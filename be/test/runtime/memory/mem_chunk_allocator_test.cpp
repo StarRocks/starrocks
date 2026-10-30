@@ -36,7 +36,7 @@
 
 #include <gtest/gtest.h>
 
-#include "common/config.h"
+#include "common/config_memory_allocator_fwd.h"
 #include "common/mem_chunk.h"
 
 namespace starrocks {

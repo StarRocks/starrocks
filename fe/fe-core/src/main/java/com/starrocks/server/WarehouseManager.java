@@ -18,6 +18,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -315,6 +316,7 @@ public class WarehouseManager implements Writable {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
+            LOG.warn("get primary compute node id for tablet {} fail {}.", tabletId, e.getMessage());
             return null;
         }
     }
@@ -397,6 +399,46 @@ public class WarehouseManager implements Writable {
 
     public ComputeResource getCompactionComputeResource(long tableId) {
         return DEFAULT_RESOURCE;
+    }
+
+    public ComputeResource getVectorIndexBuildComputeResource(long tableId) {
+        // Warehouse selection for async vector index build mirrors the load path:
+        // explicit config > the table's (loading session's) warehouse > default.
+        //   1. An explicit lake_vector_index_build_warehouse lets admins isolate all
+        //      async builds onto a dedicated warehouse, away from query/load workload.
+        //   2. Otherwise route to the warehouse the table is loaded into — its
+        //      background compute resource, the same one compaction and other
+        //      background tablet work use (recorded at load commit via
+        //      recordWarehouseInfoForTable). This keeps the build in the table's own
+        //      compute pool (data-cache locality + multi-warehouse isolation) instead
+        //      of piling every table's build onto the default warehouse. In OSS
+        //      single-warehouse mode this collapses to the default warehouse.
+        //   3. Fall back to the default resource as a last resort — building on the
+        //      default warehouse is always preferable to dropping the build.
+        String warehouseName = Config.lake_vector_index_build_warehouse;
+        if (warehouseName != null && !warehouseName.isEmpty()
+                && !warehouseName.equalsIgnoreCase(DEFAULT_WAREHOUSE_NAME)) {
+            Warehouse wh = getWarehouseAllowNull(warehouseName);
+            if (wh != null) {
+                try {
+                    return acquireComputeResource(CRAcquireContext.of(wh.getId()));
+                } catch (Exception e) {
+                    LOG.warn("Configured vector index build warehouse {} is unavailable, " +
+                            "falling back to the table's warehouse", warehouseName, e);
+                }
+            } else {
+                LOG.warn("Configured vector index build warehouse {} does not exist, " +
+                        "falling back to the table's warehouse", warehouseName);
+            }
+        }
+        // No usable explicit config warehouse: use the table's warehouse (its
+        // background compute resource). Falls back to the default resource if the
+        // table has no recorded warehouse or it is currently unavailable.
+        try {
+            return getBackgroundComputeResource(tableId);
+        } catch (Exception e) {
+            return DEFAULT_RESOURCE;
+        }
     }
 
     public Warehouse getBackgroundWarehouse() {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回输入字符串的128位xxhash3哈希值。"
 ---
 
 # xx_hash3_128

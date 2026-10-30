@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW INDEX displays information related to bitmap indexes in a table."
 ---
 
 # SHOW INDEX

@@ -16,7 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -143,6 +143,71 @@ public class DropPartitionWithExprListTest extends MVTestBase {
             addListPartition(tableName, "p3", "beijing", "2024-01-02");
             addListPartition(tableName, "p4", "guangdong", "2024-01-02");
         }
+    }
+
+    /**
+     * A drop condition on the source column of a generated partition column used to be widened onto
+     * the partition column before the partitions were picked: dt < '2024-01-02 00:00:00' became
+     * date_trunc('day', dt) <= '2024-01-02' and dropped the 2024-01-02 partitions, none of whose rows
+     * satisfy the condition. Only the partition expression itself is accepted.
+     */
+    @Test
+    public void testDropPartitionsBySourceColumnOfGeneratedPartitionColumn() {
+        starRocksAssert.withTable(T5, (obj) -> {
+            String tableName = (String) obj;
+            withTablePartitions(tableName);
+            OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+            Assertions.assertEquals(4, olapTable.getVisiblePartitions().size());
+
+            for (String where : List.of("dt < '2024-01-02 00:00:00'", "dt = '2024-01-02 12:00:00'",
+                    "dt in ('2024-01-01 12:00:00', '2024-01-02 12:00:00')")) {
+                Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                        String.format("alter table %s DROP PARTITIONS WHERE %s;", tableName, where)));
+                Assertions.assertTrue(e.getMessage().contains("Column `dt` in the partition condition is not " +
+                        "a table's partition expression"), e.getMessage());
+                Assertions.assertEquals(4, olapTable.getVisiblePartitions().size(), where);
+            }
+
+            starRocksAssert.alterTable(String.format("alter table %s DROP PARTITIONS WHERE " +
+                    "date_trunc('day', dt) < '2024-01-02 00:00:00';", tableName));
+            Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
+        });
+    }
+
+    /**
+     * Through a one-to-one expression an equality on the source column selects exactly the rows its
+     * image selects on the partition column, so it may still pick the partitions to drop. A range may
+     * not: it is exact only when the constant falls on a partition boundary.
+     */
+    @Test
+    public void testDropPartitionsBySourceColumnOfOneToOneGeneratedColumn() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE t_one_to_one (\n" +
+                " c1 int NOT NULL,\n" +
+                " c2 bigint NULL AS (100 - c1)\n" +
+                ")\n" +
+                "DUPLICATE KEY(c1)\n" +
+                "PARTITION BY (c2)\n" +
+                "PROPERTIES('replication_num' = '1')", (obj) -> {
+                    String tableName = (String) obj;
+                    starRocksAssert.ddl("ALTER TABLE t_one_to_one ADD PARTITION p90 VALUES IN ('90')");
+                    starRocksAssert.ddl("ALTER TABLE t_one_to_one ADD PARTITION p80 VALUES IN ('80')");
+                    starRocksAssert.ddl("ALTER TABLE t_one_to_one ADD PARTITION p70 VALUES IN ('70')");
+                    OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+
+                    Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                            "alter table t_one_to_one DROP PARTITIONS WHERE c1 < 20;"));
+                    Assertions.assertTrue(e.getMessage().contains("Column `c1` in the partition condition is not " +
+                            "a table's partition expression"), e.getMessage());
+                    Assertions.assertEquals(3, olapTable.getVisiblePartitions().size());
+
+                    starRocksAssert.alterTable("alter table t_one_to_one DROP PARTITIONS WHERE c1 = 10;");
+                    Assertions.assertNull(olapTable.getPartition("p90"));
+                    Assertions.assertEquals(2, olapTable.getVisiblePartitions().size());
+
+                    starRocksAssert.alterTable("alter table t_one_to_one DROP PARTITIONS WHERE c1 in (30);");
+                    Assertions.assertNull(olapTable.getPartition("p70"));
+                    Assertions.assertEquals(1, olapTable.getVisiblePartitions().size());
+                });
     }
 
     private void withTablePartitionsV2(String tableName) {
@@ -576,7 +641,7 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     MaterializedView mv = starRocksAssert.getMv("test", mvName);
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -591,7 +656,7 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                         addListPartition(tableName, "p6", "guangdong_p6",
                                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
 
-                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertTrue(processor != null);
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
@@ -624,7 +689,7 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                     MaterializedView mv = starRocksAssert.getMv("test", mvName);
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -644,7 +709,7 @@ public class DropPartitionWithExprListTest extends MVTestBase {
 
                                     {
                                         // all partitions are expired, no need to create partitions for mv
-                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -659,7 +724,7 @@ public class DropPartitionWithExprListTest extends MVTestBase {
                                         addListPartition(tableName, "p6", "guangdong_p6",
                                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
 
-                                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                                         Assertions.assertTrue(processor != null);
                                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());

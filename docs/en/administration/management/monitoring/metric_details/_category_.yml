@@ -1,0 +1,7 @@
+position: 10
+label: 'General Monitoring Metrics'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: metric_details

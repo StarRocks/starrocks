@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -24,6 +26,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
+#include "storage/rowset/segment_file_info.h"
 
 namespace starrocks {
 
@@ -31,7 +34,7 @@ class DelVector;
 
 namespace lake {
 
-class UpdateManager;
+class PrimaryKeyManager;
 
 enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
 
@@ -46,6 +49,42 @@ uint32_t get_rowset_id_step(const RowsetMetadataPB& rowset_meta);
 uint32_t get_segment_idx(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 uint32_t get_rssid(const RowsetMetadataPB& rowset_meta, int32_t segment_pos);
 
+// Resolve the segment index a del file logically follows (the delete's rssid is
+// `rowset_id + <returned index>`), preserving the in-transaction upsert/delete order.
+// `op_offset` is the writer-provided local segment position (from OpWrite.del_op_offsets); it is
+// mapped through get_segment_idx() so it lands in the same index space as segment rssids.
+// Falls back to the max segment index -- the legacy "apply all deletes after all upserts" behavior --
+// when `column_mode` is true (column-mode partial update applies deletes after all column upserts,
+// never interleaved) or when `op_offset` < 0 ("not recorded": absent array or kUnknownDelOpOffset).
+// The recorded op_offset for del file `del_id` in `op_write`, or -1 when not recorded: the
+// del_op_offsets array is absent/misaligned with dels_meta, or the entry is kUnknownDelOpOffset
+// (spill / concurrent flush). Single bridge from the on-wire uint32 (+ kUnknownDelOpOffset sentinel)
+// representation to the signed value resolve_del_op_offset() expects.
+int64_t del_op_offset_or_unset(const TxnLogPB_OpWrite& op_write, int del_id);
+
+uint32_t resolve_del_op_offset(int64_t op_offset, bool column_mode, const RowsetMetadataPB& rowset_meta);
+
+// Verify a del file's just-read content against the masked CRC32C recorded in its metadata, which is
+// carried identically by the txn log's FileMetaPB and the persisted DelfileWithRowsetId. `content` is
+// the plaintext buffer returned by the read (already decrypted), matching what the writer checksummed.
+//
+// A del file is immutable once written, so a recorded checksum always describes the content read back
+// here and a mismatch is genuine corruption -> Status::Corruption. Verification is skipped when the
+// checksum is absent -- a del file written before the field existed, or by a producer that cannot
+// compute it (the replication transcode path) -- and when lake_enable_del_file_crc_check is off.
+Status verify_del_file_crc32c(const FileMetaPB& del_meta, int64_t tablet_id, std::string_view content);
+Status verify_del_file_crc32c(const DelfileWithRowsetId& del_meta, int64_t tablet_id, std::string_view content);
+
+// Read a del file's whole content through |rf| and verify it with verify_del_file_crc32c(). On a
+// checksum mismatch, drop the file's local data cache and read once more before failing: a del file is
+// immutable, so the bytes are most likely corrupt in the local cache rather than in remote storage, and
+// the retry reads through to the remote object. Falls back to reporting the original Corruption when
+// there is no cache to drop (non-shared-data build, or lake_clear_corrupted_cache_data turned off).
+// Segment pages and persistent-index sstables recover from cache corruption the same way.
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const FileMetaPB& del_meta, int64_t tablet_id);
+StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const DelfileWithRowsetId& del_meta,
+                                               int64_t tablet_id);
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(const Tablet& tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
@@ -53,22 +92,46 @@ public:
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // append delta column group to builder
     void append_dcg(uint32_t rssid, const std::vector<std::pair<std::string, std::string>>& file_with_encryption_metas,
-                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list);
+                    const std::vector<std::vector<ColumnUID>>& unique_column_id_list,
+                    const std::vector<int64_t>& file_sizes);
     // handle txn log
-    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
                               int64_t output_rowset_schema_id);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
 
+    // Merge an OpAddIndex (produced by the ADD INDEX fast path) into
+    // TabletMetadataPB.idg_meta. For each SegmentEntry, the new IDG entry is
+    // inserted at the front of the per-segment `entries` list (newest-first
+    // ordering, consistent with LakeIndexDeltaGroupLoader). new_indexes are
+    // reconciled into schema.table_indices in an idempotent way (FE has
+    // usually already published the new schema, so this is a belt-and-braces
+    // step to cover edge cases like FE publish races).
+    //
+    // Fails when op.new_schema() would move the tablet schema BACKWARDS: the log
+    // carries a snapshot FE took at dispatch time, and installing it over content
+    // that has since advanced would drop the columns added in between. Errors
+    // here must propagate rather than be logged and ignored - see the schema
+    // installation comment in the implementation for why a wrong schema at this
+    // point is both silent and permanent.
+    Status apply_add_index(const TxnLogPB_OpAddIndex& op);
+
+    // Apply an OpDropIndex (produced by the DROP INDEX fast path): merge
+    // tombstones into the dropped_keys list of each matching IDG entry; any
+    // entry whose keys are fully tombstoned gets its .idx file moved to
+    // orphan_files and the entry removed. Also removes matching TabletIndexPB
+    // from schema.table_indices if still present.
+    void apply_drop_index(const TxnLogPB_OpDropIndex& op);
+
     // batch processing functions for merging multiple opwrites into one rowset
-    void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+    void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
-    void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                    const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
-                    const std::vector<std::string>& del_encryption_metas);
-    void set_final_rowset();
+    void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, SegmentFileInfo>& replace_segments,
+                    const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
+                    const std::vector<int64_t>& del_op_offsets, const std::vector<int64_t>& del_num_rows);
+    Status set_final_rowset();
 
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and
@@ -76,10 +139,21 @@ public:
     // deleted.
     Status finalize(int64_t txn_id, bool skip_write_tablet_metadata = false);
     // find delvec in builder's buffer, used for batch txn log precess.
+    // After reset_delvecs_for_recover(), a segment without a delvec in the builder has no deletes: it
+    // returns true with an empty delvec instead of letting the caller fall back to the base version.
     StatusOr<bool> find_delvec(const TabletSegmentId& tsid, DelVectorPtr* pdelvec) const;
+
+    // Primary key recover rebuilds every delvec from the segments and appends them here. Drop the
+    // delvecs still pending in the builder (e.g. appended by a failed publish attempt) and make the
+    // builder the only source of delvecs for the rest of this publish.
+    void reset_delvecs_for_recover();
 
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
+
+    // Drop the pending batch rowset: a batch apply replayed after recover must not keep the segments of its
+    // failed attempt. Recover itself drops the pending delvecs, see reset_delvecs_for_recover().
+    void reset_pending_rowset_for_recover() { _pending_rowset_data = PendingRowsetData{}; }
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
@@ -115,22 +189,27 @@ private:
     // collect del files which are above cloud native index's rebuild point
     void _collect_del_files_above_rebuild_point(RowsetMetadataPB* rowset,
                                                 std::vector<DelfileWithRowsetId>* collect_del_files);
-    // clean sstable meta after alter type
-    void _sstable_meta_clean_after_alter_type();
 
 private:
     struct PendingRowsetData {
         RowsetMetadataPB rowset_pb;
-        std::map<int, FileInfo> replace_segments;
+        std::map<int, SegmentFileInfo> replace_segments;
         std::vector<FileMetaPB> orphan_files;
-        std::vector<std::string> dels;
-        std::vector<std::string> del_encryption_metas;
+        // Per-del metadata: name + shared + encryption_meta + crc32c carried together so the
+        // parallel-array invariant between filename / shared / encryption can't drift.
+        // FileMetaPB.size is intentionally unused here (DelfileWithRowsetId has no size).
+        std::vector<FileMetaPB> dels;
+        // Parallel to `dels`: each del's op_offset already rebased into the merged rowset's segment
+        // space, or < 0 when not recorded (falls back to the max segment id at persist time).
+        std::vector<int64_t> del_op_offsets;
+        // Parallel to `dels`: each del file's tombstone (delete row) count (0 when a del carries none).
+        std::vector<int64_t> del_num_rows;
         uint32_t assigned_segment_idx = 0;
     };
 
     Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;
-    UpdateManager* _update_mgr;
+    PrimaryKeyManager* _primary_key_mgr;
     Buffer<uint8_t> _buf;
     std::unordered_map<uint32_t, DelvecPagePB> _delvecs;
     // from segment id to delvec, used for fill cache in finalize stage.
@@ -139,18 +218,31 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
+    // Set by reset_delvecs_for_recover(): delvecs of the base version are discarded, see find_delvec().
+    bool _delvecs_reset_by_recover = false;
     // Pending rowset data for batch processing
     PendingRowsetData _pending_rowset_data;
 };
 
-struct DelvecFileInfo {
+// One byte-range page from a plaintext delvec object.  The page declaration is
+// kept with its file declaration because a compacted MERGE output copies only
+// the live page ranges, rather than whole source objects.
+struct DelvecPageInfo {
     int64_t tablet_id;
     FileMetaPB delvec_file;
+    DelvecPagePB page;
 };
 
-Status merge_delvec_files(TabletManager* tablet_mgr, const std::vector<DelvecFileInfo>& old_delvec_files,
-                          int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
-                          std::vector<uint64_t>* offsets);
+// A target page is either copied byte-for-byte from an existing plaintext
+// source page, or is the already serialized result of a delvec union.
+struct DelvecOutputPage {
+    std::optional<DelvecPageInfo> raw_page;
+    std::string serialized_page;
+};
+
+Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector<DelvecOutputPage>& pages,
+                                    int64_t new_tablet_id, int64_t txn_id, FileMetaPB* new_delvec_file,
+                                    std::vector<uint64_t>* page_offsets);
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, const DelvecPagePB& delvec_page,
                    bool fill_cache, const LakeIOOptions& lake_io_opts, DelVector* delvec);

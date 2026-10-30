@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_txnsは各BEノード上のトランザクションに関する情報を提供します。"
 ---
 
 # be_txns

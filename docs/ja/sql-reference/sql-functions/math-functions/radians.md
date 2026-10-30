@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "角度をラジアンに変換します。"
 ---
 
 # radians

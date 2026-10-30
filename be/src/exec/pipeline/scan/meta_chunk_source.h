@@ -18,7 +18,7 @@
 #include "exec/meta_scan_node.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 

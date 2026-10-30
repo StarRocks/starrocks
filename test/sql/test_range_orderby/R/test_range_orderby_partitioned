@@ -1,0 +1,105 @@
+-- name: test_range_orderby_partitioned @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    dt date not null,
+    id int not null,
+    score int not null,
+    tag varchar(256) not null
+)
+primary key(dt, id)
+partition by range(dt) (
+    partition p1 values less than ('2026-01-02'),
+    partition p2 values less than ('2026-01-03'),
+    partition p3 values less than ('2026-01-04')
+)
+order by(score, tag)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t
+select '2026-01-01', x, 100000 - x, repeat(md5(cast(x as varchar)), 6)
+from table(generate_series(1, 20000)) as g(x);
+-- result:
+-- !result
+insert into t values
+    ('2026-01-02', 1, 500, 'p2a'),
+    ('2026-01-02', 2, 600, 'p2b'),
+    ('2026-01-03', 1, 700, 'p3a');
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+20003
+-- !result
+select count(*) from t where dt = '2026-01-02';
+-- result:
+2
+-- !result
+select count(*) from t where dt < '2026-01-02' and score > 99000;
+-- result:
+999
+-- !result
+[UC]alter table t split tablet partition(p1) properties('tablet_reshard_target_size' = '1024');
+shell: n=1; for i in $(seq 1 55); do n=$(${mysql_cmd} -Ne "select count(1) from information_schema.tablet_reshard_jobs where db_name='db_${uuid0}' and job_state not in ('FINISHED','ABORTED')" 2>/dev/null); [ "$n" = "0" ] && break; sleep 2; done; echo "pending=$n"
+-- result:
+0
+pending=0
+-- !result
+select partition_name, buckets > 1 as did_split from information_schema.partitions_meta
+    where db_name = 'db_${uuid0}' and table_name = 't' order by partition_name;
+-- result:
+p1	1
+p2	0
+p3	0
+-- !result
+select count(*), sum(score) from t;
+-- result:
+20003	1799991800
+-- !result
+select score, length(tag) from t where dt = '2026-01-01' and id = 777;
+-- result:
+99223	192
+-- !result
+select * from t where dt = '2026-01-02' order by id;
+-- result:
+2026-01-02	1	500	p2a
+2026-01-02	2	600	p2b
+-- !result
+insert into t values ('2026-01-01', 777, 1, 'moved'), ('2026-01-03', 2, 800, 'p3b');
+-- result:
+-- !result
+select score, length(tag) from t where dt = '2026-01-01' and id = 777;
+-- result:
+1	5
+-- !result
+select * from t where dt >= '2026-01-03' order by id;
+-- result:
+2026-01-03	1	700	p3a
+2026-01-03	2	800	p3b
+-- !result
+select count(*) from t;
+-- result:
+20004
+-- !result
+truncate table t partition (p2);
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+20002
+-- !result
+select count(*) from t where dt = '2026-01-02';
+-- result:
+0
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

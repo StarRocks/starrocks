@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Queries the value of an element that can be located by the path expression in a VARIANT object and returns a VARIANT value."
 ---
 
 # variant_query

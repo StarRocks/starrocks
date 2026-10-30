@@ -17,12 +17,18 @@
 #include <unistd.h>
 
 #include "base/container/lru_cache.h"
+#include "common/config_local_io_fwd.h"
 
 namespace starrocks {
 
 static void fd_deleter(const CacheKey& key, void* value) {
     int fd = static_cast<int>(reinterpret_cast<uintptr_t>(value));
     ::close(fd);
+}
+
+FdCache* FdCache::Instance() {
+    static FdCache cache(std::max<size_t>(4096, config::file_descriptor_cache_capacity));
+    return &cache;
 }
 
 FdCache::FdCache(size_t capacity) : _cache(new_lru_cache(capacity)) {}

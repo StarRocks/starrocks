@@ -1,0 +1,97 @@
+-- name: testCsvEncloseEscapeRFC4180
+create database db_${uuid0};
+use db_${uuid0};
+create table t1 (id int, name varchar(200), nullable_col varchar(50)) distributed by hash(id) buckets 1;
+insert into t1 values (1, 'hello', 'not null'), (2, 'hello,world', NULL), (3, 'say "hi"', 'val');
+insert into files (
+    "path" = "s3://${oss_bucket}/test_sink/testCsvEncloseRFC/${uuid0}/",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "format" = "csv",
+    "compression" = "uncompressed",
+    "csv.column_separator" = ",",
+    "csv.enclose" = "\"",
+    "csv.escape" = "\"",
+    "single" = "true"
+)
+select * from t1 order by id;
+select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/testCsvEncloseRFC/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.enclose" = "\""
+) order by 1;
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testCsvEncloseRFC/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+drop database db_${uuid0};
+
+-- name: testCsvEncloseEscapeBackslash
+create database db_${uuid0};
+use db_${uuid0};
+create table t2 (id int, name varchar(200), extra varchar(50)) distributed by hash(id) buckets 1;
+-- NOTE: avoid NULL here. With csv.escape='\\', the fixed NULL marker "\N" is
+-- indistinguishable from an escaped literal N on re-import (the reader's
+-- ESCAPE state strips the backslash), so NULL does not roundtrip under this
+-- escape mode. NULL roundtrip is covered by the RFC4180 case above, which
+-- uses csv.escape='"' and keeps \N intact.
+insert into t2 values (1, 'hello', 'plain'), (2, 'say "hi"', 'val'), (3, 'path\\to', 'val'), (4, 'a\\"b', 'x');
+insert into files (
+    "path" = "s3://${oss_bucket}/test_sink/testCsvEncloseBS/${uuid0}/",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "format" = "csv",
+    "compression" = "uncompressed",
+    "csv.column_separator" = ",",
+    "csv.enclose" = "\"",
+    "csv.escape" = "\\",
+    "single" = "true"
+)
+select * from t2 order by id;
+select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/testCsvEncloseBS/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.enclose" = "\"",
+    "csv.escape" = "\\"
+) order by 1;
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testCsvEncloseBS/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+drop database db_${uuid0};
+
+-- name: testCsvEncloseWithHeader
+create database db_${uuid0};
+use db_${uuid0};
+create table t3 (id int, name varchar(200)) distributed by hash(id) buckets 1;
+insert into t3 values (1, 'alice'), (2, 'bob,comma');
+insert into files (
+    "path" = "s3://${oss_bucket}/test_sink/testCsvEncloseHeader/${uuid0}/",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "format" = "csv",
+    "compression" = "uncompressed",
+    "csv.column_separator" = ",",
+    "csv.enclose" = "\"",
+    "csv.escape" = "\"",
+    "csv.include_header" = "true",
+    "single" = "true"
+)
+select * from t3 order by id;
+select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/testCsvEncloseHeader/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.skip_header" = "1",
+    "csv.enclose" = "\""
+) order by 1;
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/testCsvEncloseHeader/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+drop database db_${uuid0};

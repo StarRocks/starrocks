@@ -294,6 +294,11 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 
 #define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                                            \
     if (_type == AggHashMapVariant::Type::SRC) {                                                                      \
+        static_assert(                                                                                                \
+                agg_key_state_is_convertible<detail::AggHashMapVariantTypeTraits<Type::SRC>::HashMapWithKeyType,      \
+                                             detail::AggHashMapVariantTypeTraits<Type::DST>::HashMapWithKeyType>,     \
+                "the destination cannot hold the source's out-of-table key state (NULL group, "                       \
+                "has_null_column/fixed_byte_size, or the bit-compression context)");                                  \
         auto dst = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::DST>::HashMapWithKeyType>(              \
                 state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
@@ -306,6 +311,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                         if (null_data_ptr != nullptr) {                                                               \
                             dst->set_null_key_data(null_data_ptr);                                                    \
                         }                                                                                             \
+                        copy_agg_key_state(*hash_map_with_key, *dst);                                                 \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \
@@ -326,6 +332,22 @@ void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_MAP(phase2_null_string_two_level, phase2_null_string);
 }
 
+#define AGG_VARIANT_TYPE_NAME_CASE(NAME) \
+    case Type::NAME:                     \
+        return #NAME;
+
+const char* AggHashMapVariant::type_name() const {
+    switch (_type) { APPLY_FOR_AGG_VARIANT_ALL(AGG_VARIANT_TYPE_NAME_CASE) }
+    return "unknown";
+}
+
+const char* AggHashSetVariant::type_name() const {
+    switch (_type) { APPLY_FOR_AGG_VARIANT_ALL(AGG_VARIANT_TYPE_NAME_CASE) }
+    return "unknown";
+}
+
+#undef AGG_VARIANT_TYPE_NAME_CASE
+
 void AggHashMapVariant::reset() {
     detail::AggHashMapWithKeyPtr ptr;
     hash_map_with_key = std::move(ptr);
@@ -342,11 +364,20 @@ size_t AggHashMapVariant::size() const {
 }
 
 bool AggHashMapVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    // TODO: think about two-level hashmap
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash maps (SmallFixedSizeHashMap for TINYINT/BOOL/SMALLINT
+    // and the low-card-dict uint8 variant) have a hard-coded full keyspace
+    // and never rehash, so streaming/spill paths should only fall back when
+    // the array is actually full -- not at the 87.5% growth-heuristic
+    // threshold used by phmap.
+    return visit([increasement](const auto& hash_map_with_key) {
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        const size_t size = hash_map_with_key->hash_map.size() + increasement;
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
+            return size > HashMap::hash_table_size;
+        }
+        const size_t capacity = hash_map_with_key->hash_map.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
@@ -358,9 +389,18 @@ size_t AggHashMapVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([pool](const auto& hash_map_with_key) {
-        return sizeof(typename decltype(hash_map_with_key->hash_map)::key_type) *
-                       hash_map_with_key->hash_map.capacity() +
-               pool->total_allocated_bytes();
+        using HashMap = std::remove_reference_t<decltype(hash_map_with_key->hash_map)>;
+        size_t hash_map_bytes;
+        if constexpr (is_fixed_hash_map_v<HashMap>) {
+            // SmallFixedSizeHashMap pre-allocates a dense pointer array; the
+            // SMALLINT path is ~512 KiB and must be reported as such, not as
+            // sizeof(KeyType) * capacity.
+            hash_map_bytes = HashMap::bucket_byte_size();
+        } else {
+            hash_map_bytes = sizeof(typename HashMap::key_type) * hash_map_with_key->hash_map.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_map_bytes + pool_bytes;
     });
 }
 
@@ -380,6 +420,11 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
 
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                            \
     if (_type == AggHashSetVariant::Type::SRC) {                                                                      \
+        static_assert(                                                                                                \
+                agg_key_state_is_convertible<detail::AggHashSetVariantTypeTraits<Type::SRC>::HashSetWithKeyType,      \
+                                             detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>,     \
+                "the destination cannot hold the source's out-of-table key state (NULL group, "                       \
+                "has_null_column/fixed_byte_size, or the bit-compression context)");                                  \
         auto dst = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>(              \
                 state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
@@ -393,6 +438,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_
                         if constexpr (SrcType::has_single_null_key && DstType::has_single_null_key) {                 \
                             dst->has_null_key = hash_set_with_key->has_null_key;                                      \
                         }                                                                                             \
+                        copy_agg_key_state(*hash_set_with_key, *dst);                                                 \
                     }                                                                                                 \
                 },                                                                                                    \
                 hash_set_with_key);                                                                                   \
@@ -432,10 +478,17 @@ size_t AggHashSetVariant::size() const {
 }
 
 bool AggHashSetVariant::need_expand(size_t increasement) const {
-    size_t capacity = this->capacity();
-    size_t size = this->size() + increasement;
-    // see detail implement in reset_growth_left
-    return size >= capacity - capacity / 8;
+    // Direct-array hash sets (SmallFixedSizeHashSet for TINYINT/BOOL/SMALLINT)
+    // never rehash; only fall back when the array is actually full.
+    return visit([increasement](const auto& hash_set_with_key) {
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        const size_t size = hash_set_with_key->hash_set.size() + increasement;
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
+            return size > HashSet::hash_table_size;
+        }
+        const size_t capacity = hash_set_with_key->hash_set.capacity();
+        return size >= capacity - capacity / 8;
+    });
 }
 
 size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
@@ -447,9 +500,15 @@ size_t AggHashSetVariant::reserved_memory_usage(const MemPool* pool) const {
 
 size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
     return visit([&](auto& hash_set_with_key) {
-        return sizeof(typename decltype(hash_set_with_key->hash_set)::key_type) *
-                       hash_set_with_key->hash_set.capacity() +
-               pool->total_allocated_bytes();
+        using HashSet = std::remove_reference_t<decltype(hash_set_with_key->hash_set)>;
+        size_t hash_set_bytes;
+        if constexpr (is_fixed_hash_set_v<HashSet>) {
+            hash_set_bytes = HashSet::bucket_byte_size();
+        } else {
+            hash_set_bytes = sizeof(typename HashSet::key_type) * hash_set_with_key->hash_set.capacity();
+        }
+        const size_t pool_bytes = (pool != nullptr) ? pool->total_allocated_bytes() : 0;
+        return hash_set_bytes + pool_bytes;
     });
 }
 

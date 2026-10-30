@@ -17,9 +17,9 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "exprs/expr_context.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 class TupleDescriptor;
@@ -81,7 +81,11 @@ private:
         }
     }
 
-    void extend_and_update_columns(ChunkPtr* curr_chunk);
+    // Copy of _curr_chunk for the current grouping set: the columns that grouping set blanks out
+    // are built as const NULL columns instead of being copied.
+    ChunkPtr clone_curr_chunk(size_t num_rows);
+
+    void append_grouping_columns(Chunk* curr_chunk, size_t num_rows);
 
     /*
      * _curr_chunk
@@ -90,6 +94,9 @@ private:
      */
     // accessing chunk.
     ChunkPtr _curr_chunk;
+    // Scratch for clone_curr_chunk(): which column indexes the current grouping set nulls out.
+    // A member so that the per-chunk, per-grouping-set copy costs no allocation.
+    std::vector<uint8_t> _is_nulled_column;
 
     /*
      * _null_slot_ids

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ANALYZE STATUS views the status of collection tasks."
 ---
 
 # SHOW ANALYZE STATUS
@@ -31,7 +32,7 @@ This statement returns the following columns.
 | Status        | The status of the task.                                      |
 | StartTime     | The time when the task starts executing.                     |
 | EndTime       | The time when the task execution ends.                       |
-| Properties    | Custom parameters.                                           |
+| Properties    | Custom parameters. For external table (for example, Iceberg, Hive, or Paimon) collection tasks, this also includes collection metadata such as `table_format`, `partition_count`, `column_count`, and, for Iceberg tables, `snapshot_id`, `total_files`, and `total_rows`. |
 | Reason        | The reason why the task failed. NULL is returned if the execution was successful. |
 
 ## References

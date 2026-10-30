@@ -1,0 +1,60 @@
+-- name: test_hive_dict_scan_min_max_conjuncts
+set low_cardinality_optimize_on_lake = true;
+-- result:
+-- !result
+set always_collect_low_card_dict_on_lake = true;
+-- result:
+-- !result
+create external catalog hive_dict_conjuncts_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+create database if not exists hive_dict_conjuncts_${uuid0}.hive_test_db_${uuid0};
+-- result:
+-- !result
+use hive_dict_conjuncts_${uuid0}.hive_test_db_${uuid0};
+-- result:
+-- !result
+drop table if exists t1_${uuid0} force;
+-- result:
+-- !result
+create table t1_${uuid0} (
+    c1 int,
+    c2 string
+);
+-- result:
+-- !result
+insert into t1_${uuid0} values (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e');
+-- result:
+-- !result
+select count(c2) from t1_${uuid0};
+-- result:
+5
+-- !result
+function: wait_global_dict_ready('c2', 't1_${uuid0}')
+-- result:
+
+-- !result
+function: wait_plan_contains("verbose select count(*) from t1_${uuid0} where c2 = 'a'", "MIN/MAX PREDICATES: DictDecode(6: c2, [<place-holder> <= 'a']), DictDecode(6: c2, [<place-holder> >= 'a'])")
+-- result:
+None
+-- !result
+function: wait_plan_contains("verbose select count(*) from t1_${uuid0} where c2 in ('a', 'b')", "MIN/MAX PREDICATES: DictDecode(6: c2, [<place-holder> >= 'a']), DictDecode(6: c2, [<place-holder> <= 'b'])")
+-- result:
+None
+-- !result
+function: wait_plan_contains("verbose select count(*) from t1_${uuid0} where c2 > 'a'", "MIN/MAX PREDICATES: DictDecode(6: c2, [<place-holder> > 'a'])")
+-- result:
+None
+-- !result
+drop table t1_${uuid0} force;
+-- result:
+-- !result
+drop database if exists hive_dict_conjuncts_${uuid0}.hive_test_db_${uuid0} force;
+-- result:
+-- !result
+drop catalog hive_dict_conjuncts_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a value between the JSON type and SQL type."
 ---
 
 # cast

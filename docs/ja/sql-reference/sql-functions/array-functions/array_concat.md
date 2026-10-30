@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_CONCAT関数は複数の配列を連結して1つの配列にします。"
 ---
 
 # array_concat

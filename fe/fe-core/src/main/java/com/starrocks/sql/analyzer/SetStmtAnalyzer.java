@@ -146,6 +146,19 @@ public class SetStmtAnalyzer {
             }
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR)) {
+            String value = resolvedExpression.getStringValue();
+            double multiplier;
+            try {
+                multiplier = Double.parseDouble(value);
+            } catch (NumberFormatException e) {
+                throw new SemanticException(String.format("%s must be a finite number in [1.0, %s], got %s",
+                        SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR,
+                        SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, value));
+            }
+            SessionVariable.checkBroadcastMemExceededPenaltyFactor(multiplier);
+        }
+
         // Check variable chunk_size value if valid
         if (variable.equalsIgnoreCase(SessionVariable.CHUNK_SIZE)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.CHUNK_SIZE, 1L, 65535L);
@@ -158,6 +171,14 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.QUERY_MEM_LIMIT)) {
             checkRangeLongVariable(resolvedExpression, SessionVariable.QUERY_MEM_LIMIT, 0L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BROADCAST_MEM_THRESHOLD)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.BROADCAST_MEM_THRESHOLD, 0L, null);
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT)) {
+            checkRangeLongVariable(resolvedExpression, SessionVariable.AI_TOPN_PUSHDOWN_MAX_GLOBAL_LIMIT, 0L, null);
         }
 
         try {
@@ -199,7 +220,7 @@ public class SetStmtAnalyzer {
             String rgName = resolvedExpression.getStringValue();
             if (!StringUtils.isEmpty(rgName)) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(null, rgName);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgName);
                 }
@@ -209,7 +230,7 @@ public class SetStmtAnalyzer {
             long rgID = resolvedExpression.getLongValue();
             if (rgID > 0) {
                 TWorkGroup wg =
-                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(rgID);
+                        GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(null, rgID);
                 if (wg == null) {
                     throw new SemanticException("resource group not exists: " + rgID);
                 }
@@ -218,6 +239,22 @@ public class SetStmtAnalyzer {
 
         if (variable.equalsIgnoreCase(SessionVariable.TABLET_INTERNAL_PARALLEL_MODE)) {
             validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_FORMAT)) {
+            try {
+                SessionVariable.BinaryEncodingFormat.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_LEVEL)) {
+            try {
+                SessionVariable.BinaryEncodingLevel.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
@@ -342,6 +379,7 @@ public class SetStmtAnalyzer {
         if (variable.equalsIgnoreCase(SessionVariable.PLAN_MODE)) {
             PlanMode.fromName(resolvedExpression.getStringValue());
         }
+
 
         // check connector_sink_sort_scope
         if (variable.equalsIgnoreCase(SessionVariable.CONNECTOR_SINK_SORT_SCOPE)) {

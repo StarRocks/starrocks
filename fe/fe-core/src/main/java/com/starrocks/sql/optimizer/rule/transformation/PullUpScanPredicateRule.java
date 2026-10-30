@@ -63,8 +63,25 @@ public class PullUpScanPredicateRule extends TransformationRule {
 
     private ScalarOperator replaceScalarOperator(ScalarOperator root,
                                                  Map<ScalarOperator, ColumnRefOperator> columnRefMap) {
+        // Never replace a constant with a column. Reading a column is no cheaper than a literal, and some
+        // positions only accept constants: the value list of a const IN-predicate is evaluated without a
+        // chunk on the BE, so `x IN (0, 1)` rewritten to `x IN (0, auto_fill_col)` (the scan projection of
+        // a count(*) carries `auto_fill_col := TINYINT 1`) crashes VectorizedInConstPredicate::open().
+        if (root.isConstant()) {
+            return root;
+        }
+
         if (columnRefMap.containsKey(root)) {
             return columnRefMap.get(root);
+        }
+
+        // Do not rewrite anything inside a lambda function body. A lambda body is evaluated in the
+        // lambda's local context, where only the lambda arguments and captured columns exist. Replacing
+        // a sub-expression there with a reference to an outer (scan projection) column produces a column
+        // ref that cannot be resolved in the lambda's local chunk at runtime. This mirrors
+        // SubfieldCollector#visitLambdaFunctionOperator, which likewise never descends into lambdas.
+        if (root instanceof LambdaFunctionOperator) {
+            return root;
         }
 
         List<ScalarOperator> children = root.getChildren();
@@ -115,10 +132,12 @@ public class PullUpScanPredicateRule extends TransformationRule {
         SubfieldCollector collector = new SubfieldCollector(context.getColumnRefFactory());
         collector.visit(reservedPredicates, null);
 
+        Map<ScalarOperator, ColumnRefOperator> collectedMappings = new HashMap<>();
         collector.getExpressionMapping().forEach((k, v) -> {
             if (!translatingMap.containsKey(k)) {
                 translatingMap.put(k, v);
                 newProjections.put(v, k);
+                collectedMappings.put(k, v);
             }
         });
 
@@ -128,6 +147,21 @@ public class PullUpScanPredicateRule extends TransformationRule {
         }
 
         ColumnRefSet predicateUsedColumnRefSet = reservedPredicates.getUsedColumns();
+
+        // SubfieldCollector mints a column ref for every subfield node it walks, the intermediate ones
+        // included: for `s1.s2[1].a` it maps `s1.s2`, `s1.s2[1]` and `s1.s2[1].a`, while
+        // replaceScalarOperator only substitutes the outermost match into the predicate. Projecting the
+        // unreferenced ones out of the scan makes it emit a wider slice of the column than the
+        // ColumnAccessPath PruneSubfieldRule already computed for this scan, so such a slot is served by a
+        // partially materialized column - e.g. an ARRAY<STRUCT<a, b>> whose `b` field holds no rows, which
+        // reads out of bounds as soon as anything appends that column. Keep only the refs the rewritten
+        // predicate really uses.
+        collectedMappings.forEach((expr, ref) -> {
+            if (!predicateUsedColumnRefSet.contains(ref)) {
+                translatingMap.remove(expr);
+                newProjections.remove(ref);
+            }
+        });
         newScanOperator.buildColumnFilters(pushedPredicates);
 
         List<ColumnRefOperator> predicateUsedColumns = predicateUsedColumnRefSet

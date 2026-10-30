@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ブルームフィルターインデックスは StarRocks でデータファイルをスキップして高カーディナリティ列クエリの応答時間を短縮します。"
 sidebar_position: 30
 ---
 

@@ -15,11 +15,11 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.common.util.CredentialMask;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.odps.OdpsProperties;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
 import org.apache.logging.log4j.LogManager;
@@ -32,7 +32,6 @@ import java.util.Map;
 public class CredentialUtil {
     public static final Logger LOG = LogManager.getLogger(CredentialUtil.class);
 
-    private static final String MASK_CLOUD_CREDENTIAL_WORDS = "******";
 
     public static void maskCredential(Map<String, String> properties) {
         // Mask for aws's credential
@@ -46,6 +45,7 @@ public class CredentialUtil {
         doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY);
+        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET);
 
         // Mask for gcs's credential
@@ -61,6 +61,10 @@ public class CredentialUtil {
         doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT);
         doMask(properties, CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT);
 
+        // Mask for tencent's credential
+        doMask(properties, CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY);
+        doMask(properties, CloudConfigurationConstants.TENCENT_COS_SECRET_KEY);
+
         // Mask for iceberg rest catalog credential
         doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 OAuth2SecurityConfig.OAUTH2_CREDENTIAL);
@@ -71,6 +75,10 @@ public class CredentialUtil {
         doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
                 AwsProperties.REST_SECRET_ACCESS_KEY);
 
+        // Mask for iceberg jdbc catalog credential
+        doMask(properties, IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD);
+
         // Mask for odps catalog credential
         doMask(properties, OdpsProperties.ACCESS_ID);
         doMask(properties, OdpsProperties.ACCESS_KEY);
@@ -78,7 +86,7 @@ public class CredentialUtil {
 
     private static void doMask(Map<String, String> properties, String configKey) {
         // This key is only auxiliary authentication for Azure and does not need to be exposed.
-        properties.remove(AzureCloudConfigurationProvider.AZURE_PATH_KEY);
+        properties.remove(CloudConfigurationConstants.AZURE_PATH_KEY);
 
         // Remove for jdbc catalog's password
         properties.remove(JDBCResource.PASSWORD);
@@ -86,10 +94,10 @@ public class CredentialUtil {
         // do mask
         properties.computeIfPresent(configKey, (key, value) -> {
             if (value.length() <= 4) {
-                return MASK_CLOUD_CREDENTIAL_WORDS;
+                return CredentialMask.LONG;
             } else {
                 return new StringBuilder(value).
-                        replace(2, value.length() - 2, MASK_CLOUD_CREDENTIAL_WORDS).
+                        replace(2, value.length() - 2, CredentialMask.LONG).
                         toString();
             }
         });

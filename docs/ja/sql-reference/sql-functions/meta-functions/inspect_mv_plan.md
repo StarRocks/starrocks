@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "マテリアライズドビューの論理プランを文字列で返します。"
 ---
 
 # inspect_mv_plan

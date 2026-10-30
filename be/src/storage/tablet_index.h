@@ -96,6 +96,15 @@ public:
         return mem_usage;
     }
 
+    // Public helper so callers outside TabletIndex can translate the Thrift
+    // index-type enum to the persistence IndexType used in protos / IDG.
+    // Delegates to the private _convert_index_type_from_thrift to keep the
+    // mapping in one place.
+    static StatusOr<IndexType> convert_index_type_from_thrift(TIndexType::type index_type) {
+        TabletIndex tmp;
+        return tmp._convert_index_type_from_thrift(index_type);
+    }
+
 private:
     int64_t _index_id = -1;
     std::string _index_name;

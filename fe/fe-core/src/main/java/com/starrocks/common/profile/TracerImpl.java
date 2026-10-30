@@ -42,6 +42,25 @@ class TracerImpl extends Tracer {
         this.reasonTracer = reasonTracer;
     }
 
+    @Override
+    public Tracer fork(boolean retainScope) {
+        return new TracerImpl(
+                this.timing,                     // shared — unified time base
+                this.watcher.fork(retainScope),  // forked — retainScope copies levels
+                this.varTracer,                  // shared — no record/count calls in parallel paths
+                this.logTracer,                  // shared — already sync-safe
+                this.reasonTracer                // shared — already sync-safe
+        );
+    }
+
+    @Override
+    public void mergeFrom(Tracer other) {
+        if (other instanceof TracerImpl) {
+            TracerImpl o = (TracerImpl) other;
+            this.watcher.mergeFrom(o.watcher);
+        }
+    }
+
     private long timePoint() {
         return timing.elapsed(TimeUnit.MILLISECONDS);
     }
@@ -52,9 +71,11 @@ class TracerImpl extends Tracer {
 
     public synchronized Timer watchScope(String name) {
         tracerCost.start();
-        Timer t = watcher.scope(timePointNanoSecond(), name);
-        tracerCost.stop();
-        return t;
+        try {
+            return watcher.scope(timePointNanoSecond(), name);
+        } finally {
+            tracerCost.stop();
+        }
     }
 
     public synchronized void log(String event) {

@@ -31,15 +31,19 @@ import java.util.stream.Collectors;
 
 public class IcebergRewriteData {
 
-    private IcebergConnectorScanRangeSource source;
+    // One source per data scan node. A merge-on-read plan has two mutually exclusive data branches
+    // (with / without equality deletes), so candidates must be collected from all of them.
+    private final List<IcebergConnectorScanRangeSource> sources = new ArrayList<>();
     private Map<StructLikeWrapper, List<TaskGroup>> partitionedTasks;
     private int maxScanRangeLength = 100;
     private long batchSize = 10L * 1024 * 1024 * 1024;
     private Iterator<List<TaskGroup>> outer;
     private Iterator<TaskGroup> inner = Collections.emptyIterator();
 
-    public void setSource(IcebergConnectorScanRangeSource source) {
-        this.source = source;
+    public void addSource(IcebergConnectorScanRangeSource source) {
+        if (source != null) {
+            this.sources.add(source);
+        }
     }
 
     public void setBatchSize(long batchSize) {
@@ -52,11 +56,16 @@ public class IcebergRewriteData {
 
     public void buildNewScanNodeRange(long fileSizeThreshold, boolean allFiles) {
         partitionedTasks = new HashMap<>();
-        List<FileScanTask> tasks = new ArrayList<>();
+        for (IcebergConnectorScanRangeSource source : sources) {
+            collectFromSource(source, fileSizeThreshold, allFiles);
+        }
+        this.outer = partitionedTasks.values().iterator();
+    }
+
+    private void collectFromSource(IcebergConnectorScanRangeSource source, long fileSizeThreshold, boolean allFiles) {
+        List<FileScanTask> tasks;
         do {
-            if (source != null) {
-                tasks = source.getSourceFileScanOutputs(maxScanRangeLength, fileSizeThreshold, allFiles);
-            }
+            tasks = source.getSourceFileScanOutputs(maxScanRangeLength, fileSizeThreshold, allFiles);
             for (FileScanTask task : tasks) {
                 PartitionSpec spec = task.spec();
                 StructLikeWrapper partitionWrapper = StructLikeWrapper.forType(spec.partitionType());
@@ -80,7 +89,6 @@ public class IcebergRewriteData {
                 }
             }
         } while (!tasks.isEmpty());
-        this.outer = partitionedTasks.values().iterator();
     }
 
     public boolean hasMoreTaskGroup() {

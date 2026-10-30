@@ -34,6 +34,8 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -76,13 +78,13 @@ import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -131,6 +133,7 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -245,6 +248,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -565,7 +569,7 @@ public class RedirectStatus {
         }
 
         @Override
-        public RedirectStatus visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, Void context) {
+        public RedirectStatus visitCreateSyncMVStmt(CreateSyncMVStmt statement, Void context) {
             return visitDDLStatement(statement, context);
         }
 
@@ -650,6 +654,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitDeleteStatement(DeleteStmt statement, Void context) {
+            return RedirectStatus.FORWARD_WITH_SYNC;
+        }
+
+        @Override
+        public RedirectStatus visitMergeIntoStatement(MergeIntoStmt statement, Void context) {
             return RedirectStatus.FORWARD_WITH_SYNC;
         }
 
@@ -752,6 +761,15 @@ public class RedirectStatus {
         }
 
         @Override
+        public RedirectStatus visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
+            if (ConnectContext.get().getSessionVariable().getForwardToLeader()) {
+                return RedirectStatus.FORWARD_NO_SYNC;
+            } else {
+                return RedirectStatus.NO_FORWARD;
+            }
+        }
+
+        @Override
         public RedirectStatus visitAdminRepairTableStatement(AdminRepairTableStmt statement, Void context) {
             return visitDDLStatement(statement, context);
         }
@@ -794,6 +812,12 @@ public class RedirectStatus {
         @Override
         public RedirectStatus visitAdminAlterAutomatedSnapshotIntervalStatement(AdminAlterAutomatedSnapshotIntervalStmt clause,
                                                                                 Void context) {
+            return visitDDLStatement(clause, context);
+        }
+
+        @Override
+        public RedirectStatus visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt clause,
+                                                                            Void context) {
             return visitDDLStatement(clause, context);
         }
 
@@ -1279,6 +1303,11 @@ public class RedirectStatus {
         }
 
         @Override
+        public RedirectStatus visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, Void context) {
+            return visitDDLStatement(statement, context);
+        }
+
+        @Override
         public RedirectStatus visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, Void context) {
             return visitShowStatement(statement, context);
         }
@@ -1730,7 +1759,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement, Void context) {
-            return RedirectStatus.NO_FORWARD;
+            // A global baseline is persisted in the leader's statistics table and journalled, so it can only be
+            // built on the leader. A session baseline lives in the issuing ConnectContext alone, and the leader
+            // runs a forwarded statement against a throwaway proxy context, so forwarding one would store it
+            // where nobody can ever see it again. Split the two the way SET GLOBAL / SET is split above.
+            return statement.isGlobal() ? visitDDLStatement(statement, context) : RedirectStatus.NO_FORWARD;
         }
 
         @Override

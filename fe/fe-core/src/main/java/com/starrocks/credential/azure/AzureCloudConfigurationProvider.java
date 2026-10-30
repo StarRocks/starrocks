@@ -44,11 +44,9 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AZURE_PATH_KEY;
 
 public class AzureCloudConfigurationProvider implements CloudConfigurationProvider {
-
-    // Used to retrieve azure load path from configuration map
-    public static final String AZURE_PATH_KEY = "azure_path_key";
 
     public static final String ADLS_ENDPOINT = "dfs.core.windows.net";
     public static final String BLOB_ENDPOINT = "blob.core.windows.net";

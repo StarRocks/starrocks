@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Left-pads a string with a pad string to reach the specified length."
 ---
 
 # lpad

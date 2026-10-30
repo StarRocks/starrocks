@@ -1036,7 +1036,6 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
         org.apache.hadoop.hive.metastore.api.Partition partition = getPartition(databaseName, tableName, values);
         org.apache.hadoop.hive.metastore.api.Table table = getTable(databaseName, tableName);
         if ("TRUE".equalsIgnoreCase(table.getParameters().get("PARTITION_LEVEL_PRIVILEGE"))) {
-            String partName = Warehouse.makePartName(table.getPartitionKeys(), values);
             HiveObjectRef obj = new HiveObjectRef();
             obj.setObjectType(HiveObjectType.PARTITION);
             obj.setDbName(databaseName);

@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (DEFINED ENV{STARROCKS_HOME}) # starrocks: orc prioritize project search path
+if (DEFINED ENV{STARROCKS_HOME}) # starrocks: use the vendored ORC headers and avoid duplicate orc-config.hh
 include_directories (
   BEFORE
-  ${CMAKE_CURRENT_BINARY_DIR}/include
   "include"
   )
 else()

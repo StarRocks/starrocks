@@ -81,10 +81,6 @@ dependencies {
         exclude(group = "junit", module = "junit")
     }
     implementation("com.baidu:jprotobuf-rpc-common")
-    implementation("com.baidu:jprotobuf-rpc-core") {
-        exclude(group = "com.baidu", module = "jprotobuf")
-        exclude(group = "junit", module = "junit")
-    }
     implementation("com.clickhouse:clickhouse-jdbc")
     implementation("com.fasterxml.jackson.core:jackson-annotations")
     implementation("com.fasterxml.jackson.core:jackson-core")
@@ -97,6 +93,7 @@ dependencies {
     implementation("com.github.oshi:oshi-core")
     implementation("com.github.seancfoley:ipaddress")
     implementation("com.google.cloud.bigdataoss:gcs-connector")
+    implementation("com.google.code.findbugs:jsr305")
     implementation("com.google.code.gson:gson")
     implementation("com.google.guava:guava")
     implementation("com.google.protobuf:protobuf-java")
@@ -113,6 +110,9 @@ dependencies {
     implementation("com.qcloud:chdfs_hadoop_plugin_network")
     implementation("com.squareup.okhttp3:okhttp")
     implementation("com.squareup.okio:okio")
+    implementation("com.starrocks:jprotobuf-rpc-core") {
+        exclude(group = "junit", module = "junit")
+    }
     implementation("com.starrocks:spark-dpp")
     implementation("com.starrocks:starclient")
     implementation("com.starrocks:starmanager")
@@ -135,6 +135,9 @@ dependencies {
     implementation("io.delta:delta-kernel-defaults") {
         exclude(group = "org.apache.hadoop", module = "hadoop-client-api")
         exclude(group = "org.apache.hadoop", module = "hadoop-client-runtime")
+        // FE uses slf4j 1.7.x with log4j-slf4j-impl; exclude delta's slf4j 2.x binding to avoid
+        // NoClassDefFoundError: org/slf4j/spi/LoggingEventBuilder at startup
+        exclude(group = "org.apache.logging.log4j", module = "log4j-slf4j2-impl")
     }
     implementation("io.grpc:grpc-api")
     implementation("io.grpc:grpc-core")
@@ -178,6 +181,7 @@ dependencies {
     implementation("org.apache.hadoop:hadoop-client") {
         exclude(group = "org.slf4j", module = "slf4j-reload4j")
         exclude(group = "ch.qos.reload4j", module = "reload4j")
+        exclude(group = "org.jline", module = "jline")
     }
     implementation("org.apache.hadoop:hadoop-client-api")
     implementation("org.apache.hadoop:hadoop-client-runtime") {
@@ -228,15 +232,29 @@ dependencies {
     }
     implementation("org.apache.paimon:paimon-oss")
     implementation("org.apache.paimon:paimon-s3")
+    implementation("org.apache.orc:orc-core")
     implementation("org.apache.parquet:parquet-avro")
     implementation("org.apache.parquet:parquet-column")
     implementation("org.apache.parquet:parquet-common")
     implementation("org.apache.parquet:parquet-hadoop")
+    implementation("org.apache.ranger:ranger-audit-dest-solr") {
+        exclude(group = "org.elasticsearch", module = "*")
+        exclude(group = "org.elasticsearch.client", module = "*")
+        // jetty-client resolves to the banned 9.4.58 (ban-vulnerable-dependencies); Solr audit
+        // uses the Apache HttpClient path, not the Jetty HTTP/2 client, so this is runtime-safe.
+        exclude(group = "org.eclipse.jetty", module = "*")
+    }
+    // ZooKeeper classes that solr-solrj needs on every Solr audit send; see fe/pom.xml.
+    implementation("org.apache.zookeeper:zookeeper") {
+        isTransitive = false
+    }
     implementation("org.apache.ranger:ranger-plugins-common") {
         exclude(group = "org.elasticsearch", module = "*")
         exclude(group = "org.elasticsearch.client", module = "*")
         exclude(group = "com.nimbusds", module = "nimbus-jose-jwt")
         exclude(group = "com.sun.jersey", module = "jersey-bundle")
+        // Ranger 2.9.0 declares jsr311-api (JAX-RS 1.1) directly; it shadows jakarta.ws.rs-api 2.1.6
+        exclude(group = "javax.ws.rs", module = "jsr311-api")
     }
     compileOnly("org.apache.spark:spark-catalyst_2.12")
     implementation("org.apache.spark:spark-core_2.12") {
@@ -273,8 +291,13 @@ dependencies {
     implementation("org.jdom:jdom2")
     implementation("org.json:json")
     testImplementation("org.junit.jupiter:junit-jupiter")
+    // for HangingTestWatchdog, a TestExecutionListener
+    testImplementation("org.junit.platform:junit-platform-launcher")
     implementation("org.mariadb.jdbc:mariadb-java-client")
     testImplementation("org.mockito:mockito-inline:4.11.0")
+    // Force ByteBuddy 1.14.9+ for Java 21 class file format support
+    testImplementation("net.bytebuddy:byte-buddy:1.14.9")
+    testImplementation("net.bytebuddy:byte-buddy-agent:1.14.9")
     testImplementation("org.openjdk.jmh:jmh-core:1.37")
     testImplementation("org.openjdk.jmh:jmh-generator-annprocess:1.37")
     implementation("org.owasp.encoder:encoder")
@@ -285,18 +308,29 @@ dependencies {
     }
     implementation("org.slf4j:slf4j-api")
     implementation("org.threeten:threeten-extra:1.7.2")
+    // xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+    // jars that still reference it (commons-compress, clickhouse-jdbc, ...)
+    implementation("org.tukaani:xz")
     implementation("org.xerial.snappy:snappy-java")
-    implementation("software.amazon.awssdk:bundle")
+    implementation("software.amazon.awssdk:glue")
+    implementation("software.amazon.awssdk:dynamodb")
+    implementation("software.amazon.awssdk:kms")
+    implementation("software.amazon.awssdk:s3")
+    implementation("software.amazon.awssdk:s3-transfer-manager")
+    implementation("software.amazon.awssdk:sts")
+    implementation("software.amazon.awssdk:sso")
+    implementation("software.amazon.awssdk:ssooidc")
+    implementation("software.amazon.awssdk:url-connection-client")
     implementation("tools.profiler:async-profiler")
     implementation("com.github.vertical-blank:sql-formatter:2.0.4")
     implementation("at.yawk.lz4:lz4-java")
+    implementation("com.github.luben:zstd-jni")
     // dependency sync end
 
     // extra dependencies pom.xml does not have
     implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
     implementation("org.apache.groovy:groovy:4.0.9")
     testImplementation("org.apache.spark:spark-sql_2.12")
-    implementation("software.amazon.awssdk:s3-transfer-manager")
     implementation("net.openhft:zero-allocation-hashing:0.16")
 }
 
@@ -324,8 +358,11 @@ tasks.register<Task>("generateProtoSources") {
         "encryption.proto"
     )
 
-    // Declare inputs (proto files)
-    inputs.files(protoFiles.map { file("$protoDir/$it") })
+    // Declare inputs (proto files). The generator follows imports (e.g. internal_service.proto ->
+    // status.proto, data.proto), so track every proto in the directory rather than only the root
+    // files above; otherwise editing an imported proto leaves the generated Java stale while
+    // Gradle reports this task up to date.
+    inputs.files(fileTree(protoDir) { include("*.proto") })
 
     // Declare output directory
     outputs.dir(outputDir)
@@ -353,12 +390,6 @@ tasks.register<Task>("generateThriftSources") {
     description = "Generates Java source files from Thrift definitions"
     group = "build"
 
-    // Create a special configuration for the thrift compiler rather than using runtime classpath
-    val thriftGenClasspath = configurations.create("thriftGenClasspath")
-    dependencies {
-        thriftGenClasspath("io.github.decster:thrift-java-maven-plugin:0.1.3")
-    }
-
     val protoDir = file("../../gensrc/thrift")
     val outputDir = layout.buildDirectory.get().dir("generated-sources/thrift").asFile
 
@@ -368,24 +399,40 @@ tasks.register<Task>("generateThriftSources") {
         exclude("parquet.thrift")
     }.files
 
-    // Declare inputs (proto files)
+    // Mirror the binary-discovery logic from gensrc/thrift/Makefile:
+    // prefer $STARROCKS_THIRDPARTY/installed/bin/thrift, fall back to "thrift" on PATH.
+    // Resolved at configuration time so Gradle can track it as a task input.
+    val thriftBin: String = run {
+        val tp = System.getenv("STARROCKS_THIRDPARTY")
+        if (tp != null) {
+            val candidate = file("$tp/installed/bin/thrift")
+            if (candidate.exists()) return@run candidate.absolutePath
+        }
+        "thrift"
+    }
+
+    // Declare inputs: proto files and the thrift compiler binary.
+    // Including the binary ensures the task is re-run when the toolchain is upgraded.
     inputs.files(protoFiles)
+    inputs.property("thriftBin", thriftBin)
 
     // Declare output directory
     outputs.dir(outputDir)
 
     doFirst {
         mkdir(outputDir)
-        // Process each proto file individually
-        project.javaexec {
-            classpath = thriftGenClasspath
-            mainClass.set("io.github.decster.ThriftCompiler")
-            // Build arguments list with the output directory and all thrift files
-            val allArgs = mutableListOf("-o", "$outputDir")
-            protoFiles.forEach { file ->
-                allArgs.add(file.absolutePath)
+
+        // Process each thrift file with the native compiler, matching Maven's maven-thrift-plugin args.
+        protoFiles.forEach { thriftFile ->
+            project.exec {
+                commandLine(
+                    thriftBin,
+                    "--gen", "java",
+                    "-out", outputDir.absolutePath,
+                    "-I", protoDir.absolutePath,
+                    thriftFile.absolutePath
+                )
             }
-            args = allArgs
         }
     }
 }
@@ -459,13 +506,61 @@ tasks.test {
         showCauses = false // Show underlying causes for exceptions
     }
 
+    // HangingTestWatchdog prints the thread stacks of a hung test JVM to stderr. The test output streams are not
+    // shown above, and the report is written only when a test class finishes, which a hung one never does, so
+    // forward the watchdog's lines (each starts with this prefix) to the build log as they come.
+    addTestOutputListener(object : TestOutputListener {
+        override fun onOutput(testDescriptor: TestDescriptor, outputEvent: TestOutputEvent) {
+            if (outputEvent.destination == TestOutputEvent.Destination.StdErr &&
+                    outputEvent.message.contains("[HangingTestWatchdog]")) {
+                logger.lifecycle(outputEvent.message.trimEnd())
+            }
+        }
+    })
+
     systemProperty("starrocks.home", project.ext["starrocks.home"] as String)
 
+    // Unlike Maven surefire, Gradle does not pass the build's system properties to the test JVM, so forward the
+    // HangingTestWatchdog threshold, e.g. -Dstarrocks.ut.hang.dump.seconds=0 to disable it (-P works as well).
+    providers.systemProperty("starrocks.ut.hang.dump.seconds")
+        .orElse(providers.gradleProperty("starrocks.ut.hang.dump.seconds"))
+        .orNull
+        ?.let { systemProperty("starrocks.ut.hang.dump.seconds", it) }
+
     // Add JMockit Java agent to JVM arguments
+    val jmockitPath = configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath
     jvmArgs(
         "-Djdk.attach.allowAttachSelf",
         "-Duser.timezone=Asia/Shanghai",
-        "-javaagent:${configurations.testCompileClasspath.get().find { it.name.contains("jmockit") }?.absolutePath}"
+        "-javaagent:${jmockitPath}",
+        // JIT tuning to match Maven surefire config
+        "-XX:TieredStopAtLevel=1",
+        "-XX:CICompilerCount=1",
+        "-XX:-BackgroundCompilation",
+        "-XX:+UseSerialGC",
+        // TieredStopAtLevel=1 lowers the default code cache to 48m, which a planner-heavy test class can fill.
+        "-XX:ReservedCodeCacheSize=128m",
+        // Java 21 module access for JMockit/Mockito ByteBuddy
+        // (Maven surefire 3.2.5 auto-injects these on Java 17+)
+        "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED",
+        "--add-opens", "java.base/java.lang.invoke=ALL-UNNAMED",
+        "--add-opens", "java.base/java.io=ALL-UNNAMED",
+        "--add-opens", "java.base/java.math=ALL-UNNAMED",
+        "--add-opens", "java.base/java.net=ALL-UNNAMED",
+        "--add-opens", "java.base/java.nio=ALL-UNNAMED",
+        "--add-opens", "java.base/java.text=ALL-UNNAMED",
+        "--add-opens", "java.base/java.time=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.stream=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.regex=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.concurrent=ALL-UNNAMED",
+        "--add-opens", "java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.nio.ch=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.security.ssl=ALL-UNNAMED",
+        "--add-opens", "java.base/sun.security.x509=ALL-UNNAMED",
+        "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+        "--add-opens", "java.management/sun.management=ALL-UNNAMED",
     )
 
     // Use independent class loading (equivalent to useSystemClassLoader=false)
@@ -496,6 +591,13 @@ tasks.withType<Checkstyle>().configureEach {
 
     // Increase memory for checkstyle to avoid OutOfMemoryError
     maxHeapSize = "4096m"
+}
+
+// Aggregate task that checks both main and test sources (matches Maven behavior)
+tasks.register("checkstyle") {
+    dependsOn("checkstyleMain", "checkstyleTest")
+    description = "Run Checkstyle analysis for both main and test classes"
+    group = "verification"
 }
 
 // Bind checkstyle to run before compilation

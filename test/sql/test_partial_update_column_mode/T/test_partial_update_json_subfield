@@ -1,0 +1,28 @@
+-- name: test_partial_update_json_subfield
+-- A column-mode partial update writes the new value of the JSON column into a delta column group.
+-- get_json_* is rewritten by the optimizer into a read of an extended subfield column
+-- (cbo_json_v2_rewrite, on by default), which must resolve that delta column group through the root
+-- JSON column; resolving it through the extended column's own synthetic id finds nothing and the
+-- subfield is then silently served from the base segment, i.e. the value the update replaced.
+CREATE table tab1 (
+      pk BIGINT NOT NULL,
+      j JSON,
+      v BIGINT
+)
+ENGINE=OLAP
+PRIMARY KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into tab1 values (1, parse_json('{"x": 1, "y": "aaa"}'), 1), (2, parse_json('{"x": 2, "y": "aaa"}'), 2);
+set partial_update_mode = 'column';
+update tab1 set j = parse_json('{"x": 9, "y": "bbb"}') where pk = 1;
+set partial_update_mode = 'auto';
+select pk, get_json_int(j, '$.x'), get_json_string(j, '$.y'), cast(j as varchar) from tab1 order by pk;
+-- A predicate on the overlaid subfield must match the updated row too, not just the projection.
+select pk from tab1 where get_json_string(j, '$.y') = 'bbb' order by pk;
+select pk from tab1 where get_json_int(j, '$.x') = 9 order by pk;
+set cbo_json_v2_rewrite = false;
+select pk, get_json_int(j, '$.x'), get_json_string(j, '$.y') from tab1 order by pk;
+set cbo_json_v2_rewrite = true;

@@ -36,6 +36,7 @@
 
 #include <deque>
 #include <queue>
+#include <utility>
 #include <vector>
 
 #include "column/datum_convert.h"
@@ -49,6 +50,7 @@
 #include "types/datum.h"
 
 namespace starrocks {
+class ExecEnv;
 class Field;
 class Tablet;
 
@@ -72,7 +74,7 @@ public:
     virtual Status process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                            TabletSharedPtr base_tablet, RowsetSharedPtr rowset,
                            TabletSchemaCSPtr base_tablet_schema = nullptr) = 0;
-    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = std::move(msg); }
     std::string alter_msg_header() { return _alter_msg_header; }
 
     std::string _alter_msg_header;
@@ -134,12 +136,12 @@ private:
 
 class SchemaChangeHandler {
 public:
-    SchemaChangeHandler() = default;
+    explicit SchemaChangeHandler(ExecEnv* exec_env = nullptr) : _exec_env(exec_env) {}
     ~SchemaChangeHandler() = default;
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
 
-    void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
+    void set_alter_msg_header(std::string msg) { _alter_msg_header = std::move(msg); }
 
     const std::string& get_task_detail_msg() { return _task_detail_msg; }
 
@@ -157,6 +159,7 @@ private:
     Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 
     DISALLOW_COPY(SchemaChangeHandler);
+    ExecEnv* _exec_env = nullptr;
     std::string _alter_msg_header;
     std::string _task_detail_msg = "";
 };

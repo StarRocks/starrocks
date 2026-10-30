@@ -20,16 +20,15 @@
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/simd_selector.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exprs/expr_factory.h"
+#include "exprs/dispatch.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
 #include "types/percentile_value.h"
 #include "types/type_descriptor.h"
-#include "util/dispatch.h"
 
 namespace starrocks {
 
@@ -96,7 +95,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        if constexpr (lt_is_collection<Type>) {
+        if constexpr (lt_is_row_wise_append<Type>) {
             return _evaluate_complex(list);
         } else {
             return _evaluate_general(list);
@@ -126,7 +125,7 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
@@ -165,7 +164,7 @@ public:
         }
 
         Columns list = {lhs, rhs};
-        if constexpr (lt_is_collection<Type>) {
+        if constexpr (lt_is_row_wise_append<Type>) {
             return _evaluate_complex(list);
         } else {
             return _evaluate_general(list);
@@ -200,7 +199,7 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         auto res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
@@ -255,7 +254,7 @@ public:
         // optimization for 3 columns all not null.
         if (bhs_nulls == 0 && lhs_nulls == 0 && rhs_nulls == 0) {
             // only arithmetic type could use SIMD optimization
-            if constexpr (lt_is_collection<Type>) {
+            if constexpr (lt_is_row_wise_append<Type>) {
                 return _evaluate_complex<false>(list);
             } else if (bhs->is_constant() || !isArithmeticLT<Type>) {
                 return _evaluate_general<false>(list);
@@ -265,7 +264,7 @@ public:
                 __builtin_unreachable();
             }
         } else {
-            if constexpr (lt_is_collection<Type>) {
+            if constexpr (lt_is_row_wise_append<Type>) {
                 return _evaluate_complex<true>(list);
             } else if constexpr (isArithmeticLT<Type>) {
                 // SIMD branch
@@ -351,7 +350,7 @@ private:
         auto num_rows = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
         MutableColumnPtr res = ColumnHelper::create_column(this->type(), true);
@@ -417,7 +416,7 @@ public:
             return Column::mutate(std::move(columns[0]));
         }
 
-        if constexpr (lt_is_collection<Type>) {
+        if constexpr (lt_is_row_wise_append<Type>) {
             return _evaluate_complex(columns);
         } else {
             return _evaluate_general(columns);
@@ -457,7 +456,7 @@ private:
         int size = inputs[0]->size();
         Columns columns;
         for (const auto& col : inputs) {
-            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, std::move(col)));
+            columns.push_back(ColumnHelper::unfold_const_column(this->type(), size, col));
         }
         int col_size = columns.size();
         auto res = ColumnHelper::create_column(this->type(), true);
@@ -518,6 +517,7 @@ private:
     CASE_TYPE(TYPE_MAP, CLASS);        \
     CASE_TYPE(TYPE_STRUCT, CLASS);     \
     CASE_TYPE(TYPE_JSON, CLASS);       \
+    CASE_TYPE(TYPE_VARIANT, CLASS);    \
     CASE_TYPE(TYPE_DECIMAL32, CLASS);  \
     CASE_TYPE(TYPE_DECIMAL64, CLASS);  \
     CASE_TYPE(TYPE_DECIMAL128, CLASS); \

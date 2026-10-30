@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converting JSON object to JSON string"
 ---
 
 # json_string

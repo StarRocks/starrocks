@@ -1,6 +1,8 @@
 ---
+sidebar_position: 80
 displayed_sidebar: docs
 toc_max_heading_level: 4
+description: "A benchmark catalog is a built-in external catalog that generates data on the fly for standard benchmark suites."
 ---
 
 # Benchmark catalog

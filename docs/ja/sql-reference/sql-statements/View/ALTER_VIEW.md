@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ALTER VIEW modifies the definition of a logical view."
 ---
 
 # ALTER VIEW

@@ -19,14 +19,14 @@
 #include <vector>
 
 #include "column/column_access_path.h"
-#include "runtime/global_dict/types.h"
+#include "column/global_dict/types.h"
+#include "compute_env/runtime_range_pruner.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
-#include "storage/runtime_filter_predicate.h"
-#include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 class Conditions;
@@ -87,6 +87,8 @@ public:
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
+    uint32_t dynamic_rss_id_base = 0;
+
     bool asc_hint = true;
 
     bool prune_column_after_index_filter = false;
@@ -100,6 +102,7 @@ public:
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+    bool has_predicate_above_iterator = false;
 };
 
 } // namespace starrocks

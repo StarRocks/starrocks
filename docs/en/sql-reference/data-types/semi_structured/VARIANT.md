@@ -1,10 +1,15 @@
 ---
 displayed_sidebar: docs
+description: "The VARIANT type is supported only for tables in Iceberg Catalog and Paimon Catalog."
 ---
 
 # VARIANT
 
-Since version 4.0, StarRocks supports the VARIANT data type for querying semi-structured data from Iceberg tables in Parquet format. This article introduces the basic concepts of VARIANT, and how StarRocks queries VARIANT-type data and processes it through variant functions.
+:::important
+The VARIANT type is supported only for tables in Iceberg Catalog and Paimon Catalog. It is not supported by StarRocks native tables.
+:::
+
+From v4.1 onwards, StarRocks supports the VARIANT data type for querying semi-structured data from Iceberg tables in Parquet format. From v4.2 onwards, StarRocks also supports the VARIANT data type for querying semi-structured data from Paimon tables. This article introduces the basic concepts of VARIANT, and how StarRocks queries VARIANT-type data and processes it through VARIANT functions.
 
 ## What is VARIANT
 
@@ -23,7 +28,6 @@ StarRocks supports querying VARIANT-type data from Iceberg tables stored in Parq
 Example of querying an Iceberg table with VARIANT columns:
 
 ```SQL
-
 -- Query a table with VARIANT columns
 SELECT
     id,
@@ -33,7 +37,7 @@ FROM iceberg_catalog.db.table_with_variants;
 
 ### Extracting Values from VARIANT Data
 
-StarRocks provides several functions to extract typed values from VARIANT data:
+StarRocks provides several functions to extract typed values from VARIANT data.
 
 Example 1: Extract primitive values using typed getter functions.
 
@@ -129,7 +133,7 @@ You can cast SQL values to VARIANT. Supported input types include BOOLEAN, integ
 SELECT
     CAST(123 AS VARIANT) AS v_int,
     CAST(3.14 AS VARIANT) AS v_double,
-    CAST(DECIMAL(10, 2) '12.34' AS VARIANT) AS v_decimal,
+    CAST(CAST('12.34' AS DECIMAL(10, 2)) AS VARIANT) AS v_decimal,
     CAST('hello' AS VARIANT) AS v_string,
     CAST(PARSE_JSON('{"k":1}') AS VARIANT) AS v_json;
 ```
@@ -184,6 +188,7 @@ When data is read from Parquet files with variant encoding, the following type c
 ## Limitations and Considerations
 
 - VARIANT is supported for reading data from Iceberg tables in Parquet format with variant encoding, and for writing Parquet files using StarRocks file writers (unshredded variant encoding).
+- VARIANT is also supported for reading data from Paimon tables (Paimon requires Parquet for variant columns), but only for splits read by the native reader (append-only tables and compacted primary-key data). Reading VARIANT from uncompacted primary-key data requires the JNI reader and is not yet supported; such queries are rejected with a plan-time error.
 - The size of a VARIANT value is limited to 16 MB.
 - Currently only unshredded variant values are supported for both read and write.
 - VARIANT can be created by casting from JSON values or supported SQL types (including ARRAY, MAP, and STRUCT).

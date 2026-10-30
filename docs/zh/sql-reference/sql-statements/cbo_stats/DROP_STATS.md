@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP STATS 删除 CBO 统计信息，包括基础统计信息和直方图。"
 ---
 
 # DROP STATS

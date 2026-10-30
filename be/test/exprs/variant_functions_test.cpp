@@ -21,17 +21,23 @@
 #include <string>
 #include <vector>
 
+#include "column/array_column.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "exprs/variant_path_reader.h"
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 #include "types/variant.h"
 
@@ -80,11 +86,154 @@ static void create_variant_from_test_data(const std::string& metadata_file, cons
     variant = VariantRowValue(metadata, value);
 }
 
+static VariantRowValue create_variant_from_json_text(const std::string& json_text) {
+    auto json = JsonValue::parse(json_text);
+    CHECK(json.ok()) << json.status().to_string();
+    auto encoded = VariantEncoder::encode_json_to_variant(json.value());
+    CHECK(encoded.ok()) << encoded.status().to_string();
+    return encoded.value();
+}
+
+static MutableColumnPtr build_nullable_int64_column(const std::vector<int64_t>& values,
+                                                    const std::vector<uint8_t>& is_null) {
+    auto data = Int64Column::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_bool_column(const std::vector<uint8_t>& values,
+                                                   const std::vector<uint8_t>& is_null) {
+    auto data = BooleanColumn::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i] != 0);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_double_column(const std::vector<double>& values,
+                                                     const std::vector<uint8_t>& is_null) {
+    auto data = DoubleColumn::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_varchar_column(const std::vector<std::string>& values,
+                                                      const std::vector<uint8_t>& is_null) {
+    auto data = BinaryColumn::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_variant_column(const std::vector<VariantRowValue>& values,
+                                                      const std::vector<uint8_t>& is_null) {
+    auto data = VariantColumn::create();
+    auto null = NullColumn::create();
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        data->append(values[i]);
+        null->append(is_null[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null));
+}
+
+static MutableColumnPtr build_nullable_int_array_column(const std::vector<DatumArray>& values,
+                                                        const std::vector<uint8_t>& is_null) {
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_BIGINT_DESC, true);
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i] != 0) {
+            col->append_nulls(1);
+        } else {
+            col->append_datum(Datum(values[i]));
+        }
+    }
+    return col;
+}
+
+static MutableColumnPtr build_nullable_map_si_column(const std::vector<DatumMap>& values,
+                                                     const std::vector<uint8_t>& is_null) {
+    TypeDescriptor map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT));
+    auto col = ColumnHelper::create_column(map_type, true);
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i] != 0) {
+            col->append_nulls(1);
+        } else {
+            col->append_datum(Datum(values[i]));
+        }
+    }
+    return col;
+}
+
+static MutableColumnPtr build_nullable_struct_is_column(const std::vector<DatumStruct>& values,
+                                                        const std::vector<uint8_t>& is_null) {
+    TypeDescriptor struct_type =
+            TypeDescriptor::create_struct_type({"x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    auto col = ColumnHelper::create_column(struct_type, true);
+    DCHECK_EQ(values.size(), is_null.size());
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (is_null[i] != 0) {
+            col->append_nulls(1);
+        } else {
+            col->append_datum(Datum(values[i]));
+        }
+    }
+    return col;
+}
+
+// Decode VARIANT function result via VariantColumn::get_row_value so shredded/plain internals are both supported.
+static StatusOr<std::string> variant_result_to_json(const ColumnPtr& result, size_t row_num) {
+    ColumnPtr data_col = ColumnHelper::get_data_column(result.get());
+    auto* variant_data_col = down_cast<const VariantColumn*>(data_col.get());
+    if (variant_data_col == nullptr) {
+        return Status::InvalidArgument("result data column is not VariantColumn");
+    }
+    VariantRowValue cell;
+    const VariantRowValue* row = variant_data_col->get_row_value(row_num, &cell);
+    if (row == nullptr) {
+        return Status::InvalidArgument("failed to get variant row value");
+    }
+    return row->to_json();
+}
+
+static StatusOr<std::string> variant_result_to_json(const ColumnPtr& result, size_t row_num,
+                                                    const cctz::time_zone& ctz) {
+    ColumnPtr data_col = ColumnHelper::get_data_column(result.get());
+    auto* variant_data_col = down_cast<const VariantColumn*>(data_col.get());
+    if (variant_data_col == nullptr) {
+        return Status::InvalidArgument("result data column is not VariantColumn");
+    }
+    VariantRowValue cell;
+    const VariantRowValue* row = variant_data_col->get_row_value(row_num, &cell);
+    if (row == nullptr) {
+        return Status::InvalidArgument("failed to get variant row value");
+    }
+    return row->to_json(ctz);
+}
+
 // Test cases using real variant test data
-class VariantQueryTestFixture
+class VariantFunctionsTestQuery
         : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string, std::string>> {};
 
-TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
+TEST_P(VariantFunctionsTestQuery, variant_query_with_test_data) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto variant_column = VariantColumn::create();
     ColumnBuilder<TYPE_VARCHAR> path_builder(1);
@@ -116,14 +265,15 @@ TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
     cctz::time_zone ctz;
     TimezoneUtils::find_cctz_time_zone("-04:00", ctz);
 
-    Datum datum = result->get(0);
+    // Ask the column whether the row is SQL NULL. A variant row is not expressible as a Datum -
+    // VariantColumn::get() refuses rather than hand out a pointer into the pool it never fills -
+    // and Datum::is_null() could never have answered this for a non-null row anyway: it only ever
+    // saw the empty Datum that NullableColumn::get() returns for a null row.
     if (param_result == "NULL") {
-        ASSERT_TRUE(datum.is_null());
+        ASSERT_TRUE(result->is_null(0));
     } else {
-        ASSERT_TRUE(!datum.is_null());
-        auto variant_result = datum.get_variant();
-        ASSERT_TRUE(!!variant_result);
-        auto json_result = variant_result->to_json(ctz);
+        ASSERT_FALSE(result->is_null(0));
+        auto json_result = variant_result_to_json(result, 0, ctz);
         ASSERT_TRUE(json_result.ok());
         std::string variant_str = json_result.value();
         ASSERT_EQ(param_result, variant_str);
@@ -135,7 +285,7 @@ TEST_P(VariantQueryTestFixture, variant_query_with_test_data) {
 
 // Test cases using real variant test data from parquet test files
 INSTANTIATE_TEST_SUITE_P(
-        VariantQueryTestWithRealData, VariantQueryTestFixture,
+        VariantQueryTestWithRealData, VariantFunctionsTestQuery,
         ::testing::Values(
                 // clang-format off
                 // Basic primitive tests using real test data
@@ -171,10 +321,6 @@ INSTANTIATE_TEST_SUITE_P(
                 // clang-format on
                 ));
 
-// Simplified test cases for basic functionality using simple variant values
-class VariantQuerySimpleTestFixture
-        : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {};
-
 TEST_F(VariantFunctionsTest, variant_query_invalid_arguments) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
@@ -207,6 +353,7 @@ TEST_F(VariantFunctionsTest, variant_query_invalid_arguments) {
     }
 }
 
+// Validates null-propagation when both variant input and path input are nullable-null.
 TEST_F(VariantFunctionsTest, variant_query_null_columns) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
@@ -221,11 +368,10 @@ TEST_F(VariantFunctionsTest, variant_query_null_columns) {
 
     ColumnPtr result = VariantFunctions::variant_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
-    ASSERT_EQ(2, result->size());
-    ASSERT_TRUE(result->is_null(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[NULL, NULL]", result->debug_string());
 }
 
+// Validates invalid json-path handling returns NULL instead of failing evaluation.
 TEST_F(VariantFunctionsTest, variant_query_invalid_path) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto variant_column = VariantColumn::create();
@@ -246,6 +392,7 @@ TEST_F(VariantFunctionsTest, variant_query_invalid_path) {
     ASSERT_TRUE(result->is_null(0));
 }
 
+// Validates basic object path extraction through variant_query on non-shredded rows.
 TEST_F(VariantFunctionsTest, variant_query_complex_types) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto variant_column = VariantColumn::create();
@@ -263,19 +410,16 @@ TEST_F(VariantFunctionsTest, variant_query_complex_types) {
     ASSERT_TRUE(!!result);
     ASSERT_EQ(1, result->size());
 
-    // Handle potential ConstColumn wrapping
-    Datum datum = result->get(0);
-    ASSERT_FALSE(datum.is_null());
-
-    // For TYPE_VARIANT result, the datum should contain a VariantRowValue pointer
-    auto variant_result = datum.get_variant();
-    ASSERT_TRUE(!!variant_result);
-    auto json_result = variant_result->to_json();
+    // Handle potential ConstColumn wrapping. Read the null flag from the column: a variant row is
+    // not expressible as a Datum, and the value itself comes from get_row_value() below.
+    ASSERT_FALSE(result->is_null(0));
+    auto json_result = variant_result_to_json(result, 0);
     ASSERT_TRUE(json_result.ok());
     const std::string& variant_str = json_result.value();
     ASSERT_EQ("1", variant_str);
 }
 
+// Validates per-row dynamic path evaluation across multiple variant rows.
 TEST_F(VariantFunctionsTest, variant_query_multiple_rows) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto variant_column = VariantColumn::create();
@@ -308,15 +452,14 @@ TEST_F(VariantFunctionsTest, variant_query_multiple_rows) {
 
     std::vector<std::string> expected_results = {"42", "true", "\"Less than 64 bytes (❤️ with utf8)\""};
     for (size_t i = 0; i < 3; ++i) {
-        auto variant_result = result->get(i).get_variant();
-        ASSERT_TRUE(!!variant_result);
-        auto json_result = variant_result->to_json();
+        auto json_result = variant_result_to_json(result, i);
         ASSERT_TRUE(json_result.ok());
         const std::string& variant_str = json_result.value();
         ASSERT_EQ(expected_results[i], variant_str);
     }
 }
 
+// Validates const variant + const path handling in variant_query (const folding path).
 TEST_F(VariantFunctionsTest, variant_query_const_columns) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto variant_column = VariantColumn::create();
@@ -340,12 +483,1331 @@ TEST_F(VariantFunctionsTest, variant_query_const_columns) {
     ASSERT_EQ(3, result->size());
 
     for (size_t i = 0; i < 3; ++i) {
-        auto variant_result = result->get(i).get_variant();
-        ASSERT_TRUE(!!variant_result);
-        auto json_result = variant_result->to_json();
+        auto json_result = variant_result_to_json(result, i);
         ASSERT_TRUE(json_result.ok());
         const std::string& variant_str = json_result.value();
         ASSERT_EQ("\"Less than 64 bytes (❤️ with utf8)\"", variant_str);
+    }
+}
+
+// Verifies typed-column direct hit path in _do_variant_query -> try_append_typed_match_result for BIGINT.
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_typed_only_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ(777, result.value()->get(0).get_int64());
+}
+
+// Verifies const-path fast path with shredded typed BIGINT across multiple rows.
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_const_path_multi_rows) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777, 888}, {0, 0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_data = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    auto const_path = ConstColumn::create(std::move(path_data), 2);
+
+    Columns columns{variant_column, const_path};
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_FALSE(result.value()->is_null(1));
+    ASSERT_EQ(777, result.value()->get(0).get_int64());
+    ASSERT_EQ(888, result.value()->get(1).get_int64());
+}
+
+// Verifies typed object-prefix match ("a.b") followed by suffix seek (".int_field").
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_object_suffix_path_from_typed_variant) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    VariantRowValue typed_obj_variant;
+    create_variant_from_test_data("object_primitive.metadata", "object_primitive.value", typed_obj_variant);
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_variant_column({typed_obj_variant}, {0}));
+    variant_column->set_shredded_columns({"a.b"}, {TypeDescriptor(TYPE_VARIANT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.a.b.int_field"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ(1, result.value()->get(0).get_int64());
+}
+
+// Verifies fallback to remain row when typed path does not exist.
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_fallback_to_remain_when_typed_path_missing) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant = create_variant_from_json_text(R"({"int_field":1,"name":"fallback"})");
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.int_field"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ(1, result.value()->get(0).get_int64());
+}
+
+// Verifies typed-null matched path returns SQL NULL and does not fallback to remain on same path.
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_typed_null_no_fallback_to_remain) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("object_primitive.metadata", "object_primitive.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({0}, {1}));
+    variant_column->set_shredded_columns({"int_field"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.int_field"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies array-index suffix seek from typed variant payload (e.g. "$.a.c[0]").
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_array_index_path_from_typed_variant) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    VariantRowValue typed_array_variant;
+    create_variant_from_test_data("array_primitive.metadata", "array_primitive.value", typed_array_variant);
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_variant_column({typed_array_variant}, {0}));
+    variant_column->set_shredded_columns({"a.c"}, {TypeDescriptor(TYPE_VARIANT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.a.c[0]"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ(2, result.value()->get(0).get_int64());
+}
+
+TEST_F(VariantFunctionsTest, numeric_strings_in_variant_fields) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variants = VariantColumn::create();
+    variants->append(create_variant_from_json_text(R"({"x":"35"})"));
+    variants->append(create_variant_from_json_text(R"({"x":"bad"})"));
+    variants->append(create_variant_from_json_text(R"({"x":null})"));
+    ColumnBuilder<TYPE_VARCHAR> paths(1);
+    paths.append("$.x");
+    Columns columns{variants, paths.build(true)};
+    ctx->set_constant_columns(columns);
+
+    auto integers = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(integers.ok()) << integers.status();
+    ASSERT_EQ(3, integers.value()->size());
+    EXPECT_EQ(35, integers.value()->get(0).get_int64());
+    EXPECT_TRUE(integers.value()->is_null(1));
+    EXPECT_TRUE(integers.value()->is_null(2));
+
+    auto doubles = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(doubles.ok()) << doubles.status();
+    ASSERT_EQ(3, doubles.value()->size());
+    EXPECT_DOUBLE_EQ(35.0, doubles.value()->get(0).get_double());
+    EXPECT_TRUE(doubles.value()->is_null(1));
+    EXPECT_TRUE(doubles.value()->is_null(2));
+}
+
+TEST_F(VariantFunctionsTest, numeric_strings_in_shredded_variant_fields) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variants = VariantColumn::create();
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_varchar_column({"35", "3.5", "bad", "NaN", ""}, {0, 0, 0, 0, 1}));
+    variants->set_shredded_columns({"x"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed), nullptr, nullptr);
+    ColumnBuilder<TYPE_VARCHAR> paths(1);
+    paths.append("$.x");
+    Columns columns{variants, paths.build(true)};
+    ctx->set_constant_columns(columns);
+
+    auto integers = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(integers.ok()) << integers.status();
+    ASSERT_EQ(5, integers.value()->size());
+    EXPECT_EQ(35, integers.value()->get(0).get_int64());
+    for (size_t row : {2, 3, 4}) {
+        EXPECT_TRUE(integers.value()->is_null(row));
+    }
+
+    auto doubles = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(doubles.ok()) << doubles.status();
+    ASSERT_EQ(5, doubles.value()->size());
+    EXPECT_DOUBLE_EQ(35.0, doubles.value()->get(0).get_double());
+    EXPECT_DOUBLE_EQ(3.5, doubles.value()->get(1).get_double());
+    for (size_t row : {2, 3, 4}) {
+        EXPECT_TRUE(doubles.value()->is_null(row));
+    }
+}
+
+// Verifies typed-column direct hit path for VARCHAR without remain fallback.
+TEST_F(VariantFunctionsTest, get_variant_string_shredded_typed_only_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_varchar_column({"typed_string"}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_string(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ("typed_string", result.value()->get(0).get_slice().to_string());
+}
+
+// Verifies typed-column direct hit path for BOOLEAN without remain fallback.
+TEST_F(VariantFunctionsTest, get_variant_bool_shredded_typed_only_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_bool_column({1}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BOOLEAN)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_bool(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_TRUE(result.value()->get(0).get_uint8());
+}
+
+// Verifies typed-column direct hit path for DOUBLE without remain fallback.
+TEST_F(VariantFunctionsTest, get_variant_double_shredded_typed_only_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_double_column({3.5}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_DOUBLE)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_DOUBLE_EQ(3.5, result.value()->get(0).get_double());
+}
+
+// Verifies numeric typed BIGINT exact-hit can be bulk-cast to DOUBLE.
+TEST_F(VariantFunctionsTest, get_variant_double_shredded_numeric_cast_from_bigint) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_DOUBLE_EQ(777.0, result.value()->get(0).get_double());
+}
+
+// Verifies VARCHAR read returns SQL NULL when typed value is null on matched path.
+TEST_F(VariantFunctionsTest, get_variant_string_shredded_typed_null_no_fallback_to_remain) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("object_primitive.metadata", "object_primitive.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({0}, {1}));
+    variant_column->set_shredded_columns({"int_field"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.int_field"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_string(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies BOOLEAN read falls back to remain when typed path is missing.
+TEST_F(VariantFunctionsTest, get_variant_bool_shredded_fallback_to_remain_when_typed_path_missing) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_boolean_true.metadata", "primitive_boolean_true.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({0}, {1}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_bool(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_TRUE(result.value()->get(0).get_uint8());
+}
+
+// Verifies DOUBLE read returns SQL NULL when typed value is null on matched path.
+TEST_F(VariantFunctionsTest, get_variant_double_shredded_typed_null_no_fallback_to_remain) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("object_primitive.metadata", "object_primitive.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({0}, {1}));
+    variant_column->set_shredded_columns({"int_field"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.int_field"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_double(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies variant_query returns typed BIGINT value as VARIANT when typed path is directly hit.
+TEST_F(VariantFunctionsTest, variant_query_shredded_typed_only_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    auto json_result = variant_result_to_json(result.value(), 0);
+    ASSERT_TRUE(json_result.ok());
+    ASSERT_EQ("777", json_result.value());
+}
+
+// Verifies exact typed TYPE_VARIANT path uses the same query semantics as the row path.
+TEST_F(VariantFunctionsTest, variant_query_shredded_exact_typed_variant_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant = create_variant_from_json_text(R"({"base":0})");
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    VariantRowValue typed0 = create_variant_from_json_text(R"({"x":1})");
+    VariantRowValue typed1 = create_variant_from_json_text(R"([2,3])");
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_variant_column({typed0, typed1}, {0, 0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARIANT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_data = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    auto const_path = ConstColumn::create(std::move(path_data), 2);
+    Columns columns{variant_column, const_path};
+
+    auto result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_FALSE(result.value()->is_null(1));
+
+    auto row0 = variant_result_to_json(result.value(), 0);
+    ASSERT_TRUE(row0.ok());
+    ASSERT_EQ(R"({"x":1})", row0.value());
+
+    auto row1 = variant_result_to_json(result.value(), 1);
+    ASSERT_TRUE(row1.ok());
+    ASSERT_EQ(R"([2,3])", row1.value());
+}
+
+// Verifies const variant + const path combination uses row=0 correctly in shredded mode for all output rows.
+TEST_F(VariantFunctionsTest, variant_query_shredded_const_variant_and_const_path_multi_rows) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto const_variant = ConstColumn::create(std::move(variant_column), 3);
+    auto path_data = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    auto const_path = ConstColumn::create(std::move(path_data), 3);
+
+    Columns columns{const_variant, const_path};
+    auto result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(3, result.value()->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_FALSE(result.value()->is_null(i));
+        auto json_result = variant_result_to_json(result.value(), i);
+        ASSERT_TRUE(json_result.ok());
+        ASSERT_EQ("777", json_result.value());
+    }
+}
+
+// Verifies typed-only object (single non-root key) reports OBJECT for variant_typeof.
+TEST_F(VariantFunctionsTest, variant_typeof_typed_only_single_key_object) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"root"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+
+    Columns columns{variant_column};
+    auto result = VariantFunctions::variant_typeof(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ("Object", result.value()->get(0).get_slice().to_string());
+}
+
+// Verifies typed-only ARRAY under non-root key still reports OBJECT at variant root.
+TEST_F(VariantFunctionsTest, variant_typeof_typed_only_array_under_key_object) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
+    variant_column->set_shredded_columns({"arr_root"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
+
+    Columns columns{variant_column};
+    auto result = VariantFunctions::variant_typeof(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ("Object", result.value()->get(0).get_slice().to_string());
+}
+
+// Verifies multi-key typed-only typeof is OBJECT at root.
+TEST_F(VariantFunctionsTest, variant_typeof_multi_key_typed_only_object) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({1}, {0}));
+    typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
+    variant_column->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)},
+                                         std::move(typed), nullptr, nullptr);
+
+    Columns columns{variant_column};
+    auto result = VariantFunctions::variant_typeof(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ("Object", result.value()->get(0).get_slice().to_string());
+}
+
+// Verifies variant_query can hit a non-root typed-only scalar path directly.
+TEST_F(VariantFunctionsTest, variant_query_typed_only_scalar_non_root_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"root"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.root"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    auto json_result = variant_result_to_json(result.value(), 0);
+    ASSERT_TRUE(json_result.ok());
+    ASSERT_EQ("777", json_result.value());
+}
+
+// Verifies get_variant_bool("$.root") uses typed-only boolean directly.
+TEST_F(VariantFunctionsTest, get_variant_bool_typed_only_non_root_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_bool_column({1}, {0}));
+    variant_column->set_shredded_columns({"root"}, {TypeDescriptor(TYPE_BOOLEAN)}, std::move(typed), nullptr, nullptr);
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.root"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_bool(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_TRUE(result.value()->get(0).get_uint8());
+}
+
+// Verifies typed null at non-root path does not fallback to remain payload.
+TEST_F(VariantFunctionsTest, get_variant_int_typed_null_no_fallback_to_remain_non_root_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto remain_variant = create_variant_from_json_text("123");
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({0}, {1}));
+    variant_column->set_shredded_columns({"root"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.root"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies typed-only ARRAY under non-root key supports suffix seek.
+TEST_F(VariantFunctionsTest, get_variant_int_typed_only_array_non_root_index) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
+    variant_column->set_shredded_columns({"root"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.root[1]"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ(2, result.value()->get(0).get_int64());
+}
+
+// Verifies typed-only ARRAY under non-root key out-of-range index returns NULL.
+TEST_F(VariantFunctionsTest, get_variant_int_typed_only_array_non_root_index_out_of_range_returns_null) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int_array_column({DatumArray{Datum(int64_t(1)), Datum(int64_t(2))}}, {0}));
+    variant_column->set_shredded_columns({"root"}, {TYPE_ARRAY_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.root[9]"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies scalar path type mismatch (indexing scalar at non-root path) returns NULL.
+TEST_F(VariantFunctionsTest, get_variant_int_typed_only_scalar_non_root_index_type_mismatch_returns_null) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({777}, {0}));
+    variant_column->set_shredded_columns({"root"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.root[0]"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies typed hit with incompatible result type returns NULL when remain cannot satisfy path.
+TEST_F(VariantFunctionsTest, get_variant_int_typed_path_string_type_mismatch_returns_null) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_varchar_column({"typed_string"}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies typed-hit cast failure does not fallback to remain on same path (current locked behavior).
+TEST_F(VariantFunctionsTest, get_variant_int_typed_cast_fail_does_not_fallback_to_remain_same_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto remain_variant = create_variant_from_json_text(R"({"typed_only":123})");
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_varchar_column({"typed_string"}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0));
+}
+
+// Verifies numeric typed DOUBLE exact-hit can be bulk-cast to BIGINT.
+TEST_F(VariantFunctionsTest, get_variant_int_shredded_numeric_cast_from_double) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant;
+    create_variant_from_test_data("primitive_int8.metadata", "primitive_int8.value", remain_variant);
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_double_column({7.0}, {0}));
+    variant_column->set_shredded_columns({"typed_only"}, {TypeDescriptor(TYPE_DOUBLE)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.typed_only"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+    ASSERT_EQ(7, result.value()->get(0).get_int64());
+}
+
+// Verifies missing path and explicit JSON null are both surfaced as SQL NULL.
+TEST_F(VariantFunctionsTest, get_variant_int_missing_and_json_null_both_return_null) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+    variant_column->append(create_variant_from_json_text(R"({"a":null})"));
+    variant_column->append(create_variant_from_json_text(R"({"b":1})"));
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.a", "$.a"});
+    Columns columns{variant_column, path_column};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2, result.value()->size());
+    ASSERT_TRUE(result.value()->is_null(0)); // explicit json null
+    ASSERT_TRUE(result.value()->is_null(1)); // missing path
+}
+
+// Verifies base_shredded + const typed column reads use typed row 0 across rows.
+TEST_F(VariantFunctionsTest, get_variant_int_base_shredded_const_typed_column) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    VariantRowValue remain_variant = create_variant_from_json_text(R"({"a":0})");
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+    remain_col->append(Slice(remain_value.data(), remain_value.size()));
+
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
+    MutableColumns typed;
+    typed.emplace_back(ConstColumn::create(std::move(typed_data), 2));
+    variant_column->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    auto path_data = ColumnTestHelper::build_column<Slice>({"$.a"});
+    auto const_path = ConstColumn::create(std::move(path_data), 2);
+    Columns columns{variant_column, const_path};
+
+    auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2, result.value()->size());
+    ASSERT_EQ(42, result.value()->get(0).get_int64());
+    ASSERT_EQ(42, result.value()->get(1).get_int64());
+}
+
+// Verifies that querying a path (e.g. "$.a.b") that is a strict prefix of a
+// typed column path ("a.b.c") returns the COMPLETE sub-object (merging the
+// typed child "c" and the remain field "d"), not just the incomplete remain.
+//
+// Schema: typed column a.b.c = 42, remain = {"a":{"b":{"d":"hello"}}}
+// Query "$.a.b" must produce a variant where $.c == 42 AND $.d == "hello".
+TEST_F(VariantFunctionsTest, variant_query_parent_path_of_typed_column_returns_complete_object) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    // Typed column: a.b.c = 42
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({42}, {0}));
+
+    // Remain payload: {"a":{"b":{"d":"hello"}}}  (c was shredded out, so absent here)
+    VariantRowValue remain_variant = create_variant_from_json_text(R"({"a":{"b":{"d":"hello"}}})");
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    auto remain_metadata = remain_variant.get_metadata().raw();
+    auto remain_value_raw = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_metadata.data(), remain_metadata.size()));
+    remain_col->append(Slice(remain_value_raw.data(), remain_value_raw.size()));
+
+    variant_column->set_shredded_columns({"a.b.c"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    // Step 1: query "$.a.b" — parent of typed column "a.b.c"
+    auto path_data = ColumnTestHelper::build_column<Slice>({"$.a.b"});
+    auto const_path = ConstColumn::create(std::move(path_data), 1);
+    Columns columns{variant_column, const_path};
+
+    auto ab_result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(ab_result.ok());
+    ASSERT_EQ(1, ab_result.value()->size());
+    ASSERT_FALSE(ab_result.value()->is_null(0));
+
+    // Step 2: query "$.c" from the sub-object — must be 42 (from typed column)
+    {
+        auto sub_path = ColumnTestHelper::build_column<Slice>({"$.c"});
+        Columns sub_cols{ab_result.value(), ConstColumn::create(std::move(sub_path), 1)};
+        auto c_result = VariantFunctions::get_variant_int(ctx.get(), sub_cols);
+        ASSERT_TRUE(c_result.ok());
+        ASSERT_EQ(1, c_result.value()->size());
+        ASSERT_FALSE(c_result.value()->is_null(0)) << "$.c must exist (from typed column)";
+        ASSERT_EQ(42, c_result.value()->get(0).get_int64());
+    }
+
+    // Step 3: query "$.d" from the sub-object — must be non-null (from remain payload)
+    {
+        auto sub_path = ColumnTestHelper::build_column<Slice>({"$.d"});
+        Columns sub_cols{ab_result.value(), ConstColumn::create(std::move(sub_path), 1)};
+        auto d_result = VariantFunctions::get_variant_string(ctx.get(), sub_cols);
+        ASSERT_TRUE(d_result.ok());
+        ASSERT_EQ(1, d_result.value()->size());
+        ASSERT_FALSE(d_result.value()->is_null(0)) << "$.d must exist (from remain payload)";
+    }
+}
+
+// Verifies typed-only MAP under non-root key can be queried as VARIANT.
+TEST_F(VariantFunctionsTest, variant_query_typed_only_map_non_root_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    DatumMap m;
+    m[(Slice) "k1"] = (int32_t)1;
+    m[(Slice) "k2"] = (int32_t)2;
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_map_si_column({m}, {0}));
+    variant_column->set_shredded_columns(
+            {"map_root"}, {TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT))},
+            std::move(typed), nullptr, nullptr);
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.map_root"});
+    Columns columns{variant_column, path_column};
+    auto result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+}
+
+// Verifies typed-only STRUCT under non-root key can be queried as VARIANT.
+TEST_F(VariantFunctionsTest, variant_query_typed_only_struct_non_root_path) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto variant_column = VariantColumn::create();
+
+    DatumStruct s{Datum(int32_t(7)), Datum("x")};
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_struct_is_column({s}, {0}));
+    variant_column->set_shredded_columns(
+            {"struct_root"},
+            {TypeDescriptor::create_struct_type({"x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)})},
+            std::move(typed), nullptr, nullptr);
+
+    auto path_column = ColumnTestHelper::build_column<Slice>({"$.struct_root"});
+    Columns columns{variant_column, path_column};
+    auto result = VariantFunctions::variant_query(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1, result.value()->size());
+    ASSERT_FALSE(result.value()->is_null(0));
+}
+
+// Verifies kFullMaterialize partial materialisation: when the query path is a strict prefix
+// of shredded typed column paths, _read_full_partial merges only the relevant typed columns
+// with the remain subtree — avoiding a full row rebuild.
+//
+// Setup:
+//   remain  : {"a": {"b": {"other": "world"}}}   (a.b.c and a.b.d were shredded away)
+//   typed   : a.b.c = 42 (INT64), a.b.d = "hello" (VARCHAR)
+// Query: $.a.b  →  kFullMaterialize (a.b is strict prefix of a.b.c and a.b.d)
+// Expected: result contains all three fields: c=42, d="hello", other="world"
+TEST_F(VariantFunctionsTest, variant_path_reader_full_materialize_partial_merge) {
+    // Remain: a.b.other only (a.b.c / a.b.d were shredded into typed columns).
+    VariantRowValue remain_variant = create_variant_from_json_text(R"({"a": {"b": {"other": "world"}}})");
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    auto remain_meta_raw = remain_variant.get_metadata().raw();
+    auto remain_val_raw = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_meta_raw.data(), remain_meta_raw.size()));
+    remain_col->append(Slice(remain_val_raw.data(), remain_val_raw.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({42}, {0}));
+    typed.emplace_back(build_nullable_varchar_column({"hello"}, {0}));
+
+    auto variant_column = VariantColumn::create();
+    variant_column->set_shredded_columns({"a.b.c", "a.b.d"},
+                                         {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)}, std::move(typed),
+                                         std::move(metadata_col), std::move(remain_col));
+
+    // Prepare reader for $.a.b — a strict prefix of typed paths a.b.c and a.b.d.
+    auto path_result = VariantPathParser::parse(std::string("$.a.b"));
+    ASSERT_TRUE(path_result.ok());
+    VariantPath path = std::move(path_result).value();
+    VariantPathReader reader;
+    reader.prepare(variant_column.get(), &path);
+
+    auto result = reader.read_row(0);
+    ASSERT_EQ(VariantReadState::kValue, result.state);
+
+    // Result must contain all three fields merged from typed columns and remain subtree.
+    auto json = result.value.to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    const std::string& json_str = json.value();
+    EXPECT_NE(std::string::npos, json_str.find("\"other\"")) << "missing 'other' from remain in: " << json_str;
+    EXPECT_NE(std::string::npos, json_str.find("42")) << "missing typed int value 42 in: " << json_str;
+    EXPECT_NE(std::string::npos, json_str.find("\"hello\"")) << "missing typed string 'hello' in: " << json_str;
+}
+
+// Verifies that unrelated typed columns (outside the query prefix) are excluded from
+// _read_full_partial — i.e. x.y.z is not merged into the $.a.b result.
+TEST_F(VariantFunctionsTest, variant_path_reader_full_materialize_excludes_unrelated_typed_columns) {
+    VariantRowValue remain_variant = create_variant_from_json_text(R"({"a": {"b": {"other": "world"}}})");
+    auto metadata_col = BinaryColumn::create();
+    auto remain_col = BinaryColumn::create();
+    auto remain_meta_raw = remain_variant.get_metadata().raw();
+    auto remain_val_raw = remain_variant.get_value().raw();
+    metadata_col->append(Slice(remain_meta_raw.data(), remain_meta_raw.size()));
+    remain_col->append(Slice(remain_val_raw.data(), remain_val_raw.size()));
+
+    MutableColumns typed;
+    typed.emplace_back(build_nullable_int64_column({42}, {0}));  // a.b.c — relevant
+    typed.emplace_back(build_nullable_int64_column({999}, {0})); // x.y.z — unrelated
+
+    auto variant_column = VariantColumn::create();
+    variant_column->set_shredded_columns({"a.b.c", "x.y.z"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
+                                         std::move(typed), std::move(metadata_col), std::move(remain_col));
+
+    auto path_result = VariantPathParser::parse(std::string("$.a.b"));
+    ASSERT_TRUE(path_result.ok());
+    VariantPath path = std::move(path_result).value();
+    VariantPathReader reader;
+    reader.prepare(variant_column.get(), &path);
+
+    auto result = reader.read_row(0);
+    ASSERT_EQ(VariantReadState::kValue, result.state);
+
+    auto json = result.value.to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    const std::string& json_str = json.value();
+    // a.b.c value 42 should be present
+    EXPECT_NE(std::string::npos, json_str.find("42")) << "missing a.b.c=42 in: " << json_str;
+    // x.y.z value 999 must NOT appear in the a.b subtree result
+    EXPECT_EQ(std::string::npos, json_str.find("999")) << "unrelated x.y.z=999 leaked into: " << json_str;
+}
+
+// ---------------------------------------------------------------------------
+// Typed path with fallback values (value does not fit the typed column type)
+// ---------------------------------------------------------------------------
+
+// Typed BIGINT path "a" plus its fallback column. Rows: {"a":1} (typed), {"a":"x"} and {"a":{"k":1}} (fallback,
+// decoded with the row metadata), {"b":2} (no "a").
+static MutableColumnPtr build_bigint_path_with_fallback_rows() {
+    const std::vector<std::string> rows_json = {R"({"a":1})", R"({"a":"x"})", R"({"a":{"k":1}})", R"({"b":2})"};
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto fallback = VariantColumn::create_fallback_column();
+    auto path_a = VariantPathParser::parse(std::string("$.a"));
+    CHECK(path_a.ok());
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    for (const auto& json : rows_json) {
+        VariantRowValue row = create_variant_from_json_text(json);
+        std::string_view metadata_raw = row.get_metadata().raw();
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        auto field = VariantPath::seek_view(row.as_ref(), path_a.value());
+        if (!field.ok() || field->is_null()) {
+            std::string_view value_raw = row.get_value().raw();
+            remain->append(Slice(value_raw.data(), value_raw.size()));
+            typed->append_nulls(1);
+            fallback->append_nulls(1);
+            continue;
+        }
+        remain->append(Slice(empty_object));
+        auto as_int = field->get_value().get_int8();
+        if (as_int.ok()) {
+            typed->append_datum(Datum(static_cast<int64_t>(as_int.value())));
+            fallback->append_nulls(1);
+        } else {
+            typed->append_nulls(1);
+            std::string_view field_raw = field->get_value().raw();
+            fallback->append_datum(Datum(Slice(field_raw.data(), field_raw.size())));
+        }
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    MutableColumns fallback_columns;
+    fallback_columns.emplace_back(std::move(fallback));
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns),
+                              std::move(fallback_columns), std::move(metadata), std::move(remain));
+    return col;
+}
+
+static Columns const_path_columns(const ColumnPtr& variant_column, const std::string& path, FunctionContext* ctx) {
+    ColumnBuilder<TYPE_VARCHAR> path_builder(1);
+    path_builder.append(path);
+    Columns columns{variant_column, path_builder.build(true)};
+    ctx->set_constant_columns(columns);
+    auto st = VariantFunctions::variant_segments_prepare(ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    CHECK(st.ok()) << st.to_string();
+    return columns;
+}
+
+TEST_F(VariantFunctionsTest, typed_path_with_fallback_is_not_typed_exact) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    auto path = VariantPathParser::parse(std::string("$.a"));
+    ASSERT_TRUE(path.ok());
+    VariantPathReader reader;
+    reader.prepare(down_cast<const VariantColumn*>(col.get()), &path.value());
+    EXPECT_FALSE(reader.is_typed_exact());
+    auto read = reader.read_row(1);
+    ASSERT_EQ(VariantReadState::kValue, read.state);
+    EXPECT_EQ(R"("x")", read.value.to_json().value());
+    EXPECT_EQ(VariantReadState::kNull, reader.read_row(3).state);
+}
+
+TEST_F(VariantFunctionsTest, get_variant_with_fallback_values) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a", ctx.get());
+        auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_EQ(4, result.value()->size());
+        EXPECT_EQ(1, result.value()->get(0).get_int64());
+        EXPECT_TRUE(result.value()->is_null(1)); // "x" does not cast to BIGINT
+        EXPECT_TRUE(result.value()->is_null(2)); // object does not cast to BIGINT
+        EXPECT_TRUE(result.value()->is_null(3)); // missing
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a", ctx.get());
+        auto result = VariantFunctions::get_variant_string(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ("1", result.value()->get(0).get_slice().to_string());
+        EXPECT_EQ("x", result.value()->get(1).get_slice().to_string());
+        EXPECT_TRUE(result.value()->is_null(3));
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+}
+
+TEST_F(VariantFunctionsTest, variant_query_with_fallback_values) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a", ctx.get());
+        auto result = VariantFunctions::variant_query(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ("1", variant_result_to_json(result.value(), 0).value());
+        EXPECT_EQ(R"("x")", variant_result_to_json(result.value(), 1).value());
+        EXPECT_EQ(R"({"k":1})", variant_result_to_json(result.value(), 2).value());
+        EXPECT_TRUE(result.value()->is_null(3));
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+    {
+        // A path below the typed path is read from the fallback value.
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(col, "$.a.k", ctx.get());
+        auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_TRUE(result.value()->is_null(0));
+        EXPECT_TRUE(result.value()->is_null(1));
+        EXPECT_EQ(1, result.value()->get(2).get_int64());
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+}
+
+TEST_F(VariantFunctionsTest, variant_typeof_with_fallback_values) {
+    ColumnPtr col = build_bigint_path_with_fallback_rows();
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns{col};
+    auto result = VariantFunctions::variant_typeof(ctx.get(), columns);
+    ASSERT_TRUE(result.ok()) << result.status().to_string();
+    for (size_t i = 0; i < 4; ++i) {
+        EXPECT_EQ("Object", result.value()->get(i).get_slice().to_string()) << "row " << i;
+    }
+}
+
+// is_variant_null is TRUE only for a VARIANT null: a JSON null at a path is told apart from a missing path, and a
+// SQL NULL input is FALSE.
+TEST_F(VariantFunctionsTest, is_variant_null) {
+    auto variant_column = NullableColumn::create(VariantColumn::create(), NullColumn::create());
+    for (const char* json : {R"({"a":null})", R"({"a":1})", R"({"b":2})", "null"}) {
+        auto row = VariantEncoder::encode_json_text_to_variant(json);
+        ASSERT_TRUE(row.ok()) << row.status().to_string();
+        variant_column->append_datum(Datum(&row.value()));
+    }
+    variant_column->append_nulls(1);
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // The rows themselves: only the top-level JSON null is a VARIANT null; SQL NULL is FALSE, not NULL.
+    {
+        Columns columns{variant_column};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_FALSE(result.value()->is_nullable());
+        const std::vector<uint8_t> expected = {0, 0, 0, 1, 0};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+
+    // On '$.a': JSON null -> TRUE, value -> FALSE, missing path / null input -> FALSE.
+    {
+        auto path = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("$.a"), variant_column->size());
+        Columns query_columns{variant_column, path};
+        ctx->set_constant_columns(query_columns);
+        auto prepared = VariantFunctions::variant_segments_prepare(ctx.get(),
+                                                                   FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        ASSERT_TRUE(prepared.ok()) << prepared.to_string();
+        auto queried = VariantFunctions::variant_query(ctx.get(), query_columns);
+        ASSERT_TRUE(queried.ok()) << queried.status().to_string();
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        Columns columns{queried.value()};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        const std::vector<uint8_t> expected = {1, 0, 0, 0, 0};
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+
+    // Only-null and constant inputs.
+    {
+        Columns columns{ColumnHelper::create_const_null_column(3)};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_EQ(3, result.value()->size());
+        EXPECT_EQ(0, result.value()->get(2).get_uint8());
+    }
+    {
+        auto null_row = VariantEncoder::encode_json_text_to_variant("null");
+        ASSERT_TRUE(null_row.ok());
+        auto data = VariantColumn::create();
+        data->append_datum(Datum(&null_row.value()));
+        Columns columns{ConstColumn::create(std::move(data), 4)};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        ASSERT_TRUE(result.value()->is_constant());
+        ASSERT_EQ(4, result.value()->size());
+        EXPECT_EQ(1, result.value()->get(3).get_uint8());
+    }
+
+    // Shredded rows with typed or fallback values are objects.
+    {
+        Columns columns{build_bigint_path_with_fallback_rows()};
+        auto result = VariantFunctions::is_variant_null(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        for (size_t i = 0; i < 4; ++i) {
+            EXPECT_EQ(0, result.value()->get(i).get_uint8()) << "row " << i;
+        }
+    }
+}
+
+// An ARRAY<VARIANT> typed path (a shredded array) whose elements are a shredded VariantColumn, with a fallback
+// value in another row: the path is not typed-exact, so rows are read one by one and the array cell must be
+// encoded from the columns (a Datum cannot read the element VariantColumn).
+TEST_F(VariantFunctionsTest, variant_query_array_of_variant_path_with_fallback) {
+    // Elements: [{"k":1},{"k":2}] for row 0, as a typed-only element VariantColumn with typed path "k".
+    MutableColumns element_typed;
+    element_typed.emplace_back(build_nullable_int64_column({1, 2}, {0, 0}));
+    auto element_column = VariantColumn::create();
+    element_column->set_shredded_columns({"k"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(element_typed), nullptr,
+                                         nullptr);
+    auto elements = NullableColumn::create(std::move(element_column), NullColumn::create(2, 0));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(2);
+    offsets->append(2);
+    auto nulls = NullColumn::create(2, 0);
+    nulls->get_data()[1] = 1;
+    MutableColumns typed;
+    typed.emplace_back(
+            NullableColumn::create(ArrayColumn::create(std::move(elements), std::move(offsets)), std::move(nulls)));
+
+    // Row 1: "items" is the string "x", kept in the fallback column.
+    VariantRowValue string_value = create_variant_from_json_text(R"("x")");
+    auto string_raw = string_value.get_value().raw();
+    MutableColumns fallback;
+    auto fallback_column = VariantColumn::create_fallback_column();
+    fallback_column->append_nulls(1);
+    fallback_column->append_datum(Datum(Slice(string_raw.data(), string_raw.size())));
+    fallback.emplace_back(std::move(fallback_column));
+
+    std::string empty_object;
+    VariantEncoder::append_object_container(&empty_object, {}, {}, {});
+    auto metadata_raw = string_value.get_metadata().raw();
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (int i = 0; i < 2; ++i) {
+        metadata->append(Slice(metadata_raw.data(), metadata_raw.size()));
+        remain->append(Slice(empty_object));
+    }
+    auto col = VariantColumn::create();
+    col->set_shredded_columns({"items"}, {TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT))},
+                              std::move(typed), std::move(fallback), std::move(metadata), std::move(remain));
+    ColumnPtr variant_column = std::move(col);
+
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(variant_column, "$.items", ctx.get());
+        auto result = VariantFunctions::variant_query(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ(R"([{"k":1},{"k":2}])", variant_result_to_json(result.value(), 0).value());
+        EXPECT_EQ(R"("x")", variant_result_to_json(result.value(), 1).value());
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    }
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto columns = const_path_columns(variant_column, "$.items[1].k", ctx.get());
+        auto result = VariantFunctions::get_variant_int(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << result.status().to_string();
+        EXPECT_EQ(2, result.value()->get(0).get_int64());
+        EXPECT_TRUE(result.value()->is_null(1));
+        std::ignore = VariantFunctions::variant_segments_close(ctx.get(),
+                                                               FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     }
 }
 

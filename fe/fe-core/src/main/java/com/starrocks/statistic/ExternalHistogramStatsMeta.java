@@ -41,6 +41,13 @@ public class ExternalHistogramStatsMeta implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
+    // The table UUID resolved on the leader at analyze time. It is the key used by the connector
+    // statistics cache, so persisting it lets followers invalidate the cache during journal replay
+    // without resolving external table metadata (which may block on HMS/object storage).
+    // May be null for journals written before this field was introduced (see replay fallback).
+    @SerializedName("tableUUID")
+    private String tableUUID;
+
     public ExternalHistogramStatsMeta(String catalogName, String dbName, String tableName, String column,
                                       StatsConstants.AnalyzeType type,
                                       LocalDateTime updateTime,
@@ -68,6 +75,14 @@ public class ExternalHistogramStatsMeta implements Writable {
 
     public String getColumn() {
         return column;
+    }
+
+    public String getTableUUID() {
+        return tableUUID;
+    }
+
+    public void setTableUUID(String tableUUID) {
+        this.tableUUID = tableUUID;
     }
 
     public StatsConstants.AnalyzeType getType() {

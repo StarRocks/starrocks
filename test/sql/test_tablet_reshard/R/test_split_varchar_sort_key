@@ -1,0 +1,68 @@
+-- name: test_split_varchar_sort_key @cloud
+create database test_split_varchar_sort_key_${uuid0};
+-- result:
+-- !result
+use test_split_varchar_sort_key_${uuid0};
+-- result:
+-- !result
+SET enable_range_distribution = true;
+-- result:
+-- !result
+CREATE TABLE t_varchar_sort_key (
+    k VARCHAR(20) NOT NULL,
+    id BIGINT NOT NULL,
+    v BIGINT
+) DUPLICATE KEY(k, id)
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO t_varchar_sort_key
+SELECT LPAD(CAST(generate_series * generate_series AS STRING), 10, '0'), generate_series, generate_series * 10
+FROM TABLE(generate_series(1, 50000));
+-- result:
+-- !result
+SELECT count(*) FROM t_varchar_sort_key;
+-- result:
+50000
+-- !result
+function: set_first_tablet_id("t_varchar_sort_key")
+-- result:
+None
+-- !result
+ALTER TABLE t_varchar_sort_key SPLIT TABLET (${tablet_id}) PROPERTIES ('tablet_reshard_target_size' = '-4');
+-- result:
+-- !result
+function: wait_reshard_job_finish("t_varchar_sort_key", "SPLIT_TABLET", 1)
+-- result:
+None
+-- !result
+SELECT count(*) FROM t_varchar_sort_key;
+-- result:
+50000
+-- !result
+SELECT count(*) FROM information_schema.be_tablets t, information_schema.tables_config c
+WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key'
+  AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}'
+  AND t.TABLET_ID != ${tablet_id};
+-- result:
+4
+-- !result
+[UC]tid0=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 0;
+[UC]tid1=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 1;
+[UC]tid2=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 2;
+[UC]tid3=SELECT TABLET_ID FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 't_varchar_sort_key' AND c.TABLE_SCHEMA = 'test_split_varchar_sort_key_${uuid0}' AND t.TABLET_ID != ${tablet_id} ORDER BY TABLET_ID LIMIT 1 OFFSET 3;
+[UC]c0=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid0});
+[UC]c1=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid1});
+[UC]c2=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid2});
+[UC]c3=SELECT count(*) FROM t_varchar_sort_key TABLET(${tid3});
+SELECT ${c0} + ${c1} + ${c2} + ${c3};
+-- result:
+50000
+-- !result
+SELECT ${c0} <= 20000, ${c1} <= 20000, ${c2} <= 20000, ${c3} <= 20000;
+-- result:
+1	1	1	1
+-- !result
+drop database test_split_varchar_sort_key_${uuid0};
+-- result:
+-- !result

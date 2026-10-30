@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Rounds a number to a specified number of digits."
 ---
 
 # round, dround

@@ -17,9 +17,14 @@
 
 package com.starrocks.qe.scheduler.warehouse;
 
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.system.information.WarehouseMetricsSystemTable;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TGetWarehouseMetricsResponeItem;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,5 +63,24 @@ public class WarehouseMetricsTest {
         assertThat(thrift.getSum_required_slots()).isEqualTo("1");
         assertThat(thrift.getRemain_slots()).isEqualTo("1");
         assertThat(thrift.getMax_slots()).isEqualTo("1");
+    }
+
+    @Test
+    public void testToConstantOperatorsTypesMatchSchema() {
+        WarehouseMetrics metrics = new WarehouseMetrics(42L, "wh", 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                Optional.empty());
+        List<ScalarOperator> ops = metrics.toConstantOperators();
+        List<Column> schema = new WarehouseMetricsSystemTable().getFullSchema();
+        assertThat(ops).hasSize(schema.size());
+        for (int i = 0; i < schema.size(); i++) {
+            Column col = schema.get(i);
+            ScalarOperator op = ops.get(i);
+            assertThat(op).isInstanceOf(ConstantOperator.class);
+            assertThat(op.getType().getPrimitiveType())
+                    .as("column %s at index %d", col.getName(), i)
+                    .isEqualTo(col.getType().getPrimitiveType());
+        }
+        assertThat(((ConstantOperator) ops.get(0)).getBigint()).isEqualTo(42L);
+        assertThat(((ConstantOperator) ops.get(1)).getVarchar()).isEqualTo("wh");
     }
 }

@@ -36,6 +36,8 @@
 
 #include <string_view>
 
+#include "base/string/trim.h"
+
 namespace starrocks {
 
 const Slice UrlParser::_s_url_authority(const_cast<char*>("AUTHORITY"), 9);
@@ -59,20 +61,12 @@ const StringSearch UrlParser::_s_colon_search(&_s_colon);
 const StringSearch UrlParser::_s_question_search(&_s_question);
 const StringSearch UrlParser::_s_hash_search(&_s_hash);
 
-std::string_view trim(std::string_view str) {
-    auto pos = str.find_first_not_of(' ');
-    str.remove_prefix(std::min(pos, str.length()));
-    pos = str.find_last_not_of(' ');
-    str.remove_suffix(std::min(str.length() - pos - 1, str.length()));
-    return str;
-}
-
 UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slice* result) {
     result->data = nullptr;
     result->size = 0;
     // Remove leading and trailing spaces.
     std::string_view url_view = url;
-    Slice trimmed_url = trim(url_view);
+    Slice trimmed_url = trim_spaces(url_view);
 
     std::string_view protocol_end;
 
@@ -131,8 +125,19 @@ UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slic
 
     case HOST: {
         if (is_relative) return ParseStatus::NOT_FOUND;
+        int32_t first_slash = _s_slash_search.search(protocol_end);
+        int32_t first_question = _s_question_search.search(protocol_end);
+
+        int32_t end_pos = first_slash;
+        if (first_slash < 0 || (first_question >= 0 && first_question < first_slash)) {
+            // Either we did not find a slash, or there is one and the first question mark is
+            // left of the first slash (after the protocol), for example:
+            // http://example.com?dir=/etc
+            end_pos = first_question;
+        }
+        auto host_end = protocol_end.substr(0, end_pos);
         // Find '@'.
-        int32_t start_pos = _s_at_search.search(protocol_end);
+        int32_t start_pos = _s_at_search.search(host_end);
 
         if (start_pos < 0) {
             // No '@' was found, i.e., no user:pass info was given, start after _s_protocol.
@@ -141,15 +146,9 @@ UrlParser::ParseStatus UrlParser::parse_url(const Slice& url, UrlPart part, Slic
             // Skip '@'.
             start_pos += _s_at.size;
         }
-
-        auto host_start = protocol_end.substr(start_pos);
+        auto host_start = host_end.substr(start_pos);
         // Find ':' to strip out port.
-        int32_t end_pos = _s_colon_search.search(host_start);
-
-        if (end_pos < 0) {
-            // No port was given. search for '/' to determine ending position.
-            end_pos = _s_slash_search.search(host_start);
-        }
+        end_pos = _s_colon_search.search(host_start);
 
         *result = host_start.substr(0, end_pos);
         return ParseStatus::OK;

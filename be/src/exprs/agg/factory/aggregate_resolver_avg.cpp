@@ -29,7 +29,7 @@ struct AvgDispatcher {
         if constexpr (lt_is_aggregate<lt> && !lt_is_string<lt>) {
             auto func = AggregateFactory::MakeAvgAggregateFunction<lt>();
             using AvgState = AvgAggregateState<RunTimeCppType<ImmediateAvgResultLT<lt>>>;
-            resolver->add_aggregate_mapping<lt, AvgResultLT<lt>, AvgState>("avg", true, func);
+            resolver->add_aggregate_mapping<lt, AvgResultLT<lt>, AvgState>("avg", kWithWindow, func);
         }
     }
 };
@@ -40,8 +40,8 @@ struct ArrayAggDispatcher {
         if constexpr (lt_is_aggregate<lt> || lt_is_json<lt>) {
             auto func = new ArrayAggAggregateFunction<lt, false>();
             using AggState = ArrayAggAggregateState<lt, false>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", true,
-                                                                                                   func);
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg",
+                                                                                                   kWithWindow, func);
         }
     }
 };
@@ -56,19 +56,19 @@ struct ArrayUniqueAggDispatcher {
                 auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
                 using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
+                        "array_unique_agg", kWithoutWindow, func);
             } else if constexpr (lt_is_fixedlength<pt>) {
                 using MyHashSet = phmap::flat_hash_set<CppType, StdHash<CppType>>;
                 auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
                 using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
+                        "array_unique_agg", kWithoutWindow, func);
             } else if constexpr (lt_is_string<pt>) {
                 using MyHashSet = SliceHashSet;
                 auto func = new ArrayUnionAggAggregateFunction<pt, true, MyHashSet>();
                 using AggState = ArrayUnionAggAggregateState<pt, true, MyHashSet>;
                 resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
-                        "array_unique_agg", false, func);
+                        "array_unique_agg", kWithoutWindow, func);
             } else {
                 throw std::runtime_error("array_unique_agg does not support " + type_to_string(pt));
             }
@@ -92,8 +92,8 @@ struct ArrayAggDistinctDispatcher {
             }
             auto func = new ArrayAggAggregateFunction<pt, true, MyHashSet>();
             using AggState = ArrayAggAggregateState<pt, true, MyHashSet>;
-            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg_distinct",
-                                                                                                   false, func);
+            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>(
+                    "array_agg_distinct", kWithoutWindow, func);
 
             using WindowAggState = ArrayAggWindowState<pt, true, MyHashSet>;
             auto window_func = new ArrayAggAggregateWindowFunction<pt, true, MyHashSet>();
@@ -128,52 +128,6 @@ struct MapAggDispatcher {
     }
 };
 
-// SumMapDispatcher - nested dispatcher for both key and value types
-template <LogicalType kt>
-struct SumMapValueTypeDispatcher {
-    template <LogicalType vt>
-    void operator()(AggregateFuncResolver* resolver) {
-        // Only register for numeric value types
-        if constexpr (lt_is_numeric<vt>) {
-            using KeyCppType = RunTimeCppType<kt>;
-            if constexpr (lt_is_largeint<kt>) {
-                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, Hash128WithSeed<PhmapSeed1>>;
-                auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
-                using State = SumMapAggregateFunctionState<kt, vt, MyHashMap>;
-                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", false, func);
-            } else if constexpr (lt_is_fixedlength<kt>) {
-                using MyHashMap = phmap::flat_hash_map<KeyCppType, size_t, StdHash<KeyCppType>>;
-                auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
-                using State = SumMapAggregateFunctionState<kt, vt, MyHashMap>;
-                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", false, func);
-            } else if constexpr (lt_is_string<kt>) {
-                using MyHashMap =
-                        phmap::flat_hash_map<SliceWithHash, size_t, HashOnSliceWithHash, EqualOnSliceWithHash>;
-                auto func = new SumMapAggregateFunction<kt, vt, MyHashMap>();
-                using State = SumMapAggregateFunctionState<kt, vt, MyHashMap>;
-                resolver->add_aggregate_mapping<kt, vt, State>("sum_map", false, func);
-            }
-        }
-    }
-};
-
-struct SumMapDispatcher {
-    template <LogicalType kt>
-    void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<kt>) {
-            // For each key type, try all numeric value types
-            type_dispatch_all(TYPE_BOOLEAN, SumMapValueTypeDispatcher<kt>(), resolver);
-            type_dispatch_all(TYPE_TINYINT, SumMapValueTypeDispatcher<kt>(), resolver);
-            type_dispatch_all(TYPE_SMALLINT, SumMapValueTypeDispatcher<kt>(), resolver);
-            type_dispatch_all(TYPE_INT, SumMapValueTypeDispatcher<kt>(), resolver);
-            type_dispatch_all(TYPE_BIGINT, SumMapValueTypeDispatcher<kt>(), resolver);
-            type_dispatch_all(TYPE_LARGEINT, SumMapValueTypeDispatcher<kt>(), resolver);
-            type_dispatch_all(TYPE_FLOAT, SumMapValueTypeDispatcher<kt>(), resolver);
-            type_dispatch_all(TYPE_DOUBLE, SumMapValueTypeDispatcher<kt>(), resolver);
-        }
-    }
-};
-
 void AggregateFuncResolver::register_avg() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, AvgDispatcher(), this);
@@ -182,7 +136,6 @@ void AggregateFuncResolver::register_avg() {
             type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
             type_dispatch_all(type, ArrayUniqueAggDispatcher(), this);
             type_dispatch_all(type, MapAggDispatcher(), this);
-            type_dispatch_all(type, SumMapDispatcher(), this);
         }
     }
     type_dispatch_all(TYPE_JSON, ArrayAggDispatcher(), this);

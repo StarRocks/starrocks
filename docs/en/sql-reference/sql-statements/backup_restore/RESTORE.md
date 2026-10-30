@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Restores databases, tables, materialized views, logical views, and UDFs in StarRocks from a snapshot created by BACKUP."
 ---
 
 # RESTORE

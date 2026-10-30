@@ -38,3 +38,14 @@ insert into t1 select generate_series, cast(generate_series as int) from table(g
 select dict_merge(c2, 256) from t1;
 select dict_merge(c2, 512) from t1;
 select dict_merge(c2, 1024) from t1;
+
+CREATE TABLE t2 (
+    c1 int,
+    c2 string
+    )
+DUPLICATE KEY(c1)
+DISTRIBUTED BY HASH(c1)
+BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t2 select generate_series %5, cast(generate_series as int) %5 from table(generate_series(1, 1000));
+select dict_merge(c1, 256) from t2 group by c1 order by c1 limit 10;

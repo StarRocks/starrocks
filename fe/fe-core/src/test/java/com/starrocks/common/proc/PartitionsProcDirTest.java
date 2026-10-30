@@ -20,24 +20,49 @@ import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.clone.BalanceStat;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.VarcharType;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class PartitionsProcDirTest {
+
+    // "Buckets" is column index 9 in both the cloud-native and olap title lists.
+    private static final int BUCKETS_COLUMN_INDEX = 9;
+
+    private static Map<String, String> bucketsByPartitionId(BaseProcResult result) {
+        Map<String, String> bucketsById = new HashMap<>();
+        for (List<String> row : result.getRows()) {
+            bucketsById.put(row.get(0), row.get(BUCKETS_COLUMN_INDEX));
+        }
+        return bucketsById;
+    }
 
     @Test
     public void testFetchResultForCloudNativeTable() throws AnalysisException {
@@ -70,6 +95,110 @@ public class PartitionsProcDirTest {
     }
 
     @Test
+    public void testLookupNonExistentPartitionNameThrowsAnalysisException() {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
+        olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
+
+        db.registerTableUnlocked(olapTable);
+
+        PartitionsProcDir dir = new PartitionsProcDir(db, olapTable, false);
+
+        // Regression: lookup() previously dereferenced table.getPartition(name, ...) without
+        // a null-guard, so a missing name produced an NPE instead of the documented
+        // AnalysisException. The non-numeric name forces the catch-NumberFormatException
+        // branch that hits both getPartition(name, false) and getPartition(name, true) and
+        // resolves them as null.
+        AnalysisException ex = Assertions.assertThrows(AnalysisException.class,
+                () -> dir.lookup("no_such_partition"));
+        Assertions.assertTrue(ex.getMessage().contains("no_such_partition"),
+                "Expected message to mention the missing partition name, got: " + ex.getMessage());
+    }
+
+    @Test
+    public void testGetPartitionInfosThrowsWhenAllRemotesFailedAndNoLocalRecord() {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        olapTable.getIndexNameToMetaId().put("index1", index.getMetaId());
+        olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
+        db.registerTableUnlocked(olapTable);
+
+        // This FE holds no record for the table and every other FE failed to return a result, so
+        // getAccessTimes raises ERR_GET_PARTITION_ACCESS_TIME rather than returning an empty map that would
+        // look like "never accessed". The read must let that error surface instead of a misleading NULL.
+        new MockUp<PartitionAccessTimeMgr>() {
+            @Mock
+            public Map<Long, Long> getAccessTimes(long dbId, long tableId) {
+                throw ErrorReportException.report(
+                        ErrorCode.ERR_GET_PARTITION_ACCESS_TIME, "127.0.0.2:9020 (Connection refused)");
+            }
+        };
+
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            PartitionsProcDir dir = new PartitionsProcDir(db, olapTable, false);
+            ErrorReportException ex = Assertions.assertThrows(ErrorReportException.class, dir::getPartitionInfos);
+            Assertions.assertTrue(ex.getMessage().contains("127.0.0.2"),
+                    "Expected the error to name the unreachable FE, got: " + ex.getMessage());
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
+    @Test
+    public void testGetPartitionInfosReturnsNullAccessTimeWhenSomeRemoteResponded() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        olapTable.getIndexNameToMetaId().put("index1", index.getMetaId());
+        olapTable.addPartition(new Partition(partitionId, 1035, "p1", index, new RandomDistributionInfo(10)));
+        db.registerTableUnlocked(olapTable);
+
+        // getAccessTimes returns an empty map without raising (a trustworthy "never accessed": at least one
+        // FE answered, or there was no peer to fail), so LastAccessTime renders as NULL rather than throwing.
+        new MockUp<PartitionAccessTimeMgr>() {
+            @Mock
+            public Map<Long, Long> getAccessTimes(long dbId, long tableId) {
+                return new HashMap<>();
+            }
+        };
+
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            List<List<Comparable>> rows = new PartitionsProcDir(db, olapTable, false).getPartitionInfos();
+            // LastAccessTime is the last column; with no record it must render as the NULL placeholder.
+            List<Comparable> row = rows.get(0);
+            Assertions.assertEquals(FeConstants.NULL_STRING, row.get(row.size() - 1));
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
+    @Test
     public void testFetchResultForOlapTable() throws AnalysisException {
         Database db = new Database(10000L, "PartitionsProcDirTestDB");
 
@@ -96,5 +225,133 @@ public class PartitionsProcDirTest {
         Assertions.assertEquals("NORMAL", list1.get(5));
         Assertions.assertEquals("province", list1.get(6));
         Assertions.assertEquals("true", list1.get(21)); // tablet balanced
+    }
+
+    @Test
+    public void testFetchResultForCloudNativeTableReportsPerPhysicalBucketNum() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        DataCacheInfo dataCache = new DataCacheInfo(true, false);
+        long partitionId = 1025;
+        listPartition.setDataCacheInfo(partitionId, dataCache);
+
+        // Table-level default distribution is 3 buckets; each physical partition carries its own bucketNum.
+        LakeTable cloudNativeTable = new LakeTable(1024L, "cloud_native_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        Map<String, Long> indexNameToMetaId = cloudNativeTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
+
+        long defaultPhysicalId = 1035;
+        Partition partition = new Partition(partitionId, defaultPhysicalId, "p1", index, new RandomDistributionInfo(3));
+
+        // A physical partition added later (as ADD PHYSICAL PARTITION does) with a different bucket count.
+        long biggerPhysicalId = 1036;
+        PhysicalPartition biggerPhysical = new PhysicalPartition(biggerPhysicalId, partitionId, index);
+        biggerPhysical.setBucketNum(5);
+        partition.addSubPartition(biggerPhysical);
+
+        // A physical partition whose per-physical bucketNum is unset (0) must fall back to the table default.
+        long legacyPhysicalId = 1037;
+        PhysicalPartition legacyPhysical = new PhysicalPartition(legacyPhysicalId, partitionId, index);
+        legacyPhysical.setBucketNum(0);
+        partition.addSubPartition(legacyPhysical);
+
+        cloudNativeTable.addPartition(partition);
+        db.registerTableUnlocked(cloudNativeTable);
+
+        BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, cloudNativeTable, false).fetchResult();
+
+        Map<String, String> bucketsById = bucketsByPartitionId(result);
+        Assertions.assertEquals("3", bucketsById.get(String.valueOf(defaultPhysicalId)));
+        Assertions.assertEquals("5", bucketsById.get(String.valueOf(biggerPhysicalId)));
+        Assertions.assertEquals("3", bucketsById.get(String.valueOf(legacyPhysicalId)));
+    }
+
+    @Test
+    public void testFetchResultForOlapTableReportsPerPhysicalBucketNum() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        listPartition.setReplicationNum(partitionId, (short) 1);
+
+        OlapTable olapTable = new OlapTable(1024L, "olap_table", col, null, listPartition, null);
+        MaterializedIndex index = new MaterializedIndex(1000L, IndexState.NORMAL);
+        index.setBalanceStat(BalanceStat.BALANCED_STAT);
+        Map<String, Long> indexNameToMetaId = olapTable.getIndexNameToMetaId();
+        indexNameToMetaId.put("index1", index.getMetaId());
+
+        long defaultPhysicalId = 1035;
+        Partition partition = new Partition(partitionId, defaultPhysicalId, "p1", index, new RandomDistributionInfo(3));
+
+        long biggerPhysicalId = 1036;
+        PhysicalPartition biggerPhysical = new PhysicalPartition(biggerPhysicalId, partitionId, index);
+        biggerPhysical.setBucketNum(5);
+        partition.addSubPartition(biggerPhysical);
+
+        olapTable.addPartition(partition);
+        db.registerTableUnlocked(olapTable);
+
+        BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, olapTable, false).fetchResult();
+
+        Map<String, String> bucketsById = bucketsByPartitionId(result);
+        Assertions.assertEquals("3", bucketsById.get(String.valueOf(defaultPhysicalId)));
+        Assertions.assertEquals("5", bucketsById.get(String.valueOf(biggerPhysicalId)));
+    }
+
+    private static MaterializedIndex newRangeIndex(long indexId, long metaId, int tabletNum) {
+        MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        for (int i = 0; i < tabletNum; i++) {
+            index.addTablet(new LakeTablet(indexId + i), null, false);
+        }
+        return index;
+    }
+
+    /**
+     * A range-distribution partition's tablet count is dynamic, and RangeDistributionInfo always
+     * reports one bucket, so Buckets must come from the latest base index. Base holds 3 tablets while
+     * the rollups hold 2 and 4, so "base" (3) is distinguishable from the old fixed 1, from the
+     * minimum (2) and from the maximum (4).
+     */
+    @Test
+    public void testFetchResultForRangeDistributionReportsBaseIndexTabletNum() throws AnalysisException {
+        Database db = new Database(10000L, "PartitionsProcDirTestDB");
+
+        List<Column> col = Lists.newArrayList(new Column("province", VarcharType.VARCHAR));
+        PartitionInfo listPartition = new ListPartitionInfo(PartitionType.LIST, col);
+        long partitionId = 1025;
+        listPartition.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
+
+        LakeTable table = new LakeTable(1024L, "range_table", col, null, listPartition, null);
+        MaterializedIndex baseIndex = newRangeIndex(30000L, 3000L, 3);
+        // distributionKeyAsString resolves a range table's sort key through the base index meta.
+        table.setBaseIndexMetaId(baseIndex.getMetaId());
+        table.setIndexMeta(baseIndex.getMetaId(), "range_table", col, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        long defaultPhysicalId = 1035;
+        Partition partition =
+                new Partition(partitionId, defaultPhysicalId, "p1", baseIndex, new RangeDistributionInfo());
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        physicalPartition.createRollupIndex(newRangeIndex(10000L, 1000L, 2));
+        physicalPartition.createRollupIndex(newRangeIndex(20000L, 2000L, 4));
+
+        table.addPartition(partition);
+        db.registerTableUnlocked(table);
+
+        // Precondition: a wrong implementation taking element 0 of the generic index enumeration must
+        // not coincidentally land on the base index.
+        Assertions.assertNotEquals(baseIndex.getId(),
+                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId(),
+                "fixture no longer discriminates: adjust the meta ids so a rollup enumerates first");
+
+        BaseProcResult result = (BaseProcResult) new PartitionsProcDir(db, table, false).fetchResult();
+
+        Assertions.assertEquals("3", bucketsByPartitionId(result).get(String.valueOf(defaultPhysicalId)));
     }
 }

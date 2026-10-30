@@ -1,15 +1,22 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "base/string/slice.h"
 #include "base/testutil/assert.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/encoding_dict.h"
+#include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/utils.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
@@ -213,4 +220,255 @@ TEST(DictEncodingReadTest, BinaryPageTest) {
     constexpr LogicalType DICT_TYPE = LogicalType::TYPE_INT;
     dict_encoding_test<DICT_TYPE, TARGET_TYPE>();
 }
+
+// Build a ready-to-read DictDecoder<Slice> backed by an int-keyed dictionary, mirroring the setup
+// in dict_encoding_test().
+static void setup_slice_dict_decoder(DictDecoder<Slice>* decoder, FakeDictDecoder<TYPE_VARCHAR>* inner_decoder,
+                                     faststring* backing) {
+    faststring fs;
+    RleEncoder<int32_t> encoder(&fs, 32);
+    for (size_t i = 0; i < 4096; ++i) {
+        encoder.Put(i % 9 + 1, 10);
+    }
+    backing->resize(fs.length() + 1);
+    backing->data()[0] = 32;
+    memcpy(backing->data() + 1, fs.data(), fs.length());
+    ASSERT_OK(decoder->set_data(Slice(backing->data(), backing->length())));
+    ASSERT_OK(decoder->set_dict(10, 10, inner_decoder));
+}
+
+// DictDecoder<Slice> must reject a non-binary destination column instead of blindly down-casting it
+// to BinaryColumn. This guards the path that could otherwise let a temporary Int32 dict-code column
+// reach a string slot. Exercises both the filtered _next_batch_value() path and the
+// next_value_batch_with_nulls() path.
+TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
+    constexpr size_t count = 100;
+
+    // 1. _next_batch_value() with a filter: a binary destination succeeds.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        filter[0] = 0;
+        ASSERT_OK(decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get()));
+        EXPECT_EQ(dst.get()->size(), count);
+    }
+
+    // 2. _next_batch_value() with a filter: a non-binary destination is rejected.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        auto st = decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get());
+        ASSERT_FALSE(st.ok());
+    }
+
+    // 3. next_value_batch_with_nulls(): a non-binary destination is rejected.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+
+        NullInfos infos;
+        infos.reset_with_capacity(count);
+        infos.num_nulls = 0;
+        for (size_t i = 0; i < count; ++i) {
+            infos.nulls_data()[i] = i % 2;
+            infos.num_nulls += infos.nulls_data()[i];
+        }
+        // num_ranges > 2 routes to next_value_batch_with_nulls() rather than the row-by-row fallback.
+        infos.num_ranges = count / 2;
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        auto st = decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), filter.get());
+        ASSERT_FALSE(st.ok());
+    }
+}
+
+// A row that a pushed-down filter excludes is never written, so it contributes no bytes to the
+// BinaryColumn. It must therefore come back NULL, keeping the layout invariant that a non-NULL row
+// occupies exactly the value width and a NULL row occupies nothing. Leaving such a row NOT NULL
+// creates a third state that consumers walking FIXED_LEN_BYTE_ARRAY bytes with a fixed stride --
+// BinaryToDecimalConverter does -- cannot represent: they consume the value width for it anyway,
+// decode every following row (including the rows that survive the filter) from a misaligned offset,
+// and read past the end of the buffer.
+TEST(DictEncodingReadTest, FilterExcludedRowsAreMarkedNull) {
+    constexpr size_t count = 100;
+    // FakeDictDecoder<TYPE_VARCHAR> builds the dictionary from std::to_string(i), i in [0, 10),
+    // so every dictionary value is exactly one byte wide.
+    constexpr size_t kValueLen = 1;
+
+    // 1. _next_batch_value(): no NULLs of its own, only filter-excluded rows.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        const std::vector<size_t> excluded = {3, 50, 99};
+        for (size_t i : excluded) {
+            filter[i] = 0;
+        }
+        ASSERT_OK(decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get()));
+
+        auto* nullable = down_cast<NullableColumn*>(dst.get());
+        ASSERT_EQ(count, nullable->size());
+        EXPECT_TRUE(nullable->has_null());
+        for (size_t i = 0; i < count; ++i) {
+            const bool is_excluded = std::find(excluded.begin(), excluded.end(), i) != excluded.end();
+            EXPECT_EQ(is_excluded, nullable->is_null(i)) << "row " << i;
+        }
+        // The rows that survive still decode: rows [0, 10) all map to dictionary index 1.
+        EXPECTED_UNQUOTE(dst->debug_item(0), "1");
+        EXPECTED_UNQUOTE(dst->debug_item(4), "1");
+
+        // The invariant itself: only the surviving rows occupy bytes.
+        auto* binary = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+        EXPECT_EQ((count - excluded.size()) * kValueLen, binary->get_bytes().size());
+        EXPECT_EQ(binary->get_bytes().size(), binary->get_offset().back());
+    }
+
+    // 2. next_value_batch_with_nulls(): real NULLs and filter-excluded rows together.
+    {
+        DictDecoder<Slice> decoder;
+        FakeDictDecoder<TYPE_VARCHAR> inner_decoder;
+        faststring backing;
+        setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
+        // next_batch_with_nulls() has no BE_TEST bypass, so drop the threshold to force the
+        // filtered path regardless of how small the test dictionary is.
+        decoder._dict_size_threshold = 0;
+
+        NullInfos infos;
+        infos.reset_with_capacity(count);
+        infos.num_nulls = 0;
+        for (size_t i = 0; i < count; ++i) {
+            infos.nulls_data()[i] = (i % 10 == 0);
+            infos.num_nulls += infos.nulls_data()[i];
+        }
+        // num_ranges > 1 routes to next_value_batch_with_nulls() rather than the row-by-row fallback.
+        infos.num_ranges = count / 2;
+
+        auto filter = std::make_unique<uint8_t[]>(count);
+        memset(filter.get(), 0x01, count);
+        // Two non-NULL rows, plus one row that is already NULL: the latter must not be counted twice.
+        const std::vector<size_t> excluded = {3, 57};
+        for (size_t i : excluded) {
+            filter[i] = 0;
+        }
+        filter[10] = 0;
+
+        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+        ASSERT_OK(decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), filter.get()));
+
+        auto* nullable = down_cast<NullableColumn*>(dst.get());
+        ASSERT_EQ(count, nullable->size());
+        EXPECT_TRUE(nullable->has_null());
+        for (size_t i = 0; i < count; ++i) {
+            const bool is_excluded = std::find(excluded.begin(), excluded.end(), i) != excluded.end();
+            EXPECT_EQ(infos.nulls_data()[i] != 0 || is_excluded, nullable->is_null(i)) << "row " << i;
+        }
+
+        auto* binary = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+        const size_t surviving = count - infos.num_nulls - excluded.size();
+        EXPECT_EQ(surviving * kValueLen, binary->get_bytes().size());
+        EXPECT_EQ(binary->get_bytes().size(), binary->get_offset().back());
+    }
+}
+
+// Fixed-length dict values with nulls (DictDecoder<T>::next_value_batch_with_nulls): check every row for sparse
+// (< 10% non-null) and dense batches, leading and trailing nulls, and several batches appended to one column.
+template <typename T>
+void check_fixed_dict_with_nulls(int null_pct, bool trailing_nulls, size_t batch_size) {
+    constexpr size_t kRows = 5000;
+    constexpr int kDictSize = 37;
+    std::mt19937 rng(static_cast<uint32_t>(null_pct * 1000 + batch_size + trailing_nulls));
+    std::uniform_int_distribution<int> pct(0, 99);
+
+    std::vector<T> dict(kDictSize);
+    for (int i = 0; i < kDictSize; i++) {
+        int64_t v = i * 1000003LL + 7;
+        memset(&dict[i], 0, sizeof(T));
+        memcpy(&dict[i], &v, std::min(sizeof(T), sizeof(v)));
+    }
+    std::vector<uint8_t> nulls(kRows);
+    std::vector<uint32_t> codes;
+    for (size_t i = 0; i < kRows; i++) {
+        nulls[i] = pct(rng) < null_pct || (trailing_nulls && (i % batch_size) + 3 >= batch_size);
+        if (!nulls[i]) codes.push_back(rng() % kDictSize);
+    }
+
+    constexpr int kBitWidth = 6;
+    faststring fs;
+    RleEncoder<uint32_t> encoder(&fs, kBitWidth);
+    for (auto c : codes) encoder.Put(c);
+    encoder.Flush();
+    faststring page;
+    page.resize(fs.length() + 1);
+    page.data()[0] = kBitWidth;
+    memcpy(page.data() + 1, fs.data(), fs.length());
+
+    PlainDecoder<T> dict_page_decoder;
+    ASSERT_OK(dict_page_decoder.set_data(Slice(reinterpret_cast<const char*>(dict.data()), dict.size() * sizeof(T))));
+    DictDecoder<T> decoder;
+    ASSERT_OK(decoder.set_dict(4096, kDictSize, &dict_page_decoder));
+    ASSERT_OK(decoder.set_data(Slice(page.data(), page.length())));
+
+    auto dst = NullableColumn::create(FixedLengthColumn<T>::create(), NullColumn::create());
+    NullInfos infos;
+    for (size_t begin = 0; begin < kRows; begin += batch_size) {
+        size_t count = std::min(batch_size, kRows - begin);
+        infos.reset_with_capacity(count);
+        memcpy(infos.nulls_data(), nulls.data() + begin, count);
+        for (size_t i = 0; i < count; i++) {
+            infos.num_nulls += nulls[begin + i];
+            infos.num_ranges += i == 0 || nulls[begin + i] != nulls[begin + i - 1];
+        }
+        ASSERT_OK(decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), nullptr));
+    }
+
+    ASSERT_EQ(kRows, dst->size());
+    const auto* data = reinterpret_cast<const T*>(
+            down_cast<const FixedLengthColumnBase<T>*>(dst->data_column_raw_ptr())->raw_data());
+    size_t k = 0;
+    for (size_t i = 0; i < kRows; i++) {
+        ASSERT_EQ(nulls[i], dst->is_null(i)) << "row " << i;
+        if (!nulls[i]) {
+            ASSERT_EQ(0, memcmp(&dict[codes[k]], &data[i], sizeof(T))) << "row " << i;
+            k++;
+        }
+    }
+    ASSERT_EQ(codes.size(), k);
+}
+
+TEST(DictEncodingTest, FixedLengthValuesWithNulls) {
+    for (int null_pct : {5, 50, 95}) {
+        for (bool trailing_nulls : {false, true}) {
+            for (size_t batch_size : {7, 100, 4096}) {
+                SCOPED_TRACE(fmt::format("null_pct={} trailing_nulls={} batch_size={}", null_pct, trailing_nulls,
+                                         batch_size));
+                check_fixed_dict_with_nulls<int32_t>(null_pct, trailing_nulls, batch_size);
+                check_fixed_dict_with_nulls<int64_t>(null_pct, trailing_nulls, batch_size);
+                check_fixed_dict_with_nulls<double>(null_pct, trailing_nulls, batch_size);
+                check_fixed_dict_with_nulls<int96_t>(null_pct, trailing_nulls, batch_size);
+            }
+        }
+    }
+}
+
 } // namespace starrocks::parquet

@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "Returns the approximate distinct count using DataSketches HyperLogLog (HLL). Similar to APPROX_COUNT_DISTINCT but with higher precision."
+---
+
 # ds_hll_count_distinct
 
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col). APPROX_COUNT_DISTINCT(expr) is similar function.

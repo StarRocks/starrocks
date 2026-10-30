@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg.cost;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
@@ -47,6 +48,7 @@ public class IcebergFileStats {
     private Map<Integer, Long> columnSizes;
     private Set<Integer> corruptedStats;
     private boolean hasValidColumnMetrics;
+    private Map<Integer, Long> columnSizeRecordCounts;
 
     public IcebergFileStats(
             Map<Integer, Type.PrimitiveType> idToTypeMapping,
@@ -79,7 +81,13 @@ public class IcebergFileStats {
                             (!nullCounts.containsKey(id) || nullCounts.get(id) != recordCount))
                     .collect(toSet());
             this.nullCounts = new HashMap<>(nullCounts);
-            this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : null;
+            this.columnSizes = columnSizes != null ? new HashMap<>(columnSizes) : new HashMap<>();
+            this.columnSizeRecordCounts = new HashMap<>();
+            if (columnSizes != null) {
+                for (Integer fieldId : columnSizes.keySet()) {
+                    columnSizeRecordCounts.put(fieldId, recordCount);
+                }
+            }
             hasValidColumnMetrics = true;
         }
     }
@@ -161,6 +169,22 @@ public class IcebergFileStats {
         this.recordCount += count;
     }
 
+    public void incrementColumnSizeRecordCounts(Set<Integer> fieldIds, long recordCount) {
+        if (columnSizeRecordCounts == null) {
+            columnSizeRecordCounts = new HashMap<>();
+        }
+        for (Integer fieldId : fieldIds) {
+            columnSizeRecordCounts.merge(fieldId, recordCount, Long::sum);
+        }
+    }
+
+    public long getColumnSizeRecordCount(Integer fieldId) {
+        if (columnSizeRecordCounts == null) {
+            return 0;
+        }
+        return columnSizeRecordCounts.getOrDefault(fieldId, 0L);
+    }
+
     public void incrementFileCount() {
         this.fileCount++;
     }
@@ -231,7 +255,7 @@ public class IcebergFileStats {
             // SR on Iceberg only support primitive type now, idToTypeMapping do not contains the corresponding id
             // for complex types like struct, map etc.
             Type.PrimitiveType type = idToTypeMapping.get(id);
-            if (type != null) {
+            if (type != null && !IcebergUtil.isPromotedDateBound(type, value)) {
                 map.put(id, Conversions.fromByteBuffer(type, value));
             }
         });

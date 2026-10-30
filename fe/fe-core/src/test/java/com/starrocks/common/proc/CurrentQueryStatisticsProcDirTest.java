@@ -46,6 +46,7 @@ public class CurrentQueryStatisticsProcDirTest {
                 .queryId("queryId1")
                 .warehouseName("wh1")
                 .resourceGroupName("wg1")
+                .queryType("Statistics")
                 .build()
         );
         statistic.put("queryId2", new QueryStatisticsItem.Builder()
@@ -84,6 +85,8 @@ public class CurrentQueryStatisticsProcDirTest {
         Assertions.assertEquals("abc1", list1.get(15));
         // ResourceGroupName
         Assertions.assertEquals("wg1", list1.get(16));
+        // QueryType
+        Assertions.assertEquals("Statistics", list1.get(17));
 
         List<String> list2 = rows.get(1);
         Assertions.assertEquals(list2.size(), CurrentQueryStatisticsProcDir.TITLE_NAMES.size());

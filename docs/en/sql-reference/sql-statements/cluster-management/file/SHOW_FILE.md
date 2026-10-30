@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "You can execute the SHOW FILE statement to view the information about a file stored in a database."
 ---
 
 # SHOW FILE

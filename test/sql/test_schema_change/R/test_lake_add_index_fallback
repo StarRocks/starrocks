@@ -1,0 +1,34 @@
+-- name: test_lake_add_index_fallback @cloud
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+create database lake_idx_fb_${uuid0};
+-- result:
+-- !result
+use lake_idx_fb_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 int,
+    v1 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+-- result:
+-- !result
+insert into t1 values (1, 'hello world'), (2, 'starrocks lake'), (3, 'fast path index');
+-- result:
+-- !result
+ALTER TABLE t1 ADD INDEX idx_gin(v1) USING GIN ("parser" = "english");
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t1;
+-- result:
+3
+-- !result
+drop database lake_idx_fb_${uuid0};
+-- result:
+-- !result

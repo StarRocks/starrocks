@@ -14,8 +14,10 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -49,6 +51,8 @@ public class IcebergDeleteSink extends DataSink {
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
     private com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra sinkExtraInfo;
+    // the branch the commit goes to, or null for the main branch
+    private String targetBranch;
 
     /**
      * Constructor for IcebergDeleteSink
@@ -61,6 +65,7 @@ public class IcebergDeleteSink extends DataSink {
                              SessionVariable sessionVariable) {
         this.icebergTable = icebergTable;
         Table nativeTable = icebergTable.getNativeTable();
+        IcebergApiConverter.checkPartitionTransformsWritable(nativeTable.spec());
         this.desc = desc;
         this.tableLocation = nativeTable.location();
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
@@ -70,8 +75,7 @@ public class IcebergDeleteSink extends DataSink {
         this.compressionType = nativeTable.properties().getOrDefault(DELETE_PARQUET_COMPRESSION,
                 nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
                         sessionVariable.getConnectorSinkCompressionCodec()));
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
-                sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
+        this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
     }
 
     public void init() {
@@ -137,8 +141,12 @@ public class IcebergDeleteSink extends DataSink {
         tIcebergTableSink.setData_location(dataLocation);
         tIcebergTableSink.setFile_format("parquet"); // Delete files are always parquet
         tIcebergTableSink.setIs_static_partition_sink(false);
+        // DeleteSink only emits position-delete files; the codec belongs in the
+        // delete-file slot. `compression_type` is reserved for data files now.
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
-        tIcebergTableSink.setCompression_type(compression);
+        Preconditions.checkState(compression != null,
+                "delete file compression type not supported: " + compressionType);
+        tIcebergTableSink.setDelete_compression_type(compression);
         tIcebergTableSink.setTarget_max_file_size(targetMaxFileSize);
         com.starrocks.thrift.TCloudConfiguration tCloudConfiguration = new com.starrocks.thrift.TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
@@ -179,5 +187,17 @@ public class IcebergDeleteSink extends DataSink {
      */
     public com.starrocks.connector.iceberg.IcebergMetadata.IcebergSinkExtra getSinkExtraInfo() {
         return sinkExtraInfo;
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
+    }
+
+    public void setTargetBranch(String targetBranch) {
+        this.targetBranch = targetBranch;
+    }
+
+    public boolean isUnpartitionedTable() {
+        return !icebergTable.isPartitioned();
     }
 }

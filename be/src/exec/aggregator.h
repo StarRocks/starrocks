@@ -32,18 +32,20 @@
 #include "exec/aggregator_fwd.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/expr.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/memory/counting_allocator.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
 class RuntimeFilter;
+class RuntimeFilterBuildDescriptor;
 class AggTopNRuntimeFilterBuilder;
 class AggInRuntimeFilterMerger;
 struct HashTableKeyAllocator;
@@ -127,7 +129,20 @@ struct AggFunctionTypes {
     bool serialize_always_nullable = false;
 
     template <bool UseIntermediateAsOutput>
-    bool is_result_nullable() const;
+    bool is_result_nullable() const {
+        if constexpr (UseIntermediateAsOutput) {
+            // If using intermediate results as output, no output will be generated and only the input will be serialized.
+            // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
+            return has_nullable_child || serialize_always_nullable;
+        } else {
+            // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
+            // Therefore, we need to decide whether the output is really nullable case by case:
+            // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
+            // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
+            // 3. Always nullable: `is_always_nullable_result`.
+            return (has_nullable_child && is_nullable) || is_always_nullable_result;
+        }
+    }
     bool use_nullable_fn(bool use_intermediate_as_output) const;
 };
 
@@ -192,6 +207,14 @@ static const int STREAMING_HT_MIN_REDUCTION_SIZE =
 struct LimitedMemAggState {
     size_t limited_memory_size{};
     bool has_limited(const Aggregator& aggregator) const;
+
+    // Compute the LIMITED_MEM budget as min(memory_usage, cap), floored at 1. Both streaming
+    // pre-agg sinks cap by config::streaming_agg_limited_memory_size. The floor is essential:
+    // set_execute_mode() latches this budget exactly once (enter_low_memory_mode() is a
+    // one-shot latch) and has_limited() tests `limited_memory_size > 0 && ...`, so a 0 budget
+    // would make has_limited() permanently false, silently degrading LIMITED_MEM back to AUTO
+    // with no memory cap and reintroducing the streaming pre-aggregation OOM.
+    static size_t clamp_budget(int64_t memory_usage, int64_t cap);
 };
 
 using AggregatorPtr = std::shared_ptr<Aggregator>;
@@ -508,6 +531,21 @@ protected:
     bool _is_pending_reset_state = false;
     Filter _streaming_selection;
 
+    // Agg functions whose state keeps only the first value it sees (AggregateFunction::is_first_value_only, e.g.
+    // any_value). While there is one, build_hash_map marks the rows that created a group in `_new_group_selection`
+    // (Filter convention: 0 = created a group) and compute_batch_agg_states feeds those functions only these rows
+    // (plus the non-NULL rows of groups created by a NULL row, see _first_value_only_selection), so the rows of the
+    // other groups never touch their states.
+    std::vector<uint8_t> _is_first_value_only_funcs;
+    size_t _num_first_value_only_funcs = 0;
+    Filter _new_group_selection;
+    Filter _first_value_only_selection_buffer;
+    // Bloom filter over the states of groups whose first-value-only functions may still lack a value.
+    std::vector<uint64_t> _pending_first_value_groups;
+    bool _has_pending_first_value_groups = false;
+    // Whether `_new_group_selection` describes the rows of the last build_hash_map.
+    bool _new_group_selection_ready = false;
+
     bool _has_udaf = false;
 
     AggStatistics* _agg_stat;
@@ -531,6 +569,11 @@ public:
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_topn_runtime_filter(size_t chunk_size);
+
+private:
+    const Filter& _first_value_only_selection(size_t i, bool use_intermediate, size_t chunk_size);
+
+public:
     Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk,
                                      bool force_use_intermediate_as_output = false);
 
@@ -591,6 +634,9 @@ protected:
     // Choose different agg hash map/set by different group by column's count, type, nullable
     template <typename HashVariantType>
     void _init_agg_hash_variant(HashVariantType& hash_variant);
+
+    // Publishes the selected key representation to the query profile.
+    void _report_hash_variant(const char* name);
     // get spec hash table/set type
     template <typename HashVariantType>
     typename HashVariantType::Type _get_hash_table_type();
@@ -617,12 +663,7 @@ protected:
     Status _create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn, bool is_result_nullable,
                                       const AggregateFunction** ret);
 
-    int64_t get_two_level_threahold() {
-        if (config::two_level_memory_threshold < 0) {
-            return agg::two_level_memory_threshold;
-        }
-        return config::two_level_memory_threshold;
-    }
+    int64_t get_two_level_threahold();
 
     template <class HashMapWithKey>
     friend struct AllocateState;
@@ -630,6 +671,13 @@ protected:
 
 inline bool LimitedMemAggState::has_limited(const Aggregator& aggregator) const {
     return limited_memory_size > 0 && aggregator.memory_usage() >= limited_memory_size;
+}
+
+inline size_t LimitedMemAggState::clamp_budget(int64_t memory_usage, int64_t cap) {
+    if (memory_usage > cap) {
+        return cap;
+    }
+    return memory_usage > 0 ? static_cast<size_t>(memory_usage) : 1;
 }
 
 template <class T>

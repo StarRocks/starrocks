@@ -1,0 +1,64 @@
+-- name: test_window_partition_order_by_subquery
+CREATE TABLE `t0` (
+  `v1` int(11) NULL,
+  `v2` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+CREATE TABLE `t1` (
+  `k1` int(11) NULL,
+  `k2` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO `t0` (v1, v2) VALUES (1, 10), (2, 20), (3, 30);
+INSERT INTO `t1` (k1, k2) VALUES (1, 100), (2, 200), (3, 300);
+
+-- A scalar subquery nested inside the window's ORDER BY expression. It has to be planned as an
+-- Apply below the window, otherwise the FE emits a TExprNode without a node_type and the BE
+-- rejects the fragment with "Required field 'node_type' was not present!".
+select k1, dense_rank() over (order by abs((select max(v1) from t0))) as r from t1 order by k1;
+
+-- The same subquery used directly as the window's ORDER BY expression. This used to fail
+-- analysis with "slot type shouldn't be invalid".
+select k1, count(1) over (order by (select max(v1) from t0)) as c from t1 order by k1;
+
+-- Scalar subquery as the window's PARTITION BY expression.
+select k1, dense_rank() over (partition by (select max(v1) from t0) order by k1) as r from t1 order by k1;
+
+-- Subqueries in both PARTITION BY and ORDER BY, plus one nested in an expression.
+select k1,
+       sum(k2) over (partition by (select min(v1) from t0) order by k1 + (select count(*) from t0)) as s
+from t1 order by k1;
+
+-- The window's subquery may also appear in the select list and in an aggregate below the window.
+select k1, k2 + (select max(v2) from t0) as e,
+       row_number() over (partition by (select max(v1) from t0) order by k1 desc) as rn
+from t1 order by k1;
+
+-- A quantified or existential subquery has to be planned together with its predicate: that predicate is
+-- what becomes the Apply. Planning its Subquery child on its own used to dereference a null
+-- OptExprBuilder ("Cannot invoke OptExprBuilder.getExpressionMapping() because this.builder is null").
+select k1, dense_rank() over (partition by k1 in (select v1 from t0 where v1 <= 2) order by k1) as r
+from t1 order by k1;
+select k1, count(1) over (order by k1 in (select v1 from t0 where v1 <= 2)) as c from t1 order by k1;
+select k1, count(1) over (order by k1 not in (select v1 from t0 where v1 <= 2)) as c from t1 order by k1;
+select k1, dense_rank() over (partition by exists (select v1 from t0 where v1 > 100) order by k1) as r
+from t1 order by k1;
+
+-- Correlated existential subquery in a window's PARTITION BY.
+select k1, dense_rank() over (partition by exists (select 1 from t0 where t0.v1 = t1.k1 and t0.v2 >= 20)
+                              order by k1) as r
+from t1 order by k1;
+
+-- A quantified subquery nested inside a larger window expression.
+select k1, count(1) over (order by (k1 in (select v1 from t0 where v1 <= 2)) or k1 = 3) as c
+from t1 order by k1;

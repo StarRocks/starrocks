@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to load JSON data into StarRocks using Stream Load or Routine Load, with JSON path expressions for field mapping and nested object handling."
 ---
 
 # Introduction
@@ -34,10 +35,10 @@ The `format: json` parameter allows you to execute the format of the imported da
 
 Related parameters:
 
-* jsonpaths: Select the JSON path for each column
-* json\_root: Select the column where the JSON starts to be parsed
-* strip\_outer\_array: Crop the outermost array field
-* strict\_mode: Strictly filter for column type conversion during import
+* `jsonpaths`: Select the JSON path for each column
+* `json_root`: Select the column where the JSON starts to be parsed
+* `strip_outer_array`: Crop the outermost array field
+* `strict_mode`: Strictly filter for column type conversion during import
 
 When the JSON data schema and StarRocks data schema are not exactly the same, modify the `Jsonpath`.
 

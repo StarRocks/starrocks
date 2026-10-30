@@ -1,6 +1,8 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 toc_max_heading_level: 5
+description: "A Hive catalog is a kind of external catalog that is supported by StarRocks from v2.4 onwards."
 ---
 
 # Hive catalog
@@ -31,14 +33,23 @@ To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster 
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
   - Textfile files support the LZO compression format from v3.1.5 onwards.
 
-- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP and STRUCT data types for Textfile-formatted Hive tables.
+- The data types of Hive that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the STRUCT data type for Textfile-formatted Hive tables. The MAP data type for Textfile-formatted Hive tables is supported from v4.2 onwards.
+
+- From v4.2 onwards, StarRocks parses Textfile-formatted Hive tables in the same way as Hive:
+
+  - For tables that use OpenCSVSerde, StarRocks honors the `quoteChar` and `escapeChar` properties (including their default values `"` and `\`), and follows the parsing rules of the opencsv 2.3 library bundled with Hive 0.14 through 4.0.
+  - For tables that use LazySimpleSerDe, StarRocks honors the escape character defined by `ESCAPED BY`.
+  - Rows are split at physical line boundaries, and the `\N` NULL marker is recognized before unescaping, both matching Hive.
+  - MAP columns are parsed in the Hive text format, that is, entries separated by the collection delimiter, and keys and values separated by the map key delimiter.
+
+  These rules apply only to queries against Hive tables. Broker Load, Stream Load, and the FILES() function are not affected. In earlier StarRocks versions, quote and escape characters were ignored, so rows and fields could be split differently from Hive.
 
 - StarRocks supports sinking data to Parquet-formatted (supported from v3.2 onwards) and ORC- or Textfile-formatted (supported from v3.3 onwards) Hive tables:
 
   - Parquet and ORC files support the following compression formats: NO_COMPRESSION, SNAPPY, LZ4, ZSTD, and GZIP.
   - Textfile files support the NO_COMPRESSION compression format.
 
-  You can use the table property [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
+  You can use the table property [`compression_codec`](./hive_catalog.md#properties) or the system variable [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) to specify the compression algorithm used for sinking data to Hive tables.
 
   When writing to a Hive table, if the table's properties include a compression codec, StarRocks will preferentially use that algorithm to compress the written data. Otherwise, it will use the compression algorithm set in the system variable `connector_sink_compression_codec`.
 
@@ -58,7 +69,7 @@ The following authentication methods are recommended:
 
 Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparations).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparations).
 
 ### HDFS
 
@@ -195,8 +206,9 @@ The following table describes the parameters you need to configure in `Metastore
 | aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 | hive.metastore.glue.catalogid | No       | The ID of the AWS Glue Data Catalog to use. When not specified, the catalog in the current AWS account is used. You must specify this parameter when you need to access a Glue Data Catalog in a different AWS account (cross-account access). |
+| aws.glue.resource_share_type  | No       | Controls which databases `SHOW DATABASES` lists, by setting the `ResourceShareType` sent to the AWS Glue `GetDatabases` API. Case-insensitive. Valid values: `FOREIGN` (databases shared with your account from another account through AWS Resource Access Manager), `FEDERATED` (databases that reference an external data source such as a JDBC connection), and `ALL` (local databases plus both of the above). When unset, only local databases are listed. This parameter affects listing only. StarRocks still queries a database using the single account set by `hive.metastore.glue.catalogid`, so a listed `FOREIGN` database remains unqueryable unless you also set `hive.metastore.glue.catalogid` to the owner account or create a [resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html) for it in your own Data Catalog; a `FEDERATED` database is not a Hive-compatible database and cannot be queried through this catalog. |
 
-For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 #### StorageCredentialParams
 
@@ -244,7 +256,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
@@ -357,6 +369,22 @@ If you choose Data Lake Storage Gen2 as storage for your Hive cluster, take one 
   | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
   | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
   | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -735,6 +763,21 @@ PROPERTIES
   );
   ```
 
+- If you choose the Workload Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - If you choose the VM-based authentication method, run a command like below:
@@ -866,7 +909,7 @@ You can use one of the following syntaxes to view the schema of a Hive table:
 
 2. [Switch to a Hive Catalog and a database in it](#switch-to-a-hive-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -1253,13 +1296,13 @@ Note that the REFRESH EXTERNAL TABLE refreshes only the tables and partitions ca
 
 ## Periodically refresh metadata cache
 
-From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following [FE parameters](../../administration/management/FE_configuration.md):
+From v2.5.5 onwards, StarRocks can periodically refresh the cached metadata of the frequently accessed Hive catalogs to perceive data changes. You can configure the Hive metadata cache refresh through the following [FE parameters](../../administration/configuration/FE_parameters/FE_parameters.md):
 
 | Configuration item                                           | Default                              | Description                          |
 | ------------------------------------------------------------ | ------------------------------------ | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
-| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| enable_background_refresh_connector_metadata                 | `true` in v3.0<br />`false` in v2.5  | Whether to enable the periodic Hive metadata cache refresh. After it is enabled, StarRocks polls the metastore (Hive Metastore or AWS Glue) of your Hive cluster, and refreshes the cached metadata of the frequently accessed Hive catalogs to perceive data changes. `true` indicates to enable the Hive metadata cache refresh, and `false` indicates to disable it. This item is an [FE dynamic parameter](../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_interval_millis                  | `600000` (10 minutes)                | The interval between two consecutive Hive metadata cache refreshes. Unit: millisecond. This item is an [FE dynamic parameter](../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
+| background_refresh_metadata_time_secs_since_last_access_secs | `86400` (24 hours)                   | The expiration time of a Hive metadata cache refresh task. For the Hive catalog that has been accessed, if it has not been accessed for more than the specified time, StarRocks stops refreshing its cached metadata. For the Hive catalog that has not been accessed, StarRocks will not refresh its cached metadata. Unit: second. This item is an [FE dynamic parameter](../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters). You can modify it using the [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) command. |
 
 Using the periodic Hive metadata cache refresh feature and the metadata automatic asynchronous update policy together significantly accelerates data access, reduces the read load from external data sources, and improves query performance.
 

@@ -1,5 +1,6 @@
 ---
 sidebar_position: 30
+description: "A concise field guide to choosing between Hash Bucketing and Random Bucketing in StarRocks, including their mechanics, trade‑offs, and recommended use cases."
 ---
 
 # Bucketing
@@ -30,7 +31,7 @@ Rows are assigned to tablets by hashing one or more columns. Tablet count is f
 
 ### Requirements
 - Must pick a stable, evenly, high‑cardinality key up front. The cardinality should typically be 1000 times more than the number of BE nodes to prevent data skew among hash buckets.
-- Choose an appropriate bucket size initially, ideally ranging between 1 to 10 GB.
+- Choose an appropriate bucket size initially, ideally ranging between 1 to 10 GB. For shared-data clusters of v4.1 or later, which support large-capacity tablets, the bucket size should ideally range between 10 GB and 50 GB, and be no more than 100 GB.
 
 ### Strengths
 - Query locality – selective filters and joins touch fewer tablets.

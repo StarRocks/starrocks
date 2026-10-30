@@ -23,6 +23,7 @@ import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.Metric;
 import com.starrocks.metric.MetricLabel;
 import com.starrocks.qe.scheduler.slot.BaseSlotTracker;
+import com.starrocks.qe.scheduler.slot.MemoryAdmissionGate;
 import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 
 import java.util.List;
@@ -41,6 +42,7 @@ public class WarehouseMetricEntity {
     public final GaugeMetric<Integer> sumRequiredSlots;
     public final GaugeMetric<Long> remainSlots;
     public final GaugeMetric<Long> maxSlots;
+    public final GaugeMetric<Double> maxNodeMemUsedPct;
 
     private final List<Metric> metrics = Lists.newArrayList();
 
@@ -140,6 +142,19 @@ public class WarehouseMetricEntity {
         };
         maxSlots.addLabel(new MetricLabel("field", "max_slots"));
         metrics.add(maxSlots);
+
+        // The memory gate of Query Queue V2 compares this value with query_queue_mem_used_pct_limit. The memory usage
+        // of a node only reaches the leader FE, where admission happens, so it is meaningful there.
+        this.maxNodeMemUsedPct = new GaugeMetric<Double>("warehouse_query_queue", Metric.MetricUnit.PERCENT,
+                "highest process memory usage among the alive nodes of the warehouse with a fresh report, " +
+                        "as a fraction of the memory limit of the node") {
+            @Override
+            public Double getValue() {
+                return MemoryAdmissionGate.getMaxNodeMemUsedPct(warehouseId);
+            }
+        };
+        maxNodeMemUsedPct.addLabel(new MetricLabel("field", "max_node_mem_used_pct"));
+        metrics.add(maxNodeMemUsedPct);
     }
 
     public List<Metric> getMetrics() {

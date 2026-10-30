@@ -1,0 +1,35 @@
+-- name: test_json_subfield_case_collision_self_join
+-- Cross-scan variant of the JSON subfield case-collision: when the same table is scanned twice in
+-- one query (self-join / same base index via aliases), the analyzer reuses ONE copied OlapTable for
+-- both aliases (AnalyzerUtils.copyTable). A per-scan collision check misses a case-differing pair
+-- split across the aliases -- t1 reads fields->'Campaign', t2 reads fields->'campaign'. The first
+-- rewrite adds an extended fields.Campaign column to the shared copy; the second scan then reused it
+-- case-insensitively for fields.campaign and emitted /fields/Campaign for both -> silently wrong
+-- values (Campaign extraction returns the campaign value, or vice versa). The rewrite must also
+-- detect collisions against the shared table's already-added extended columns and fall back.
+drop database if exists test_json_subfield_case_collision_self_join;
+create database test_json_subfield_case_collision_self_join;
+use test_json_subfield_case_collision_self_join;
+
+CREATE TABLE t (
+  id bigint,
+  fields json
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO t VALUES
+ (1, parse_json('{"Campaign":"CAP1","campaign":"low1"}')),
+ (2, parse_json('{"Campaign":"CAP2","campaign":"low2"}'));
+
+set cbo_json_v2_rewrite = true;
+
+-- 'Campaign' (via t1) and 'campaign' (via t2) address two distinct fields and must return their own
+-- values: caps = CAP1/CAP2, low = low1/low2. Before the cross-scan guard, caps came back as low1/low2.
+SELECT t1.id AS id,
+       get_json_string(t1.fields, 'Campaign') AS caps,
+       get_json_string(t2.fields, 'campaign') AS low
+FROM t t1 JOIN t t2 ON t1.id = t2.id
+ORDER BY t1.id;
+
+drop database test_json_subfield_case_collision_self_join;

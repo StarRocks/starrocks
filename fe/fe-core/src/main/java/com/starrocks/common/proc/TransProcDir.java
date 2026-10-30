@@ -61,6 +61,8 @@ public class TransProcDir implements ProcDirInterface {
             .add("TimeoutMs")
             .add("PreparedTimeoutMs")
             .add("ErrMsg")
+            .add("NoOpPublish")
+            .add("NoOpPublishReason")
             .build();
 
     private long dbId;

@@ -14,12 +14,14 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sorting.h"
 #include "types/date_value.h"
 
 namespace starrocks {
@@ -91,7 +93,9 @@ TEST(FixedLengthColumnTest, test_nullable) {
     ASSERT_EQ(100, column->size());
     ASSERT_EQ(100 * 5, column->byte_size());
 
-    const auto* data = reinterpret_cast<const int32_t*>(column->raw_data());
+    RawDataVisitor rv;
+    ASSERT_OK(column->accept(&rv));
+    const auto* data = reinterpret_cast<const int32_t*>(rv.result());
     for (int i = 0; i < 100; i++) {
         if (i % 2) {
             ASSERT_EQ(true, column->is_null(i));
@@ -114,7 +118,8 @@ TEST(FixedLengthColumnTest, test_nullable) {
         }
     }
 
-    data = reinterpret_cast<const int32_t*>(column->raw_data());
+    ASSERT_OK(column->accept(&rv));
+    data = reinterpret_cast<const int32_t*>(rv.result());
     for (int i = 0; i < 100; i++) {
         if (i % 3) {
             ASSERT_EQ(true, column->is_null(i));
@@ -183,8 +188,8 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     auto c1 = Int32Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
+    const auto& p = c1->immutable_data();
     for (size_t i = 0; i < values.size(); i++) {
-        auto* p = reinterpret_cast<const int32_t*>(c1->raw_data());
         ASSERT_EQ(values[i], p[i]);
     }
 
@@ -192,10 +197,9 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     ASSERT_EQ(values.size(), c2->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c2->size());
-    auto* nullable_c2 = down_cast<NullableColumn*>(c2.get());
+    const auto& datas = GetContainer<TYPE_INT>::get_data(c2.get());
     for (size_t i = 0; i < values.size(); i++) {
-        auto* p = reinterpret_cast<const int32_t*>(nullable_c2->data_column()->raw_data());
-        ASSERT_EQ(values[i], p[i]);
+        ASSERT_EQ(values[i], datas[i]);
     }
 }
 
@@ -381,17 +385,10 @@ TEST(FixedLengthColumnTest, test_append_numeric) {
     EXPECT_EQ(0, c1->get(0).get_int64());
 
     c1->append(*c2, 0, 2);
-    EXPECT_EQ(3u, c1->size());
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_EQ(1, c1->get(1).get_int64());
-    EXPECT_EQ(2, c1->get(2).get_int64());
+    EXPECT_EQ("[0, 1, 2]", c1->debug_string());
 
     c1->append(*c2, 1, 1);
-    EXPECT_EQ(4u, c1->size());
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_EQ(1, c1->get(1).get_int64());
-    EXPECT_EQ(2, c1->get(2).get_int64());
-    EXPECT_EQ(2, c1->get(3).get_int64());
+    EXPECT_EQ("[0, 1, 2, 2]", c1->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -409,22 +406,10 @@ TEST(FixedLengthColumnTest, test_append_nullable_numeric) {
     EXPECT_EQ(0, c1->get(0).get_int64());
 
     c1->append(*c2, 0, 2);
-    EXPECT_EQ(3u, c1->size());
-    EXPECT_FALSE(c1->is_null(0));
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_TRUE(c1->is_null(1));
-    EXPECT_FALSE(c1->is_null(2));
-    EXPECT_EQ(100, c1->get(2).get_int64());
+    EXPECT_EQ("[0, NULL, 100]", c1->debug_string());
 
     c1->append(*c2, 1, 1);
-    EXPECT_EQ(4u, c1->size());
-    EXPECT_FALSE(c1->is_null(0));
-    EXPECT_EQ(0, c1->get(0).get_int64());
-    EXPECT_TRUE(c1->is_null(1));
-    EXPECT_FALSE(c1->is_null(2));
-    EXPECT_EQ(100, c1->get(2).get_int64());
-    EXPECT_FALSE(c1->is_null(3));
-    EXPECT_EQ(100, c1->get(3).get_int64());
+    EXPECT_EQ("[0, NULL, 100, 100]", c1->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -607,57 +592,18 @@ TEST(FixedLengthColumnTest, test_compare_row) {
 }
 
 // NOLINTNEXTLINE
-TEST(FixedLengthColumnTest, test_upgrade_if_overflow) {
-    auto column = FixedLengthColumn<uint32_t>::create();
-    for (int i = 0; i < 10; i++) {
-        column->append(i);
-    }
-
-    auto ret = column->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_EQ(column->size(), 10);
-    for (int i = 0; i < 10; i++) {
-        ASSERT_EQ(column->get(i).get_uint32(), i);
-    }
-
-#ifdef NDEBUG
-    // This case will alloc a lot of memory and run slowly
-    auto large_column = FixedLengthColumn<uint8_t>::create();
-    large_column->resize(Column::MAX_CAPACITY_LIMIT + 5);
-    ret = large_column->upgrade_if_overflow();
-    ASSERT_FALSE(ret.ok());
-#endif
-}
-
-// NOLINTNEXTLINE
-TEST(FixedLengthColumnTest, test_fixed_length_column_downgrade) {
-    auto column = FixedLengthColumn<uint32_t>::create();
-    column->append(1);
-    auto ret = column->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(column->has_large_column());
-}
-
-// NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_replicate) {
     auto column = FixedLengthColumn<int32_t>::create();
     column->append(7);
     column->append(3);
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(3);
     offsets.emplace_back(5);
 
     auto c2 = column->replicate(offsets).value();
-    ASSERT_EQ(5, c2->size());
-    ASSERT_EQ(c2->get(0).get_int32(), 7);
-    ASSERT_EQ(c2->get(1).get_int32(), 7);
-    ASSERT_EQ(c2->get(2).get_int32(), 7);
-    ASSERT_EQ(c2->get(3).get_int32(), 3);
-    ASSERT_EQ(c2->get(4).get_int32(), 3);
+    ASSERT_EQ("[7, 7, 7, 3, 3]", c2->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -674,7 +620,7 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     Filter filter{1, 0, 1, 0, 1};
     ASSERT_TRUE(c1->fill_range(ids, filter).ok());
 
-    auto* p = reinterpret_cast<const int64_t*>(c1->raw_data());
+    const auto& p = c1->immutable_data();
     ASSERT_EQ(0, p[0]);
     ASSERT_EQ(values[1], p[1]);
     ASSERT_EQ(0, p[2]);

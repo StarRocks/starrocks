@@ -1,5 +1,7 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
+description: "Iceberg 元数据表提供 Iceberg 表的变更历史、快照和 Manifest 等元数据查询接口。"
 ---
 
 # Iceberg 元数据表
@@ -20,7 +22,37 @@ displayed_sidebar: docs
 | `manifests`            | 显示与表日志中快照相关联的 Manifest 概览。                   |
 | `partitions`           | 显示表中分区的详细信息。                                     |
 | `files`                | 显示当前快照中数据文件（Data File）和删除文件（Delete File）的详细信息。 |
+| `entries`              | 显示当前快照的 Manifest 条目，包括已删除文件的条目。         |
+| `all_data_files`       | 显示表的所有快照中的数据文件。                               |
+| `all_delete_files`     | 显示表的所有快照中的删除文件。                               |
+| `all_manifests`        | 显示表的所有快照中的 Manifest。                              |
+| `all_entries`          | 显示表的所有快照中的 Manifest 条目。                         |
 | `refs`                 | 显示关于 Iceberg 引用（Reference）的详细信息，包括分支和标签。 |
+| `properties`           | 显示表属性的键值对。                                         |
+
+## Iceberg v3 Row Lineage 元数据列
+
+从 v4.1 开始，对于 Iceberg v3 表（format-version = 3），StarRocks 支持查询以下行血缘（Row Lineage）相关的元数据列：
+
+| 元数据列                     | 描述                                                                                       |
+| :--------------------------- | :----------------------------------------------------------------------------------------- |
+| `_row_id`                    | 表内唯一的行标识符（BIGINT）。格式：`firstRowId + row_position`。                          |
+| `_last_updated_sequence_number` | 该行最后更新时的提交序列号（BIGINT）。                                                  |
+
+使用方法：
+
+```SQL
+SELECT _row_id, _last_updated_sequence_number, * FROM [<catalog>.][<database>.]table;
+```
+
+:::note
+
+- `_row_id` 列需要数据文件具备 `firstRowId` 元信息。如果数据文件缺失 `firstRowId`，查询将失败并报错。
+- 对于新写入的数据，`_row_id` 通过 `firstRowId + row_position` 计算，`_last_updated_sequence_number` 取文件级别的 `dataSequenceNumber`。
+- 在 compaction（如 Iceberg OPTIMIZE / rewrite-data-files）后，如果 compactor 按照 Iceberg v3 规范将 `_row_id` 和 `_last_updated_sequence_number` 写入数据文件的物理列中，StarRocks 会读取每行的物理列值，从而在 compaction 后保留行血缘信息。
+- 这些元数据列仅对 Iceberg v3 表（format-version = 3）可用。
+
+:::
 
 ## `history` 表
 
@@ -98,7 +130,8 @@ SELECT * FROM [<catalog>.][<database>.]table$manifests;
 | existing_rows_count       | Manifest 文件中所有状态为 `EXISTING` 数据文件的总行数。 |
 | deleted_data_files_count  | Manifest 文件中状态为 `DELETED` 的数据文件数量。        |
 | deleted_rows_count        | Manifest 文件中所有状态为 `DELETED` 数据文件的总行数。  |
-| partition_summaries       | 分区范围元数据。                                        |
+| partitions                | 分区范围元数据。                                        |
+| content                   | Manifest 文件的内容类型。有效值：`DATA(0)`、`DELETES(1)`。对于 Delete Manifest，`*_data_files_count` 和 `*_rows_count` 字段统计的是其中的删除文件和被删除的行。 |
 
 ## `partitions` 表
 
@@ -139,6 +172,7 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | file_path          | 数据文件的位置。                                             |
 | file_format        | 数据文件的格式。                                             |
 | spec_id            | 用于跟踪包含行的文件的 Spec ID。                             |
+| partition          | 文件的分区值，为一个 Struct，包含表的所有分区规范中的分区字段。文件所属分区规范中没有的字段为 `NULL`。如果表从未分区，则没有该字段。`partition` 是保留关键字，查询时需要用反引号括起来。 |
 | record_count       | 数据文件中包含的条目数。                                     |
 | file_size_in_bytes | 数据文件的大小。                                             |
 | column_sizes       | Iceberg 列 ID 与文件中对应大小的映射。                       |
@@ -151,6 +185,63 @@ SELECT * FROM [<catalog>.][<database>.]table$files;
 | sort_id            | 代表该文件排序顺序的 ID。                                    |
 | equality_ids       | 用于在相等删除文件（Equality Delete File）中进行相等比较的字段 ID 集。 |
 | key_metadata       | 文件加密所使用的密钥元数据（如适用）。                       |
+| first_row_id       | 格式版本 3 的表中，数据文件第一行的行 ID。删除文件为 `NULL`。 |
+| referenced_data_file | Deletion Vector 或文件级 Position Delete 文件所作用的数据文件的位置。数据文件为 `NULL`。 |
+| content_offset     | Deletion Vector 在其 Puffin 文件中的偏移量。其他文件为 `NULL`。 |
+| content_size_in_bytes | Deletion Vector 在其 Puffin 文件中的大小。其他文件为 `NULL`。 |
+
+## `entries` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$entries;
+```
+
+输出：
+
+| 字段                 | 描述                                                         |
+| :------------------- | :----------------------------------------------------------- |
+| status               | 条目的状态。有效值：`EXISTING(0)`、`ADDED(1)`、`DELETED(2)`。 |
+| snapshot_id          | 添加或删除该文件的快照 ID。                                  |
+| sequence_number      | 文件的数据序列号。                                           |
+| file_sequence_number | 添加该文件的快照的序列号。                                   |
+| data_file            | 文件信息，为一个 Struct，字段与 `files` 表相同。其中排序顺序 ID 字段名为 `sort_order_id`。 |
+
+## `all_data_files` 表和 `all_delete_files` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_data_files;
+SELECT * FROM [<catalog>.][<database>.]table$all_delete_files;
+```
+
+这两个表的字段与 `files` 表相同。它们列出表的所有快照的 Manifest 中的数据文件或删除文件，因此同一个文件可能出现多次。
+
+## `all_manifests` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_manifests;
+```
+
+该表包含 `manifests` 表的字段以及以下字段。一个 Manifest 在包含它的每个快照中各出现一次。
+
+| 字段                  | 描述                         |
+| :-------------------- | :--------------------------- |
+| reference_snapshot_id | 包含该 Manifest 的快照 ID。  |
+
+## `all_entries` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$all_entries;
+```
+
+该表的字段与 `entries` 表相同。它列出表的所有快照的 Manifest 中的条目。
 
 ## `refs` 表
 
@@ -170,3 +261,26 @@ SELECT * FROM [<catalog>.][<database>.]table$refs;
 | max_reference_age_in_ms | 引用的最长保留时间，超出此时间引用可能会过期。               |
 | min_snapshots_to_keep   | 仅适用于分支，分支中必须保留的最小快照数。                   |
 | max_snapshot_age_in_ms  | 仅适用于分支，分支中允许的最长保留时间。过期的快照将被删除。 |
+
+## `properties` 表
+
+用法：
+
+```SQL
+SELECT * FROM [<catalog>.][<database>.]table$properties;
+```
+
+输出：
+
+| **字段** | **描述**       |
+| :------- | :------------- |
+| key      | 表属性的名称。 |
+| value    | 表属性的值。   |
+
+示例输出：
+
+| key                             | value                              |
+| :------------------------------ | :--------------------------------- |
+| location                        | s3://bucket/warehouse/db/my_table  |
+| write.format.default            | parquet                            |
+| write.parquet.compression-codec | zstd                               |

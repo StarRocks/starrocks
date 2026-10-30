@@ -14,7 +14,8 @@
 
 #pragma once
 
-#include "column/type_traits.h"
+#include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -46,14 +47,18 @@ public:
             simdjson::padded_string padded_buckets_string = ctx->get_constant_column(1)->get(0).get_slice().to_string();
             simdjson::ondemand::parser simdjson_parser;
             simdjson::ondemand::document doc;
-            simdjson_parser.iterate(padded_buckets_string).get(doc);
+            if (auto error = simdjson_parser.iterate(padded_buckets_string).get(doc); error != simdjson::SUCCESS) {
+                ctx->set_error("histogram_hll_ndv: can't parse JSON specification of histogram buckets.", false);
+                return;
+            }
             simdjson::ondemand::array outer_array = doc.get_array();
             for (auto bucket_json : outer_array) {
                 simdjson::ondemand::array inner_array = bucket_json.get_array();
                 buckets.push_back(Bucket<LT>::from_json(inner_array, ctx->get_arg_type(0), &state.mem_pool));
             }
-        } catch (const simdjson::simdjson_error& e) {
-            throw std::runtime_error("histogram_hll_ndv: can't parse JSON specification of histogram buckets.");
+        } catch (const std::exception&) {
+            ctx->set_error("histogram_hll_ndv: can't parse JSON specification of histogram buckets.", false);
+            return;
         }
 
         state.buckets = buckets;
@@ -74,32 +79,18 @@ public:
             create_impl(ctx, state_impl);
         }
 
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         auto& buckets = this->data(state).buckets;
         auto bucket_it{buckets.end()};
-        uint64_t hash = 0;
 
-        // find the correct bucket for the current value.
-        if constexpr (lt_is_string_or_binary<LT>) {
-            Slice s = column->get_slice(row_num);
-            bucket_it = std::upper_bound(buckets.begin(), buckets.end(), s,
-                                         [](auto& s, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(s); });
-            if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(s)) {
-                bucket_it = buckets.end();
-            }
-
-            hash = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
-        } else {
-            const auto v = column->immutable_data();
-            bucket_it = std::upper_bound(
-                    buckets.begin(), buckets.end(), v[row_num],
-                    [](auto& value, Bucket<LT>& bucket) { return bucket.is_less_equal_to_upper(value); });
-            if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(v[row_num])) {
-                bucket_it = buckets.end();
-            }
-
-            hash = HashUtil::murmur_hash64A(&v[row_num], sizeof(v[row_num]), HashUtil::MURMUR_SEED);
+        const auto v = GetContainer<LT>::get_data(columns[0], row_num);
+        bucket_it = std::upper_bound(buckets.begin(), buckets.end(), v, [](auto& value, Bucket<LT>& bucket) {
+            return bucket.is_less_equal_to_upper(value);
+        });
+        if (bucket_it != buckets.end() && !bucket_it->is_greater_equal_to_lower(v)) {
+            bucket_it = buckets.end();
         }
+        // find the correct bucket for the current value.
+        uint64_t hash = HashUtil::murmur_hash64A<T>(v, HashUtil::MURMUR_SEED);
 
         if (hash != 0 && bucket_it != buckets.end()) {
             int index = std::distance(buckets.begin(), bucket_it);

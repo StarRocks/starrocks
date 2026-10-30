@@ -82,7 +82,6 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: test_mv1\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 16: d = '20230801'\n" +
                         "     partitions=1/4");
         }
 
@@ -96,7 +95,6 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: test_mv1\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 16: d >= '20230801'\n" +
                         "     partitions=3/4\n" +
                         "     rollup: test_mv1");
         }
@@ -195,7 +193,6 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: test_mv3\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 16: d = '20230801'\n" +
                         "     partitions=1/4");
         }
 
@@ -209,7 +206,6 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
                         "     TABLE: test_mv3\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 16: d >= '20230801'\n" +
                         "     partitions=3/4\n" +
                         "     rollup: test_mv3");
         }
@@ -291,7 +287,6 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
                     ") " +
                     " as select a, b, d, cnt" +
                     " from jdbc_table_view");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " with sync mode");
 
         {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "percentile_cont 计算精确百分位数，使用连续分布模型进行线性插值。"
 ---
 
 # percentile_cont

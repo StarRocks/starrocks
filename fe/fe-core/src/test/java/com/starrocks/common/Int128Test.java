@@ -383,8 +383,8 @@ public class Int128Test {
         // Note: Different values may have different hash codes (not guaranteed, but
         // likely)
         // This is not a strict requirement, but good practice
-        Int128 val1 = Int128.of(1L);
-        Int128 val2 = Int128.of(2L);
+        Int128.of(1L);
+        Int128.of(2L);
         // We don't assert inequality here because hash collisions are allowed
     }
 

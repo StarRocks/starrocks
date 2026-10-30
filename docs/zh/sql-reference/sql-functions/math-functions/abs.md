@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回数值的绝对值。"
 ---
 
 # abs

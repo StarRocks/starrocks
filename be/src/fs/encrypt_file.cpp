@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <fmt/format.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
@@ -25,11 +26,11 @@
 #include <cpuid.h>
 #endif
 
+#include "base/format.h"
 #include "base/utility/defer_op.h"
-#include "fmt/format.h"
 #include "fs/encrypt_file.h"
 #include "gutil/endian.h"
-#include "io/core/input_stream.h"
+#include "io/input_stream.h"
 
 namespace starrocks {
 
@@ -79,9 +80,9 @@ std::string get_openssl_errors() {
     std::ostringstream serr;
     unsigned long l;
     int line, flags;
-    const char *file, *data;
+    const char *file, *func, *data;
     char buf[256];
-    while ((l = ERR_get_error_line_data(&file, &line, &data, &flags)) != 0) {
+    while ((l = ERR_get_error_all(&file, &line, &func, &data, &flags)) != 0) {
         ERR_error_string_n(l, buf, sizeof(buf));
         serr << " " << buf << ":" << file << ":" << line << ((flags & ERR_TXT_STRING) ? data : "");
     }

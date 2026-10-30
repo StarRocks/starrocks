@@ -38,6 +38,7 @@ public class CollationsSystemTable {
                         .column("IS_DEFAULT", TypeFactory.createVarcharType(64))
                         .column("IS_COMPILED", TypeFactory.createVarcharType(64))
                         .column("SORTLEN", IntegerType.BIGINT)
+                        .column("PAD_ATTRIBUTE", TypeFactory.createVarcharType(9))
                         .build(), TSchemaTableType.SCH_COLLATIONS);
     }
 }

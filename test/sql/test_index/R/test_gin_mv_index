@@ -1,0 +1,52 @@
+-- name: test_gin_mv_index @native
+create database test_gin_mv_index_${uuid0};
+-- result:
+-- !result
+use test_gin_mv_index_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `base_t` (
+    `id` int(11) NOT NULL COMMENT "",
+    `content` varchar(200) NOT NULL COMMENT "",
+    `content2` varchar(200) NOT NULL COMMENT ""
+)
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_two_gin
+(id, content, content2,
+ INDEX gin_idx1 (`content`) USING GIN,
+ INDEX gin_idx2 (`content2`) USING GIN)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+REFRESH MANUAL
+PROPERTIES ("replication_num" = "1")
+AS SELECT id, content, content2 FROM base_t;
+-- result:
+-- !result
+INSERT INTO base_t VALUES (1, "alpha beta", "red green"), (2, "gamma delta", "blue cyan");
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_two_gin WITH SYNC MODE;
+select id, content from mv_two_gin where content = "alpha beta";
+-- result:
+1	alpha beta
+-- !result
+select id, content2 from mv_two_gin where content2 = "red green";
+-- result:
+1	red green
+-- !result
+select id from mv_two_gin order by id;
+-- result:
+1
+2
+-- !result
+drop database test_gin_mv_index_${uuid0};
+-- result:
+-- !result

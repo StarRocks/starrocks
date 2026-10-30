@@ -44,6 +44,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -77,6 +78,7 @@ public class IndexAnalyzer {
     public static String INVERTED_INDEX_PARSER_CHINESE = "chinese";
 
     public static String INVERTED_INDEX_DICT_GRAM_NUM_KEY = DICT_GRAM_NUM.toString().toLowerCase(Locale.ROOT);
+    public static String INVERTED_INDEX_LOWER_CASE_KEY = "lower_case";
 
     // BloomFilterIndexUtil constants
     public static final String FPP_KEY = NgramBfIndexParamsKey.BLOOM_FILTER_FPP.toString().toLowerCase(Locale.ROOT);
@@ -114,6 +116,21 @@ public class IndexAnalyzer {
     }
 
     /**
+     * Checks that a column of the given type can carry a BITMAP index.
+     *
+     * @throws SemanticException if the type is not supported
+     */
+    public static void checkBitmapColumnType(String columnName, PrimitiveType colType) {
+        // The BE writes the bitmap dictionary with a value-seek encoding, which 256-bit decimals do not have.
+        if (!(colType.isDateType() ||
+                colType.isFixedPointType() || (colType.isDecimalV3Type() && colType != PrimitiveType.DECIMAL256) ||
+                colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
+            throw new SemanticException(colType + " is not supported in bitmap index. "
+                    + "invalid column: " + columnName);
+        }
+    }
+
+    /**
      * Checks if a column is compatible with the specified index type and table keys type.
      *
      * @param column     the column to check
@@ -126,13 +143,8 @@ public class IndexAnalyzer {
                                    Map<String, String> properties, KeysType keysType) {
         if (indexType == IndexDef.IndexType.BITMAP) {
             String indexColName = column.getName();
-            PrimitiveType colType = column.getPrimitiveType();
-            if (!(colType.isDateType() ||
-                    colType.isFixedPointType() || colType.isDecimalV3Type() ||
-                    colType.isStringType() || colType == PrimitiveType.BOOLEAN)) {
-                throw new SemanticException(colType + " is not supported in bitmap index. "
-                        + "invalid column: " + indexColName);
-            } else if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
+            checkBitmapColumnType(indexColName, column.getPrimitiveType());
+            if ((keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) && !column.isKey()) {
                 throw new SemanticException(
                         "BITMAP index only used in columns of DUP_KEYS/PRIMARY_KEYS table or key columns of"
                                 + " UNIQUE_KEYS/AGG_KEYS table. invalid column: " + indexColName);
@@ -172,6 +184,8 @@ public class IndexAnalyzer {
                     "The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true");
         }
 
+        lowerCasePropertyKeys(properties);
+
         if (properties.containsKey(INVERTED_INDEX_IMP_LIB_KEY)) {
             String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
             if (!(CLUCENE.name().equalsIgnoreCase(impValue) || BUILTIN.name().equalsIgnoreCase(impValue))) {
@@ -194,9 +208,27 @@ public class IndexAnalyzer {
 
         checkInvertedIndexParser(column.getName(), column.getPrimitiveType(), properties);
         checkInvertedIndexNgram(properties);
+        checkInvertedIndexLowerCase(properties);
 
         // add default properties
         addDefaultProperties(properties);
+    }
+
+    // BE finds the GIN properties by exact lower-case key, so any other spelling must be folded before storing.
+    private static void lowerCasePropertyKeys(Map<String, String> properties) {
+        if (properties.keySet().stream().allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT)))) {
+            return;
+        }
+        Map<String, String> lowerCased = new LinkedHashMap<>();
+        for (Entry<String, String> entry : properties.entrySet()) {
+            String key = entry.getKey().toLowerCase(Locale.ROOT);
+            if (lowerCased.containsKey(key)) {
+                throw new SemanticException("Duplicated index property for GIN after lower-casing the key: " + key);
+            }
+            lowerCased.put(key, entry.getValue());
+        }
+        properties.clear();
+        properties.putAll(lowerCased);
     }
 
     private static void addDefaultProperties(Map<String, String> properties) {
@@ -242,16 +274,27 @@ public class IndexAnalyzer {
         }
     }
 
-    // VectorIndexUtil methods
-    public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
-        if (RunMode.isSharedDataMode()) {
-            throw new SemanticException("The vector index does not support shared data mode");
-        }
-        if (!Config.enable_experimental_vector) {
-            throw new SemanticException(
-                    "The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");
+    public static void checkInvertedIndexLowerCase(Map<String, String> properties) {
+        String lowerCase = properties == null ? null : properties.get(INVERTED_INDEX_LOWER_CASE_KEY);
+        if (lowerCase == null) {
+            return;
         }
 
+        // lower_case is only meaningful for the builtin english analyzer.
+        String impValue = properties.get(INVERTED_INDEX_IMP_LIB_KEY);
+        String parser = getInvertedIndexParser(properties);
+        if (!BUILTIN.name().equalsIgnoreCase(impValue) || !INVERTED_INDEX_PARSER_ENGLISH.equalsIgnoreCase(parser)) {
+            throw new SemanticException(
+                    "INVERTED index lower_case is only supported when imp_lib is builtin and parser is english.");
+        }
+
+        if (!"true".equalsIgnoreCase(lowerCase) && !"false".equalsIgnoreCase(lowerCase)) {
+            throw new SemanticException("INVERTED index lower_case should be true or false.");
+        }
+    }
+
+    // VectorIndexUtil methods
+    public static void checkVectorIndexValid(Column column, Map<String, String> properties, KeysType keysType) {
         if (column.isAllowNull()) {
             throw new SemanticException("The vector index can only build on non-nullable column");
         }
@@ -352,6 +395,60 @@ public class IndexAnalyzer {
             if (dimValue % mValue != 0) {
                 throw new SemanticException("`DIM` should be a multiple of `M_IVFPQ` for IVFPQ index");
             }
+
+            // IVFPQ k-means training needs at least `nlist` vectors, so a build
+            // threshold below nlist would start building with too few training
+            // points and fail every INSERT inside faiss ('nx >= k'). Fail fast at
+            // DDL time instead; BE re-floors the threshold at nlist as a second
+            // line of defense.
+            String threshold = getPropertyIgnoreCase(properties, CommonIndexParamKey.INDEX_BUILD_THRESHOLD.name());
+            if (threshold != null) {
+                // threshold is a valid integer, guaranteed by checkParams.
+                int thresholdValue = Integer.parseInt(threshold);
+                String nlist = getPropertyIgnoreCase(properties, IndexParamsKey.NLIST.name());
+                // The NLIST default is only materialized at the end of this method,
+                // so fall back to the registered default when it is not set yet.
+                int nlistValue = Integer.parseInt(nlist != null ? nlist
+                        : IndexParams.getInstance().getParam(IndexParamsKey.NLIST.name()).getDefaultValue());
+                if (thresholdValue < nlistValue) {
+                    throw new SemanticException(String.format(
+                            "`index_build_threshold` (%d) must be >= `nlist` (%d) for IVFPQ index",
+                            thresholdValue, nlistValue));
+                }
+            }
+        }
+
+        if (vectorIndexType == VectorIndexType.HNSW) {
+            // User-typed property keys have not been normalized yet (lower-casing
+            // happens at the end of this method), so look up case-insensitively.
+            String quantizer = getPropertyIgnoreCase(properties, IndexParamsKey.QUANTIZER.name());
+            String mPq = getPropertyIgnoreCase(properties, IndexParamsKey.M_PQ.name());
+            String nbitsPq = getPropertyIgnoreCase(properties, IndexParamsKey.NBITS_PQ.name());
+            boolean isPq = quantizer != null
+                    && quantizer.equalsIgnoreCase(VectorIndexParams.QuantizerType.PQ.name());
+
+            if (isPq) {
+                if (mPq == null) {
+                    throw new SemanticException("`M_PQ` is required when QUANTIZER = pq");
+                }
+                int mPqValue = Integer.parseInt(mPq);
+
+                String dim = getPropertyIgnoreCase(properties, CommonIndexParamKey.DIM.name());
+                int dimValue = Integer.parseInt(dim);
+                if (dimValue % mPqValue != 0) {
+                    throw new SemanticException(
+                            "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
+                }
+            } else {
+                // BE silently ignores M_PQ / NBITS_PQ for non-PQ quantizers; fail
+                // loudly so users don't think the value took effect.
+                if (mPq != null) {
+                    throw new SemanticException("`M_PQ` is only allowed when QUANTIZER = pq");
+                }
+                if (nbitsPq != null) {
+                    throw new SemanticException("`NBITS_PQ` is only allowed when QUANTIZER = pq");
+                }
+            }
         }
 
         // add default properties
@@ -366,6 +463,21 @@ public class IndexAnalyzer {
                 .collect(Collectors.toMap(entry -> entry.getKey().toLowerCase(), entry -> entry.getValue().toLowerCase()));
         properties.clear();
         properties.putAll(lowerProperties);
+    }
+
+    /**
+     * Look up a property by name in a case-insensitive fashion.
+     * Needed because vector-index properties are not normalized until after
+     * {@link #checkVectorIndexValid} returns, but cross-field validation runs
+     * before that normalization.
+     */
+    private static String getPropertyIgnoreCase(Map<String, String> properties, String key) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private static void addDefaultVectorProperties(Map<String, String> properties,

@@ -19,19 +19,21 @@
 
 #include "column/chunk.h"
 #ifndef __APPLE__
-#include "exec/file_scanner/avro_scanner.h"
+#include "connector/file/scanner/avro_scanner.h"
 #endif
-#include "exec/file_scanner/csv_scanner.h"
-#include "exec/file_scanner/json_scanner.h"
+#include "connector/file/scanner/csv_scanner.h"
+#include "connector/file/scanner/json_scanner.h"
 #ifndef __APPLE__
-#include "exec/file_scanner/orc_scanner.h"
+#include "connector/file/scanner/orc_scanner.h"
 #endif
 #ifndef __APPLE__
-#include "exec/file_scanner/parquet_scanner.h"
+#include "connector/file/scanner/parquet_scanner.h"
 #endif
 #include "base/utility/defer_op.h"
 #include "common/runtime_profile.h"
 #include "common/thread/thread.h"
+#include "connector/file/file_scan_utils.h"
+#include "connector/file/scanner/arrow_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
@@ -227,6 +229,8 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
     case TFileFormatType::FORMAT_AVRO:
         return std::make_unique<AvroScanner>(runtime_state(), runtime_profile(), scan_range, counter);
 #endif
+    case TFileFormatType::FORMAT_ARROW:
+        return std::make_unique<ArrowScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     default:
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }
@@ -237,11 +241,8 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
     if (scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
     }
-    if (runtime_state()->enable_log_rejected_record() &&
-        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
-        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
-        return Status::InternalError("only support csv/json format to log rejected record");
-    }
+    RETURN_IF_ERROR(check_rejected_record_format_support(runtime_state()->enable_log_rejected_record(),
+                                                         scan_range.ranges[0].format_type));
     //create scanner object and open
     std::unique_ptr<FileScanner> scanner = _create_scanner(scan_range, counter);
     if (scanner == nullptr) {

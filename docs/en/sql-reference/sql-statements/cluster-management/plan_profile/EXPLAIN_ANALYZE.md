@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "EXPLAIN ANALYZE runs a SQL statement and returns its query profile with per-operator execution statistics."
 ---
 
 # EXPLAIN ANALYZE
@@ -20,7 +21,7 @@ EXPLAIN ANALYZE <statement>
 
 ## Parameters
 
-`statement`: the SQL statement of which to show the query profile. Both [SELECT](../../table_bucket_part_index/SELECT.md) and [INSERT INTO](../../loading_unloading/INSERT.md) are supported.
+`statement`: the SQL statement of which to show the query profile. Both [SELECT](../../table_bucket_part_index/SELECT/SELECT.md) and [INSERT INTO](../../loading_unloading/INSERT.md) are supported.
 
 ## Usage notes
 

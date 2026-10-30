@@ -15,20 +15,23 @@
 #pragma once
 
 #include <map>
+#include <optional>
 
+#include "column/flat_json/flat_json_internal.h"
 #include "storage/rowset/column_writer.h"
+#include "storage/rowset/object_column_writer.h"
 
 namespace starrocks {
 class BloomFilter;
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_json_column_writer(const ColumnWriterOptions& opts,
                                                                   TypeInfoPtr type_info, WritableFile* wfile,
-                                                                  std::unique_ptr<ScalarColumnWriter> json_writer);
+                                                                  std::unique_ptr<ObjectColumnWriter> json_writer);
 
 class FlatJsonColumnWriter : public ColumnWriter {
 public:
     FlatJsonColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
-                         std::unique_ptr<ScalarColumnWriter> json_writer);
+                         std::unique_ptr<ObjectColumnWriter> json_writer);
 
     ~FlatJsonColumnWriter() override = default;
 
@@ -46,6 +49,15 @@ public:
     Status write_ordinal_index() override;
     Status write_zone_map() override;
     Status write_bitmap_index() override;
+    // Same order as write_ordinal_index(): the flat children first, then the root JSON writer.
+    // Omitting the root leaves its ColumnMetaPB without an ordinal index, which ColumnReader::_init()
+    // rejects as a corrupt segment.
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        for (auto& w : _flat_writers) {
+            w->take_ordinal_index_builders(out);
+        }
+        _json_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override;
     ordinal_t get_next_rowid() const override;
 
@@ -59,6 +71,10 @@ public:
 protected:
     Status _init_flat_writers();
     Status _write_flat_column();
+    // Accounts the values written to the sub-column writer at `index` to its value stats, see JsonValueStatsPB.
+    void _update_value_stats(size_t index, const Column& column);
+    // Stores the value stats in the metadata of the JSON-typed sub-columns.
+    void _save_value_stats();
 
 private:
     Status _flat_column(MutableColumns& json_datas);
@@ -66,20 +82,24 @@ private:
 protected:
     ColumnMetaPB* _json_meta;
     WritableFile* _wfile;
-    std::unique_ptr<ScalarColumnWriter> _json_writer;
+    std::unique_ptr<ObjectColumnWriter> _json_writer;
 
     std::vector<std::unique_ptr<ColumnWriter>> _flat_writers;
     std::vector<std::string> _flat_paths;
     std::vector<LogicalType> _flat_types;
     MutableColumns _flat_columns;
+    // One per sub-column writer; set for the JSON-typed sub-columns other than the remain.
+    std::vector<std::optional<flat_json::JsonValueStats>> _value_stats;
 
     MutableColumns _json_datas;
     size_t _estimate_size = 0;
 
-    bool _has_remain;
+    bool _has_remain = false;
     std::shared_ptr<BloomFilter> _remain_filter;
     bool _is_flat = false;
     const FlatJsonConfig* _flat_json_config = nullptr;
+    // JSON columns of the segment writer, see ColumnWriterOptions::json_columns_in_segment.
+    size_t _json_columns_in_segment = 1;
 
     // Store original options for sub-column global dict setup
     // FIXME: avoid copy the map
@@ -88,5 +108,16 @@ protected:
 
     // Track global dict validity for each sub-column
     std::map<std::string, bool> _subcolumn_dict_valid;
+
+    // captured from the parent ColumnWriterOptions so it can be propagated to
+    // the flat string/JSON sub-columns (the `remain` blob is the primary target).
+    // The fallback plain _json_writer already carries this flag via its own opts.
+    bool _use_zstd_compression = false;
+    // The parent column's data page size. The flattened sub-columns are what
+    // actually holds the data, so a per-column page size that stopped at the
+    // parent would have no effect on a JSON column at all.
+    uint32_t _data_page_size = 0;
+    uint32_t _zstd_compression_dict_sample_bytes = 0;
+    double _zstd_compression_dict_min_gain = 0;
 };
 } // namespace starrocks

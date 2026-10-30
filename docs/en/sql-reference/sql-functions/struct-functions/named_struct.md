@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Creates a struct with the specified field names and values."
 ---
 
 # named_struct

@@ -433,6 +433,12 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         if (captureVersionFragment != null && !captureVersionFragment.isScheduled()) {
             queue.add(captureVersionFragment);
             totalFragments++;
+            for (ExecutionFragment fragment : dag.getPreExecutedFragments()) {
+                if (!fragment.isScheduled()) {
+                    queue.add(fragment);
+                    totalFragments++;
+                }
+            }
         }
 
         // topological-sort for input fragments

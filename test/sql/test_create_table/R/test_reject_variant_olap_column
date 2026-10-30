@@ -1,0 +1,43 @@
+-- name: test_reject_variant_olap_column
+CREATE DATABASE IF NOT EXISTS test_reject_variant_olap_column_db;
+-- result:
+-- !result
+USE test_reject_variant_olap_column_db;
+-- result:
+-- !result
+CREATE TABLE vtest (id INT, v VARIANT) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: VARIANT is not supported as a column type for OLAP tables: column 'v'.")
+-- !result
+CREATE TABLE varr (id INT, a ARRAY<VARIANT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: VARIANT is not supported as a column type for OLAP tables: column 'a'.")
+-- !result
+CREATE TABLE vmap (id INT, m MAP<INT, VARIANT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: VARIANT is not supported as a column type for OLAP tables: column 'm'.")
+-- !result
+CREATE TABLE vstruct (id INT, s STRUCT<f VARIANT>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: VARIANT is not supported as a column type for OLAP tables: column 's'.")
+-- !result
+CREATE TABLE vnest (id INT, a ARRAY<STRUCT<f VARIANT>>) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: VARIANT is not supported as a column type for OLAP tables: column 'a'.")
+-- !result
+CREATE TABLE vok (id INT, j JSON) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO vok VALUES (1, parse_json('{"a":1}'));
+-- result:
+-- !result
+SELECT count(*) FROM vok;
+-- result:
+1
+-- !result

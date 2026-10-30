@@ -320,6 +320,8 @@ public:
     bool from_unixtime(int64_t, const std::string& timezone);
     bool from_unixtime(int64_t, const cctz::time_zone& ctz);
     bool from_unixtime(int64_t, int64_t, const cctz::time_zone& ctz);
+    // from_unixtime with the zone's offset at `second` already known (e.g. from a TzOffsetCache).
+    void from_unixtime_with_offset(int64_t second, int64_t microsecond, int64_t offset);
 
     bool operator==(const DateTimeValue& other) const {
         // NOTE: This is not same with MySQL.
@@ -517,7 +519,7 @@ protected:
 };
 class TeradataFormat {
 public:
-    TeradataFormat() {}
+    TeradataFormat() = default;
     ~TeradataFormat() = default;
 
     bool prepare(std::string_view format);

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "多次元配列のネスト、スライス、比較、フィルタリングをサポートする配列型。"
 ---
 
 # ARRAY
@@ -200,7 +201,7 @@ INSERT INTO t0 VALUES(1, [1,2,3]);
 
 ### Stream Load または Routine Load を使用して CSV 形式の配列をロードする
 
-  CSV ファイル内の配列はデフォルトでカンマで区切られています。[Stream Load または Routine Load](../../../loading/Loading_intro.md) を使用して、CSV テキストファイルまたは Kafka 内の CSV データをロードできます。
+  CSV ファイル内の配列はデフォルトでカンマで区切られています。[Stream Load または Routine Load](../../../loading/loading_introduction/loading_introduction.mdx) を使用して、CSV テキストファイルまたは Kafka 内の CSV データをロードできます。
 
 ## 配列データのクエリ
 

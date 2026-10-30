@@ -34,7 +34,6 @@
 
 package com.starrocks.persist;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
@@ -50,6 +49,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
+import com.starrocks.catalog.RecycleMaterializedIndexInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -57,11 +57,12 @@ import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.common.util.Util;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
-import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
@@ -77,7 +78,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.proto.EncryptionKeyPB;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
@@ -122,6 +122,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -134,8 +135,29 @@ public class EditLog {
 
     private final BlockingQueue<JournalTask> journalQueue;
 
+    // WAL-apply fence (leader demotion). editLogFenceLock guards, as one unit, the leader journal-write
+    // admission gate (gateOpen) and the count of in-flight leader writes (inFlight); both are accessed
+    // EXCLUSIVELY under it (no lock-free reads). The fence lives here (not in GlobalStateMgr) because the apply
+    // it protects (WALApplier.apply) runs in EditLog and demotion drains it (awaitWalDrained) before sealing
+    // the journal writer. gateOpen is fixed at construction for EditLogs that are never fenced (StarMgr,
+    // checkpoint, tests) and toggled by GlobalStateMgr for its own EditLog. The fence API is defined together
+    // below loadJournal, next to the log* write path that uses it.
+    private final Object editLogFenceLock = new Object();
+    private boolean gateOpen;                // leader journal-write gate; open only while this node is the ACTIVE leader
+    private int inFlight = 0;                // count of ALL admitted writes not yet committed+applied
+
+    /** An EditLog whose WAL admission gate is always open (never fenced): StarMgr, checkpoint worker, tests. */
     public EditLog(BlockingQueue<JournalTask> journalQueue) {
+        this(journalQueue, true);
+    }
+
+    /**
+     * @param gateOpen initial WAL admission gate state. GlobalStateMgr passes false and drives it open/closed
+     *                 across leader activation/demotion; every other caller passes true (never fenced).
+     */
+    public EditLog(BlockingQueue<JournalTask> journalQueue, boolean gateOpen) {
         this.journalQueue = journalQueue;
+        this.gateOpen = gateOpen;
     }
 
     public void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
@@ -281,6 +303,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
                     break;
                 }
+                case OperationType.OP_MODIFY_PARTITION_VACUUM_STATE: {
+                    PartitionVacuumStateInfo info = (PartitionVacuumStateInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyPartitionVacuumState(info);
+                    break;
+                }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.data();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
@@ -311,6 +338,12 @@ public class EditLog {
                 case OperationType.OP_ERASE_PARTITION_V2: {
                     ErasePartitionLog erasePartitionLog = (ErasePartitionLog) journal.data();
                     globalStateMgr.getLocalMetastore().replayErasePartition(erasePartitionLog.getPartitionId());
+                    break;
+                }
+                case OperationType.OP_ERASE_MATERIALIZED_INDEX: {
+                    EraseMaterializedIndexLog log = (EraseMaterializedIndexLog) journal.data();
+                    globalStateMgr.getRecycleBin().replayEraseMaterializedIndex(new RecycleMaterializedIndexInfo(
+                            log.getDbId(), log.getTableId(), log.getPhysicalPartitionId(), log.getIndexId()));
                     break;
                 }
                 case OperationType.OP_RECOVER_TABLE_V2: {
@@ -490,8 +523,14 @@ public class EditLog {
                     DropFrontendInfo dropFrontendInfo = (DropFrontendInfo) journal.data();
                     globalStateMgr.getNodeMgr().replayDropFrontend(dropFrontendInfo);
                     if (dropFrontendInfo.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getNodeName())) {
-                        throw new JournalInconsistentException("current fe "
-                                + dropFrontendInfo.getNodeName() + " is removed. will exit");
+                        // The removed frontend must exit by itself, and it must NOT be raised as a
+                        // JournalInconsistentException: OP_REMOVE_FRONTEND_V2 is an ignorable operation,
+                        // so the exception would be swallowed by canSkipBadReplayedJournal() when
+                        // metadata_journal_ignore_replay_failure is true (the default).
+                        String errMsg = "current fe " + dropFrontendInfo.getNodeName() + " is removed. will exit";
+                        LOG.error(errMsg);
+                        Util.stdoutWithTime(errMsg);
+                        System.exit(-1);
                     }
                     break;
                 }
@@ -591,6 +630,11 @@ public class EditLog {
                 case OperationType.OP_MODIFY_TABLE_COLOCATE_V2: {
                     final TablePropertyInfo info = (TablePropertyInfo) journal.data();
                     globalStateMgr.getColocateTableIndex().replayModifyTableColocate(info);
+                    break;
+                }
+                case OperationType.OP_COLOCATE_RANGE_UPDATE: {
+                    final ColocateRangePersistInfo info = (ColocateRangePersistInfo) journal.data();
+                    globalStateMgr.getColocateTableIndex().replayColocateRangeUpdate(info);
                     break;
                 }
                 case OperationType.OP_HEARTBEAT_V2: {
@@ -758,6 +802,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+                case OperationType.OP_MODIFY_NO_DICT_COLUMNS:
                 case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
@@ -815,6 +860,11 @@ public class EditLog {
                         default:
                             break;
                     }
+                    break;
+                }
+                case OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA: {
+                    ReleaseAlterJobHistorySchemaLog log = (ReleaseAlterJobHistorySchemaLog) journal.data();
+                    globalStateMgr.getSchemaChangeHandler().replayReleaseHistorySchema(log);
                     break;
                 }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
@@ -979,14 +1029,11 @@ public class EditLog {
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalBasicStatsMeta(basicStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should refresh cache here.
-                    // We don't need to refresh statistics when checkpointing
+                    // The follower replays the stats meta log, indicating that the leader has re-completed
+                    // statistics, so the follower should drop its connector stats cache here and reload it
+                    // lazily on the next query. We don't need to touch the cache when checkpointing.
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns(), true);
+                        globalStateMgr.getAnalyzeMgr().replayRefreshExternalBasicStatsCache(basicStatsMeta);
                     }
                     break;
                 }
@@ -994,24 +1041,18 @@ public class EditLog {
                     ExternalBasicStatsMeta basicStatsMeta = (ExternalBasicStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalBasicStatsMeta(basicStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableAndColumnStatistics(
-                                basicStatsMeta.getCatalogName(),
-                                basicStatsMeta.getDbName(), basicStatsMeta.getTableName(),
-                                basicStatsMeta.getColumns());
+                        globalStateMgr.getAnalyzeMgr().replayExpireExternalBasicStatsCache(basicStatsMeta);
                     }
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_HISTOGRAM_STATS_META: {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayAddExternalHistogramStatsMeta(histogramStatsMeta);
-                    // The follower replays the stats meta log, indicating that the master has re-completed
-                    // statistic, and the follower's should expire cache here.
-                    // We don't need to refresh statistics when checkpointing
+                    // The follower replays the stats meta log, indicating that the leader has re-completed
+                    // statistics, so the follower should drop its connector histogram cache here and reload it
+                    // lazily on the next query. We don't need to touch the cache when checkpointing.
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().refreshConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                        globalStateMgr.getAnalyzeMgr().replayRefreshExternalHistogramStatsCache(histogramStatsMeta);
                     }
                     break;
                 }
@@ -1019,10 +1060,7 @@ public class EditLog {
                     ExternalHistogramStatsMeta histogramStatsMeta = (ExternalHistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveExternalHistogramStatsMeta(histogramStatsMeta);
                     if (!GlobalStateMgr.isCheckpointThread()) {
-                        globalStateMgr.getAnalyzeMgr().expireConnectorTableHistogramStatisticsCache(
-                                histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
-                                histogramStatsMeta.getTableName(),
-                                Lists.newArrayList(histogramStatsMeta.getColumn()));
+                        globalStateMgr.getAnalyzeMgr().replayExpireExternalHistogramStatsCache(histogramStatsMeta);
                     }
                     break;
                 }
@@ -1165,6 +1203,26 @@ public class EditLog {
                 case OperationType.OP_UPDATE_TABLE_STORAGE_INFOS: {
                     TableStorageInfos tableStorageInfos = (TableStorageInfos) journal.data();
                     globalStateMgr.getStorageVolumeMgr().replayUpdateTableStorageInfos(tableStorageInfos);
+                    break;
+                }
+                case OperationType.OP_CREATE_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayCreateProvider(provider);
+                    break;
+                }
+                case OperationType.OP_ALTER_AI_PROVIDER: {
+                    AIProvider provider = (AIProvider) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayAlterProvider(provider);
+                    break;
+                }
+                case OperationType.OP_DROP_AI_PROVIDER: {
+                    DropAIProviderLog log = (DropAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replayDropProvider(log);
+                    break;
+                }
+                case OperationType.OP_SET_DEFAULT_AI_PROVIDER: {
+                    SetDefaultAIProviderLog log = (SetDefaultAIProviderLog) journal.data();
+                    globalStateMgr.getAIProviderMgr().replaySetDefaultProvider(log);
                     break;
                 }
                 case OperationType.OP_PIPE: {
@@ -1313,6 +1371,12 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
+                case OperationType.OP_ALTER_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayAlterGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
+                    break;
+                }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
                     BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
@@ -1359,18 +1423,215 @@ public class EditLog {
         }
     }
 
+    // ---- WAL-apply fence API (see the editLogFenceLock field comment) ----
+
+    /** Open the journal-write gate. Called by GlobalStateMgr when this node enters ACTIVE leadership. */
+    public void openWalGate() {
+        synchronized (editLogFenceLock) {
+            gateOpen = true;
+            editLogFenceLock.notifyAll();
+        }
+    }
+
+    /** Close the gate. Called by GlobalStateMgr when this node leaves ACTIVE leadership (demotion begin). */
+    public void closeWalGate() {
+        synchronized (editLogFenceLock) {
+            gateOpen = false;
+            editLogFenceLock.notifyAll();
+        }
+    }
+
+    /**
+     * Admit a leader write and count it in the fence; the caller MUST pair it with {@link #exitGate} in a
+     * finally. The gate check and the inFlight increment are one atomic step under editLogFenceLock, mutually
+     * exclusive with closeWalGate, so demotion's drain is lossless. Throws an (unchecked) EditLogException when
+     * the gate is closed (this node is not the ACTIVE leader).
+     */
+    private void enterGate() {
+        synchronized (editLogFenceLock) {
+            if (!gateOpen) {
+                throw new EditLogException("leader WAL gate is closed, submit log is not allowed "
+                        + "(this FE is demoting or not the active leader; retry, the statement will be "
+                        + "routed to the new leader)");
+            }
+            inFlight++;
+        }
+    }
+
+    /** Keeps provisional metadata changes and their commit/rollback inside the existing WAL fence. */
+    public final class WalScope implements AutoCloseable {
+        private boolean closed;
+
+        private WalScope() {
+            enterGate();
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                exitGate();
+            }
+        }
+    }
+
+    public WalScope openWalScope() {
+        return new WalScope();
+    }
+
+    private void exitGate() {
+        synchronized (editLogFenceLock) {
+            if (inFlight <= 0) {
+                throw new IllegalStateException("leader WAL fence underflow");
+            }
+            inFlight--;
+            editLogFenceLock.notifyAll();
+        }
+    }
+
+    // Package-private test accessor: current in-flight (admitted-but-not-yet-drained) leader write count.
+    int inFlightForTest() {
+        synchronized (editLogFenceLock) {
+            return inFlight;
+        }
+    }
+
+    /**
+     * Wait until every admitted write has fully resolved (inFlight -> 0). Called by demotion
+     * (GlobalStateMgr.sealJournalWriter) AFTER closeWalGate and BEFORE sealing the writer, so the writer is
+     * still alive to consume in-flight submits. inFlight covers commit + apply on the normal path
+     * (logEditGated holds the fence across the apply, and waitForCommit is uninterruptible so a caller can
+     * never leave with its apply skipped); the one case that resolves WITHOUT a completed apply is an
+     * applier that threw mid-apply. FATAL on timeout: the caller lets the exception propagate to a clean
+     * process restart, because proceeding could leave a not-yet-consumed task orphaned.
+     * TODO: also fail the drain on a recorded WALApplier.apply failure once the WAL apply path is stable.
+     * Deferred for now: while the WAL rewrite settles, apply failures are expected and treated as benign.
+     */
+    public void awaitWalDrained(long timeoutMs) {
+        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
+        synchronized (editLogFenceLock) {
+            while (inFlight > 0) {
+                long remainingNs = deadlineNs - System.nanoTime();
+                if (remainingNs <= 0) {
+                    throw new IllegalStateException(
+                            "timed out waiting for leader WAL writes to drain. inFlight=" + inFlight);
+                }
+                try {
+                    TimeUnit.NANOSECONDS.timedWait(editLogFenceLock, remainingNs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("interrupted while waiting for leader WAL drain", e);
+                }
+            }
+        }
+    }
+
+    /**
+     * Serialize one op+payload and enqueue it. LOCK-FREE (outside editLogFenceLock): the caller has already
+     * registered the write via {@link #enterGate}. Blocks if the journal queue is full (backpressure). Throws
+     * InterruptedException so throw-path callers can react; no-throw callers retry via {@link #submitRawUninterruptibly}.
+     */
+    private JournalTask submitRaw(short op, Writable writable, long maxWaitIntervalMs) throws InterruptedException {
+        long startTimeNano = System.nanoTime();
+        DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
+        try {
+            buffer.writeShort(op);
+            writable.write(buffer);
+        } catch (IOException | JsonParseException e) {
+            LOG.info("failed to serialize journal data", e);
+            throw new SerializeException("failed to serialize journal data");
+        }
+        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
+        this.journalQueue.put(task);
+        return task;
+    }
+
+    /**
+     * submitRaw for the no-throw paths: uninterruptible, but never swallows the interrupt - the flag is
+     * cleared on entry (a stale flag would make the first put() throw immediately), remembered across
+     * retries, and re-asserted on exit. No backoff between retries: put() itself blocks for queue space,
+     * so the only retry trigger is the interrupt.
+     */
+    private JournalTask submitRawUninterruptibly(short op, Writable writable, long maxWaitIntervalMs) {
+        boolean interrupted = Thread.interrupted();
+        try {
+            while (true) {
+                try {
+                    return submitRaw(op, writable, maxWaitIntervalMs);
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                    LOG.warn("interrupted while submitting journal task; retrying: {}", e.toString());
+                }
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /**
+     * Submit a gated journal entry and return its task WITHOUT waiting for the commit. The WAL fence is held
+     * until the task completes (commit or abort) and released via a one-shot completion callback, so a caller
+     * can wait for durability later (e.g. outside a lock) without leaking the fence. Use this for the rare
+     * "submit here, wait elsewhere" pattern; the common case is logEdit / logJsonObject which wait inline.
+     */
+    public JournalTask submitLogNoWait(short op, Writable writable) {
+        enterGate();
+        boolean handedOff = false;
+        try {
+            JournalTask task = submitRawUninterruptibly(op, writable, -1);
+            task.setOnDone(this::exitGate);
+            handedOff = true;
+            return task;
+        } finally {
+            if (!handedOff) {
+                exitGate();
+            }
+        }
+    }
+
+    /**
+     * Submit a gated journal write, wait for its commit, and (when applyAction is non-null) run the in-memory
+     * apply INSIDE the WAL fence on a successful commit. The fence (enterGate/exitGate) is released in the
+     * finally, which is correct on every path because {@link #waitForCommit} is uninterruptible: it returns
+     * only once the JournalWriter has RESOLVED the task (commit or abort), so the fence can never be released
+     * while the write is still in flight. Concretely: normal path = commit + apply done; aborted task =
+     * settled, EditLogException propagates; apply threw = the write is durable and settled (the torn apply is
+     * the caller's exception to surface); serialization failure = nothing was ever enqueued.
+     */
+    private void logEditGated(short op, Writable writable, Runnable applyAction) {
+        enterGate();
+        try {
+            waitForCommit(submitRawUninterruptibly(op, writable, -1));
+            if (applyAction != null) {
+                try {
+                    applyAction.run();
+                } catch (Throwable t) {
+                    // The journal entry is already durable, so a torn apply permanently diverges this
+                    // FE's in-memory state from its own WAL: nothing replays it later (the commit
+                    // watermark advances past it on demotion). Make that loud and searchable for ops;
+                    // the exception still propagates to the caller unchanged - no new exit path while
+                    // the WAL applier rollout settles.
+                    LOG.error("WAL apply failed for op {}: the journal entry is durable but the in-memory "
+                            + "apply was torn; this FE's memory may have diverged from its own WAL", op, t);
+                    throw t;
+                }
+            }
+        } finally {
+            exitGate();
+        }
+    }
+
     /**
      * submit log to queue, wait for JournalWriter
      */
     public void logEdit(short op, Writable writable) {
-        JournalTask task = submitLog(op, writable, -1);
-        waitInfinity(task);
+        logEditGated(op, writable, null);
     }
 
     private void logEdit(short op, Writable writable, WALApplier walApplier) {
-        JournalTask task = submitLog(op, writable, -1);
-        waitInfinity(task);
-        walApplier.apply(writable);
+        logEditGated(op, writable, walApplier == null ? null : () -> walApplier.apply(writable));
     }
 
     public void logJsonObject(short op, Object obj) {
@@ -1386,102 +1647,50 @@ public class EditLog {
      * Apply the in-memory change in WALApplier.
      */
     public void logJsonObject(short op, Object obj, WALApplier applier) {
-        logEdit(op, new Writable() {
+        Writable writable = new Writable() {
             @Override
             public void write(DataOutput out) throws IOException {
                 Text.writeString(out, GsonUtils.GSON.toJson(obj));
             }
-        });
-        applier.apply(obj);
+        };
+        logEditGated(op, writable, applier == null ? null : () -> applier.apply(obj));
     }
 
     /**
-     * submit log in queue and return immediately
+     * Wait until the JournalWriter resolves this task (commit or abort), UNINTERRUPTIBLY: an interrupt
+     * (e.g. a pool shutdownNow() or a query cancel hitting the caller thread) is remembered and re-asserted
+     * on exit, but never abandons the wait. Leaving early would skip the caller's in-memory apply while the
+     * write may still commit, permanently diverging this node's memory from its own journal (upstream's
+     * waitInfinity had the same swallow-interrupt semantics for the same reason). The wait is bounded in
+     * practice because the task always settles: the writer stays alive until the demotion drain completes,
+     * and sealing aborts whatever is still queued. Failures throw an (unchecked) {@link EditLogException}
+     * (aborted task / false result), so an applier caller applies iff this returns normally.
      */
-    private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
-        long startTimeNano = System.nanoTime();
-        if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-            if (ConnectContext.get() != null) {
-                ConnectContext.get().setIsLeaderTransferred(true);
-            }
-            throw new LeaderTransferException();
-        }
-
-        // do not check whether global state mgr is leader when writing star mgr journal,
-        // because starmgr state change happens before global state mgr state change,
-        // it will write log before global state mgr becomes leader
-        Preconditions.checkState(op == OperationType.OP_STARMGR || GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, but " +
-                        GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
-        DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
-
-        // 1. serialized
-        try {
-            buffer.writeShort(op);
-            writable.write(buffer);
-        } catch (IOException | JsonParseException e) {
-            // The old implementation swallow exception like this
-            LOG.info("failed to serialize journal data", e);
-            throw new SerializeException("failed to serialize journal data");
-        }
-        JournalTask task = new JournalTask(startTimeNano, buffer, maxWaitIntervalMs);
-
-        /*
-         * for historical reasons, logJsonObject is not allowed to raise Exception, which is really unreasonable to me.
-         * This PR will continue to swallow exception and retry till the end of the world like before.
-         * Hope some day we'll fix it.
-         */
-        // 2. put to queue
-        int cnt = 0;
-        while (true) {
-            try {
-                if (cnt != 0) {
-                    Thread.sleep(1000);
-                }
-                this.journalQueue.put(task);
-                break;
-            } catch (InterruptedException e) {
-                // got interrupted while waiting if necessary for space to become available
-                LOG.warn("failed to put queue, wait and retry {} times..: {}", cnt, e);
-            }
-            cnt++;
-        }
-        return task;
-    }
-
-    /**
-     * wait for JournalWriter commit all logs
-     */
-    public static void waitInfinity(JournalTask task) {
-        long startTimeNano = task.getStartTimeNano();
+    public static void waitForCommit(JournalTask task) {
         boolean result;
-        int cnt = 0;
-        while (true) {
-            try {
-                if (cnt != 0) {
-                    Thread.sleep(1000);
+        boolean interrupted = false;
+        try {
+            while (true) {
+                try {
+                    result = task.get();
+                    break;
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                    LOG.warn("interrupted while waiting for journal task to commit; keep waiting until it settles");
+                } catch (ExecutionException e) {
+                    throw new EditLogException("journal task failed to commit", e.getCause());
                 }
-                // return true if JournalWriter wrote log successfully
-                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such
-                // scenario JournalWriter will simply exit the whole process
-                result = task.get();
-                break;
-            } catch (InterruptedException | ExecutionException e) {
-                if (e.getCause() != null && e.getCause() instanceof LeaderTransferException) {
-                    if (ConnectContext.get() != null) {
-                        ConnectContext.get().setIsLeaderTransferred(true);
-                    }
-                    throw (LeaderTransferException) (e.getCause());
-                }
-                LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
-                cnt++;
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
             }
         }
-
-        // for now if journal writer fails, it will exit directly, so this property should always be true.
-        Preconditions.checkState(result);
+        if (!result) {
+            throw new EditLogException("journal task aborted without a detailed cause");
+        }
         if (MetricRepo.hasInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - task.getStartTimeNano()) / 1000000);
         }
     }
 
@@ -1501,30 +1710,28 @@ public class EditLog {
         logJsonObject(OperationType.OP_DELETE_AUTO_INCREMENT_ID, info, walApplier);
     }
 
-    public void logCreateDb(Database db, String storageVolumeId) {
-        CreateDbInfo createDbInfo = new CreateDbInfo(db.getId(), db.getFullName());
-        createDbInfo.setStorageVolumeId(storageVolumeId);
-        logJsonObject(OperationType.OP_CREATE_DB_V2, createDbInfo);
+    public void logCreateDb(CreateDbInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_DB_V2, info, walApplier);
     }
 
-    public void logDropDb(DropDbInfo dropDbInfo) {
-        logJsonObject(OperationType.OP_DROP_DB, dropDbInfo);
+    public void logDropDb(DropDbInfo dropDbInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_DB, dropDbInfo, walApplier);
     }
 
     public void logEraseDb(long dbId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ERASE_DB_V2, new EraseDbLog(dbId), walApplier);
     }
 
-    public void logRecoverDb(RecoverInfo info) {
-        logJsonObject(OperationType.OP_RECOVER_DB_V2, info);
+    public void logRecoverDb(RecoverInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RECOVER_DB_V2, info, walApplier);
     }
 
     public void logAlterDb(DatabaseInfo dbInfo, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_DB_V2, dbInfo, walApplier);
     }
 
-    public void logCreateTable(CreateTableInfo info) {
-        logJsonObject(OperationType.OP_CREATE_TABLE_V2, info);
+    public void logCreateTable(CreateTableInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_TABLE_V2, info, walApplier);
     }
 
     public void logResourceGroupOp(ResourceGroupOpEntry op, WALApplier applier) {
@@ -1559,16 +1766,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_TASK_RUN_STATE, info);
     }
 
-    public void logAddPartition(PartitionPersistInfoV2 info) {
-        logJsonObject(OperationType.OP_ADD_PARTITION_V2, info);
+    public void logAddPartitions(AddPartitionsInfoV2 info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_PARTITIONS_V2, info, walApplier);
     }
 
-    public void logAddPartitions(AddPartitionsInfoV2 info) {
-        logJsonObject(OperationType.OP_ADD_PARTITIONS_V2, info);
-    }
-
-    public void logAddSubPartitions(AddSubPartitionsInfoV2 info) {
-        logJsonObject(OperationType.OP_ADD_SUB_PARTITIONS_V2, info);
+    public void logAddSubPartitions(AddSubPartitionsInfoV2 info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_SUB_PARTITIONS_V2, info, walApplier);
     }
 
     public void logDropPartitions(DropPartitionsInfo info, WALApplier walApplier) {
@@ -1579,6 +1782,11 @@ public class EditLog {
         logJsonObject(OperationType.OP_ERASE_PARTITION_V2, new ErasePartitionLog(partitionId), walApplier);
     }
 
+    public void logEraseMaterializedIndex(RecycleMaterializedIndexInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ERASE_MATERIALIZED_INDEX, new EraseMaterializedIndexLog(
+                info.getDbId(), info.getTableId(), info.getPhysicalPartitionId(), info.getIndexId()), walApplier);
+    }
+
     public void logRecoverPartition(RecoverInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_RECOVER_PARTITION_V2, info, walApplier);
     }
@@ -1587,12 +1795,16 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
     }
 
-    public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
-        logJsonObject(OperationType.OP_BATCH_MODIFY_PARTITION, info);
+    public void logModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, info);
     }
 
-    public void logDropTable(DropInfo info) {
-        logJsonObject(OperationType.OP_DROP_TABLE_V2, info);
+    public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BATCH_MODIFY_PARTITION, info, walApplier);
+    }
+
+    public void logDropTable(DropInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_TABLE_V2, info, walApplier);
     }
 
     public void logDisablePartitionRecovery(long partitionId, WALApplier walApplier) {
@@ -1611,21 +1823,23 @@ public class EditLog {
         logJsonObject(OperationType.OP_RECOVER_TABLE_V2, info, walApplier);
     }
 
-    public void logDropRollup(DropInfo info) {
-        logJsonObject(OperationType.OP_DROP_ROLLUP_V2, info);
+    public void logDropRollup(DropInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_ROLLUP_V2, info, walApplier);
     }
 
-    public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
-        logJsonObject(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo);
+    public void logBatchDropRollup(BatchDropInfo batchDropInfo, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo, walApplier);
     }
 
     public JournalTask logFinishConsistencyCheck(ConsistencyCheckInfo info) {
-        return submitLog(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, new Writable() {
+        // Submitted under a db lock but waited on outside it (EditLog.waitForCommit), so use the deferred-wait
+        // submit that releases the WAL fence at durability rather than inline.
+        return submitLogNoWait(OperationType.OP_FINISH_CONSISTENCY_CHECK_V2, new Writable() {
             @Override
             public void write(DataOutput out) throws IOException {
                 Text.writeString(out, GsonUtils.GSON.toJson(info));
             }
-        }, -1);
+        });
     }
 
     public void logAddComputeNode(ComputeNode computeNode, WALApplier applier) {
@@ -1664,12 +1878,12 @@ public class EditLog {
         logJsonObject(OperationType.OP_FINISH_MULTI_DELETE, info, walApplier);
     }
 
-    public void logAddReplica(ReplicaPersistInfo info) {
-        logJsonObject(OperationType.OP_ADD_REPLICA_V2, info);
+    public void logAddReplica(ReplicaPersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ADD_REPLICA_V2, info, walApplier);
     }
 
-    public void logUpdateReplica(ReplicaPersistInfo info) {
-        logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info);
+    public void logUpdateReplica(ReplicaPersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPDATE_REPLICA_V2, info, walApplier);
     }
 
     public void logDeleteReplica(ReplicaPersistInfo info, WALApplier walApplier) {
@@ -1741,12 +1955,12 @@ public class EditLog {
     }
 
     // for TransactionState
-    public void logInsertTransactionState(TransactionState transactionState) {
-        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
+    public void logInsertTransactionState(TransactionState transactionState, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState, walApplier);
     }
 
-    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
-        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch);
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch, walApplier);
     }
 
     public void logBackupJob(BackupJob job, WALApplier walApplier) {
@@ -1773,20 +1987,34 @@ public class EditLog {
         logJsonObject(OperationType.OP_COLOCATE_ADD_TABLE_V2, info);
     }
 
-    public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info) {
-        logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info);
+    public void logColocateBackendsPerBucketSeq(ColocatePersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2, info, walApplier);
     }
 
-    public void logColocateMarkUnstable(ColocatePersistInfo info) {
-        logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info);
+    public void logColocateMarkUnstable(ColocatePersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_COLOCATE_MARK_UNSTABLE_V2, info, walApplier);
     }
 
-    public void logColocateMarkStable(ColocatePersistInfo info) {
-        logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info);
+    public void logColocateMarkStable(ColocatePersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_COLOCATE_MARK_STABLE_V2, info, walApplier);
     }
 
     public void logModifyTableColocate(TablePropertyInfo info) {
         logJsonObject(OperationType.OP_MODIFY_TABLE_COLOCATE_V2, info);
+    }
+
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info);
+    }
+
+    /**
+     * WAL-applier overload: the supplied applier runs after the journal record is durable,
+     * so the in-memory mutation matches the persisted state on both leader and follower.
+     * Used by the SplitTabletJob post-publish path so the ColocateRangeMgr update is
+     * sequenced with the same semantics as markGroupUnstable.
+     */
+    public void logColocateRangeUpdate(ColocateRangePersistInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_COLOCATE_RANGE_UPDATE, info, walApplier);
     }
 
     public void logHeartbeat(HbPackage hbPackage) {
@@ -1803,6 +2031,10 @@ public class EditLog {
 
     public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info, walApplier);
+    }
+
+    public void logModifyNoDictColumns(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_MODIFY_NO_DICT_COLUMNS, info, walApplier);
     }
 
     public void logSetHasDelete(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
@@ -1917,8 +2149,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_BASE_COMPACTION_FORBIDDEN_TIME_RANGES, info, walApplier);
     }
 
-    public void logReplaceTempPartition(ReplacePartitionOperationLog info) {
-        logJsonObject(OperationType.OP_REPLACE_TEMP_PARTITION, info);
+    public void logReplaceTempPartition(ReplacePartitionOperationLog info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_REPLACE_TEMP_PARTITION, info, walApplier);
     }
 
     public void logInstallPlugin(PluginInfo plugin, WALApplier walApplier) {
@@ -1937,6 +2169,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log, walApplier);
     }
 
+    public void logReleaseAlterJobHistorySchema(ReleaseAlterJobHistorySchemaLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, log, walApplier);
+    }
+
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log, walApplier);
     }
@@ -1949,8 +2185,8 @@ public class EditLog {
         logEdit(OperationType.OP_GLOBAL_VARIABLE_V2, info, walApplier);
     }
 
-    public void logSwapTable(SwapTableOperationLog log) {
-        logJsonObject(OperationType.OP_SWAP_TABLE, log);
+    public void logSwapTable(SwapTableOperationLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SWAP_TABLE, log, walApplier);
     }
 
     public void logAddAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
@@ -2067,8 +2303,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info, walApplier);
     }
 
-    public void logAlterMvStatus(AlterMaterializedViewStatusLog log) {
-        logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log);
+    public void logAlterMvStatus(AlterMaterializedViewStatusLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log, walApplier);
     }
 
     public void logAlterMvBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
@@ -2079,8 +2315,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_RENAME_MATERIALIZED_VIEW, log, walApplier);
     }
 
-    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
-        logJsonObject(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
+    public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log, walApplier);
     }
 
     public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log, WALApplier walApplier) {
@@ -2108,7 +2344,9 @@ public class EditLog {
     }
 
     public JournalTask logStarMgrOperationNoWait(StarMgrJournal journal) {
-        return submitLog(OperationType.OP_STARMGR, journal, -1);
+        // StarMgr's own EditLog is constructed gate-open, so this uses the same deferred-wait submit as any
+        // other no-wait write; the fence is released when the returned task completes.
+        return submitLogNoWait(OperationType.OP_STARMGR, journal);
     }
 
     public void logCreateUser(CreateUserInfo info, WALApplier walApplier) {
@@ -2163,14 +2401,6 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log, walApplier);
     }
 
-    public void logMVJobState(MVMaintenanceJob job, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_MV_JOB_STATE, job, walApplier);
-    }
-
-    public void logMVEpochChange(MVEpoch epoch) {
-        logJsonObject(OperationType.OP_MV_EPOCH_UPDATE, epoch);
-    }
-
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_TABLE_PROPERTIES, info, walApplier);
     }
@@ -2183,8 +2413,8 @@ public class EditLog {
         logJsonObject(OperationType.OP_ALTER_PIPE, log, walApplier);
     }
 
-    public void logModifyTableAddOrDrop(TableColumnAlterInfo info) {
-        logJsonObject(OperationType.OP_FAST_ALTER_TABLE_COLUMNS, info);
+    public void logModifyTableAddOrDrop(TableColumnAlterInfo info, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_FAST_ALTER_TABLE_COLUMNS, info, walApplier);
     }
 
     public void logAlterTask(AlterTaskInfo info, WALApplier applier) {
@@ -2209,6 +2439,22 @@ public class EditLog {
 
     public void logUpdateTableStorageInfos(TableStorageInfos tableStorageInfos, WALApplier walApplier) {
         logJsonObject(OperationType.OP_UPDATE_TABLE_STORAGE_INFOS, tableStorageInfos, walApplier);
+    }
+
+    public void logCreateAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_CREATE_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logAlterAIProvider(AIProvider provider, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_AI_PROVIDER, provider, walApplier);
+    }
+
+    public void logDropAIProvider(DropAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_DROP_AI_PROVIDER, log, walApplier);
+    }
+
+    public void logSetDefaultAIProvider(SetDefaultAIProviderLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_SET_DEFAULT_AI_PROVIDER, log, walApplier);
     }
 
     public void logReplicationJob(ReplicationJob replicationJob, WALApplier walApplier) {
@@ -2277,6 +2523,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
+    public void logUpdateTabletReshardJob(TabletReshardJob snapshot, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, snapshot, applier);
+    }
+
     public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId), walApplier);
     }
@@ -2287,5 +2537,9 @@ public class EditLog {
 
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
+    }
+
+    public void logAlterGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_GROUP_PROVIDER, groupProviderLog, walApplier);
     }
 }

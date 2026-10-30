@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW GRANTS displays all privileges and roles granted to a user or role."
 ---
 
 # SHOW GRANTS
@@ -10,6 +11,8 @@ displayed_sidebar: docs
 
 ロールと権限の詳細については、[権限の概要](../../../administration/user_privs/authorization/user_privs.md)を参照してください。
 
+AI 権限も同じ出力形式を使用します。`USAGE ON AI FUNCTION`、`USAGE ON ALL AI FUNCTIONS`、`USAGE ON AI PROVIDER`、`USAGE ON ALL AI PROVIDERS` が表示されます。プロバイダー名は引用され、削除済みプロバイダーへの付与は省略されます。付与は UUID に結び付くため、同じ名前で再作成しても以前の付与は復元されません。
+
 :::tip
 すべてのロールとユーザーは、自分に付与された権限や割り当てられたロールを確認できます。指定されたユーザーまたはロールの権限を表示できるのは、`user_admin` ロールを持つユーザーのみです。
 :::
@@ -18,12 +21,14 @@ displayed_sidebar: docs
 
 ```SQL
 SHOW GRANTS; -- 現在のユーザーの権限を表示します。
+SHOW GRANTS FOR CURRENT_USER[()]; -- 現在のユーザーの権限を表示します（MySQL互換構文）。
 SHOW GRANTS FOR ROLE <role_name>; -- 特定のロールの権限を表示します。
 SHOW GRANTS FOR <user_identity>; -- 特定のユーザーの権限を表示します。
 ```
 
 ## パラメータ
 
+- `CURRENT_USER[()]`: 現在のセッションユーザーの権限を返します。括弧は省略可能です。この形式は `SHOW GRANTS` と同等であり、接続初期化時にこのステートメントを自動的に発行する MySQL クライアント（Metabase、DBeaver など）との互換性のために提供されています。
 - role_name
 - user_identity
 
@@ -52,6 +57,13 @@ SHOW GRANTS FOR <user_identity>; -- 特定のユーザーの権限を表示し�
 
 ```SQL
 mysql> SHOW GRANTS;
++--------------+---------+----------------------------------------+
+| UserIdentity | Catalog | Grants                                 |
++--------------+---------+----------------------------------------+
+| 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
++--------------+---------+----------------------------------------+
+
+mysql> SHOW GRANTS FOR CURRENT_USER();
 +--------------+---------+----------------------------------------+
 | UserIdentity | Catalog | Grants                                 |
 +--------------+---------+----------------------------------------+

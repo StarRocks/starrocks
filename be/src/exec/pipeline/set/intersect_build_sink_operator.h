@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/set/intersect_context.h"
-#include "runtime/runtime_state.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 

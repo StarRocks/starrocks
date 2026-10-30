@@ -37,12 +37,14 @@ package com.starrocks.http.rest;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -92,8 +94,16 @@ public class ShowMetaInfoAction extends RestBaseAction {
                 new ShowMetaInfoAction(controller));
     }
 
+    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String action = request.getSingleParameter("action");
         // check param empty
         if (Strings.isNullOrEmpty(action)) {
@@ -210,7 +220,10 @@ public class ShowMetaInfoAction extends RestBaseAction {
         long tableSize = 0;
         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
             long partitionSize = 0;
-            for (MaterializedIndex mIndex : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+            // Query-visible layout, like RowCountAction: during an ORDER BY split's UNSHARE window the
+            // children share the parent's files, so summing them answers a question about data volume
+            // with a number no single reader ever sees. Outside that window this is the latest layout.
+            for (MaterializedIndex mIndex : partition.getQueryableMaterializedIndices(IndexExtState.VISIBLE)) {
                 partitionSize += mIndex.getDataSize(singleReplica);
             } // end for indexes
             tableSize += partitionSize;

@@ -28,12 +28,9 @@ namespace {
 
 class TestIntColumn final : public Column {
 public:
-    explicit TestIntColumn(bool is_array = false) : _is_array(is_array) {}
+    explicit TestIntColumn() {}
 
     bool is_array() const override { return _is_array; }
-
-    const uint8_t* raw_data() const override { return reinterpret_cast<const uint8_t*>(_data.data()); }
-    uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data.data()); }
 
     size_t size() const override { return _data.size(); }
     size_t capacity() const override { return _data.capacity(); }
@@ -49,10 +46,6 @@ public:
 
     void reserve(size_t n) override { _data.reserve(n); }
     void resize(size_t n) override { _data.resize(n); }
-
-    StatusOr<MutablePtr> upgrade_if_overflow() override { return nullptr; }
-    StatusOr<MutablePtr> downgrade() override { return nullptr; }
-    bool has_large_column() const override { return false; }
 
     void assign(size_t n, size_t idx) override { _data.assign(n, _data[idx]); }
 

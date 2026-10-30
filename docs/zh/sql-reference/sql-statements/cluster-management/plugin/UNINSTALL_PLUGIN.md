@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UNINSTALL PLUGIN removes a plugin from StarRocks."
 ---
 
 # UNINSTALL PLUGIN

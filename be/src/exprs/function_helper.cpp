@@ -18,12 +18,13 @@
 #include <fmt/format.h>
 
 #include <stdexcept>
+#include <type_traits>
 
 #include "base/simd/multi_version.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 
 namespace starrocks {
 
@@ -33,11 +34,14 @@ struct ColumnBuilder {
         if constexpr (lt_is_decimal<Type>) {
             return RunTimeColumnType<Type>::create(type_desc.precision, type_desc.scale);
         } else if constexpr (lt_is_collection<Type>) {
+            // Built recursively from type_desc.children by the caller; unreachable here.
             throw std::runtime_error(fmt::format("Unsupported collection type {}", Type));
             return nullptr;
         } else if constexpr (Type == TYPE_UNKNOWN || Type == TYPE_BINARY || Type == TYPE_DECIMAL) {
             throw std::runtime_error(fmt::format("Unsupported column type {}", Type));
             return nullptr;
+        } else if constexpr (std::is_constructible_v<RunTimeColumnType<Type>, const TypeDescriptor&, size_t>) {
+            return RunTimeColumnType<Type>::create(type_desc, 0);
         } else {
             return RunTimeColumnType<Type>::create();
         }
@@ -82,7 +86,7 @@ MutableColumnPtr FunctionHelper::create_column(const TypeDescriptor& type_desc, 
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
     } else {
         auto col = type_dispatch_column(type, ColumnBuilder(), type_desc);
-        p = col ? std::move(*col).mutate() : nullptr;
+        p = col ? Column::mutate(std::move(col)) : nullptr;
     }
 
     if (nullable && p != nullptr) {
@@ -230,7 +234,7 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
         auto new_null_column = union_null_column(nullable_column->null_column(), null_column);
         return NullableColumn::create(nullable_column->data_column()->clone(), std::move(new_null_column));
     } else {
-        return NullableColumn::create(std::move(column), std::move(null_column));
+        return NullableColumn::create(column, std::move(null_column));
     }
 }
 

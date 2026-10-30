@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW AUTHENTICATION displays the authentication information of the current user or all users in the current cluster."
 ---
 
 # SHOW AUTHENTICATION

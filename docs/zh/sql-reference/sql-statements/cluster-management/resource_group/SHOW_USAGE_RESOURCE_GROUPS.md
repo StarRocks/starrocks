@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW USAGE RESOURCE GROUPS shows resource usage information of resource groups on each BE."
 ---
 
 # SHOW USAGE RESOURCE GROUPS

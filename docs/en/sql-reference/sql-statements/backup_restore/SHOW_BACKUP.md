@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Views the last BACKUP task in a specified database."
 ---
 
 # SHOW BACKUP

@@ -1,35 +1,223 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community."
 ---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 # Cross-cluster Data Migration Tool
 
 The StarRocks Cross-cluster Data Migration Tool is provided by StarRocks Community. You can use this tool to easily migrate data from the source cluster to the target cluster.
 
-:::note
-
-- The StarRocks Cross-cluster Data Migration Tool only supports migrating data from a shared-nothing cluster to either another shared-nothing cluster or a shared-data cluster.
-- The StarRocks version of the target cluster must be v3.1.8, v3.2.3, or later.
-
-:::
+| Migration Path                        | Support information            |
+| ------------------------------------- | ------------------------------ |
+| From Shared-nothing to Shared-nothing | From v3.1.8 and v3.2.3 onwards |
+| From Shared-nothing to Shared-data    | From v3.1.8 and v3.2.3 onwards |
+| From Shared-data to Shared-data       | From v4.1 onwards              |
+| From Shared-data to Shared-nothing    | Not supported                  |
 
 ## Preparations
 
+<Tabs groupId="migrationPath">
+<TabItem value="sourceNothing" label="Migrate from Shared-nothing" default>
+
+### On source cluster
+
+You do not need to perform any preparations on the source cluster.
+
+### On target cluster
+
 The following preparations must be performed on the target cluster for data migration.
 
-### Open ports
+#### Open ports
 
 If you have enabled the firewall, you must open these ports:
 
 | **Component** | **Port**     | **Default** |
 | ----------- | -------------- | ----------- |
-| FE          | query_port     | 9030 |
-| FE          | http_port      | 8030 |
-| FE          | rpc_port       | 9020 |
-| BE          | be_http_port   | 8040 |
-| BE          | be_port        | 9060 |
+| FE          | query_port     | 9030        |
+| FE          | http_port      | 8030        |
+| FE          | rpc_port       | 9020        |
+| BE/CN       | be_http_port   | 8040        |
+| BE/CN       | be_port        | 9060        |
 
-### Enable Legacy Compatibility for Replication
+</TabItem>
+
+<TabItem value="sourceData" label="Migrate between Shared-data">
+
+### On source cluster
+
+During migration, the source cluster's Auto-Vacuum mechanism may delete historical data versions that the target CNs still need to read. To prevent this situation, you must extend the Auto-Vacuum grace period by dynamically setting the FE configuration item `lake_autovacuum_grace_period_minutes` to a significantly large value:
+
+```SQL
+ADMIN SET FRONTEND CONFIG("lake_autovacuum_grace_period_minutes"="10000000");
+```
+
+:::important
+
+This setting prevents the source cluster from reclaiming stale object storage files during migration, which will cause storage amplification. It is recommended to keep the migration window as short as possible, and to reset this item to its default value `30` after migration.
+
+```SQL
+ADMIN SET FRONTEND CONFIG("lake_autovacuum_grace_period_minutes"="30");
+```
+
+:::
+
+### On target cluster
+
+The following preparations must be performed on the target cluster for data migration.
+
+#### Open ports
+
+If you have enabled the firewall, you must open these ports:
+
+| **Component** | **Port**     | **Default** |
+| ----------- | -------------- | ----------- |
+| FE          | query_port     | 9030        |
+| FE          | http_port      | 8030        |
+| FE          | rpc_port       | 9020        |
+
+#### Disable Compaction
+
+You must disable Compaction on the target cluster during migration to prevent conflicts with incoming replication data.
+
+1. Dynamically disable Compaction:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="0");
+   ```
+
+2. To prevent Compaction from being re-enabled after a cluster restart, also add the following configuration to the FE configuration file **fe.conf**:
+
+   ```Properties
+   lake_compaction_max_tasks = 0
+   ```
+
+:::important
+
+After migration is complete, re-enable Compaction by removing the above configuration from **fe.conf**, and enable Compaction dynamically by executing:
+
+```SQL
+ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
+```
+
+:::
+
+#### Create source storage volumes on the target cluster
+
+The Migration Tool identifies which storage volume each source table uses, and looks up a corresponding storage volume on the target cluster using the naming convention `src_<source_volume_name>`. You must pre-create these storage volumes before starting migration.
+
+:::important
+These storage volumes are used **only during migration** to give target CNs read access to the source cluster's object storage. After migration is complete, they are no longer needed and can be dropped.
+:::
+
+1. On the **source cluster**, list all storage volumes:
+
+   ```SQL
+   SHOW STORAGE VOLUMES;
+   ```
+
+2. For each storage volume used by the tables you plan to migrate, describe it to get its configuration:
+
+   ```SQL
+   DESCRIBE STORAGE VOLUME <volume_name>;
+   ```
+
+   Example output:
+
+   ```
+   +---------------------+------+-----------+-------------------------------+-----------------------------+
+   | Name                | Type | IsDefault | Location                      | Params                      |
+   +---------------------+------+-----------+-------------------------------+-----------------------------+
+   | builtin_storage_vol | S3   | true      | s3://my-bucket                | {"aws.s3.region":"...",...} |
+   +---------------------+------+-----------+-------------------------------+-----------------------------+
+   ```
+
+3. On the **target cluster**, create a mirrored storage volume using the same object storage credentials, but with the name prefixed by `src_`:
+
+   ```SQL
+   CREATE STORAGE VOLUME src_<source_volume_name>
+   TYPE = S3
+   LOCATIONS = ("<same_location_as_source>")
+   PROPERTIES
+   (
+       "enabled" = "true",
+       "aws.s3.region" = "<region>",
+       "aws.s3.endpoint" = "<endpoint>",
+       "aws.s3.use_aws_sdk_default_behavior" = "false",
+       "aws.s3.use_instance_profile" = "false",
+       "aws.s3.access_key" = "<access_key>",
+       "aws.s3.secret_key" = "<secret_key>",
+       "aws.s3.enable_partitioned_prefix" = "false"
+   );
+   ```
+
+   :::note
+   - Set `aws.s3.enable_partitioned_prefix` to `false` regardless of the source cluster's setting. The migration tool reads files using the source partition's full path directly, so partitioned prefix must not be applied to the mirrored volume.
+   - Repeat this step for **each** unique storage volume used by the tables to be migrated. For example, if the source uses `builtin_storage_volume`, create `src_builtin_storage_volume` on the target cluster.
+   - It is recommended to use temporary credentials (access key / secret key) for the source storage volume. These can be revoked after migration is complete.
+   :::
+
+#### Migrate range-distributed tables
+
+Range-distributed table migration is supported only between shared-data clusters. The migration tool creates a missing target table automatically from the source table definition. Do not create the target table manually.
+
+Record the original values of the following FE configurations. For each dynamic setting, also add the matching persistent setting to **fe.conf** on every applicable FE so that an FE restart does not change the migration contract.
+
+1. On both the source and target clusters, disable tablet merge and keep range distribution enabled:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true");
+   ```
+
+2. `enable_execute_script_on_frontend` is a static configuration. Set it to `true` in **fe.conf** on every source and target FE, and restart the FEs before the migration window.
+
+   ```Properties
+   enable_execute_script_on_frontend = true
+   ```
+
+3. On the target cluster, suppress size-triggered automatic tablet split by setting the target size to a very large value:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ```
+
+4. Before starting the tool, run the following query separately on the source and target clusters:
+
+   ```SQL
+   SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_TYPE = 'MERGE_TABLET'
+     AND JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   Start migration only when this query returns no relevant rows on either cluster. This waits for every non-final merge state, including `PENDING`, `PREPARING`, `RUNNING`, `CLEANING`, and `ABORTING`. Keep source automatic split enabled so that the source topology can evolve. Do not run independent writes or pre-split operations on the target while migration is active.
+
+The tool reads the actual source and target topology through leader-only `ADMIN EXECUTE ON FRONTEND` calls. The complete range value for each tablet contains `lowerBound`, `lowerIncluded`, `upperBound`, and `upperIncluded`. A null endpoint means negative or positive infinity. In a finite multi-column endpoint list, a null cell means SQL NULL; every other cell is a canonical string value. This representation preserves both inclusion flags and distinguishes a literal string `NULL` from SQL NULL. Although the bridge retains this complete representation for future extension, the current FE-to-BE split path accepts only half-open `[lower, upper)` child ranges.
+
+`ADMIN EXECUTE ON FRONTEND` is not forwarded to another FE. The tool must discover and connect to each cluster's Leader FE, and the migration users need the SYSTEM-level `OPERATE` privilege. FE scripts are privileged code: use a dedicated trusted account, protect its credentials, and pass generated script parameters as properly escaped JSON inside one SQL string. The DDL executor must send the complete ADMIN statement without splitting it at semicolons. After migration, restore the recorded static script-execution setting as described below.
+
+For each range-distributed table, the tool compares freshly read source and target topologies. If they differ, the tool stops generating new replication jobs for that table but lets queued, sending, and target-running jobs finish. After all such jobs and replication transactions have drained, it submits an exact-boundary tablet split through the existing DDL queue. Replication resumes only after another topology read proves that source and target ranges are structurally equal.
+
+Range distribution does not change shared-data version synchronization. Each replication uses the source physical partition's `visibleVersion`, compares the complete metadata and file sets, and skips files that already exist on the target.
+
+When transparent data encryption (TDE) is used in shared-data-to-shared-data migration, a newly copied private standalone physical file is read with its source encryption metadata and then re-encrypted under the target policy. If the source key hierarchy cannot be unwrapped, migration fails before the target publication. Newly copied shared or bundled physical files are unsupported when the source file is encrypted or target TDE is enabled. Objects that already exist on the target can be reused directly and retain their target encryption metadata. Migration from a shared-nothing source to a shared-data target fails closed when a source rowset or DCG file is encrypted; decrypting and re-encrypting those files on this path is not supported.
+
+:::warning
+
+This workflow supports split convergence only. It fails closed if convergence would require a target merge, including a source merge, a target-only boundary, crossing ranges, or a target topology finer than the source topology. Range-colocate layouts are also unsupported.
+
+:::
+
+After migration, first wait for the tool, replication jobs and transactions, and tablet reshard jobs to drain. Restore dynamic configurations, including the source and target merge setting and the target tablet size, with `ADMIN SET FRONTEND CONFIG`, and restore their recorded values in **fe.conf**. Restore automatic reshard behavior only if it was enabled before migration; otherwise keep it disabled. Separately restore the recorded static `enable_execute_script_on_frontend` value in **fe.conf** on every FE and restart the FEs. Disable script execution only if its recorded value was `false` or you intentionally choose a stricter post-migration security policy.
+
+</TabItem>
+</Tabs>
+
+#### Enable Legacy Compatibility for Replication
 
 StarRocks may behave differently between the old and new versions, causing problems during cross-cluster data migration. Therefore, you must enable Legacy Compatibility for the target cluster before data migration and disable it after data migration is completed.
 
@@ -53,13 +241,17 @@ StarRocks may behave differently between the old and new versions, causing probl
    enable_legacy_compatibility_for_replication = true
    ```
 
+:::important
+
 After the data migration is completed, you need to remove the configuration `enable_legacy_compatibility_for_replication = true` from the configuration file, and dynamically disable Legacy Compatibility for Replication using the following statement:
 
 ```SQL
 ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
 ```
 
-### Configure Data Migration (Optional)
+:::
+
+#### Configure Data Migration (Optional)
 
 You can configure data migration operations using the following FE and BE parameters. In most cases, the default configuration can meet your needs. If you wish to use the default configuration, you can skip this step.
 
@@ -71,7 +263,7 @@ Please note that increasing the values of the following configuration items can 
 
 #### FE Parameters
 
-The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters) on how to modify them.
+The following FE parameters are dynamic configuration items. Refer to [Configure FE Dynamic Parameters](./configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters) on how to modify them.
 
 | **Parameter**                         | **Default** | **Unit** | **Description**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -82,7 +274,7 @@ The following FE parameters are dynamic configuration items. Refer to [Configure
 
 #### BE Parameters
 
-The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](../administration/management/BE_configuration.md) on how to modify it.
+The following BE parameter is a dynamic configuration item. Refer to [Configure BE Dynamic Parameters](./configuration/BE_parameters/BE_parameters.md) on how to modify it.
 
 | **Parameter**       | **Default** | **Unit** | **Description**                                              |
 | ------------------- | ----------- | -------- | ------------------------------------------------------------ |
@@ -126,6 +318,8 @@ source_fe_query_port=9030
 source_cluster_user=root
 source_cluster_password=
 source_cluster_password_secret_key=
+
+# You can leave this empty or omit it if you want to migrate data between shared-data source clusters.
 source_cluster_token=
 
 target_fe_host=
@@ -145,6 +339,8 @@ exclude_data_list=
 
 # If there are no special requirements, please maintain the default values for the following configurations.
 target_cluster_storage_volume=
+# This configuration item is for migration between shared-data clusters only.
+target_cluster_use_builtin_storage_volume_only=false
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
 # To maintain consistency with the source cluster, use null.
@@ -181,6 +377,15 @@ replication_job_batch_size=10
 report_interval_seconds=300
 
 enable_table_property_sync=false
+
+# privilege config
+enable_privilege_sync=false
+ddl_job_allow_drop_user_target_only=false
+ddl_job_allow_drop_role_target_only=false
+ddl_job_allow_drop_inconsistent_user=true
+ddl_job_allow_revoke_grant_target_only=false
+privilege_sync_exclude_users=
+privilege_sync_exclude_roles=
 ```
 
 The description of the parameters is as follows:
@@ -193,7 +398,7 @@ The description of the parameters is as follows:
 | source_cluster_user                       | The username used to log in to the source cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
 | source_cluster_password                   | The user password used to log in to the source cluster.      |
 | source_cluster_password_secret_key        | The secret key used to encrypt the password of the login user for the source cluster. The default value is an empty string, which means that the login password is not encrypted. If you want to encrypt `source_cluster_password`, you can get the encrypted `source_cluster_password` string by using SQL statement `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_ secret_key>'))`. |
-| source_cluster_token                      | Token of the source cluster. For information on how to obtain the cluster token, refer to [Obtain Cluster Token](#obtain-cluster-token) below. |
+| source_cluster_token                      | Token of the source cluster. For information on how to obtain the cluster token, refer to [Obtain Cluster Token](#obtain-cluster-token) below. <br />**NOTE**<br />The Cluster Token is not required for migration between shared-data clusters because files are read directly from object storage. You can leave this empty or omit it if you want to migrate data between shared-data source clusters. |
 | target_fe_host                            | The IP address or FQDN (Fully Qualified Domain Name) of the target cluster's FE. |
 | target_fe_query_port                      | The query port (`query_port`) of the target cluster's FE.    |
 | target_cluster_user                       | The username used to log in to the target cluster. This user must be granted the OPERATE privilege on the SYSTEM level. |
@@ -204,6 +409,7 @@ The description of the parameters is as follows:
 | include_data_list                         | The databases and tables that need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. This item takes effect prior to `exclude_data_list`. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | exclude_data_list                         | The databases and tables that do not need to be migrated, with multiple objects separated by commas (`,`). For example: `db1, db2.tbl2, db3`. `include_data_list` takes effect prior to this item. If you want to migrate all databases and tables in the cluster, you do not need to configure this item. |
 | target_cluster_storage_volume             | The storage volume used to store tables in the target cluster when the target cluster is a shared-data cluster. If you want to use the default storage volume, you do not need to specify this item. |
+| target_cluster_use_builtin_storage_volume_only | Whether to use `builtin_storage_volume` for migration in the target cluster. It is required for migration between shared-data clusters only. When this item is set to `true`, tables created in the target cluster will use `builtin_storage_volume` uniformly, instead of using the source cluster's `storage_volume` configuration. This is useful when the source cluster has multiple custom storage volumes but you want to consolidate all tables under one storage volume in the target cluster. |
 | target_cluster_replication_num            | The number of replicas specified when creating tables in the target cluster. If you want to use the same replica number as the source cluster, you do not need to specify this item. |
 | target_cluster_max_disk_used_percent      | Disk usage percentage threshold for BE nodes of the target cluster when the target cluster is shared-nothing. Migration is terminated when the disk usage of any BE in the target cluster exceeds this threshold. The default value is `80`, which means 80%. |
 | meta_job_interval_seconds                 | The interval, in seconds, at which the migration tool retrieves metadata from the source and target clusters. You can use the default value for this item. |
@@ -218,7 +424,7 @@ The description of the parameters is as follows:
 | replication_job_batch_size                | The batch size at which the migration tool triggers data synchronization tasks. You can use the default value for this item. |
 | max_replication_data_size_per_job_in_gb   | The data size threshold at which the migration tool triggers data synchronization tasks. Unit: GB. Multiple data synchronization tasks will be triggered if the size of the partition to be migrated exceed this value. The default value is `1024`. You can use the default value for this item. |
 | report_interval_seconds                   | The time interval at which the migration tool prints the progress information. Unit: Seconds. Default value: `300`. You can use the default value for this item. |
-| target_cluster_enable_persistent_index    | Whether to enable persistent index the in the target cluster. If this item is not specified, the target cluster is consistent with the source cluster. |
+| target_cluster_enable_persistent_index    | Whether to enable persistent index the in the target cluster. If this item is not specified, the target cluster is consistent with the source cluster. <br />**NOTE**<br />When migrating data between two shared-data clusters, the tool automatically converts `persistent_index_type = LOCAL` to `CLOUD_NATIVE` in the CREATE TABLE statement for Primary Key tables. No manual action is needed. |
 | ddl_job_allow_drop_inconsistent_time_partition | Whether to allow the migration tool to delete partitions with inconsistent time between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted partitions during the migration. |
 | enable_bitmap_index_sync                  | Whether to enable synchronization for Bitmap indexes.         |
 | ddl_job_allow_drop_inconsistent_bitmap_index | Whether to allow the migration tool to delete inconsistent Bitmap indexes between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted indexes during the migration. |
@@ -230,10 +436,24 @@ The description of the parameters is as follows:
 | ddl_job_allow_drop_inconsistent_view      | Whether to allow the migration tool to delete inconsistent views between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. The migration tool will automatically synchronize the deleted views during the migration. |
 | ddl_job_allow_drop_view_target_only       | Whether to allow the migration tool to delete views that are deleted in the source cluster to keep the views consistent between the source and target clusters. The default is `true`, meaning they will be deleted. You can use the default value for this item. |
 | enable_table_property_sync                | Whether to enable synchronization for table properties.       |
+| enable_privilege_sync                     | Whether to enable synchronization for users, roles, and their privileges. The default is `false`, which means account metadata is not synchronized. |
+| ddl_job_allow_drop_user_target_only       | Whether to allow the migration tool to delete users that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. |
+| ddl_job_allow_drop_role_target_only       | Whether to allow the migration tool to delete roles that exist only in the target cluster but not in the source cluster. The default is `false`, which means they will not be deleted. |
+| ddl_job_allow_drop_inconsistent_user      | Whether to allow the migration tool to rebuild (that is, drop and re-create) a user whose definition is inconsistent between the source and target clusters. The default is `true`. A user is only rebuilt when their privileges have been read in the same cycle, so that the privileges can be granted again immediately. |
+| ddl_job_allow_revoke_grant_target_only    | Whether to allow the migration tool to revoke privileges that are granted only in the target cluster but not in the source cluster. The default is `false`, which means they will not be revoked. |
+| privilege_sync_exclude_users              | The users that the migration tool must leave untouched, with multiple users separated by commas (`,`). A user can be specified either as a user name (`jack`) or as a full user identity (`'jack'@'%'`). `root` and the user specified in `target_cluster_user` are always excluded. |
+| privilege_sync_exclude_roles              | The roles that the migration tool must leave untouched, with multiple roles separated by commas (`,`). |
+
+<Tabs groupId="migrationPath">
+<TabItem value="sourceNothing" label="Migrate from Shared-nothing" default>
 
 ### Obtain Cluster Token
 
-The Cluster Token is available in the FE metdata. Log in to the server where the FE node is located and run the following command:
+:::note
+The Cluster Token is not required for migration between shared-data clusters. You can skip this step if you want to migrate data between shared-data source clusters.
+:::
+
+The Cluster Token is available in the FE metadata. Log in to the server where the FE node is located and run the following command:
 
 ```Bash
 cat fe/meta/image/VERSION | grep token
@@ -245,7 +465,29 @@ Output:
 token=wwwwwwww-xxxx-yyyy-zzzz-uuuuuuuuuu
 ```
 
+</TabItem>
+
+<TabItem value="sourceData" label="Migrate between Shared-data">
+
+### Map storage volumes
+
+When the migration tool creates a table on the target cluster, it determines the table's storage volume as follows (in order of precedence):
+
+1. If `target_cluster_use_builtin_storage_volume_only` is set to `true`, `builtin_storage_volume` is used for all tables.
+2. If `target_cluster_storage_volume` is set to a specific storage volume, the specified storage volume is used for all tables.
+3. Otherwise, by default, the source table's storage volume property is reserved. Tables from different source storage volumes are created under the corresponding storage volumes on the target cluster, provided those storage volumes exist on the target.
+
+Therefore, if you want to keep the storage volume property for each table in the source cluster, you can pre-create the same storage volumes in the target cluster. After migration, each table in the target cluster will inherit the storage volume property it had in the source cluster.
+
+Note that the `src_`-prefixed storage volumes serve a different purpose: they are used **only during migration** to give target CNs read access to the source cluster's object storage. After migration is complete, the `src_<name>` volumes are no longer needed and can be dropped.
+
+</TabItem>
+</Tabs>
+
 ### Network-related configuration (Optional)
+
+<Tabs groupId="migrationPath">
+<TabItem value="sourceNothing" label="Migrate from Shared-nothing" default>
 
 During data migration, the migration tool needs to access **all** FE nodes of both the source and target clusters, and the target cluster needs to access **all** BE and CN nodes of the source cluster.
 
@@ -262,7 +504,7 @@ SHOW COMPUTE NODES;
 
 If these nodes use private addresses that cannot be accessed outside the cluster, such as internal network addresses within a Kubernetes cluster, you need to map these private addresses to addresses that can be accessed from outside.
 
-Navigate to the extracted folder of the tool and modify the configuration file **conf/hosts.properties**。
+Navigate to the extracted folder of the tool and modify the configuration file **conf/hosts.properties**.
 
 ```Bash
 cd starrocks-cluster-sync
@@ -292,6 +534,71 @@ SOURCE_192.1.1.2=10.1.1.2
 TARGET_fe-0.starrocks.svc.cluster.local=10.1.2.1;9030:19030
 ```
 
+</TabItem>
+
+<TabItem value="sourceData" label="Migrate between Shared-data">
+
+During data migration, the migration tool needs to access **all** FE nodes of both the source and target clusters.
+
+:::note
+Unlike migration from shared-nothing clusters, you do **not** need to configure network access from the target cluster to the source cluster's CN nodes, because data is transferred directly between object storage systems.
+:::
+
+You can obtain the FE network addresses by executing the following statement on the corresponding cluster:
+
+```SQL
+-- FE nodes
+SHOW FRONTENDS;
+```
+
+If FE nodes use private addresses that cannot be accessed outside the cluster, such as internal network addresses within a Kubernetes cluster, you need to map these private addresses to addresses that can be accessed from outside.
+
+Navigate to the extracted folder of the tool and modify the configuration file **conf/hosts.properties**.
+
+```Bash
+cd starrocks-cluster-sync
+vi conf/hosts.properties
+```
+
+The default content of the file is as follows, describing how network address mapping is configured:
+
+```Properties
+# <SOURCE/TARGET>_<host>=<mappedHost>[;<srcPort>:<dstPort>[,<srcPort>:<dstPort>...]]
+```
+
+:::note
+The `<host>` must match the address shown in the `IP` column returned by `SHOW FRONTENDS`.
+:::
+
+The following example maps the target cluster's internal Kubernetes FQDN to a reachable IP:
+
+```Properties
+TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
+```
+
+</TabItem>
+</Tabs>
+
+### Synchronize users, roles, and privileges (Optional)
+
+By default, the migration tool does not synchronize account metadata. If you set `enable_privilege_sync` to `true`, the tool also synchronizes users, roles, and their privileges from the source cluster to the target cluster.
+
+Each time the tool retrieves metadata, it reads the users, roles, and privileges of both clusters, compares them, and executes the DDL statements needed to make the target cluster consistent with the source cluster. User definitions are obtained using `SHOW CREATE USER`, which returns the password as ciphertext, so no plaintext password is handled during migration.
+
+The following objects are never modified by the migration tool:
+
+- `root` and the user specified in `target_cluster_user`. Overwriting the password of the target cluster's `root` would lock out its operators, and dropping the account that the tool uses to connect would break the tool's own connection.
+- The immutable built-in roles `root`, `db_admin`, `cluster_admin`, `user_admin`, and `security_admin`. The `public` role is built-in but mutable, so its privileges are synchronized while the role itself is left alone.
+- The users specified in `privilege_sync_exclude_users` and the roles specified in `privilege_sync_exclude_roles`.
+
+:::note
+
+- The FE of both clusters must support `SHOW CREATE USER`. If the FE of either cluster does not support this statement, users and their privileges are skipped, and only roles and role privileges are synchronized.
+- The progress of privilege synchronization is printed to the log file **log/sync.INFO.log** with the prefix `Sync privilege progress`. It lists the status of each of the four units: roles, role privileges, users, and user privileges.
+- In one-time synchronization mode (`one_time_run_mode=true`), the tool exits successfully only after privileges have also converged. It exits with a failure if either cluster does not support `SHOW CREATE USER`, or if privileges remain inconsistent across three consecutive comparisons.
+
+:::
+
 ## Step 3: Start the Migration Tool
 
 After configuring the tool, start the migration tool to initiate the data migration process.
@@ -302,7 +609,7 @@ After configuring the tool, start the migration tool to initiate the data migrat
 
 :::note
 
-- Make sure that the BE nodes of the source and target clusters can properly communicate via the network.
+- If you are migrating data from a shared-nothing cluster, make sure that the BE nodes of the source and target clusters can properly communicate via the network.
 - During runtime, the migration tool regularly checks whether the data in the target cluster is lagging behind the source cluster. If there is a lag, it initiates data migration tasks.
 - If new data is constantly loaded into the source cluster, data synchronization will continue until the data in the target cluster is consistent with that in the source cluster.
 - You can query tables in the target cluster during migration, but do not load new data into the tables, as it may result in inconsistencies between the data in the target cluster and the source cluster. Currently, the migration tool does not forbid data loading into the target cluster during migration.
@@ -385,6 +692,32 @@ WHERE TABLE_TYPE = 'BASE TABLE'
 ORDER BY TABLE_NAME;
 ```
 
+## After Migration
+
+When `Sync job progress` has been stable at 100% and your business is ready to switch, complete the cutover as follows:
+
+1. Stop writes to the source cluster.
+2. Verify `Sync job progress` reaches and remains at 100% after writes stop.
+3. Stop the migration tool.
+4. Point your applications to the target cluster address.
+5. If you migrated data between shared-data clusters, restore the Auto-Vacuum setting on the source cluster:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("lake_autovacuum_grace_period_minutes"="30");
+   ```
+
+6. If you migrated data between shared-data clusters, re-enable Compaction on the target cluster. Remove `lake_compaction_max_tasks = 0` from **fe.conf** and execute:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
+   ```
+
+7. Disable Legacy Compatibility for Replication on the target cluster. Remove `enable_legacy_compatibility_for_replication = true` from **fe.conf** and execute:
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false");
+   ```
+
 ## Limits
 
 The list of objects that support synchronization currently is as follows (those not included indicate that synchronization is not supported):
@@ -393,3 +726,10 @@ The list of objects that support synchronization currently is as follows (those 
 - Internal tables and their data
 - Materialized view schemas and their building statements (The data in the materialized view will not be synchronized. And if the base tables of the materialized view is not synchronized to the target cluster, the background refresh task of the materialized view reports an error.)
 - Logical views
+- Users, roles, and their privileges (not synchronized by default, enabled by `enable_privilege_sync`)
+
+For migration between shared-data clusters:
+
+- The target cluster must be running on v4.1 or later.
+- Migration from a shared-data cluster to a shared-nothing target is not supported.
+- Each storage volume used by the source cluster's tables must have a corresponding `src_<volume_name>` storage volume pre-created on the target cluster.

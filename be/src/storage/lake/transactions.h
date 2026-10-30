@@ -17,6 +17,7 @@
 #include <span>
 
 #include "common/statusor.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
 
 namespace starrocks {
@@ -52,9 +53,14 @@ class PublishTabletInfo;
 //
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
-StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
-                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata);
+// |base_version_order| carries FE's prefer_shared_initial_metadata hint into the base-version reads:
+// kSharedFirst tells them to try the partition-shared version-1 object before the per-tablet key that
+// a bundled partition never writes. A preference only -- either order resolves the metadata. Has no
+// effect unless |base_version| is 1. See InitialMetadataOrder.
+StatusOr<TabletMetadataPtr> publish_version(
+        TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info, int64_t base_version, int64_t new_version,
+        std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata, int64_t fe_built_version = 0,
+        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst);
 
 // Publish a batch new versions of transaction logs.
 //
@@ -91,5 +97,14 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const Txn
 // Collect files to delete for `abort_txn` in transaction log
 void collect_files_in_log(TabletManager* tablet_mgr, const TxnLogPB& txn_log,
                           std::vector<std::string>* files_to_delete);
+
+// Reserve a per-tablet publish slot. Returns false if another publish task
+// (publish_version or publish_resharding_tablet) is already running on this
+// tablet — callers should surface this as Status::ResourceBusy and let the
+// scheduler retry. Must be paired with release_publish_tablet on every path.
+bool acquire_publish_tablet(int64_t tablet_id);
+
+// Release a slot previously reserved by acquire_publish_tablet.
+void release_publish_tablet(int64_t tablet_id);
 
 } // namespace starrocks::lake

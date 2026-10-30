@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include "column/chunk_factory.h"
+#include "fs/fs_factory.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/segment_options.h"
@@ -59,7 +61,7 @@ Status BinlogReader::init() {
         }
     }
     _data_schema = Schema(&_reader_params.output_schema, _data_column_index);
-    _data_chunk = ChunkHelper::new_chunk(_data_schema, 0);
+    _data_chunk = ChunkFactory::new_chunk(_data_schema, 0);
 
     _initialized = true;
 
@@ -261,7 +263,7 @@ Status BinlogReader::_init_segment_iterator() {
     }
     SegmentSharedPtr seg_ptr = _rowset->segments()[segment_index];
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset->rowset_path()))
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset->rowset_path()))
     seg_options.chunk_size = _reader_params.chunk_size;
     seg_options.stats = &_stats;
     // set start row to read if next change event is not the first row in the segment

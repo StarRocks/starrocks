@@ -1,0 +1,841 @@
+---
+displayed_sidebar: docs
+hide_table_of_contents: true
+description: "Alphabetical i - p"
+---
+
+import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
+
+# メトリクス iからpまで
+
+:::note
+
+マテリアライズドビューと共有データクラスターのメトリクスについては、対応するセクションで詳しく説明しています。
+
+- [非同期マテリアライズドビューのメトリクスに関するメトリクス](../metrics-materialized_view.md)
+- [共有データダッシュボードのメトリクス、およびスターレットダッシュボードのメトリクスに関するメトリクス](../metrics-shared-data.md)
+
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
+
+:::
+
+<MetricsIP />
+
+## `iceberg_compaction_duration_ms_total`
+
+- 単位: ミリ秒
+- 種類: 累積
+- ラベル: `compaction_type`（`manual` または `auto`）
+- 説明: Icebergコンパクションタスクの実行に費やされた合計時間。
+
+## `iceberg_compaction_input_files_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Icebergコンパクションタスクによって読み取られたデータファイルの総数。
+
+## `iceberg_compaction_output_files_total`
+
+- 単位: 数
+- タイプ: 累積
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Icebergコンパクションタスクによって生成されたデータファイルの総数。
+
+## `iceberg_compaction_removed_delete_files_total`
+
+- 単位: カウント
+- 種類: 累積
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Icebergの手動コンパクションタスクによって削除された削除ファイルの総数。
+
+## `iceberg_compaction_total`
+
+- 単位: 数
+- タイプ: 累積
+- ラベル: `compaction_type` (`manual` または `auto`)
+- 説明: Icebergコンパクション (`rewrite_data_files`) タスクの総数。
+
+## `iceberg_merge_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `MERGE INTO` タスクによって書き込まれた総バイト数を、ファイル種別ごとに集計します。`data` は新規データファイル（更新された行と挿入された行）のサイズを表し、`position_delete` は命中した旧行をマークする position delete ファイルのサイズを表します。
+
+## `iceberg_merge_duration_ms_total`
+
+- 単位: ミリ秒
+- タイプ: 累積
+- 説明: Iceberg `MERGE INTO` タスクの総実行時間（ミリ秒）。各タスクの実行時間は、タスク終了後に加算されます。
+
+## `iceberg_merge_files`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `MERGE INTO` タスクによって書き込まれたファイルの総数を、ファイル種別ごとに集計します。`data` は新規データファイルの件数を、`position_delete` は position delete ファイルの件数を数えます。
+
+## `iceberg_merge_rows`
+
+- 単位: 行
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `MERGE INTO` タスクが処理した行の総数を、ファイル種別ごとに集計します。`position_delete` は UPDATE または DELETE によって命中したターゲット行（position delete として追加される）をカウントし、`data` は書き込まれたデータ行（更新された行と挿入された行）をカウントします。
+
+## `iceberg_merge_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル:
+  - `status` (`success` または `failed`)
+  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
+- 説明: Iceberg テーブルを対象とする `MERGE INTO` タスクの総数。このメトリクスは、各タスクが成功・失敗にかかわらず終了するたびに 1 ずつ加算されます。Iceberg MERGE INTO は V2 Merge-On-Read モデルを採用しており、単一のスナップショットでデータファイルと position delete ファイルを原子的に書き込みます。
+
+## `iceberg_metadata_table_query_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `metadata_table` (`refs`、`history`、`metadata_log_entries`、`snapshots`、`manifests`、`files`、`partitions`、または `properties`)
+- 説明: IcebergメタデータテーブルにアクセスするSQLクエリの合計数。各クエリは、アクセスされているメタデータテーブルを識別する`metadata_table`ラベルの下でカウントされます。
+
+## `iceberg_time_travel_query_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: カテゴリ化されたシリーズの`time_travel_type` (`branch`、`tag`、`snapshot`、または `timestamp`)。
+- 説明: Icebergタイムトラベルクエリの合計数。ラベルなしのシリーズは、各タイムトラベルクエリを1回カウントします。ラベル付きのシリーズは、クエリで使用される各異なるタイムトラベルタイプをカウントします。`snapshot`は`FOR VERSION AS OF <snapshot_id>`を意味し、`branch`と`tag`は`FOR VERSION AS OF <reference_name>`を意味し、`timestamp`は`FOR TIMESTAMP AS OF ...`を意味します。
+
+## `iceberg_update_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `UPDATE` タスクによって書き込まれた総バイト数を、ファイル種別ごとに集計します。`data` は更新後の行を含む新規データファイルのサイズを表し、`position_delete` は更新対象の旧行をマークする position delete ファイルのサイズを表します。
+
+## `iceberg_update_duration_ms_total`
+
+- 単位: ミリ秒
+- タイプ: 累積
+- 説明: Iceberg `UPDATE` タスクの総実行時間（ミリ秒）。各タスクの実行時間は、タスク終了後に加算されます。
+
+## `iceberg_update_files`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `file_type` (`data` または `position_delete`)
+- 説明: Iceberg `UPDATE` タスクによって書き込まれたファイルの総数を、ファイル種別ごとに集計します。`data` は新規データファイルの件数を、`position_delete` は position delete ファイルの件数を数えます。
+
+## `iceberg_update_rows`
+
+- 単位: 行
+- タイプ: 累積
+- 説明: Iceberg `UPDATE` タスクが影響を与えた行の総数。生成されるファイル数に関係なく、1 行は 1 回のみカウントされます。
+
+## `iceberg_update_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル:
+  - `status` (`success` または `failed`)
+  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
+- 説明: Iceberg テーブルを対象とする `UPDATE` タスクの総数。このメトリクスは、各タスクが成功・失敗にかかわらず終了するたびに 1 ずつ加算されます。Iceberg UPDATE は V2 Merge-On-Read モデルを採用しており、単一のスナップショットでデータファイルと position delete ファイルを原子的に書き込みます。
+
+## `iceberg_write_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- ラベル: `write_type` (`insert`、`overwrite`、または `ctas`)
+- 説明: Iceberg書き込みタスク (`INSERT`、`INSERT OVERWRITE`、`CTAS`) から書き込まれたバイトの合計。これは、Icebergテーブルに書き込まれたデータファイルの合計サイズを表します。`write_type`は操作タイプを区別します。
+
+## `iceberg_write_duration_ms_total`
+
+- 単位: ミリ秒
+- タイプ: 累積
+- ラベル: `write_type` (`insert`、`overwrite`、または `ctas`)
+- 説明: Iceberg書き込みタスク (`INSERT`、`INSERT OVERWRITE`、`CTAS`) の合計実行時間 (ミリ秒)。各タスクの実行時間は、終了後に加算されます。`write_type`は操作タイプを区別します。
+
+## `iceberg_write_files`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `write_type` (`insert`、`overwrite`、または `ctas`)
+- 説明: Iceberg書き込みタスク (`INSERT`、`INSERT OVERWRITE`、`CTAS`) からIcebergに書き込まれたデータファイルの合計数。これは、Icebergテーブルに書き込まれたデータファイルの数を表します。`write_type`は操作タイプを区別します。
+
+## `iceberg_write_rows`
+
+- 単位: 行
+- タイプ: 累積
+- ラベル: `write_type` (`insert`、`overwrite`、または `ctas`)
+- 説明: Iceberg書き込みタスク (`INSERT`、`INSERT OVERWRITE`、`CTAS`) から書き込まれた行の合計。これは、Icebergテーブルに書き込まれた行数を表します。`write_type`は操作タイプを区別します。
+
+## `iceberg_write_total`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル:
+  - `status` (`success` または `failed`)
+  - `reason` (`none`、`timeout`、`oom`、`access_denied`、`unknown`)
+  - `write_type` (`insert`、`overwrite`、または `ctas`)
+- 説明: Icebergテーブルをターゲットとする`INSERT`、`INSERT OVERWRITE`、または`CTAS`タスクの合計数。このメトリックは、各タスクの終了後、成功または失敗にかかわらず1ずつ増加します。`write_type`は操作タイプを区別します。
+
+## `int128_column_pool_bytes`
+
+- 単位: バイト
+- 説明: INT128カラムプールによって使用されるメモリ。
+
+## `int16_column_pool_bytes`
+
+- 単位: バイト
+- 説明: INT16カラムプールによって使用されるメモリ。
+
+## `int32_column_pool_bytes`
+
+- 単位: バイト
+- 説明: INT32カラムプールによって使用されるメモリ。
+
+## `int64_column_pool_bytes`
+
+- 単位: バイト
+- 説明: INT64カラムプールによって使用されるメモリ。
+
+## `int8_column_pool_bytes`
+
+- 単位: バイト
+- 説明: INT8カラムプールによって使用されるメモリ。
+
+## `jwks_fetch_latency_ms`
+
+- 単位: ms
+- タイプ: Histogram
+- 説明: ID プロバイダーから JWKS（JSON Web Key Set）を取得するたびのレイテンシ。きっかけは問いません。`jwks_url` の初回ロード、キャッシュ TTL 前のバックグラウンド更新、未知の `kid` を持つトークンによる強制更新、リトライのいずれも含み、失敗した取得も計測します。JWT の署名検証自体は安定した CPU コストなので、Bearer 認証が遅くなったときに時間がかかっているのはこの取得です。
+- 導入時期: v4.2
+
+## `jwks_refresh_total`
+
+- 単位: 個
+- タイプ: Counter
+- 説明: ID プロバイダーからの JWKS 取得の総数。`result`（`success` または `failure`）でラベル付けされます。HTTP 取得そのものの時点で 1 回ずつ数えるため、バックグラウンド更新は 1 回として数えられ、取得に失敗してキャッシュ済みの鍵で応答した場合（`jwks_cache_outage_ttl_seconds` を参照）は `failure` として数えられます。`failure` が増え続ける場合は ID プロバイダーの JWKS エンドポイントが不健全です。障害許容ウィンドウが尽きるまでは、認証はキャッシュ済みの鍵で継続します。
+- 導入時期: v4.2
+
+## `jemalloc_active_bytes`
+
+- 単位: バイト
+- 説明: アプリケーションによって割り当てられたアクティブなページ内の合計バイト数。
+
+## `jemalloc_allocated_bytes`
+
+- 単位: バイト
+- 説明: アプリケーションによって割り当てられた合計バイト数。
+
+## `jemalloc_dirty_bytes`
+
+- 単位: バイト
+- 説明: 未使用のダーティページ内の合計バイト数。これらのページはまだ madvise によってオペレーティングシステムに返却されておらず、ページフォールトを発生させずに新しい割り当てに再利用できます。
+
+## `jemalloc_mapped_bytes`
+
+- 単位: バイト
+- 説明: アロケータによってマップされたアクティブなエクステント内の合計バイト数。
+
+## `jemalloc_metadata_bytes`
+
+- 単位: バイト
+- 説明: メタデータに割り当てられた合計バイト数。これには、ブートストラップに敏感なアロケータメタデータ構造に使用される基本割り当てと内部割り当てが含まれます。透過的ヒュージページの使用はこの項目には含まれません。
+
+## `jemalloc_metadata_thp`
+
+- 単位: カウント
+- 説明: メタデータに使用される透過的ヒュージページの数。
+
+## `jemalloc_muzzy_bytes`
+
+- 単位: バイト
+- 説明: 未使用の muzzy ページ内の合計バイト数。muzzy はダーティページと保持（retained）ページの中間的な減衰状態で、ページは madvise（例: MADV_FREE）によって処理済みですが、アドレスマッピングはまだ保持されています。
+
+## `jemalloc_resident_bytes`
+
+- 単位: バイト
+- 説明: アロケータによってマップされた物理的に常駐するデータページ内の最大バイト数。これには、アロケータメタデータに割り当てられたすべてのページ、アクティブな割り当てをバックアップするページ、および未使用のダーティページが含まれます。
+
+## `jemalloc_retained_bytes`
+
+- 単位: バイト
+- 説明: munmap(2)のような操作を介してオペレーティングシステムに返されるのではなく、保持された仮想メモリマッピングの合計バイト数。
+
+## `jit_cache_mem_bytes`
+
+- 単位: バイト
+- 説明: JITコンパイルされた関数キャッシュによって使用されるメモリ。
+
+## `jvm_heap_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、または `max`)
+- 説明: BE プロセスに組み込まれた JVM のヒープメモリ。`used` はオブジェクトが占有しているメモリ、`committed` は JVM がオペレーティングシステムから確保しているメモリ、`max` はヒープサイズの上限です。FE ノードも自身の JVM について同じ名前のメトリクスをエクスポートしますが、ここでは BE のメトリクスについて説明します。
+  - BE の JVM メトリクス (このセクションのすべての `jvm_*_size_bytes` メトリクス) は、BE 設定項目 `enable_jvm_metrics` が `true` (デフォルト) で、BE 起動時に環境変数 `JAVA_HOME` が設定されている場合にのみエクスポートされます。
+  - BE はこれらのメトリクスを収集するために JVM を起動しません。BE プロセス内で JVM が作成されるまで (たとえば HDFS へのアクセス、JNI ベースのスキャナー、Java UDF の使用時)、すべての値は `0` のままです。
+  - BE 設定項目 `enable_metric_calculator` が `true` (デフォルト) の場合、値は 15 秒ごとに更新されます。それ以外の場合は、メトリクスの取得時に更新されます。
+  - `enable_jvm_memory_tracker` が `true` (デフォルト) の場合、コミット済みのヒープメモリと非ヒープメモリは BE の `jvm` メモリトラッカーにも計上されます。
+
+## `jvm_non_heap_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used` または `committed`)
+- 説明: BE プロセスに組み込まれた JVM の非ヒープメモリ (Metaspace やコードキャッシュなど)。`max` の値はエクスポートされません。BE の JVM メトリクスがエクスポートされる条件については、[`jvm_heap_size_bytes`](#jvm_heap_size_bytes) を参照してください。
+
+## `jvm_old_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Old 世代メモリプール。各 `type` の意味とサポートされるガベージコレクターについては、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_perm_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Metaspace (Java 7 以前では Permanent 世代)。JVM オプション `-XX:MaxMetaspaceSize` が設定されていない限り Metaspace には上限が定義されていないため、`max` と `peak_max` は通常 `-1` です。各 `type` の意味については、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_survivor_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Survivor 領域メモリプール。デフォルトの G1 コレクターを使用する場合、`max` と `peak_max` は `-1` です。各 `type` の意味とサポートされるガベージコレクターについては、[`jvm_young_size_bytes`](#jvm_young_size_bytes) を参照してください。
+
+## `jvm_young_size_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- ラベル: `type` (`used`、`committed`、`max`、`peak_used`、または `peak_max`)
+- 説明: BE プロセスに組み込まれた JVM の Young 世代 (Eden 領域) メモリプール。デフォルトの G1 コレクターを使用する場合、`max` と `peak_max` は `-1` です。BE の JVM メトリクスがエクスポートされる条件については、[`jvm_heap_size_bytes`](#jvm_heap_size_bytes) を参照してください。
+  - `used`、`committed`、`max` はメモリプールの現在の使用状況です。`peak_used` と `peak_max` は、JVM がメモリプールについて記録するピーク使用状況 (`MemoryPoolMXBean.getPeakUsage()`) から取得されます。`peak_used` は `used` の最大値で、`peak_max` はそのピーク使用状況の記録に含まれる `max` フィールドです。`peak_max` は `max` の最大値を別途追跡したものではないため、メモリプールの容量を監視するには `peak_max` ではなく `max` を使用してください。ピーク使用状況は、JVM の起動時または最後にリセットされた時点から記録されます。BE はピーク使用状況をリセットしないため、リセットされるのは BE の再起動時だけです。
+  - `max` または `peak_max` が `-1` の場合、そのメモリプールにはサイズの上限が定義されていないことを意味します。エラーを示すものではありません。
+  - `jvm_young_size_bytes`、`jvm_survivor_size_bytes`、`jvm_old_size_bytes` はメモリプール名で照合されるため、JVM が Serial、Parallel、CMS、または G1 ガベージコレクターを使用している場合にのみ値が設定されます。ZGC または Shenandoah では `0` のままです。`jvm_heap_size_bytes` と `jvm_non_heap_size_bytes` は影響を受けません。
+
+## `lake_compaction_held_segment_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 入力セグメントを保持する実行中の lake compaction タスクが現在ピン留めしているセグメントメタデータのサイズ（`lake_compaction_hold_input_segments` で制御）。メタデータキャッシュとは異なり、このメモリは LRU の管理下になく、保持しているタスクの終了時に解放されます。値が継続的に高い場合は、キャッシュのサイズ不足ではなく長時間実行中の compaction を示します。
+
+## `lake_compaction_failed`
+
+- 単位: 件数
+- 説明: 失敗したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_compaction_partial_success`
+
+- 単位: 件数
+- 説明: 部分的に成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_compaction_running`
+
+- 単位: 件数
+- 説明: 現在実行中のストレージ・コンピュート分離（lake）コンパクションジョブの数。
+
+## `lake_compaction_running_tasks`
+
+- 単位: 件数
+- 説明: 実行中のすべてのストレージ・コンピュート分離（lake）コンパクションジョブにわたって、現在コンパクション中の tablet 数。これはスケジューラが `lake_compaction_max_tasks` 設定で上限を設ける際に用いる単位と同じで、コンパクションジョブ（パーティションごとに 1 つ）を数える `lake_compaction_running` よりも細かい粒度です。1 つのジョブは tablet ごとに 1 つの tablet 単位タスクに分割されます。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` で値 0 を出力するため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_compaction_score_at_trigger`
+
+- 単位: スコア
+- タイプ: Gauge
+- 説明: 直近にストレージ・コンピュート分離（lake）コンパクションジョブを起動したパーティションのコンパクションスコア（整数に丸めた値）。値はそのパーティション内タブレットの *最大* スコア（`Quantiles.getMax()`）で、スケジューラがコンパクション対象パーティションを選ぶ判定基準と一致します。トリガごとに各パーティションで 1 回更新され、Gauge は最新の更新値を保持します。この Gauge は減衰しません。Leader FE では、コンパクションが実行されていないときは直近のトリガ値を保持します（0 にリセットされません）。この値はプロセスローカル（Leader 上のインメモリカウンターで、永続化されません）であるため、FE Leader のフェイルオーバー後、新しく昇格した Leader は 0 から開始し、最初のコンパクショントリガまで 0 を報告します——前の Leader の値は引き継ぎません。この指標を単独で参照するのではなく、`lake_compaction_running > 0` と組み合わせてアラートを設定してください。`is_leader` ラベルが付与されており、Follower FE は `is_leader="false"` を返し値は 0 になるため、ダッシュボードでは `is_leader="true"` でフィルタしてください。
+
+## `lake_compaction_success`
+
+- 単位: 件数
+- 説明: 成功したストレージ・コンピュート分離（lake）コンパクションジョブのカウンタ。
+
+## `lake_pk_index_cache_delvec_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルに付随する DelVector が使用するメモリ。DelVector を伴って取り込まれた SST ファイル（Compaction の出力など）だけが DelVector を持ちます。このメモリは主キーインデックスキャッシュには計上されないため、`information_schema.be_tablets` の `INDEX_MEM` にも含まれません。
+
+## `lake_pk_index_cache_filter_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのブルームフィルターが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_index_block_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_cache_hit_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスがすでに主キーインデックスキャッシュにロードされていた回数。`lake_pk_index_load_total` と合わせると、キャッシュのヒット率は `hit / (hit + load)` で求められます。
+
+## `lake_pk_index_cache_index_block_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE で主キーインデックスがキャッシュされている tablet について、主キーインデックスの SST ファイルのインデックスブロックが使用するメモリ。`lake_pk_index_cache_memtable_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_cache_memtable_bytes`
+
+- 単位: バイト
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE でキャッシュされている主キーインデックスの MemTable（書き込み中のものとフラッシュ中のものの両方）が使用するメモリ。`lake_pk_index_cache_index_block_bytes`、`lake_pk_index_cache_filter_bytes` とこの指標の合計が、主キーインデックスキャッシュに計上されるメモリです。`information_schema.be_tablets` の `INDEX_MEM` は、このメモリを tablet ごとに示します。
+
+## `lake_pk_index_load_duration_us`
+
+- 単位: us
+- タイプ: 累積
+- 説明: 共有データモード専用。`lake_pk_index_load_total` で数えられる主キーインデックスのロードに費やされた合計時間。`lake_pk_index_load_total` で割ると、tablet 1 つあたりのインデックスの平均ロード時間が得られます。
+
+## `lake_pk_index_load_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスが主キーインデックスキャッシュになく、インデックス全体をロードする必要があった回数。インデックスがキャッシュにないのは、BE の起動後にまだロードされていないか、削除（evict）されたためです。ロードでは、その tablet のすべての主キーインデックス SST ファイルを開き、それらのファイルがまだカバーしていない rowset を再生します。失敗したロードも数えられます。ロード先の tablet が変わらないのにこの値が増え続ける場合、インデックスの削除と再ロードが繰り返されています。
+
+## `lake_segment_cache_hit_minute`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける、直近 60 秒間の segment メタデータキャッシュのルックアップヒット数。ヒットはキャッシュ内の候補が見つかったことを示しますが、そのスキーマがリクエストと互換性を持たない場合、再利用が拒否されることがあります。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_segment_cache_miss_minute`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける、直近 60 秒間の segment メタデータキャッシュのルックアップで、キャッシュエントリが見つからなかった回数。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_segment_cache_schema_reject_total`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、スキーマが存在しない、または要求されたスキーマと互換性がないために、キャッシュ済み segment 候補の再利用が拒否された累積回数。キャッシュへの追加が有効な場合、拒否されたエントリが引き続き同じ segment を参照しているときに限り、アトミックに置き換えます。既存のリーダーは元の segment を引き続き使用します。それ以外の場合、リクエストはプライベート segment を開きます。ルックアップミス後の並行キャッシュ挿入で互換性のない候補が返された場合も含むため、この値をルックアップヒット数から直接差し引くことはできません。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_tablet_location_handoff_entries`
+
+- 単位: 件数
+- タイプ: 瞬時値
+- 説明: 共有データモード専用。この BE が所有していない tablet について保持しているストレージロケーションの件数。これらは combined txn log を書き込むために、ロード時に tablet の所有ノードから引き渡されたものです（BE 設定項目 `lake_shard_info_cache_ttl_sec` を参照）。エントリは `staros_shard_info_fallback_cache_entries` で数えられるエントリと共有する 16 MiB の LRU キャッシュに保持され、最後の更新から `lake_shard_info_cache_ttl_sec` の間有効で、キャッシュに空きが必要になったときに削除されます。そのため、この値は引き渡しが現在使われているかどうかではなく、キャッシュの占有量を表します。
+
+## `lake_tablet_location_handoff_hits_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データモード専用。この BE が所有していない tablet のストレージロケーションを、StarMgr に問い合わせる代わりに所有ノードから引き渡されたロケーションで解決した回数。1 回増えるごとに StarMgr の GetShard RPC が 1 回省かれます。`file_bundling` が有効なテーブルへのロードを調整するノードで増加します。`staros_shard_info_fallback_total` と合わせると、引き渡しのヒット率は `hits / (hits + fallback)` で求められます。
+
+## `lake_vacuum_del_file_batch_size_minute`
+
+- 単位: 件数（バッチあたりファイル数）
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける Vacuum の直近 60 秒の `DeleteObjects` バッチあたり平均ファイル数。
+
+## `lake_vacuum_del_file_retries_minute`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: 共有データクラスタにおける Vacuum の直近 60 秒に発生した削除リトライ回数。一時的なオブジェクトストレージのスロットリング（SlowDown / try-again）を可視化する。
+
+## `load_bytes`
+
+- 単位: バイト
+- 説明: ロードされた合計バイト数。
+
+## `load_channel_count`
+
+- 単位: カウント
+- 説明: ロードチャネルの総数。
+
+## `load_mem_bytes`
+
+- 単位: バイト
+- 説明: データロードのメモリコスト。
+
+## `load_rows`
+
+- 単位: カウント
+- 説明: ロードされた合計行数。
+
+## `load_rpc_threadpool_size`
+
+- 単位: カウント
+- 説明: RPCスレッドプールの現在のサイズ。これは、ルーチンロードとテーブル関数を介したロードの処理に使用されます。デフォルト値は10で、最大値は1000です。この値は、スレッドプールの使用状況に基づいて動的に調整されます。
+
+## `load_sink_close_active_threads`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールで実行中のクローズ処理の数。共有データクラスタでは、各クローズ処理がロードの結合トランザクションログをオブジェクトストレージに書き込みます。
+
+## `load_sink_close_execute_time_ns_total`
+
+- 単位: ナノ秒
+- タイプ: 累積
+- 説明: 完了したロード Sink クローズタスクの累積実行時間。クローズ中の待機とオブジェクトストレージへの書き込み時間を含み、各タスクの終了時に更新されます。
+
+## `load_sink_close_executed_tasks_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: スレッドプールで完了したロード Sink クローズタスクの数。エラーを返したクローズタスクも含みます。
+
+## `load_sink_close_pending_time_ns_total`
+
+- 単位: ナノ秒
+- タイプ: 累積
+- 説明: 完了したロード Sink クローズタスクがスレッドプールのキューで待機した累積時間。各タスクの終了時に更新され、現在キューで待機中のタスクはまだ含まれません。
+
+## `load_sink_close_queue_count`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールのキューで待機しているクローズ処理の数。値が増え続ける場合、オブジェクトストレージへの書き込みがロードの完了に追いついていません。
+
+## `load_sink_close_running_threads`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールのスレッド数。
+
+## `load_sink_close_threadpool_size`
+
+- 単位: カウント
+- タイプ: 瞬時値
+- 説明: ロード Sink クローズスレッドプールの最大スレッド数。`load_sink_close_thread_pool_num_max` で設定します。
+
+## `local_column_pool_bytes (Deprecated)`
+
+## `low_cardinality_dict_cache_bytes`
+
+- 単位: バイト
+- タイプ: Gauge
+- 説明: この FE 上の低基数グローバル辞書キャッシュ（`CacheDictManager`）にキャッシュされている辞書データの合計バイト数。キャッシュによって正確に追跡され（サンプリングではありません）、シリアライズされた辞書データを数え、実際のヒープ使用量の下限となります。このキャッシュは `low_cardinality_dict_cache_max_bytes` 設定によってこのサイズで上限が設定されます。
+
+## `max_disk_io_util_percent`
+
+- 単位: -
+- 説明: ディスクI/O使用率の最大パーセンテージ。
+
+## `max_network_receive_bytes_rate`
+
+- 単位: バイト
+- 説明: ネットワーク経由で受信した合計バイト数（すべてのネットワークインターフェースの中で最大値）。
+
+## `max_network_send_bytes_rate`
+
+- 単位: バイト
+- 説明: ネットワーク経由で送信された合計バイト数（すべてのネットワークインターフェースの中で最大値）。
+
+## `memory_pool_bytes_total`
+
+- 単位: バイト
+- 説明: メモリプールによって使用されたメモリ。
+
+## `memtable_flush_duration_us`
+
+- 単位: us
+- 説明: メムテーブルフラッシュに費やされた合計時間。
+
+## `memtable_flush_queue_count`
+
+- 単位: カウント
+- 説明: メムテーブルフラッシュスレッドプール内のキューに入れられたタスク数。
+
+## `memtable_flush_total`
+
+- 単位: カウント
+- 説明: メムテーブルフラッシュの合計数。
+
+## `merge_commit_append_pipe`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: マージコミット中にストリームロードパイプにデータを追加するのに費やされた時間。
+
+## `merge_commit_fail_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 失敗したマージコミットリクエスト。
+
+## `merge_commit_pending`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: マージコミットタスクが実行前に保留中のキューで待機する時間。
+
+## `merge_commit_pending_bytes`
+
+- 単位: バイト
+- タイプ: 瞬間
+- 説明: 保留中のマージコミットタスクによって保持されているデータの合計バイト数。
+
+## `merge_commit_pending_total`
+
+- 単位: カウント
+- タイプ: 瞬間
+- 説明: 現在実行キューで待機中のマージコミットタスク。
+
+## `merge_commit_register_pipe_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: マージコミット操作のために登録されたストリームロードパイプ。
+
+## `merge_commit_request`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: マージコミットリクエストのエンドツーエンド処理レイテンシー。
+
+## `merge_commit_request_bytes`
+
+- 単位: バイト
+- タイプ: 累積
+- 説明: マージコミットリクエスト全体で受信されたデータの合計バイト数。
+
+## `merge_commit_request_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: BEによって受信されたマージコミットリクエストの合計数。
+
+## `merge_commit_send_rpc_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: マージコミット操作を開始するためにFEに送信されたRPCリクエスト。
+
+## `merge_commit_success_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 正常に完了したマージコミットリクエスト。
+
+## `merge_commit_unregister_pipe_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: マージコミット操作から登録解除されたストリームロードパイプ。
+
+レイテンシーメトリクスは、`merge_commit_request_latency_99` や `merge_commit_request_latency_90` のようなパーセンタイル系列を公開し、マイクロ秒で報告されます。エンドツーエンドのレイテンシーは以下に従います。
+
+`merge_commit_request = merge_commit_pending + merge_commit_wait_plan + merge_commit_append_pipe + merge_commit_wait_finish`
+
+> **注記**: v3.4.11、v3.5.12、v4.0.4より前では、これらのレイテンシーメトリクスはナノ秒で報告されていました。
+
+## `merge_commit_wait_finish`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: マージコミットロード操作が完了するのを待機した時間。
+
+## `merge_commit_wait_plan`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: RPCリクエストとストリームロードパイプが利用可能になるのを待機する時間の合計レイテンシー。
+
+## `meta_replay_lag_second`
+
+- 単位: 秒
+- タイプ: Gauge
+- 説明: この FE が再生済みのメタデータが、Leader の時刻からどれだけ遅れているか。Leader FE は 10 秒ごとにタイムスタンプをジャーナルに書き込んでおり、この項目はこのノードが再生した最新のタイムスタンプの経過時間です。`max_journal_replay_lag` は Leader のみが報告しますが、この項目は遅延しているノード自身が報告し、1 件のジャーナルの再生が滞っている間も増加し続けます。Leader FE はタイムスタンプを再生せず書き込む側であるため、常に `0` を報告します。この値が `meta_delay_toleration_second` を超えると、そのノードは自身のメタデータでの読み取り提供を停止し、クエリを Leader に転送します。ただし例外が 2 つあります。1 つは `ignore_meta_check` が `true` の場合で、このときは読み取りの提供を続けます。もう 1 つは、前回のチェック以降ジャーナルを 1 件も再生しておらず、かつ Leader との接続が保たれている場合です。このときそのノードは現在の読み取り提供状態をそのまま維持します。Leader が何も書き込んでいなければ、その時刻から遅れていること自体はこのノードの状態を表さないためです。この 2 つ目のケースはノードをサービスから外さないだけであり、すでに読み取りの提供を停止しているノードを復帰させるものではありません。
+
+## `meta_request_duration`
+
+- 単位: us
+- 説明: メタ読み取り/書き込みの合計時間。
+
+## `meta_request_total`
+
+- 単位: カウント
+- 説明: メタ読み取り/書き込みリクエストの合計数。
+
+## `metadata_mem_bytes (Deprecated)`
+
+## `network_receive_bytes`
+
+- 単位: バイト
+- 説明: ネットワーク経由で受信した合計バイト数。
+
+## `network_receive_packets`
+
+- 単位: カウント
+- 説明: ネットワーク経由で受信したパケットの合計数。
+
+## `network_send_bytes`
+
+- 単位: バイト
+- 説明: ネットワーク経由で送信されたバイト数。
+
+## `network_send_packets`
+
+- 単位: カウント
+- 説明: ネットワーク経由で送信されたパケットの合計数。
+
+## `ordinal_index_mem_bytes`
+
+- 単位: バイト
+- 説明: 順序インデックスによって使用されるメモリ。
+
+## `page_cache_capacity`
+
+- 説明: ストレージページキャッシュの容量。
+
+## `page_cache_hit_count`
+
+- 単位: カウント
+- 説明: ストレージページキャッシュでのヒットの合計数。
+
+## `page_cache_insert_count`
+
+- 単位: カウント
+- 説明: ストレージページキャッシュでの挿入操作の合計数。
+
+## `page_cache_insert_evict_count`
+
+- 単位: カウント
+- 説明: 容量制約により挿入操作中に削除されたキャッシュエントリの合計数。
+
+## `page_cache_lookup_count`
+
+- 単位: カウント
+- 説明: ストレージページキャッシュのルックアップの合計数。
+
+## `page_cache_release_evict_count`
+
+- 単位: カウント
+- 説明: キャッシュ使用量が容量を超えた際に、解放操作中に削除されたキャッシュエントリの合計数。
+
+## `pip_query_ctx_cnt`
+
+- 単位: カウント
+- 説明: BEで現在実行中のクエリの総数。
+
+## `pipe_driver_execution_time`
+
+- 説明: PipelineDriverエグゼキュータがPipelineDriverの処理に費やした累積時間。
+
+## `pipe_driver_queue_len`
+
+- 単位: カウント
+- 説明: BEでスケジューリングを待機している準備完了キュー内の準備完了ドライバーの現在の数。
+
+## `pipe_driver_schedule_count`
+
+- 単位: カウント
+- 説明: BEのパイプラインエグゼキュータのドライバーのスケジューリング時間の累積数。
+
+## `pipe_drivers`
+
+- 単位: カウント
+- 説明: BE のアドミッション制御が現在予約している論理 driver 容量。fragment が driver と operator をインスタンス化する間に保持する予約と、インスタンス化後も解放されていない予約を含みます。colocate 実行グループを含む論理 DOP の計数規則に従う値であり、生成済み driver オブジェクト数や実行中のスレッド数ではありません。準備の失敗や fragment の完了などで予約が解放されると、この値は減少します。
+
+## `pipe_poller_block_queue_len`
+
+- 単位: カウント
+- 説明: パイプラインエンジン内のPipelineDriverPollerのブロックキューの現在の長さ。
+
+## `pipe_poller_max_driver_check`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: PipelineDriverPollerの1回のポーリングで、最も時間がかかった単一ドライバーのチェックに要した時間。値が大きい場合、1つのブロック中ドライバーのチェックがポーリング全体を遅らせています。
+
+## `pipe_poller_pass`
+
+- 単位: マイクロ秒
+- タイプ: サマリー
+- 説明: PipelineDriverPollerがブロック中のドライバーを1回ポーリングするのに要した時間。各エグゼキュータセットのポーラースレッドは1つだけのため、1回のポーリングが長いと、そのスレッドを待つすべてのドライバーが遅れます。直近のウィンドウ内の最大値は `pipe_poller_pass_max_latency` で確認できます。
+
+## `pipe_prepare_pool_queue_len`
+
+- 単位: カウント
+- 説明: パイプラインPREPAREスレッドプール内のキューに入れられたタスク数。これは瞬間的な値です。
+
+## `pipe_scan_executor_queuing`
+
+- 単位: カウント
+- 説明: スキャンオペレータによって起動された保留中の非同期I/Oタスクの現在の数。
+
+## `pk_index_compaction_queue_count`
+
+- 単位: カウント
+- 説明: プライマリキーインデックス圧縮スレッドプール内のキューに入れられたタスク数。
+
+## `pk_index_sst_read_error_total`
+
+- タイプ: カウンター
+- 単位: カウント
+- 説明: レイクプライマリキー永続インデックスにおけるSSTファイル読み取り失敗の総数。SSTマルチゲット（読み取り）操作が失敗した場合、または Compaction が入力SSTファイルの読み取り中にデータ破損を検出した場合に増加します。
+
+## `pk_index_sst_write_error_total`
+
+- タイプ: カウンター
+- 単位: カウント
+- 説明: レイクプライマリキー永続インデックスにおけるSSTファイル書き込み失敗の総数。SSTファイルの構築が失敗した場合に増加します。
+
+## `plan_fragment_count`
+
+- 単位: カウント
+- 説明: 現在実行中のクエリプランフラグメントの数。
+
+## `process_fd_num_limit_hard`
+
+- 単位: カウント
+- 説明: ファイルディスクリプタの最大数のハードリミット。
+
+## `process_fd_num_limit_soft`
+
+- 単位: カウント
+- 説明: ファイルディスクリプタの最大数のソフトリミット。この項目はソフトリミットを示します。ハードリミットは`ulimit`コマンドを使用して設定できます。
+
+## `process_fd_num_used`
+
+- 単位: カウント
+- 説明: このBEプロセスで現在使用中のファイルディスクリプタの数。
+
+## `process_mem_bytes`
+
+- 単位: バイト
+- 説明: このプロセスが使用するメモリ。
+
+このメトリクスには、`passthrough_mem_bytes` が追跡するローカル pass-through バッファのメモリが含まれます。pass-through メトリクスはプロセス合計の一部であり、追加のメモリではありません。合計使用量を計算する際に両者を加算しないでください。このメモリ計上値はコンテナの RSS とは異なります。
+
+## `process_thread_num`
+
+- 単位: カウント
+- 説明: このプロセス内のスレッドの総数。
+
+## `publish_version_queue_count`
+
+- 単位: カウント
+- 説明: パブリッシュバージョン スレッドプール内のキューに入れられたタスク数。
+
+## `push_request_duration_us`
+
+- 単位: us
+- 説明: Spark Loadに費やされた合計時間。
+
+## `push_request_write_bytes`
+
+- 単位: バイト
+- 説明: Spark Loadを介して書き込まれた合計バイト数。
+
+## `push_request_write_bytes_per_second`
+
+- 単位: バイト/秒
+- 説明: Spark Loadのデータ書き込みレート。
+
+## `push_request_write_rows`
+
+- 単位: 数
+- 説明: Spark Load経由で書き込まれた行の合計。
+
+## `push_requests_total`
+
+- 単位: 数
+- 説明: 成功および失敗したSpark Loadリクエストの合計数。

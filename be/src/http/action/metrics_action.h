@@ -38,30 +38,39 @@
 
 #include <string>
 
-#include "base/metrics.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
 class ExecEnv;
 class HttpRequest;
-class MetricRegistry;
+class MetricsVisitor;
+class ProcessMetricsRegistry;
 
 typedef void (*MockFunc)(const std::string&);
 
 class MetricsAction : public HttpHandler {
 public:
-    explicit MetricsAction(MetricRegistry* metrics) : _metrics(metrics), _mock_func(nullptr) {}
+    explicit MetricsAction(ProcessMetricsRegistry* process_metrics_registry)
+            : _process_metrics_registry(process_metrics_registry), _mock_func(nullptr) {}
     // for tests
-    explicit MetricsAction(MetricRegistry* metrics, MockFunc func) : _metrics(metrics), _mock_func(func) {}
+    explicit MetricsAction(ProcessMetricsRegistry* process_metrics_registry, MockFunc func)
+            : _process_metrics_registry(process_metrics_registry), _mock_func(func) {}
     ~MetricsAction() override = default;
 
     void handle(HttpRequest* req) override;
 
+    // AuthN-only: require Basic identity when `config::enable_http_auth` is on (the
+    // injected verifier short-circuits when it is off). No extra privilege required —
+    // `required_privilege()` stays NONE. Defined out-of-line in the .cpp so BE
+    // incremental-coverage attributes the line to a be/src translation unit; a
+    // header-inline override is inlined into callers and not counted.
+    bool need_auth() const override;
+
 private:
     void _collect_table_metrics(starrocks::MetricsVisitor* visitor);
 
-    MetricRegistry* _metrics;
+    ProcessMetricsRegistry* _process_metrics_registry;
     MockFunc _mock_func;
     bvar::DumpOptions _options;
 };

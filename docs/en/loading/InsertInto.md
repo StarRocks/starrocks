@@ -1,5 +1,7 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
+description: "How to load data into StarRocks using INSERT statements: INSERT VALUES, INSERT INTO SELECT, INSERT OVERWRITE, Dynamic Overwrite, and loading from files..."
 ---
 
 # Load data using INSERT
@@ -121,7 +123,7 @@ You can append one or more rows to a specific table by using INSERT INTO VALUES 
 
 > **CAUTION**
 >
-> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
+> Inserting data via INSERT INTO VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/loading_introduction.mdx) for other options that suit your scenarios.
 
 The following example inserts two rows into the data source table `source_wiki_edit` with the label `insert_load_wikipedia`. Label is the unique identification label for each data load transaction within the database.
 
@@ -221,7 +223,7 @@ You can overwrite a specific table with one or more rows by using INSERT OVERWRI
 
 > **CAUTION**
 >
-> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](Loading_intro.md) for other options that suit your scenarios.
+> Overwriting data via INSERT OVERWRITE VALUES merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment. To load mass data into StarRocks, see [Loading options](./loading_introduction/loading_introduction.mdx) for other options that suit your scenarios.
 
 Query the source table and the target table to make sure there is data in them.
 
@@ -602,7 +604,7 @@ You can locate the problem by checking the log with `tracking_url`.
 
 ### Check via Information Schema
 
-You can use the [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
+You can use the [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) statement to query the results of one or more load jobs from the `loads` table in the `information_schema` database. This feature is supported from v3.1 onwards.
 
 Example 1: Query the results of load jobs executed on the `load_test` database, sort the results by creation time (`CREATE_TIME`) in descending order, and only return the top result.
 

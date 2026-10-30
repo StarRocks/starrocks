@@ -1468,6 +1468,138 @@ class TestPropertiesChanges:
         assert result[0].properties == wapped_meta_props
 
 
+class TestEnableStatisticCollectOnFirstLoad:
+    """Tests for the `enable_statistic_collect_on_first_load` property.
+
+    StarRocks only records this property in information_schema.tables_config when it is set
+    to a falsy value; a truthy (or unset) value is never reported. The reflected (conn) side
+    is therefore absent when the value is true, so an absent value must be treated as 'true'
+    to avoid a spurious diff. This is implemented via a default of 'true' for the property.
+    """
+
+    PROP = "enable_statistic_collect_on_first_load"
+
+    def _run(self, conn_props, meta_props):
+        autogen_context = Mock(spec=AutogenContext)
+        autogen_context.dialect.name = DialectName
+
+        conn_kwargs = {TableInfoKeyWithPrefix.PROPERTIES: conn_props} if conn_props is not None else {}
+        meta_kwargs = {TableInfoKeyWithPrefix.PROPERTIES: meta_props} if meta_props is not None else {}
+        conn_table = Mock(kwargs=conn_kwargs)
+        conn_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(conn_table.kwargs)}
+        meta_table = Mock(kwargs=meta_kwargs)
+        meta_table.dialect_options = {DialectName: extract_starrocks_dialect_attributes(meta_table.kwargs)}
+
+        upgrade_ops = UpgradeOps([])
+        compare_starrocks_table(
+            autogen_context, upgrade_ops, "test_table", "test_db", conn_table, meta_table
+        )
+        return upgrade_ops.ops
+
+    def test_meta_true_db_absent_no_change(self):
+        """The reported bug: metadata sets true, DB does not report it -> no spurious diff."""
+        result = self._run(conn_props={}, meta_props={self.PROP: "true"})
+        assert len(result) == 0
+
+    def test_both_absent_no_change(self):
+        """Neither side specifies it -> both default to true -> no change."""
+        result = self._run(conn_props={}, meta_props={})
+        assert len(result) == 0
+
+    def test_both_false_no_change(self):
+        """Both sides explicitly false (DB reports false) -> no change."""
+        result = self._run(conn_props={self.PROP: "false"}, meta_props={self.PROP: "false"})
+        assert len(result) == 0
+
+    def test_meta_true_db_false_detects_change(self):
+        """Metadata true while DB reports false -> a real change must be detected."""
+        result = self._run(conn_props={self.PROP: "false"}, meta_props={self.PROP: "true"})
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        assert result[0].properties.get(self.PROP) == "true"
+
+    def test_meta_false_db_absent_detects_change(self):
+        """Metadata false while DB is absent (effectively true) -> change to set false."""
+        result = self._run(conn_props={}, meta_props={self.PROP: "false"})
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        assert result[0].properties.get(self.PROP) == "false"
+
+    def test_meta_absent_db_false_no_implicit_reset(self):
+        """DB has it false but the model does not manage it -> NO spurious reset to default.
+
+        This property is exempt from implicit reset-to-default: when it is not specified in
+        the metadata, the database value is left untouched regardless of the default.
+        """
+        result = self._run(conn_props={self.PROP: "false"}, meta_props={})
+        assert len(result) == 0
+
+    def test_meta_absent_db_false_other_props_unaffected(self):
+        """The implicit-reset exemption is scoped to this property only.
+
+        A different non-default property absent from metadata still triggers a reset, while
+        the exempt property is left alone.
+        """
+        result = self._run(
+            conn_props={self.PROP: "false", "replication_num": "2"},
+            meta_props={},
+        )
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        # Only replication_num is reset (wrapped as a future-partition property);
+        # the exempt property is not in the op.
+        prop_keys = set(result[0].properties)
+        assert any("replication_num" in k for k in prop_keys)
+        assert not any(self.PROP in k for k in prop_keys)
+
+
+class TestBucketSize:
+    """Tests for the `bucket_size` property of RANDOM-distributed tables.
+
+    Its default is the FE config `default_automatic_bucket_size`, which StarRocks lowered from
+    4294967296 to 1073741824 in 4.0 (#63168); a table keeps its value across upgrades. An
+    unmanaged `bucket_size` must therefore never be implicitly reset to a hardcoded default.
+    """
+
+    PROP = "bucket_size"
+    GIB_1 = "1073741824"
+    GIB_4 = "4294967296"
+
+    _run = TestEnableStatisticCollectOnFirstLoad._run
+
+    @pytest.mark.parametrize("conn_value", [GIB_1, GIB_4, "2147483648"])
+    def test_meta_absent_no_implicit_reset(self, conn_value):
+        """The reported bug: a 4.0+ table reports 1 GiB, the model omits it -> no reset."""
+        result = self._run(conn_props={self.PROP: conn_value, "replication_num": "3"},
+                           meta_props={"replication_num": "3"})
+        assert len(result) == 0
+
+    def test_meta_absent_other_props_still_reset(self):
+        """The exemption is scoped to bucket_size: other unmanaged properties still reset."""
+        result = self._run(conn_props={self.PROP: self.GIB_1, "replication_num": "2"}, meta_props={})
+        assert len(result) == 1
+        prop_keys = set(result[0].properties)
+        assert any("replication_num" in k for k in prop_keys)
+        assert not any(self.PROP in k for k in prop_keys)
+
+    @pytest.mark.parametrize("conn_value, meta_value", [(GIB_1, GIB_4), (GIB_4, GIB_1), (GIB_1, "2147483648")])
+    def test_explicit_change_detected(self, conn_value, meta_value):
+        """A bucket_size set in the model is still managed."""
+        result = self._run(conn_props={self.PROP: conn_value}, meta_props={self.PROP: meta_value})
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        assert result[0].properties.get(self.PROP) == meta_value
+
+    @pytest.mark.parametrize("value", [GIB_1, GIB_4])
+    def test_explicit_same_no_change(self, value):
+        result = self._run(conn_props={self.PROP: value}, meta_props={self.PROP: value})
+        assert len(result) == 0
+
+
 class TestORMTableObjects:
     """Tests using real SQLAlchemy ORM Table objects with __table_args__."""
 

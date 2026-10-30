@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "使用 StarRocks Kubernetes Operator 在 Kubernetes 集群上自动化部署和管理集群。"
 ---
 
 # 使用 Operator 部署 StarRocks 集群
@@ -28,11 +30,11 @@ displayed_sidebar: docs
 
 **创建  GKE 集群**
 
-创建前，请确保已经完成所有前置工作。创建步骤，请参考[创建 GKE 集群](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster)。
+创建前，请确保已经完成所有前置工作。创建步骤，请参考[创建 GKE 集群](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster)。
 
 **创建私有 Kubernetes 集群**
 
-创建 [Kubernetes 集群](https://kubernetes.io/zh-cn/docs/setup/production-environment/tools/kubeadm/)。如需快速体验本特性，则可以使用 [Minikube](https://kubernetes.io/zh-cn/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) 创建单节点 Kubernetes 集群。
+创建 [Kubernetes 集群](https://kubernetes.io/docs/)。如需快速体验本特性，则可以使用 Minikube 创建单节点 Kubernetes 集群。
 
 ### 部署 StarRocks Operator
 
@@ -117,6 +119,19 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 > **说明**
 >
 > 如果部分 Pod 长时间仍无法启动，您可以通过 `kubectl logs -n starrocks <pod_name>` 查看日志信息或者通过 `kubectl -n starrocks describe pod <pod_name>` 查看 Event 信息，以定位问题。
+
+### 配置 BE 和 CN Core Dump 收集与重启行为
+
+BE 和 CN 容器入口脚本可以监控、压缩并上传 Core Dump，也支持为了调试而重启组件。请在 BE 或 CN 容器中配置以下环境变量：
+
+| 变量 | 可选值和默认值 | 说明 |
+| ---- | -------------- | ---- |
+| `COREDUMP_ENABLED` | 设置为 `true` 时启用。其他值（包括未设置）均表示禁用。 | 启动 Core Dump 上传进程。当组件因 `SIGABRT`（退出状态码 `134`）或 `SIGSEGV`（退出状态码 `139`）退出时，入口脚本会重启组件，使上传进程继续运行。 |
+| `DEBUG_MODE` | 设置为 `true` 时启用。其他值（包括未设置）均表示禁用调试重启行为。 | 组件每次退出后都会重启。此行为仅用于调试。 |
+| `BE_RESTART_WAIT_SECONDS` | 正整数。默认值：`5`。 | BE 重启前等待的秒数。在 `COREDUMP_ENABLED=true` 或 `DEBUG_MODE=true` 时使用。 |
+| `CN_RESTART_WAIT_SECONDS` | 正整数。默认值：`5`。 | CN 重启前等待的秒数。在 `COREDUMP_ENABLED=true` 或 `DEBUG_MODE=true` 时使用。 |
+
+Core Dump 收集要求容器镜像中包含 `inotifywait`、`pigz` 和 `rclone`。标准非精简版 Ubuntu BE/CN 镜像包含这些命令；精简版 Ubuntu 镜像和 UBI 镜像不包含。如果启用了 Core Dump 收集但缺少必需命令，BE 或 CN 将拒绝启动，并在容器日志中报告缺少的命令。
 
 ## 访问 StarRocks 集群
 
@@ -247,7 +262,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 >
 > 如果配置了 CN 自动扩缩容策略，则请删除 CN 的 `replicas` 字段。
 
-Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。更多自动扩容容策略的说明，请参见 [Pod 水平自动扩缩](https://kubernetes.io/zh-cn/docs/tasks/run-application/horizontal-pod-autoscale/)。
+Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。更多自动扩容容策略的说明，请参见 [Pod 水平自动扩缩](https://kubernetes.io/zh-cn/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)。
 
 如下是 StarRocks 提供的 [CN 自动扩缩策略模版](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml)。
 
@@ -265,7 +280,7 @@ Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为�
       maxReplicas: 10 # The maximum number of CNs is set to 10.
       minReplicas: 1 # The minimum number of CNs is set to 1.
       # operator creates an HPA resource based on the following field.
-      # see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ for more information.
+      # see https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/ for more information.
       hpaPolicy:
         metrics: # Resource metrics
           - type: Resource

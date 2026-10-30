@@ -50,11 +50,58 @@
 #include <thread>
 #include <utility>
 
-#include "common/config.h"
+#include "common/config_thrift_server_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 
 namespace starrocks {
+
+namespace {
+
+// A TProcessor decorator that stops a single malformed or hostile connection from aborting the
+// whole BE process.
+//
+// thrift's TConnectedClient::run() (used by the threaded/thread-pool servers) only catches
+// TTransportException and TException around processor_->process(). Any *non-thrift* exception --
+// e.g. std::bad_alloc / std::length_error raised while a message with a bogus, huge string or
+// container length field is deserialized -- propagates out of the loop, unwinds through
+// std::terminate() and aborts the entire process (SIGABRT). Because our TBinaryProtocol is
+// configured with thrift_rpc_max_body_size == 0 (unlimited) by default, the protocol never
+// rejects such a length itself: readStringBody/readListBegin skip their size checks when the
+// limit is 0, so a garbage length reaches the unbounded resize()/allocation.
+//
+// Wrapping the real processor lets std::exceptions (and anything else) escaping process() be
+// turned into a clean connection teardown: returning false makes TConnectedClient::run() break
+// out of its loop and cleanup() the connection, exactly as it does for a client that hangs up.
+// Genuine thrift exceptions are re-thrown unchanged so the server keeps its existing handling
+// (and logging) for them.
+class ExceptionSafeProcessor : public apache::thrift::TProcessor {
+public:
+    explicit ExceptionSafeProcessor(std::shared_ptr<apache::thrift::TProcessor> delegate)
+            : _delegate(std::move(delegate)) {}
+
+    bool process(std::shared_ptr<apache::thrift::protocol::TProtocol> in,
+                 std::shared_ptr<apache::thrift::protocol::TProtocol> out, void* connection_context) override {
+        try {
+            return _delegate->process(std::move(in), std::move(out), connection_context);
+        } catch (const apache::thrift::TException&) {
+            // Transport/protocol exceptions are part of thrift's own contract; let
+            // TConnectedClient::run() handle (and log) them as before.
+            throw;
+        } catch (const std::exception& e) {
+            LOG(WARNING) << "Uncaught exception while processing a thrift RPC, closing the connection: " << e.what();
+            return false;
+        } catch (...) {
+            LOG(WARNING) << "Uncaught non-standard exception while processing a thrift RPC, closing the connection";
+            return false;
+        }
+    }
+
+private:
+    std::shared_ptr<apache::thrift::TProcessor> _delegate;
+};
+
+} // namespace
 
 // Helper class that starts a server in a separate thread, and handles
 // the inter-thread communication to monitor whether it started
@@ -242,7 +289,7 @@ void* ThriftServer::ThriftServerEventProcessor::createContext(
     {
         std::lock_guard<std::mutex> _l(_thrift_server->_session_keys_lock);
 
-        std::shared_ptr<SessionKey> key_ptr(new std::string(ss.str()));
+        auto key_ptr = std::make_shared<std::string>(ss.str());
 
         _session_key = key_ptr.get();
         _thrift_server->_session_keys[key_ptr.get()] = key_ptr;
@@ -281,8 +328,7 @@ void ThriftServer::ThriftServerEventProcessor::deleteContext(
 
 ThriftServer::ThriftServer(const std::string& name, std::shared_ptr<apache::thrift::TProcessor> processor, int port,
                            MetricRegistry* metrics, int num_worker_threads, ServerType server_type)
-        : _started(false),
-          _port(port),
+        : _port(port),
           _num_worker_threads(num_worker_threads),
           _server_type(server_type),
           _name(name),
@@ -305,6 +351,10 @@ ThriftServer::ThriftServer(const std::string& name, std::shared_ptr<apache::thri
 
 Status ThriftServer::start() {
     DCHECK(!_started);
+    // Guard every connection handler against a non-thrift exception (e.g. a std::bad_alloc raised
+    // while deserializing a malformed message) aborting the whole BE process. See
+    // ExceptionSafeProcessor for details.
+    _processor = std::make_shared<ExceptionSafeProcessor>(_processor);
     auto protocol_factory = std::make_shared<apache::thrift::protocol::TBinaryProtocolFactory>();
     protocol_factory->setStrict(config::thrift_rpc_strict_mode, true);
     protocol_factory->setStringSizeLimit(config::thrift_rpc_max_body_size);
@@ -328,22 +378,21 @@ Status ThriftServer::start() {
     switch (_server_type) {
     case NON_BLOCKING: {
         if (transport_factory == nullptr) {
-            transport_factory.reset(new apache::thrift::transport::TTransportFactory());
+            transport_factory = std::make_shared<apache::thrift::transport::TTransportFactory>();
         }
 
-        std::shared_ptr<apache::thrift::transport::TNonblockingServerSocket> port(
-                new apache::thrift::transport::TNonblockingServerSocket(_port));
+        auto port = std::make_shared<apache::thrift::transport::TNonblockingServerSocket>(_port);
         _server = std::make_unique<apache::thrift::server::TNonblockingServer>(
                 _processor, transport_factory, transport_factory, protocol_factory, protocol_factory, port, thread_mgr);
         break;
     }
 
     case THREAD_POOL:
-        fe_server_transport.reset(new apache::thrift::transport::TServerSocket(
-                BackendOptions::get_service_bind_address_without_bracket(), _port));
+        fe_server_transport = std::make_shared<apache::thrift::transport::TServerSocket>(
+                BackendOptions::get_service_bind_address_without_bracket(), _port);
 
         if (transport_factory == nullptr) {
-            transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
+            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
         }
 
         _server = std::make_unique<apache::thrift::server::TThreadPoolServer>(
@@ -358,7 +407,7 @@ Status ThriftServer::start() {
         server_socket->setKeepAlive(true);
 
         if (transport_factory == nullptr) {
-            transport_factory.reset(new apache::thrift::transport::TBufferedTransportFactory());
+            transport_factory = std::make_shared<apache::thrift::transport::TBufferedTransportFactory>();
         }
 
         // Use non-detached thread mode, so the ThreadedServer can correctly wait for all client threads done and exits cleanly.
@@ -375,8 +424,7 @@ Status ThriftServer::start() {
         return Status::InternalError(error_msg.str());
     }
 
-    std::shared_ptr<ThriftServer::ThriftServerEventProcessor> event_processor(
-            new ThriftServer::ThriftServerEventProcessor(this));
+    auto event_processor = std::make_shared<ThriftServer::ThriftServerEventProcessor>(this);
     _server->setServerEventHandler(event_processor);
 
     RETURN_IF_ERROR(event_processor->start_and_wait_for_server());

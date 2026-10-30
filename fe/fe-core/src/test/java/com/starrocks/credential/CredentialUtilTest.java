@@ -15,19 +15,45 @@
 package com.starrocks.credential;
 
 import com.starrocks.catalog.JDBCResource;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.connector.iceberg.IcebergCatalogProperties;
 import com.starrocks.connector.iceberg.rest.OAuth2SecurityConfig;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.iceberg.aws.AwsProperties;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class CredentialUtilTest {
+    @Test
+    public void testAdls2SecretsAreMaskedInRenderedProperties() {
+        for (String key : List.of(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY,
+                CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN,
+                CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET)) {
+            for (String secret : List.of("", "abc", "fake-sensitive-credential")) {
+                Map<String, String> properties = new HashMap<>(Map.of(key, secret,
+                        CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, "account.dfs.core.windows.net"));
+                CredentialUtil.maskCredential(properties);
+                String rendered = new PrintableMap<>(properties, " = ", true, true).toString();
+                Assertions.assertTrue(rendered.contains("******"), key);
+                Assertions.assertTrue(rendered.contains("account.dfs.core.windows.net"));
+                if (!secret.isEmpty()) {
+                    Assertions.assertFalse(rendered.contains(secret), key);
+                }
+                // SQL renderers that mask directly through PrintableMap must cover the same credentials.
+                rendered = new PrintableMap<>(Map.of(key, secret), " = ", true, true, true).toString();
+                Assertions.assertTrue(rendered.contains("***"), key);
+                if (!secret.isEmpty()) {
+                    Assertions.assertFalse(rendered.contains(secret), key);
+                }
+            }
+        }
+    }
+
     @Test
     public void testMaskCredential() {
         Map<String, String> properties = new HashMap<>();
@@ -49,9 +75,9 @@ public class CredentialUtilTest {
         CredentialUtil.maskCredential(properties);
         Assertions.assertEquals("he******eh", properties.get(key));
 
-        properties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, "path");
+        properties.put(CloudConfigurationConstants.AZURE_PATH_KEY, "path");
         CredentialUtil.maskCredential(properties);
-        Assertions.assertFalse(properties.containsKey(AzureCloudConfigurationProvider.AZURE_PATH_KEY));
+        Assertions.assertFalse(properties.containsKey(CloudConfigurationConstants.AZURE_PATH_KEY));
     }
 
     @Test
@@ -93,14 +119,14 @@ public class CredentialUtilTest {
     @Test
     public void testMaskHuaweiOBSCredential() {
         Map<String, String> properties = new HashMap<>();
-        
+
         // Test underscore format
         properties.put(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY, "AKIAIOSFODNN7EXAMPLE");
         properties.put(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY");
         CredentialUtil.maskCredential(properties);
         Assertions.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY));
         Assertions.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY));
-        
+
         // Test dot format
         properties.clear();
         properties.put(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT, "AKIAIOSFODNN7EXAMPLE");
@@ -108,6 +134,27 @@ public class CredentialUtilTest {
         CredentialUtil.maskCredential(properties);
         Assertions.assertEquals("AK******LE", properties.get(CloudConfigurationConstants.HUAWEI_OBS_ACCESS_KEY_DOT));
         Assertions.assertEquals("wJ******EY", properties.get(CloudConfigurationConstants.HUAWEI_OBS_SECRET_KEY_DOT));
+    }
+
+    @Test
+    public void testMaskTencentCOSCredential() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY, "test_cos_access_key");
+        properties.put(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY, "test_cos_secret_key");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_ACCESS_KEY));
+        Assertions.assertEquals("te******ey", properties.get(CloudConfigurationConstants.TENCENT_COS_SECRET_KEY));
+    }
+
+    @Test
+    public void testMaskIcebergJdbcCatalogPassword() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD, "12345678");
+        CredentialUtil.maskCredential(properties);
+        Assertions.assertEquals("12******78", properties.get(
+                IcebergCatalogProperties.ICEBERG_CUSTOM_PROPERTIES_PREFIX +
+                        IcebergCatalogProperties.ICEBERG_JDBC_PASSWORD));
     }
 
     @Test

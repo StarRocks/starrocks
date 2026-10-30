@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and manage bitmap indexes in StarRocks to accelerate equality and range queries on low-cardinality columns."
 keywords: ['suoyin']
 sidebar_position: 20
 ---
@@ -246,7 +247,7 @@ SELECT count(1) FROM lineorder_without_index WHERE lo_shipmode="MAIL";
 
 **查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 列数据的 Page 全部读出来，再进行谓词过滤。
 
-总共耗时约 0.91 ms，**其中加载数据花了 0.47 ms**，低基数优化字典解码花了 0.31 ms，谓词过滤花了 0.23 ms。
+总共耗时约 0.91 秒，**其中加载数据花了 0.47 秒**，低基数优化字典解码花了 0.31 秒，谓词过滤花了 0.23 秒。
 
 ```Bash
 PullRowNum: 20.566M (20566493) // 返回结果集的行数。
@@ -278,7 +279,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL";
 
 **查询性能分析**：由于查询的列是低基数列，因此 Bitmap 索引对查询过滤效果不佳，即使 Bitmap 索引能够快速定位到实际数据的行号，但是待读取的数据行较多并且散落在各个 Page 中，因此实际上无法过滤掉需要读取的 Page。反而因为强制使用 Bitmap 索引，引入了加载 Bitmap 索引和使用 Bitmap 索引过滤数据的开销，总时间更多。
 
-总共耗时 2.7s，**其中加载数据和 Bitmap 索引花了 0.93s**，低基数优化字典解码花了 0.33s，使用 Bitmap 索引过滤数据花了 0.42s，ZoneMap 索引过滤数据花了 0.17s。
+ 2.7 秒，**其中加载数据和 Bitmap 索引花了 0.93 秒**，低基数优化字典解码花了 0.33 秒，使用 Bitmap 索引过滤数据花了 0.42 秒，ZoneMap 索引过滤数据花了 0.17 秒。
 
 ```Bash
 PullRowNum: 20.566M (20566493) // 返回结果集的行数。
@@ -286,11 +287,11 @@ CompressedBytesRead: 72.472 MB // 读取的总数据量。该列 Bitmap 索引�
 RawRowsRead: 20.566M (20566493) // 读取的数据行。实际只读了 2000 万行。
 ReadPagesNum: 8.802K (8802) // 读取的 Page 数量。实际上还是读取所有 Page。因为使用 Bitmap 索引过滤出的这 2000 万行数据是随机分布在各个 Page 的，而 Page 是最小数据读取单元，所以 Bitmap 索引没有过滤掉 Page。
 IOTaskExecTime: 2s77ms // Scan 数据总时间，相对于没创建 Bitmap 索引耗时更长。
-    BlockFetch: 931.144ms // 加载数据和 Bitmap 索引时间。相比于上一个查询，该查询为了加载 Bitmap 索引（18M），多花了 400ms
+    BlockFetch: 931.144ms // 加载数据和 Bitmap 索引时间。相比于上一个查询，该查询为了加载 Bitmap 索引（18M），多花了 400 ms
     DictDecode: 329.696ms // 因为输出的行数是一样的，所以低基数优化字典解码的时间所花时间差不多
     BitmapIndexFilter: 419.308ms // Bitmap 索引过滤数据的时间。
     BitmapIndexFilterRows: 123.433M (123432975) // Bitmap 索引过滤掉的数据行数。
-    ZoneMapIndexFiter: 171.580ms // ZoneMap 索引过滤数据花了 0.17s。
+    ZoneMapIndexFilter: 171.580ms // ZoneMap 索引过滤数据花了 0.17 秒。
 ```
 
 ##### 由 StarRocks 默认配置决定是否使用 Bitmap 索引
@@ -332,7 +333,7 @@ WHERE lo_shipmode = "MAIL"
 
 **查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_shipmode` 、`lo_quantity`、`lo_discount` 和 `lo_tax` 这四列数据的 Page 全部读出来，再进行谓词过滤。
 
-总共耗时 1.76s，**其中加载数据（4 个列的数据）花了 1.6s**，谓词过滤花了 0.1s。
+ 1.76 秒，**其中加载数据（4 个列的数据）花了 1.6 秒**，谓词过滤花了 0.1 秒。
 
 ```Bash
 PullRowNum: 4.092K (4092) // 返回结果集的行数。
@@ -363,7 +364,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quanti
 
 **查询性能分析**：由于是基于多个低基数列的组合查询，Bitmap 索引效果较好，能够过滤掉一部分 Page，读取数据的时间明显减少。
 
-总共耗时 0.68s，**其中加载数据和 Bitmap 索引花了 0.54s**，Bitmap 索引过滤数据花了 0.14s。
+ 0.68 秒，**其中加载数据和 Bitmap 索引花了 0.54 秒**，Bitmap 索引过滤数据花了 0.14 秒。
 
 ```Bash
 PullRowNum: 4.092K (4092) // 返回结果集的行数。
@@ -385,7 +386,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_shipmode="MAIL" AND lo_quanti
 
 **查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
 
-总共耗时 0.67s，**其中加载数据和 Bitmap 索引花了 0.54s**，Bitmap 索引过滤数据花了 0.13s。
+ 0.67 秒，**其中加载数据和 Bitmap 索引花了 0.54 秒**，Bitmap 索引过滤数据花了 0.13 秒。
 
 ```Bash
 PullRowNum: 4.092K (4092) // 返回结果集的行数。
@@ -409,7 +410,7 @@ select count(1) from lineorder_without_index where lo_partkey=10000;
 
 **查询性能分析**：因为查询的表没有 Bitmap 索引，所以查询时会将包含 `lo_partkey` 列数据的 page 全部读出来，再进行谓词过滤。
 
-总共耗时约 0.43 s，**其中加载数据花了 0.39 s**，谓词过滤花了 0.02 s。
+约 0.43 秒，**其中加载数据花了 0.39 秒**，谓词过滤花了 0.02 秒。
 
 ```Bash
 PullRowNum: 255 // 返回结果集的行数。
@@ -440,7 +441,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 
 **查询性能分析**：由于查询的列是基数较高，因此 Bitmap 索引效果比较好，能够过滤掉一部分 Page，读取数据的时间明显减少。
 
-总共耗时 0.015s，**其中加载数据和 Bitmap 索引花了 0.009s**，Bitmap 索引过滤数据花了 0.003s。
+ 0.015 秒，**其中加载数据和 Bitmap 索引花了 0.009 秒**，Bitmap 索引过滤数据花了 0.003 秒。
 
 ```Bash
 PullRowNum: 255 // 返回结果集的行数。
@@ -463,7 +464,7 @@ SELECT count(1) FROM lineorder_with_index WHERE lo_partkey=10000;
 
 **查询性能分析**：因为根据 StarRocks 默认的配置，过滤条件中涉及的列值数量/列的基数 < `bitmap_max_filter_ratio/1000`（默认为 1/1000）才会走 Bitmap 索引。实际上该值确实小于 1/1000，因此查询使用 Bitmap 索引，查询效果等同于强制使用 Bitmap 索引。
 
-总共耗时 0.014s，**其中加载数据和 Bitmap 索引花了 0.008s**，Bitmap 索引过滤数据花了 0.003s。
+ 0.014 秒，**其中加载数据和 Bitmap 索引花了 0.008 秒**，Bitmap 索引过滤数据花了 0.003 秒。
 
 ```Bash
 PullRowNum: 255 // 返回结果集的行数。

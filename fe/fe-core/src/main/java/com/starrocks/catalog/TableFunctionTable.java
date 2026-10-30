@@ -42,6 +42,8 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -81,9 +83,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -131,12 +135,12 @@ public class TableFunctionTable extends Table {
 
     private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
-    private static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
-    private static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
-    private static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
-    private static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
-    private static final String PROPERTY_CSV_ESCAPE = "csv.escape";
-    private static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
+    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
+    public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
+    public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
+    public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
+    public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
     private static final String PROPERTY_CSV_INCLUDE_HEADER = "csv.include_header";
 
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
@@ -145,6 +149,8 @@ public class TableFunctionTable extends Table {
 
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
     private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
+
+    public static final String PROPERTY_SCHEMA = "schema";
 
     public enum MisMatchFillValue {
         NONE,       // error
@@ -188,6 +194,8 @@ public class TableFunctionTable extends Table {
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
     private MisMatchFillValue misMatchFillValue = MisMatchFillValue.NONE;
+
+    private Optional<List<Column>> explicitSchemaColumns = Optional.empty();
 
     // for unload data
     private String compressionType;
@@ -255,9 +263,11 @@ public class TableFunctionTable extends Table {
     private void setSchemaForLoadAndQuery() throws DdlException {
         parseFilesForLoadAndQuery();
 
-        // infer schema from files
-        List<Column> columns = new ArrayList<>();
-        if (path.startsWith(FAKE_PATH)) {
+        List<Column> columns;
+        if (explicitSchemaColumns.isPresent()) {
+            columns = new ArrayList<>(explicitSchemaColumns.get());
+        } else if (path.startsWith(FAKE_PATH)) {
+            columns = new ArrayList<>();
             columns.add(new Column("col_int", IntegerType.INT));
             columns.add(new Column("col_string", VarcharType.VARCHAR));
         } else {
@@ -374,6 +384,25 @@ public class TableFunctionTable extends Table {
         return properties;
     }
 
+    /**
+     * Re-derives the fields that come from the load properties {@code InsertAnalyzer} pushes down
+     * from the enclosing INSERT into the {@code FILES()} property map.
+     *
+     * <p>Needed because the push-down does not always run before this table is built. Two callers
+     * resolve a {@code FILES()} schema outside the planner meta lock and before
+     * {@code InsertAnalyzer#analyzeProperties}: {@code StatementPlanner}'s lock-free pre-analysis
+     * for an INSERT that mixes {@code FILES()} with locked tables, and the Sample-Based Tablet
+     * Pre-Split hook. {@code QueryAnalyzer#resolveTableRef} then reuses the instance they built
+     * instead of rebuilding it, so the constructor parsed the property map while the pushed-down
+     * keys were still absent and every derived field kept its default -- silently dropping, for
+     * example, the {@code strict_mode} the statement (or the session default) asked for.
+     */
+    public void applyPushedDownLoadProperties(Map<String, String> pushedDownProperties) {
+        if (pushedDownProperties.containsKey(PROPERTY_STRICT_MODE)) {
+            strictMode = Boolean.parseBoolean(pushedDownProperties.get(PROPERTY_STRICT_MODE));
+        }
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
@@ -398,6 +427,12 @@ public class TableFunctionTable extends Table {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
             tTableFunctionTable.setCsv_include_header(csvIncludeHeader);
+            if (csvEnclose != 0) {
+                tTableFunctionTable.setCsv_enclose(csvEnclose);
+            }
+            if (csvEscape != 0) {
+                tTableFunctionTable.setCsv_escape(csvEscape);
+            }
         }
         tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
         TParquetOptions parquetOptions = new TParquetOptions();
@@ -464,6 +499,26 @@ public class TableFunctionTable extends Table {
 
         if (!SUPPORTED_FORMATS.contains(format.toLowerCase())) {
             throw new DdlException("not supported format: " + format);
+        }
+
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_FILES, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_ROWS, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_TYPES, PROPERTY_SCHEMA);
+
+            String schemaStr = properties.get(PROPERTY_SCHEMA);
+            if (Strings.isNullOrEmpty(schemaStr) || schemaStr.trim().isEmpty()) {
+                throw new DdlException("'schema' property is empty");
+            }
+            try {
+                List<Column> cols = SqlParser.parseFilesSchema(schemaStr);
+                if (cols.isEmpty()) {
+                    throw new DdlException("'schema' declares no columns");
+                }
+                explicitSchemaColumns = Optional.of(cols);
+            } catch (ParsingException e) {
+                throw new DdlException("invalid 'schema': " + e.getMessage(), e);
+            }
         }
 
         String colsFromPathProp = properties.get(PROPERTY_COLUMNS_FROM_PATH);
@@ -754,9 +809,23 @@ public class TableFunctionTable extends Table {
         return misMatchFillValue != MisMatchFillValue.NONE;
     }
 
+    public boolean hasExplicitSchema() {
+        return explicitSchemaColumns.isPresent();
+    }
+
     @Override
     public String toString() {
         return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
+    }
+
+    /**
+     * Not a lock target: every FILES() call builds its own instance, which is never published in a database, so
+     * there is nothing for the meta lock to protect -- and no reason for it to keep the other tables of the
+     * statement under the lock for the whole planning phase, whether FILES() is read or written.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
     }
 
     @Override
@@ -806,17 +875,15 @@ public class TableFunctionTable extends Table {
     }
 
     public void parsePropertiesForUnload(List<Column> columns, SessionVariable sessionVariable) {
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            throw new SemanticException(
+                    "'schema' is not supported in INSERT INTO FILES (unload); " +
+                    "output columns are determined by the SELECT list");
+        }
+
         List<String> columnNames = columns.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
-
-        Set<String> duplicateColumnNames = columns.stream()
-                .map(Column::getName)
-                .filter(name -> Collections.frequency(columnNames, name) > 1)
-                .collect(Collectors.toSet());
-        if (!duplicateColumnNames.isEmpty()) {
-            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
-        }
 
         // parse table function properties
         String single = properties.getOrDefault(PROPERTY_SINGLE, "false");
@@ -848,6 +915,21 @@ public class TableFunctionTable extends Table {
                     "Use any of (parquet, orc, csv)", format));
         }
 
+        // csv writes columns by position; other formats keep the names in a schema that readers resolve by name
+        if (!CSV.equalsIgnoreCase(format)) {
+            Set<String> seenColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            Set<String> duplicateColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            for (String columnName : columnNames) {
+                if (!seenColumnNames.add(columnName)) {
+                    duplicateColumnNames.add(columnName);
+                }
+            }
+            if (!duplicateColumnNames.isEmpty()) {
+                throw new SemanticException("expect column names to be distinct (case-insensitive) for " + format +
+                        " format, but got duplicate(s): " + duplicateColumnNames);
+            }
+        }
+
         // if max_file_size is not specified, use target max file size from session
         if (properties.containsKey(PROPERTY_TARGET_MAX_FILE_SIZE)) {
             this.targetMaxFileSize = Long.parseLong(properties.get(PROPERTY_TARGET_MAX_FILE_SIZE));
@@ -874,19 +956,36 @@ public class TableFunctionTable extends Table {
             // parse and validate partition columns
             List<String> partitionColumnNames = Arrays.asList(properties.get(PROPERTY_PARTITION_BY).split(","));
             partitionColumnNames.replaceAll(String::trim);
-            partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList());
-
-            List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream()
-                    .filter(col -> !columnNames.contains(col))
+            Set<String> seenPartitionColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            partitionColumnNames = partitionColumnNames.stream()
+                    .filter(seenPartitionColumnNames::add)
                     .collect(Collectors.toList());
+
+            // resolve each name case-insensitively to exactly one output column
+            List<String> unmatchedPartitionColumnNames = new ArrayList<>();
+            List<String> ambiguousPartitionColumnNames = new ArrayList<>();
+            List<Integer> partitionColumnIDs = new ArrayList<>();
+            for (String partitionColumnName : partitionColumnNames) {
+                List<Integer> matchedIDs = IntStream.range(0, columnNames.size())
+                        .filter(i -> columnNames.get(i).equalsIgnoreCase(partitionColumnName))
+                        .boxed()
+                        .collect(Collectors.toList());
+                if (matchedIDs.isEmpty()) {
+                    unmatchedPartitionColumnNames.add(partitionColumnName);
+                } else if (matchedIDs.size() > 1) {
+                    ambiguousPartitionColumnNames.add(partitionColumnName);
+                } else {
+                    partitionColumnIDs.add(matchedIDs.get(0));
+                }
+            }
             if (!unmatchedPartitionColumnNames.isEmpty()) {
                 throw new SemanticException("partition columns expected to be a subset of " + columnNames +
                         ", but got extra columns: " + unmatchedPartitionColumnNames);
             }
-
-            List<Integer> partitionColumnIDs = partitionColumnNames.stream()
-                    .map(columnNames::indexOf)
-                    .collect(Collectors.toList());
+            if (!ambiguousPartitionColumnNames.isEmpty()) {
+                throw new SemanticException("partition column(s) " + ambiguousPartitionColumnNames +
+                        " are ambiguous, more than one output column has the same name");
+            }
 
             for (Integer partitionColumnID : partitionColumnIDs) {
                 Column partitionColumn = columns.get(partitionColumnID);
@@ -928,6 +1027,29 @@ public class TableFunctionTable extends Table {
             this.csvIncludeHeader = includeHeader.equalsIgnoreCase("true");
         }
 
+        // csv enclose & escape options: accept exactly one single-byte ASCII character.
+        // Reject empty, multi-character, or multi-byte (non-ASCII) values so that the
+        // byte transmitted to BE unambiguously represents the user's intent.
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.enclose must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ENCLOSE), bs.length);
+            }
+            this.csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.escape must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ESCAPE), bs.length);
+            }
+            this.csvEscape = bs[0];
+        }
+
         // parquet options
         if (properties.containsKey(PROPERTY_PARQUET_USE_LEGACY_ENCODING)) {
             String useLegacyEncoding = properties.getOrDefault(PROPERTY_PARQUET_USE_LEGACY_ENCODING, "false");
@@ -962,6 +1084,14 @@ public class TableFunctionTable extends Table {
 
         public List<Column> build() {
             return columns;
+        }
+    }
+
+    private static void rejectIfPresent(Map<String, String> props, String key, String against)
+            throws DdlException {
+        if (props.containsKey(key)) {
+            throw new DdlException(
+                    String.format("'%s' cannot be used together with '%s'", key, against));
         }
     }
 }

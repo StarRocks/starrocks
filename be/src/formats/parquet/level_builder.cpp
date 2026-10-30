@@ -16,9 +16,19 @@
 
 #include <fmt/core.h>
 
+#include <algorithm>
+#include <limits>
 #include <string>
 #include <utility>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
+#include "base/simd/rle_simd.h"
+#include "base/time/tz_offset_cache.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column.h"
@@ -26,8 +36,8 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "column/variant_column.h"
 #include "common/compiler_util.h"
 #include "gutil/casts.h"
@@ -51,6 +61,63 @@ inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->immutable_data().data();
     return raw_column;
 }
+
+namespace {
+// Rows of the elements column of an array/map node that have a parquet slot, i.e. the elements of rows that are
+// defined, not null and non-empty. Elements under a null or undefined row (or not covered by the offsets) have no
+// slot. The selection is only materialized once such elements are met, so the common case allocates nothing.
+//
+// Invariant of LevelBuilder: the column passed for a context has exactly one row per slot of that context (a level
+// with def >= repeated_ancestor_def_level, the "spaced" values of WriteBatchSpaced). Struct children are aligned
+// with the struct rows; array/map elements are aligned by gathering them with this selection.
+class ElementSelection {
+public:
+    ElementSelection(const uint32_t* offsets, size_t num_rows, size_t num_elements) : _offsets(offsets) {
+        if (offsets[0] != 0 || offsets[num_rows] != num_elements) {
+            _start(0);
+        }
+    }
+
+    // Row `row` is written with its elements.
+    void select(size_t row) {
+        if (_selected) {
+            for (uint32_t i = _offsets[row]; i < _offsets[row + 1]; i++) {
+                _rows.push_back(i);
+            }
+        }
+    }
+
+    // Row `row` is written without its elements (null or undefined).
+    void skip(size_t row) {
+        if (!_selected && _offsets[row + 1] > _offsets[row]) {
+            _start(row);
+        }
+    }
+
+    // Returns `elements` itself if every element has a slot, else the gathered elements with a slot.
+    ColumnPtr apply(const ColumnPtr& elements) const {
+        if (!_selected) {
+            return elements;
+        }
+        auto selected = elements->clone_empty();
+        selected->append_selective(*elements, _rows.data(), 0, static_cast<uint32_t>(_rows.size()));
+        return ColumnPtr(std::move(selected));
+    }
+
+private:
+    // Rows before `row` were all written with their (contiguous) elements.
+    void _start(size_t row) {
+        _selected = true;
+        for (uint32_t i = _offsets[0]; i < _offsets[row]; i++) {
+            _rows.push_back(i);
+        }
+    }
+
+    const uint32_t* _offsets;
+    bool _selected = false;
+    std::vector<uint32_t> _rows;
+};
+} // namespace
 
 LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root, std::string timezone,
                            bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
@@ -224,8 +291,29 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
         auto values = new target_type[col->size()];
         DeferOp defer([&] { delete[] values; });
 
-        for (size_t i = 0; i < col->size(); i++) {
-            values[i] = static_cast<target_type>(data_col[i]);
+        // SIMD widening for the two common parquet-int cases; rle_simd takes int32
+        // counts, so fall back to scalar when col_size doesn't fit.
+        const size_t col_size = col->size();
+        if constexpr (std::is_same_v<source_type, int8_t> && std::is_same_v<target_type, int32_t>) {
+            if (col_size <= static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                simd_widen_int8_to_int32(values, data_col, static_cast<int32_t>(col_size));
+            } else {
+                for (size_t i = 0; i < col_size; i++) {
+                    values[i] = static_cast<target_type>(data_col[i]);
+                }
+            }
+        } else if constexpr (std::is_same_v<source_type, int16_t> && std::is_same_v<target_type, int32_t>) {
+            if (col_size <= static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+                simd_widen_int16_to_int32(values, data_col, static_cast<int32_t>(col_size));
+            } else {
+                for (size_t i = 0; i < col_size; i++) {
+                    values[i] = static_cast<target_type>(data_col[i]);
+                }
+            }
+        } else {
+            for (size_t i = 0; i < col_size; i++) {
+                values[i] = static_cast<target_type>(data_col[i]);
+            }
         }
 
         write_leaf_callback(LevelBuilderResult{
@@ -358,15 +446,39 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     auto values = new cpp_type[col->size()];
     DeferOp defer([&] { delete[] values; });
 
-    for (size_t i = 0; i < col->size(); i++) {
-        auto offset = timestamp::get_timezone_offset_by_timestamp(data_col[i]._timestamp, _ctz);
+    // INT96 stores UTC: a value is shifted by the offset in force at 00:00 of its day read as UTC. The INT64
+    // encoding stores the wall clock and needs no offset.
+    int64_t fixed_offset = 0;
+    std::vector<int64_t> offsets;
+    if constexpr (use_int96_timestamp_encoding) {
+        std::vector<int64_t> day_seconds(col->size());
+        int64_t lo = std::numeric_limits<int64_t>::max();
+        int64_t hi = std::numeric_limits<int64_t>::min();
+        for (size_t i = 0; i < col->size(); i++) {
+            if (null_col == nullptr || !null_col[i]) {
+                day_seconds[i] =
+                        (static_cast<int64_t>(timestamp::to_julian(data_col[i]._timestamp)) - date::UNIX_EPOCH_JULIAN) *
+                        SECS_PER_DAY;
+                lo = std::min(lo, day_seconds[i]);
+                hi = std::max(hi, day_seconds[i]);
+            }
+        }
+        TzOffsetCache offset_cache;
+        if (lo <= hi && !offset_cache.uniform_offset_for_unix(lo, hi, _ctz, &fixed_offset)) {
+            offsets.resize(col->size());
+            offset_cache.offsets_for_unix(day_seconds.data(), null_col, col->size(), _ctz, offsets.data());
+        }
+    }
 
-        auto timestamp = use_int96_timestamp_encoding ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, offset)
-                                                      : data_col[i]._timestamp;
+    for (size_t i = 0; i < col->size(); i++) {
+        Timestamp timestamp = data_col[i]._timestamp;
+        if constexpr (use_int96_timestamp_encoding) {
+            timestamp = timestamp::sub<TimeUnit::SECOND>(timestamp, offsets.empty() ? fixed_offset : offsets[i]);
+        }
 
         if constexpr (use_int96_timestamp_encoding) {
-            auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
-            auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);
+            auto date = reinterpret_cast<int32_t*>(&values[i].value[2]);
+            auto nanosecond = reinterpret_cast<int64_t*>(&values[i].value[0]);
             *date = timestamp::to_julian(timestamp);
             *nanosecond = timestamp::to_time(timestamp) * 1000;
         } else {
@@ -406,10 +518,13 @@ Status LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& c
     auto values = new ::parquet::ByteArray[col->size()];
     DeferOp defer([&] { delete[] values; });
 
-    for (size_t i = 0; i < col->size(); i++) {
-        values[i].len = static_cast<uint32_t>(vo[i + 1] - vo[i]);
-        values[i].ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[i]);
-    }
+    vo.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offsets = offsets_buf.data();
+        for (size_t i = 0; i < col->size(); i++) {
+            values[i].len = static_cast<uint32_t>(offsets[i + 1] - offsets[i]);
+            values[i].ptr = reinterpret_cast<const uint8_t*>(vb.data() + offsets[i]);
+        }
+    });
 
     write_leaf_callback(LevelBuilderResult{
             .num_levels = ctx._num_levels,
@@ -440,6 +555,7 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
     auto* array_col = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
     const auto offsets = array_col->offsets_column()->immutable_data();
+    ElementSelection selection(offsets.data(), col->size(), elements->size());
 
     size_t num_levels_upper_bound = ctx._num_levels + elements->size();
     auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
@@ -464,13 +580,10 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
         auto array_size = offsets[offset + 1] - offsets[offset];
         auto array_is_null = (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset]));
 
-        // null in current array_column
+        // null in current array_column, or undefined because of a null ancestor.
+        // Its elements, if any, have no slot in parquet.
         if (array_is_null) {
-            if (array_size > 0) {
-                return Status::DataQualityError(
-                        fmt::format("Array column ({}) has null element at offset {}, but array size is {}",
-                                    type_desc.debug_string(), offset, array_size));
-            }
+            selection.skip(offset);
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
 
@@ -490,6 +603,7 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
         }
 
         // not null and non-empty array
+        selection.select(offset);
         (*rep_levels)[num_levels] = rep_level;
         num_levels += array_size;
         offset++;
@@ -503,7 +617,8 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
                                     ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1,
                                     ctx._max_def_level + node->is_optional() + 1);
 
-    return _write_column_chunk(derived_ctx, type_desc.children[0], inner_node, elements, write_leaf_callback);
+    return _write_column_chunk(derived_ctx, type_desc.children[0], inner_node, selection.apply(elements),
+                               write_leaf_callback);
 }
 
 Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
@@ -525,11 +640,9 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
     auto* null_col = get_raw_null_column(col);
     auto* map_col = down_cast<const MapColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& keys = map_col->keys_column();
-    if (UNLIKELY(keys->has_null())) {
-        return Status::NotSupported("Does not support to write map value of null key");
-    }
     const auto& values = map_col->values_column();
     const auto offsets = map_col->offsets_column()->immutable_data();
+    ElementSelection selection(offsets.data(), col->size(), keys->size());
 
     size_t num_levels_upper_bound = ctx._num_levels + keys->size();
     auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
@@ -550,7 +663,10 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
+        // null in current map_column, or undefined because of a null ancestor.
+        // Its entries, if any, have no slot in parquet.
         if (def_level < ctx._max_def_level || (null_col != nullptr && null_col[offset])) {
+            selection.skip(offset);
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
 
@@ -559,8 +675,8 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
-        auto array_size = offsets[offset + 1] - offsets[offset];
-        if (array_size == 0) {
+        auto map_size = offsets[offset + 1] - offsets[offset];
+        if (map_size == 0) {
             (*def_levels)[num_levels] = def_level + node->is_optional();
             (*rep_levels)[num_levels] = rep_level;
 
@@ -569,12 +685,18 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
             continue;
         }
 
+        selection.select(offset);
         (*rep_levels)[num_levels] = rep_level;
-        num_levels += array_size;
+        num_levels += map_size;
         offset++;
     }
 
     DCHECK(col->size() == offset);
+
+    ColumnPtr selected_keys = selection.apply(keys);
+    if (UNLIKELY(selected_keys->has_null())) {
+        return Status::NotSupported("Does not support to write map value of null key");
+    }
 
     def_levels->resize(num_levels);
     rep_levels->resize(num_levels);
@@ -582,8 +704,10 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
                                     ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1,
                                     ctx._max_def_level + node->is_optional() + 1);
 
-    RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[0], key_node, keys, write_leaf_callback));
-    RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[1], value_node, values, write_leaf_callback));
+    RETURN_IF_ERROR(
+            _write_column_chunk(derived_ctx, type_desc.children[0], key_node, selected_keys, write_leaf_callback));
+    RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[1], value_node, selection.apply(values),
+                                        write_leaf_callback));
     return Status::OK();
 }
 
@@ -686,12 +810,22 @@ Status LevelBuilder::_write_variant_column_chunk(const LevelBuilderContext& ctx,
 
         auto values = new ::parquet::ByteArray[col->size()];
         DeferOp defer([&] { delete[] values; });
+        std::vector<std::string> datas;
+        datas.reserve(col->size());
 
         for (size_t i = 0; i < col->size(); ++i) {
-            const VariantRowValue* variant = variant_col->get_object(i);
-            std::string_view slice = write_metadata ? variant->get_metadata().raw() : variant->get_value().raw();
-            values[i].len = static_cast<uint32_t>(slice.size());
-            values[i].ptr = reinterpret_cast<const uint8_t*>(slice.data());
+            VariantRowValue variant_buffer;
+            const VariantRowValue* variant = variant_col->get_row_value(i, &variant_buffer);
+
+            if (variant == nullptr) {
+                datas.emplace_back();
+            } else {
+                std::string_view slice = write_metadata ? variant->get_metadata().raw() : variant->get_value().raw();
+                datas.emplace_back(slice);
+            }
+            const std::string& data = datas.back();
+            values[i].len = static_cast<uint32_t>(data.size());
+            values[i].ptr = reinterpret_cast<const uint8_t*>(data.data());
         }
 
         write_leaf_callback(LevelBuilderResult{
@@ -719,9 +853,48 @@ std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(const Leve
         }
 
         auto bitset = std::make_shared<std::vector<uint8_t>>((col_size + 7) / 8);
+#ifdef __AVX2__
+        {
+            const __m256i zero_vec = _mm256_setzero_si256();
+            size_t i = 0;
+            // cmpeq_epi8 yields 0xFF where the input byte is 0 (i.e. NOT null);
+            // movemask_epi8 packs those MSB-bits into a 32-bit bitset directly,
+            // which matches the (1 - nulls[i]) << (i & 7) pattern below.
+            for (; i + 32 <= col_size; i += 32) {
+                __m256i nulls_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(nulls + i));
+                __m256i not_null = _mm256_cmpeq_epi8(nulls_vec, zero_vec);
+                uint32_t mask = _mm256_movemask_epi8(not_null);
+                std::memcpy(bitset->data() + (i >> 3), &mask, sizeof(mask));
+            }
+            for (; i < col_size; i++) {
+                (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
+            }
+        }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        {
+            // NEON lacks movemask, so AND with per-lane bit weights and reduce
+            // via three pairwise adds to pack 8 bytes -> 1 bitset byte.
+            const uint8x8_t zero_vec = vdup_n_u8(0);
+            const uint8x8_t bit_mask = {1, 2, 4, 8, 16, 32, 64, 128};
+            size_t i = 0;
+            for (; i + 8 <= col_size; i += 8) {
+                uint8x8_t nulls_vec = vld1_u8(nulls + i);
+                uint8x8_t not_null = vceq_u8(nulls_vec, zero_vec);
+                uint8x8_t masked = vand_u8(not_null, bit_mask);
+                uint8x8_t sum1 = vpadd_u8(masked, masked);
+                uint8x8_t sum2 = vpadd_u8(sum1, sum1);
+                uint8x8_t sum3 = vpadd_u8(sum2, sum2);
+                (*bitset)[i >> 3] = vget_lane_u8(sum3, 0);
+            }
+            for (; i < col_size; i++) {
+                (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
+            }
+        }
+#else
         for (size_t i = 0; i < col_size; i++) {
             (*bitset)[i >> 3] |= (1 - nulls[i]) << (i & 0b111);
         }
+#endif
         return bitset;
     }
 

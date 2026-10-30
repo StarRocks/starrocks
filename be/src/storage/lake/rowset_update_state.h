@@ -14,17 +14,23 @@
 
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <unordered_map>
 
 #include "gutil/macros.h"
+#include "storage/lake/cross_publish_context.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
-#include "storage/primary_key_encoding_types.h"
+#include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks::lake {
+
+using CrossPublishRowSelectorPtr = std::unique_ptr<CrossPublishRowSelector>;
 
 class RssidFileInfoContainer;
 
@@ -54,12 +60,12 @@ struct AutoIncrementPartialUpdateState {
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id{0};
+    uint32_t segment_id{0};
     std::vector<uint32_t> rowids;
-    bool skip_rewrite;
+    bool skip_rewrite{false};
 
-    AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
     void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
         this->schema = std::move(modified_schema);
@@ -83,59 +89,6 @@ struct RowsetUpdateStateParams {
     const RssidFileInfoContainer& container;
 };
 
-class SegmentPKIterator {
-public:
-    SegmentPKIterator() = default;
-    ~SegmentPKIterator() { close(); }
-    Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                PrimaryKeyEncodingType encoding_type);
-    void next();
-    bool done();
-    Status status();
-    void close();
-    // <Current pk column chunk, begin rowid>
-    std::pair<ChunkPtr, size_t> current();
-
-    // Return the memory usage of this encode pk column.
-    // If _lazy_load is true, return 0, because memory allocation is lazy.
-    size_t memory_usage() const { return _memory_usage; }
-
-    // Encode `pk_column_chunk` to the given |pk_column|
-    StatusOr<MutableColumnPtr> encoded_pk_column(const Chunk* chunk);
-
-    const MutableColumnPtr& standalone_pk_column() const { return _standalone_pk_column; }
-
-private:
-    Status _load();
-
-    // Iterator of this segment file.
-    ChunkIteratorPtr _iter;
-    // The PK schema of this segment file.
-    Schema _pkey_schema;
-    // status
-    Status _status = Status::OK();
-    // The current pk column index.
-    size_t _current_pk_column_idx = 0;
-    // The rowid offsets of each piece.
-    // E.g. if we have column vec : 100 rows, 101 rows, 200 rows,
-    // offset will be [0, 100, 201, 401]
-    std::vector<size_t> _begin_rowid_offsets;
-    // Current loaded row count of the segment.
-    size_t _current_rows = 0;
-    // If true, we will load segment peice by piece when needed.
-    bool _lazy_load = false;
-    // If enable lazy load, `_memory_usage` will record first piece of pk column memory usage.
-    size_t _memory_usage = 0;
-    // For large segment, we need to load segment file piece by piece.
-    ChunkUniquePtr _pk_column_chunk;
-    // For no lazy load, we can load whole pk column and encode at once.
-    MutableColumnPtr _standalone_pk_column;
-    // The encoding type of primary key.
-    PrimaryKeyEncodingType _encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
-};
-
-using SegmentPKIteratorPtr = std::unique_ptr<SegmentPKIterator>;
-
 class RowsetUpdateState {
 public:
     RowsetUpdateState();
@@ -146,6 +99,7 @@ public:
     // How to use `RowsetUpdateState` when publish:
     //
     // init()
+    // prepare()
     //
     // for each segment:
     //      load_segment()
@@ -161,16 +115,27 @@ public:
     // init params in RowsetUpdateState.
     void init(const RowsetUpdateStateParams& params);
 
-    // Load `segment_id`-th segment file's state.
+    // Initialize shared state (rowset, segment iterators, per-segment vectors, column expr values).
+    // Must be called once before any load_segment call, for both serial and parallel paths.
+    Status prepare(const RowsetUpdateStateParams& params);
+
+    // Load `segment_id`-th segment file's state. Requires prepare() called first.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
     Status load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                         bool need_resolve_conflict, bool need_lock);
 
     // Handle `segment_id`-th segment file's partial update request.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values,
+    // provided each call uses its own replace_segments/orphan_files containers.
     Status rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
-                           std::map<int, FileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
+                           std::map<int, SegmentFileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
 
-    // Release `segment_id`-th segment file's state.
+    // Release `segment_id`-th segment file's state (upserts + partial state).
     void release_segment(uint32_t segment_id);
+
+    // Release partial update state (write_columns) for a segment, but keep upserts for Phase 2.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
+    void release_segment_partial_state(uint32_t segment_id);
 
     // Load `del_id`-th delete file's state.
     Status load_delete(uint32_t del_id, const RowsetUpdateStateParams& params);
@@ -181,7 +146,7 @@ public:
     const SegmentPKIteratorPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
     const MutableColumnPtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
 
-    std::size_t memory_usage() const { return _memory_usage; }
+    std::size_t memory_usage() const { return _memory_usage.load(std::memory_order_relaxed); }
 
     std::string to_string() const;
 
@@ -191,9 +156,34 @@ public:
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
+    // Blank out the index answers for the rows a sibling owns, leaving them at the "no old row"
+    // sentinel. |owned| is SegmentPKChunkRef::owned / SegmentPKIterator::standalone_owned(), one byte
+    // per entry of |rss_rowids|; empty means "own every row" and this is then a no-op, which is every
+    // publish but a SPLIT child's cross publish.
+    //
+    // Why any of this: cross publish hands each child the parent's whole op_write, siblings' rows
+    // included. A sibling's key still resolves -- against the sstables this child inherited from the
+    // parent -- and the location it returns can name a rowset the split pruned away, which
+    // plan_read_by_rssid would route to get_column_values and fail the publish for good on an unknown
+    // rssid. That is the failure #77744 fixed for del files, reached from the upsert side.
+    //
+    // A mask and not a filter on purpose: the vector keeps one entry per row of the source segment, so
+    // every caller's row i still names segment rowid i and no rowid derived from it has to be
+    // remapped -- and rewrite_segment needs one entry per row regardless. This only makes the ANSWER
+    // harmless; a caller that would act on "no old row" (insert the row, let it win a comparison,
+    // allocate an id for it) must still skip the row itself.
+    // Visible for testing: the row-count test that tells a narrowed emit from a whole-segment one.
+    // An empty ownership mask does not prove the publish iterator emitted the whole segment, and a
+    // narrowed emit of ZERO rows still needs the owned-only rewrite -- hence the bool.
+    static bool narrowed_emit_owns_only(size_t emitted_rows, size_t source_rows, Filter* mask);
+
+    static void mask_unowned_rowids(const Filter& owned, std::vector<uint64_t>* rss_rowids);
+
     const MutableColumnPtr& auto_increment_deletes(uint32_t segment_id) const;
 
     static StatusOr<bool> file_exist(const std::string& full_path);
+
+    const OlapReaderStatistics& stats() const { return _stats; }
 
 private:
     // Load segment state
@@ -203,6 +193,11 @@ private:
 
     Status _prepare_auto_increment_partial_update_states(uint32_t segment_id, const RowsetUpdateStateParams& params,
                                                          bool need_lock);
+
+    // Widen the merged columns of segment |segment_id| to one value per row of the SOURCE segment, which
+    // is what the rewriters demand and what a cross publish's narrowed publish iterator does not give.
+    // A no-op on every tablet that was never resharded -- see the definition.
+    //
 
     // resolve conflict when publish transaction
     Status _resolve_conflict(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version);
@@ -219,10 +214,14 @@ private:
     void _reset();
 
     // one for each segment file
+    // Built once per rowset by prepare(); nullptr unless this is a SPLIT child cross-publishing a
+    // rowset whose segments the split marked shared. Outlives every _upserts iterator, which only
+    // borrows it.
+    CrossPublishRowSelectorPtr _row_selector;
     std::vector<SegmentPKIteratorPtr> _upserts;
     // one for each delete file
     MutableColumns _deletes;
-    size_t _memory_usage = 0;
+    std::atomic<size_t> _memory_usage{0};
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
     std::vector<int64_t> _base_versions;
@@ -239,6 +238,8 @@ private:
     RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
 
+    // Initialized by prepare(), reused by _do_load_upserts for each segment.
+    Schema _pkey_schema;
     // to be destructed after segment iters
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;

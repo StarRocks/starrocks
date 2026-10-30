@@ -17,7 +17,6 @@
 #include <queue>
 #include <vector>
 
-#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/compaction_policy.h"
@@ -49,47 +48,7 @@ public:
     // (>= lake_compaction_max_rowset_size), they are already well-compacted
     // and should have zero compaction priority. This prevents them from being
     // selected for compaction when they don't need it.
-    double io_count() const {
-        int64_t large_rowset_threshold = config::lake_compaction_max_rowset_size;
-
-        // For non-overlapped rowsets that are already large enough, return 0
-        // to indicate they don't need compaction. The only exception is if they have deletes,
-        // in which case we still want to consider compacting them to reclaim space.
-        if (!rowset_meta_ptr->overlapped() && stat.num_dels == 0) {
-            int64_t rowset_size = static_cast<int64_t>(rowset_meta_ptr->data_size());
-            if (rowset_size >= large_rowset_threshold) {
-                // Already a large, well-compacted rowset with no deletes - zero priority
-                return 0;
-            }
-        }
-
-        double cnt = 1;
-        if (rowset_meta_ptr->overlapped()) {
-            int segments_size = rowset_meta_ptr->segments_size();
-            if (segments_size == 0) {
-                cnt = 1;
-            } else if (rowset_meta_ptr->segment_size_size() == 0) {
-                // No segment_size info, fall back to counting all segments
-                cnt = segments_size;
-            } else {
-                // Count only segments smaller than the large segment threshold
-                int effective_count = 0;
-                for (int i = 0; i < rowset_meta_ptr->segment_size_size(); i++) {
-                    if (static_cast<int64_t>(rowset_meta_ptr->segment_size(i)) < large_rowset_threshold) {
-                        effective_count++;
-                    }
-                }
-                cnt = std::max(1, effective_count);
-            }
-        }
-        if (stat.num_dels > 0) {
-            // if delvec file exist, that means we need to read segment files and delvec files both
-            // And update_compaction_delvec_file_io_ratio control the io amp ratio of delvec files, default is 2.
-            // Bigger update_compaction_delvec_file_io_amp_ratio means high priority about merge rowset with delvec files.
-            cnt *= config::update_compaction_delvec_file_io_amp_ratio;
-        }
-        return cnt;
-    }
+    double io_count() const;
     double delete_bytes() const {
         if (stat.num_rows == 0) return 0.0;
         if (stat.num_dels >= stat.num_rows) return (double)stat.bytes;
@@ -99,7 +58,7 @@ public:
     void calculate_score() { score = (io_count() * 1024 * 1024) / read_bytes(); }
     // Rowset has multi segments and these segments are overlapped
     bool multi_segment_with_overlapped() const {
-        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segments_size() > 1;
+        return rowset_meta_ptr->overlapped() && rowset_meta_ptr->segment_metas_size() > 1;
     }
     bool operator<(const RowsetCandidate& other) const { return score < other.score; }
 
@@ -161,14 +120,24 @@ struct PKSizeTieredLevel {
 class PrimaryCompactionPolicy : public CompactionPolicy {
 public:
     explicit PrimaryCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata,
-                                     bool force_base_compaction)
-            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction) {}
+                                     bool force_base_compaction, bool allow_base_compaction = true)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), force_base_compaction, allow_base_compaction) {}
 
     ~PrimaryCompactionPolicy() override = default;
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
                                                   std::vector<bool>* has_dels);
+
+    // Base compaction: a full merge of the tablet's rowsets (like non-primary-key base compaction),
+    // ordered by absolute delete-row count (num_dels) descending so that, when the result-bytes
+    // budget forces a subset, the rowsets holding the most delete marks are rewritten first. This
+    // drops deleted rows and shrinks the delete vectors. Used when a manual ALTER TABLE ... COMPACT
+    // forces a base compaction, or when the tablet has accumulated enough deletes to warrant
+    // reclamation (by delete ratio or absolute delete-row count). When has_dels is non-null it is
+    // filled, in returned-rowset order, with whether each picked rowset carries deletes.
+    StatusOr<std::vector<RowsetPtr>> pick_base_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
+                                                       std::vector<bool>* has_dels = nullptr);
 
     // Common function to return the picked rowset indexes.
     // For compaction score, only picked rowset indexes are needed.
@@ -181,6 +150,20 @@ public:
 
 private:
     int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata);
+};
+
+// One-shot policy used after a range-tablet split. A rowset is the metadata and
+// conflict-resolution unit, so a rowset containing any shared segment must be
+// rewritten in full. This deliberately bypasses every normal score, size and
+// input-count gate. Rowset readers apply the child tablet range only to shared
+// segments; private segments in a mixed rowset are already child-local.
+class UnshareCompactionPolicy final : public CompactionPolicy {
+public:
+    explicit UnshareCompactionPolicy(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> tablet_metadata)
+            : CompactionPolicy(tablet_mgr, std::move(tablet_metadata), false) {}
+
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
+    StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override;
 };
 
 } // namespace starrocks::lake

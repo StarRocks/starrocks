@@ -23,8 +23,8 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
@@ -47,7 +47,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -102,7 +101,7 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadataRequestContext requestContext) {
         return hmsOps.getPartitionKeys(dbName, tblName);
     }
 
@@ -132,10 +131,8 @@ public class HudiMetadata implements ConnectorMetadata {
             table = hmsOps.getTable(dbName, tblName);
         } catch (Exception e) {
             LOG.error("Failed to get hudi table [{}.{}.{}]", catalogName, dbName, tblName, e);
-            Throwable ce = ExceptionUtils.getRootCause(e);
-            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
-            throw new StarRocksConnectorException(String.format("Failed to get hudi table %s.%s.%s. %s",
-                    catalogName, dbName, tblName, errMsg), e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to get hudi table %s.%s.%s", catalogName, dbName, tblName), e);
         }
 
         return table;
@@ -236,6 +233,17 @@ public class HudiMetadata implements ConnectorMetadata {
         } else {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
         }
+    }
+
+    /**
+     * Drops this table from both cache levels instead of reloading it, as HiveMetadata does: the table, its
+     * partitions, statistics and file lists. No remote I/O and no per-table refresh lock, so concurrent INSERTs
+     * reading the same source do not queue behind each other's metastore load; planning loads what it reads.
+     */
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        hmsOps.invalidateTable(table.getCatalogDBName(), table.getCatalogTableName());
+        cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTableForRead(table));
     }
 
     @Override

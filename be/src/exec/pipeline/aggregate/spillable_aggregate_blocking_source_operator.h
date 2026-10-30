@@ -18,7 +18,7 @@
 
 #include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {

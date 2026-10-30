@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回x的y次方。"
 ---
 
 # pow, power, dpow, fpow

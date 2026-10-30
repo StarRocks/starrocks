@@ -19,11 +19,13 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/starlet_location_provider.h"
@@ -107,7 +109,7 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
 
     writer->close();
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     ASSIGN_OR_ABORT(auto seg0,
                     Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
                                   _tablet_schema));
@@ -124,7 +126,7 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
         for (int i = 0, sz = k0.size(); i < sz; i++) {
@@ -198,7 +200,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 
     writer->close();
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     ASSIGN_OR_ABORT(auto seg0,
                     Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
                                   _tablet_schema));
@@ -215,7 +217,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
         for (int i = 0, sz = k0.size(); i < sz; i++) {
@@ -236,7 +238,7 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 }
 
 TEST_P(LakeTabletWriterTest, test_write_fail) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 
@@ -257,7 +259,7 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
 }
 
 TEST_P(LakeTabletWriterTest, test_close_without_finish) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
 
@@ -282,14 +284,14 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     // `close()` directly without calling `finish()`
     writer->close();
 
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
 
     // segment file should be deleted
     ASSERT_TRUE(fs->path_exists(seg_path).is_not_found());
 }
 
 TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
 
     std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
@@ -378,7 +380,7 @@ TEST_P(LakeTabletWriterTest, test_check_global_dict_all_valid) {
     ASSERT_OK(writer->open());
 
     // Create a segment writer wrapper with all columns marked as valid
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     std::string segment_path = _tablet_mgr->segment_location(_tablet_metadata->id(), "test_segment");
     ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(segment_path));
 
@@ -404,7 +406,7 @@ TEST_P(LakeTabletWriterTest, test_check_global_dict_some_invalid) {
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     SegmentWriterOptions opts;
 
     // First segment: all valid
@@ -441,7 +443,7 @@ TEST_P(LakeTabletWriterTest, test_check_global_dict_once_invalid_always_invalid)
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     SegmentWriterOptions opts;
 
     // First segment: col1 is invalid
@@ -475,7 +477,7 @@ TEST_P(LakeTabletWriterTest, test_check_global_dict_new_columns_in_later_segment
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(writer->open());
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     SegmentWriterOptions opts;
 
     // First segment: only col1
@@ -625,7 +627,7 @@ TEST_P(LakeTabletWriterTest, test_merge_writers_with_global_dict) {
     ASSIGN_OR_ABORT(auto main_writer, tablet.new_writer(kHorizontal, next_id()));
     ASSERT_OK(main_writer->open());
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     SegmentWriterOptions opts;
 
     // Set up main writer's global dict info

@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 
 namespace starrocks {
 

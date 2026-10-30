@@ -39,7 +39,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +48,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class RoutineLoadScheduler extends FrontendDaemon {
+public class RoutineLoadScheduler extends LeaderDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadScheduler.class);
 
@@ -56,7 +56,7 @@ public class RoutineLoadScheduler extends FrontendDaemon {
 
     @VisibleForTesting
     public RoutineLoadScheduler() {
-        super();
+        super("routine-load-scheduler", Config.routine_load_scheduler_interval_millisecond);
         routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
@@ -66,7 +66,7 @@ public class RoutineLoadScheduler extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         try {
             process();
         } catch (Throwable e) {
@@ -137,5 +137,23 @@ public class RoutineLoadScheduler extends FrontendDaemon {
 
     private List<RoutineLoadJob> getNeedScheduleRoutineJobs() {
         return routineLoadManager.getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE));
+    }
+
+    // This daemon drives the (deliberately unjournaled) NEED_SCHEDULE -> RUNNING transition, so it
+    // owns restoring it on demotion: map every RUNNING job back to its durable NEED_SCHEDULE shape
+    // (dropping the leader-session task bookkeeping) so a re-elected leader in this same process
+    // re-divides the job exactly like a restarted FE. job.state is journal-visible (PAUSE/RESUME/STOP
+    // replay mutates it on these same objects), so demotion waits for this daemon to quiesce BEFORE
+    // starting the follower replayer - this reset never races replayed state changes.
+    @Override
+    protected void onStopped() {
+        for (RoutineLoadJob job : routineLoadManager.getRoutineLoadJobByState(
+                Sets.newHashSet(RoutineLoadJob.JobState.RUNNING))) {
+            try {
+                job.resetToLastDurableStateOnDemotion();
+            } catch (Throwable t) {
+                LOG.warn("reset routine load job {} on leader handoff failed", job.getId(), t);
+            }
+        }
     }
 }

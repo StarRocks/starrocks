@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW COMPUTE NODES は、クラスタ内のすべての CN ノードの情報を表示します。"
 ---
 
 # SHOW COMPUTE NODES

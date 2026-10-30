@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "analyze_status テーブルは分析ジョブのステータス情報を提供。"
 ---
 
 # analyze_status

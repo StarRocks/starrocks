@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "task_runsは非同期タスクの実行に関する情報を提供します。"
 ---
 
 # task_runs
@@ -14,7 +15,7 @@ displayed_sidebar: docs
 | TASK_NAME     | タスクの名前。                                               |
 | CREATE_TIME   | タスクが作成された時間。                                     |
 | FINISH_TIME   | タスクが終了した時間。                                       |
-| STATE         | タスクの状態。 有効な値は `PENDING`、`RUNNING`、`FAILED`、`SUCCESS` です。バージョン 3.1.12 から、特にマテリアライズドビューのリフレッシュタスク用に新しい状態 `MERGED` が追加されました。新しいリフレッシュタスクが提出され、古いタスクがまだ保留キューにある場合、これらのタスクはマージされ、その優先度レベルが維持されます。 |
+| STATE         | タスクの状態。 有効な値は `PENDING`、`RUNNING`、`FAILED`、`SUCCESS`、`MERGED`、`SKIPPED` です。``MERGED`は、マテリアライズドビューのリフレッシュタスク用です。新しいリフレッシュタスクが送信され、古いタスクがまだ保留キューにある場合、これらのタスクは統合され、優先度レベルは維持されます。`SKIPPED`は、マテリアライズドビューのリフレッシュタスク用です。ベーステーブルのパーティションでデータの変更が検出されない場合、対応するマテリアライズドビューのパーティションに対するリフレッシュ処理はスキップされます。 |
 | CATALOG       | タスクが属するカタログ。                                     |
 | DATABASE      | タスクが属するデータベース。                                 |
 | DEFINITION    | タスクの SQL 定義。                                          |
@@ -26,6 +27,7 @@ displayed_sidebar: docs
 | PROPERTIES    | タスクのプロパティ。                                         |
 | JOB_ID        | タスクのジョブ ID。                                          |
 | PROCESS_TIME  | タスクの処理時間。                                           |
+| TASK_SOURCE   | タスクを送信したソース。 有効な値は `CTAS`、`MV`、`INSERT`、`PIPE`、`DATACACHE_SELECT` です。ソースが記録されていないレガシーレコードの場合は `UNKNOWN` が返されます。 |
 
 タスク実行記録は、[SUBMIT TASK](../sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) または [CREATE MATERIALIZED VIEW](../sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW.md) によって生成されます。
 

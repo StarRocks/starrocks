@@ -15,6 +15,7 @@
 
 package com.starrocks.staros;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.staros.metrics.MetricsSystem;
@@ -25,12 +26,12 @@ import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.StarMgrCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
+import com.starrocks.qe.JournalObservable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
@@ -51,7 +52,9 @@ public class StarMgrServer {
     private static final Logger LOG = LogManager.getLogger(StarMgrServer.class);
 
     private static StarMgrServer CHECKPOINT = null;
-    private CheckpointController checkpointController = null;
+    // Package-private so same-package tests can inject a mock controller and verify
+    // stopCheckpointController without reflection.
+    CheckpointController checkpointController = null;
     private CheckpointWorker checkpointWorker = null;
     private boolean checkpointWorkerStarted = false;
     private static long checkpointThreadId = -1;
@@ -91,6 +94,7 @@ public class StarMgrServer {
 
     private StarManagerServer starMgrServer;
     private StarOSBDBJEJournalSystem journalSystem;
+    private final JournalObservable starMgrJournalObservable = new JournalObservable();
     private ThreadPoolExecutor grpcExecutor;
 
     public StarMgrServer() {
@@ -108,7 +112,7 @@ public class StarMgrServer {
     }
 
     // for checkpoint thread only
-    public StarMgrServer(BDBJEJournal journal) {
+    public StarMgrServer(com.starrocks.journal.Journal journal) {
         journalSystem = new StarOSBDBJEJournalSystem(journal);
         starMgrServer = new StarManagerServer(journalSystem);
     }
@@ -125,8 +129,22 @@ public class StarMgrServer {
         return execution;
     }
 
+    /**
+     * NOTE: Only used by UtFrameUtils to construct a StarMgrServer with MockedJournal for testing.
+     */
+    @VisibleForTesting
+    public void initializeForTest(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
     public void initialize(BDBEnvironment environment, String baseImageDir) throws IOException {
-        journalSystem = new StarOSBDBJEJournalSystem(environment);
+        StarOSBDBJEJournalSystem bdbJournalSystem = new StarOSBDBJEJournalSystem(environment);
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
+    private void initializeImpl(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        this.journalSystem = bdbJournalSystem;
+        this.journalSystem.setJournalObservable(starMgrJournalObservable);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
@@ -138,7 +156,9 @@ public class StarMgrServer {
         com.staros.util.Config.DEFAULT_FS_TYPE = "";
 
         // use tablet_sched_disable_balance
+        // TODO: shard check will be bound to a different Config var
         com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+        com.staros.util.Config.DISABLE_BACKGROUND_SHARD_GROUP_BALANCE_CHECK = Config.tablet_sched_disable_balance;
         // turn on 0 as default worker group id, to be compatible with add/drop backend in FE
         com.staros.util.Config.ENABLE_ZERO_WORKER_GROUP_COMPATIBILITY = true;
         // set the same heartbeat configuration to starmgr, but not able to change in runtime.
@@ -148,21 +168,48 @@ public class StarMgrServer {
         com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
         com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
         com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
+        com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+        com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
+        com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL =
+                Config.lake_enable_incremental_shard_replica_journal;
+        // Deliberately not refreshed below: StarMgr builds the reverse index while loadImage() runs at the
+        // end of this method and maintains it from there on, so a later change cannot take effect without a
+        // restart, and applying one at runtime would leave an index that was never seeded.
+        com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX =
+                Config.lake_enable_worker_shard_reverse_index;
 
-        grpcExecutor = ThreadPoolManager.newDaemonFixedThreadPool(Config.starmgr_grpc_server_max_worker_threads,
-                        Integer.MAX_VALUE, "starmgr-grpc-default-executor", true);
-        grpcExecutor.allowCoreThreadTimeOut(true);
+        // The pool runs every call stage of short reads and heartbeats, and also handlers that block for
+        // seconds (CreateShard, GetShard waiting for placement), so it must be able to grow large. A fixed
+        // pool of that size grows to it under any load and then hands each stage to one of about a thousand
+        // threads parked on its queue's take lock, which costs far more than the handler. A scaling pool
+        // starts a thread only while all are busy and hands a stage to an idle thread without that lock.
+        int grpcMaxThreads = Config.starmgr_grpc_server_max_worker_threads;
+        grpcExecutor = ThreadPoolManager.newDaemonScalingThreadPool(grpcExecutorCoreThreads(grpcMaxThreads),
+                grpcMaxThreads, "starmgr-grpc-default-executor", true);
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            // TODO: shard check will be bound to a different Config var
             com.staros.util.Config.DISABLE_BACKGROUND_SHARD_SCHEDULE_CHECK = Config.tablet_sched_disable_balance;
+            com.staros.util.Config.DISABLE_BACKGROUND_SHARD_GROUP_BALANCE_CHECK = Config.tablet_sched_disable_balance;
             com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
             com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
             com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
             com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
             com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
             com.staros.util.Config.SHARD_DEAD_REPLICA_EXPIRE_SECS = (int) Config.tablet_sched_be_down_tolerate_time_s;
-            ThreadPoolManager.setFixedThreadPoolSize(grpcExecutor, Config.starmgr_grpc_server_max_worker_threads);
+            com.staros.util.Config.SCHEDULER_ENABLE_PACK_GROUP_SAMPLE = Config.lake_scheduler_enable_colocate_group_sample;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_THRESHOLD = Config.lake_scheduler_colocate_group_sample_threshold;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_SIZE = Config.lake_scheduler_colocate_group_sample_size;
+            com.staros.util.Config.SCHEDULER_PACK_GROUP_SAMPLE_EMPTY_FALLBACK_PERCENT =
+                    Config.lake_scheduler_colocate_group_sample_empty_fallback_percent;
+            com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL =
+                    Config.lake_enable_incremental_shard_replica_journal;
+            int maxThreads = Config.starmgr_grpc_server_max_worker_threads;
+            ThreadPoolManager.setScalingThreadPoolSize(grpcExecutor, grpcExecutorCoreThreads(maxThreads), maxThreads);
         });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
@@ -198,6 +245,17 @@ public class StarMgrServer {
         loadImage(imageDir);
     }
 
+    // Threads the gRPC pool keeps while idle: enough for a CPU-bound burst of short calls, and at least one
+    // so a call queued while the pool is at its maximum always has a thread to run it.
+    private static int grpcExecutorCoreThreads(int maxThreads) {
+        return Math.max(1, Math.min(ThreadPoolManager.cpuCores(), maxThreads));
+    }
+
+    @VisibleForTesting
+    ThreadPoolExecutor getGrpcExecutor() {
+        return grpcExecutor;
+    }
+
     private void becomeLeader() {
         getStarMgr().becomeLeader();
     }
@@ -207,6 +265,21 @@ public class StarMgrServer {
         checkpointController = new CheckpointController(
                 "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR);
         checkpointController.start();
+    }
+
+    /**
+     * Symmetric counterpart to {@link #startCheckpointController()}. Fire-and-forget stop for leader
+     * demotion: requests stop on the StarMgr-side CheckpointController without joining, so the single
+     * state-change thread is not blocked. The controller's worker self-cleans in onStopped() and
+     * deregisters on exit; the re-activation cleanliness gate verifies quiescence. The field is left
+     * as-is because {@link #startCheckpointController()} unconditionally replaces it with a fresh
+     * instance on re-election; the old one becomes garbage once its worker exits.
+     */
+    public void stopCheckpointController() {
+        CheckpointController controller = checkpointController;
+        if (controller != null) {
+            controller.stopBestEffort();
+        }
     }
 
     private void becomeFollower() {
@@ -293,6 +366,10 @@ public class StarMgrServer {
         PrometheusRegistryHelper.visitPrometheusRegistry(MetricsSystem.METRIC_REGISTRY, visitor);
     }
 
+    public JournalObservable getStarMgrJournalObservable() {
+        return starMgrJournalObservable;
+    }
+
     public long getMaxJournalId() {
         return getJournalSystem().getJournal().getMaxJournalId();
     }
@@ -311,11 +388,5 @@ public class StarMgrServer {
 
     public void triggerNewImage() {
         journalSystem.getJournalWriter().setForceRollJournal();
-    }
-
-    public void markLeaderTransferred() {
-        if (journalSystem != null) {
-            journalSystem.markLeaderTransferred();
-        }
     }
 }

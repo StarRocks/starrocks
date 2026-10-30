@@ -17,8 +17,10 @@
 #include <span>
 #include <vector>
 
+#include "common/logging.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 
@@ -43,10 +45,15 @@ public:
 
     // For publish cross transaction with only one txn log, including splitting tablet and identical tablet
     PublishTabletInfo(PublishTabletType publish_tablet_type, int64_t tablet_id_in_txn_log,
-                      int64_t tablet_id_in_metadata)
+                      int64_t tablet_id_in_metadata, int32_t split_count = 0, int32_t split_index = 0)
             : publish_tablet_type(publish_tablet_type),
               tablet_ids_in_txn_logs(1, tablet_id_in_txn_log),
-              tablet_id_in_metadata(tablet_id_in_metadata) {}
+              tablet_id_in_metadata(tablet_id_in_metadata),
+              split_count(split_count),
+              split_index(split_index) {
+        DCHECK(publish_tablet_type != SPLITTING_TABLET ||
+               (split_count > 1 && split_index >= 0 && split_index < split_count));
+    }
 
     // For cross publish merging tablet with multiple txn logs
     PublishTabletInfo(PublishTabletType publish_tablet_type, const std::span<const int64_t>& tablet_ids_in_txn_logs,
@@ -58,6 +65,8 @@ public:
     PublishTabletType get_publish_tablet_type() const { return publish_tablet_type; }
     const std::vector<int64_t>& get_tablet_ids_in_txn_logs() const { return tablet_ids_in_txn_logs; }
     int64_t get_tablet_id_in_metadata() const { return tablet_id_in_metadata; }
+    int32_t get_split_count() const { return split_count; }
+    int32_t get_split_index() const { return split_index; }
     // A txn log will be applied to multiple tablets in splitting tablet, so it cannot be deleted after applied.
     bool can_delete_txn_log() const { return publish_tablet_type != SPLITTING_TABLET; }
 
@@ -65,17 +74,47 @@ private:
     PublishTabletType publish_tablet_type;
     std::vector<int64_t> tablet_ids_in_txn_logs;
     int64_t tablet_id_in_metadata;
+    int32_t split_count = 0;
+    int32_t split_index = 0;
 };
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info);
 
+// Transform a shadow rewrite txn log in-place: move the op_write rowset into
+// op_schema_change.rowsets (with id=1) and set alter_version. If there is no
+// op_write rowset (empty partition at W), leaves an empty op_schema_change with
+// alter_version set.
+void convert_op_write_to_op_schema_change(TxnLogPB* log, int64_t alter_version);
+
+// Convert |txn_log| so it can be applied to the new tablet identified by
+// |publish_tablet_info|.
+//
+// For MERGING_TABLET, a compaction payload (op_compaction / op_parallel_compaction)
+// is dropped rather than re-projected: the payload's input/output rowset-id
+// references live in the old tablet's rowset-id space, which is not valid
+// against the merged tablet. After dropping, the log becomes a pure no-op at
+// apply time; background compaction on the merged tablet will re-run the
+// optimization in the merged rssid space. The compaction's already-written
+// output files (segments, sstables, lcrm) are scheduled for async deletion
+// via delete_files_async so they do not leak.
+//
+// SPLITTING / IDENTICAL cross-publishes pass through the existing per-type
+// transforms (set_all_data_files_shared / update_rowset_ranges / stat-scaling
+// for split; tablet_id rewrite for identical).
 StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                     const PublishTabletInfo& publish_tablet_info);
 
+// |base_version_order| carries FE's prefer_shared_initial_metadata hint into the reads of the OLD
+// tablets' |base_version| metadata, as publish_version() does for a normal publish. It matters here
+// because a partition can be resharded while still at version 1 -- an empty `file_bundling` partition
+// pre-split ahead of its first load -- and then the old tablets' version-1 metadata exists only in the
+// partition-shared object. A preference only: either order resolves the metadata. See
+// InitialMetadataOrder.
 Status publish_resharding_tablet(TabletManager* tablet_manager, const ReshardingTabletInfoPB& resharding_tablet,
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                  bool skip_write_tablet_metadata,
                                  std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
-                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges);
+                                 std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
+                                 InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst);
 
 } // namespace starrocks::lake

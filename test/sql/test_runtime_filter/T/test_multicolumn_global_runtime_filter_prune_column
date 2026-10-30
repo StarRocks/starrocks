@@ -1,0 +1,236 @@
+-- name: test_multicolumn_global_runtime_filter_prune_column @slow
+set enable_multicolumn_global_runtime_filter=true;
+set disable_colocate_join=true;
+set global_runtime_filter_wait_timeout=1;
+set broadcast_row_limit=0;
+CREATE TABLE `TABLE_EVENT` (
+  `CG_group6` int(11) NOT NULL COMMENT "",
+  `ID` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`CG_group6`, `ID`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`CG_group6`) BUCKETS 20
+PROPERTIES (
+  "replication_num" = "1"
+);
+INSERT INTO TABLE_EVENT SELECT generate_series, generate_series FROM TABLE(generate_series(1, 200000));
+[UC]ANALYZE FULL TABLE TABLE_EVENT;
+CREATE TABLE `TABLE_OBJECT` (
+  `CG_group3` int(11) NOT NULL COMMENT "",
+  `ID` bigint(20) NOT NULL COMMENT "",
+  `ARRAY_LARGEINT` array<largeint> NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`CG_group3`, `ID`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`CG_group3`) BUCKETS 20
+PROPERTIES (
+  "replication_num" = "1"
+);
+INSERT INTO TABLE_OBJECT SELECT generate_series, generate_series, [1, 2, 3, 4, 5] FROM TABLE(generate_series(1, 1000000));
+[UC]ANALYZE FULL TABLE TABLE_OBJECT;
+-- Verify multicolumn GRF correctness: org_length must equal new_length for all rows.
+-- A non-empty result indicates rows were incorrectly filtered by a multicolumn GRF.
+WITH `EVENT` AS (
+    SELECT
+      -1 AS `EVENT_ID`
+    FROM
+      TABLE_EVENT
+  ),
+  `OBJECT` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      IFNULL(`ARRAY_LARGEINT`, NULL) AS `EVENT_IDS`
+    FROM
+      TABLE_OBJECT
+  ),
+  `UNNESTED` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      UNNEST AS `EVENT_ID`
+    FROM
+      `OBJECT`,
+      UNNEST(`EVENT_IDS`)
+  ),
+  `MERGED` AS (
+    SELECT
+      `UNNESTED`.`ID`,
+      `UNNESTED`.`CG_group3`
+    FROM
+      `UNNESTED`
+      LEFT JOIN `EVENT` ON (`UNNESTED`.`EVENT_ID` = `EVENT`.`EVENT_ID`)
+  ),
+  `AGGREGATED` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      COUNT(*) AS `new_length`
+    FROM
+      `MERGED`
+    GROUP BY
+      `ID`,
+      `CG_group3`
+  ),
+  `LOJ` AS (
+    SELECT
+      TABLE_OBJECT.`ID`,
+      TABLE_OBJECT.`CG_group3`,
+      `AGGREGATED`.`new_length`
+    FROM
+      TABLE_OBJECT
+      LEFT JOIN `AGGREGATED` ON (
+        TABLE_OBJECT.`ID` = `AGGREGATED`.`ID`
+        AND TABLE_OBJECT.`CG_group3` = `AGGREGATED`.`CG_group3`
+      )
+  ),
+  `INPUT` AS (
+    SELECT
+      `LOJ`.`ID`,
+      ARRAY_LENGTH(TABLE_OBJECT.`ARRAY_LARGEINT`) AS org_length,
+      `LOJ`.`new_length`
+    FROM
+      `LOJ` JOIN TABLE_OBJECT ON (
+        true
+        AND TABLE_OBJECT.`CG_group3` = `LOJ`.`CG_group3`
+        AND TABLE_OBJECT.`ID` = `LOJ`.`ID`
+      )
+  )
+SELECT * FROM INPUT WHERE org_length != new_length
+LIMIT 1;
+WITH `EVENT` AS (
+    SELECT
+      -1 AS `EVENT_ID`
+    FROM
+      TABLE_EVENT
+  ),
+  `OBJECT` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      IFNULL(`ARRAY_LARGEINT`, NULL) AS `EVENT_IDS`
+    FROM
+      TABLE_OBJECT
+  ),
+  `UNNESTED` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      UNNEST AS `EVENT_ID`
+    FROM
+      `OBJECT`,
+      UNNEST(`EVENT_IDS`)
+  ),
+  `MERGED` AS (
+    SELECT
+      `UNNESTED`.`ID`,
+      `UNNESTED`.`CG_group3`
+    FROM
+      `UNNESTED`
+      LEFT JOIN `EVENT` ON (`UNNESTED`.`EVENT_ID` = `EVENT`.`EVENT_ID`)
+  ),
+  `AGGREGATED` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      COUNT(*) AS `new_length`
+    FROM
+      `MERGED`
+    GROUP BY
+      `ID`,
+      `CG_group3`
+  ),
+  `LOJ` AS (
+    SELECT
+      TABLE_OBJECT.`ID`,
+      TABLE_OBJECT.`CG_group3`,
+      `AGGREGATED`.`new_length`
+    FROM
+      TABLE_OBJECT
+      LEFT JOIN `AGGREGATED` ON (
+        TABLE_OBJECT.`ID` = `AGGREGATED`.`ID`
+        AND TABLE_OBJECT.`CG_group3` = `AGGREGATED`.`CG_group3`
+      )
+  ),
+  `INPUT` AS (
+    SELECT
+      `LOJ`.`ID`,
+      ARRAY_LENGTH(TABLE_OBJECT.`ARRAY_LARGEINT`) AS org_length,
+      `LOJ`.`new_length`
+    FROM
+      `LOJ` JOIN TABLE_OBJECT ON (
+        true
+        AND TABLE_OBJECT.`CG_group3` = `LOJ`.`CG_group3`
+        AND TABLE_OBJECT.`ID` = `LOJ`.`ID`
+      )
+  )
+SELECT * FROM INPUT WHERE org_length != new_length
+LIMIT 1;
+WITH `EVENT` AS (
+    SELECT
+      -1 AS `EVENT_ID`
+    FROM
+      TABLE_EVENT
+  ),
+  `OBJECT` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      IFNULL(`ARRAY_LARGEINT`, NULL) AS `EVENT_IDS`
+    FROM
+      TABLE_OBJECT
+  ),
+  `UNNESTED` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      UNNEST AS `EVENT_ID`
+    FROM
+      `OBJECT`,
+      UNNEST(`EVENT_IDS`)
+  ),
+  `MERGED` AS (
+    SELECT
+      `UNNESTED`.`ID`,
+      `UNNESTED`.`CG_group3`
+    FROM
+      `UNNESTED`
+      LEFT JOIN `EVENT` ON (`UNNESTED`.`EVENT_ID` = `EVENT`.`EVENT_ID`)
+  ),
+  `AGGREGATED` AS (
+    SELECT
+      `ID`,
+      `CG_group3`,
+      COUNT(*) AS `new_length`
+    FROM
+      `MERGED`
+    GROUP BY
+      `ID`,
+      `CG_group3`
+  ),
+  `LOJ` AS (
+    SELECT
+      TABLE_OBJECT.`ID`,
+      TABLE_OBJECT.`CG_group3`,
+      `AGGREGATED`.`new_length`
+    FROM
+      TABLE_OBJECT
+      LEFT JOIN `AGGREGATED` ON (
+        TABLE_OBJECT.`ID` = `AGGREGATED`.`ID`
+        AND TABLE_OBJECT.`CG_group3` = `AGGREGATED`.`CG_group3`
+      )
+  ),
+  `INPUT` AS (
+    SELECT
+      `LOJ`.`ID`,
+      ARRAY_LENGTH(TABLE_OBJECT.`ARRAY_LARGEINT`) AS org_length,
+      `LOJ`.`new_length`
+    FROM
+      `LOJ` JOIN TABLE_OBJECT ON (
+        true
+        AND TABLE_OBJECT.`CG_group3` = `LOJ`.`CG_group3`
+        AND TABLE_OBJECT.`ID` = `LOJ`.`ID`
+      )
+  )
+SELECT * FROM INPUT WHERE org_length != new_length
+LIMIT 1;

@@ -20,6 +20,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -30,6 +31,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
@@ -37,6 +39,8 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyColumnCommentLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
+import com.starrocks.persist.TableColumnAlterInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -55,6 +59,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -62,7 +67,9 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 public class SchemaChangeHandlerEditLogTest {
     private static final String DB_NAME = "test_schema_change_handler_editlog";
@@ -424,6 +431,118 @@ public class SchemaChangeHandlerEditLogTest {
         Assertions.assertTrue(exception.getMessage().contains("does not exist"));
     }
 
+    @Test
+    public void testApplyFastSchemaEvolutionMetaChangeNormalCase() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
+        Map<Long, Long> indexToNewSchemaId = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : table.getIndexMetaIdToSchema().entrySet()) {
+            indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+            indexToNewSchemaId.put(entry.getKey(), GlobalStateMgr.getCurrentState().getNextId());
+        }
+        List<Index> newIndexes = table.getCopiedIndexes();
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+        long baseSchemaId = table.getIndexMetaByMetaId(table.getBaseIndexMetaId()).getSchemaId();
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        handler.applyFastSchemaEvolutionMetaChange(db, table, indexSchemaMap, newIndexes, jobId, indexToNewSchemaId);
+
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        assertHistoryOnlyJobPruned(handler, jobId, db.getId(), table.getId(), baseSchemaId);
+
+        TableColumnAlterInfo replayInfo = (TableColumnAlterInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_FAST_ALTER_TABLE_COLUMNS);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(table.getId(), replayInfo.getTableId());
+        Assertions.assertEquals(jobId, replayInfo.getJobId());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createHashOlapTable(TABLE_ID, TABLE_NAME, 3);
+        followerDb.registerTableUnlocked(followerTable);
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        try {
+            followerHandler.replayFastSchemaEvolutionMetaChange(replayInfo);
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, followerTable.getState());
+            assertHistoryOnlyJobPruned(followerHandler, jobId, DB_ID, TABLE_ID, baseSchemaId);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        // once nothing below its threshold is running, the leader releases the pre-alter schema and the
+        // follower drops its copy on replay
+        handler.clearExpireFinishedOrCancelledAlterJobsV2();
+        Assertions.assertTrue(handler.getHistorySchema(db.getId(), table.getId(), baseSchemaId).isEmpty());
+        ReleaseAlterJobHistorySchemaLog releaseLog = (ReleaseAlterJobHistorySchemaLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA);
+        Assertions.assertEquals(jobId, releaseLog.getJobId());
+        followerHandler.replayReleaseHistorySchema(releaseLog);
+        Assertions.assertTrue(followerHandler.getHistorySchema(DB_ID, TABLE_ID, baseSchemaId).isEmpty());
+    }
+
+    private static void assertHistoryOnlyJobPruned(SchemaChangeHandler handler, long jobId, long dbId, long tableId,
+                                                   long preAlterSchemaId) {
+        SchemaChangeJobV2 job = (SchemaChangeJobV2) handler.getAlterJobsV2().get(jobId);
+        Assertions.assertNotNull(job);
+        Assertions.assertTrue(job.physicalPartitionIndexTabletMap.isEmpty());
+        Assertions.assertTrue(job.physicalPartitionIndexMap.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToSchema.isEmpty());
+        Assertions.assertTrue(job.indexMetaIdToShortKey.isEmpty());
+
+        // SHOW ALTER TABLE COLUMN still has its row
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        Assertions.assertFalse(infos.isEmpty());
+
+        // the pre-alter schema stays resolvable for transactions that still carry it
+        Assertions.assertTrue(job.getHistorySchema().isPresent());
+        Assertions.assertFalse(job.getHistorySchema().get().isExpired());
+        Assertions.assertTrue(handler.getHistorySchema(dbId, tableId, preAlterSchemaId).isPresent());
+    }
+
+    @Test
+    public void testApplyFastSchemaEvolutionMetaChangeEditLogException() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        OlapTable table = (OlapTable) db.getTable(TABLE_NAME);
+        Assertions.assertNotNull(table);
+
+        Map<Long, List<Column>> indexSchemaMap = new HashMap<>();
+        Map<Long, Long> indexToNewSchemaId = new HashMap<>();
+        for (Map.Entry<Long, List<Column>> entry : table.getIndexMetaIdToSchema().entrySet()) {
+            indexSchemaMap.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+            indexToNewSchemaId.put(entry.getKey(), GlobalStateMgr.getCurrentState().getNextId());
+        }
+        List<Index> newIndexes = table.getCopiedIndexes();
+        long jobId = GlobalStateMgr.getCurrentState().getNextId();
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        int beforeJobSize = handler.getUnfinishedAlterJobV2ByTableId(table.getId()).size();
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logModifyTableAddOrDrop(any(TableColumnAlterInfo.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            RuntimeException exception = Assertions.assertThrows(RuntimeException.class, () ->
+                    handler.applyFastSchemaEvolutionMetaChange(db, table, indexSchemaMap, newIndexes, jobId, indexToNewSchemaId));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+            Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+            Assertions.assertEquals(beforeJobSize, handler.getUnfinishedAlterJobV2ByTableId(table.getId()).size());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
     private static OlapTable createHashOlapTable(long tableId, String tableName, int bucketNum) {
         List<Column> columns = Lists.newArrayList();
         Column col1 = new Column("v1", IntegerType.BIGINT);
@@ -618,6 +737,39 @@ public class SchemaChangeHandlerEditLogTest {
             Assertions.assertEquals("EditLog write failed", exception.getMessage());
             Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, lakeTable.getState());
             Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(lakeTable.getId()).isEmpty());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testProcessLakeTableAlterMetaRejectsReservedTableBeforeWritingEditLog() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        Assertions.assertNotNull(db);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
+        ModifyTablePropertiesClause clause = new ModifyTablePropertiesClause(properties);
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            for (OlapTable.OlapTableState reservedState : List.of(OlapTable.OlapTableState.SCHEMA_CHANGE,
+                    OlapTable.OlapTableState.TABLET_RESHARD)) {
+                LakeTable lakeTable = createHashLakeTable(GlobalStateMgr.getCurrentState().getNextId(),
+                        "lake_table_reserved_" + reservedState.name(), 3);
+                db.registerTableUnlocked(lakeTable);
+                lakeTable.setState(reservedState);
+
+                Assertions.assertThrows(DdlException.class,
+                        () -> handler.processLakeTableAlterMeta(clause, db, lakeTable));
+                Assertions.assertEquals(reservedState, lakeTable.getState());
+                Assertions.assertTrue(handler.getUnfinishedAlterJobV2ByTableId(lakeTable.getId()).isEmpty());
+                verify(spyEditLog, never()).logAlterJob(any(AlterJobV2.class), any());
+            }
         } finally {
             GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
         }

@@ -92,9 +92,14 @@ public class SelectAnalyzer {
 
         List<Expr> groupByExpressions = new ArrayList<>(
                 analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+        groupByExpressions.forEach(expression -> AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expression, AIFunctionUsageAnalyzer.PlacementContext.GROUP_BY));
+        widenGroupingKeyNullability(groupByClause, outputScope, outputExpressions, groupByExpressions);
 
         boolean distinctWithoutGroupBy = selectList.isDistinct() && groupByExpressions.isEmpty();
         if (selectList.isDistinct()) {
+            outputExpressions.forEach(expression -> AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                    expression, AIFunctionUsageAnalyzer.PlacementContext.SELECT_DISTINCT));
             if (!groupByExpressions.isEmpty()) {
                 new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
                         .verify(outputExpressions);
@@ -114,6 +119,8 @@ public class SelectAnalyzer {
         List<Expr> orderByExpressions =
                 orderByElements.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
 
+        AIFunctionUsageAnalyzer.verifyNoCorrelatedAIFunctionsInQueryBlock(analyzeState);
+
         analyzeGroupingOperations(analyzeState, groupByClause, outputExpressions);
 
         List<Expr> sourceExpressions = new ArrayList<>(outputExpressions);
@@ -123,10 +130,18 @@ public class SelectAnalyzer {
 
         List<FunctionCallExpr> aggregates = analyzeAggregations(analyzeState, sourceScope,
                 Stream.concat(sourceExpressions.stream(), orderByExpressions.stream()).collect(Collectors.toList()));
-        if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions)) {
+        aggregates.forEach(aggregate -> aggregate.getChildren().forEach(argument ->
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        argument, AIFunctionUsageAnalyzer.PlacementContext.AGGREGATE_ARGUMENTS)));
+        boolean isGroupByAll = groupByClause != null
+                && groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL);
+        boolean isAggregationQuery = AnalyzerUtils.isAggregate(aggregates, groupByExpressions) ||
+                (isGroupByAll && !analyzeState.getGroupingFunctionCallExprs().isEmpty());
+        if (isAggregationQuery) {
             if (!groupByExpressions.isEmpty() &&
                     selectList.getItems().stream().anyMatch(SelectListItem::isStar) &&
-                    !selectList.isDistinct()) {
+                    !selectList.isDistinct() &&
+                    !isGroupByAll) {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
@@ -140,6 +155,9 @@ public class SelectAnalyzer {
             if (!orderByElements.isEmpty()) {
                 new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, sourceAndOutputScope)
                         .verify(orderByExpressions);
+                if (selectList.isDistinct()) {
+                    verifyDistinctOrderBy(orderByExpressions, outputExpressions, analyzeState, sourceAndOutputScope);
+                }
             }
         }
 
@@ -170,7 +188,7 @@ public class SelectAnalyzer {
 
         analyzeWindowFunctions(analyzeState, outputExpressions, orderByExpressions);
 
-        if (AnalyzerUtils.isAggregate(aggregates, groupByExpressions) &&
+        if (isAggregationQuery &&
                 (sortClause != null || havingClause != null)) {
             /*
              * Create scope for order by when aggregation is present.
@@ -359,6 +377,74 @@ public class SelectAnalyzer {
         return outputExpressions;
     }
 
+    /**
+     * SELECT DISTINCT is evaluated on top of the aggregation, and it only emits the select-list
+     * expressions. An ORDER BY may therefore only reference those; a GROUP BY key that is not
+     * selected is no longer available once DISTINCT has been applied, and picking one of the rows
+     * that DISTINCT collapsed would be arbitrary anyway. MySQL and PostgreSQL both reject such
+     * queries. Without this check the transformer still builds a plan whose projection above the
+     * DISTINCT aggregation reads a column that aggregation does not output, which fails much later
+     * with an opaque "missing statistic of col" planner error.
+     * <p>
+     * The equivalent check for {@code SELECT DISTINCT} without GROUP BY is already covered by
+     * {@link AggregationAnalyzer}, but only when the ONLY_FULL_GROUP_BY sql mode is set, so this
+     * check is deliberately independent of the sql mode.
+     */
+    private void verifyDistinctOrderBy(List<Expr> orderByExpressions, List<Expr> outputExpressions,
+                                       AnalyzeState analyzeState, Scope orderByScope) {
+        // The fields the select list reads. An ORDER BY slot bound to one of them refers to the same
+        // column even when the two SlotRefs disagree on qualification, as in
+        // "select distinct t.a as b from t order by a".
+        Set<FieldId> outputFields = outputExpressions.stream()
+                .map(analyzeState.getColumnReferences()::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        for (Expr orderByExpression : orderByExpressions) {
+            Expr uncovered = findExprNotEmittedByDistinct(orderByExpression, outputExpressions, outputFields,
+                    analyzeState, orderByScope);
+            if (uncovered != null) {
+                throw new SemanticException("for SELECT DISTINCT, ORDER BY expressions must appear in select list",
+                        uncovered.getPos());
+            }
+        }
+    }
+
+    /**
+     * Returns the first sub-expression of {@code expr} that the DISTINCT output cannot provide, or
+     * null when the whole expression can be computed from it.
+     */
+    private Expr findExprNotEmittedByDistinct(Expr expr, List<Expr> outputExpressions, Set<FieldId> outputFields,
+                                              AnalyzeState analyzeState, Scope orderByScope) {
+        if (outputExpressions.stream().anyMatch(expr::equals)) {
+            return null;
+        }
+        if (expr instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) expr;
+            if (slotRef.isFromLambda()) {
+                return null;
+            }
+            FieldId fieldId = analyzeState.getColumnReferences().get(expr);
+            if (fieldId == null) {
+                return null;
+            }
+            // Slots bound to the order-by scope itself resolve to a select-list item, e.g. an alias.
+            if (Objects.equals(fieldId.getRelationId(), orderByScope.getRelationId())) {
+                return null;
+            }
+            return outputFields.contains(fieldId) ? null : expr;
+        }
+        // Only a column reference can make an expression un-computable from the DISTINCT output;
+        // everything else (literals, functions, casts, ...) is fine as long as its children are.
+        for (Expr child : expr.getChildren()) {
+            Expr uncovered = findExprNotEmittedByDistinct(child, outputExpressions, outputFields, analyzeState,
+                    orderByScope);
+            if (uncovered != null) {
+                return uncovered;
+            }
+        }
+        return null;
+    }
+
     private List<OrderByElement> expandOrderByAll(OrderByElement orderByElement,
                                                   List<Expr> outputExpressions) {
         List<OrderByElement> newOrderByElements = new ArrayList<>();
@@ -380,7 +466,6 @@ public class SelectAnalyzer {
             analyzeState.setOrderBy(Collections.emptyList());
             return Collections.emptyList();
         }
-
 
         // Expand ORDER BY ALL to individual columns
         if (orderByElements.size() == 1 && orderByElements.get(0).isOrderByAll()) {
@@ -457,6 +542,9 @@ public class SelectAnalyzer {
             outputWindowFunctions.addAll(window);
         }
         analyzeState.setOutputAnalytic(outputWindowFunctions);
+        outputWindowFunctions.forEach(expression ->
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expression, AIFunctionUsageAnalyzer.PlacementContext.WINDOW_FUNCTION));
 
         List<AnalyticExpr> orderByWindowFunctions = new ArrayList<>();
         for (Expr expression : orderByExpressions) {
@@ -469,6 +557,9 @@ public class SelectAnalyzer {
             orderByWindowFunctions.addAll(window);
         }
         analyzeState.setOrderByAnalytic(orderByWindowFunctions);
+        orderByWindowFunctions.forEach(expression ->
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expression, AIFunctionUsageAnalyzer.PlacementContext.WINDOW_FUNCTION));
     }
 
     private void analyzeWhere(Expr whereClause, AnalyzeState analyzeState, Scope scope) {
@@ -606,6 +697,22 @@ public class SelectAnalyzer {
                             .mapToObj(i -> rewriteOriGrouping.subList(0, i)).collect(Collectors.toList());
 
                     analyzeState.setGroupingSetsList(groupingSets);
+                } else if (groupByClause.getGroupingType().equals(GroupByClause.GroupingType.GROUP_BY_ALL)) {
+                    // Collect implicit grouping keys from non-aggregate output expressions.
+                    // GROUPING(expr...) itself is not a grouping key, but its arguments must participate in grouping.
+                    for (Expr outputExpr : outputExpressions) {
+                        if (ExprUtils.containsAggregate(outputExpr)) {
+                            continue;
+                        }
+
+                        if (outputExpr instanceof GroupingFunctionCallExpr groupingExpr) {
+                            for (Expr argument : groupingExpr.getChildren()) {
+                                addGroupByAllExpression(argument, groupByExpressions, analyzeState, sourceScope);
+                            }
+                        } else {
+                            addGroupByAllExpression(outputExpr, groupByExpressions, analyzeState, sourceScope);
+                        }
+                    }
                 } else {
                     throw new StarRocksPlannerException("unknown grouping type", INTERNAL_ERROR);
                 }
@@ -613,6 +720,57 @@ public class SelectAnalyzer {
         }
         analyzeState.setGroupBy(groupByExpressions);
         return groupByExpressions;
+    }
+
+    /**
+     * ROLLUP/CUBE/GROUPING SETS produce super-aggregate rows where grouping-key columns are NULL,
+     * regardless of whether the underlying column is declared NOT NULL. The Repeat operator already
+     * accounts for this widening at plan/fragment-build time, but analysis-time nullability is
+     * otherwise derived solely from the grouping expression itself, so it must be widened here too.
+     *
+     * <p>Two analysis-time signals need widening: the output {@link Field} on the scope (consumed by
+     * materialized-view schema building and, via QueryAnalyzer.visitView, by view queries), and the
+     * output {@link Expr} itself (consumed directly by the Arrow Flight prepared-statement schema,
+     * which reads getOutputExpression().isNullable()). Without the latter, a direct
+     * {@code GROUP BY ROLLUP} query that is not wrapped in a view still reports the grouping key as
+     * NOT NULL while the executed result delivers NULLs.
+     */
+    private void widenGroupingKeyNullability(GroupByClause groupByClause, Scope outputScope,
+                                             List<Expr> outputExpressions, List<Expr> groupByExpressions) {
+        if (groupByClause == null || groupByExpressions.isEmpty()) {
+            return;
+        }
+        GroupByClause.GroupingType groupingType = groupByClause.getGroupingType();
+        if (groupingType != GroupByClause.GroupingType.ROLLUP
+                && groupingType != GroupByClause.GroupingType.CUBE
+                && groupingType != GroupByClause.GroupingType.GROUPING_SETS) {
+            return;
+        }
+        List<Field> outputFields = outputScope.getRelationFields().getAllFields();
+        for (int i = 0; i < outputExpressions.size() && i < outputFields.size(); i++) {
+            Expr outputExpr = outputExpressions.get(i);
+            if (groupByExpressions.stream().anyMatch(outputExpr::equals)) {
+                outputFields.get(i).setNullable(true);
+                if (outputExpr instanceof SlotRef) {
+                    ((SlotRef) outputExpr).setNullable(true);
+                }
+            }
+        }
+    }
+
+    private void addGroupByAllExpression(Expr expression, List<Expr> groupByExpressions,
+                                         AnalyzeState analyzeState, Scope sourceScope) {
+        if (groupByExpressions.contains(expression)) {
+            return;
+        }
+        analyzeExpression(expression, analyzeState, sourceScope);
+        if (!expression.getType().canGroupBy()) {
+            throw new SemanticException(Type.NOT_SUPPORT_GROUP_BY_ERROR_MSG);
+        }
+        AnalyzerUtils.verifyNoAggregateFunctions(expression, "GROUP BY");
+        AnalyzerUtils.verifyNoWindowFunctions(expression, "GROUP BY");
+        AnalyzerUtils.verifyNoGroupingFunctions(expression, "GROUP BY");
+        groupByExpressions.add(expression);
     }
 
     private List<Expr> rewriteGroupByAlias(List<Expr> groupingExprs, AnalyzeState analyzeState, Scope sourceScope,
@@ -1019,4 +1177,3 @@ public class SelectAnalyzer {
         return result;
     }
 }
-

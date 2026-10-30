@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PLUGINS displays all installed and built-in plugins in StarRocks."
 ---
 
 # SHOW PLUGINS

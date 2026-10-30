@@ -21,18 +21,18 @@
 #include "exec/chunks_sorter_topn.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
-LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_nullable_key,
-                                                     bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
-                                                     const std::vector<TSlotId>& t_pre_agg_output_slot_id,
-                                                     const std::vector<ExprContext*>& sort_exprs,
-                                                     std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-                                                     std::string sort_keys, int64_t offset, int64_t partition_limit,
-                                                     const TTopNType::type topn_type)
+LocalPartitionTopnContext::LocalPartitionTopnContext(
+        const std::vector<TExpr>& t_partition_exprs, bool has_outer_join_child, bool enable_pre_agg,
+        const std::vector<TExpr>& t_pre_agg_exprs, const std::vector<TSlotId>& t_pre_agg_output_slot_id,
+        const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+        std::string sort_keys, int64_t offset, int64_t partition_limit, const TTopNType::type topn_type)
         : _t_partition_exprs(t_partition_exprs),
-          _has_nullable_key(has_nullable_key),
+          _has_nullable_key(has_outer_join_child),
+          _has_outer_join_child(has_outer_join_child),
           _enable_pre_agg(enable_pre_agg),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
@@ -107,6 +107,7 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
 
         // Collect arg_typedescs for aggregate function.
         std::vector<FunctionContext::TypeDesc> arg_typedescs;
+        arg_typedescs.reserve(fn.arg_types.size());
         for (auto& type : fn.arg_types) {
             arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
         }
@@ -114,20 +115,23 @@ Status LocalPartitionTopnContext::prepare_pre_agg(RuntimeState* state) {
         _pre_agg->_agg_fn_ctxs[i] = FunctionContext::create_context(state, _mem_pool.get(), return_type, arg_typedescs);
         state->obj_pool()->add(_pre_agg->_agg_fn_ctxs[i]);
 
+        const bool has_nullable_child = _has_outer_join_child || desc.nodes[0].has_nullable_child;
+        AggFunctionTypes agg_fn_type = {return_type, serde_type, arg_typedescs, has_nullable_child,
+                                        desc.nodes[0].is_nullable};
         bool is_input_nullable = false;
         const AggregateFunction* func = nullptr;
-        if (fn.name.function_name == "count") {
+        const bool is_count_fn = fn.name.function_name == "count";
+        if (is_count_fn) {
             return_type.type = TYPE_BIGINT;
             arg_type.type = TYPE_BIGINT;
             serde_type.type = TYPE_BIGINT;
-            is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child);
-            _pre_agg->_agg_fn_types[i] = {serde_type, false, false};
+            agg_fn_type = {return_type, serde_type, arg_typedescs, false, false};
+            // Keep count function selection consistent with Aggregator's intermediate-output path.
+            is_input_nullable = !fn.arg_types.empty() && has_nullable_child;
         } else {
-            // For nullable aggregate function(sum, max, min, avg),
-            // we should always use nullable aggregate function.
-            is_input_nullable = true;
-            _pre_agg->_agg_fn_types[i] = {serde_type, is_input_nullable, desc.nodes[0].is_nullable};
+            is_input_nullable = agg_fn_type.use_nullable_fn(true);
         }
+        _pre_agg->_agg_fn_types[i] = std::move(agg_fn_type);
 
         func = get_window_function(fn.name.function_name, arg_type.type, return_type.type, is_input_nullable,
                                    fn.binary_type, state->func_version());
@@ -194,11 +198,12 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
                             &_pre_agg->_agg_fn_ctxs, agg_states, _pre_agg.get()));
                 }
             },
-            [this, state](size_t partition_idx, const ChunkPtr& chunk) {
-                (void)_chunks_sorters[partition_idx]->update(state, chunk);
+            [this, state](size_t partition_idx, const ChunkPtr& chunk) -> Status {
+                RETURN_IF_ERROR(_chunks_sorters[partition_idx]->update(state, chunk));
                 if (_enable_pre_agg) {
-                    (void)compute_agg_state(chunk.get(), partition_idx);
+                    RETURN_IF_ERROR(compute_agg_state(chunk.get(), partition_idx));
                 }
+                return Status::OK();
             }));
     if (_chunks_partitioner->is_passthrough()) {
         RETURN_IF_ERROR(transfer_all_chunks_from_partitioner_to_sorters(state));
@@ -220,12 +225,13 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     }
 
     _partition_num = _chunks_partitioner->num_partitions();
-    RETURN_IF_ERROR(
-            _chunks_partitioner->consume_from_hash_map([this, state](int32_t partition_idx, const ChunkPtr& chunk) {
-                (void)_chunks_sorters[partition_idx]->update(state, chunk);
+    RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map(
+            [this, state](int32_t partition_idx, const ChunkPtr& chunk) -> StatusOr<bool> {
+                RETURN_IF_ERROR(_chunks_sorters[partition_idx]->update(state, chunk));
                 if (_enable_pre_agg) {
-                    (void)compute_agg_state(chunk.get(), partition_idx);
+                    RETURN_IF_ERROR(compute_agg_state(chunk.get(), partition_idx));
                 }
+                // Keep consuming all partitions.
                 return true;
             }));
 
@@ -288,10 +294,9 @@ StatusOr<ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_sorters() {
 MutableColumns LocalPartitionTopnContext::_create_agg_result_columns(size_t num_rows) {
     MutableColumns agg_result_columns(_pre_agg->_agg_fn_types.size());
     for (size_t i = 0; i < _pre_agg->_agg_fn_types.size(); ++i) {
-        // For count, count distinct, bitmap_union_int such as never return null function,
-        // we need to create a not-nullable column.
-        agg_result_columns[i] = ColumnHelper::create_column(_pre_agg->_agg_fn_types[i].result_type,
-                                                            _pre_agg->_agg_fn_types[i].is_nullable);
+        const bool is_count_fn = _pre_agg->_t_pre_agg_exprs[i].nodes[0].fn.name.function_name == "count";
+        const bool is_result_nullable = is_count_fn ? false : _pre_agg->_agg_fn_types[i].is_result_nullable<true>();
+        agg_result_columns[i] = ColumnHelper::create_column(_pre_agg->_agg_fn_types[i].serde_type, is_result_nullable);
         agg_result_columns[i]->reserve(num_rows);
     }
     return agg_result_columns;
@@ -378,8 +383,7 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         std::vector<bool> is_asc_order, std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
         bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
         const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset, int64_t limit, std::string sort_keys,
-        const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
-        const std::vector<RuntimeFilterBuildDescriptor*>&)
+        bool has_outer_join_child, const std::vector<RuntimeFilterBuildDescriptor*>&)
         : _topn_type(topn_type),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),

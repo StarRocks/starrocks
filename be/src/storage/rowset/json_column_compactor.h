@@ -18,28 +18,49 @@
 #include "storage/rowset/json_column_writer.h"
 
 namespace starrocks {
+class JsonColumn;
+
 class FlatJsonColumnCompactor final : public FlatJsonColumnWriter {
 public:
     FlatJsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
-                            std::unique_ptr<ScalarColumnWriter> json_writer)
+                            std::unique_ptr<ObjectColumnWriter> json_writer)
             : FlatJsonColumnWriter(opts, std::move(type_info), wfile, std::move(json_writer)) {}
 
     Status append(const Column& column) override;
 
     Status finish() override;
 
+    uint64_t estimate_buffer_size() override;
+
 private:
+    // A segment whose buffered input outgrows streaming_threshold_bytes() while every chunk so far has
+    // the same flat layout switches to writing chunks as they arrive, with that layout, instead of
+    // buffering the whole output segment to re-derive one at finish(). See _start_streaming().
+    Status _start_streaming();
+    Status _stream_write(const Column& column, const JsonColumn& json_col);
+    // A segment whose buffered input outgrows streaming_threshold_bytes() without one flat layout is written as
+    // whole JSON from then on, as it arrives, rather than buffered whole to derive a layout.
+    Status _start_plain_streaming();
+    Status _write_plain(const Column& column);
+
     Status _compact_columns(MutableColumns& json_datas);
 
     Status _merge_columns(MutableColumns& json_datas);
 
     Status _flatten_columns(MutableColumns& json_datas);
+
+    // Memory held by the buffered chunks, which decides when to stop buffering.
+    size_t _buffered_memory = 0;
+    bool _streaming = false;
+    bool _plain_streaming = false;
+    // Every chunk buffered so far is flat with the first chunk's layout.
+    bool _uniform_flat_layout = true;
 };
 
 class JsonColumnCompactor final : public ColumnWriter {
 public:
     JsonColumnCompactor(const ColumnWriterOptions& opts, TypeInfoPtr type_info, WritableFile* wfile,
-                        std::unique_ptr<ScalarColumnWriter> json_writer)
+                        std::unique_ptr<ObjectColumnWriter> json_writer)
             : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
               _json_meta(opts.meta),
               _json_writer(std::move(json_writer)) {}
@@ -60,6 +81,9 @@ public:
     Status write_ordinal_index() override { return _json_writer->write_ordinal_index(); }
     Status write_zone_map() override { return _json_writer->write_zone_map(); }
     Status write_bitmap_index() override { return _json_writer->write_bitmap_index(); }
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _json_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _json_writer->write_bloom_filter_index(); }
     ordinal_t get_next_rowid() const override { return _json_writer->get_next_rowid(); }
     uint64_t total_mem_footprint() const override { return _json_writer->total_mem_footprint(); }
@@ -67,11 +91,8 @@ public:
     bool is_global_dict_valid() override { return _is_global_dict_valid; }
 
 private:
-    void _flat_column(Columns& json_datas);
-
-private:
     ColumnMetaPB* _json_meta;
-    std::unique_ptr<ScalarColumnWriter> _json_writer;
+    std::unique_ptr<ObjectColumnWriter> _json_writer;
     bool _is_global_dict_valid = true;
 };
 } // namespace starrocks

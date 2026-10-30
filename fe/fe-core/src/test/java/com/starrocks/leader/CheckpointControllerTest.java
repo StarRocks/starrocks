@@ -15,18 +15,27 @@
 package com.starrocks.leader;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalType;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Frontend;
 import com.starrocks.utframe.MockJournal;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.net.HttpURLConnection;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -106,6 +115,82 @@ public class CheckpointControllerTest {
         int idx2 = workers.indexOf(follower2);
         assertTrue(idx1 < idx2);
         Config.checkpoint_only_on_leader = oldValue;
+    }
+
+    @Test
+    public void testOnStoppedClearsLeaderSessionBookkeeping() {
+        // onStopped must drop the previous leader's pending-push set and last-failed-worker
+        // map so a re-elected leader does not (a) try to push to nodes that already have
+        // the new image and (b) inherit stale worker-selection bias. Per-round volatile
+        // fields (workerNodeName / journalId / result / clusterSnapshotInfo) are naturally
+        // overwritten by the next createImage() call, so onStopped does not touch them.
+        controller.nodesToPushImage.add("follower1");
+        controller.nodesToPushImage.add("follower2");
+        controller.setLastFailedTime("follower1", System.currentTimeMillis());
+
+        controller.onStopped();
+
+        Assertions.assertTrue(controller.nodesToPushImage.isEmpty(),
+                "nodesToPushImage must be cleared on demotion");
+        Assertions.assertTrue(controller.lastFailedTime.isEmpty(),
+                "lastFailedTime must be cleared on demotion");
+    }
+
+    @Test
+    public void testOnStopRequestedWakesCheckpointWait() throws Exception {
+        BlockingQueue<CheckpointController.CheckpointCompletionStatus> result = new ArrayBlockingQueue<>(1);
+        java.lang.reflect.Field resultField = CheckpointController.class.getDeclaredField("result");
+        resultField.setAccessible(true);
+        resultField.set(controller, result);
+
+        controller.onStopRequested();
+
+        Assertions.assertNotNull(result.poll(1, TimeUnit.SECONDS),
+                "stop request must wake createImage result wait");
+    }
+
+    @Test
+    public void testOnStopRequestedDisconnectsOwnInFlightConnection() {
+        // The controller holds its own in-flight HTTP connection; onStopRequested() must disconnect
+        // exactly that connection (never a global registry) to break out of an uninterruptible read.
+        HttpURLConnection conn = Mockito.mock(HttpURLConnection.class);
+        controller.inFlightConnection = conn;
+
+        controller.onStopRequested();
+
+        Mockito.verify(conn).disconnect();
+    }
+
+    @Test
+    public void testOnStopRequestedNoConnectionIsNoop() {
+        // With no in-flight connection, onStopRequested() must not fail (nothing to disconnect).
+        controller.inFlightConnection = null;
+        controller.onStopRequested();
+    }
+
+    @Test
+    public void testInterruptOnStopOptedOut() {
+        // The controller's worker calls BDBJE directly (getFinalizedJournalId / deleteJournals),
+        // where an interrupt can invalidate the environment - it must opt out of the default
+        // interrupt-based stop and rely on cooperative isStopRequested()/onStopRequested().
+        Assertions.assertFalse(controller.interruptOnStop());
+    }
+
+    @Test
+    public void testPartialCleanupUpdatesRetainedMetrics() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getServingState();
+        Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(new NodeMgr());
+
+        Journal journal = Mockito.mock(Journal.class);
+        Mockito.when(journal.deleteJournalsAndGetMinJournalId(36L)).thenReturn(21L);
+        CheckpointController cleanupController = new CheckpointController("cleanup", journal, "");
+
+        MetricRepo.initializeEditLogRetained(JournalType.FE_META, 1L, 35L);
+        MetricRepo.recordEditLogBatch(JournalType.FE_META, 35L, 1L, 100L);
+        Deencapsulation.invoke(cleanupController, "deleteOldJournals", 35L);
+
+        Assertions.assertEquals(15L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(1500L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
     }
 
     @Test

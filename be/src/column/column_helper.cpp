@@ -14,11 +14,15 @@
 
 #include "column/column_helper.h"
 
+#include <type_traits>
+
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_view/column_view_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/file_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
@@ -36,7 +40,7 @@ Filter& ColumnHelper::merge_nullable_filter(Column* column) {
         // NOTE(zc): Must use uint8_t* to enable auto-vectorized.
         auto selected = sel_vec.data();
         size_t num_rows = sel_vec.size();
-        // we treat null(1) as false(0)
+        // we treat null(1) as false(0); compiler auto-vectorises this loop.
         for (size_t i = 0; i < num_rows; ++i) {
             selected[i] = static_cast<uint8_t>(selected[i] & !nulls[i]);
         }
@@ -82,15 +86,13 @@ void ColumnHelper::merge_two_anti_filters(const ColumnPtr& column, NullData& nul
     if (column->is_nullable()) {
         const auto* nullable_column = as_raw_const_column<NullableColumn>(column);
         const auto nulls = nullable_column->null_column_data().data();
-        for (size_t i = 0; i < num_rows; ++i) {
-            null_data[i] |= nulls[i];
-        }
+        // Use SIMD OR for null data merge
+        or_two_filters(num_rows, null_data.data(), nulls);
     }
 
     const auto* datas = get_cpp_data<TYPE_BOOLEAN>(data_column);
-    for (size_t j = 0; j < num_rows; ++j) {
-        (*filter)[j] &= datas[j];
-    }
+    // Use SIMD AND for filter merge
+    merge_two_filters(filter, datas, nullptr);
 }
 
 void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filter) {
@@ -106,9 +108,48 @@ void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filt
     }
 }
 
+void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescriptor& type) {
+    // A const-null column carries no binary data (its data column may not be a BinaryColumn).
+    if (column->only_null()) {
+        return;
+    }
+    const Column* data_column = get_data_column(column);
+
+    switch (type.type) {
+    case TYPE_BINARY:
+    case TYPE_VARBINARY: {
+        DCHECK(data_column->is_binary());
+        auto* binary_column = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_column));
+        binary_column->set_is_binary_type(true);
+        break;
+    }
+    case TYPE_STRUCT: {
+        const auto* struct_column = down_cast<const StructColumn*>(data_column);
+        for (size_t i = 0; i < type.children.size(); ++i) {
+            mark_binary_columns(struct_column->get_column_by_idx(i), type.children[i]);
+        }
+        break;
+    }
+    case TYPE_ARRAY: {
+        const auto* array_column = down_cast<const ArrayColumn*>(data_column);
+        mark_binary_columns(array_column->elements_column(), type.children[0]);
+        break;
+    }
+    case TYPE_MAP: {
+        const auto* map_column = down_cast<const MapColumn*>(data_column);
+        mark_binary_columns(map_column->keys_column(), type.children[0]);
+        mark_binary_columns(map_column->values_column(), type.children[1]);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected, bool* all_zero) {
     uint8_t* data = filter->data();
     size_t num_rows = filter->size();
+    // Compiler auto-vectorises this bytewise AND.
     for (size_t i = 0; i < num_rows; i++) {
         data[i] = data[i] & selected[i];
     }
@@ -122,6 +163,7 @@ void ColumnHelper::or_two_filters(Filter* __restrict filter, const uint8_t* __re
 }
 
 void ColumnHelper::or_two_filters(size_t count, uint8_t* __restrict data, const uint8_t* __restrict selected) {
+    // Compiler auto-vectorises this bytewise OR.
     for (size_t i = 0; i < count; i++) {
         data[i] |= selected[i];
     }
@@ -250,17 +292,27 @@ public:
     }
 
     Status do_visit(StructColumn* column) {
-        return Status::NotSupported("Unsupported struct column in column wise comparator");
+        // Each subfield is independently a NullableColumn (see ColumnHelper::create_column
+        // STRUCT branch), so we just recurse into each field and let the NullableColumn
+        // arm refresh its `_has_null` like for ARRAY/MAP element columns.
+        for (size_t i = 0; i < column->fields_size(); ++i) {
+            RETURN_IF_ERROR(column->field_column_raw_ptr(i)->accept_mutable(this));
+        }
+        return Status::OK();
+    }
+
+    Status do_visit(FileColumn* column) {
+        for (const ColumnPtr& field : column->fields()) {
+            RETURN_IF_ERROR(field->as_mutable_raw_ptr()->accept_mutable(this));
+        }
+        return Status::OK();
     }
 
     template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* column) {
         return Status::OK();
     }
-    template <typename T>
-    Status do_visit(BinaryColumnBase<T>* column) {
-        return Status::OK();
-    }
+    Status do_visit(BinaryColumn* column) { return Status::OK(); }
 };
 
 Status ColumnHelper::update_nested_has_null(Column* column) {
@@ -368,24 +420,17 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
 struct ColumnBuilder {
     template <LogicalType ltype>
     MutableColumnPtr operator()(const TypeDescriptor& type_desc, size_t size) {
-        switch (ltype) {
-        case TYPE_UNKNOWN:
-        case TYPE_NULL:
-        case TYPE_BINARY:
-        case TYPE_DECIMAL:
-        case TYPE_STRUCT:
-        case TYPE_ARRAY:
-        case TYPE_MAP:
+        // ARRAY/MAP/STRUCT are built recursively from type_desc.children by the caller and never
+        // reach this dispatch; getting here with one means the caller lost the children.
+        if constexpr (ltype == TYPE_UNKNOWN || ltype == TYPE_NULL || ltype == TYPE_BINARY || ltype == TYPE_DECIMAL ||
+                      lt_is_collection<ltype>) {
             LOG(FATAL) << "Unsupported column type" << ltype;
-        case TYPE_DECIMAL32:
-            return Decimal32Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL64:
-            return Decimal64Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL128:
-            return Decimal128Column::create(type_desc.precision, type_desc.scale, size);
-        case TYPE_DECIMAL256:
-            return Decimal256Column::create(type_desc.precision, type_desc.scale, size);
-        default:
+            return nullptr;
+        } else if constexpr (lt_is_decimal<ltype>) {
+            return RunTimeColumnType<ltype>::create(type_desc.precision, type_desc.scale, size);
+        } else if constexpr (std::is_constructible_v<RunTimeColumnType<ltype>, const TypeDescriptor&, size_t>) {
+            return RunTimeColumnType<ltype>::create(type_desc, size);
+        } else {
             return RunTimeColumnType<ltype>::create(size);
         }
     }
@@ -433,6 +478,9 @@ MutableColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bo
             columns.emplace_back(std::move(field_column));
         }
         p = StructColumn::create(std::move(columns), type_desc.field_names);
+    } else if (type_desc.type == LogicalType::TYPE_FILE) {
+        // FileColumn owns its fixed column layout; the TypeDescriptor carries no children.
+        p = FileColumn::create(size);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }
@@ -542,4 +590,21 @@ std::tuple<UInt32Column::Ptr, ColumnPtr, NullColumnPtr> ColumnHelper::unpack_arr
     auto offsets_column = array_column->offsets_column();
     return {offsets_column, elements_column, null_column};
 }
+
+bool ColumnHelper::get_binary_slice_at(const Column* column, size_t row, Slice* out) {
+    if (column == nullptr || out == nullptr) return false;
+    if (column->is_constant()) {
+        column = down_cast<const ConstColumn*>(column)->data_column().get();
+        row = 0;
+    }
+    if (column->is_nullable()) {
+        const auto* nc = down_cast<const NullableColumn*>(column);
+        if (nc->is_null(row)) return false;
+        column = nc->data_column().get();
+    }
+    if (!column->is_binary()) return false;
+    *out = down_cast<const BinaryColumn*>(column)->get_slice(row);
+    return true;
+}
+
 } // namespace starrocks

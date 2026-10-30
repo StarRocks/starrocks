@@ -1,0 +1,28 @@
+-- name: test_colocate_range_cross_db_group @cloud @sequential
+-- SQL integration: same colocate group across two databases. Verifies the
+-- ColocateTableIndex peer-GroupId resolution works when two tables in
+-- different DBs share the same colocateGroupId. The cross-DB join uses
+-- fully-qualified names; the result count is deterministic.
+set enable_range_distribution = true;
+
+create database db_${uuid0}_a;
+create database db_${uuid0}_b;
+
+create table db_${uuid0}_a.t_left (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_xdb_${uuid0}:k1');
+
+create table db_${uuid0}_b.t_right (k1 int, k2 int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'grp_xdb_${uuid0}:k1');
+
+insert into db_${uuid0}_a.t_left values (1, 10), (2, 20), (3, 30);
+insert into db_${uuid0}_b.t_right values (1, 100), (2, 200), (3, 300);
+
+-- cross-DB colocate join on the colocate-prefix column
+select count(*) from db_${uuid0}_a.t_left l join db_${uuid0}_b.t_right r on l.k1 = r.k1;
+
+drop table db_${uuid0}_a.t_left;
+drop table db_${uuid0}_b.t_right;
+drop database db_${uuid0}_a;
+drop database db_${uuid0}_b;

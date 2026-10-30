@@ -16,6 +16,8 @@ package com.starrocks.scheduler.mv.pct;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -26,9 +28,13 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.DelegatingConnectorMetadata;
 import com.starrocks.connector.HivePartitionDataInfo;
-import com.starrocks.connector.TableUpdateArbitrator;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.mv.MVMetaVersionRepairer;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -72,11 +78,15 @@ public class MVPCTMetaRepairer {
                 toRepairTables.stream().filter(p -> !isSupportedPCTRepairer(p.first, p.second)).findFirst();
         if (nonSupportedTableOpt.isPresent()) {
             Pair<Table, BaseTableInfo> nonSupportedTable = nonSupportedTableOpt.get();
-            mv.setInactiveAndReason(
+            AlterMVJobExecutor.inactiveMvFromRefresh(mv,
                     MaterializedViewExceptions.inactiveReasonForBaseTableChanged(nonSupportedTable.second.getTableName()));
-            throw new DmlException(String.format("Table %s is recreated and needed to be repaired, but it is not supported " +
-                            "by MVPCTMetaRepairer: %s, set mv %s inactive",
-                    nonSupportedTable.first.getName(), nonSupportedTable.second, mv.getName()));
+            throw new DmlException(String.format("Materialized view %s.%s set inactive: base table '%s' " +
+                            "(catalog=%s, db=%s) was recreated but its table type is not supported for automatic meta repair. " +
+                            "Only Hive tables support automatic repair. Please manually refresh the MV.",
+                    db.getFullName(), mv.getName(),
+                    nonSupportedTable.first.getName(),
+                    nonSupportedTable.second.getCatalogName(),
+                    nonSupportedTable.second.getDbName()));
         }
         final MVPCTMetaRepairer repairer = new MVPCTMetaRepairer(db, mv);
         for (Pair<Table, BaseTableInfo> pair : toRepairTables) {
@@ -106,9 +116,6 @@ public class MVPCTMetaRepairer {
     }
 
     public static boolean isTableSupportedPCTRepair(Table baseTable) {
-        if (baseTable == null) {
-            return false;
-        }
         return baseTable instanceof HiveTable;
     }
 
@@ -144,22 +151,28 @@ public class MVPCTMetaRepairer {
             autoRefreshPartitionsLimit = mv.getTableProperty().getAutoRefreshPartitionsLimit();
         }
         List<String> partitionNames = Lists.newArrayList(partitionInfoMap.keySet());
-        TableUpdateArbitrator.UpdateContext updateContext = new TableUpdateArbitrator.UpdateContext(
-                table,
-                autoRefreshPartitionsLimit,
-                partitionNames);
-        TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        if (arbitrator == null) {
+        Optional<Map<String, Optional<HivePartitionDataInfo>>> partitionDataInfosOpt =
+                getHivePartitionRepairInfo(table, partitionNames, autoRefreshPartitionsLimit);
+        if (partitionDataInfosOpt.isEmpty()) {
             return;
         }
-        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = partitionDataInfosOpt.get();
         List<String> updatedPartitionNames =
                 getUpdatedPartitionNames(partitionNames, partitionInfoMap, partitionDataInfos);
         LOG.info("try to get updated partitions names based on data.partitionNames:{}, isAutoRefresh:{}," +
                         " autoRefreshPartitionsLimit:{}, updatedPartitionNames:{}",
                 partitionNames, isAutoRefresh, autoRefreshPartitionsLimit, updatedPartitionNames);
+        // Resolve the partition metadata here, beside getHivePartitionRepairInfo above, rather than
+        // inside the repair: the repair runs under the MV's write lock and is meant to be a pure meta
+        // update ("acquire db write lock to modify meta of mv"), while this is a connector call.
+        // The condition mirrors the one it replaces -- nothing was fetched when every partition had
+        // already changed, because then the repair needs no partition metadata at all.
+        Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos = Maps.newHashMap();
+        if (partitionNames.stream().anyMatch(name -> !updatedPartitionNames.contains(name))) {
+            newPartitionInfos = PartitionUtil.getPartitionNameWithPartitionInfo(table, partitionNames);
+        }
         // if partition is not modified, change the last refresh time to update
-        repairMvBaseTableMeta(mv, baseTableInfo, table, updatedPartitionNames);
+        repairMvBaseTableMeta(mv, baseTableInfo, table, updatedPartitionNames, newPartitionInfos);
     }
 
     private List<String> getUpdatedPartitionNames(
@@ -190,17 +203,21 @@ public class MVPCTMetaRepairer {
     }
 
     private void repairMvBaseTableMeta(MaterializedView mv, BaseTableInfo oldBaseTableInfo,
-                                       Table newTable, List<String> updatedPartitionNames) {
+                                       Table newTable, List<String> updatedPartitionNames,
+                                       Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos) {
         if (oldBaseTableInfo.isInternalCatalog()) {
             return;
         }
         // acquire db write lock to modify meta of mv
         Locker locker = new Locker();
         if (!locker.lockTableAndCheckDbExist(db, mv.getId(), LockType.WRITE)) {
-            throw new DmlException("repair mv meta failed. database:" + db.getFullName() + " not exist");
+            throw new DmlException("Materialized view %s.%s meta repair failed: " +
+                    "failed to acquire write lock on database %s, it may no longer exist",
+                    db.getFullName(), mv.getName(), db.getFullName());
         }
         try {
-            MVMetaVersionRepairer.repairExternalBaseTableInfo(mv, oldBaseTableInfo, newTable, updatedPartitionNames);
+            MVMetaVersionRepairer.repairExternalBaseTableInfo(mv, oldBaseTableInfo, newTable, updatedPartitionNames,
+                    newPartitionInfos);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
         }
@@ -219,11 +236,10 @@ public class MVPCTMetaRepairer {
 
         // collect repair info for partition should not affect the main flow since the table may not need repair.
         try {
-            TableUpdateArbitrator.UpdateContext updateContext = new TableUpdateArbitrator.UpdateContext(
-                    table, -1, Lists.newArrayList(partitionName));
-            TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-            if (arbitrator != null) {
-                Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+            Optional<Map<String, Optional<HivePartitionDataInfo>>> partitionDataInfosOpt =
+                    getHivePartitionRepairInfo(table, Lists.newArrayList(partitionName), -1);
+            if (partitionDataInfosOpt.isPresent()) {
+                Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = partitionDataInfosOpt.get();
                 Preconditions.checkState(partitionDataInfos.size() == 1);
                 if (partitionDataInfos.get(partitionName).isPresent()) {
                     HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfos.get(partitionName).get();
@@ -235,5 +251,34 @@ public class MVPCTMetaRepairer {
             LOG.warn("collect partition repair info failed, table:{}, partition:{}",
                     table.getName(), partitionName, e);
         }
+    }
+
+    private static Optional<Map<String, Optional<HivePartitionDataInfo>>> getHivePartitionRepairInfo(
+            Table table, List<String> partitionNames, int partitionLimit) {
+        if (!(table instanceof HiveTable hiveTable)) {
+            return Optional.empty();
+        }
+        Optional<ConnectorMetadata> metadata = resolveLeafMetadata(table);
+        if (metadata.isPresent() && metadata.get() instanceof HiveMetadata hiveMetadata) {
+            return hiveMetadata.getHivePartitionDataInfos(hiveTable, partitionNames, partitionLimit);
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<ConnectorMetadata> resolveLeafMetadata(Table table) {
+        Optional<ConnectorMetadata> metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getOptionalMetadata(table.getCatalogName());
+        if (metadata.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ConnectorMetadata current = metadata.get();
+        while (current instanceof DelegatingConnectorMetadata delegating) {
+            ConnectorMetadata next = delegating.delegateFor(table);
+            Preconditions.checkState(next != current,
+                    "delegating metadata returned itself for table: %s", table);
+            current = next;
+        }
+        return Optional.of(current);
     }
 }

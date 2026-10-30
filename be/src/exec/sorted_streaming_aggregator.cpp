@@ -19,15 +19,19 @@
 #include <utility>
 #include <vector>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/append_with_mask.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
+#include "column/file_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
+#include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -86,9 +90,6 @@ public:
         }
 
         return Status::OK();
-    }
-    Status do_visit(const LargeBinaryColumn& column) {
-        return Status::NotSupported("Unsupported large binary column in column wise comparator");
     }
 
     // For types with expensive comparison operations, always check the previous comparison result
@@ -154,7 +155,38 @@ public:
         return Status::NotSupported("Unsupported map column in column wise comparator");
     }
 
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("Unsupported AdaptiveNullableColumn in column wise comparator");
+    }
+
     Status do_visit(const StructColumn& column) {
+        size_t num_rows = column.size();
+        if (!_first_column->empty()) {
+            _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
+        } else {
+            _cmp_vector[0] |= 1;
+        }
+
+        if (!_null_masks.empty()) {
+            DCHECK_EQ(_null_masks.size(), num_rows);
+            for (size_t i = 1; i < num_rows; ++i) {
+                if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
+                    _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+                } else {
+                    _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
+                }
+            }
+        } else {
+            for (size_t i = 1; i < num_rows; ++i) {
+                _cmp_vector[i] |= column.compare_at(i - 1, i, column, true) != 0;
+            }
+        }
+
+        return Status::OK();
+    }
+
+    Status do_visit(const FileColumn& column) {
         size_t num_rows = column.size();
         if (!_first_column->empty()) {
             _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
@@ -473,7 +505,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     _last_state = nullptr;
     _last_columns.clear();
 
-    return _build_output_chunk(std::move(group_by_columns), ColumnHelper::to_columns(std::move(agg_result_columns)),
+    return _build_output_chunk(group_by_columns, ColumnHelper::to_columns(std::move(agg_result_columns)),
                                use_intermediate);
 }
 

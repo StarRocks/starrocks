@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Query the value mapped to the key in a dictionary object."
 ---
 
 # dictionary_get

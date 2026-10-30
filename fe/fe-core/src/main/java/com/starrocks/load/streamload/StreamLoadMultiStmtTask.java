@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -26,6 +27,7 @@ import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -37,6 +39,8 @@ import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -62,6 +66,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *     +--[commitTxn]-------------------------> COMMITING
  *     |                                            |
  *     |                                            +--[success]---------> COMMITED
+ *     |                                            +--[fail, txn found committed]--> COMMITED
  *     |                                            +--[fail]------------> ABORTING
  *     |
  *     +--[manualCancel / timeout / exception]----> ABORTING
@@ -75,8 +80,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * </pre>
  *
  * Final states: CANCELLED, COMMITED, FINISHED.
- * COMMITING and ABORTING are intermediate; cancel is rejected in COMMITING.
+ * COMMITING and ABORTING are intermediate; cancel and new loads are rejected in COMMITING.
  * BEFORE_LOAD, LOADING, PREPARING, PREPARED are defined for compatibility but not used in this class.
+ *
+ * Sub-tasks in taskMaps are not registered as transaction state callbacks, so this task
+ * must propagate its final state to them: commit success and reconcile-found-committed call
+ * propagateCommitStateToSubTasks (COMMITED, or FINISHED when the txn is visible), and abort
+ * paths call cancelCoordinatorOnly (CANCELLED). Display outlets (information_schema.loads,
+ * SHOW STREAM LOAD) delegate to sub-tasks and rely on this propagation.
  */
 public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMultiStmtTask.class);
@@ -150,6 +161,11 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     @SerializedName(value = "abortReason")
     private String abortReason = "";
     private String lastAbortErrorMsg = "";
+    // Set right before commitStmt runs. Whatever its outcome, commitStmt clears the explicit transaction
+    // state and resets the context's txnId, so rollbackStmt can no longer reach the transaction (it takes
+    // its "not after begin" branch and does nothing): from then on the rollback aborts the transaction in
+    // the transaction manager, where it is registered since the first load, and reconciles against it.
+    private volatile boolean explicitTxnStateCleared = false;
 
     public StreamLoadMultiStmtTask(long id, Database db, String label, String user, String clientIp,
                           long timeoutMs, long createTimeMs, ComputeResource computeResource) {
@@ -215,7 +231,11 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
 
         boolean rollbackSuccess = false;
         try {
-            TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+            if (explicitTxnStateCleared) {
+                abortTxnInTxnManager();
+            } else {
+                TransactionStmtExecutor.rollbackStmt(context, new RollbackStmt(NodePosition.ZERO));
+            }
             rollbackSuccess = true;
         } catch (Exception e) {
             this.lastAbortErrorMsg = e.getMessage();
@@ -259,6 +279,31 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     /**
+     * Abort the transaction in the transaction manager once commitStmt has cleared the explicit
+     * transaction state (see explicitTxnStateCleared). Without this the transaction, registered since
+     * the first load, would stay PREPARE or PREPARED until the transaction timeout, holding its tables
+     * against schema changes. The sub-tasks' tablets are passed along, as rollbackStmt passes those of
+     * the explicit state's items, so the abort can clean up the data the loads wrote. A transaction
+     * that is already final or committed makes the abort throw; reconcileWithTxnManager then reads its
+     * status.
+     */
+    private void abortTxnInTxnManager() throws StarRocksException {
+        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
+        List<TabletFailInfo> failInfos = Lists.newArrayList();
+        for (StreamLoadTask task : taskMaps.values()) {
+            ExplicitTxnState.ExplicitTxnStateItem item = task.getTxnStateItem();
+            if (item.getTabletCommitInfos() != null) {
+                commitInfos.addAll(item.getTabletCommitInfos());
+            }
+            if (item.getTabletFailInfos() != null) {
+                failInfos.addAll(item.getTabletFailInfos());
+            }
+        }
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                dbId, txnId, abortReason, commitInfos, failInfos, null);
+    }
+
+    /**
      * Check the actual transaction status in the transaction manager to handle cases
      * where rollbackStmt fails but the transaction has already reached a final state.
      *
@@ -268,13 +313,25 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         try {
             GlobalTransactionMgr txnMgr =
                     GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-            ExplicitTxnState explicitState = txnMgr.getExplicitTxnState(txnId);
-            if (explicitState == null) {
-                LOG.info("ExplicitTxnState already cleared for txnId: {}, label: {}, " +
-                        "treating as aborted", txnId, label);
-                return true;
+            TransactionState txnState;
+            if (explicitTxnStateCleared) {
+                // The explicit state is gone whatever happened to the transaction, so only the
+                // transaction manager can tell whether it is still running.
+                txnState = txnMgr.getTransactionState(dbId, txnId);
+                if (txnState == null) {
+                    LOG.info("Transaction not found in transaction manager, txnId: {}, label: {}, " +
+                            "treating as aborted", txnId, label);
+                    return true;
+                }
+            } else {
+                ExplicitTxnState explicitState = txnMgr.getExplicitTxnState(txnId);
+                if (explicitState == null) {
+                    LOG.info("ExplicitTxnState already cleared for txnId: {}, label: {}, " +
+                            "treating as aborted", txnId, label);
+                    return true;
+                }
+                txnState = explicitState.getTransactionState();
             }
-            TransactionState txnState = explicitState.getTransactionState();
             if (txnState != null) {
                 TransactionStatus status = txnState.getTransactionStatus();
                 if (status == TransactionStatus.ABORTED || status == TransactionStatus.VISIBLE
@@ -290,6 +347,10 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                         } finally {
                             writeUnlock();
                         }
+                        // Mark sub-tasks committed before tryRollbackNow invokes
+                        // cancelCoordinatorOnly on them; otherwise a committed
+                        // transaction would display CANCELLED sub-tasks.
+                        propagateCommitStateToSubTasks(status == TransactionStatus.VISIBLE);
                     }
                     return true;
                 }
@@ -361,10 +422,24 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         if (context.getExecutionId() == null) {
             context.setExecutionId(loadId);
         }
-        // Also propagate compute resource so the txn carries the same resource context.
-        if (context.getCurrentComputeResource() == null) {
-            context.setCurrentComputeResource(computeResource);
+        // Bind the context to the task's warehouse and compute resource before the transaction is
+        // created: TransactionStmtExecutor.beginStmt stores context.getCurrentComputeResource() in
+        // the TransactionState, and createPartition, updateImmutablePartition and publish derive
+        // tablet locations and nodes from it. In shared-data mode getCurrentComputeResource() never
+        // returns null: it acquires a resource from the context's warehouse (the default one for
+        // this private context) and re-acquires whenever the resource's warehouse differs from the
+        // context's, so a null check left the transaction on the default warehouse while the load's
+        // coordinator runs on the task's warehouse.
+        if (RunMode.isSharedDataMode()) {
+            context.setCurrentWarehouseId(computeResource.getWarehouseId());
         }
+        context.setCurrentComputeResource(computeResource);
+        // The transaction's timeout is the task's (the HTTP "timeout" header), as for a classic
+        // stream load: TransactionStmtExecutor.beginStmt takes it from context.getExecTimeout(),
+        // i.e. the session's query_timeout, and the transaction is visible to the transaction
+        // timeout checker from the first load. commitStmt's lock and publish waits follow the
+        // same value. Set it after the warehouse binding, which replaces the session variables.
+        context.getSessionVariable().setQueryTimeoutS((int) Math.max(1L, timeoutMs / 1000L));
 
         TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO),
                 TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, label);
@@ -415,28 +490,70 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         // Phase 2: Execute time-consuming operations (without lock)
         boolean success = false;
         String commitErrorMsg = null;
+        boolean commitStmtFailed = false;
         try {
             LOG.info("commit {} sub tasks", taskMaps.size());
+            // Fire every table's channel first. prepareChannel only dispatches the
+            // coordinator (Coordinator.exec() is non-blocking); issuing them up front lets
+            // the per-table flushes overlap on the BEs instead of running one-at-a-time. The
+            // blocking join happens below in waitCoordFinish, so splitting the fire and the
+            // wait bounds total commit latency by the slowest table rather than the sum. New
+            // loads are rejected once the task is COMMITING, so taskMaps is stable across the
+            // two iterations below.
+            List<StreamLoadTask> dispatched = Lists.newArrayList();
             for (StreamLoadTask task : taskMaps.values()) {
                 task.prepareChannel(0, task.getTableName(), headers, resp);
                 if (!resp.stateOK()) {
-                    commitErrorMsg = "prepareChannel failed";
-                    return;
+                    commitErrorMsg = tableLoadErrorMsg(task, resp.msg);
+                    resp.setErrorMsg(commitErrorMsg);
+                    break;
                 }
+                dispatched.add(task);
+            }
+            // Wait for every dispatched coordinator and add its result to the transaction.
+            // Run this even when a prepare failed above: the loads already dispatched must be
+            // added via loadData so the rollback path aborts them with their tablet infos --
+            // otherwise the explicit transaction would carry no items and rollbackStmt would
+            // take its empty-item branch, skipping abortTransaction. A per-task result keeps
+            // an earlier prepare failure from poisoning the wait check below.
+            for (StreamLoadTask task : dispatched) {
                 if (task.checkNeedPrepareTxn()) {
-                    task.waitCoordFinish(resp);
-                }
-                if (!resp.stateOK()) {
-                    commitErrorMsg = "waitCoordFinish failed";
-                    return;
+                    TransactionResult waitResp = new TransactionResult();
+                    task.waitCoordFinish(waitResp);
+                    if (!waitResp.stateOK()) {
+                        if (commitErrorMsg == null) {
+                            commitErrorMsg = tableLoadErrorMsg(task, waitResp.msg);
+                            resp.setErrorMsg(commitErrorMsg);
+                        }
+                        // waitCoordFinish already aborted the shared transaction on failure
+                        // (cancelTask -> abortTransaction). Stop draining: calling loadData for
+                        // a later table after the transaction is aborted would add it to an
+                        // already-aborted transaction. The remaining dispatched coordinators are
+                        // cancelled by the rollback path (tryRollbackNow -> cancelCoordinatorOnly).
+                        break;
+                    }
                 }
                 TransactionStmtExecutor.loadData(dbId, task.getTable().getId(), task.getTxnStateItem(), context);
             }
-            TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
-            if (context.getState().isError()) {
-                commitErrorMsg = context.getState().getErrorMessage();
-            } else {
+            if (commitErrorMsg != null) {
+                return;
+            }
+            explicitTxnStateCleared = true;
+            String commitStmtError = executeCommitStmt();
+            if (commitStmtError == null) {
                 success = true;
+            } else if (isTxnCommittedInTxnManager()) {
+                // commitStmt failed after the transaction was committed: its data is or becomes
+                // visible. Reporting a failure would make the client load the data again, and the
+                // rollback would mark the task CANCELLED while the transaction is VISIBLE.
+                LOG.warn("Commit reported an error but transaction {} is committed, label: {}, error: {}",
+                        txnId, label, commitStmtError);
+                success = true;
+            } else {
+                // commitStmt reports a failed commit through the context state instead of throwing.
+                // The response is set below, once the rollback has settled the outcome.
+                commitErrorMsg = commitStmtError;
+                commitStmtFailed = true;
             }
         } catch (Exception e) {
             commitErrorMsg = e.getMessage();
@@ -450,6 +567,7 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 } finally {
                     writeUnlock();
                 }
+                propagateCommitStateToSubTasks();
             } else {
                 this.errorMsg = commitErrorMsg != null ? commitErrorMsg : "commit failed";
                 LOG.warn("Commit failed for transaction {}, label: {}, error: {}",
@@ -461,7 +579,90 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                     writeUnlock();
                 }
                 tryRollbackNow();
+                // The client must get a failed commit: an OK response makes it treat the transaction
+                // as committed. The response follows the outcome the rollback settled: if it found the
+                // transaction committed, the task is COMMITED and the response stays OK.
+                if (commitStmtFailed && this.state != State.COMMITED) {
+                    resp.setErrorMsg(commitErrorMsg);
+                }
             }
+        }
+    }
+
+    // All tables of the transaction share its label, so an error of one table's load must name the table:
+    // otherwise the client cannot tell which table failed.
+    private static String tableLoadErrorMsg(StreamLoadTask task, String errorMsg) {
+        return String.format("Failed to load table %s: %s", task.getTableName(), errorMsg);
+    }
+
+    /**
+     * Run commitStmt and return its error, or null if it succeeded. commitStmt reports a failed commit
+     * through the context state rather than by throwing; an unchecked exception escaping it, possibly
+     * thrown after the transaction was committed, is returned the same way, so the caller checks the
+     * transaction status in both cases.
+     */
+    private String executeCommitStmt() {
+        String error;
+        try {
+            TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
+            if (!context.getState().isError()) {
+                return null;
+            }
+            error = context.getState().getErrorMessage();
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to commit transaction {}, label: {}", txnId, label, e);
+            error = e.getMessage();
+        }
+        return Strings.isNullOrEmpty(error) ? "commit failed" : error;
+    }
+
+    private boolean isTxnCommittedInTxnManager() {
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(dbId, txnId);
+        if (txnState == null) {
+            return false;
+        }
+        TransactionStatus status = txnState.getTransactionStatus();
+        return status == TransactionStatus.COMMITTED || status == TransactionStatus.VISIBLE;
+    }
+
+    /**
+     * Propagate the committed transaction's final state to all sub-tasks, resolving the
+     * actual transaction status to decide between COMMITED and FINISHED.
+     * The explicit transaction created by TransactionStmtExecutor.beginStmt carries no
+     * callback id, so afterCommitted/afterVisible are never dispatched to this task.
+     * All display outlets (information_schema.loads, SHOW STREAM LOAD) delegate to the
+     * sub-tasks; without this propagation they would show PREPARING forever for
+     * committed transactions.
+     */
+    private void propagateCommitStateToSubTasks() {
+        if (taskMaps.isEmpty()) {
+            return;
+        }
+        boolean visible = false;
+        try {
+            TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getTransactionState(dbId, txnId);
+            visible = txnState != null && txnState.getTransactionStatus() == TransactionStatus.VISIBLE;
+        } catch (Exception e) {
+            LOG.warn("Failed to get transaction status when propagating commit state, label: {}, " +
+                    "txnId: {}, treating as committed", label, txnId, e);
+        }
+        propagateCommitStateToSubTasks(visible);
+    }
+
+    /**
+     * Propagate the committed transaction's final state to all sub-tasks.
+     * Sub-tasks already in an unreversible state are left untouched.
+     */
+    private void propagateCommitStateToSubTasks(boolean visible) {
+        // For FINISHED sub-tasks use the time visibility was observed: convergence via
+        // checkNeedRemove may happen long after the parent's commit endTimeMs, and the
+        // single-table afterVisible path also stamps the observation time. COMMITED
+        // sub-tasks keep the commit completion time.
+        long finishTimeMs = !visible && this.endTimeMs != -1 ? this.endTimeMs : System.currentTimeMillis();
+        for (StreamLoadTask task : taskMaps.values()) {
+            task.markCommittedByParent(visible, finishTimeMs);
         }
     }
 
@@ -511,6 +712,14 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         if (isFinalState()) {
             if (endTimeMs == -1) {
                 endTimeMs = currentMs;
+            }
+            // Opportunistically converge sub-task display state: no transaction callback
+            // ever fires for multi-statement transactions, so a sub-task left COMMITED
+            // (commit returned before publish finished) or missed by a racing load is
+            // upgraded here once the transaction becomes visible.
+            if (this.state == State.COMMITED
+                    && taskMaps.values().stream().anyMatch(task -> !task.isFinalState())) {
+                propagateCommitStateToSubTasks();
             }
             return isForce || ((currentMs - endTimeMs) > Config.stream_load_task_keep_max_second * 1000L);
         }
@@ -690,6 +899,7 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     @Override
     public void gsonPostProcess() throws IOException {
         loadId = new TUniqueId(loadIdHi, loadIdLo);
+        init();
     }
 
     @Override
@@ -698,26 +908,46 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         loadIdLo = loadId.getLo();
     }
 
-    @Override
-    public TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException {
+    /**
+     * Check whether the task can accept load requests in its current state, filling
+     * resp with the rejection reason otherwise. Reads {@code state} without the lock
+     * when used as a fast-fail pre-check; the sub-task creation path in tryLoad
+     * re-runs it under the write lock to serialize against commitTxn's
+     * COMMITING/COMMITED transitions.
+     */
+    private boolean checkLoadAllowed(TransactionResult resp) {
         if (this.state == State.CANCELLED) {
             resp.setErrorMsg(String.format("stream load task %s has already been cancelled: %s", label, errorMsg));
-            return null;
+            return false;
         }
         if (this.state == State.ABORTING) {
             resp.setErrorMsg(String.format("stream load task %s is aborting: %s", label, abortReason));
-            return null;
+            return false;
         }
         if (this.state == State.COMMITED || this.state == State.FINISHED) {
             resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
+            return false;
+        }
+        if (this.state == State.COMMITING) {
+            // Reject new loads while the commit is in progress: a sub-task created here
+            // would neither be included in the committing transaction nor be reached by
+            // propagateCommitStateToSubTasks, leaving it displayed as PREPARING forever.
+            resp.setErrorMsg(String.format("stream load task %s is committing, can not accept new loads", label));
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public TNetworkAddress tryLoad(int channelId, String tableName, TransactionResult resp) throws StarRocksException {
+        if (!checkLoadAllowed(resp)) {
             return null;
         }
 
         // For multi-statement tasks, delegate to specific table task if exists
         StreamLoadTask task = taskMaps.get(tableName);
-        if (task != null) {
-            return task.tryLoad(0, tableName, resp);
-        } else {
+        if (task == null) {
+            // Resolve metadata outside the lock to keep the critical section small.
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db == null) {
                 throw new MetaNotFoundException("Database " + dbId + "has been deleted");
@@ -727,26 +957,74 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 throw new MetaNotFoundException("Failed to find table " + tableName + " in db " + dbName);
             }
             long id = GlobalStateMgr.getCurrentState().getNextId();
-            task = new StreamLoadTask(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, computeResource);
-            taskMaps.put(table.getName(), task);
-            LOG.info("Add stream load task {}", task.getShowInfo());
-            task.tryBegin(0, 1, txnId);
-            return task.tryLoad(0, tableName, resp);
+            StreamLoadTask newTask =
+                    new StreamLoadTask(id, db, table, label, user, clientIp, timeoutMs, 1, 0, createTimeMs, computeResource);
+            // Registering a new sub-task must be serialized with commitTxn's COMMITING
+            // transition (taken under the same write lock): otherwise a load racing with
+            // commit could add a sub-task that neither joins the committing transaction
+            // nor is reached by propagateCommitStateToSubTasks.
+            writeLock();
+            try {
+                if (!checkLoadAllowed(resp)) {
+                    return null;
+                }
+                task = taskMaps.get(table.getName());
+                if (task == null) {
+                    // Register the transaction with DatabaseTransactionMgr and add this table to it
+                    // before the sub-task exists, as the INSERT path of an explicit transaction does
+                    // before it executes. The BE looks the transaction up there while it writes
+                    // (createPartition for automatic partitioning, updateImmutablePartition for
+                    // automatic bucketing); a transaction that only reaches DatabaseTransactionMgr at
+                    // commit fails those lookups with "txn %d not exist". It also lets a failed
+                    // sub-task abort the shared transaction (StreamLoadTask.cancelTask). If this
+                    // throws, nothing is added to taskMaps and executeLoadTask aborts the transaction.
+                    TransactionStmtExecutor.activateTable(dbId, table.getId(), context);
+                    task = newTask;
+                    taskMaps.put(table.getName(), task);
+                    boolean isFirstSubTask = taskMaps.size() == 1;
+                    LOG.info("Add stream load task {}", task.getShowInfo());
+                    task.tryBegin(0, 1, txnId);
+                    if (isFirstSubTask) {
+                        decideCombinedTxnLogFromFirstTable(table);
+                    }
+                }
+            } finally {
+                writeUnlock();
+            }
         }
+        return task.tryLoad(0, tableName, resp);
+    }
+
+    // The first table to join the multi-statement stream load decides, once and for all, whether
+    // the transaction aggregates its txn logs (combined txn log). A file_bundling lake table already
+    // writes one bundled data file plus one aggregated metadata file per partition version, so it
+    // also aggregates its per-tablet txn logs into a single file per partition, matching the
+    // single-table load path where DatabaseTransactionMgr sets
+    // useCombinedTxnLog = combinedTxnLog || fileBundling.
+    //
+    // The decision is frozen after the first table because the transaction carries a single
+    // useCombinedTxnLog flag that every sub-task's sink and the publish path use uniformly. A
+    // multi-statement transaction is created (beginStmt) before any target table is known, and each
+    // sub-task's sink is planned during its own load; flipping the flag once a later table joins
+    // would make publish look for combined logs an earlier sub-task never wrote (or per-tablet logs
+    // a later sub-task did not write), wedging publish. So a later file_bundling table does not turn
+    // aggregation on if the first table did not, and a later non-file_bundling table keeps writing
+    // combined logs if the first table did -- both are correct, only the file count differs.
+    private void decideCombinedTxnLogFromFirstTable(OlapTable table) {
+        if (!table.isFileBundling()) {
+            return;
+        }
+        ExplicitTxnState explicitTxnState =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId);
+        if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
+            return;
+        }
+        explicitTxnState.getTransactionState().setUseCombinedTxnLog(true);
     }
 
     @Override
     public TNetworkAddress executeTask(int channelId, String tableName, HttpHeaders headers, TransactionResult resp) {
-        if (this.state == State.CANCELLED) {
-            resp.setErrorMsg(String.format("stream load task %s has already been cancelled: %s", label, errorMsg));
-            return null;
-        }
-        if (this.state == State.ABORTING) {
-            resp.setErrorMsg(String.format("stream load task %s is aborting: %s", label, abortReason));
-            return null;
-        }
-        if (this.state == State.COMMITED || this.state == State.FINISHED) {
-            resp.setErrorMsg(String.format("stream load task %s has already been %s", label, state.name().toLowerCase()));
+        if (!checkLoadAllowed(resp)) {
             return null;
         }
 
@@ -817,9 +1095,9 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterPrepared(TransactionState txnState) throws StarRocksException {
         for (StreamLoadTask task : taskMaps.values()) {
-            task.afterPrepared(txnState, txnOperated);
+            task.afterPrepared(txnState);
         }
     }
 
@@ -838,9 +1116,9 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         for (StreamLoadTask task : taskMaps.values()) {
-            task.afterCommitted(txnState, txnOperated);
+            task.afterCommitted(txnState);
         }
     }
 
@@ -852,10 +1130,10 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
         for (StreamLoadTask task : taskMaps.values()) {
-            task.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+            task.afterAborted(txnState, txnStatusChangeReason);
         }
     }
 
@@ -867,9 +1145,9 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+    public void afterVisible(TransactionState txnState) {
         for (StreamLoadTask task : taskMaps.values()) {
-            task.afterVisible(txnState, txnOperated);
+            task.afterVisible(txnState);
         }
     }
 

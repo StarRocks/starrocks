@@ -17,24 +17,66 @@
 #include "column/column.h"
 #include "common/constexpr.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet.h"
-#include "storage/lake/update_manager.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks::lake {
 
 Status LakePrimaryKeyRecover::pre_cleanup() {
-    // 1. reset delvec & sst in metadata and clean delvec in builder
-    // TODO reclaim delvec files
+    // 1. reset delvec & sst in metadata and clean delvec in builder.
+    // Nothing refers to the dropped delvec files and sstables any more, hand them to vacuum.
+    for (auto& [version, file] : *_metadata->mutable_delvec_meta()->mutable_version_to_file()) {
+        file.set_version(version);
+        _metadata->mutable_orphan_files()->Add(std::move(file));
+    }
+    for (const auto& sst : _metadata->sstable_meta().sstables()) {
+        FileMetaPB file_meta;
+        file_meta.set_name(sst.filename());
+        file_meta.set_size(sst.filesize());
+        file_meta.set_shared(sst.shared());
+        file_meta.set_version(sst.generation_version());
+        _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+    }
     _metadata->clear_delvec_meta();
     _metadata->clear_sstable_meta();
+    // A del file a compaction output carried over from one of its inputs is dropped too. Recover does not replay
+    // it, and the index rebuild that follows must not either, or the index would erase rows the rebuilt delvecs
+    // keep live. Its deleted rows may come back, which recover allows.
+    for (auto& rowset : *_metadata->mutable_rowsets()) {
+        auto* dels = rowset.mutable_del_files();
+        auto inherited = std::stable_partition(dels->begin(), dels->end(), [&](const DelfileWithRowsetId& del) {
+            return del.origin_rowset_id() == rowset.id();
+        });
+        for (auto it = inherited; it != dels->end(); ++it) {
+            FileMetaPB file_meta;
+            file_meta.set_name(it->name());
+            file_meta.set_shared(it->shared());
+            file_meta.set_version(it->version());
+            _metadata->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+        dels->erase(inherited, dels->end());
+    }
+    // A compaction without output segments keeps an output rowset only to carry those del files; with them gone
+    // it holds nothing, and an empty ordinary rowset is not a valid shape, so drop it.
+    auto* rowsets = _metadata->mutable_rowsets();
+    auto emptied = std::stable_partition(rowsets->begin(), rowsets->end(), [](const RowsetMetadataPB& rowset) {
+        return rowset.has_delete_predicate() || rowset.segment_metas_size() > 0 || rowset.del_files_size() > 0;
+    });
+    for (auto it = emptied; it != rowsets->end(); ++it) {
+        _metadata->mutable_rowset_to_schema()->erase(it->id());
+    }
+    rowsets->erase(emptied, rowsets->end());
+    // The builder may still hold delvecs appended before recover, and must not let a segment that the
+    // rebuild finds no deletes for fall back to the base version's delvec.
+    _builder->reset_delvecs_for_recover();
     // 2. reset primary index
-    RETURN_ERROR_IF_FALSE(_tablet->update_mgr()->try_remove_primary_index_cache(_tablet->id()));
+    RETURN_ERROR_IF_FALSE(_tablet->primary_key_mgr()->try_remove_primary_index_cache(_tablet->id()));
     DataDir* data_dir = StorageEngine::instance()->get_persistent_index_store(_tablet->id());
     if (data_dir != nullptr) {
         // clear local persistent index's index meta from rocksdb, and index files.
@@ -104,12 +146,49 @@ Status LakePrimaryKeyRecover::rowset_iterator(
             }
             ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(ropts, _tablet->tablet_mgr()->del_location(
                                                                                        _metadata->id(), del.name())));
+            // Recovery rebuilds every delvec from these deletes, so a corrupt del file that still
+            // deserializes would bake the wrong rows into the recovered delvecs -- permanently, since
+            // recovery treats the result as the new source of truth. The shared PrimaryKeyRecover
+            // consumes plain file handles (it also serves shared-nothing, which has no del checksum),
+            // so verify here before handing the handle over; it re-reads positionally from offset 0.
+            // Only pays the extra read when a checksum was actually recorded.
+            if (del.has_crc32c()) {
+                auto verified = read_and_verify_del_file(read_file.get(), del, _metadata->id());
+                RETURN_IF_ERROR(verified.status());
+            }
             del_rfs.push_back(std::move(read_file));
         }
-        // position of del files in itrs
+        // Position of each del file in the merged (segments + dels) replay sequence consumed by the
+        // handler. A del file logically follows segment index op_offset, so the segments preceding it
+        // are this rowset's iterators with segment index <= op_offset (segs_before, counted below) and
+        // the del files preceding it are the j already collected; hence its merged position is
+        // segs_before + j. This interleaves deletes at the same point the apply path does, so recover
+        // reproduces the same delvec. del_rfs only holds origin del files (the loop above breaks on
+        // non-origin), so op_offset is in this rowset's segment-index space. Reduces to the legacy
+        // "after all segments" when op_offset is the max segment index.
         std::vector<uint32_t> delidxs;
-        for (uint32_t i = itrs.size(); i < itrs.size() + del_rfs.size(); ++i) {
-            delidxs.push_back(i);
+        delidxs.reserve(del_rfs.size());
+        for (uint32_t j = 0; j < del_rfs.size(); ++j) {
+            const auto& del = rowset->metadata().del_files(j);
+            // Fall back to the max segment id when op_offset was not recorded (older metadata): the
+            // delete then sorts after all segments (num_segments + j), i.e. the legacy recover
+            // behavior. Matches the apply/persist fallback in resolve_del_op_offset().
+            const uint32_t op_offset = del.has_op_offset() ? del.op_offset() : get_max_segment_idx(rowset->metadata());
+            // Segments preceding this del in the replay = this rowset's segment iterators whose segment
+            // index is <= op_offset. Counting them (rather than using op_offset + 1) stays correct when
+            // segment_idx is no longer contiguous -- e.g. after tablet split/pruning a rowset can retain
+            // sparse segment indices, where op_offset + 1 would over- or under-count and replay the
+            // delete at the wrong point (erasing a row live publish kept, or vice versa). It also covers
+            // a segmentless delete-only rowset (count == 0, so the del lands at a position the handler
+            // reaches) and reduces to op_offset + 1 for the common contiguous case. itrs[k] corresponds
+            // to the k-th segment_meta, whose index is get_segment_idx(metadata, k).
+            uint32_t segs_before = 0;
+            for (uint32_t k = 0; k < itrs.size(); ++k) {
+                if (get_segment_idx(rowset->metadata(), static_cast<int32_t>(k)) <= op_offset) {
+                    ++segs_before;
+                }
+            }
+            delidxs.push_back(segs_before + j);
         }
         RETURN_IF_ERROR(handler(itrs, del_rfs, delidxs, rowset->id()));
     }
@@ -118,11 +197,24 @@ Status LakePrimaryKeyRecover::rowset_iterator(
 
 // generate delvec and save
 Status LakePrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) {
+    // num_dels must follow the rebuilt delvecs, not the ones recover discarded.
+    std::unordered_map<uint32_t, RowsetMetadataPB*> rssid_to_rowset;
+    for (int i = 0; i < _metadata->rowsets_size(); i++) {
+        auto* rowset = _metadata->mutable_rowsets(i);
+        rowset->set_num_dels(0);
+        for (int j = 0; j < rowset->segment_metas_size(); j++) {
+            rssid_to_rowset[get_rssid(*rowset, j)] = rowset;
+        }
+    }
     for (auto& new_delete : new_deletes) {
         auto delvec_ptr = std::make_shared<DelVector>();
         auto& del_ids = new_delete.second;
         delvec_ptr->init(_metadata->version(), del_ids.data(), del_ids.size());
         _builder->append_delvec(delvec_ptr, new_delete.first);
+        auto it = rssid_to_rowset.find(new_delete.first);
+        if (it != rssid_to_rowset.end()) {
+            it->second->set_num_dels(it->second->num_dels() + delvec_ptr->cardinality());
+        }
     }
     return Status::OK();
 }

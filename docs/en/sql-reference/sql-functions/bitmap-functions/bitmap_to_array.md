@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a BITMAP into a BIGINT array."
 ---
 
 # bitmap_to_array

@@ -14,13 +14,15 @@
 
 #include <velocypack/Exception.h>
 
+#include <string_view>
+
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_visitor_adapter.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exprs/cast_expr.h"
 #include "exprs/decimal_cast_expr.h"
 
@@ -103,14 +105,7 @@ public:
 
     Status do_visit(const BinaryColumn& col) {
         Slice slice = col.get_slice(_row);
-#ifdef __APPLE__
-        // On macOS, velocypack's template overload resolution may not correctly
-        // match std::string_view constructor, causing "Must give a string or char const*" error.
-        // Use std::string explicitly to avoid type ambiguity.
-        _add_element(std::string(slice.data, slice.size));
-#else
         _add_element(std::string_view(slice.data, slice.size));
-#endif
         return {};
     }
 
@@ -157,9 +152,6 @@ public:
             std::string name;
             if (key_col->is_binary()) {
                 auto binary_col = ColumnHelper::as_column<BinaryColumn>(key_col);
-                name = binary_col->get_slice(i);
-            } else if (key_col->is_large_binary()) {
-                auto binary_col = ColumnHelper::as_column<LargeBinaryColumn>(key_col);
                 name = binary_col->get_slice(i);
             } else {
                 // TODO(murphy) cast to string instead of debug

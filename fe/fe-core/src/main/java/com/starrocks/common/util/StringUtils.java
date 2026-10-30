@@ -38,6 +38,7 @@ import com.starrocks.catalog.Table;
 
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 public class StringUtils {
     private static final String CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -83,35 +84,16 @@ public class StringUtils {
     }
 
     /*
-     * Compare string with utf-8 byte array, same with DM,BE,StorageEngine
+     * Compare two strings by their UTF-8 bytes in UNSIGNED byte order, matching how BE
+     * orders VARCHAR (memcmp on the raw bytes; see be/src/base/string/memcmp.h) and
+     * therefore how BE routes rows into range-distributed tablets. Bytes are masked to
+     * 0..255 (Java byte is signed); on a common prefix the shorter string is smaller (no
+     * trailing-NUL special case). A CHAR value that embeds a NUL is a separate, out-of-scope
+     * edge: the BE CHAR load strips at the first NUL (be/src/column/datum_convert.cpp), which
+     * this raw-byte compare does not model.
      */
     public static int compareStringWithUTF8ByteArray(String s1, String s2) {
-        byte[] s1Bytes = s1.getBytes(StandardCharsets.UTF_8);
-        byte[] s2Bytes = s2.getBytes(StandardCharsets.UTF_8);
-
-        int minLength = Math.min(s1Bytes.length, s2Bytes.length);
-        int i;
-        for (i = 0; i < minLength; i++) {
-            if (s1Bytes[i] < s2Bytes[i]) {
-                return -1;
-            } else if (s1Bytes[i] > s2Bytes[i]) {
-                return 1;
-            }
-        }
-        if (s1Bytes.length > s2Bytes.length) {
-            if (s1Bytes[i] == 0x00) {
-                return 0;
-            } else {
-                return 1;
-            }
-        } else if (s1Bytes.length < s2Bytes.length) {
-            if (s2Bytes[i] == 0x00) {
-                return 0;
-            } else {
-                return -1;
-            }
-        } else {
-            return 0;
-        }
+        return Arrays.compareUnsigned(
+                s1.getBytes(StandardCharsets.UTF_8), s2.getBytes(StandardCharsets.UTF_8));
     }
 }

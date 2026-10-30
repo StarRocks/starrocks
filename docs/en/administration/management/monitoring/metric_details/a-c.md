@@ -1,0 +1,582 @@
+---
+displayed_sidebar: docs
+hide_table_of_contents: true
+description: "Alphabetical a - c"
+---
+
+# Metrics a through c
+
+:::note
+
+Metrics for materialized views and shared-data clusters are detailed in the corresponding sections:
+
+- [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
+- [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
+
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
+
+:::
+
+## `active_scan_context_count`
+
+- Unit: Count
+- Description: Total number of scan tasks created by Flink/Spark SQL.
+
+## `ai_http_requests_total`
+
+- Type: Counter
+- Labels: None
+- Unit: Count
+- Description: Total AI HTTP attempts accepted by the transport, including initial and retry attempts. An attempt is counted only when `AIHttpClient::submit` returns success; admission waits and synchronously rejected submissions are not counted.
+
+## `ai_http_retries_total`
+
+- Type: Counter
+- Labels: None
+- Unit: Count
+- Description: Total accepted AI HTTP retry attempts. The initial attempt is excluded, and a retry scheduled but cancelled before transport acceptance is not counted. This counter is therefore always less than or equal to `ai_http_requests_total`.
+
+## `ai_http_timeouts_total`
+
+- Type: Counter
+- Labels: None
+- Unit: Count
+- Description: Total accepted AI HTTP attempts terminated by a transport timeout or an expired request/query deadline. Each accepted attempt is counted at most once. Cancellation, shutdown, and deadlines reached before an HTTP attempt is accepted are not counted.
+
+## `async_delta_writer_queue_count`
+
+- Unit: Count
+- Description: Queued task count in the tablet delta writer thread pool.
+
+## `authentication_failure_reason_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of failed authentications, labeled by failure reason (`reason` = `malformed`, `no_matching_si`, `signature_fail`, `expired`, `claim_mismatch`, `bad_credential`, `disabled`, or `internal`). The HTTP response deliberately reports every failure as a flat `invalid_token`, so this metric is where the actual reason is visible.
+- Introduced in: v4.2
+
+## `authentication_failure_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of failed authentications, labeled by two independent dimensions: `channel` (`mysql`, `http`, `arrow_flight`, `thrift_load`, or `thrift_gateway`) is which way the credential arrived, and `kind` (`mysql_native_scramble`, `mysql_oauth2_client`, `gssapi_token`, `plain_password`, or `bearer_token`) is how it had to be read. Sum by `channel` to tell apart which channel is failing - HTTP, Arrow Flight, or the BE-to-FE load RPCs; sum by `kind` to see whether Bearer authentication as a whole is healthy.
+- Introduced in: v4.2
+
+## `authentication_success_total`
+
+- Unit: Count
+- Type: Counter
+- Description: Total number of successful authentications, labeled by `channel` and `kind` (same label values as `authentication_failure_total`).
+- Introduced in: v4.2
+
+## `base_compaction_task_byte_per_second`
+
+- Unit: Bytes/s
+- Description: Estimated rate of base compactions.
+
+## `base_compaction_task_cost_time_ms`
+
+- Unit: ms
+- Description: Total time spent on base compactions.
+
+## `be_base_compaction_bytes_per_second`
+
+- Unit: Bytes/s
+- Type: Average
+- Description: Base compaction speed of BE.
+
+## `be_base_compaction_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Base compaction failure of BE.
+
+## `be_base_compaction_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Base compaction request of BE.
+
+## `be_base_compaction_rowsets_per_second`
+
+- Unit: Count
+- Type: Average
+- Description: Base compaction speed of BE rowsets.
+
+## `be_broker_count`
+
+- Unit: Count
+- Type: Average
+- Description: Number of brokers.
+
+## `be_brpc_endpoint_count`
+
+- Unit: Count
+- Type: Average
+- Description: Number of StubCache in bRPC.
+
+## `be_bytes_read_per_second`
+
+- Unit: Bytes/s
+- Type: Average
+- Description: Read speed of BE.
+
+## `be_bytes_written_per_second`
+
+- Unit: Bytes/s
+- Type: Average
+- Description: Write speed of BE.
+
+## `be_clone_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: BE clone failure.
+
+## `be_clone_total_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Clone request of BE.
+
+## `be_create_rollup_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Materialized view creation failure of BE.
+
+## `be_create_rollup_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Materialized view creation request of BE.
+
+## `be_create_tablet_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Tablet creation failure of BE.
+
+## `be_create_tablet_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Tablet creation request of BE.
+
+## `be_cumulative_compaction_bytes_per_second`
+
+- Unit: Bytes/s
+- Type: Average
+- Description: Cumulative compaction speed of BE.
+
+## `be_cumulative_compaction_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Cumulative compaction failure of BE.
+
+## `be_cumulative_compaction_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Cumulative compaction request of BE.
+
+## `be_cumulative_compaction_rowsets_per_second`
+
+- Unit: Count
+- Type: Average
+- Description: Cumulative compaction speed of BE rowsets.
+
+## `be_delete_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Delete failure of BE.
+
+## `be_delete_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Delete request of BE.
+
+## `be_finish_task_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Task failure of BE.
+
+## `be_finish_task_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Task finish request of BE.
+
+## `be_fragment_endpoint_count`
+
+- Unit: Count
+- Type: Average
+- Description: Number of BE DataStream.
+
+## `be_fragment_request_latency_avg`
+
+- Unit: ms
+- Type: Average
+- Description: Latency of fragment requests.
+
+## `be_fragment_requests_per_second`
+
+- Unit: Count/s
+- Type: Average
+- Description: Number of fragment requests.
+
+## `be_http_request_latency_avg`
+
+- Unit: ms
+- Type: Average
+- Description: Latency of HTTP requests.
+
+## `be_http_request_send_bytes_per_second`
+
+- Unit: Bytes/s
+- Type: Average
+- Description: Number of bytes sent for HTTP requests.
+
+## `be_http_requests_per_second`
+
+- Unit: Count/s
+- Type: Average
+- Description: Number of HTTP requests.
+
+## `be_publish_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Version release failure of BE.
+
+## `be_publish_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Version publish request of BE.
+
+## `be_report_disk_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Disk report failure of BE.
+
+## `be_report_disk_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Disk report request of BE.
+
+## `be_report_tables_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Table report failure of BE.
+
+## `be_report_tablet_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Tablet report failure of BE.
+
+## `be_report_tablet_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Tablet report request of BE.
+
+## `be_report_tablets_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Tablet report request of BE.
+
+## `be_report_task_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Task report failure of BE.
+
+## `be_report_task_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Task report request of BE.
+
+## `be_schema_change_failed`
+
+- Unit: Count/s
+- Type: Average
+- Description: Schema change failure of BE.
+
+## `be_schema_change_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Schema change report request of BE.
+
+## `be_storage_migrate_requests`
+
+- Unit: Count/s
+- Type: Average
+- Description: Migration request of BE.
+
+## `binary_column_pool_bytes`
+
+- Unit: Bytes
+- Description: Memory used by the BINARY column pool.
+
+## `bitmap_index_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by bitmap indexes.
+
+## `block_cache_hit_bytes`
+
+- Unit: Bytes
+- Type: Counter
+- Description: Cumulative bytes of block cache hits. For now, only the cache hit bytes for external table is being counted.
+
+## `block_cache_miss_bytes`
+
+- Unit: Bytes
+- Type: Counter
+- Description: Cumulative bytes of block cache misses. For now, only the cache miss bytes for external table is being counted.
+
+## `block_cache_hit_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache hits.
+
+## `block_cache_miss_count`
+
+- Unit: Count
+- Type: Counter
+- Description: Cumulative count of block cache misses.
+
+## `blocks_created_total (Deprecated)`
+
+## `blocks_deleted_total (Deprecated)`
+
+## `blocks_open_reading (Deprecated)`
+
+## `blocks_open_writing (Deprecated)`
+
+## `bloom_filter_index_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by Bloomfilter indexes.
+
+## `broker_count`
+
+- Unit: Count
+- Description: Total number of filesystem brokers (by host address) created.
+
+## `brpc_endpoint_stub_count`
+
+- Unit: Count
+- Description: Total number of bRPC stubs (by address).
+
+## `builtin_inverted_index_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by builtin inverted indexes.
+
+## `bytes_read_total (Deprecated)`
+
+## `bytes_written_total`
+
+- Unit: Bytes
+- Description: Total bytes written (sectors write * 512).
+
+## `central_column_pool_bytes (Deprecated)`
+
+## `chunk_allocator_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by the chunk allocator.
+
+## `chunk_pool_local_core_alloc_count`
+
+- Unit: Count
+- Description: Memory chunk allocation/cache metrics.
+
+## `chunk_pool_other_core_alloc_count`
+
+- Unit: Count
+- Description: Memory chunk allocation/cache metrics.
+
+## `chunk_pool_system_alloc_cost_ns`
+
+- Unit: ns
+- Description: Memory chunk allocation/cache metrics.
+
+## `chunk_pool_system_alloc_count`
+
+- Unit: Count
+- Description: Memory chunk allocation/cache metrics.
+
+## `chunk_pool_system_free_cost_ns`
+
+- Unit: ns
+- Description: Memory chunk allocation/cache metrics.
+
+## `chunk_pool_system_free_count`
+
+- Unit: Count
+- Description: Memory chunk allocation/cache metrics.
+
+## `clone_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used for replica clone.
+
+## `cluster_snapshot_consecutive_failures`
+
+- Unit: Count
+- Description: Number of consecutive failed automated cluster snapshot jobs since the last successful one. A persistently increasing value indicates the snapshot storage volume is misconfigured or unreachable.
+
+## `cluster_snapshot_last_finished_time`
+
+- Unit: Milliseconds
+- Description: Epoch time (in milliseconds) of the last finished automated cluster snapshot, or 0 if none has finished.
+
+## `column_metadata_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by column metadata.
+
+## `column_partial_update_apply_duration_us`
+
+- Unit: us
+- Description: Total time spent on partial updates for columns' APPLY tasks (Column mode).
+
+## `column_partial_update_apply_total`
+
+- Unit: Count
+- Description: Total number of APPLY for partial updates by column (Column mode)
+
+## `column_pool_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by the column pools.
+
+## `column_zonemap_index_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by column zonemaps.
+
+## `compaction_bytes_total`
+
+- Unit: Bytes
+- Description: Total merged bytes from base compactions and cumulative compactions.
+
+## `compaction_deltas_total`
+
+- Unit: Count
+- Description: Total number of merged rowsets from base compactions and cumulative compactions.
+
+## `compaction_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by compactions.
+
+## `zstd_compression_dict_build_fallback`
+
+- Unit: Count
+- Description: Cumulative number of times a column that was eligible for the compression dictionary ended up without one and was written as plain ZSTD, either because the trial pages did not come out enough smaller with the dictionary (see `zstd_compression_dict_min_gain`) or because building it failed. Counted once per column writer per segment; as with `zstd_compression_dict_pages_written`, a flat JSON column has one writer per flattened sub-column. Only writers that attempted a dictionary are counted: a page too small to be sampled is not counted here (the next page is tried instead), and neither is a column that never reaches the trial -- because it is dictionary-encoded, or ends before the trial finishes -- so this counter plus `zstd_compression_dict_pages_written` does not add up to the number of nominated columns. A high value relative to `zstd_compression_dict_pages_written` means that the compression dictionary rarely takes effect for the columns designated by the table property `zstd_compression_columns`.
+
+## `zstd_compression_dict_bytes`
+
+- Unit: Bytes
+- Description: Cumulative on-disk size of the compression dictionary pages written to segment files. Divide it by `zstd_compression_dict_pages_written` to get the average dictionary size, which is bounded by `zstd_compression_dict_sample_bytes`.
+
+## `zstd_compression_dict_pages_written`
+
+- Unit: Count
+- Description: Cumulative number of compression dictionary pages written to segment files. One dictionary page is written per column writer per segment, and a flat JSON column has one writer per flattened sub-column, each of which can produce its own dictionary page. So this metric counts writers that actually used a compression dictionary -- not schema columns, and not dictionary-compressed data pages.
+
+## `consistency_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by replica consistency checks.
+
+## `cpu`
+
+- Unit: -
+- Description: CPU usage information returned by `/proc/stat`.
+
+## `cpu_guest`
+
+- Unit: -
+- Type: Average
+- Description: cpu_guest usage rate.
+
+## `cpu_idle`
+
+- Unit: -
+- Type: Average
+- Description: cpu_idle usage rate.
+
+## `cpu_iowait`
+
+- Unit: -
+- Type: Average
+- Description: cpu_iowait usage rate.
+
+## `cpu_irq`
+
+- Unit: -
+- Type: Average
+- Description: cpu_irq usage rate.
+
+## `cpu_nice`
+
+- Unit: -
+- Type: Average
+- Description: cpu_nice usage rate.
+
+## `cpu_softirq`
+
+- Unit: -
+- Type: Average
+- Description: cpu_softirq usage rate.
+
+## `cpu_steal`
+
+- Unit: -
+- Type: Average
+- Description: cpu_steal usage rate.
+
+## `cpu_system`
+
+- Unit: -
+- Type: Average
+- Description: cpu_system usage rate.
+
+## `cpu_user`
+
+- Unit: -
+- Type: Average
+- Description: cpu_user usage rate.
+
+## `cpu_util`
+
+- Unit: -
+- Type: Average
+- Description: CPU usage rate.
+
+## `cumulative_compaction_task_byte_per_second`
+
+- Unit: Bytes/s
+- Description: Rate of bytes processed during cumulative compactions.
+
+## `cumulative_compaction_task_cost_time_ms`
+
+- Unit: ms
+- Description: Total time spent on cumulative compactions.

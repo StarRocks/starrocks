@@ -66,7 +66,7 @@ public class MapTypeTest extends PlanTestBase {
     public void testInsertErrorType() throws Exception {
         String sql = "insert into test_map values (1, map{1: map{1:2}}, map{1:1});";
         try {
-            String plan = getFragmentPlan(sql);
+            getFragmentPlan(sql);
         } catch (Exception e) {
             assertContains(e.getMessage(), 
                     "Cannot cast 'map{1:map{1:2}}' from " + 
@@ -77,7 +77,7 @@ public class MapTypeTest extends PlanTestBase {
     @Test
     public void testComplexAnyValue() throws Exception {
         String sql = "select any_value(c2) from test_map limit 1";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         assertContains("1:AGGREGATE (update finalize)\n" +
                 "  |  output: any_value(3: c2)\n" +
                 "  |  group by: \n" +

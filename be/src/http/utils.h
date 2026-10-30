@@ -17,27 +17,41 @@
 
 #pragma once
 
+#include <cstdint>
+#include <limits>
 #include <string>
 
-#include "common/utils.h"
-#include "http/http_common.h"
-#include "http/http_request.h"
+#include "base/status.h"
 
 namespace starrocks {
 
 class HttpRequest;
-
-std::string encode_basic_auth(const std::string& user, const std::string& passwd);
-// parse Basic authorization
-// return true, if request contain valid basic authorization.
-// Otherwise return fasle
-bool parse_basic_auth(const HttpRequest& req, std::string* user, std::string* passwd);
-
-bool parse_basic_auth(const HttpRequest& req, AuthInfo* auth);
 
 void do_file_response(const std::string& dir_path, HttpRequest* req);
 
 void do_dir_response(const std::string& dir_path, HttpRequest* req);
 
 std::string get_content_type(const std::string& file_name);
+
+// Parse an integer that came in as a request header or a query argument.
+//
+// std::stoll and friends cannot be used on these: they throw
+// std::invalid_argument when the value is not a number and std::out_of_range
+// when it does not fit the type. The value is supplied by the client and is
+// handled inside a libevent callback that has no handler above it, so an
+// escaping exception terminates the process instead of failing the one
+// request. StringParser reports both conditions through a return code.
+//
+// min and max bound the accepted value, so a caller whose field is narrower
+// than int64_t does not have to repeat the check and cannot silently truncate.
+// A value that overflows int64_t is reported the same way as one that misses
+// those bounds, since from the client's side it is the same mistake.
+//
+// The message names the parameter and the accepted range but never the rejected
+// value. The status reaches a WARNING log on a load path that does not require
+// authentication, so echoing the value there would let any client write bytes of
+// its choosing into the log.
+Status parse_int64_param(const std::string& name, const std::string& value, int64_t* result,
+                         int64_t min = std::numeric_limits<int64_t>::min(),
+                         int64_t max = std::numeric_limits<int64_t>::max());
 } // namespace starrocks

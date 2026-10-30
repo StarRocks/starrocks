@@ -21,16 +21,20 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "exec/aggregate/agg_hash_variant.h"
 #include "exec/aggregate/agg_profile.h"
-#include "exec/exec_node.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/exec_node.h"
+#include "exec_primitive/pipeline/operator.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
 #include "exprs/expr_executor.h"
@@ -39,11 +43,12 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/java/java_env.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
-#include "udf/java/java_udf.h"
+#include "exprs/udf/java/java_udf_context.h"
 #endif
-#include "udf/java/utils.h"
 
 namespace starrocks {
 
@@ -106,22 +111,6 @@ inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
     }
 }
 
-template <bool UseIntermediateAsOutput>
-bool AggFunctionTypes::is_result_nullable() const {
-    if constexpr (UseIntermediateAsOutput) {
-        // If using intermediate results as output, no output will be generated and only the input will be serialized.
-        // Therefore, only judge whether the input is nullable to decide whether to serialize null data.
-        return has_nullable_child || serialize_always_nullable;
-    } else {
-        // `is_nullable` means whether the output MAY be nullable. It will be false only when the output is always non-nullable.
-        // Therefore, we need to decide whether the output is really nullable case by case:
-        // 1. Same as input: `has_nullable_child` = `has_nullable_child && is_nullable(true)`.
-        // 2. Always non-nullable: `false` = `has_nullable_child && is_nullable(false)`, eg. count, count distinct, and bitmap_union_int.
-        // 3. Always nullable: `is_always_nullable_result`.
-        return (has_nullable_child && is_nullable) || is_always_nullable_result;
-    }
-}
-
 bool AggFunctionTypes::use_nullable_fn(bool use_intermediate_as_output) const {
     // The non-nullable version functions assume that both the input and output are non-nullable, while the nullable version
     // functions support nullable input or nullable output, which will judge whether the input and output are nullable.
@@ -172,7 +161,15 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
-                         FunctionContext* context);
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration,
+                         bool use_cache = false, bool* cache_hit_out = nullptr);
+
+int64_t Aggregator::get_two_level_threahold() {
+    if (config::two_level_memory_threshold < 0) {
+        return agg::two_level_memory_threshold();
+    }
+    return config::two_level_memory_threshold;
+}
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
@@ -218,7 +215,8 @@ void AggregatorParams::init() {
         const TFunction& fn = desc.nodes[0].fn;
 
         if (AggStateUtils::is_count_function(fn.name.function_name)) {
-            // count function is always not nullable
+            // count family serializes a non-nullable BIGINT. count_combine's NULL-skipping is
+            // re-derived from the real input nullability in _is_agg_result_nullable, not here.
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
             // whether agg function has nullable child
@@ -227,6 +225,7 @@ void AggregatorParams::init() {
             bool is_nullable = desc.nodes[0].is_nullable;
             // collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
+            arg_typedescs.reserve(fn.arg_types.size());
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(TypeDescriptor::from_thrift(type));
             }
@@ -300,14 +299,31 @@ Status Aggregator::open(RuntimeState* state) {
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
 #ifndef __APPLE__
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, [this]() {
+        auto& opts = state->query_options();
+        bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, [this, enable_cache]() {
             std::vector<int> attached_udaf_idx;
             attached_udaf_idx.reserve(_agg_fn_ctxs.size());
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                     const auto& fn = _fns[i];
-                    auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                _agg_fn_ctxs[i]);
+                    // use_cache only when isolation is explicitly shared and enable_cache_udaf is set
+                    bool use_cache = enable_cache && fn.__isset.isolated && !fn.isolated;
+                    bool cache_hit = false;
+                    Status st;
+                    {
+                        SCOPED_TIMER(_agg_stat->udaf_load_timer);
+                        st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                               _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                               use_cache ? &cache_hit : nullptr);
+                    }
+                    if (use_cache) {
+                        if (cache_hit) {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_hit_count, 1);
+                        } else {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
+                        }
+                    }
                     if (!st.ok()) {
                         for (int idx : attached_udaf_idx) {
                             destroy_java_udaf_context(_agg_fn_ctxs[idx]);
@@ -394,7 +410,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(call_agg_create());
 #else
         if (_has_udaf) {
-            auto promise_st = call_function_in_pthread(state, call_agg_create);
+            auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, call_agg_create);
             RETURN_IF_ERROR(promise_st->get_future().get());
         } else {
             RETURN_IF_ERROR(call_agg_create());
@@ -471,7 +487,16 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
     _agg_input_raw_columns.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     _is_merge_funcs.resize(agg_size);
+    _is_first_value_only_funcs.assign(agg_size, 0);
+    _num_first_value_only_funcs = 0;
     _agg_fn_types = _params->agg_fn_types;
+
+    // Save the TFunction objects up front: close() walks _agg_functions/_agg_fn_ctxs and indexes _fns with
+    // the same index, so _fns must be filled before any error return below can leave prepare half-done.
+    _fns.reserve(agg_size);
+    for (int i = 0; i < agg_size; ++i) {
+        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
+    }
 
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = aggregate_functions[i];
@@ -482,6 +507,8 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         // get function
         bool is_result_nullable = _is_agg_result_nullable(desc, agg_fn_type);
         RETURN_IF_ERROR(_create_aggregate_function(state, fn, is_result_nullable, &_agg_functions[i]));
+        _is_first_value_only_funcs[i] = _agg_functions[i]->is_first_value_only();
+        _num_first_value_only_funcs += _is_first_value_only_funcs[i];
         VLOG_ROW << "agg_fn_name: " << fn.name.function_name << ", has_outer_join_child: " << has_outer_join_child
                  << ", is_result_nullable " << is_result_nullable;
 
@@ -558,14 +585,11 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
         if (state->query_options().__isset.group_concat_max_len) {
             _agg_fn_ctxs[i]->set_group_concat_max_len(state->query_options().group_concat_max_len);
         }
+        if (state->query_options().__isset.max_array_length) {
+            _agg_fn_ctxs[i]->set_max_array_length(state->query_options().max_array_length);
+        }
         state->obj_pool()->add(_agg_fn_ctxs[i]);
         _agg_fn_ctxs[i]->set_mem_usage_counter(&_agg_state_mem_usage);
-    }
-
-    // save TFunction object
-    _fns.reserve(_agg_fn_ctxs.size());
-    for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
-        _fns.emplace_back(aggregate_functions[i].nodes[0].fn);
     }
 
     // prepare for spiller
@@ -578,8 +602,10 @@ Status Aggregator::prepare(RuntimeState* state, RuntimeProfile* runtime_profile)
 
 bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTypes& agg_func_type) {
     const TFunction& fn = desc.nodes[0].fn;
-    // NOTE: For count, we cannot use agg_func_type since it's only mocked values.
-    if (fn.name.function_name == FUNCTION_COUNT) {
+    // NOTE: count and count_combine carry mocked agg_func_type values (non-nullable fast-path), so
+    // their NULL-skipping choice must come from the real input nullability on the plan node.
+    if (fn.name.function_name == FUNCTION_COUNT ||
+        fn.name.function_name == FUNCTION_COUNT + AggStateUtils::AGG_STATE_COMBINE_SUFFIX) {
         if (fn.arg_types.empty()) {
             return false;
         }
@@ -592,6 +618,7 @@ bool Aggregator::_is_agg_result_nullable(const TExpr& desc, const AggFunctionTyp
 Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, const TFunction& fn,
                                               bool is_result_nullable, const AggregateFunction** ret) {
     std::vector<TypeDescriptor> arg_types;
+    arg_types.reserve(fn.arg_types.size());
     for (auto& type : fn.arg_types) {
         arg_types.push_back(TypeDescriptor::from_thrift(type));
     }
@@ -621,8 +648,9 @@ Status Aggregator::_create_aggregate_function(starrocks::RuntimeState* state, co
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             DCHECK_LE(1, fn.arg_types.size());
             const TypeDescriptor& arg_type = arg_types[0];
+            bool is_arrow_input = fn.__isset.input_type && fn.input_type == "arrow";
             auto* func = get_aggregate_function(func_name, return_type, arg_types, is_result_nullable, fn.binary_type,
-                                                state->func_version());
+                                                state->func_version(), is_arrow_input);
             if (func == nullptr) {
                 return Status::InternalError(strings::Substitute(
                         "Invalid agg function plan: $0 with (arg type $1, serde type $2, result type $3, nullable $4)",
@@ -671,6 +699,7 @@ Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
 
     _tmp_agg_states.assign(_tmp_agg_states.size(), nullptr);
     _streaming_selection.assign(_streaming_selection.size(), 0);
+    _new_group_selection_ready = false;
 
     DCHECK(_mem_pool != nullptr);
     // Note: we must free agg_states object before _mem_pool free_all;
@@ -793,7 +822,7 @@ void Aggregator::close(RuntimeState* state) {
     (void)agg_close();
 #else
     if (_has_udaf) {
-        auto promise_st = call_function_in_pthread(state, agg_close);
+        auto promise_st = JavaEnv::GetInstance()->submit_java_udf_call(state, agg_close);
         (void)promise_st->get_future().get();
     } else {
         (void)agg_close();
@@ -871,8 +900,12 @@ Status Aggregator::evaluate_agg_input_column(Chunk* chunk, std::vector<ExprConte
                     ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
         } else {
             // if function has at least two argument, unpack const column selectively
-            // for function like corr, FE forbid second args to be const, we will always unpack const column for it
             // for function like percentile_disc, the second args is const, do not unpack it
+            // NOTE: an argument that the analyzer saw as non-constant can still be constant here,
+            // because the optimizer folds constants after analysis. Every aggregate function that
+            // reads an argument other than the first one must therefore cope with a const column
+            // (see `GetContainer` / `ColumnHelper::get_data_column`), it cannot assume the column
+            // has the concrete type of its argument.
             if (agg_expr_ctxs[j]->root()->is_constant()) {
                 _agg_input_columns[i][j] = std::move(col);
             } else {
@@ -910,17 +943,79 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
     return Status::OK();
 }
 
+// A NULL input never changes the state of a first-value-only function (its nullable wrapper skips it), so a group
+// can still lack a value only if every row of it so far was NULL. Such groups are recorded by state pointer in the
+// bloom filter `_pending_first_value_groups`; a false positive only costs an update that does nothing.
+static constexpr size_t kPendingFirstValueGroupsBits = 23;
+
+static inline size_t pending_first_value_group_bit(AggDataPtr state) {
+    return (reinterpret_cast<uintptr_t>(state) * 0x9E3779B97F4A7C15ULL) >> (64 - kPendingFirstValueGroupsBits);
+}
+
+// The rows a first-value-only function must see: the rows that created a group, plus the non-NULL rows of the groups
+// that may still lack a value.
+const Filter& Aggregator::_first_value_only_selection(size_t i, bool use_intermediate, size_t chunk_size) {
+    const Column* column =
+            (!_is_merge_funcs[i] && !use_intermediate) ? _agg_input_raw_columns[i][0] : _agg_input_columns[i][0].get();
+    const bool all_null = column->only_null();
+    const uint8_t* nulls = nullptr;
+    if (!all_null && column->is_nullable() && column->has_null()) {
+        nulls = down_cast<const NullableColumn*>(column)->null_column_data().data();
+    }
+    if (!all_null && nulls == nullptr && !_has_pending_first_value_groups) {
+        return _new_group_selection;
+    }
+
+    if (_pending_first_value_groups.empty()) {
+        _pending_first_value_groups.assign((1ULL << kPendingFirstValueGroupsBits) / 64, 0);
+    }
+    uint64_t* __restrict pending = _pending_first_value_groups.data();
+    const uint8_t* __restrict new_groups = _new_group_selection.data();
+    _first_value_only_selection_buffer.resize(chunk_size);
+    uint8_t* __restrict selection = _first_value_only_selection_buffer.data();
+    for (size_t row = 0; row < chunk_size; row++) {
+        const bool is_null = all_null || (nulls != nullptr && nulls[row]);
+        const size_t bit = pending_first_value_group_bit(_tmp_agg_states[row]);
+        if (new_groups[row] == 0) {
+            selection[row] = 0;
+            if (is_null) {
+                pending[bit / 64] |= 1ULL << (bit % 64);
+                _has_pending_first_value_groups = true;
+            }
+        } else {
+            selection[row] = is_null || ((pending[bit / 64] >> (bit % 64)) & 1) == 0;
+        }
+    }
+    return _first_value_only_selection_buffer;
+}
+
 Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
+    const bool new_group_selection_ready = _new_group_selection_ready;
+    _new_group_selection_ready = false;
 
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         // evaluate arguments at i-th agg function
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge
-        if (!_is_merge_funcs[i] && !use_intermediate) {
+        if (new_group_selection_ready && _is_first_value_only_funcs[i]) {
+            // The states of the other groups already hold their value: skip their rows, never touching the states.
+            DCHECK_EQ(_new_group_selection.size(), chunk_size);
+            const Filter& selection = _first_value_only_selection(i, use_intermediate, chunk_size);
+            if (!_is_merge_funcs[i] && !use_intermediate) {
+                _agg_functions[i]->update_batch_selectively_exception_safe(
+                        _agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i], _agg_input_raw_columns[i].data(),
+                        _tmp_agg_states.data(), selection);
+            } else {
+                DCHECK_GE(_agg_input_columns[i].size(), 1);
+                _agg_functions[i]->merge_batch_selectively_exception_safe(
+                        _agg_fn_ctxs[i], _agg_input_columns[i][0]->size(), _agg_states_offsets[i],
+                        _agg_input_columns[i][0].get(), _tmp_agg_states.data(), selection);
+            }
+        } else if (!_is_merge_funcs[i] && !use_intermediate) {
             _agg_functions[i]->update_batch_exception_safe(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
                                                            _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
         } else {
@@ -936,6 +1031,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
 
 Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
+    _new_group_selection_ready = false;
     bool use_intermediate = _use_intermediate_as_input();
     auto& agg_expr_ctxs = use_intermediate ? _intermediate_agg_expr_ctxs : _agg_expr_ctxs;
 
@@ -1213,14 +1309,25 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 void Aggregator::try_convert_to_two_level_map() {
     auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
     if (current_size > get_two_level_threahold()) {
+        auto prev_type = _hash_map_variant.type();
         _hash_map_variant.convert_to_two_level(_state);
+        // The sink keeps calling this on every chunk once the table is over the threshold, but
+        // only the first call can migrate. Without this the profile would keep naming the
+        // one-level table the query has stopped using.
+        if (_hash_map_variant.type() != prev_type) {
+            _report_hash_variant(_hash_map_variant.type_name());
+        }
     }
 }
 
 void Aggregator::try_convert_to_two_level_set() {
     auto current_size = _hash_set_variant.reserved_memory_usage(mem_pool());
     if (current_size > get_two_level_threahold()) {
+        auto prev_type = _hash_set_variant.type();
         _hash_set_variant.convert_to_two_level(_state);
+        if (_hash_set_variant.type() != prev_type) {
+            _report_hash_variant(_hash_set_variant.type_name());
+        }
     }
 }
 
@@ -1525,6 +1632,22 @@ typename HashVariantType::Type Aggregator::_try_to_apply_compressed_key_opt(type
     if (_group_by_types.empty()) {
         return type;
     }
+    // Don't shadow direct-array variants with the slice_cx1 rewrite.
+    // TINYINT / BOOL / SMALLINT route to SmallFixedSizeHashMap-backed
+    // direct arrays; the slice_cx1 path sits on the same direct array
+    // under int8 but adds a per-row bitcompress_serialize step, so any
+    // query that supplies range stats via `group_by_min_max` would
+    // otherwise silently regress to the slower slice path.
+    if (_group_by_types.size() == 1) {
+        switch (_group_by_types[0].result_type.type) {
+        case TYPE_TINYINT:
+        case TYPE_BOOLEAN:
+        case TYPE_SMALLINT:
+            return type;
+        default:
+            break;
+        }
+    }
     for (size_t i = 0; i < _ranges.size(); ++i) {
         if (!_ranges[i].has_value()) {
             return type;
@@ -1597,6 +1720,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         // build with compressed key
         VLOG_ROW << "apply compressed key";
         _build_hash_variant<HashVariantType>(hash_variant, type, std::move(compress_key_ctx));
+        _report_hash_variant(hash_variant.type_name());
         return;
     }
 
@@ -1617,9 +1741,27 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             variant->fixed_byte_size = fixed_byte_size;
         }
     });
+
+    _report_hash_variant(hash_variant.type_name());
+}
+
+// Which rung of the key ladder a query actually landed on leaves no trace in the plan and has no
+// counter of its own, so today it can only be inferred from hash table bytes per group -- which
+// is how the cost of the serialized fallback has had to be diagnosed so far.  Report it the way
+// Velox reports `hashtable.hashMode`.
+//
+// An aggregate with no grouping keys accumulates into a single state and never touches the
+// hash table, so its variant field holds nothing but the enum's default.  Reporting that would
+// read as a missed optimization on exactly the nodes where none was possible.
+void Aggregator::_report_hash_variant(const char* name) {
+    if (_group_by_expr_ctxs.empty()) {
+        return;
+    }
+    _runtime_profile->add_info_string("HashVariant", name);
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {
+    _new_group_selection_ready = false;
     if (agg_group_by_with_limit) {
         if (_hash_map_variant.size() >= _limit) {
             build_hash_map_with_selection(chunk_size);
@@ -1627,6 +1769,22 @@ void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit)
         } else {
             _streaming_selection.assign(chunk_size, 0);
         }
+    }
+
+    if (_num_first_value_only_funcs > 0) {
+        _hash_map_variant.visit([&](auto& hash_map_with_key) {
+            using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+            hash_map_with_key->build_hash_map_marking_new_groups(chunk_size, _group_by_columns, _mem_pool.get(),
+                                                                 AllocateState<MapType>(this), &_tmp_agg_states,
+                                                                 &_new_group_selection);
+        });
+        // The hash map marks a row that created a group with 1; flip it to the Filter convention (0 = selected).
+        uint8_t* __restrict selection = _new_group_selection.data();
+        for (size_t i = 0; i < chunk_size; i++) {
+            selection[i] ^= 1;
+        }
+        _new_group_selection_ready = true;
+        return;
     }
 
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
@@ -1646,6 +1804,7 @@ void Aggregator::build_hash_map(size_t chunk_size, std::atomic<int64_t>& shared_
 }
 
 void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomic<int64_t>& shared_limit_countdown) {
+    _new_group_selection_ready = false;
     auto start_size = _hash_map_variant.size();
     if (_hash_map_variant.size() >= _limit || shared_limit_countdown.load(std::memory_order_relaxed) <= 0) {
         build_hash_map_with_selection(chunk_size);
@@ -1663,6 +1822,7 @@ void Aggregator::_build_hash_map_with_shared_limit(size_t chunk_size, std::atomi
 }
 
 void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
+    _new_group_selection_ready = false;
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         hash_map_with_key->build_hash_map_with_selection(chunk_size, _group_by_columns, _mem_pool.get(),
@@ -1672,6 +1832,7 @@ void Aggregator::build_hash_map_with_selection(size_t chunk_size) {
 }
 
 void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
+    _new_group_selection_ready = false;
     _streaming_selection.resize(chunk_size);
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
@@ -1691,6 +1852,7 @@ void Aggregator::build_hash_map_with_topn_runtime_filter(size_t chunk_size) {
 // so the following group keys(same as the first not found group keys) are not marked as non-founded.
 // This can be used for stream mv so no need to find multi times for the same non-found group keys.
 void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit) {
+    _new_group_selection_ready = false;
     _hash_map_variant.visit([&](auto& hash_map_with_key) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         hash_map_with_key->build_hash_map_with_selection_and_allocation(chunk_size, _group_by_columns, _mem_pool.get(),
@@ -1830,7 +1992,11 @@ void Aggregator::convert_hash_set_to_chunk(int32_t chunk_size, ChunkPtr* chunk) 
             ++it;
         }
 
-        {
+        // A streaming DISTINCT aggregation re-drains the hash set every time the sink re-arms
+        // streaming_all_states, so this can run right after reset_state() emptied it. results is
+        // then a buffer of default constructed keys with nothing to deserialize out of it; mirror
+        // the read_index > 0 guard convert_hash_map_to_chunk() already has.
+        if (read_index > 0) {
             SCOPED_TIMER(_agg_stat->group_by_append_timer);
             hash_set.insert_keys_to_columns(hash_set.results, group_by_columns, read_index);
         }
@@ -1901,5 +2067,11 @@ void Aggregator::_release_agg_memory() {
         }
     });
 }
+
+// Only prepare() instantiates these, and at -O3 it inlines them, so the out-of-line copies can be
+// dropped before they reach the archive. Requesting them explicitly keeps the key-ladder decision
+// callable from a unit test, which is otherwise reachable only by running a whole plan fragment.
+template void Aggregator::_init_agg_hash_variant<AggHashMapVariant>(AggHashMapVariant&);
+template void Aggregator::_init_agg_hash_variant<AggHashSetVariant>(AggHashSetVariant&);
 
 } // namespace starrocks

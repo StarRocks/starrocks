@@ -1,6 +1,0 @@
--- name: test_shared_nothing @native
-select @@run_mode;
--- result:
-shared_nothing
--- !result
-

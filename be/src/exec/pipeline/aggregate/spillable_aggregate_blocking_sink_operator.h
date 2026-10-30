@@ -13,22 +13,25 @@
 // limitations under the License.
 
 #pragma once
+#include <utility>
+
 #include "aggregate_blocking_sink_operator.h"
 #include "base/concurrency/race_detect.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "exec/aggregator.h"
-#include "exec/pipeline/operator.h"
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/sorted_streaming_aggregator.h"
-#include "runtime/runtime_state.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exprs/sort_exec_exprs.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
 public:
     template <class... Args>
     SpillableAggregateBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
-            : AggregateBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
+            : AggregateBlockingSinkOperator(std::move(aggregator), std::forward<Args>(args)...,
                                             "spillable_aggregate_blocking_sink") {}
 
     ~SpillableAggregateBlockingSinkOperator() override = default;

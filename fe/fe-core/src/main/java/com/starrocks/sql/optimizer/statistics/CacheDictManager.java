@@ -16,13 +16,19 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
@@ -63,7 +69,7 @@ import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
  * - Dictionary data size must be <= 1MB to ensure BE can generate dictionary pages after compaction
  * <p>
  * 2. Cache Management:
- * - Uses Caffeine AsyncLoadingCache with maximum size from Config.statistic_dict_columns
+ * - Uses Caffeine AsyncLoadingCache bounded by total dictionary bytes (Config.low_cardinality_dict_cache_max_bytes)
  * - Cache entries are keyed by ColumnIdentifier (tableId + columnName)
  * - Cache automatically loads dictionaries asynchronously when accessed
  * <p>
@@ -85,7 +91,47 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
     private static final Set<Long> FORBIDDEN_DICT_TABLE_IDS = Sets.newConcurrentHashSet();
 
+    // Global dicts seeded from a query dump during ReplayFromDump. On replay there is no BE to load a dict
+    // from, so hasGlobalDict/getGlobalDict below short-circuit to a seeded dict when present -- reproducing the
+    // dict-encoding optimization the dump captured. Keyed by the REPLAYED (newly assigned) tableId + column.
+    // Empty outside replay, so it is inert in production.
+    @VisibleForTesting
+    private static final Map<ColumnIdentifier, ColumnDict> REPLAY_DICTS = Maps.newConcurrentMap();
+
+    @VisibleForTesting
+    public static void replayPut(long tableId, ColumnId columnName, ColumnDict dict) {
+        REPLAY_DICTS.put(new ColumnIdentifier(tableId, columnName), dict);
+    }
+
+    @VisibleForTesting
+    public static void clearReplayDicts() {
+        REPLAY_DICTS.clear();
+    }
+    // Thrash guard: per-column history of recent dictionary invalidation timestamps (millis). Used to
+    // detect "rolling low-cardinality" columns whose dictionary keeps being invalidated and re-collected;
+    // such columns are forbidden (added to NO_DICT_STRING_COLUMNS) so they stop wasting MetaScans.
+    // Bounded so idle / rarely-thrashing columns cannot accumulate forever. maximumSize caps the entry
+    // count and Caffeine LRU-evicts the least-recently-touched columns; a column that keeps thrashing is
+    // touched on every invalidation and is therefore never evicted while it still matters.
+    // Fixed-window invalidation counter per column -- far lighter than a Deque of boxed timestamps: one
+    // small object (window start + count), O(1) per invalidation, no boxing, no queue scanning. A fixed
+    // window (reset every window_sec) is enough to detect a persistently thrashing column, which
+    // invalidates far more often than the threshold; the only imprecision is that a burst straddling a
+    // window boundary may take one extra window to trip -- irrelevant for sustained thrash.
+    private static final class InvalidationWindow {
+        long windowStartMs;
+        int count;
+    }
+
+    private static final Cache<ColumnIdentifier, InvalidationWindow> DICT_INVALIDATION_HISTORY =
+            Caffeine.newBuilder()
+                    .maximumSize(Config.statistic_dict_columns)
+                    .build();
+
     public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
+
+    // Estimated overhead for node + key + future, rounded up
+    public static final int ENTRY_OVERHEAD_BYTES = 256;
 
     public CacheDictManager() {
     }
@@ -103,7 +149,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 CompletableFuture<Optional<ColumnDict>> asyncLoad(
                         @NonNull ColumnIdentifier columnIdentifier,
                         @NonNull Executor executor) {
-                    return CompletableFuture.supplyAsync(() -> {
+                    CompletableFuture<Optional<ColumnDict>> future = CompletableFuture.supplyAsync(() -> {
                         try {
                             long tableId = columnIdentifier.getTableId();
                             ColumnId columnName = columnIdentifier.getColumnName();
@@ -128,6 +174,16 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                             throw new CompletionException(e);
                         }
                     }, executor);
+                    // Rejected columns are also in NO_DICT_STRING_COLUMNS (which short-circuits lookups),
+                    // so their cached empty is redundant and never invalidated -- drop it so empties can't
+                    // pile up under the byte cap. Async so it runs after Caffeine stores the entry.
+                    future.whenCompleteAsync((result, throwable) -> {
+                        if (throwable == null && result != null && !result.isPresent()
+                                && NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
+                            dictStatistics.synchronous().invalidate(columnIdentifier);
+                        }
+                    }, executor);
+                    return future;
                 }
 
                 @Override
@@ -138,8 +194,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 }
             };
 
+    // Bounded by total dict bytes, not entry count. Empty Optional (non-low-card column) weighs 1.
     private final AsyncLoadingCache<ColumnIdentifier, Optional<ColumnDict>> dictStatistics = Caffeine.newBuilder()
-            .maximumSize(Config.statistic_dict_columns)
+            .maximumWeight(Config.low_cardinality_dict_cache_max_bytes)
+            .weigher((Weigher<ColumnIdentifier, Optional<ColumnDict>>) (key, value) ->
+                    ENTRY_OVERHEAD_BYTES + value.map(ColumnDict::getByteSize).orElse(0))
             .executor(ThreadPoolManager.getStatsCacheThread())
             .buildAsync(dictLoader);
 
@@ -187,8 +246,15 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
+    public boolean hasGlobalDict(OlapTable scanTable, ColumnId columnName, long versionTime) {
+        long tableId = scanTable.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        // A dump-seeded dict is authoritative for replay; deliberately ignore versionTime (the recreated
+        // replay table has a fresh, larger version that would otherwise fail the version gate below).
+        // REPLAY_DICTS is empty outside ReplayFromDump, so the isEmpty() guard makes this a no-op in production.
+        if (!REPLAY_DICTS.isEmpty() && REPLAY_DICTS.containsKey(columnIdentifier)) {
+            return true;
+        }
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{}-{} isn't low cardinality string column", tableId, columnName);
             return false;
@@ -199,17 +265,18 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
             return false;
         }
 
-        Set<Long> dbIds = ConnectContext.get().getCurrentSqlDbIds();
-        for (Long id : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
-            if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId) != null) {
-                columnIdentifier.setDbId(db.getId());
-                break;
-            }
-        }
-
-        if (columnIdentifier.getDbId() == -1) {
+        long dbId = resolveDbId(scanTable);
+        Table table = dbId == -1 ? null : GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, tableId);
+        if (table == null) {
             LOG.debug("{} couldn't find db id", columnName);
+            return false;
+        }
+        columnIdentifier.setDbId(dbId);
+
+        // Column-level persisted forbid (survives FE restart / leader failover): the dictionary thrash
+        // guard records such columns as a table property, checked here so they stop being collected.
+        if (table instanceof OlapTable olapTable && olapTable.isNoDictColumn(columnName.getId())) {
+            LOG.debug("table {} column {} is a persisted no-dict column", tableId, columnName);
             return false;
         }
 
@@ -236,9 +303,33 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         return false;
     }
 
+    // The analyzer records the database on every OLAP table it resolves, including a view's base tables. The
+    // statement's database set cannot stand in for it: it holds only the databases the user wrote, so a table
+    // read through a view in another database would never get its dict. A materialized view picked by a rewrite
+    // was not resolved by the analyzer, but knows its database itself; fall back to that set for anything else.
+    private static long resolveDbId(OlapTable table) {
+        if (table instanceof MaterializedView mv) {
+            return mv.getDbId();
+        }
+        Optional<Long> dbId = table.mayGetDatabaseId();
+        if (dbId.isPresent()) {
+            return dbId.get();
+        }
+        for (Long id : ConnectContext.get().getCurrentSqlDbIds()) {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(id);
+            if (db != null && GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(id, table.getId()) != null) {
+                return id;
+            }
+        }
+        return -1;
+    }
+
     @Override
     public boolean hasGlobalDict(long tableId, ColumnId columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        if (!REPLAY_DICTS.isEmpty() && REPLAY_DICTS.containsKey(columnIdentifier)) {
+            return true;
+        }
         if (NO_DICT_STRING_COLUMNS.contains(columnIdentifier)) {
             LOG.debug("{} isn't low cardinality string column", columnName);
             return false;
@@ -269,6 +360,11 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         LOG.info("remove dict for table:{} column:{}", tableId, columnName);
         dictStatistics.synchronous().invalidate(columnIdentifier);
 
+        // A real present->invalidated transition just happened (the containsKey guard above skips the
+        // no-op case where the dictionary is already absent). Record it and, if this column keeps
+        // thrashing, forbid it so it stops being collected.
+        recordInvalidationAndMaybeForbid(table, columnName, columnIdentifier);
+
         // Remove all subfields' dicts if the column is a JSON type
         try {
             List<String> parts = SubfieldAccessPathNormalizer.parseSimpleJsonPath(columnName.getId());
@@ -292,6 +388,79 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         }
     }
 
+    // Track one dictionary invalidation for a column and, when a column is invalidated too frequently,
+    // forbid collecting its dictionary. Frequent invalidation signals a column unsuited to the global
+    // dictionary: a rolling low-cardinality column whose values keep turning over, and/or the
+    // high-concurrency version race it triggers (each re-collection bumps the collected version, so
+    // in-flight loads that carry the older version invalidate it again on commit). Both funnel through
+    // removeGlobalDict and are counted here; either way the remedy is the same -- stop collecting it.
+    // Forbidding only disables an optimization, so it is always correctness-safe. The in-memory entry
+    // takes effect immediately; the forbid is also persisted (asynchronously) as a table property so it
+    // survives FE restart / leader failover.
+    private void recordInvalidationAndMaybeForbid(OlapTable table, ColumnId columnName,
+                                                  ColumnIdentifier columnIdentifier) {
+        if (recordInvalidationAndCheckThreshold(columnIdentifier)) {
+            NO_DICT_STRING_COLUMNS.add(columnIdentifier);
+            DICT_INVALIDATION_HISTORY.invalidate(columnIdentifier);
+            LOG.info("forbid global dict for table:{} column:{} due to dictionary thrashing " +
+                            "(>= {} invalidations within {}s); it will stop being collected",
+                    columnIdentifier.getTableId(), columnName,
+                    Config.dict_thrash_guard_threshold, Config.dict_thrash_guard_window_sec);
+            persistNoDictColumnAsync(table, columnName);
+        }
+    }
+
+    // Record one invalidation of this column and return true once it has been invalidated at least
+    // dict_thrash_guard_threshold times within dict_thrash_guard_window_sec (the thrash condition).
+    private boolean recordInvalidationAndCheckThreshold(ColumnIdentifier columnIdentifier) {
+        if (!Config.enable_dict_thrash_guard || Config.dict_thrash_guard_threshold <= 0) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        long windowMs = Math.max(1, Config.dict_thrash_guard_window_sec) * 1000L;
+        InvalidationWindow w = DICT_INVALIDATION_HISTORY.get(columnIdentifier, k -> new InvalidationWindow());
+        int count;
+        synchronized (w) {
+            if (w.count == 0 || now - w.windowStartMs > windowMs) {
+                w.windowStartMs = now;
+                w.count = 1;
+            } else {
+                w.count++;
+            }
+            count = w.count;
+        }
+        return count >= Config.dict_thrash_guard_threshold;
+    }
+
+    // Persist the column-level forbid so it survives restart. MUST run off the caller's thread:
+    // removeGlobalDict is invoked from the transaction-apply path, which may hold db/txn locks, while
+    // the persist takes a table WRITE lock and writes an edit log -- doing that inline risks a deadlock
+    // or lock-order violation. Running it on a separate thread (with no other locks held) is safe, and
+    // leader-only because only the leader writes edit logs (followers get it via replay).
+    private void persistNoDictColumnAsync(OlapTable table, ColumnId columnName) {
+        if (table == null || !GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
+        long dbId = MetaUtils.lookupDbIdByTable(table);
+        if (dbId == -1) {
+            return;
+        }
+        long tableId = table.getId();
+        String col = columnName.getId();
+        try {
+            ThreadPoolManager.getStatsCacheThread().execute(() -> {
+                try {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .disableGlobalDictForColumn(dbId, tableId, col);
+                } catch (Exception e) {
+                    LOG.warn("failed to persist no-dict column table:{} column:{}", tableId, col, e);
+                }
+            });
+        } catch (Exception e) {
+            LOG.warn("failed to submit no-dict persist task table:{} column:{}", tableId, col, e);
+        }
+    }
+
     @Override
     public void disableGlobalDict(long tableId) {
         LOG.debug("disable dict optimize for table {}", tableId);
@@ -301,10 +470,38 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public void enableGlobalDict(long tableId) {
         FORBIDDEN_DICT_TABLE_IDS.remove(tableId);
+        // Give this table a clean slate: drop any of its columns that the thrash guard (or the
+        // cardinality check) previously forbade, so collection can be retried after an explicit enable.
+        NO_DICT_STRING_COLUMNS.removeIf(columnIdentifier -> columnIdentifier.getTableId() == tableId);
+        DICT_INVALIDATION_HISTORY.asMap().keySet().removeIf(columnIdentifier -> columnIdentifier.getTableId() == tableId);
+    }
+
+    // Clear the in-memory forbid state for specific columns. Called from ALTER TABLE ... ENABLE DICTIONARY
+    // (and its edit-log replay) so an explicit ENABLE takes effect on every FE immediately, without waiting
+    // for a restart. hasGlobalDict() checks NO_DICT_STRING_COLUMNS before the persisted noDictColumns, so
+    // clearing the persisted property alone is not enough. Only the named columns are cleared, so a
+    // cardinality-based forbid on some other column is untouched; if one of these columns was actually
+    // high-cardinality it is simply re-derived on the next collection (correctness-safe).
+    @Override
+    public void clearForbiddenColumns(long tableId, Set<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
+        NO_DICT_STRING_COLUMNS.removeIf(ci -> ci.getTableId() == tableId
+                && columnNames.contains(ci.getColumnName().getId()));
+        DICT_INVALIDATION_HISTORY.asMap().keySet().removeIf(ci -> ci.getTableId() == tableId
+                && columnNames.contains(ci.getColumnName().getId()));
     }
 
     @Override
-    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectVersion, long versionTime) {
+    public boolean isColumnForbidden(long tableId, String columnName) {
+        return NO_DICT_STRING_COLUMNS.stream()
+                .anyMatch(ci -> ci.getTableId() == tableId && ci.getColumnName().getId().equals(columnName));
+    }
+
+    @Override
+    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion,
+                                 long versionTime, Long contentIdentity) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
@@ -325,8 +522,14 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     ColumnDict columnDict = columnOptional.get();
                     long lastVersion = columnDict.getVersion();
                     long dictCollectVersion = columnDict.getCollectedVersion();
-                    if (collectVersion != dictCollectVersion) {
-                        LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
+                    if (collectedVersion != dictCollectVersion) {
+                        LOG.info("remove dict by unmatched version {}:{}", collectedVersion, dictCollectVersion);
+                        removeGlobalDict(table, columnName);
+                        return;
+                    }
+                    if (contentIdentity != null && contentIdentity != columnDict.getContentIdentity()) {
+                        LOG.info("remove dict by unmatched content identity for table:{} column:{} received:{} expected:{}",
+                                tableId, columnName, contentIdentity, columnDict.getContentIdentity());
                         removeGlobalDict(table, columnName);
                         return;
                     }
@@ -343,6 +546,12 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
+        if (!REPLAY_DICTS.isEmpty()) {
+            ColumnDict replayDict = REPLAY_DICTS.get(columnIdentifier);
+            if (replayDict != null) {
+                return Optional.of(replayDict);
+            }
+        }
         CompletableFuture<Optional<ColumnDict>> columnFuture = dictStatistics.get(columnIdentifier);
         if (columnFuture.isDone()) {
             try {
@@ -440,5 +649,28 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     @Override
     public long estimateSize() {
         return Estimator.estimate(dictStatistics.asMap(), 20);
+    }
+
+    // Exact total dict bytes, maintained by Caffeine (O(1)). Serialized size, a lower bound on heap.
+    public long getCacheWeightedBytes() {
+        return dictStatistics.synchronous().policy().eviction()
+                .map(eviction -> eviction.weightedSize().orElse(0L))
+                .orElse(0L);
+    }
+
+    // Apply low_cardinality_dict_cache_max_bytes changes to the live cache. Called once, after GlobalStateMgr is up.
+    public void registerConfigRefreshListener() {
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(this::refreshCacheMaximum);
+    }
+
+    private void refreshCacheMaximum() {
+        dictStatistics.synchronous().policy().eviction().ifPresent(eviction -> {
+            long oldMax = eviction.getMaximum();
+            long newMax = Config.low_cardinality_dict_cache_max_bytes;
+            if (oldMax != newMax) {
+                eviction.setMaximum(newMax);
+                LOG.info("update dict cache max bytes from {} to {}", oldMax, newMax);
+            }
+        });
     }
 }

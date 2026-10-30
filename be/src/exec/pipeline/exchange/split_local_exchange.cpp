@@ -16,10 +16,19 @@
 
 #include <memory>
 
+#include "common/config_exec_flow_fwd.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_executor.h"
 
 namespace starrocks::pipeline {
+
+SplitLocalExchanger::SplitLocalExchanger(int num_consumers, std::vector<ExprContext*>& split_expr_ctxs,
+                                         size_t chunk_size)
+        : _split_expr_ctxs(std::move(split_expr_ctxs)),
+          _buffer(num_consumers),
+          _opened_source_opcount(num_consumers, 0),
+          kBufferedRowSizeScaleFactor(config::split_exchanger_buffer_chunk_num),
+          _chunk_size(chunk_size) {}
 
 Status SplitLocalExchanger::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExprExecutor::prepare(_split_expr_ctxs, state));

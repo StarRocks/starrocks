@@ -16,18 +16,21 @@
 
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
-#include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/persistent_index.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 
+enum class PrimaryKeyEncodingType;
 class Tablet;
 class HashIndex;
-class ParallelPublishContext;
+class ParallelUpsertContext;
+struct ParallelPublishSlot;
 
 const uint64_t ROWID_MASK = 0xffffffff;
 
@@ -41,7 +44,8 @@ public:
     using tablet_rowid_t = uint64_t;
 
     PrimaryIndex();
-    PrimaryIndex(const Schema& pk_schema);
+    // |encoding_type| is the encoding of every key passed to this index.
+    PrimaryIndex(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type);
     virtual ~PrimaryIndex();
 
     // Fetch all primary keys from the tablet associated with this index into memory
@@ -75,9 +79,23 @@ public:
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
 
-    // support parallel upsert with thread pool
-    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, IOStat* stat = nullptr,
-                  ParallelPublishContext* ctx = nullptr);
+    // Parallel-publish overload. The active-memtable write happens synchronously here; on a
+    // cloud-native index the SST / inactive-memtable lookup of the replaced old values is submitted
+    // to `ctx`'s runner, which is why `slot` -- whose `pk_column` owns the bytes `keys` points into
+    // -- must outlive the join.
+    //
+    // When `ctx->defers_lookup()` the lookup task appends the replaced rowids to the context and the
+    // caller must join the runner and call flush_memtable(); otherwise the lookup completes before
+    // this returns and the context is appended to synchronously. Either way the caller must not
+    // append them again.
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx, IOStat* stat = nullptr);
+
+    // Same, for an arbitrary subset of rows addressed by absolute rowid: pks[i] lands at
+    // (rssid, rowids[i]). Only supported on the cloud-native persistent index (returns NotSupported
+    // otherwise).
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx, IOStat* stat = nullptr);
 
     // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
@@ -168,17 +186,17 @@ public:
     // only for ut
     void set_status(bool loaded, Status st) {
         _loaded = loaded;
-        _status = st;
+        _status = std::move(st);
     }
 
     // Return the pointer of specific position of slice array.
-    static const Slice* build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin, uint32_t idx_end,
-                                              std::vector<Slice>* key_slices);
+    static StatusOr<const Slice*> build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin,
+                                                        uint32_t idx_end, Buffer<Slice>* key_slices);
 
     bool need_rebuild() const;
 
 protected:
-    void _set_schema(const Schema& pk_schema);
+    void _set_schema(const Schema& pk_schema, PrimaryKeyEncodingType encoding_type);
 
 private:
     Status _do_load(Tablet* tablet);
@@ -195,7 +213,8 @@ private:
                                          uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                                         uint32_t idx_end, IOStat* stat, ParallelPublishContext* ctx);
+                                         uint32_t idx_end, ParallelPublishSlot* slot, ParallelUpsertContext* ctx,
+                                         IOStat* stat);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 

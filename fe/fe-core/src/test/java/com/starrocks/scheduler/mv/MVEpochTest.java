@@ -32,24 +32,19 @@ class MVEpochTest {
 
     @Test
     void write() throws IOException {
-        long txnId = 9137;
         BinlogConsumeStateVO binlog = new BinlogConsumeStateVO();
         binlog.getBinlogMap().put(
                 new BinlogConsumeStateVO.BinlogIdVO(1),
                 new BinlogConsumeStateVO.BinlogLSNVO(2, 1));
         MVEpoch epoch = new MVEpoch(new MvId(0, 1024));
-        epoch.onReady();
-        epoch.onSchedule();
-        epoch.onCommitting();
-        epoch.onCommitted(binlog);
+        epoch.setState(MVEpoch.EpochState.COMMITTED);
+        epoch.setBinlogState(binlog);
         epoch.setStartTimeMilli(1024);
         epoch.setCommitTimeMilli(1024);
 
         assertEquals(MVEpoch.EpochState.COMMITTED, epoch.getState());
         DataOutputBuffer buffer = new DataOutputBuffer(1024);
         Text.writeString(buffer, GsonUtils.GSON.toJson(epoch, MVEpoch.class));
-        byte[] bytes = buffer.getData();
-
         DataInput input = new DataInputStream(new ByteArrayInputStream(buffer.getData()));
         MVEpoch deserialized = GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
         assertEquals(epoch, deserialized);

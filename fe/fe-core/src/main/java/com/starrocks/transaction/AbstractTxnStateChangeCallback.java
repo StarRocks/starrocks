@@ -31,7 +31,7 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
 
     }
 
@@ -41,7 +41,7 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
 
     }
@@ -52,7 +52,7 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+    public void afterVisible(TransactionState txnState) {
 
     }
 
@@ -67,7 +67,7 @@ public abstract class AbstractTxnStateChangeCallback implements TxnStateChangeCa
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
+    public void afterPrepared(TransactionState txnState) throws StarRocksException {
 
     }
 

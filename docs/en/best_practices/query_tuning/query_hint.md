@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 70
+description: "Query hints are directives or comments that explicitly suggest the query optimizer on how to execute a query."
 ---
 
 # Query Hint
@@ -54,14 +55,6 @@ SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_plann
        SUM(sales_amount) AS total_sales_amount  
 FROM t;
 
--- To specify hints in the subquery
-WITH t AS (  
-  SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */  
-         region, sales_amount  
-  FROM sales_orders  
-)  
-SELECT SUM(sales_amount) AS total_sales_amount  
-FROM t;
 ```
 
 ## User-defined variable hint

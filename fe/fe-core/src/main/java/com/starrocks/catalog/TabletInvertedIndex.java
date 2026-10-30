@@ -48,6 +48,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -149,6 +150,15 @@ public class TabletInvertedIndex implements MemoryTrackable {
         markTabletForceDelete(tablet.getId(), tablet.getBackendIds());
     }
 
+    /**
+     * Batch mark tablets for force delete.
+     */
+    public void markTabletsForceDelete(Collection<Tablet> tablets) {
+        for (Tablet tablet : tablets) {
+            markTabletForceDelete(tablet);
+        }
+    }
+
     public void eraseTabletForceDelete(long tabletId, long backendId) {
         forceDeleteTablets.computeIfPresent(tabletId, (id, backendSets) -> {
             backendSets.remove(backendId);
@@ -162,21 +172,46 @@ public class TabletInvertedIndex implements MemoryTrackable {
         }
         mutationLock.lock();
         try {
-            CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.remove(tabletId);
-            if (replicas != null) {
-                for (Replica replica : replicas) {
-                    Set<Long> tabletIds = backendToTabletIdList.get(replica.getBackendId());
-                    if (tabletIds != null) {
-                        tabletIds.remove(tabletId);
-                    }
-                }
-            }
-            tabletMetaMap.remove(tabletId);
-
-            LOG.debug("delete tablet: {}", tabletId);
+            deleteTabletUnlocked(tabletId);
         } finally {
             mutationLock.unlock();
         }
+    }
+
+    /**
+     * Batch delete tablets with a single lock acquisition, reducing lock contention
+     * compared to calling deleteTablet() in a loop.
+     */
+    public void deleteTablets(Collection<Long> tabletIds) {
+        if (GlobalStateMgr.isCheckpointThread()) {
+            return;
+        }
+        if (tabletIds.isEmpty()) {
+            return;
+        }
+        mutationLock.lock();
+        try {
+            for (long tabletId : tabletIds) {
+                deleteTabletUnlocked(tabletId);
+            }
+        } finally {
+            mutationLock.unlock();
+        }
+    }
+
+    private void deleteTabletUnlocked(long tabletId) {
+        CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.remove(tabletId);
+        if (replicas != null) {
+            for (Replica replica : replicas) {
+                Set<Long> tabletIds = backendToTabletIdList.get(replica.getBackendId());
+                if (tabletIds != null) {
+                    tabletIds.remove(tabletId);
+                }
+            }
+        }
+        tabletMetaMap.remove(tabletId);
+
+        LOG.debug("delete tablet: {}", tabletId);
     }
 
     // Only for test
@@ -192,13 +227,32 @@ public class TabletInvertedIndex implements MemoryTrackable {
         try {
             CopyOnWriteArrayList<Replica> replicas = tabletToReplicaList.computeIfAbsent(tabletId,
                     k -> new CopyOnWriteArrayList<>());
-            replicas.add(replica);
+            long backendId = replica.getBackendId();
 
-            Set<Long> tabletIds = backendToTabletIdList.computeIfAbsent(replica.getBackendId(),
+            // Restore the per-(tabletId, backendId) uniqueness invariant that the prior
+            // Map<backendId, Replica> inner container provided in branch-3.5 before #66288.
+            // Replace the first existing entry in place so concurrent readers see an atomic
+            // swap (never a transient absence). FE restart / journal replay rebuilds this
+            // index through the same path, so once this fix lands no duplicates ever form
+            // and no historical sweep is needed.
+            int firstIdx = -1;
+            for (int i = 0; i < replicas.size(); i++) {
+                if (replicas.get(i).getBackendId() == backendId) {
+                    firstIdx = i;
+                    break;
+                }
+            }
+            if (firstIdx >= 0) {
+                replicas.set(firstIdx, replica);
+            } else {
+                replicas.add(replica);
+            }
+
+            Set<Long> tabletIds = backendToTabletIdList.computeIfAbsent(backendId,
                     k -> ConcurrentHashMap.newKeySet());
             tabletIds.add(tabletId);
 
-            LOG.debug("add replica {} of tablet {} in backend {}", replica.getId(), tabletId, replica.getBackendId());
+            LOG.debug("add replica {} of tablet {} in backend {}", replica.getId(), tabletId, backendId);
         } finally {
             mutationLock.unlock();
         }

@@ -691,8 +691,6 @@ public class TempPartitionTest extends StarRocksTestBase {
                 "distributed by hash(k2) buckets 1\n" +
                 "properties('replication_num' = '1');");
 
-        Database db3 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
-        OlapTable tbl3 = (OlapTable) db3.getTable("tbl3");
 
         // base range is [min, 10), [10, 20), [20, 30)
 

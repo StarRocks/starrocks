@@ -16,21 +16,28 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.thrift.TFunction;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DecimalType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.JsonType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.Comparator;
+import java.util.List;
 
 public class FunctionSetTest {
 
@@ -379,5 +386,90 @@ public class FunctionSetTest {
         Assertions.assertEquals(2, tableFunction.getTableFnReturnTypes().size());
         Assertions.assertEquals(IntegerType.BIGINT, tableFunction.getTableFnReturnTypes().get(0));
         Assertions.assertEquals(VarcharType.VARCHAR, tableFunction.getTableFnReturnTypes().get(1));
+    }
+
+    @Test
+    public void testAICompleteBuiltinMetadata() {
+        List<Function> aiCompleteFunctions = functionSet.getBuiltinFunctions().stream()
+                .filter(fn -> "ai_complete".equals(fn.functionName()))
+                .sorted(Comparator.comparingLong(Function::getFunctionId))
+                .toList();
+
+        long[] expectedIds = {200000L, 200001L};
+        Type[][] expectedArgs = {
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
+                {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
+        };
+        String[][] expectedNames = {
+                {"prompt", "provider", "model", "options"},
+                {"prompt", "file", "provider", "model", "options"}
+        };
+
+        Assertions.assertEquals(expectedIds.length, aiCompleteFunctions.size());
+        for (int i = 0; i < expectedIds.length; i++) {
+            Function fn = aiCompleteFunctions.get(i);
+            Assertions.assertEquals(expectedIds[i], fn.getFunctionId());
+            Assertions.assertArrayEquals(expectedArgs[i], fn.getArgs());
+            Assertions.assertArrayEquals(expectedNames[i], fn.getArgNames());
+            Assertions.assertEquals(expectedArgs[i].length, fn.getNumArgs());
+            Assertions.assertEquals(VarcharType.VARCHAR, fn.getReturnType());
+            Assertions.assertTrue(fn.isNullable());
+            Assertions.assertTrue(fn.isAI());
+            Assertions.assertEquals(TFunctionBinaryType.AI, fn.getBinaryType());
+
+            Assertions.assertFalse(fn.isPolymorphic());
+            TFunction thriftFunction = fn.toThrift();
+            Assertions.assertEquals(TFunctionBinaryType.AI, thriftFunction.getBinary_type());
+        }
+
+        Assertions.assertTrue(FunctionSet.nonDeterministicFunctions.contains("ai_complete"));
+    }
+
+    @Test
+    public void testAIQueryIsRemoved() {
+        Assertions.assertTrue(functionSet.getBuiltinFunctions().stream()
+                .noneMatch(fn -> "ai_query".equals(fn.functionName())));
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_query"));
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("AI_QUERY"));
+    }
+
+    @Test
+    public void testGrantableAIFunctionFamiliesRejectMalformedMetadata() {
+        Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("AI_COMPLETE"));
+        for (String name : List.of("lower", "missing_ai", "db.ai_complete", "db.lower", "*", " ai_complete")) {
+            Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(name));
+        }
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily(null));
+
+        Function overload = functionSet.getBuiltinFunctions().stream()
+                .filter(fn -> "ai_complete".equals(fn.functionName())).findFirst().orElseThrow();
+        overload.setUserVisible(false);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setUserVisible(true);
+        overload.setBinaryType(TFunctionBinaryType.BUILTIN);
+        Assertions.assertNull(functionSet.getGrantableAIFunctionFamily("ai_complete"));
+        overload.setBinaryType(TFunctionBinaryType.AI);
+        Assertions.assertEquals("ai_complete", functionSet.getGrantableAIFunctionFamily("ai_complete"));
+    }
+
+    @Test
+    public void testAICompleteJsonSignaturesPreserveMetadata() {
+        Type[][] concreteArgs = {
+                {VarcharType.VARCHAR, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON},
+                {VarcharType.VARCHAR, FileType.FILE, VarcharType.VARCHAR, VarcharType.VARCHAR, JsonType.JSON}
+        };
+        long[] expectedIds = {200000L, 200001L};
+
+        for (int i = 0; i < concreteArgs.length; i++) {
+            Function resolved = functionSet.getFunction(
+                    new Function(new FunctionName("ai_complete"), concreteArgs[i], InvalidType.INVALID, false),
+                    Function.CompareMode.IS_IDENTICAL);
+
+            Assertions.assertNotNull(resolved);
+            Assertions.assertEquals(expectedIds[i], resolved.getFunctionId());
+            Assertions.assertArrayEquals(concreteArgs[i], resolved.getArgs());
+            Assertions.assertFalse(resolved.isPolymorphic());
+            Assertions.assertTrue(resolved.isAI());
+        }
     }
 }

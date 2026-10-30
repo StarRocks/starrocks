@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns an array of the elements in the intersection of one or more arrays."
 ---
 
 # array_intersect

@@ -496,6 +496,10 @@ public class PartitionKey implements Comparable<PartitionKey> {
         return Math.max(higher, 0);
     }
 
+    public static boolean isShadowDateLiteral(DateLiteral literal) {
+        return literal.getYear() == 0 && literal.getMonth() == 0 && literal.getDay() == 0;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

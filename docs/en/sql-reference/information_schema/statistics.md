@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Information schema placeholder view not implemented in StarRocks."
 ---
 
 # statistics

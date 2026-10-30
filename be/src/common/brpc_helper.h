@@ -14,10 +14,13 @@
 
 #pragma once
 
-#include "common/config.h"
+namespace brpc {
+class Controller;
+}
 
-// Ignore BRPC overcrowded error when the corresponding module config is enabled.
-#define SET_IGNORE_OVERCROWDED(ctnl, module)          \
-    if (config::brpc_##module##_ignore_overcrowded) { \
-        ctnl.ignore_eovercrowded();                   \
-    }
+namespace starrocks {
+
+void set_ignore_overcrowded_for_query(brpc::Controller& cntl);
+void set_ignore_overcrowded_for_load(brpc::Controller& cntl);
+
+} // namespace starrocks

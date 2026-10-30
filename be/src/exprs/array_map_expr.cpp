@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <memory>
 #include <sstream>
 
@@ -33,8 +34,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
-#include "runtime/user_function_cache.h"
-#include "storage/chunk_helper.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 ArrayMapExpr::ArrayMapExpr(const TExprNode& node) : Expr(node, false) {}
@@ -171,7 +171,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 
         // if lambda expr doesn't rely on argument, we don't need to put it into cur_chunk
         if constexpr (!independent_lambda_expr) {
-            cur_chunk->append_column(elements_column, arguments_ids[i]);
+            // Move it in: when the same array column is passed as two lambda arguments
+            // (e.g. array_map((x, y) -> ..., a, a)), both iterations yield the same elements
+            // column, and Chunk requires its columns to be unique. The rvalue overload
+            // copy-on-writes the duplicate instead of aliasing one column to two slots.
+            cur_chunk->append_column(std::move(elements_column), arguments_ids[i]);
         }
     }
     DCHECK(aligned_offsets != nullptr);
@@ -189,7 +193,9 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
                 ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets_data));
                 cur_chunk->append_column(replicated_view_column, slot_id);
-                RETURN_IF_ERROR(view_column->capacity_limit_reached());
+                // The replicated column, not the view it was replicated from: the size that can
+                // overflow is the element-level one, and the view has the chunk's row count.
+                RETURN_IF_ERROR(replicated_view_column->capacity_limit_reached());
             } else {
                 ASSIGN_OR_RETURN(auto replicated_column,
                                  captured_column->as_mutable_raw_ptr()->replicate(aligned_offsets_data));
@@ -228,25 +234,34 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
-            column = ColumnHelper::unpack_and_duplicate_const_column(tmp_col->size(), std::move(tmp_col));
-            column = ColumnHelper::align_return_type(std::move(column), type().children[0], column->size(), true);
+            size_t num_rows = tmp_col->size();
+            column = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], num_rows, true);
         } else {
-            ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
-            RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
-            accumulator.finalize();
-            while (auto tmp_chunk = accumulator.pull()) {
-                tmp_chunk->check_or_die();
-                for (auto& column : tmp_chunk->columns()) {
+            // The lambda is evaluated over one bounded slice of the element-level chunk at a time, so
+            // that its intermediate results cost a slice rather than the whole expansion. The slicing
+            // used to go through ChunkAccumulator, which cuts a chunk that is already fully built into
+            // pieces and holds *all* of them until they are pulled - a second copy of the entire
+            // element-level chunk (every lambda argument plus every replicated capture column, at
+            // sum(array lengths) rows) alive at the same time as the original. Cutting the pieces here
+            // keeps one of them alive instead, and the arithmetic below is the accumulator's own: full
+            // slices of DEFAULT_CHUNK_SIZE rows and a shorter last one.
+            const size_t element_rows = cur_chunk->num_rows();
+            for (size_t start = 0; start < element_rows; start += DEFAULT_CHUNK_SIZE) {
+                const size_t count = std::min<size_t>(DEFAULT_CHUNK_SIZE, element_rows - start);
+                auto slice_chunk = cur_chunk->clone_empty(count);
+                TRY_CATCH_BAD_ALLOC(slice_chunk->append(*cur_chunk, start, count));
+                RETURN_IF_ERROR(slice_chunk->capacity_limit_reached());
+                slice_chunk->check_or_die();
+                for (auto& slice_column : slice_chunk->columns()) {
                     // because not all functions can handle ArrayViewColumn correctly, we need to convert it back to ArrayColumn first.
                     // in the future, this copy can be removed when we solve this problem.
-                    if (column->is_array_view()) {
-                        column = ArrayViewColumn::to_array_column(column);
+                    if (slice_column->is_array_view()) {
+                        slice_column = ArrayViewColumn::to_array_column(slice_column);
                     }
                 }
-                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], slice_chunk.get()));
                 tmp_col->check_or_die();
-                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
-                                                          true);
+                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], count, true);
                 if (column == nullptr) {
                     column = std::move(*tmp_col).mutate();
                 } else {
@@ -272,7 +287,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         array_column->check_or_die();
         ColumnPtr result_column = array_column;
         if (result_null_column != nullptr) {
-            result_column = NullableColumn::create(std::move(array_column), std::move(result_null_column));
+            result_column = NullableColumn::create(std::move(array_column), result_null_column);
             result_column->check_or_die();
         }
         result_column = ConstColumn::create(result_column, chunk->num_rows());
@@ -283,7 +298,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 ArrayColumn::create(std::move(column), ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone()));
         array_column->check_or_die();
         if (result_null_column != nullptr) {
-            return NullableColumn::create(std::move(array_column), std::move(result_null_column));
+            return NullableColumn::create(std::move(array_column), result_null_column);
         }
         return array_column;
     }
@@ -399,13 +414,32 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                     ->get_total_elements_num(result_null_column);
 
     if (total_elements_num == 0) {
-        // if all input rows are empty arrays, return a const empty array column as result
+        // All non-null input arrays are empty. When some rows are null we cannot use a const
+        // column (null rows and empty-`[]` rows differ): build `num_rows` empty arrays and apply
+        // the per-row null mask so null inputs stay null instead of being rendered as `[]` (and
+        // so the row count is correct). With no null rows every row is identical, so a const
+        // empty array column is fine.
         column = ColumnHelper::create_column(type().children[0], true);
         auto aligned_offsets = UInt32Column::create(0);
+        if (result_null_column) {
+            // all-zero offsets (num_rows + 1 of them) -> every row is an empty array
+            aligned_offsets->append_default(chunk->num_rows() + 1);
+            auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
+            array_col->check_or_die();
+            auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
+            // result_null_column may be shorter than num_rows when the nullable input is a
+            // const/single-row column that has not been materialized to chunk size; align the
+            // per-row null mask to the empty-array column (padded rows are non-null, since the
+            // all-null case already returned above) so the NullableColumn stays consistent.
+            result_null_mut->resize(chunk->num_rows());
+            auto result = NullableColumn::create(std::move(array_col), std::move(result_null_mut));
+            result->check_or_die();
+            return result;
+        }
         aligned_offsets->append_default(2);
         auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
-        auto result = ConstColumn::create(std::move(array_col), chunk->num_rows() - null_rows);
+        auto result = ConstColumn::create(std::move(array_col), chunk->num_rows());
         result->check_or_die();
         return result;
     }
@@ -435,11 +469,27 @@ std::string ArrayMapExpr::debug_string() const {
 }
 
 int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
-    int num = Expr::get_slot_ids(slot_ids);
+    std::vector<SlotId> collected;
+    Expr::get_slot_ids(&collected);
+    // The columns the extracted common expressions depend on are genuine captures.
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
-        slot_ids->push_back(slot_id);
+        expr->get_slot_ids(&collected);
+    }
+    int num = 0;
+    for (SlotId id : collected) {
+        // Drop the synthetic slot ids we assigned to the extracted common expressions themselves:
+        // each is produced and consumed inside this array_map's own evaluate_lambda_expr (in its
+        // private tmp_chunk) and never exists in an enclosing chunk. Such a slot can reach here
+        // through the child lambda's captured slots, because extraction rewrote the lambda body to
+        // reference it. Surfacing it to an enclosing lambda makes that lambda treat it as a
+        // captured column and look it up via Chunk::get_column_by_slot_id on the input chunk,
+        // crashing the BE (e.g. nested array_map over a constant array whose inner lambda captures
+        // the outer lambda argument).
+        if (_outer_common_exprs.find(id) != _outer_common_exprs.end()) {
+            continue;
+        }
+        slot_ids->push_back(id);
         num++;
-        num += (expr->get_slot_ids(slot_ids));
     }
     return num;
 }

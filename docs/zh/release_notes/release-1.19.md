@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 1.19 版本发布说明：全局运行时过滤、CBO 优化器默认启用、主键表实验功能。"
 ---
 
 # StarRocks version 1.19

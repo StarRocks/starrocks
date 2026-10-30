@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "json_path式で特定できるJSONオブジェクト内の要素をクエリし、JSON値を返します。"
 ---
 
 # Arrow function

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CASE is a conditional expression."
 ---
 
 # case

@@ -36,6 +36,11 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <atomic>
+#include <memory>
+#include <thread>
+#include <unordered_map>
 #include <vector>
 
 using namespace starrocks;
@@ -234,9 +239,73 @@ static void deleter(const CacheKey& key, void* v) {
     std::cout << "delete key " << key.to_string() << std::endl;
 }
 
-static void insert_LRUCache(LRUCache& cache, const CacheKey& key, int value, CachePriority priority) {
-    uint32_t hash = key.hash(key.data(), key.size(), 0);
-    cache.release(cache.insert(key, hash, EncodeValue(value), value, &deleter, priority));
+static uint32_t hash_cache_key(const CacheKey& key) {
+    return key.hash(key.data(), key.size(), 0);
+}
+
+static int lookup_cache(Cache* cache, int key) {
+    std::string encoded;
+    Cache::Handle* handle = cache->lookup(EncodeKey(&encoded, key));
+    const int result = (handle == nullptr) ? -1 : DecodeValue(cache->value(handle));
+    if (handle != nullptr) {
+        cache->release(handle);
+    }
+    return result;
+}
+
+static void insert_cache(Cache* cache, int key, int value, size_t charge,
+                         CachePriority priority = CachePriority::NORMAL) {
+    std::string encoded;
+    cache->release(cache->insert(EncodeKey(&encoded, key), EncodeValue(value), charge, &CacheTest::Deleter, priority));
+}
+
+static void touch_cache(Cache* cache, int key) {
+    std::string encoded;
+    cache->touch(EncodeKey(&encoded, key));
+}
+
+static uint32_t shard_for_int_key(int key) {
+    std::string encoded;
+    return hash_cache_key(EncodeKey(&encoded, key)) >> (32 - kNumShardBits);
+}
+
+static std::array<int, 3> find_int_keys_in_same_shard() {
+    std::unordered_map<uint32_t, std::vector<int>> shard_keys;
+    for (int key = 0;; key++) {
+        auto& keys = shard_keys[shard_for_int_key(key)];
+        keys.push_back(key);
+        if (keys.size() == 3) {
+            return {keys[0], keys[1], keys[2]};
+        }
+    }
+}
+
+static void insert_LRUCache(LRUCache& cache, const CacheKey& key, int value, size_t charge,
+                            CachePriority priority = CachePriority::NORMAL) {
+    cache.release(cache.insert(key, hash_cache_key(key), EncodeValue(value), charge, &deleter, priority));
+}
+
+static int decode_LRUCache_value(Cache::Handle* handle) {
+    return DecodeValue(reinterpret_cast<LRUHandle*>(handle)->value);
+}
+
+static int lookup_LRUCache(LRUCache& cache, const CacheKey& key) {
+    Cache::Handle* handle = cache.lookup(key, hash_cache_key(key));
+    const int result = (handle == nullptr) ? -1 : decode_LRUCache_value(handle);
+    if (handle != nullptr) {
+        cache.release(handle);
+    }
+    return result;
+}
+
+static void touch_LRUCache(LRUCache& cache, const CacheKey& key) {
+    cache.touch(key, hash_cache_key(key));
+}
+
+static size_t entry_charge_for_int_key() {
+    std::string encoded;
+    CacheKey key = EncodeKey(&encoded, 0);
+    return 1 + LRUCache::key_handle_size(key);
 }
 
 TEST_F(CacheTest, Usage) {
@@ -245,39 +314,423 @@ TEST_F(CacheTest, Usage) {
 
     CacheKey key1("100");
     size_t key_mem_usage = sizeof(LRUHandle) - 1 + key1.size();
-    insert_LRUCache(cache, key1, 100, CachePriority::NORMAL);
+    insert_LRUCache(cache, key1, 100, 100, CachePriority::NORMAL);
     // 100 + 90
     ASSERT_EQ(100 + key_mem_usage, cache.get_usage());
 
     CacheKey key2("200");
-    insert_LRUCache(cache, key2, 200, CachePriority::DURABLE);
+    insert_LRUCache(cache, key2, 200, 200, CachePriority::DURABLE);
     // 300 + 180
     ASSERT_EQ(300 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key3("300");
-    insert_LRUCache(cache, key3, 300, CachePriority::NORMAL);
+    insert_LRUCache(cache, key3, 300, 300, CachePriority::NORMAL);
     // 600 + 270
     ASSERT_EQ(600 + key_mem_usage * 3, cache.get_usage());
 
     CacheKey key4("400");
-    insert_LRUCache(cache, key4, 400, CachePriority::NORMAL);
+    insert_LRUCache(cache, key4, 400, 400, CachePriority::NORMAL);
     // 600 + 180
     ASSERT_EQ(600 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key5("500");
-    insert_LRUCache(cache, key5, 500, CachePriority::NORMAL);
+    insert_LRUCache(cache, key5, 500, 500, CachePriority::NORMAL);
     // 700 + 180
     ASSERT_EQ(700 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key6("600");
-    insert_LRUCache(cache, key6, 600, CachePriority::NORMAL);
+    insert_LRUCache(cache, key6, 600, 600, CachePriority::NORMAL);
     // 800 + 180
     ASSERT_EQ(800 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key7("950");
     // 900 + 90
-    insert_LRUCache(cache, key7, 900, CachePriority::DURABLE);
+    insert_LRUCache(cache, key7, 900, 900, CachePriority::DURABLE);
     ASSERT_EQ(900 + key_mem_usage, cache.get_usage());
+}
+
+TEST_F(CacheTest, TouchUpdatesRecencyWithoutLookupSideEffects) {
+    const size_t entry_charge = entry_charge_for_int_key();
+
+    {
+        LRUCache cache;
+        cache.set_capacity(entry_charge * 2);
+
+        std::string k100_buf;
+        std::string k200_buf;
+        std::string k300_buf;
+        CacheKey k100 = EncodeKey(&k100_buf, 100);
+        CacheKey k200 = EncodeKey(&k200_buf, 200);
+        CacheKey k300 = EncodeKey(&k300_buf, 300);
+
+        insert_LRUCache(cache, k100, 101, 1);
+        insert_LRUCache(cache, k200, 201, 1);
+        insert_LRUCache(cache, k300, 301, 1);
+
+        ASSERT_EQ(-1, lookup_LRUCache(cache, k100));
+        ASSERT_EQ(201, lookup_LRUCache(cache, k200));
+        ASSERT_EQ(301, lookup_LRUCache(cache, k300));
+    }
+
+    {
+        LRUCache cache;
+        cache.set_capacity(entry_charge * 2);
+
+        std::string k100_buf;
+        std::string k200_buf;
+        std::string k300_buf;
+        CacheKey k100 = EncodeKey(&k100_buf, 100);
+        CacheKey k200 = EncodeKey(&k200_buf, 200);
+        CacheKey k300 = EncodeKey(&k300_buf, 300);
+
+        insert_LRUCache(cache, k100, 101, 1);
+        insert_LRUCache(cache, k200, 201, 1);
+        const uint64_t lookup_count_before_touch = cache.get_lookup_count();
+        const uint64_t hit_count_before_touch = cache.get_hit_count();
+        touch_LRUCache(cache, k100);
+        ASSERT_EQ(lookup_count_before_touch, cache.get_lookup_count());
+        ASSERT_EQ(hit_count_before_touch, cache.get_hit_count());
+        insert_LRUCache(cache, k300, 301, 1);
+
+        ASSERT_EQ(101, lookup_LRUCache(cache, k100));
+        ASSERT_EQ(-1, lookup_LRUCache(cache, k200));
+        ASSERT_EQ(301, lookup_LRUCache(cache, k300));
+    }
+}
+
+TEST_F(CacheTest, TouchUpdatesRecencyOnShardedCache) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    const auto keys = find_int_keys_in_same_shard();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 2 * kNumShards));
+
+    insert_cache(cache.get(), keys[0], 1000, 1);
+    insert_cache(cache.get(), keys[1], 2000, 1);
+    touch_cache(cache.get(), keys[0]);
+    insert_cache(cache.get(), keys[2], 3000, 1);
+
+    ASSERT_EQ(1000, lookup_cache(cache.get(), keys[0]));
+    ASSERT_EQ(-1, lookup_cache(cache.get(), keys[1]));
+    ASSERT_EQ(3000, lookup_cache(cache.get(), keys[2]));
+}
+
+static Cache::Handle* insert_if_absent_cache(Cache* cache, int key, int value, size_t charge, bool* inserted) {
+    std::string encoded;
+    return cache->insert_if_absent(EncodeKey(&encoded, key), EncodeValue(value), charge, &CacheTest::Deleter, inserted);
+}
+
+static bool update_charge_cache(Cache* cache, int key, size_t new_value_size,
+                                bool (*pred)(void* value, const void* ctx) = nullptr, const void* ctx = nullptr) {
+    std::string encoded;
+    return cache->update_charge_if(EncodeKey(&encoded, key), new_value_size, pred, ctx);
+}
+
+static bool value_equals(void* value, const void* ctx) {
+    return DecodeValue(value) == static_cast<int>(reinterpret_cast<intptr_t>(ctx));
+}
+
+TEST_F(CacheTest, InsertIfAbsentInsertsWhenKeyMissing) {
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * kNumShards));
+
+    bool inserted = false;
+    auto* handle = insert_if_absent_cache(cache.get(), 100, 1000, 1, &inserted);
+    ASSERT_NE(nullptr, handle);
+    ASSERT_TRUE(inserted);
+    ASSERT_EQ(1000, DecodeValue(cache->value(handle)));
+    cache->release(handle);
+
+    ASSERT_EQ(1000, lookup_cache(cache.get(), 100));
+    ASSERT_TRUE(_deleted_keys.empty());
+}
+
+TEST_F(CacheTest, InsertIfAbsentKeepsExistingEntry) {
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 2 * kNumShards));
+
+    insert_cache(cache.get(), 100, 1000, 1);
+
+    bool inserted = true;
+    auto* handle = insert_if_absent_cache(cache.get(), 100, 2000, 1, &inserted);
+    ASSERT_NE(nullptr, handle);
+    ASSERT_FALSE(inserted);
+    // The existing value is returned; the rejected one is never handed to the deleter,
+    // it stays the caller's responsibility.
+    ASSERT_EQ(1000, DecodeValue(cache->value(handle)));
+    cache->release(handle);
+
+    ASSERT_EQ(1000, lookup_cache(cache.get(), 100));
+    ASSERT_TRUE(_deleted_keys.empty());
+}
+
+TEST_F(CacheTest, InsertIfAbsentEvictsToStayWithinCapacity) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    const auto keys = find_int_keys_in_same_shard();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 2 * kNumShards));
+
+    insert_cache(cache.get(), keys[0], 1000, 1);
+    insert_cache(cache.get(), keys[1], 2000, 1);
+
+    bool inserted = false;
+    cache->release(insert_if_absent_cache(cache.get(), keys[2], 3000, 1, &inserted));
+    ASSERT_TRUE(inserted);
+
+    ASSERT_EQ(-1, lookup_cache(cache.get(), keys[0]));
+    ASSERT_EQ(2000, lookup_cache(cache.get(), keys[1]));
+    ASSERT_EQ(3000, lookup_cache(cache.get(), keys[2]));
+    ASSERT_EQ(std::vector<int>({keys[0]}), _deleted_keys);
+}
+
+TEST_F(CacheTest, InsertIfAbsentIsAtomicUnderConcurrency) {
+    constexpr int kThreads = 16;
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 64 * kNumShards));
+
+    std::atomic<int> inserted_count{0};
+    std::vector<std::thread> threads;
+    threads.reserve(kThreads);
+    for (int i = 0; i < kThreads; i++) {
+        threads.emplace_back([&, i]() {
+            bool inserted = false;
+            auto* handle = insert_if_absent_cache(cache.get(), 100, 1000 + i, 1, &inserted);
+            if (inserted) {
+                inserted_count.fetch_add(1);
+            }
+            cache->release(handle);
+        });
+    }
+    for (auto& t : threads) {
+        t.join();
+    }
+
+    ASSERT_EQ(1, inserted_count.load());
+    ASSERT_TRUE(_deleted_keys.empty());
+}
+
+static bool replace_cache(Cache* cache, int key, int value, size_t charge, int expected) {
+    std::string encoded;
+    return cache->replace_if(EncodeKey(&encoded, key), EncodeValue(value), charge, &CacheTest::Deleter, value_equals,
+                             reinterpret_cast<const void*>(static_cast<intptr_t>(expected)));
+}
+
+TEST_F(CacheTest, ReplaceIfDefaultDoesNotAdoptOrModify) {
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 32 * kNumShards));
+    insert_cache(cache.get(), 100, 1000, 1);
+    const auto usage = cache->get_memory_usage();
+    std::string encoded;
+    EXPECT_FALSE(cache->Cache::replace_if(EncodeKey(&encoded, 100), EncodeValue(2000), 101, &CacheTest::Deleter,
+                                          value_equals, reinterpret_cast<const void*>(static_cast<intptr_t>(1000))));
+    EXPECT_EQ(1000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_TRUE(_deleted_values.empty());
+    encoded.clear();
+    cache->erase(EncodeKey(&encoded, 100));
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
+TEST_F(CacheTest, ReplaceIfReclaimsOldChargeBeforeEvictingOtherEntries) {
+    const auto keys = find_int_keys_in_same_shard();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 2 * kNumShards));
+    insert_cache(cache.get(), keys[0], 1000, 1);
+    insert_cache(cache.get(), keys[1], 2000, 1);
+    const auto usage = cache->get_memory_usage();
+    ASSERT_TRUE(replace_cache(cache.get(), keys[0], 3000, 1, 1000));
+    EXPECT_EQ(3000, lookup_cache(cache.get(), keys[0]));
+    EXPECT_EQ(2000, lookup_cache(cache.get(), keys[1]));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
+TEST_F(CacheTest, ReplaceIfKeepsPinnedOldHandleAndChargesReplacement) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 32 * kNumShards));
+    insert_cache(cache.get(), 100, 1000, 1);
+    const size_t old_usage = cache->get_memory_usage();
+    std::string encoded;
+    auto* old_handle = cache->lookup(EncodeKey(&encoded, 100));
+    ASSERT_NE(nullptr, old_handle);
+
+    ASSERT_TRUE(replace_cache(cache.get(), 100, 2000, 101, 1000));
+    EXPECT_EQ(2000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(1000, DecodeValue(cache->value(old_handle)));
+    EXPECT_TRUE(_deleted_values.empty());
+    // Pinned old handles retain their charge until release, just as with insert().
+    EXPECT_EQ(old_usage * 2 + 100, cache->get_memory_usage());
+    cache->release(old_handle);
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+    EXPECT_EQ(old_usage + 100, cache->get_memory_usage());
+
+    // A stale owner's late accounting update cannot change the replacement's charge.
+    EXPECT_FALSE(update_charge_cache(cache.get(), 100, 999, value_equals,
+                                     reinterpret_cast<const void*>(static_cast<intptr_t>(1000))));
+    EXPECT_EQ(old_usage + 100, cache->get_memory_usage());
+    EXPECT_TRUE(update_charge_cache(cache.get(), 100, 201, value_equals,
+                                    reinterpret_cast<const void*>(static_cast<intptr_t>(2000))));
+    EXPECT_EQ(old_usage + 200, cache->get_memory_usage());
+}
+
+TEST_F(CacheTest, ReplaceIfRejectsMissingAndChangedEntriesWithoutAdoptingValue) {
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 32 * kNumShards));
+    EXPECT_FALSE(replace_cache(cache.get(), 100, 2000, 101, 1000));
+    EXPECT_EQ(-1, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(0, cache->get_memory_usage());
+    EXPECT_TRUE(_deleted_values.empty());
+
+    insert_cache(cache.get(), 100, 1000, 1);
+    const size_t usage = cache->get_memory_usage();
+    EXPECT_FALSE(replace_cache(cache.get(), 100, 2000, 101, 999));
+    EXPECT_EQ(1000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_TRUE(_deleted_values.empty());
+
+    ASSERT_TRUE(replace_cache(cache.get(), 100, 3000, 1, 1000));
+    EXPECT_FALSE(replace_cache(cache.get(), 100, 4000, 101, 1000));
+    EXPECT_EQ(3000, lookup_cache(cache.get(), 100));
+    EXPECT_EQ(usage, cache->get_memory_usage());
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+    std::string encoded;
+    cache->erase(EncodeKey(&encoded, 100));
+    EXPECT_EQ(std::vector<int>({1000, 3000}), _deleted_values);
+}
+
+TEST_F(CacheTest, ReplaceIfHasOnlyOneWinnerForTheSameExpectedValue) {
+    constexpr int kThreads = 16;
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge_for_int_key() * 64 * kNumShards));
+    insert_cache(cache.get(), 100, 1000, 1);
+    std::atomic<int> replaced_count{0};
+    std::vector<std::thread> threads;
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back([&, i]() {
+            if (replace_cache(cache.get(), 100, 2000 + i, 1, 1000)) {
+                replaced_count.fetch_add(1);
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    EXPECT_EQ(1, replaced_count.load());
+    const auto winner = lookup_cache(cache.get(), 100);
+    EXPECT_GE(winner, 2000);
+    EXPECT_LT(winner, 2000 + kThreads);
+    EXPECT_EQ(std::vector<int>({1000}), _deleted_values);
+}
+
+TEST_F(CacheTest, UpdateChargeIfAdjustsUsage) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 16 * kNumShards));
+
+    insert_cache(cache.get(), 100, 1000, 1);
+    const size_t base_usage = cache->get_memory_usage();
+
+    ASSERT_TRUE(update_charge_cache(cache.get(), 100, 101));
+    ASSERT_EQ(base_usage + 100, cache->get_memory_usage());
+
+    ASSERT_TRUE(update_charge_cache(cache.get(), 100, 1));
+    ASSERT_EQ(base_usage, cache->get_memory_usage());
+
+    // The entry itself is untouched, only its accounted size changed.
+    ASSERT_EQ(1000, lookup_cache(cache.get(), 100));
+    ASSERT_TRUE(_deleted_keys.empty());
+}
+
+TEST_F(CacheTest, UpdateChargeIfIgnoresMissingKeyAndRejectedPredicate) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 16 * kNumShards));
+
+    insert_cache(cache.get(), 100, 1000, 1);
+    const size_t base_usage = cache->get_memory_usage();
+
+    ASSERT_FALSE(update_charge_cache(cache.get(), 200, 101));
+    ASSERT_EQ(base_usage, cache->get_memory_usage());
+
+    ASSERT_FALSE(update_charge_cache(cache.get(), 100, 101, value_equals,
+                                     reinterpret_cast<const void*>(static_cast<intptr_t>(2000))));
+    ASSERT_EQ(base_usage, cache->get_memory_usage());
+
+    ASSERT_TRUE(update_charge_cache(cache.get(), 100, 101, value_equals,
+                                    reinterpret_cast<const void*>(static_cast<intptr_t>(1000))));
+    ASSERT_EQ(base_usage + 100, cache->get_memory_usage());
+}
+
+TEST_F(CacheTest, UpdateChargeIfRefreshesRecencyBeforeEvicting) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    const auto keys = find_int_keys_in_same_shard();
+    std::unique_ptr<Cache> cache(new_lru_cache(entry_charge * 2 * kNumShards));
+
+    insert_cache(cache.get(), keys[0], 1000, 1);
+    insert_cache(cache.get(), keys[1], 2000, 1);
+
+    // Grow the *older* entry past the shard capacity. Because the update refreshes it to
+    // the MRU end first, the newer entry is the one evicted, not the entry being updated.
+    ASSERT_TRUE(update_charge_cache(cache.get(), keys[0], 1 + entry_charge));
+
+    ASSERT_EQ(1000, lookup_cache(cache.get(), keys[0]));
+    ASSERT_EQ(-1, lookup_cache(cache.get(), keys[1]));
+    ASSERT_EQ(std::vector<int>({keys[1]}), _deleted_keys);
+}
+
+TEST_F(CacheTest, TouchMissingKeyDoesNotAffectRecencyOrStats) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    LRUCache cache;
+    cache.set_capacity(entry_charge * 2);
+
+    std::string k100_buf;
+    std::string k200_buf;
+    std::string k300_buf;
+    std::string k999_buf;
+    CacheKey k100 = EncodeKey(&k100_buf, 100);
+    CacheKey k200 = EncodeKey(&k200_buf, 200);
+    CacheKey k300 = EncodeKey(&k300_buf, 300);
+    CacheKey k999 = EncodeKey(&k999_buf, 999);
+
+    insert_LRUCache(cache, k100, 101, 1);
+    insert_LRUCache(cache, k200, 201, 1);
+
+    const uint64_t lookup_count_before = cache.get_lookup_count();
+    const uint64_t hit_count_before = cache.get_hit_count();
+    touch_LRUCache(cache, k999);
+
+    ASSERT_EQ(lookup_count_before, cache.get_lookup_count());
+    ASSERT_EQ(hit_count_before, cache.get_hit_count());
+
+    insert_LRUCache(cache, k300, 301, 1);
+
+    ASSERT_EQ(-1, lookup_LRUCache(cache, k100));
+    ASSERT_EQ(201, lookup_LRUCache(cache, k200));
+    ASSERT_EQ(301, lookup_LRUCache(cache, k300));
+}
+
+TEST_F(CacheTest, TouchPinnedEntryIsNoOpAndDoesNotChangeStats) {
+    const size_t entry_charge = entry_charge_for_int_key();
+    LRUCache cache;
+    cache.set_capacity(entry_charge * 2);
+
+    std::string k100_buf;
+    std::string k200_buf;
+    std::string k300_buf;
+    CacheKey k100 = EncodeKey(&k100_buf, 100);
+    CacheKey k200 = EncodeKey(&k200_buf, 200);
+    CacheKey k300 = EncodeKey(&k300_buf, 300);
+
+    insert_LRUCache(cache, k100, 101, 1);
+    insert_LRUCache(cache, k200, 201, 1);
+
+    Cache::Handle* pinned = cache.lookup(k100, hash_cache_key(k100));
+    ASSERT_NE(nullptr, pinned);
+    ASSERT_EQ(101, decode_LRUCache_value(pinned));
+
+    const uint64_t lookup_count_after_pin = cache.get_lookup_count();
+    const uint64_t hit_count_after_pin = cache.get_hit_count();
+    touch_LRUCache(cache, k100);
+
+    ASSERT_EQ(lookup_count_after_pin, cache.get_lookup_count());
+    ASSERT_EQ(hit_count_after_pin, cache.get_hit_count());
+
+    insert_LRUCache(cache, k300, 301, 1);
+
+    ASSERT_EQ(-1, lookup_LRUCache(cache, k200));
+    ASSERT_EQ(301, lookup_LRUCache(cache, k300));
+    ASSERT_EQ(101, decode_LRUCache_value(pinned));
+
+    cache.release(pinned);
+    ASSERT_EQ(101, lookup_LRUCache(cache, k100));
 }
 
 TEST_F(CacheTest, HeavyEntries) {

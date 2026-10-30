@@ -131,9 +131,35 @@ class TestNormalizeSQL:
     def test_whitespace_normalization(self):
         """Test whitespace collapse and trimming."""
         sql = "  SELECT   `id`  ,  `name`   FROM   `users`  "
+        # normalize_sql collapses runs of whitespace but no longer canonicalizes comma
+        # spacing (that is sqlglot's job now), so the spaces around the comma survive as
+        # single spaces.
         expected = "select id , name from users"
         result = TableAttributeNormalizer.normalize_sql(sql)
         assert result == expected
+
+    def test_comment_marker_inside_string_literal_preserved(self):
+        """A '--' inside a string literal is data, not a comment, and must survive.
+
+        Regression: the comment-stripping regex truncated the literal (and left it
+        unterminated), so SELECT 'x -- foo' and SELECT 'x -- bar' normalized to the
+        same text — silently missing a real view definition change.
+        """
+        a = TableAttributeNormalizer.normalize_sql("select 'x -- foo' as c from t")
+        b = TableAttributeNormalizer.normalize_sql("select 'x -- bar' as c from t")
+        assert a != b
+        assert a == "select 'x -- foo' as c from t"
+
+    def test_whitespace_inside_string_literal_preserved(self):
+        """Runs of whitespace inside a string literal must not be collapsed.
+
+        Regression: the whitespace-collapse regex ran over the whole string, so
+        SELECT 'a   b' and SELECT 'a b' normalized to the same text.
+        """
+        a = TableAttributeNormalizer.normalize_sql("select 'a   b' as c from t")
+        b = TableAttributeNormalizer.normalize_sql("select 'a b' as c from t")
+        assert a != b
+        assert a == "select 'a   b' as c from t"
 
     def test_none_input(self):
         """Test None input handling."""

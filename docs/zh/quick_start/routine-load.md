@@ -1,5 +1,6 @@
 ---
-description: Kafka Routine Load 使用共享数据存储
+sidebar_position: 60
+description: Kafka Routine Load 使用存算分离存储
 displayed_sidebar: docs
 ---
 
@@ -47,7 +48,7 @@ Routine load 是一种使用 Apache Kafka 或在本实验中使用 Redpanda，�
 
 ### curl
 
-`curl` 用于下载 Compose 文件和生成数据的脚本。通过在操作系统提示符下运行 `curl` 或 `curl.exe` 检查是否已安装 curl。如果未安装 curl，[在此获取 curl](https://curl.se/dlwiz/?type=bin)。
+`curl` 用于下载 Compose 文件和生成数据的脚本。通过在操作系统提示符下运行 `curl` 或 `curl.exe` 检查是否已安装 curl。如果未安装 curl，[在此获取 curl](https://curl.se/)。
 
 ### Python
 
@@ -738,7 +739,7 @@ Kafka 的代理连接信息。格式为 `<kafka_broker_name_or_ip>:<broker_ port
 
 [StarRocks 架构](../introduction/Architecture.md)
 
-本实验使用的示例非常简单。Routine Load 具有更多选项和功能。[了解更多](../loading/RoutineLoad.md)。
+本实验使用的示例非常简单。Routine Load 具有更多选项和功能。[了解更多](../loading/kafka/RoutineLoad.md)。
 
 [JSONPath](https://goessner.net/articles/JsonPath/)
 ```

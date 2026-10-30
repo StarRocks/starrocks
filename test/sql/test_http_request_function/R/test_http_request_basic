@@ -1,0 +1,217 @@
+-- name: test_http_request_basic @sequential
+ADMIN SET FRONTEND CONFIG ("http_request_security_level" = "3");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "jsonplaceholder\\.typicode\\.com|.*\\.badssl\\.com");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("http_request_ssl_verification_required" = "false");
+-- result:
+-- !result
+SELECT sleep(2);
+-- result:
+1
+-- !result
+SELECT http_request(url => NULL);
+-- result:
+E: (1064, "Getting analyzing error. Detail message: http_request() required parameter 'url' cannot be NULL.")
+-- !result
+SELECT json_query(http_request(url => ''), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => 'not a valid url'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(url => 'https://jsonplaceholder.typicode.com/posts/1'), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(
+    json_query(http_request(url => 'https://jsonplaceholder.typicode.com/posts/1'), '$.body'),
+    '$.id'
+) as post_id;
+-- result:
+1
+-- !result
+SELECT json_query(
+    json_query(http_request(
+        url => 'https://jsonplaceholder.typicode.com/posts',
+        method => 'POST',
+        headers => '{"Content-Type": "application/json"}',
+        body => '{"title": "test post", "body": "hello world", "userId": 1}',
+        timeout_ms => 30000
+    ), '$.body'),
+    '$.title'
+) as created_title;
+-- result:
+"test post"
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'DELETE'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    ssl_verify => false
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://invalid-domain-that-does-not-exist-12345.com/api',
+    timeout_ms => 5000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/99999'
+), '$.status') as status;
+-- result:
+404
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    headers => '{"Accept": "application/json"}'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    timeout_ms => 1
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/photos',
+    timeout_ms => 60000
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts',
+    method => 'POST',
+    headers => '{"Content-Type": "text/plain"}',
+    body => 'plain text body'
+), '$.status') as status;
+-- result:
+201
+-- !result
+SELECT json_query(http_request(url => 'https://self-signed.badssl.com/'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://self-signed.badssl.com/',
+    ssl_verify => false
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(url => 'https://expired.badssl.com/'), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://expired.badssl.com/',
+    ssl_verify => false
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    method => 'GET',
+    timeout_ms => 30000,
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    ssl_verify => true
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'HEAD'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'OPTIONS'
+), '$.status') as status;
+-- result:
+204
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'HEAD'
+), '$.body') as body;
+-- result:
+""
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'INVALID'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT CAST(json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'INVALID'
+), '$.error') AS STRING) LIKE '%Invalid HTTP method%' as has_error_message;
+-- result:
+1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'PATCH'
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => ''
+), '$.status') as status;
+-- result:
+-1
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'get'
+), '$.status') as status;
+-- result:
+200
+-- !result
+SELECT json_query(http_request(
+    url => 'https://jsonplaceholder.typicode.com/posts/1',
+    method => 'GeT'
+), '$.status') as status;
+-- result:
+200
+-- !result
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("http_request_host_allowlist_regexp" = "");
+    ADMIN SET FRONTEND CONFIG ("http_request_ssl_verification_required" = "true");
+} END CLEANUP

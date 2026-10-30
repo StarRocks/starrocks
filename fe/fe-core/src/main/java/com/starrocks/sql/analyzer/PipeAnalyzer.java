@@ -90,6 +90,16 @@ public class PipeAnalyzer {
         analyzePipeName(pipeName, context.getDatabase());
     }
 
+    /**
+     * The checks {@link #analyze(CreatePipeStmt, ConnectContext)} runs before it analyzes the INSERT, for a
+     * caller that is about to do remote work on the INSERT's behalf first (the files() pre-pass in
+     * StatementPlanner): an invalid statement must still fail on its properties, before touching storage.
+     * Local and idempotent, so running it again in analyze() is harmless.
+     */
+    public static void analyzeBeforeInsert(CreatePipeStmt stmt) {
+        analyzeProperties(stmt.getProperties());
+    }
+
     private static void analyzeProperties(Map<String, String> properties) {
         if (MapUtils.isEmpty(properties)) {
             return;
@@ -166,7 +176,6 @@ public class PipeAnalyzer {
 
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
         analyzeProperties(stmt.getProperties());
-        Map<String, String> properties = stmt.getProperties();
 
         InsertStmt insertStmt = stmt.getInsertStmt();
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());

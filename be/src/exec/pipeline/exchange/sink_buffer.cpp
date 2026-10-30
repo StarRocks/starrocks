@@ -15,21 +15,36 @@
 #include "exec/pipeline/exchange/sink_buffer.h"
 
 #include <bthread/bthread.h>
+#include <fmt/std.h>
 
+#include <cerrno>
 #include <cstddef>
 #include <mutex>
 #include <string_view>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/fragment_context_cancel.h"
+#include "exec/pipeline/query_context.h"
 #include "fmt/core.h"
-#include "runtime/exec_env.h"
-#include "util/brpc_stub_cache.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+template <typename T>
+void update_peak(std::atomic<T>& peak, T value) {
+    T current = peak.load(std::memory_order_relaxed);
+    while (value > current && !peak.compare_exchange_weak(current, value, std::memory_order_relaxed)) {
+    }
+}
+} // namespace
 
 SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFragmentDestination>& destinations,
                        bool is_dest_merge)
@@ -77,6 +92,15 @@ SinkBuffer::~SinkBuffer() {
     _sink_ctxs.clear();
 }
 
+DeferOp<std::function<void()>> SinkBuffer::defer_notify() {
+    return DeferOp<std::function<void()>>([this]() {
+        _observable.notify_sink_observers();
+        if (bthread_self()) {
+            CHECK(tls_thread_status.mem_tracker() == RuntimeEnv::GetInstance()->process_mem_tracker());
+        }
+    });
+}
+
 void SinkBuffer::incr_sinker(RuntimeState* state) {
     for (auto& [_, sink_ctx] : _sink_ctxs) {
         sink_ctx->num_sinker++;
@@ -90,6 +114,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         return Status::OK();
     }
     _buffered_mem_usage->consume(request.request_byte_size);
+    update_peak(_peak_buffered_requests, ++_num_buffered_requests);
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
@@ -113,6 +138,17 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         auto& instance_id = request.fragment_instance_id;
         auto& context = sink_ctx(instance_id.lo);
 
+        // _num_sending_rpc is part of is_finished(), but _try_to_send_rpc() decreases it without notifying.
+        // If another thread sets _is_finishing meanwhile (e.g. driver 0 cancels the buffer while this sinker
+        // is still sending), its notification and its own pending-finish check may both see this thread as
+        // still sending. Under the event scheduler nothing else would wake driver 0 then, so notify here once
+        // this thread has left _try_to_send_rpc(). The fragment stays alive because this sinker's driver has
+        // not finished yet.
+        DeferOp notify_if_finishing([this]() {
+            if (_is_finishing) {
+                _observable.notify_sink_observers();
+            }
+        });
         RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { context.buffer.push(request); }));
     }
 
@@ -179,6 +215,8 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     RuntimeProfile::Counter* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     RuntimeProfile::Counter* network_timer = ADD_TIMER(profile, "NetworkTime");
     RuntimeProfile::Counter* wait_timer = ADD_TIMER(profile, "WaitTime");
+    RuntimeProfile::Counter* buffer_full_timer = ADD_CHILD_TIMER(profile, "BufferFullTime", "WaitTime");
+    RuntimeProfile::Counter* pending_finish_timer = ADD_CHILD_TIMER(profile, "PendingFinishTime", "WaitTime");
     RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
 
     COUNTER_SET(rpc_count, _rpc_count.load());
@@ -187,11 +225,11 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
-    // WaitTime consists two parts
-    // 1. buffer full time
-    // 2. pending finish time
-    COUNTER_SET(wait_timer, _full_time.load());
-    COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
+    const int64_t buffer_full_time = _full_time.load();
+    const int64_t pending_finish_time = MonotonicNanos() - _pending_timestamp;
+    COUNTER_SET(buffer_full_timer, buffer_full_time);
+    COUNTER_SET(pending_finish_timer, pending_finish_time);
+    COUNTER_SET(wait_timer, buffer_full_time + pending_finish_time);
 
     RuntimeProfile::Counter* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
     RuntimeProfile::Counter* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
@@ -202,6 +240,20 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     RuntimeProfile::Counter* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
     COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
     COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
+
+    // Memory of requests that are queued or in flight. It is only released when the RPC completes,
+    // so it keeps growing while the receiver holds closures (back pressure) until it reaches
+    // SinkBufferMemoryLimit, which is what finally blocks the upstream operators.
+    RuntimeProfile::Counter* buffer_peak_mem_counter = ADD_COUNTER(profile, "SinkBufferPeakMemoryUsage", TUnit::BYTES);
+    RuntimeProfile::Counter* buffer_mem_limit_counter = ADD_COUNTER(profile, "SinkBufferMemoryLimit", TUnit::BYTES);
+    RuntimeProfile::Counter* peak_in_flight_rpc_counter =
+            ADD_COUNTER(profile, "SinkBufferPeakInFlightRpcNum", TUnit::UNIT);
+    RuntimeProfile::Counter* peak_buffered_request_counter =
+            ADD_COUNTER(profile, "SinkBufferPeakRequestNum", TUnit::UNIT);
+    COUNTER_SET(buffer_peak_mem_counter, _buffered_mem_usage->peak_consumption());
+    COUNTER_SET(buffer_mem_limit_counter, static_cast<int64_t>(_memory_limit));
+    COUNTER_SET(peak_in_flight_rpc_counter, static_cast<int64_t>(_peak_in_flight_rpc.load()));
+    COUNTER_SET(peak_buffered_request_counter, _peak_buffered_requests.load());
 
     profile->add_derived_counter(
             "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
@@ -235,7 +287,21 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     _is_finishing = true;
-    if (state != nullptr && state->query_ctx() && state->query_ctx()->is_query_expired()) {
+    // Cancel all in-flight RPCs. Without this, a cancelled fragment keeps waiting until these RPCs drain.
+    // bthread_id_list_reset() may call on_error() callback of valid call ids, which may lead to deadlock if the thread
+    // is still holding the lock. So the lock-and-swap idiom is used. See bRPC comments (id.h) for more details.
+    for (auto& [_, sink_context] : _sink_ctxs) {
+        bthread_id_list_t tmplist;
+        bthread_id_list_init(&tmplist, 0, 0);
+        {
+            std::lock_guard cids_guard(sink_context->in_flight_rpc_cids_mutex);
+            bthread_id_list_swap(&tmplist, &sink_context->in_flight_rpc_cids);
+        }
+        bthread_id_list_reset(&tmplist, ECANCELED);
+        bthread_id_list_destroy(&tmplist);
+    }
+
+    if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _is_finishing {}, _num_remaining_eos {}, "
@@ -281,6 +347,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
     DeferOp decrease_defer([this]() { --_num_sending_rpc; });
     ++_num_sending_rpc;
+    TEST_SYNC_POINT("SinkBuffer::_try_to_send_rpc:after_incr_sending");
 
     // When the driver worker thread sends request and creates the protobuf request,
     // also use process_mem_tracker to record the memory of the protobuf request.
@@ -312,7 +379,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         size_t request_byte_size = request.request_byte_size;
 
         bool need_wait = false;
-        DeferOp pop_defer([&need_wait, &buffer, mem_tracker = _mem_tracker]() {
+        DeferOp pop_defer([this, &need_wait, &buffer, mem_tracker = _mem_tracker]() {
             if (need_wait) {
                 return;
             }
@@ -322,6 +389,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // This must be invoked before decrease_defer desctructed to avoid sink_buffer and fragment_ctx released.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
             buffer.pop();
+            --_num_buffered_requests;
         });
 
         // The order of data transmiting in IO level may not be strictly the same as
@@ -390,10 +458,12 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        auto failed_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                         std::string_view rpc_error_msg) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto query_ctx_weak = _fragment_ctx->runtime_state()->query_ctx()->weak_from_this();
+
+        auto failed_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                         std::string_view rpc_error_msg) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -402,21 +472,21 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             const auto& dest_addr = context.dest_addrs;
             std::string err_msg =
                     fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
                                 print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
-            _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
+            cancel_fragment_context(_fragment_ctx, Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;
         };
 
-        auto success_function = [this, request_byte_size](const ClosureContext& ctx,
-                                                          const PTransmitChunkResult& result) noexcept {
-            auto query_ctx = _fragment_ctx->runtime_state()->query_ctx();
-            auto query_ctx_guard = query_ctx->shared_from_this();
+        auto success_function = [this, request_byte_size, query_ctx_weak](const ClosureContext& ctx,
+                                                                          const PTransmitChunkResult& result) noexcept {
+            auto query_ctx_guard = query_ctx_weak.lock();
+            RETURN_IF(!query_ctx_guard, (void)0);
             auto notify = this->defer_notify();
 
             auto defer = DeferOp([this]() { --_total_in_flight_rpc; });
@@ -425,11 +495,11 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             if (!status.ok()) {
                 _is_finishing = true;
-                _fragment_ctx->cancel(status);
+                cancel_fragment_context(_fragment_ctx, status);
 
                 const auto& dest_addr = context.dest_addrs;
                 LOG(WARNING) << fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] [msg={}]",
@@ -446,7 +516,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->addFailureHandler(failed_function);
         closure->addSuccessHandler(success_function);
 
-        ++_total_in_flight_rpc;
+        update_peak(_peak_in_flight_rpc, ++_total_in_flight_rpc);
         ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
@@ -455,7 +525,17 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
-        SET_IGNORE_OVERCROWDED(closure->cntl, query);
+        set_ignore_overcrowded_for_query(closure->cntl);
+
+        // The call id must be obtained before launching the RPC, as per bRPC doc.
+        const auto call_id = closure->cntl.call_id();
+        {
+            std::lock_guard cids_guard(context.in_flight_rpc_cids_mutex);
+            // Do not cancel eos request, because eos request is the last request to be sent, and it must be sent to the destination.
+            if (!request.params->eos()) {
+                bthread_id_list_add(&context.in_flight_rpc_cids, call_id);
+            }
+        }
 
         return _send_rpc(closure, request);
     }

@@ -22,8 +22,10 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -33,6 +35,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HivePartitionStats;
 import com.starrocks.connector.hive.IHiveMetastore;
+import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -101,6 +104,11 @@ public class KuduMetadata implements ConnectorMetadata {
         if (!schemaEmulationEnabled) {
             return Collections.singletonList(DEFAULT_SCHEMA);
         }
+        // Below the metastore branch on purpose: an HMS-backed catalog answers from the metastore, whose
+        // own client carries the hive-metastore guard -- reporting it here as well would name the wrong
+        // system and count the same wait twice. The branches that answer from a constant or from the
+        // databases map contact nothing at all.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
         try {
             List<String> tables = kuduClient.getTablesList().getTablesList();
             LinkedHashSet<String> schemas = new LinkedHashSet<>();
@@ -149,6 +157,7 @@ public class KuduMetadata implements ConnectorMetadata {
                 return table.isKuduTable();
             }).collect(Collectors.toList());
         }
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
         try {
             List<String> tablesList = kuduClient.getTablesList().getTablesList();
             if (!schemaEmulationEnabled && DEFAULT_SCHEMA.equals(dbName)) {
@@ -178,10 +187,11 @@ public class KuduMetadata implements ConnectorMetadata {
         if (!schemaEmulationEnabled) {
             if (DEFAULT_SCHEMA.equals(dbName)) {
                 return databases.computeIfAbsent(DEFAULT_SCHEMA,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             return null;
         }
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
         try {
             List<String> tables = kuduClient.getTablesList().getTablesList();
             if (tables.stream().anyMatch(table -> {
@@ -189,7 +199,7 @@ public class KuduMetadata implements ConnectorMetadata {
                 return schemaTable != null && dbName.equals(schemaTable.first);
             })) {
                 return databases.computeIfAbsent(dbName,
-                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), d));
+                        d -> new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), d));
             }
             LOG.error("Kudu database {}.{} done not exist.", catalogName, dbName);
             return null;
@@ -204,6 +214,7 @@ public class KuduMetadata implements ConnectorMetadata {
             return metastore.get().getTable(dbName, tblName);
         }
         String fullTableName = getKuduFullTableName(dbName, tblName);
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
         try {
             if (!kuduClient.tableExists(fullTableName)) {
                 LOG.error("Kudu table {}.{} does not exist.", dbName, tblName);
@@ -259,6 +270,8 @@ public class KuduMetadata implements ConnectorMetadata {
 
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        // Calls the kudu client, which has no FE-owned wrapper to guard further down.
+        BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         KuduTable kuduTable = (KuduTable) table;
         String kuduTableName = getKuduFullTableName(kuduTable);
@@ -309,10 +322,8 @@ public class KuduMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange versionRange) {
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columns.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
+        Statistics.Builder builder = Statistics.builder()
+                .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
 
         KuduTable kuduTable = (KuduTable) table;
         long rowCount;
@@ -322,12 +333,14 @@ public class KuduMetadata implements ConnectorMetadata {
             rowCount = tableStatistics.getCommonStats().getRowNums();
         } else {
             try {
+                BlockingCallValidator.validateNotUnderLock("kudu", catalogName);
                 String kuduTableName = getKuduFullTableName(kuduTable);
                 rowCount = kuduClient.openTable(kuduTableName).getTableStatistics().getLiveRowCount();
             } catch (RpcRemoteException e) {
                 if (isGetTableStatisticsUnsupported(e)) {
-                    LOG.warn("GetTableStatistics method not supported. Fallback to return default row count 1.");
-                    rowCount = 1;
+                    LOG.warn("GetTableStatistics method not supported. Fallback to default row count {}.",
+                            Config.default_statistics_output_row_count);
+                    rowCount = Config.default_statistics_output_row_count;
                 } else {
                     throw new RuntimeException("RPC error while getting table statistics", e);
                 }
@@ -336,6 +349,17 @@ public class KuduMetadata implements ConnectorMetadata {
             }
         }
         builder.setOutputRowCount(rowCount);
+        for (Map.Entry<ColumnRefOperator, Column> entry : columns.entrySet()) {
+            ConnectorNdvEstimator.TypeCategory cat =
+                    ConnectorNdvEstimator.fromStarRocksType(entry.getValue().getType());
+            double ndv = Math.max(1.0, Math.min(ConnectorNdvEstimator.typeNdv(cat, rowCount), rowCount));
+            builder.addColumnStatistic(entry.getKey(), ColumnStatistic.builder()
+                    .setDistinctValuesCount(ndv)
+                    .setAverageRowSize(entry.getValue().getType().getTypeSize())
+                    .setNullsFraction(0)
+                    .setType(ColumnStatistic.StatisticType.ESTIMATE)
+                    .build());
+        }
         return builder.build();
     }
 

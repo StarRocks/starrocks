@@ -1,0 +1,7 @@
+position: 80
+label: 'User Privileges and Authentication'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: user_privs

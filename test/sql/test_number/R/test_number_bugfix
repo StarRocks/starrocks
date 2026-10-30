@@ -1,25 +1,3 @@
--- name: test_sr_8425
-show backends;
-create database test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
--- result:
--- !result
-use test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
--- result:
--- !result
-select 601070.968843214312543654*8.54914236*0.4790000000019*0.98901*18727.790683412432141;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Return scale(39) exceeds maximum value(38), please cast decimal type to low-precision one.')
--- !result
-set sql_mode = 'MODE_DOUBLE_LITERAL,ONLY_FULL_GROUP_BY,PIPES_AS_CONCAT';
--- result:
--- !result
-select 601070.968843214312543654*8.54914236*0.4790000000019*0.98901*18727.790683412432141;
--- result:
-45590152444.36925
--- !result
-drop database test_number_bf58dfca_6183_11ed_b695_00163e0b9de0;
--- result:
--- !result
 -- name: test_sr_9663
 show backends;
 create database test_number_bfa2e020_6183_11ed_b695_00163e0b9de0;

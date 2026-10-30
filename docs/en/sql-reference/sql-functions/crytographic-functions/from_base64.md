@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Decodes a Base64-encoded string."
 ---
 
 # from_base64

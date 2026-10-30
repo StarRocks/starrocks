@@ -1,0 +1,208 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#ifdef USE_STAROS
+
+#include <starlet.h>
+
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <shared_mutex>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "base/time/time.h"
+#include "fslib/configuration.h"
+#include "fslib/file_system.h"
+
+namespace starrocks {
+
+class Cache;
+class CacheKey;
+class TableMetricsManager;
+
+class StarOSWorker : public staros::starlet::Worker {
+public:
+    using ServiceId = staros::starlet::ServiceId;
+    using WorkerId = staros::starlet::WorkerId;
+    using ShardId = staros::starlet::ShardId;
+    using ShardInfo = staros::starlet::ShardInfo;
+    using WorkerInfo = staros::starlet::WorkerInfo;
+    using FileSystem = staros::starlet::fslib::FileSystem;
+    using Configuration = staros::starlet::fslib::Configuration;
+
+    typedef std::function<void(ShardId)> add_shard_listener;
+
+    explicit StarOSWorker(TableMetricsManager* table_metrics_mgr = nullptr);
+
+    ~StarOSWorker() override;
+
+    absl::Status add_shard(const ShardInfo& shard) override;
+
+    absl::Status remove_shard(const ShardId shard) override;
+
+    absl::StatusOr<WorkerInfo> worker_info() const override;
+
+    absl::Status update_worker_info(const WorkerInfo& info) override;
+
+    // get shard info directly from local cache, if the shard is assigned to this worker
+    absl::StatusOr<ShardInfo> get_shard_info(ShardId id) const override;
+
+    std::vector<ShardInfo> shards() const override;
+
+    std::vector<ShardId> shard_ids() const;
+
+    // `conf`: a k-v map, provides additional information about the filesystem configuration
+    absl::StatusOr<std::shared_ptr<FileSystem>> get_shard_filesystem(ShardId id, const Configuration& conf);
+
+    // retrieve shard info from the worker. Unlike `get_shard_info`, if the shard info is not there in local cache,
+    // the worker will try to fetch it back from starmgr.
+    // What starmgr returns for a shard this worker does not own is kept like a borrowed shard info, see
+    // `borrow_shard_info`, so repeated lookups of it, here and in `get_shard_filesystem`, skip the RPC.
+    absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
+
+    // Serialized `staros::AddShardInfo` of shard |id| if this worker owns it, NotFound otherwise.
+    // The owner hands it to a node that has to write under the shard's directory without owning
+    // the shard (the load coordinator writing a combined txn log), see `borrow_shard_info`.
+    absl::StatusOr<std::string> export_shard_info(ShardId id) const;
+
+    // Keeps a shard info produced by `export_shard_info` on the shard's owner, so that
+    // `get_shard_filesystem` and `retrieve_shard_info` resolve a shard this worker does not own
+    // without a starmgr RPC. Kept apart from the owned shards: `get_shard_info`, and therefore
+    // every ownership check, never sees it. Ignored for a shard this worker owns. Kept in an LRU
+    // cache of `kBorrowedShardInfoCacheCapacity` bytes; an entry is used for
+    // `config::lake_shard_info_cache_ttl_sec` after its last refresh and then ignored until the cache
+    // evicts it. While that is 0 nothing is kept and nothing kept is used. The number of entries held is
+    // the `lake_tablet_location_handoff_entries` gauge.
+    absl::Status borrow_shard_info(std::string_view serialized);
+
+    // Whether a usable borrowed shard info of |id| is kept, see `borrow_shard_info`. Counts one
+    // fetched from starmgr as well, see `retrieve_shard_info`.
+    bool has_borrowed_shard_info(ShardId id) const;
+
+    // register the listener(callback) when new shard is added to the worker
+    void register_add_shard_listener(add_shard_listener listener) { _add_shard_listener = std::move(listener); }
+
+    void set_fs_cache_capacity(int32_t capacity);
+
+private:
+    struct ShardInfoDetails {
+        ShardInfo shard_info;
+        std::shared_ptr<std::string> fs_cache_key;
+
+        ShardInfoDetails(ShardInfo info) : shard_info(std::move(info)) {}
+    };
+
+    // A value of `_borrowed_cache`. Never changed once inserted: a change inserts a new value.
+    struct BorrowedShardInfo {
+        ShardInfo shard_info;
+        std::shared_ptr<std::string> fs_cache_key;
+        int64_t expire_at_sec;
+        // Fetched from starmgr by this worker rather than handed over by the owner. Each kind is
+        // counted in its own metrics.
+        bool fetched = false;
+    };
+
+    // Bytes; an entry is charged its shard info's size, about 1 KiB.
+    static constexpr size_t kBorrowedShardInfoCacheCapacity = 16 * 1024 * 1024;
+
+    static void borrowed_value_deleter(const CacheKey& /*key*/, void* value);
+
+    struct CacheValue {
+        std::weak_ptr<std::string> key;
+        std::shared_ptr<FileSystem> fs;
+        int64_t created_time_sec;
+
+        CacheValue(const std::weak_ptr<std::string>& key, const std::shared_ptr<FileSystem>& fs)
+                : key(key), fs(fs), created_time_sec(MonotonicSeconds()) {}
+    };
+
+    // This function can be made static perfectly. The only reason to make it `virtual`
+    // is, for unit test MOCK as it is the only interface to interact with the Starlet runtime.
+    virtual absl::StatusOr<ShardInfo> _fetch_shard_info_from_remote(ShardId id);
+
+    static void cache_value_deleter(const CacheKey& /*key*/, void* value) { delete static_cast<CacheValue*>(value); }
+
+    static std::string get_cache_key(std::string_view scheme, const Configuration& conf);
+
+    static absl::StatusOr<staros::starlet::fslib::Configuration> build_conf_from_shard_info(
+            const ShardInfo& info, const Configuration* initial_conf = nullptr);
+
+    static absl::StatusOr<std::string> build_scheme_from_shard_info(const ShardInfo& info);
+
+    static bool need_enable_cache(const ShardInfo& info);
+
+    void on_add_shard_event(ShardId shardId) {
+        // NOTE: not thread-safe
+        if (_add_shard_listener) {
+            _add_shard_listener(shardId);
+        }
+    }
+    std::optional<uint64_t> get_table_id(const ShardInfo& shard_info);
+
+    absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
+    std::optional<BorrowedShardInfo> get_borrowed_shard_info(ShardId id) const;
+    std::optional<std::shared_ptr<FileSystem>> get_borrowed_shard_filesystem(ShardId id, const Configuration& conf);
+    // Keeps |value| unless this worker owns the shard or already keeps a newer storage version of it.
+    void keep_borrowed_shard_info(std::unique_ptr<BorrowedShardInfo> value);
+    // Keeps what starmgr returned for a shard this worker does not own, together with the filesystem
+    // built for it if any, see `retrieve_shard_info`.
+    void keep_fetched_shard_info(const ShardInfo& info, std::shared_ptr<std::string> fs_cache_key);
+    // Puts |value| into `_borrowed_cache` under |id|, replacing what is there. Requires `_borrowed_mtx`.
+    void insert_borrowed_shard_info_locked(ShardId id, BorrowedShardInfo* value);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
+    build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> new_shared_filesystem(
+            std::string_view scheme, const Configuration& conf);
+    absl::Status invalidate_fs(const ShardInfo& shard);
+
+    std::shared_ptr<std::string> insert_fs_cache(const std::string& key, const std::shared_ptr<FileSystem>& fs);
+    void erase_fs_cache(const std::string& key);
+    // Run when the last holder of a key returned by `insert_fs_cache` lets it go: erases the entry
+    // under |key| unless a filesystem built later for the same configuration replaced it.
+    void release_fs_cache(const std::string& key);
+    // Whether the filesystem cache still holds its entry under |key| itself, rather than under another
+    // key for the same configuration or not at all.
+    bool is_live_fs_cache_key(const std::shared_ptr<std::string>& key);
+    std::shared_ptr<FileSystem> lookup_fs_cache(const std::string& key);
+    std::shared_ptr<FileSystem> lookup_fs_cache(const std::shared_ptr<std::string>& key);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> find_fs_cache(
+            const std::string& key);
+
+private:
+    mutable std::shared_mutex _mtx;
+    std::shared_mutex _cache_mtx;
+    std::mutex _fs_cache_key_reset_mtx; // Protects fs_cache_key reset operations
+    std::unordered_map<ShardId, ShardInfoDetails> _shards;
+    // Shards this worker does not own, see `borrow_shard_info` and `retrieve_shard_info`. The cache is
+    // thread-safe on its own; `_borrowed_mtx` orders the writes to it against each other and against
+    // `add_shard`. Never taken inside `_mtx`; `keep_borrowed_shard_info` takes `_mtx` inside it.
+    mutable std::mutex _borrowed_mtx;
+    std::unique_ptr<Cache> _borrowed_cache;
+    std::unique_ptr<Cache> _fs_cache;
+    add_shard_listener _add_shard_listener;
+    TableMetricsManager* _table_metrics_mgr = nullptr;
+};
+
+} // namespace starrocks
+#endif // USE_STAROS

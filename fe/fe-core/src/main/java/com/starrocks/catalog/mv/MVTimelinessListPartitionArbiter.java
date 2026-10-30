@@ -70,6 +70,9 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         try (Timer ignored = Tracers.watchScope("CollectBaseTableUpdatePartitionNames")) {
             baseChangedPartitionNames = collectBaseTableUpdatePartitionNames(refBaseTablePartitionColumns,
                     mvTimelinessInfo);
+            if (baseChangedPartitionNames == null) {
+                return MvUpdateInfo.fullRefresh(mv);
+            }
         }
 
         // collect base table's partition infos
@@ -121,6 +124,8 @@ public final class MVTimelinessListPartitionArbiter extends MVTimelinessArbiter 
         mvTimelinessInfo.getMVPartNameToBasePCells().putAll(mvToBaseNameRef);
 
         mvToRefreshPartitionNames.addAll(getMVToRefreshPartitionNames(baseChangedPartitionNames, baseToMvNameRef));
+        mvToRefreshPartitionNames.addAll(getMvPartitionCellsWithUntrackedRows(refBaseTablePartitionColumns.keySet(),
+                mvToBaseNameRef, mvPartitionNameToListMap));
 
         return mvTimelinessInfo;
     }

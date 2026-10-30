@@ -47,6 +47,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -81,13 +82,16 @@ public class EsPartitionsProcDir implements ProcDirInterface {
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = esTable.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             Joiner joiner = Joiner.on(", ");
+            // Read once: a sync swaps it at any time, and it is null until one succeeds and after one fails.
+            EsTablePartitions esTablePartitions = esTable.getEsTablePartitions();
             Map<String, EsShardPartitions> unPartitionedIndices =
-                    esTable.getEsTablePartitions().getUnPartitionedIndexStates();
+                    esTablePartitions == null ? Map.of() : esTablePartitions.getUnPartitionedIndexStates();
             Map<String, EsShardPartitions> partitionedIndices =
-                    esTable.getEsTablePartitions().getPartitionedIndexStates();
+                    esTablePartitions == null ? Map.of() : esTablePartitions.getPartitionedIndexStates();
             for (EsShardPartitions esShardPartitions : unPartitionedIndices.values()) {
                 List<Comparable> partitionInfo = new ArrayList<Comparable>();
                 partitionInfo.add(esShardPartitions.getIndexName());
@@ -100,8 +104,8 @@ public class EsPartitionsProcDir implements ProcDirInterface {
             }
 
             RangePartitionInfo rangePartitionInfo = null;
-            if (esTable.getPartitionInfo().getType() == PartitionType.RANGE) {
-                rangePartitionInfo = (RangePartitionInfo) esTable.getEsTablePartitions().getPartitionInfo();
+            if (esTable.getPartitionInfo().getType() == PartitionType.RANGE && esTablePartitions != null) {
+                rangePartitionInfo = (RangePartitionInfo) esTablePartitions.getPartitionInfo();
             }
             if (rangePartitionInfo != null) {
                 for (EsShardPartitions esShardPartitions : partitionedIndices.values()) {
@@ -121,7 +125,7 @@ public class EsPartitionsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         // set result
@@ -145,14 +149,11 @@ public class EsPartitionsProcDir implements ProcDirInterface {
 
     @Override
     public ProcNodeInterface lookup(String indexName) throws AnalysisException {
-
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
-        try {
-            return new EsShardProcDir(db, esTable, indexName);
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
-        }
+        // Lock-free: this method only stashes db / esTable / indexName into a new
+        // EsShardProcDir. It does not read any mutable per-table state and does not
+        // iterate any catalog collection. The resulting EsShardProcDir takes its
+        // own per-table READ when it actually fetches data.
+        return new EsShardProcDir(db, esTable, indexName);
     }
 
 }

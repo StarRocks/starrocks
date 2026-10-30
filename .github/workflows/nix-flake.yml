@@ -1,0 +1,70 @@
+name: Nix Flake
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".envrc"
+      - ".github/workflows/nix-flake.yml"
+      - "be/cmake_modules/ThirdParty.cmake"
+      - "build-support/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "nix/**"
+      - "thirdparty/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".envrc"
+      - ".github/workflows/nix-flake.yml"
+      - "be/cmake_modules/ThirdParty.cmake"
+      - "build-support/**"
+      - "flake.lock"
+      - "flake.nix"
+      - "nix/**"
+      - "thirdparty/**"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check ${{ matrix.system }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},{"system":"aarch64-darwin","runner":"macos-latest"}]}' || '{"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"}]}') }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          determinate: false
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      - name: Check flake
+        run: nix flake check --print-build-logs
+
+      - name: Check package derivation
+        run: nix eval --raw ".#packages.${{ matrix.system }}.starrocks.name"
+
+      - name: Check third-party layer derivations
+        run: |
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-foundation.name"
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-rpc.name"
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-formats.name"
+          nix eval --raw ".#packages.${{ matrix.system }}.starrocks-thirdparty-leaf.name"
+
+      - name: Check Maven dependency derivation
+        run: nix eval --raw ".#packages.${{ matrix.system }}.starrocks-maven-deps.name"
+
+      - name: Check development shell
+        run: nix develop --command starrocks-build-env --print
+
+      - name: Check backend development shell derivation
+        run: nix eval --raw ".#devShells.${{ matrix.system }}.be.name"

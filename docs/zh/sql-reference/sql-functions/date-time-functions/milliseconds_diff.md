@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算两个日期表达式的毫秒数差。"
 ---
 
 # milliseconds_diff

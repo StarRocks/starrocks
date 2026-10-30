@@ -1,0 +1,35 @@
+-- name: test_regexp_extract_all_zero_len
+-- description: Regression for regexp_extract_all with a capture group (group > 0) whose
+--              overall match can be zero-length (e.g. pattern "(a*)"). The group>0 path
+--              looped on RE2 FindAndConsumeN, which does not advance the StringPiece on a
+--              zero-length match at the cursor -> spun forever at 100% CPU with unbounded
+--              memory growth (DoS, ignored query cancellation); and for a zero-length match
+--              found after skipping input (e.g. "($)") it emitted the match twice. The fix
+--              advances by the whole-match span exactly like the group-0 path. If the DoS
+--              regresses the query hangs until the query_timeout below fires, failing the
+--              test instead of returning a result.
+
+set query_timeout = 30;
+
+-- group > 0, constant pattern -> extract_regex_matches(pre-allocated overload)
+SELECT regexp_extract_all('bbb', '(a*)', 1);
+
+-- group > 0, empty capture group interleaved with real matches (constant pattern)
+SELECT regexp_extract_all('a1b2', '(\\d*)', 1);
+
+-- group > 0, non-constant pattern -> extract_regex_matches(local-buffer overload)
+SELECT regexp_extract_all(s, p, 1) FROM (SELECT 'bbb' AS s, '(a*)' AS p) t;
+
+-- group 0 stays consistent with the group>0 zero-length output
+SELECT regexp_extract_all('bbb', 'a*', 0);
+
+-- zero-length match against an empty input
+SELECT regexp_extract_all('', '(a*)', 1);
+
+-- zero-length match found AFTER skipping input (end anchor): emitted once, exactly like
+-- the group-0 path -- not duplicated (regression for the review P2 finding)
+SELECT regexp_extract_all('abc', '($)', 1);
+SELECT regexp_extract_all('abc', '$', 0);
+
+-- normal (non-zero-length) extraction is unaffected
+SELECT regexp_extract_all('a1b2c3', '([0-9])', 1);

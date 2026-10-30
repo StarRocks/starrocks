@@ -19,10 +19,8 @@
 #include <memory>
 #include <vector>
 
-#include "base/simd/simd.h"
 #include "column/vectorized_fwd.h"
 #include "column_reader.h"
-#include "common/config.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "formats/parquet/column_chunk_reader.h"
@@ -30,7 +28,7 @@
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/range.h"
+#include "storage_primitive/range.h"
 
 namespace tparquet {
 class ColumnChunk;
@@ -89,7 +87,7 @@ class StoredColumnReaderImpl : public StoredColumnReader {
 public:
     StoredColumnReaderImpl(const ColumnReaderOptions& opts) : _opts(opts) {}
 
-    virtual ~StoredColumnReaderImpl() = default;
+    ~StoredColumnReaderImpl() override = default;
 
     // Reset internal state and ready for next read_values
     virtual void reset_levels() = 0;
@@ -120,9 +118,35 @@ protected:
     // for OptionalColumn, we will override it.
     virtual void _append_default_levels(size_t row_nums) {}
 
+    // Record that `num_levels` levels of the current page (already delimited by _convert_row_to_value) are passed
+    // over without being materialized. Decoders are not moved here; the next selected read skips them in
+    // _skip_deferred(). The caller must call this before decreasing _num_values_left_in_cur_page.
+    virtual void _defer_skip(size_t num_levels) { _levels_to_skip += num_levels; }
+
+    // Convert _levels_to_skip into _values_to_skip by consuming the levels from the level decoder.
+    // The page must be loaded. For RequiredColumn, levels are values.
+    virtual Status _skip_deferred_levels() {
+        _values_to_skip += _levels_to_skip;
+        _levels_to_skip = 0;
+        return Status::OK();
+    }
+
+    // Position the decoders of the current page at the read cursor: load the page if needed and skip
+    // everything recorded by _defer_skip().
+    Status _skip_deferred();
+
+    void _reset_deferred_skip() {
+        _levels_to_skip = 0;
+        _values_to_skip = 0;
+    }
+
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;
-    size_t _num_values_skip_in_cur_page = 0;
+    // Pending skips of the current page, see _defer_skip(). Both are reset when a new page is entered.
+    // Levels passed over but not consumed from the level decoder yet.
+    size_t _levels_to_skip = 0;
+    // Values whose levels are consumed but which are not skipped in the value decoder yet.
+    size_t _values_to_skip = 0;
     const ColumnReaderOptions& _opts;
     bool _cur_page_loaded = false;
     uint64_t _read_cursor = _opts.first_row_index;
@@ -141,24 +165,15 @@ private:
     // only convert in the current page, the return is the num of values that will be used and
     // the input target row pointer is changed to the result row that can be dealt in current page.
     virtual StatusOr<size_t> _convert_row_to_value(size_t* row);
-    // to skip values bases no levels we need to collect_not_null_values when decoding levels,
-    // for required column, we don't need levels information,
-    // for optional column, we collect levels information lazily,
-    // for repeated column, we collect levels information after _convert_row_to_value which had decoded the levels.
-    virtual void _collect_not_null_values(size_t num_levels, bool lazy_flag) {}
 
-    virtual Status _lazy_skip_values(uint64_t begin) = 0;
+    // Read `num_values` levels (and their values) of the current page into dst. If append_default is set, the
+    // segment is not selected: only default values (and levels) are appended, the skip is recorded by the caller
+    // with _defer_skip().
     virtual Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
                                           starrocks::Column* dst, bool append_default,
                                           const FilterData* filter = nullptr) = 0;
 
-    virtual const FilterData* _convert_filter_row_to_value(const Filter* filter, size_t row_readed) {
-        if (!filter || !config::parquet_push_down_filter_to_decoder_enable) {
-            return nullptr;
-        }
-        // based on benchmark we added some threshold here, selectivity < 0.2
-        return SIMD::count_nonzero(*filter) * 1.0 / filter->size() < 0.2 ? filter->data() + row_readed : nullptr;
-    }
+    virtual const FilterData* _convert_filter_row_to_value(const Filter* filter, size_t row_readed);
 };
 
 } // namespace starrocks::parquet

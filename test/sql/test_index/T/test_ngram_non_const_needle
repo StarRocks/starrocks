@@ -1,0 +1,76 @@
+-- name: test_ngram_non_const_needle
+-- Basic non-constant needle: similarity values and parity with constant-needle path.
+CREATE TABLE t_ngram (
+    haystack VARCHAR(100) NOT NULL,
+    needle   VARCHAR(100) NOT NULL
+) PROPERTIES ("replication_num" = "1");
+
+insert into t_ngram values
+    ('abcde',   'abcde'),
+    ('abcde',   'xyzwv'),
+    ('abcdfg',  'abcde'),
+    ('chinese', 'chinese');
+
+-- non-constant needle returns correct similarity for each row
+select ngram_search(haystack, needle, 4) as sim from t_ngram order by sim desc, haystack, needle;
+
+-- non-constant needle produces the same result as the constant-needle path,
+-- including the partial-overlap row (sim=0.5) to catch any float/double discrepancy
+select haystack, ngram_search(haystack, 'abcde', 4) = ngram_search(haystack, needle, 4) as parity
+from t_ngram where needle = 'abcde' order by haystack;
+
+-- NULL needle must propagate as a NULL result.
+
+CREATE TABLE t_ngram_null (
+    haystack VARCHAR(100),
+    needle   VARCHAR(100)
+) PROPERTIES ("replication_num" = "1");
+
+insert into t_ngram_null values
+    ('abcde', 'abcde'),
+    ('abcde', null),
+    ('xyzwv', 'abcde');
+
+-- non-null rows produce normal similarity values
+select ngram_search(haystack, needle, 4) as sim
+from t_ngram_null where needle is not null order by sim;
+
+-- null needle yields a null result
+select ngram_search(haystack, needle, 4) is null as is_null
+from t_ngram_null where needle is null;
+
+-- name: test_ngram_non_const_needle_case_insensitive
+CREATE TABLE t_ngram_ci (
+    haystack VARCHAR(100) NOT NULL,
+    needle   VARCHAR(100) NOT NULL
+) PROPERTIES ("replication_num" = "1");
+
+insert into t_ngram_ci values
+    ('Hello',   'hello'),
+    ('CHINESE', 'chinese'),
+    ('abcde',   'ABCDE');
+
+-- case-insensitive: upper/lower pair is similarity 1.0
+select ngram_search_case_insensitive(haystack, needle, 4) as sim
+from t_ngram_ci order by sim desc, haystack;
+
+-- case-sensitive: same pairs differ in case so similarity is reduced
+select ngram_search(haystack, needle, 4) as sim
+from t_ngram_ci order by sim desc, haystack;
+
+-- Non-constant needle must not be pushed down to the ngram bloom filter index.
+-- The query must still return correct results even when an index exists on haystack column.
+CREATE TABLE t_ngram_idx (
+    haystack VARCHAR(100) NOT NULL,
+    needle   VARCHAR(100) NOT NULL,
+    INDEX idx_haystack(haystack) USING NGRAMBF ("gram_num" = "4", "bloom_filter_fpp" = "0.05")
+) PROPERTIES ("replication_num" = "1");
+
+insert into t_ngram_idx values
+    ('chinese', 'chinese'),
+    ('chineaaaa', 'chinese'),
+    ('tonightisgreadnight', 'chinese');
+
+-- with index present, non-constant needle must still return the full result set correctly
+select haystack, ngram_search(haystack, needle, 4) as sim
+from t_ngram_idx order by sim desc, haystack;

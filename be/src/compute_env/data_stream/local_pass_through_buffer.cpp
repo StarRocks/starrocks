@@ -1,0 +1,268 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "compute_env/data_stream/local_pass_through_buffer.h"
+
+#include "column/chunk.h"
+#include "common/logging.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
+
+namespace starrocks {
+
+// A buffered chunk is allocated by the sender thread and freed by the receiver thread. While it waits in
+// the channel it belongs to neither instance, so it is parked on the query tracker, the common ancestor
+// of both instances: the query, resource group, query pool and process trackers keep counting it, and
+// only the instance trackers change. The global passthrough tracker is not part of the tracker tree; it
+// mirrors the parked bytes for diagnosis. Without a query tracker, fall back to the process tracker, the
+// common ancestor of every tracker, so the process tracker still counts the bytes.
+static MemTracker* parking_tracker(MemTracker* query_mem_tracker) {
+    return query_mem_tracker != nullptr ? query_mem_tracker : RuntimeEnv::GetInstance()->process_mem_tracker();
+}
+
+static void park_buffered_bytes(MemTracker* query_mem_tracker, int64_t bytes) {
+    CurrentThread::current().mem_transfer_to(parking_tracker(query_mem_tracker), bytes);
+    RuntimeEnv::GetInstance()->passthrough_mem_tracker()->consume(bytes);
+}
+
+// Hand parked bytes to the current thread's tracker, which then frees them or keeps them as its own.
+static void unpark_buffered_bytes(MemTracker* query_mem_tracker, int64_t bytes) {
+    CurrentThread::current().mem_transfer_from(parking_tracker(query_mem_tracker), bytes);
+    RuntimeEnv::GetInstance()->passthrough_mem_tracker()->release(bytes);
+}
+
+// channel per [sender_id]
+class PassThroughSenderChannel {
+public:
+    // `query_mem_tracker` is owned by the PassThroughChannel, which outlives this sender channel.
+    PassThroughSenderChannel(std::atomic_int64_t& total_bytes, MemTracker* query_mem_tracker)
+            : _total_bytes(total_bytes), _query_mem_tracker(query_mem_tracker) {}
+
+    ~PassThroughSenderChannel() {
+        if (_physical_bytes > 0) {
+            unpark_buffered_bytes(_query_mem_tracker, _physical_bytes);
+        }
+    }
+
+    void append_chunk(const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
+        // Release allocated bytes in current MemTracker, since it would not be released at current MemTracker
+        int64_t before_bytes = CurrentThread::current().get_consumed_bytes();
+        auto clone = chunk->clone_unique();
+        int64_t physical_bytes = CurrentThread::current().get_consumed_bytes() - before_bytes;
+        DCHECK_GE(physical_bytes, 0);
+        park_buffered_bytes(_query_mem_tracker, physical_bytes);
+
+        std::unique_lock lock(_mutex);
+        _buffer.emplace_back(std::make_pair(std::move(clone), driver_sequence));
+        _bytes.push_back(chunk_size);
+        _physical_bytes += physical_bytes;
+        _total_bytes += physical_bytes;
+    }
+    void pull_chunks(ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
+        std::unique_lock lock(_mutex);
+        chunks->swap(_buffer);
+        bytes->swap(_bytes);
+        unpark_buffered_bytes(_query_mem_tracker, _physical_bytes);
+        _total_bytes -= _physical_bytes;
+        _physical_bytes = 0;
+    }
+    // Drop everything buffered without handing it to a consumer. Used when the receiver is
+    // cancelled/closed: nobody will ever pull these chunks, so free them now instead of
+    // holding the memory until query teardown. The accounting mirrors the destructor:
+    // transfer ownership without changing common ancestors. The immediate _buffer.clear() then
+    // frees net-zero on the current tracker.
+    void clear() {
+        std::unique_lock lock(_mutex);
+        if (_physical_bytes > 0) {
+            unpark_buffered_bytes(_query_mem_tracker, _physical_bytes);
+            _total_bytes -= _physical_bytes;
+            _physical_bytes = 0;
+        }
+        _buffer.clear();
+        _bytes.clear();
+    }
+
+private:
+    std::mutex _mutex; // lock-step to push/pull chunks
+    ChunkUniquePtrVector _buffer;
+    std::vector<size_t> _bytes;
+    int64_t _physical_bytes = 0; // Physical consumed bytes for each chunk
+    std::atomic_int64_t& _total_bytes;
+    MemTracker* const _query_mem_tracker;
+};
+
+// channel per [fragment_instance_id, dest_node_id]
+class PassThroughChannel {
+public:
+    explicit PassThroughChannel(std::shared_ptr<MemTracker> query_mem_tracker)
+            : _query_mem_tracker(std::move(query_mem_tracker)) {}
+
+    PassThroughSenderChannel* get_or_create_sender_channel(int sender_id) {
+        std::unique_lock lock(_mutex);
+        auto it = _sender_id_to_channel.find(sender_id);
+        if (it == _sender_id_to_channel.end()) {
+            auto* channel = new PassThroughSenderChannel(_total_bytes, _query_mem_tracker.get());
+            _sender_id_to_channel.emplace(sender_id, channel);
+            return channel;
+        } else {
+            return it->second;
+        }
+    }
+    ~PassThroughChannel() {
+        for (auto& it : _sender_id_to_channel) {
+            delete it.second;
+        }
+        _sender_id_to_channel.clear();
+    }
+
+    int64_t get_total_bytes() const { return _total_bytes; }
+
+    // Marked once the receiver (DataStreamRecvr) is cancelled or closed. The sink and
+    // receiver share the same PassThroughChannel, so this is how the append side learns
+    // that the peer is gone and it should stop buffering chunks. It also drops whatever is
+    // already buffered, since the cancelled receiver will never pull it.
+    void set_cancelled() {
+        _cancelled.store(true, std::memory_order_release);
+        std::unique_lock lock(_mutex);
+        for (auto& [_, sender_channel] : _sender_id_to_channel) {
+            sender_channel->clear();
+        }
+    }
+    bool is_cancelled() const { return _cancelled.load(std::memory_order_acquire); }
+
+private:
+    std::mutex _mutex;
+    std::unordered_map<int, PassThroughSenderChannel*> _sender_id_to_channel;
+    std::atomic_int64_t _total_bytes = 0;
+    std::atomic<bool> _cancelled{false};
+    // Destroyed after ~PassThroughChannel() has deleted the sender channels that point to it.
+    const std::shared_ptr<MemTracker> _query_mem_tracker;
+};
+
+PassThroughChunkBuffer::PassThroughChunkBuffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker)
+        : _mutex(), _query_id(query_id), _query_mem_tracker(std::move(query_mem_tracker)) {}
+
+PassThroughChunkBuffer::~PassThroughChunkBuffer() {
+    if (UNLIKELY(_ref_count != 0)) {
+        LOG(WARNING) << "PassThroughChunkBuffer reference leak detected! query_id=" << print_id(_query_id)
+                     << ", _ref_count=" << _ref_count;
+    }
+    // Channels are shared with the PassThroughContexts that resolved them; dropping the map only
+    // drops this buffer's reference. A channel still referenced by a sink or a receiver stays
+    // alive until that side is destroyed too.
+    _key_to_channel.clear();
+}
+
+PassThroughChannelPtr PassThroughChunkBuffer::get_or_create_channel(const Key& key) {
+    std::unique_lock lock(_mutex);
+    auto it = _key_to_channel.find(key);
+    if (it == _key_to_channel.end()) {
+        auto channel = std::make_shared<PassThroughChannel>(_query_mem_tracker);
+        _key_to_channel.emplace(key, channel);
+        return channel;
+    } else {
+        return it->second;
+    }
+}
+
+void PassThroughContext::init() {
+    if (_channel != nullptr) {
+        return;
+    }
+    _channel = _chunk_buffer->get_or_create_channel(PassThroughChunkBuffer::Key(_fragment_instance_id, _node_id));
+    // From here on the context owns the channel, so every later use of it is safe regardless of
+    // when the PassThroughChunkBuffer is released.
+    _chunk_buffer = nullptr;
+}
+
+void PassThroughContext::append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence) {
+    // The receiver has been cancelled/closed; drop the chunk instead of buffering it forever.
+    // This mirrors the RPC path, where PipelineSenderQueue::add_chunks returns early once the
+    // receiver queue is cancelled. Without this, the sink keeps cloning chunks into the shared
+    // pass-through buffer that nobody will ever pull, holding the memory until query teardown.
+    if (_channel->is_cancelled()) {
+        return;
+    }
+    PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
+    sender_channel->append_chunk(chunk, chunk_size, driver_sequence);
+}
+void PassThroughContext::pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes) {
+    PassThroughSenderChannel* sender_channel = _channel->get_or_create_sender_channel(sender_id);
+    sender_channel->pull_chunks(chunks, bytes);
+}
+
+int64_t PassThroughContext::total_bytes() const {
+    return _channel->get_total_bytes();
+}
+
+void PassThroughContext::set_cancelled() {
+    _channel->set_cancelled();
+}
+
+bool PassThroughContext::is_cancelled() const {
+    return _channel->is_cancelled();
+}
+
+void PassThroughChunkBufferManager::open_fragment_instance(const TUniqueId& query_id,
+                                                           std::shared_ptr<MemTracker> query_mem_tracker) {
+    VLOG_FILE << "PassThroughChunkBufferManager::open_fragment_instance, query_id = " << query_id;
+    {
+        std::unique_lock lock(_mutex);
+        auto it = _query_id_to_buffer.find(query_id);
+        if (it == _query_id_to_buffer.end()) {
+            auto* buffer = new PassThroughChunkBuffer(query_id, std::move(query_mem_tracker));
+            _query_id_to_buffer.emplace(query_id, buffer);
+        } else {
+            DCHECK_EQ(it->second->query_mem_tracker(), query_mem_tracker.get());
+            it->second->ref();
+        }
+    }
+}
+
+void PassThroughChunkBufferManager::close() {
+    std::unique_lock lock(_mutex);
+    for (auto it = _query_id_to_buffer.begin(); it != _query_id_to_buffer.end();) {
+        delete it->second;
+        it = _query_id_to_buffer.erase(it);
+    }
+}
+
+void PassThroughChunkBufferManager::close_fragment_instance(const TUniqueId& query_id) {
+    VLOG_FILE << "PassThroughChunkBufferManager::close_fragment_instance, query_id = " << query_id;
+    {
+        std::unique_lock lock(_mutex);
+        auto it = _query_id_to_buffer.find(query_id);
+        if (it != _query_id_to_buffer.end()) {
+            int rc = it->second->unref();
+            if (rc == 0) {
+                delete it->second;
+                _query_id_to_buffer.erase(it);
+            }
+        }
+    }
+}
+
+PassThroughChunkBuffer* PassThroughChunkBufferManager::get(const TUniqueId& query_id) {
+    {
+        std::unique_lock lock(_mutex);
+        auto it = _query_id_to_buffer.find(query_id);
+        if (it == _query_id_to_buffer.end()) {
+            return nullptr;
+        }
+        return it->second;
+    }
+}
+
+} // namespace starrocks

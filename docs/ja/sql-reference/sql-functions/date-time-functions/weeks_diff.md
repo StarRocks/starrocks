@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの日付式の週差を返します（expr1 − expr2）。"
 ---
 
 # weeks_diff

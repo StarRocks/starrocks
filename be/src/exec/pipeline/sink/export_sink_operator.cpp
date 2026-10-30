@@ -15,17 +15,21 @@
 #include "exec/pipeline/sink/export_sink_operator.h"
 
 #include "base/uid_util.h"
-#include "exec/data_sink.h"
-#include "exec/file_builder.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
+#include "data_sink/file/file_builder.h"
+#include "data_sink/file/plain_text_builder.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
-#include "exec/plain_text_builder.h"
+#include "exec_primitive/data_sink.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/csv/converter.h"
-#include "fs/fs_broker.h"
-#include "io/formatted_output_stream.h"
+#include "formats/io/formatted_output_stream.h"
+#include "fs/fs_factory.h"
+#include "platform/fs_broker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -68,14 +72,14 @@ void ExportSinkIOBuffer::_add_chunk(const ChunkPtr& chunk) {
     if (_file_builder == nullptr) {
         if (Status status = _open_file_writer(); !status.ok()) {
             LOG(WARNING) << "open file write failed, error: " << status.to_string();
-            _fragment_ctx->cancel(status);
+            cancel_fragment_context(_fragment_ctx, status);
             return;
         }
     }
 
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
         LOG(WARNING) << "add chunk to file builder failed, error: " << status.to_string();
-        _fragment_ctx->cancel(status);
+        cancel_fragment_context(_fragment_ctx, status);
         return;
     }
 }
@@ -95,7 +99,7 @@ Status ExportSinkIOBuffer::_open_file_writer() {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
         } else {
             if (_t_export_sink.broker_addresses.empty()) {

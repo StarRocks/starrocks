@@ -15,6 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.load.loadv2.IVMRefreshCommitInfo;
 
 public class InsertTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("loadedRows")
@@ -25,6 +26,25 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
 
     @SerializedName("partitionVersion")
     private long partitionVersion;
+
+    // For a shadow-rewrite transaction: the watershed txn id the converted
+    // op_schema_change log must be keyed by, and the alter version it is anchored at.
+    @SerializedName("shadowRewriteWatershedTxnId")
+    private long shadowRewriteWatershedTxnId = 0;
+
+    @SerializedName("shadowRewriteAlterVersion")
+    private long shadowRewriteAlterVersion = 0;
+
+    // Set only by an IVM refresh; null for every other INSERT.
+    @SerializedName("ivmRefreshCommitInfo")
+    private IVMRefreshCommitInfo ivmRefreshCommitInfo;
+
+    // Set when a column-subset INSERT into a primary key table was planned as a plain insert because
+    // every target partition had never been committed to. The commit re-checks that under the
+    // transaction manager lock, since another transaction may have committed to those partitions
+    // in between, and fails the commit if so (see DatabaseTransactionMgr.commitPreparedTransaction).
+    @SerializedName("requireEmptyPartitions")
+    private boolean requireEmptyPartitions = false;
 
     public InsertTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.INSERT_STREAMING);
@@ -53,6 +73,35 @@ public class InsertTxnCommitAttachment extends TxnCommitAttachment {
         return partitionVersion;
     }
 
+    public void setShadowRewriteWatershedTxnId(long shadowRewriteWatershedTxnId) {
+        this.shadowRewriteWatershedTxnId = shadowRewriteWatershedTxnId;
+    }
 
+    public long getShadowRewriteWatershedTxnId() {
+        return shadowRewriteWatershedTxnId;
+    }
 
+    public void setShadowRewriteAlterVersion(long shadowRewriteAlterVersion) {
+        this.shadowRewriteAlterVersion = shadowRewriteAlterVersion;
+    }
+
+    public long getShadowRewriteAlterVersion() {
+        return shadowRewriteAlterVersion;
+    }
+
+    public void setIvmRefreshCommitInfo(IVMRefreshCommitInfo ivmRefreshCommitInfo) {
+        this.ivmRefreshCommitInfo = ivmRefreshCommitInfo;
+    }
+
+    public IVMRefreshCommitInfo getIvmRefreshCommitInfo() {
+        return ivmRefreshCommitInfo;
+    }
+
+    public void setRequireEmptyPartitions(boolean requireEmptyPartitions) {
+        this.requireEmptyPartitions = requireEmptyPartitions;
+    }
+
+    public boolean getRequireEmptyPartitions() {
+        return requireEmptyPartitions;
+    }
 }

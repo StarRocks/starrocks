@@ -14,18 +14,25 @@
 
 #include "exec/pipeline/exchange/mem_limited_chunk_queue.h"
 
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <memory>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "common/config_storage_fwd.h"
 #include "common/runtime_profile.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_manager.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/driver_queue_factory.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
-#include "exec/workgroup/work_group.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -39,24 +46,25 @@ public:
         auto fs = FileSystem::Default();
         ASSERT_OK(fs->create_dir_recursive(path));
         LOG(INFO) << "path: " << path;
-        auto parent = GlobalEnv::GetInstance()->query_pool_mem_tracker_shared();
+        auto parent = RuntimeEnv::GetInstance()->query_pool_mem_tracker_shared();
         dummy_wg = std::make_shared<workgroup::WorkGroup>(
                 "default_wg", workgroup::WorkGroup::DEFAULT_WG_ID, workgroup::WorkGroup::DEFAULT_VERSION, 4, 100.0, 0,
                 1.0, workgroup::WorkGroupType::WG_DEFAULT, workgroup::WorkGroup::DEFAULT_MEM_POOL);
-        dummy_wg->init(parent);
+        dummy_wg->init(parent, create_query_shared_driver_queue(
+                                       PipelineExecutorMetrics::instance()->get_driver_queue_metrics()));
         dummy_wg->set_shared_executors(ExecEnv::GetInstance()->workgroup_manager()->shared_executors());
 
         dummy_dir_mgr = std::make_unique<spill::DirManager>();
-        ASSERT_OK(dummy_dir_mgr->init(path));
+        ASSERT_OK(dummy_dir_mgr->init(path, {config::storage_root_path}));
 
         dummy_block_mgr = std::make_unique<spill::LogBlockManager>(dummy_query_id, dummy_dir_mgr.get());
 
         dummy_fragment_ctx.set_workgroup(dummy_wg);
         dummy_query_ctx = std::make_shared<QueryContext>();
 
-        dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx);
+        dummy_runtime_state.set_fragment_ctx(&dummy_fragment_ctx, &dummy_fragment_ctx.fragment_runtime_state());
         dummy_runtime_state.set_fragment_dict_state(dummy_fragment_ctx.dict_state());
-        dummy_runtime_state.set_query_ctx(dummy_query_ctx.get());
+        dummy_query_ctx->attach_to_runtime_state(&dummy_runtime_state);
     }
     void TearDown() override {}
 
@@ -84,7 +92,7 @@ public:
         chunk->append_column(std::move(col), 0);
         return chunk;
     }
-    size_t _next_value = 0;
+    uint64_t _next_value = 0;
     size_t _chunk_size;
 };
 
@@ -92,6 +100,53 @@ void wait_flush_task_done(MemLimitedChunkQueue& queue) {
     while (queue._has_flush_io_task) {
         usleep(1000);
     }
+}
+
+TEST_F(MemLimitedChunkQueueTest, test_pending_flush_task) {
+    MemLimitedChunkQueue::Options options;
+    options.block_size = 1024 * 32;
+    options.memory_limit = 1024 * 32;
+    options.max_unconsumed_bytes = INT64_MAX;
+    options.block_manager = dummy_block_mgr.get();
+    MemLimitedChunkQueue queue(&dummy_runtime_state, 1, options);
+    ASSERT_OK(queue.init_metrics(&dummy_runtime_profile));
+    queue.open_consumer(0);
+    queue.open_producer();
+
+    std::atomic<bool> entered = false;
+    std::atomic<bool> release = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_flush_task", [&](void*) {
+        entered.store(true);
+        while (!release.load()) {
+            bthread_usleep(1000);
+        }
+    });
+    DeferOp cleanup([&]() {
+        release.store(true);
+        wait_flush_task_done(queue);
+        while (queue.has_pending_io_tasks()) {
+            bthread_usleep(1000);
+        }
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    AutoIncChunkBuilder builder;
+    ASSERT_OK(queue.push(builder.get_next()));
+    ASSERT_OK(queue.push(builder.get_next()));
+    ASSERT_FALSE(queue.can_push());
+    for (int i = 0; i < 5000 && !entered.load(); ++i) {
+        bthread_usleep(1000);
+    }
+    ASSERT_TRUE(entered.load());
+    ASSERT_TRUE(queue.has_pending_io_tasks());
+    release.store(true);
+    wait_flush_task_done(queue);
+    while (queue.has_pending_io_tasks()) {
+        bthread_usleep(1000);
+    }
+    ASSERT_FALSE(queue.has_pending_io_tasks());
 }
 
 TEST_F(MemLimitedChunkQueueTest, test_iterator) {
@@ -382,8 +437,10 @@ TEST_F(MemLimitedChunkQueueTest, test_load) {
         wait_flush_task_done(queue);
         int32_t submitted_load_tasks = 0;
         SyncPoint::GetInstance()->EnableProcessing();
-        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task",
-                                              [&](void* arg) { submitted_load_tasks++; });
+        SyncPoint::GetInstance()->SetCallBack("MemLimitedChunkQueue::before_execute_load_task", [&](void* arg) {
+            ASSERT_TRUE(queue.has_pending_io_tasks());
+            submitted_load_tasks++;
+        });
         DeferOp defer([]() {
             SyncPoint::GetInstance()->ClearAllCallBacks();
             SyncPoint::GetInstance()->DisableProcessing();

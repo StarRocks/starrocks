@@ -24,6 +24,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
@@ -761,7 +762,6 @@ public class AuthorizationMgrTest {
                 ctx, null, DB_NAME, PrivilegeType.CREATE_TABLE));
 
         // on all users
-        AuthorizationMgr authorizationManager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         Assertions.assertThrows(AccessDeniedException.class,
                 () -> Authorizer.checkUserAction(ctx, UserIdentity.ROOT, PrivilegeType.IMPERSONATE));
 
@@ -1380,9 +1380,73 @@ public class AuthorizationMgrTest {
         GlobalVariable.setActivateAllRolesOnLogin(true);
     }
 
+    // The `public` role is implicitly held by every user, so a privilege change on it
+    // must invalidate every cached merged-privilege collection. A user whose cache entry
+    // was populated *before* the change would otherwise keep authorizing against a stale
+    // snapshot. These two tests pin that behavior for GRANT and REVOKE respectively.
+    @Test
+    public void testGrantToPublicRoleInvalidatesMergedPrivilegeCache() throws Exception {
+        boolean oldCacheEnabled = Config.authorization_enable_priv_collection_cache;
+        Config.authorization_enable_priv_collection_cache = true;
+        try {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create user user_grant_public", ctx), ctx);
+            UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_grant_public", "%");
+
+            // Populate the merged-privilege cache for the user before the grant: the user
+            // has no privilege on db.tbl0 yet, so the check is denied and that snapshot is cached.
+            setCurrentUserAndRoles(ctx, user);
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+
+            // Grant the privilege to the implicit `public` role.
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT select on db.tbl0 TO ROLE public", ctx), ctx);
+
+            // The user must now see the privilege; a stale cache entry would still deny it.
+            setCurrentUserAndRoles(ctx, user);
+            Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
+        } finally {
+            Config.authorization_enable_priv_collection_cache = oldCacheEnabled;
+        }
+    }
+
+    @Test
+    public void testRevokeFromPublicRoleInvalidatesMergedPrivilegeCache() throws Exception {
+        boolean oldCacheEnabled = Config.authorization_enable_priv_collection_cache;
+        Config.authorization_enable_priv_collection_cache = true;
+        try {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "create user user_revoke_public", ctx), ctx);
+            UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_revoke_public", "%");
+
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "GRANT select on db.tbl0 TO ROLE public", ctx), ctx);
+
+            // Populate the merged-privilege cache for the user while public still grants the
+            // privilege, so the cached snapshot includes it.
+            setCurrentUserAndRoles(ctx, user);
+            Authorizer.checkTableAction(ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT);
+
+            // Revoke the privilege from the implicit `public` role.
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "REVOKE select on db.tbl0 FROM ROLE public", ctx), ctx);
+
+            // The user must no longer see the privilege; a stale cache entry would still allow it.
+            setCurrentUserAndRoles(ctx, user);
+            Assertions.assertThrows(AccessDeniedException.class, () -> Authorizer.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_0, PrivilegeType.SELECT));
+        } finally {
+            Config.authorization_enable_priv_collection_cache = oldCacheEnabled;
+        }
+    }
+
     @Test
     public void testBuiltinRoles() throws Exception {
-        AuthorizationMgr manager = ctx.getGlobalStateMgr().getAuthorizationMgr();
         setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
         // create user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1646,6 +1710,99 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void testViewExportPrivilege() throws Exception {
+        checkExportPrivilege(ObjectType.VIEW, new TableName("db", "view1"));
+    }
+
+    @Test
+    public void testMaterializedViewExportPrivilege() throws Exception {
+        checkExportPrivilege(ObjectType.MATERIALIZED_VIEW, new TableName("db3", "mv1"));
+    }
+
+    private void checkExportPrivilege(ObjectType objectType, TableName name) throws Exception {
+        String object = objectType.toString() + " " + name.getDb() + "." + name.getTbl();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on " + object + " to test_user", ctx), ctx);
+        setCurrentUserAndRoles(ctx, testUser);
+        assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
+
+        for (String privilege : List.of("EXPORT", "ALL PRIVILEGES")) {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "grant " + privilege + " on " + object + " to test_user", ctx), ctx);
+            setCurrentUserAndRoles(ctx, testUser);
+            checkExportAction(objectType, name);
+
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "revoke " + privilege + " on " + object + " from test_user", ctx), ctx);
+            setCurrentUserAndRoles(ctx, testUser);
+            assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
+        }
+    }
+
+    private void checkExportAction(ObjectType objectType, TableName name) throws AccessDeniedException {
+        if (objectType.equals(ObjectType.VIEW)) {
+            Authorizer.checkViewAction(ctx, name, PrivilegeType.EXPORT);
+        } else {
+            Authorizer.checkMaterializedViewAction(ctx, name, PrivilegeType.EXPORT);
+        }
+    }
+
+    @Test
+    public void testViewExportGrantOptionUpgrade() throws Exception {
+        checkExportGrantOptionUpgrade(ObjectType.VIEW, new TableName("db", "view1"), "SELECT, ALTER, DROP");
+    }
+
+    @Test
+    public void testMaterializedViewExportGrantOptionUpgrade() throws Exception {
+        checkExportGrantOptionUpgrade(ObjectType.MATERIALIZED_VIEW, new TableName("db3", "mv1"),
+                "SELECT, ALTER, DROP, REFRESH");
+    }
+
+    private void checkExportGrantOptionUpgrade(ObjectType objectType, TableName name, String oldPrivileges)
+            throws Exception {
+        String object = objectType + " " + name.getDb() + "." + name.getTbl();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create user export_recipient", ctx), ctx);
+        // Persisted ALL grants contain the old action set, without EXPORT.
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant " + oldPrivileges + " on " + object + " to test_user with grant option", ctx), ctx);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        assertThrows(AccessDeniedException.class, () -> Authorizer.checkSystemAction(ctx, PrivilegeType.GRANT));
+        StatementBase oldGrant = UtFrameUtils.parseStmtWithNewParser(
+                "grant " + oldPrivileges + " on " + object + " to export_recipient", ctx);
+        Authorizer.check(oldGrant, ctx);
+        DDLStmtExecutor.execute(oldGrant, ctx);
+
+        StatementBase grantAll = UtFrameUtils.parseStmtWithNewParser(
+                "grant all privileges on " + object + " to export_recipient", ctx);
+        StatementBase revokeAll = UtFrameUtils.parseStmtWithNewParser(
+                "revoke all privileges on " + object + " from export_recipient", ctx);
+        for (StatementBase statement : List.of(grantAll, revokeAll)) {
+            ErrorReportException error = assertThrows(ErrorReportException.class, () -> Authorizer.check(statement, ctx));
+            Assertions.assertEquals(ErrorCode.ERR_ACCESS_DENIED, error.getErrorCode());
+        }
+
+        setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant export on " + object + " to test_user with grant option", ctx), ctx);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.check(grantAll, ctx);
+        DDLStmtExecutor.execute(grantAll, ctx);
+        UserIdentity recipient = UserIdentity.createAnalyzedUserIdentWithIp("export_recipient", "%");
+        setCurrentUserAndRoles(ctx, recipient);
+        checkExportAction(objectType, name);
+
+        setCurrentUserAndRoles(ctx, testUser);
+        Authorizer.check(revokeAll, ctx);
+        DDLStmtExecutor.execute(revokeAll, ctx);
+        setCurrentUserAndRoles(ctx, recipient);
+        assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
+    }
+
+    @Test
     public void testGrantView() throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user view_user", ctx), ctx);
@@ -1731,13 +1888,10 @@ public class AuthorizationMgrTest {
             Assertions.assertTrue(e.getMessage().contains("There is no such grant defined on TABLE db.tbl1"));
         }
 
-        StatementBase statementBase =
-                UtFrameUtils.parseStmtWithNewParser("revoke select on table db.* from test_user", ctx);
+        UtFrameUtils.parseStmtWithNewParser("revoke select on table db.* from test_user", ctx);
 
-        statementBase =
-                UtFrameUtils.parseStmtWithNewParser("revoke insert on table db.* from test_user", ctx);
-        statementBase =
-                UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl0 from test_user", ctx);
+        UtFrameUtils.parseStmtWithNewParser("revoke insert on table db.* from test_user", ctx);
+        UtFrameUtils.parseStmtWithNewParser("revoke select on table db.tbl0 from test_user", ctx);
     }
 
     @Test
@@ -1820,7 +1974,7 @@ public class AuthorizationMgrTest {
 
         sql = "show grants for user_for_system";
         ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        ShowResultSet resultSet = ShowExecutor.execute(showStreamLoadStmt, ctx);
+        ShowExecutor.execute(showStreamLoadStmt, ctx);
     }
 
     @Test

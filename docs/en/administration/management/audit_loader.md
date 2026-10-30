@@ -1,5 +1,7 @@
 ---
+sidebar_position: 80
 displayed_sidebar: docs
+description: "StarRocks stores its audit logs in the local file fe/log/fe.audit.log rather than an internal database."
 ---
 
 # Manage audit logs within StarRocks via AuditLoader
@@ -37,6 +39,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `db` VARCHAR(96) COMMENT "Database where the query runs",
   `state` VARCHAR(8) COMMENT "Query state (EOF, ERR, OK)",
   `errorCode` VARCHAR(512) COMMENT "Error code",
+  `errorMessage` VARCHAR(1048576) NULL COMMENT "Error message returned to the client",
   `queryTime` BIGINT COMMENT "Query execution time (milliseconds)",
   `scanBytes` BIGINT COMMENT "Number of bytes scanned by the query",
   `scanRows` BIGINT COMMENT "Number of rows scanned by the query",
@@ -53,6 +56,7 @@ CREATE TABLE starrocks_audit_db__.starrocks_audit_tbl__ (
   `pendingTimeMs` BIGINT COMMENT "Time the query waited in the queue (milliseconds)",
   `candidateMVs` VARCHAR(65533) NULL COMMENT "List of candidate materialized views",
   `hitMvs` VARCHAR(65533) NULL COMMENT "List of matched materialized views",
+  `QueriedRelations` ARRAY<VARCHAR(65533)> NULL COMMENT "List of directly referenced tables and views",
   `warehouse` VARCHAR(32) NULL COMMENT "Warehouse name"
 ) ENGINE = OLAP
 DUPLICATE KEY (`queryId`, `timestamp`, `queryType`)
@@ -71,6 +75,19 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
 ```
 
 After a partition is created, you can move on to the next step.
+
+:::note
+
+If the table already exists from an earlier version, add the columns that were introduced since, otherwise the corresponding fields are silently dropped when the audit logs are loaded. For example, `errorMessage` is introduced in v4.2.0:
+
+```SQL
+ALTER TABLE starrocks_audit_db__.starrocks_audit_tbl__
+ADD COLUMN `errorMessage` VARCHAR(1048576) NULL COMMENT "Error message returned to the client" AFTER `errorCode`;
+```
+
+Add the column before you configure the `filter` property of AuditLoader to reference it, because that filter is evaluated against the columns of the table.
+
+:::
 
 ## Download and configure AuditLoader
 
@@ -207,6 +224,7 @@ See [INSTALL PLUGIN](../../sql-reference/sql-statements/cluster-management/plugi
      pendingTimeMs: -1
       candidateMvs: null
             hitMVs: null
+  QueriedRelations: ["default_catalog.db1.tbl1","default_catalog.db1.view1"]
     …………
     ```
 

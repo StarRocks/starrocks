@@ -17,13 +17,15 @@
 #include <atomic>
 #include <ostream>
 
+#include "column/sorting/sort_permute.h"
 #include "column/vectorized_fwd.h"
-#include "exec/sorting/sort_permute.h"
+#include "common/storage_define.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
-#include "storage/chunk_aggregator.h"
-#include "storage/olap_define.h"
-#include "storage/primary_key_encoding_types.h"
+#include "runtime/mem_tracker_fwd.h"
+#include "storage/tablet_schema.h"
+#include "storage_primitive/chunk_aggregator.h"
+#include "storage_primitive/primary_key_encoding_types.h"
 
 namespace starrocks {
 
@@ -155,7 +157,8 @@ private:
 
     std::string _merge_condition;
 
-    int64_t _max_buffer_size = config::write_buffer_size;
+    // Keep this fallback value in sync with config::write_buffer_size default.
+    int64_t _max_buffer_size = 104857600;
     // initial value is max size
     size_t _max_buffer_row = std::numeric_limits<size_t>::max();
     size_t _total_rows = 0;

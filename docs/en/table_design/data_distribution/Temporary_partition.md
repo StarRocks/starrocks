@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 40
+description: "How to use temporary partitions in StarRocks to atomically overwrite data, adjust partitioning strategies, or stage data without affecting production queries."
 ---
 
 # Temporary partition
@@ -167,7 +168,7 @@ For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../../
 
 ## Query data in temporary partitions
 
-You can use the [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) statement to query data in specified temporary partitions.
+You can use the [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) statement to query data in specified temporary partitions.
 
 ```SQL
 SELECT * FROM

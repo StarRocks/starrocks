@@ -67,10 +67,12 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -79,6 +81,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -112,9 +115,18 @@ public class PartitionSelector {
     // why not use `PARTITION_ID` here? because partition_id in partitions_meta is physical partition id which may be confused.
     private static final String PARTITIONS_META_TEMPLATE = "SELECT PARTITION_NAME FROM INFORMATION_SCHEMA.PARTITIONS_META " +
             "WHERE DB_NAME ='%s' and TABLE_NAME='%s' AND %s;";
-    private static final String EXTERNAL_TABLE_PARTITION_META_TEMPLATE = "SELECT PARTITION_NAME, SUM(ROW_COUNT) as ROW_COUNT," +
-            "CAST(SUM(DATA_SIZE) AS BIGINT) as DATA_SIZE FROM _statistics_.external_column_statistics " +
-            "WHERE TABLE_UUID = '%s' AND PARTITION_NAME in ('%s') GROUP BY PARTITION_NAME;";
+    // TABLE_UUID matches both the hashed and raw representations (external_column_statistics
+    // stores table_uuid hashed - see StatisticUtils.hashTableUuidForPkStorage - to stay within
+    // BE's primary_key_limit_size); matching only the raw value here would silently return no
+    // rows once a table's stats have been (re-)collected under the hashed key. The inner subquery
+    // dedups to the freshest row per (PARTITION_NAME, COLUMN_NAME) so a partition isn't counted
+    // twice if both its hashed and raw rows happen to be alive at once.
+    private static final String EXTERNAL_TABLE_PARTITION_META_TEMPLATE =
+            "SELECT PARTITION_NAME, SUM(ROW_COUNT) as ROW_COUNT, CAST(SUM(DATA_SIZE) AS BIGINT) as DATA_SIZE FROM (" +
+            "SELECT *, ROW_NUMBER() OVER (PARTITION BY PARTITION_NAME, COLUMN_NAME ORDER BY UPDATE_TIME DESC) AS RN " +
+            "FROM _statistics_.external_column_statistics " +
+            "WHERE TABLE_UUID IN ('%s', '%s') AND PARTITION_NAME in ('%s')) DEDUP_T " +
+            "WHERE RN = 1 GROUP BY PARTITION_NAME;";
     // NOTE: `json` to `datetime` is not supported yet, so we use `string` here.
     private static final String JSON_QUERY_TEMPLATE = "CAST(CAST(JSON_QUERY(%s, '$[0].[%d]') AS STRING) AS %s)";
 
@@ -262,9 +274,18 @@ public class PartitionSelector {
 
         LOG.debug("Get partition ids by where expression: {}", scalarOperator.toString());
 
-        // deduce generated column expr to partition slotRef
+        // Deduce a predicate on a generated partition column from one on its source column. The
+        // deduction only widens: c1 < '2024-01-02 00:00:00' deduces c2 <= '2024-01-02' for
+        // c2 = date_trunc('day', c1), which keeps every row the original keeps and some it does not.
+        // That is what a retention condition needs, since the partitions it selects are the ones
+        // kept. A drop condition selects the partitions to drop, and there the extra partitions are
+        // dropped with rows that do not satisfy the condition -- all of 2024-01-02 above. So a drop
+        // condition is only deduced where the deduction is exact (see deduceGenerateColumns); on
+        // anything else the source column is rejected below, and the message names the partition
+        // expression to write instead.
         try {
-            scalarOperator = deduceGenerateColumns(scalarOperator, olapTable, columnRefFactory);
+            scalarOperator = deduceGenerateColumns(scalarOperator, olapTable, columnRefFactory,
+                    isDropPartitionCondition);
         } catch (Exception e) {
             LOG.debug("Failed to deduce generated column expr to partition slotRef: " + e.getMessage());
         }
@@ -304,8 +325,22 @@ public class PartitionSelector {
         return selectedPartitionIds;
     }
 
+    /**
+     * @param exactOnly deduce only where the deduced predicate selects exactly the rows the original
+     *                  does: an equality or IN list through a one-to-one expression. A range is never
+     *                  exact through a many-to-one bucket, and even c2 = 100 - c1 would need the
+     *                  constant to sit on a bucket boundary, so ranges are left alone.
+     */
+    private static boolean isExactDeduction(ScalarOperator predicate, ScalarOperator generatedExpr) {
+        boolean equality = (predicate instanceof BinaryPredicateOperator binary
+                && binary.getBinaryType().isEquivalence())
+                || (predicate instanceof InPredicateOperator in && !in.isNotIn());
+        return equality && OperatorFunctionChecker.isOneToOne(generatedExpr);
+    }
+
     private static ScalarOperator deduceGenerateColumns(ScalarOperator scalarOperator,
-                                              OlapTable olapTable, ColumnRefFactory columnRefFactory) {
+                                              OlapTable olapTable, ColumnRefFactory columnRefFactory,
+                                              boolean exactOnly) {
         Map<String, ColumnRefOperator>  columnNameToColRefMap = Maps.newHashMap();
         List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(scalarOperator);
 
@@ -374,6 +409,20 @@ public class PartitionSelector {
                     if (pair != null) {
                         ColumnRefOperator generatedColumn = pair.first;
                         ScalarOperator generatedExpr = pair.second;
+                        if (exactOnly && !isExactDeduction(scalarOperator, generatedExpr)) {
+                            return scalarOperator;
+                        }
+                        // buildDeducedConjunct keeps the comparison operator, which only maps soundly
+                        // through an expression that grows with its column. Equality is exempt -- a = c
+                        // implies f(a) = f(c) whichever way f runs -- so the restriction has to wait
+                        // until the predicate is known rather than being applied when the generated
+                        // column map is built.
+                        if (scalarOperator instanceof BinaryPredicateOperator
+                                && !((BinaryPredicateOperator) scalarOperator).getBinaryType().isEqual()
+                                && !OperatorFunctionChecker.onlyContainIncreasingFunctions(
+                                        (CallOperator) generatedExpr).first) {
+                            return scalarOperator;
+                        }
                         ScalarOperator result = buildDeducedConjunct(scalarOperator, generatedExpr, generatedColumn);
                         return result;
                     }
@@ -810,7 +859,9 @@ public class PartitionSelector {
      * such as Iceberg/Hudi by its table UUID.
      */
     public static Map<String, Pair<Long, Long>> getExternalTablePartitionStats(Table table, Set<String> needPartitionNames) {
-        String sql = String.format(EXTERNAL_TABLE_PARTITION_META_TEMPLATE, table.getUUID(),
+        String rawTableUuid = table.getUUID();
+        String hashedTableUuid = StatisticUtils.hashTableUuidForPkStorage(rawTableUuid);
+        String sql = String.format(EXTERNAL_TABLE_PARTITION_META_TEMPLATE, hashedTableUuid, rawTableUuid,
                 String.join(",", needPartitionNames));
         LOG.info("Get external table partition stats by sql: {}", sql);
         List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
@@ -921,7 +972,7 @@ public class PartitionSelector {
         if (partitionInfo.isListPartition()) {
             // support common partition expressions for list partition tables
         } else if (partitionInfo.isRangePartition()) {
-            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctions(predicate);
+            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(predicate);
             if (!result.first) {
                 throw new SemanticException("Retention condition must only contain monotonic functions for range partition " +
                         "tables but contains: " + result.second);

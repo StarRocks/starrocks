@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks REST API design standard covering URL format, HTTP method semantics, request/response conventions, and error handling."
 ---
 
 # StarRocks Restful API Standard

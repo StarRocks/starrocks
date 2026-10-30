@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the minimum value of the expr expression."
 ---
 
 # min

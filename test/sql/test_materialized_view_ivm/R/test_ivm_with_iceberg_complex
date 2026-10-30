@@ -136,7 +136,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -164,7 +164,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -200,7 +200,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -240,7 +240,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -288,7 +288,7 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
-True
+False
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:

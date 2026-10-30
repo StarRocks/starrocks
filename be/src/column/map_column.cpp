@@ -19,6 +19,13 @@
 #include <numeric>
 #include <set>
 
+#ifdef __AVX2__
+#include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
@@ -30,6 +37,23 @@
 #include "types/datum.h"
 
 namespace starrocks {
+static std::vector<uint32_t> _build_sorted_key_indices(const Column* keys, size_t offset, size_t map_size) {
+    std::vector<std::pair<DatumKey, uint32_t>> keyed_indices;
+    keyed_indices.reserve(map_size);
+    for (uint32_t i = 0; i < map_size; ++i) {
+        keyed_indices.emplace_back(keys->get(offset + i).convert2DatumKey(), i);
+    }
+    std::sort(keyed_indices.begin(), keyed_indices.end(),
+              [](const auto& lhs, const auto& rhs) { return lhs.first < rhs.first; });
+
+    std::vector<uint32_t> sorted_indices;
+    sorted_indices.reserve(map_size);
+    for (const auto& kv : keyed_indices) {
+        sorted_indices.emplace_back(kv.second);
+    }
+    return sorted_indices;
+}
+
 void MapColumn::check_or_die() const {
     const auto offsets = _offsets->immutable_data();
     CHECK_EQ(offsets.back(), _keys->size());
@@ -60,16 +84,6 @@ size_t MapColumn::capacity() const {
     return _offsets->capacity() - 1;
 }
 
-const uint8_t* MapColumn::raw_data() const {
-    DCHECK(false) << "Don't support map column raw_data";
-    return nullptr;
-}
-
-uint8_t* MapColumn::mutable_raw_data() {
-    DCHECK(false) << "Don't support map column mutable_raw_data";
-    return nullptr;
-}
-
 size_t MapColumn::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     const auto offsets = _offsets->immutable_data();
@@ -95,10 +109,27 @@ void MapColumn::resize(size_t n) {
 }
 
 void MapColumn::assign(size_t n, size_t idx) {
-    DCHECK_LE(idx, this->size()) << "Range error when assign MapColumn.";
+    DCHECK_LT(idx, this->size()) << "Range error when assign MapColumn.";
     auto desc = this->clone_empty();
-    auto datum = get(idx); // just reference
-    desc->append_value_multiple_times(&datum, n);
+
+    const auto& offsets_data = _offsets->immutable_data();
+    const uint32_t offset = offsets_data[idx];
+    const uint32_t map_size = offsets_data[idx + 1] - offset;
+    const auto sorted_indices = _build_sorted_key_indices(_keys.get(), offset, map_size);
+
+    auto* desc_map = down_cast<MapColumn*>(desc.get());
+    auto* desc_keys = desc_map->_keys.get();
+    auto* desc_values = desc_map->_values.get();
+    auto* desc_offsets = desc_map->_offsets.get();
+    for (size_t c = 0; c < n; ++c) {
+        for (uint32_t sorted_idx : sorted_indices) {
+            const uint32_t element_idx = offset + sorted_idx;
+            desc_keys->append(*_keys, element_idx, 1);
+            desc_values->append(*_values, element_idx, 1);
+        }
+        desc_offsets->append(desc_offsets->get_data().back() + map_size);
+    }
+
     swap_column(*desc);
     desc->reset_column();
 }
@@ -393,6 +424,44 @@ size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
         }
         check_offset += kBatchSize;
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    const uint8_t* f_data = filter.data();
+
+    constexpr size_t kBatchSize = /*width of NEON registers*/ 128 / 8;
+
+    while (check_offset + kBatchSize < to) {
+        uint8x16_t f = vld1q_u8(f_data + check_offset);
+        // nibble_mask holds 4 bits per row: 0xf where the row is kept, 0x0 otherwise.
+        uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(f, f));
+
+        if (nibble_mask == 0) {
+            // all no hit, pass
+        } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
+            // all hit, copy all
+            auto element_size = offsets[check_offset + kBatchSize] - offsets[check_offset];
+            memset(element_filter.data() + offsets[check_offset], 1, element_size);
+            if (result_offset != check_offset) {
+                DCHECK_LE(offsets[result_offset], offsets[check_offset]);
+                auto delta = offsets[check_offset] - offsets[result_offset];
+                memmove(offsets + result_offset + 1, offsets + check_offset + 1, kBatchSize * sizeof(offsets[0]));
+                for (size_t i = 0; i < kBatchSize; i++) {
+                    offsets[result_offset + i + 1] -= delta;
+                }
+            }
+            result_offset += kBatchSize;
+        } else {
+            // Keep only the high bit of each nibble, then walk the kept rows one set bit at a time.
+            nibble_mask &= 0x8888'8888'8888'8888ull;
+            for (; nibble_mask > 0; nibble_mask &= nibble_mask - 1) {
+                size_t i = __builtin_ctzll(nibble_mask) >> 2;
+                auto array_size = offsets[check_offset + i + 1] - offsets[check_offset + i];
+                memset(element_filter.data() + offsets[check_offset + i], 1, array_size);
+                offsets[result_offset + 1] = offsets[result_offset] + array_size;
+                result_offset += 1;
+            }
+        }
+        check_offset += kBatchSize;
+    }
 #endif
 
     for (auto i = check_offset; i < to; ++i) {
@@ -625,44 +694,6 @@ std::string MapColumn::debug_string() const {
         ss << debug_item(i);
     }
     return ss.str();
-}
-
-StatusOr<MutableColumnPtr> MapColumn::upgrade_if_overflow() {
-    if (_offsets->size() > Column::MAX_CAPACITY_LIMIT) {
-        return Status::InternalError("Size of MapColumn exceed the limit");
-    }
-
-    auto ret = upgrade_helper_func(_keys->as_mutable_raw_ptr());
-    if (!ret.ok()) {
-        return ret;
-    }
-    if (ret.value() != nullptr) {
-        _keys = std::move(ret.value());
-    }
-
-    ret = upgrade_helper_func(_values->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _values = std::move(ret.value());
-    }
-
-    return ret;
-}
-
-StatusOr<MutableColumnPtr> MapColumn::downgrade() {
-    auto ret = downgrade_helper_func(_keys->as_mutable_raw_ptr());
-    if (!ret.ok()) {
-        return ret;
-    }
-    if (ret.value() != nullptr) {
-        _keys = std::move(ret.value());
-    }
-
-    ret = downgrade_helper_func(_values->as_mutable_raw_ptr());
-    if (ret.ok() && ret.value() != nullptr) {
-        _values = std::move(ret.value());
-    }
-
-    return ret;
 }
 
 Status MapColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {

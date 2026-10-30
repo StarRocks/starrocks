@@ -122,6 +122,8 @@ public class BenchmarkScanNode extends ScanNode {
         benchmarkScanNode.setDb_name(table.getCatalogDBName());
         benchmarkScanNode.setScale_factor(table.getScaleFactor());
         msg.benchmark_scan_node = benchmarkScanNode;
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

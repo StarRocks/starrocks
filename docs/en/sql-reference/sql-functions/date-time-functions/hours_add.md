@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Adds hours to a date or datetime."
 ---
 
 # hours_add

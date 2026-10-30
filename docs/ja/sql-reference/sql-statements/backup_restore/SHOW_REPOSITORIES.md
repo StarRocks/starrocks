@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks で作成されたリポジトリを表示します。"
 ---
 
 # SHOW REPOSITORIES

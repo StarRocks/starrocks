@@ -16,24 +16,16 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
+
 public class ModifyInferenceTest extends PlanTestBase {
-
-    @BeforeEach
-    public void before() {
-        connectContext.getSessionVariable().setMVPlanner(true);
-    }
-
-    @AfterEach
-    public void after() {
-        connectContext.getSessionVariable().setMVPlanner(false);
-    }
 
     private ModifyInference.ModifyOp planAndInferenceKey(String sql) throws Exception {
         ExecPlan plan = getExecPlan(sql);
@@ -46,6 +38,10 @@ public class ModifyInferenceTest extends PlanTestBase {
         Assertions.assertEquals(expected, modify);
     }
 
+    private void assertInferenceNotSupported(String sql) throws Exception {
+        Assertions.assertThrows(org.apache.commons.lang3.NotImplementedException.class, () -> planAndInferenceKey(sql));
+    }
+
     @Test
     public void testScan() throws Exception {
         assertInferenceModify("select * from t0", ModifyInference.ModifyOp.INSERT_ONLY);
@@ -53,17 +49,26 @@ public class ModifyInferenceTest extends PlanTestBase {
     }
 
     @Test
+    public void testAIProjectPropagatesModifyInference() throws Exception {
+        ExecPlan plan = getExecPlan("select v1 from t0");
+        ColumnRefOperator output = plan.getOutputColumns().get(0);
+        OptExpression aiProject = OptExpression.create(
+                new PhysicalAIProjectOperator(Map.of(output, output), Map.of()), plan.getPhysicalPlan());
+
+        Assertions.assertEquals(ModifyInference.infer(plan.getPhysicalPlan()), ModifyInference.infer(aiProject));
+    }
+
+    @Test
     public void testJoin() throws Exception {
-        assertInferenceModify("select * from t0 join t1 on t0.v1 = t1.v4", ModifyInference.ModifyOp.INSERT_ONLY);
-        assertInferenceModify("select * from tprimary join t1 on pk = t1.v4", ModifyInference.ModifyOp.ALL);
+        assertInferenceNotSupported("select * from t0 join t1 on t0.v1 = t1.v4");
+        assertInferenceNotSupported("select * from tprimary join t1 on pk = t1.v4");
     }
 
     @Test
     public void testAgg() throws Exception {
-        assertInferenceModify("select v1, count(*) from t0 group by v1", ModifyInference.ModifyOp.UPSERT);
+        assertInferenceNotSupported("select v1, count(*) from t0 group by v1");
         assertInferenceModify("select pk, count(*) from tprimary group by pk", ModifyInference.ModifyOp.ALL);
-
-        assertInferenceModify("select v1, count(*) from t0 join t1 on t0.v1=t1.v4 group by v1", ModifyInference.ModifyOp.UPSERT);
-        assertInferenceModify("select v4, count(*) from tprimary join t1 on pk=t1.v4 group by v4", ModifyInference.ModifyOp.ALL);
+        assertInferenceNotSupported("select v1, count(*) from t0 join t1 on t0.v1=t1.v4 group by v1");
+        assertInferenceNotSupported("select v4, count(*) from tprimary join t1 on pk=t1.v4 group by v4");
     }
 }

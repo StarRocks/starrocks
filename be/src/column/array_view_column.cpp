@@ -355,7 +355,7 @@ ColumnPtr ArrayViewColumn::to_array_column(const ColumnPtr& column) {
         DCHECK(nullable_column != nullptr);
         auto array_view_column = down_cast<const ArrayViewColumn*>(nullable_column->data_column().get());
         auto array_column = array_view_column->to_array_column();
-        return NullableColumn::create(std::move(array_column), std::move(nullable_column->null_column()));
+        return NullableColumn::create(array_column, nullable_column->null_column());
     }
     auto array_view_column = down_cast<const ArrayViewColumn*>(column.get());
     return array_view_column->to_array_column();

@@ -16,20 +16,33 @@
 
 #include "base/concurrency/await.h"
 #include "base/gc/gc_helper.h"
+#include "base/statusor.h"
+#include "cache/datacache.h"
 #include "cache/mem_cache/page_cache.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
 #include "common/thread/thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
+MemSpaceMonitor::~MemSpaceMonitor() {
+    stop();
+}
+
 void MemSpaceMonitor::start() {
+    if (!_stopped.load(std::memory_order_acquire)) {
+        // Already running. Never move-assign over a joinable thread.
+        return;
+    }
+    _stopped.store(false, std::memory_order_release);
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
-    Thread::set_thread_name(_adjust_datacache_thread, "adjust_mem_cache");
+    Thread::set_thread_name(_adjust_datacache_thread, "adj_mem_cache");
 }
 
 void MemSpaceMonitor::stop() {
+    if (_stopped.load(std::memory_order_acquire)) {
+        return;
+    }
     _stopped.store(true, std::memory_order_release);
     if (_adjust_datacache_thread.joinable()) {
         _adjust_datacache_thread.join();
@@ -77,7 +90,7 @@ void MemSpaceMonitor::_adjust_datacache_callback() {
         if (!config::datacache_enable) {
             continue;
         }
-        MemTracker* memtracker = GlobalEnv::GetInstance()->process_mem_tracker();
+        MemTracker* memtracker = _process_mem_tracker;
         if (memtracker == nullptr || !memtracker->has_limit()) {
             continue;
         }

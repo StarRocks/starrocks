@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PROPERTY displays properties of a user, including the maximum number of connections, the default catalog, and the default database."
 ---
 
 # SHOW PROPERTY

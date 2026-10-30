@@ -18,18 +18,28 @@
 #include <gtest/gtest.h>
 
 #include <iomanip>
+#include <optional>
 #include <sstream>
 
 #include "butil/time.h"
+#include "column/json_column.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 #include "types/decimalv3.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 
 class EncryptionFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() override {}
+    void SetUp() override { _max_length_for_to_base64 = config::max_length_for_to_base64; }
+
+    void TearDown() override { config::max_length_for_to_base64 = _max_length_for_to_base64; }
+
+private:
+    int64_t _max_length_for_to_base64 = 0;
 };
 
 // ==================== AES Encrypt/Decrypt with Mode Tests ====================
@@ -94,7 +104,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_Test) {
         // which don't use padding. For 16-byte aligned input, PKCS#7 adds a full 16-byte padding block.
         // We verify correctness through encrypt-decrypt cycle instead of comparing encrypted output.
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_GT(encrypted_data->get_data()[0].size, 0); // Ensure encryption succeeded
+        ASSERT_GT(encrypted_data->get_slice(0).size, 0); // Ensure encryption succeeded
 
         // Decrypt
         Columns decrypt_columns;
@@ -107,7 +117,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string());
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string());
     }
 }
 
@@ -175,7 +185,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CBC_Test) {
         // which don't use padding. For 16-byte aligned input, PKCS#7 adds a full 16-byte padding block.
         // We verify correctness through encrypt-decrypt cycle instead of comparing encrypted output.
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_GT(encrypted_data->get_data()[0].size, 0); // Ensure encryption succeeded
+        ASSERT_GT(encrypted_data->get_slice(0).size, 0); // Ensure encryption succeeded
 
         // Decrypt
         Columns decrypt_columns;
@@ -188,7 +198,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CBC_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string());
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string());
     }
 }
 
@@ -252,7 +262,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CFB_Test) {
 
         // For stream modes (CFB), verify encrypted length equals plain length (no padding)
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_EQ(tc.plain.size(), encrypted_data->get_data()[0].size)
+        ASSERT_EQ(tc.plain.size(), encrypted_data->get_slice(0).size)
                 << "CFB mode should not add padding, encrypted length should equal plain length";
 
         // Decrypt and verify we can recover the original plaintext
@@ -266,7 +276,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CFB_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string()) << "Decrypted text should match original plaintext";
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string()) << "Decrypted text should match original plaintext";
     }
 }
 
@@ -332,7 +342,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_OFB_Test) {
 
         // For stream modes (OFB), verify encrypted length equals plain length (no padding)
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_EQ(tc.plain.size(), encrypted_data->get_data()[0].size)
+        ASSERT_EQ(tc.plain.size(), encrypted_data->get_slice(0).size)
                 << "OFB mode should not add padding, encrypted length should equal plain length";
 
         // Decrypt and verify we can recover the original plaintext
@@ -346,7 +356,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_OFB_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string()) << "Decrypted text should match original plaintext";
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string()) << "Decrypted text should match original plaintext";
     }
 }
 
@@ -412,7 +422,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CTR_Test) {
 
         // For stream modes (CTR), verify encrypted length equals plain length (no padding)
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_EQ(tc.plain.size(), encrypted_data->get_data()[0].size)
+        ASSERT_EQ(tc.plain.size(), encrypted_data->get_slice(0).size)
                 << "CTR mode should not add padding, encrypted length should equal plain length";
 
         // Decrypt and verify we can recover the original plaintext
@@ -426,7 +436,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CTR_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string()) << "Decrypted text should match original plaintext";
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string()) << "Decrypted text should match original plaintext";
     }
 }
 
@@ -536,7 +546,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_GCM_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(tc.plain, result->get_data()[0].to_string());
+        ASSERT_EQ(tc.plain, result->get_slice(0).to_string());
     }
 }
 
@@ -599,7 +609,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_GCM_with_AAD_Test) {
     ASSERT_FALSE(decrypted->is_null(0));
 
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-    ASSERT_EQ(plain, result->get_data()[0].to_string());
+    ASSERT_EQ(plain, result->get_slice(0).to_string());
 
     // Decrypt with wrong AAD should fail (authentication failure)
     auto wrong_aad_col = BinaryColumn::create();
@@ -638,7 +648,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_GCM_with_AAD_Test) {
     ASSERT_FALSE(decrypted_no_aad->is_null(0));
 
     auto result_no_aad = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted_no_aad);
-    ASSERT_EQ(plain, result_no_aad->get_data()[0].to_string());
+    ASSERT_EQ(plain, result_no_aad->get_slice(0).to_string());
 }
 
 // Test NULL handling
@@ -714,7 +724,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_NULL_IV_Test) {
     ASSERT_FALSE(decrypted->is_null(0));
 
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-    ASSERT_EQ("test data", result->get_data()[0].to_string());
+    ASSERT_EQ("test data", result->get_slice(0).to_string());
 }
 
 // Test case-insensitive mode string
@@ -758,7 +768,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_CaseInsensitive_Test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plain, result->get_data()[0].to_string());
+        ASSERT_EQ(plain, result->get_slice(0).to_string());
     }
 }
 
@@ -803,7 +813,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_LargeData_Test) {
     ASSERT_FALSE(decrypted->is_null(0));
 
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-    ASSERT_EQ(plain, result->get_data()[0].to_string());
+    ASSERT_EQ(plain, result->get_slice(0).to_string());
 }
 
 // Test batch encryption with constant key/mode (optimized path)
@@ -885,7 +895,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_with_NULL_IV_Test) {
     ASSERT_FALSE(encrypted->is_null(0)) << "ECB mode should work with NULL IV";
 
     auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-    ASSERT_GT(encrypted_data->get_data()[0].size, 0);
+    ASSERT_GT(encrypted_data->get_slice(0).size, 0);
 
     // Decrypt - should also work with NULL IV
     Columns decrypt_columns;
@@ -898,7 +908,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_ECB_with_NULL_IV_Test) {
     ASSERT_FALSE(result->is_null(0));
 
     auto result_data = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-    ASSERT_EQ(plain, result_data->get_data()[0].to_string());
+    ASSERT_EQ(plain, result_data->get_slice(0).to_string());
 }
 
 // Test non-ECB mode with NULL IV (should return NULL)
@@ -942,16 +952,15 @@ TEST_F(EncryptionFunctionsTest, aes_encryptGeneralTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         text->append(texts[j]);
     }
 
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -963,8 +972,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptGeneralTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -981,7 +990,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptSingularCasesTest) {
                              "09529C15ECF0FC27073310DCEB76FAF4", "0143DB63EE66B0CDFF9F69917680151E",
                              "0143DB63EE66B0CDFF9F69917680151E"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         if (j % 2 == 0) {
             null_column->append(DATUM_NOT_NULL);
@@ -995,9 +1004,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptSingularCasesTest) {
     auto nullable_text = NullableColumn::create(std::move(text), std::move(null_column));
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(nullable_text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1007,7 +1015,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptSingularCasesTest) {
     columns.emplace_back(std::move(result));
     result = StringFunctions::hex_string(ctx.get(), columns).value();
     ASSERT_TRUE(result->is_nullable());
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         if (j % 2 == 0) {
             ASSERT_FALSE(result->is_null(j));
             auto datum = result->get(j);
@@ -1030,16 +1038,15 @@ TEST_F(EncryptionFunctionsTest, aes_encryptBigDataTest) {
                              "9B247414C29023C0E208DD1C4914EEB1AD7912069B5F47EF7B4E1CBDDDE7551C",
                              "CB49B2B910DA7C511C559B241183471C3718BF908D1946600ED4B7CE729E2684"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         text->append(texts[j]);
     }
 
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1051,8 +1058,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptBigDataTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1068,7 +1075,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullPlainTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         plain_null->append(0);
         text->append(texts[j]);
@@ -1095,8 +1102,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullPlainTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1113,7 +1120,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullTextTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
+    for (int j = 0; j < std::size(plains); ++j) {
         plain->append(plains[j]);
         text->append(texts[j]);
         text_null->append(0);
@@ -1139,8 +1146,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptNullTextTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1161,9 +1168,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstTextTest) {
 
     columns.emplace_back(std::move(plain));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1175,8 +1181,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstTextTest) {
     result = StringFunctions::hex_string(ctx.get(), columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1204,8 +1210,8 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstAllTest) {
     auto v = ColumnHelper::as_column<ConstColumn>(result);
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(v->data_column());
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], data_column->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], data_column->get_slice(j).to_string());
     }
 }
 
@@ -1220,7 +1226,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptGeneralTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         text->append(texts[j]);
     }
@@ -1232,17 +1238,16 @@ TEST_F(EncryptionFunctionsTest, aes_decryptGeneralTest) {
     columns.clear();
     columns.emplace_back(std::move(result));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
     result = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1258,7 +1263,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptBigDataTest) {
                              "9B247414C29023C0E208DD1C4914EEB1AD7912069B5F47EF7B4E1CBDDDE7551C",
                              "CB49B2B910DA7C511C559B241183471C3718BF908D1946600ED4B7CE729E2684"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         text->append(texts[j]);
     }
@@ -1270,17 +1275,16 @@ TEST_F(EncryptionFunctionsTest, aes_decryptBigDataTest) {
     columns.clear();
     columns.emplace_back(std::move(result));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
     result = EncryptionFunctions::aes_decrypt_with_mode(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1296,7 +1300,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullPlainTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         plain_null->append(0);
         text->append(texts[j]);
@@ -1322,8 +1326,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullPlainTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1340,7 +1344,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullTextTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "424B4E9B042FC5274A77A82BB4BB9826",
                              "09529C15ECF0FC27073310DCEB76FAF4"};
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         plain->append(results[j]);
         text->append(texts[j]);
         text_null->append(0);
@@ -1366,8 +1370,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptNullTextTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1393,9 +1397,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstTextTest) {
     columns.clear();
     columns.emplace_back(std::move(result));
     columns.emplace_back(std::move(text));
-    auto iv_col = ColumnHelper::create_const_null_column(sizeof(plains) / sizeof(plains[0]));
-    auto mode_col =
-            ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), sizeof(plains) / sizeof(plains[0]));
+    auto iv_col = ColumnHelper::create_const_null_column(std::size(plains));
+    auto mode_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("AES_128_ECB"), std::size(plains));
     columns.emplace_back(std::move(iv_col));
     columns.emplace_back(std::move(mode_col));
 
@@ -1403,8 +1406,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstTextTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(plains) / sizeof(plains[0]); ++j) {
-        ASSERT_EQ(plains[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(plains); ++j) {
+        ASSERT_EQ(plains[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1434,8 +1437,8 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstAllTest) {
 
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(v->data_column());
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], data_column->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], data_column->get_slice(j).to_string());
     }
 }
 
@@ -1464,7 +1467,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(encrypted->is_null(0));
 
         auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted);
-        ASSERT_GT(encrypted_data->get_data()[0].size, 0);
+        ASSERT_GT(encrypted_data->get_slice(0).size, 0);
 
         // Decrypt with 2 parameters
         Columns decrypt_columns;
@@ -1475,7 +1478,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(0).to_string());
     }
 
     // Test case 2: Binary data
@@ -1504,7 +1507,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(0).to_string());
     }
 
     // Test case 3: Empty string
@@ -1533,7 +1536,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_basic_test) {
         ASSERT_FALSE(decrypted->is_null(0));
 
         auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
-        ASSERT_EQ(plaintext, result->get_data()[0].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(0).to_string());
     }
 }
 
@@ -1631,7 +1634,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_batch_test) {
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted);
     for (size_t i = 0; i < plaintexts.size(); ++i) {
         ASSERT_FALSE(decrypted->is_null(i));
-        ASSERT_EQ(plaintexts[i], result->get_data()[i].to_string());
+        ASSERT_EQ(plaintexts[i], result->get_slice(i).to_string());
     }
 }
 
@@ -1685,11 +1688,11 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_mixed_null_test) {
     auto result = down_cast<const BinaryColumn*>(nullable_result->data_column().get());
 
     ASSERT_FALSE(decrypted->is_null(0));
-    ASSERT_EQ("data1", result->get_data()[0].to_string());
+    ASSERT_EQ("data1", result->get_slice(0).to_string());
     ASSERT_TRUE(decrypted->is_null(1));
     ASSERT_TRUE(decrypted->is_null(2));
     ASSERT_FALSE(decrypted->is_null(3));
-    ASSERT_EQ("data4", result->get_data()[3].to_string());
+    ASSERT_EQ("data4", result->get_slice(3).to_string());
 }
 
 // Test 2-parameter version with constant columns (optimization path)
@@ -1723,7 +1726,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_const_test) {
     auto encrypted_unpacked = ColumnHelper::unpack_and_duplicate_const_column(encrypted->size(), encrypted);
     auto encrypted_data = ColumnHelper::cast_to<TYPE_VARCHAR>(encrypted_unpacked);
     for (size_t i = 1; i < 5; ++i) {
-        ASSERT_EQ(encrypted_data->get_data()[0].to_string(), encrypted_data->get_data()[i].to_string());
+        ASSERT_EQ(encrypted_data->get_slice(0).to_string(), encrypted_data->get_slice(i).to_string());
     }
 
     // Decrypt
@@ -1738,7 +1741,7 @@ TEST_F(EncryptionFunctionsTest, aes_encrypt_decrypt_2params_const_test) {
     auto decrypted_unpacked = ColumnHelper::unpack_and_duplicate_const_column(decrypted->size(), decrypted);
     auto result = ColumnHelper::cast_to<TYPE_VARCHAR>(decrypted_unpacked);
     for (size_t i = 0; i < 5; ++i) {
-        ASSERT_EQ(plaintext, result->get_data()[i].to_string());
+        ASSERT_EQ(plaintext, result->get_slice(i).to_string());
     }
 }
 
@@ -1799,8 +1802,8 @@ TEST_F(EncryptionFunctionsTest, from_base64GeneralTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1828,8 +1831,8 @@ TEST_F(EncryptionFunctionsTest, from_base64NullTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     result2->is_null(j);
 }
@@ -1848,8 +1851,8 @@ TEST_F(EncryptionFunctionsTest, from_base64ConstTest) {
     auto v = ColumnHelper::as_column<ConstColumn>(result);
     auto data_column = ColumnHelper::cast_to<TYPE_VARCHAR>(v->data_column());
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], data_column->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], data_column->get_slice(j).to_string());
     }
 }
 
@@ -1871,9 +1874,30 @@ TEST_F(EncryptionFunctionsTest, to_base64Test) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
+}
+
+TEST_F(EncryptionFunctionsTest, to_base64LargeInputTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto plain = BinaryColumn::create();
+
+    constexpr size_t kInputSize = 8 * 1024 * 1024;
+    std::string input(kInputSize, 'x');
+    config::max_length_for_to_base64 = kInputSize;
+
+    plain->append(input);
+    columns.emplace_back(std::move(plain));
+
+    ColumnPtr encoded = EncryptionFunctions::to_base64(ctx.get(), columns).value();
+
+    Columns decode_columns;
+    decode_columns.emplace_back(encoded);
+
+    ColumnPtr decoded = EncryptionFunctions::from_base64(ctx.get(), decode_columns).value();
+    ASSERT_EQ(input, decoded->get(0).get_slice().to_string());
 }
 
 TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
@@ -1900,8 +1924,8 @@ TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -1920,8 +1944,8 @@ TEST_F(EncryptionFunctionsTest, to_base64ConstTest) {
     auto result2 = ColumnHelper::as_column<ConstColumn>(result)->data_column();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1943,8 +1967,8 @@ TEST_F(EncryptionFunctionsTest, md5GeneralTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -1972,8 +1996,8 @@ TEST_F(EncryptionFunctionsTest, md5NullTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
     int j;
-    for (j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
     ASSERT_TRUE(result2->is_null(j));
 }
@@ -2014,8 +2038,8 @@ TEST_F(EncryptionFunctionsTest, md5sumTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -2044,8 +2068,8 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+    for (int j = 0; j < std::size(results); ++j) {
+        ASSERT_EQ(results[j], v->get_slice(j).to_string());
     }
 }
 
@@ -2072,7 +2096,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         ASSERT_EQ(results[j], v->immutable_data()[j]);
     }
 }
@@ -2102,7 +2126,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
-    for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
+    for (int j = 0; j < std::size(results); ++j) {
         ASSERT_EQ(results[j], v->immutable_data()[j]);
     }
 }
@@ -2143,7 +2167,7 @@ TEST_P(ShaTestFixture, test_sha2) {
         EXPECT_TRUE(result->is_null(0));
     } else {
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
-        EXPECT_EQ(expected, v->get_data()[0].to_string());
+        EXPECT_EQ(expected, v->get_slice(0).to_string());
     }
 
     ASSERT_TRUE(EncryptionFunctions::sha2_close(ctx.get(),
@@ -2193,8 +2217,8 @@ protected:
 TEST_P(RowFingerprintTestFixture, test_encode_fingerprint_sha256) {
     auto [str, expected] = GetParam();
 
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     Columns columns;
@@ -2220,8 +2244,8 @@ INSTANTIATE_TEST_SUITE_P(
                                           "f5a08e0c4ce4f0c1289265b8e4e93fc261979c835d2e98947e03ded44cf20635")));
 
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_null_test) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
 
@@ -2256,17 +2280,14 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_null_test) {
 
 // Test encode_fingerprint_sha256 with integer types
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto return_type = TYPE_VARBINARY_DESC;
 
     // Test INT8
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_TINYINT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_TINYINT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = Int8Column::create();
-        col->append(1);
-        col->append(127);
-        col->append(-128);
+        auto col = ColumnTestHelper::build_column<int8_t>({1, 127, -128});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2279,13 +2300,10 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
 
     // Test INT32
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = Int32Column::create();
-        col->append(0);
-        col->append(12345);
-        col->append(-67890);
+        auto col = ColumnTestHelper::build_column<int32_t>({0, 12345, -67890});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2295,7 +2313,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
 
     // Test INT64
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_BIGINT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = Int64Column::create();
@@ -2327,17 +2345,14 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_integer_types) {
 
 // Test encode_fingerprint_sha256 with floating-point types
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_float_types) {
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto return_type = TYPE_VARBINARY_DESC;
 
     // Test FLOAT
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_FLOAT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_FLOAT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = FloatColumn::create();
-        col->append(0.0f);
-        col->append(3.14159f);
-        col->append(-2.71828f);
+        auto col = ColumnTestHelper::build_column<float>({0.0f, 3.14159f, -2.71828f});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2348,13 +2363,10 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_float_types) {
 
     // Test DOUBLE
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DOUBLE_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
-        auto col = DoubleColumn::create();
-        col->append(0.0);
-        col->append(3.141592653589793);
-        col->append(-2.718281828459045);
+        auto col = ColumnTestHelper::build_column<double>({0.0, 3.141592653589793, -2.718281828459045});
         columns.emplace_back(std::move(col));
 
         ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2366,11 +2378,11 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_float_types) {
 
 // Test encode_fingerprint_sha256 with date/datetime types
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_date_types) {
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto return_type = TYPE_VARBINARY_DESC;
 
     // Test DATE
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATE)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATE_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = DateColumn::create();
@@ -2391,7 +2403,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_date_types) {
 
     // Test DATETIME
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_DATETIME)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_DATETIME_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
         Columns columns;
         auto col = TimestampColumn::create();
@@ -2410,8 +2422,8 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_date_types) {
 
 // Test encode_fingerprint_sha256 with boolean type
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_boolean_type) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_BOOLEAN)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_BOOLEAN_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
 
@@ -2431,29 +2443,21 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_boolean_type) {
 
 // Test encode_fingerprint_sha256 with multiple columns
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_multiple_columns) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                                                        TypeDescriptor::from_logical_type(TYPE_DOUBLE)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_DOUBLE_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
 
     // Column 1: INT32
-    auto int_col = Int32Column::create();
-    int_col->append(1);
-    int_col->append(2);
+    auto int_col = ColumnTestHelper::build_column<int32_t>({1, 2});
     columns.emplace_back(std::move(int_col));
 
     // Column 2: VARCHAR
-    auto str_col = BinaryColumn::create();
-    str_col->append("alice");
-    str_col->append("bob");
+    auto str_col = ColumnTestHelper::build_column<Slice>({"alice", "bob"});
     columns.emplace_back(std::move(str_col));
 
     // Column 3: DOUBLE
-    auto double_col = DoubleColumn::create();
-    double_col->append(99.5);
-    double_col->append(88.5);
+    auto double_col = ColumnTestHelper::build_column<double>({99.5, 88.5});
     columns.emplace_back(std::move(double_col));
 
     ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
@@ -2470,16 +2474,13 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_multiple_columns) {
 
 // Test encode_fingerprint_sha256 with mixed nullable and non-nullable columns
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_mixed_nullable) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
 
     // Non-nullable INT column
-    auto int_col = Int32Column::create();
-    int_col->append(100);
-    int_col->append(200);
+    auto int_col = ColumnTestHelper::build_column<int32_t>({100, 200});
     columns.emplace_back(std::move(int_col));
 
     // Nullable VARCHAR column
@@ -2500,7 +2501,7 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_mixed_nullable) {
 
 // Test encode_fingerprint_sha256 with decimal types
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_decimal_types) {
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto return_type = TYPE_VARBINARY_DESC;
 
     // Test DECIMAL64
     {
@@ -2543,20 +2544,17 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_decimal_types) {
 
 // Test encode_fingerprint_sha256 deterministic behavior
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_deterministic) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
-                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
 
     // Create same data twice
     auto create_columns = []() {
         Columns columns;
-        auto int_col = Int32Column::create();
-        int_col->append(42);
+        auto int_col = ColumnTestHelper::build_column<int32_t>({42});
         columns.emplace_back(std::move(int_col));
 
-        auto str_col = BinaryColumn::create();
-        str_col->append("test");
+        auto str_col = ColumnTestHelper::build_column<Slice>({"test"});
         columns.emplace_back(std::move(str_col));
         return columns;
     };
@@ -2574,8 +2572,8 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_deterministic) {
 
 // Test encode_fingerprint_sha256 with empty string vs null
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_empty_vs_null) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
+    auto return_type = TYPE_VARBINARY_DESC;
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
     Columns columns;
 
@@ -2601,28 +2599,25 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_empty_vs_null) {
 
 // Test encode_fingerprint_sha256 with type collision prevention
 TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    auto return_type = TYPE_VARBINARY_DESC;
 
     // Create INT32 with value 65
     Columns columns1;
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT)};
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
-        auto int_col = Int32Column::create();
-        int_col->append(65);
+        auto int_col = ColumnTestHelper::build_column<int32_t>({65});
         columns1.emplace_back(std::move(int_col));
     }
 
     // Create VARCHAR with value "A" (ASCII 65)
     Columns columns2;
     {
-        std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
-        std::unique_ptr<FunctionContext> ctx_int(
-                FunctionContext::create_test_context({TypeDescriptor::from_logical_type(TYPE_INT)}, return_type));
+        std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
+        std::unique_ptr<FunctionContext> ctx_int(FunctionContext::create_test_context({TYPE_INT_DESC}, return_type));
         std::unique_ptr<FunctionContext> ctx_str(
-                FunctionContext::create_test_context({TypeDescriptor::from_logical_type(TYPE_VARCHAR)}, return_type));
-        auto str_col = BinaryColumn::create();
-        str_col->append("A");
+                FunctionContext::create_test_context({TYPE_VARCHAR_DESC}, return_type));
+        auto str_col = ColumnTestHelper::build_column<Slice>({"A"});
         columns2.emplace_back(std::move(str_col));
 
         ColumnPtr result1 = EncryptionFunctions::encode_fingerprint_sha256(ctx_int.get(), columns1).value();
@@ -2631,6 +2626,295 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
         // INT32(65) and VARCHAR("A") should produce different hashes due to type markers
         EXPECT_NE(result1->get(0).get_slice(), result2->get(0).get_slice());
     }
+}
+
+// A constant argument arrives as a ConstColumn whose inner data column holds a SINGLE row, while
+// the function still has to emit `chunk_size` digests. Reading the inner column with the loop's row
+// index walks off the end of it. Encoding a const argument must be identical to encoding the same
+// value materialised once per row.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_arg_matches_materialized) {
+    constexpr size_t kNumRows = 4;
+    auto return_type = TYPE_VARBINARY_DESC;
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const std::string const_str = "starrocks";
+    constexpr int64_t const_bigint = 1234567890123LL;
+
+    auto make_varying = []() {
+        auto col = Int32Column::create();
+        for (size_t i = 0; i < kNumRows; i++) {
+            col->append(static_cast<int32_t>(i));
+        }
+        return col;
+    };
+
+    // Reference: every argument materialised for all rows.
+    Columns materialized;
+    materialized.emplace_back(make_varying());
+    {
+        auto str_col = BinaryColumn::create();
+        auto big_col = Int64Column::create();
+        for (size_t i = 0; i < kNumRows; i++) {
+            str_col->append(const_str);
+            big_col->append(const_bigint);
+        }
+        materialized.emplace_back(std::move(str_col));
+        materialized.emplace_back(std::move(big_col));
+    }
+    ColumnPtr expected = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), materialized).value();
+    ASSERT_EQ(kNumRows, expected->size());
+
+    // Same values, but the last two arguments are constants (what a SQL literal produces).
+    Columns with_consts;
+    with_consts.emplace_back(make_varying());
+    with_consts.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(const_str), kNumRows));
+    with_consts.emplace_back(ColumnHelper::create_const_column<TYPE_BIGINT>(const_bigint, kNumRows));
+
+    ColumnPtr actual = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), with_consts).value();
+    ASSERT_EQ(kNumRows, actual->size());
+
+    for (size_t row = 0; row < kNumRows; row++) {
+        EXPECT_EQ(expected->get(row).get_slice(), actual->get(row).get_slice()) << "row " << row;
+    }
+}
+
+// All arguments constant over a multi-row chunk: every row must get the same, correct digest.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_all_const_args) {
+    constexpr size_t kNumRows = 8;
+    auto return_type = TYPE_VARBINARY_DESC;
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_VARCHAR_DESC};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const std::string const_str = "starrocks";
+
+    // Single-row reference value.
+    Columns one_row;
+    {
+        auto col = BinaryColumn::create();
+        col->append(const_str);
+        one_row.emplace_back(std::move(col));
+    }
+    ColumnPtr expected = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), one_row).value();
+
+    Columns const_cols;
+    const_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(const_str), kNumRows));
+    ColumnPtr actual = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), const_cols).value();
+    ASSERT_EQ(kNumRows, actual->size());
+
+    for (size_t row = 0; row < kNumRows; row++) {
+        EXPECT_EQ(expected->get(0).get_slice(), actual->get(row).get_slice()) << "row " << row;
+    }
+}
+
+// A const NULL argument mixed with a const non-null argument over a multi-row chunk.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_null_and_const_value) {
+    constexpr size_t kNumRows = 4;
+    auto return_type = TYPE_VARBINARY_DESC;
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    auto varying = Int32Column::create();
+    for (size_t i = 0; i < kNumRows; i++) {
+        varying->append(static_cast<int32_t>(i));
+    }
+
+    Columns columns;
+    columns.emplace_back(std::move(varying));
+    columns.emplace_back(ColumnHelper::create_const_null_column(kNumRows));
+    columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("abc"), kNumRows));
+
+    ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
+    ASSERT_EQ(kNumRows, result->size());
+    for (size_t row = 0; row < kNumRows; row++) {
+        EXPECT_EQ(32, result->get(row).get_slice().size);
+    }
+    // The varying first argument must still differentiate the rows.
+    EXPECT_NE(result->get(0).get_slice(), result->get(1).get_slice());
+}
+
+// A complex-typed argument reaches no case of type_dispatch_filter, so before the guard every value --
+// NULL included -- fingerprinted to SHA-256("").
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_rejects_complex_types) {
+    auto return_type = TYPE_VARBINARY_DESC;
+    auto int_type = TYPE_INT_DESC;
+    std::vector<TypeDescriptor> complex_types = {
+            TypeDescriptor::create_array_type(int_type),
+            TypeDescriptor::create_map_type(int_type, int_type),
+            TypeDescriptor::create_struct_type({"a"}, {int_type}),
+            TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type({"a"}, {int_type})),
+    };
+
+    for (const auto& complex_type : complex_types) {
+        std::vector<FunctionContext::TypeDesc> arg_types = {complex_type};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+        MutableColumnPtr col = ColumnHelper::create_column(complex_type, true);
+        col->append_default(2);
+        Columns columns;
+        columns.emplace_back(std::move(col));
+
+        auto result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns);
+        EXPECT_FALSE(result.ok()) << "type " << complex_type.debug_string() << " must be rejected, not hashed to "
+                                  << "a digest that cannot tell its inputs apart";
+    }
+}
+
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_still_accepts_scalars) {
+    auto return_type = TYPE_VARBINARY_DESC;
+    for (auto logical_type :
+         {TYPE_BOOLEAN, TYPE_INT, TYPE_BIGINT, TYPE_DOUBLE, TYPE_VARCHAR, TYPE_DATE, TYPE_DATETIME, TYPE_JSON}) {
+        auto type_desc = TypeDescriptor::from_logical_type(logical_type);
+        std::vector<FunctionContext::TypeDesc> arg_types = {type_desc};
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+        MutableColumnPtr col = ColumnHelper::create_column(type_desc, true);
+        col->append_default(2);
+        Columns columns;
+        columns.emplace_back(std::move(col));
+
+        auto result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns);
+        ASSERT_TRUE(result.ok()) << "scalar type " << type_to_string(logical_type) << " must still encode";
+        EXPECT_EQ(2, result.value()->size());
+    }
+}
+
+static ColumnPtr nullable_strings(const std::vector<std::optional<std::string>>& values) {
+    auto data = BinaryColumn::create();
+    auto nulls = NullColumn::create();
+    for (const auto& value : values) {
+        if (value.has_value()) {
+            data->append(Slice(*value));
+            nulls->append(0);
+        } else {
+            data->append_default();
+            nulls->append(1);
+        }
+    }
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+template <LogicalType LT>
+static ColumnPtr nullable_numbers(const std::vector<std::optional<RunTimeCppType<LT>>>& values) {
+    auto data = RunTimeColumnType<LT>::create();
+    auto nulls = NullColumn::create();
+    for (const auto& value : values) {
+        data->append(value.value_or(RunTimeCppType<LT>{}));
+        nulls->append(value.has_value() ? 0 : 1);
+    }
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+static std::unique_ptr<FunctionContext> fingerprint_context(const std::vector<LogicalType>& types) {
+    std::vector<FunctionContext::TypeDesc> arg_types;
+    for (auto type : types) {
+        arg_types.emplace_back(TypeDescriptor::from_logical_type(type));
+    }
+    return std::unique_ptr<FunctionContext>(
+            FunctionContext::create_test_context(std::move(arg_types), TYPE_VARBINARY_DESC));
+}
+
+static std::string digest_hex(const ColumnPtr& digests, size_t row) {
+    Slice digest = digests->get(row).get_slice();
+    std::stringstream ss;
+    ss << std::hex << std::setfill('0');
+    for (size_t i = 0; i < digest.size; ++i) {
+        ss << std::setw(2) << (static_cast<int>(static_cast<unsigned char>(digest.data[i])) & 0xFF);
+    }
+    return ss.str();
+}
+
+// Row 0 and row 1 of every case are tuples v1 encodes to the same bytes, because an earlier string absorbs the start
+// of the next argument.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_v2_separates_what_v1_collides) {
+    struct Case {
+        std::string name;
+        std::vector<LogicalType> types;
+        Columns columns;
+    };
+    const std::string backspace = "\x08";
+    std::vector<Case> cases;
+    cases.push_back({"string then string",
+                     {TYPE_VARCHAR, TYPE_VARCHAR},
+                     {nullable_strings({"a" + backspace, "a"}), nullable_strings({"b", backspace + "b"})}});
+    cases.push_back({"binary then string",
+                     {TYPE_VARBINARY, TYPE_VARCHAR},
+                     {nullable_strings({"a" + backspace, "a"}), nullable_strings({"b", backspace + "b"})}});
+    cases.push_back({"string then nullable string",
+                     {TYPE_VARCHAR, TYPE_VARCHAR},
+                     {nullable_strings({"a", "a" + backspace + "x"}),
+                      nullable_strings({std::string("x\0", 2), std::nullopt})}});
+    cases.push_back({"string then nullable int",
+                     {TYPE_VARCHAR, TYPE_INT},
+                     {nullable_strings({"a", std::string("a\x03\x05\x00\x00", 5)}),
+                      nullable_numbers<TYPE_INT>({5, std::nullopt})}});
+    cases.push_back({"string then nullable tinyint",
+                     {TYPE_VARCHAR, TYPE_TINYINT},
+                     {nullable_strings({"a", "a\x01"}), nullable_numbers<TYPE_TINYINT>({0, std::nullopt})}});
+    cases.push_back({"empty strings",
+                     {TYPE_VARCHAR, TYPE_VARCHAR},
+                     {nullable_strings({"", backspace}), nullable_strings({backspace, ""})}});
+
+    for (const auto& c : cases) {
+        auto ctx = fingerprint_context(c.types);
+        ColumnPtr v1 = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), c.columns).value();
+        EXPECT_EQ(v1->get(0).get_slice(), v1->get(1).get_slice()) << c.name;
+        ColumnPtr v2 = EncryptionFunctions::encode_fingerprint_sha256_v2(ctx.get(), c.columns).value();
+        EXPECT_NE(v2->get(0).get_slice(), v2->get(1).get_slice()) << c.name;
+    }
+}
+
+// An MV's __ROW_ID__ is this digest, so changing the bytes of either version would orphan every row already stored.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_digests_are_stable) {
+    auto ctx = fingerprint_context({TYPE_VARCHAR, TYPE_INT});
+    Columns columns{nullable_strings({"a", std::string("a\x03\x05\x00\x00", 5)}),
+                    nullable_numbers<TYPE_INT>({5, std::nullopt})};
+
+    ColumnPtr v1 = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
+    EXPECT_EQ("8d549c99069773bce3d5a4815be40704d235cfb01aa201649b2d0315f653fb52", digest_hex(v1, 0));
+    EXPECT_EQ("8d549c99069773bce3d5a4815be40704d235cfb01aa201649b2d0315f653fb52", digest_hex(v1, 1));
+
+    ColumnPtr v2 = EncryptionFunctions::encode_fingerprint_sha256_v2(ctx.get(), columns).value();
+    EXPECT_EQ("8f63405920d617f56feb4be3da5ce143f40d1f2b050c1efcfb967a3eee86717e", digest_hex(v2, 0));
+    EXPECT_EQ("ce532af2bb2dc25bfb4bde85cba696a396c0db820ba96f2593ac45a899965f95", digest_hex(v2, 1));
+
+    auto string_ctx = fingerprint_context({TYPE_VARCHAR});
+    Columns strings{nullable_strings({"starrocks", "", std::nullopt})};
+    ColumnPtr v2_strings = EncryptionFunctions::encode_fingerprint_sha256_v2(string_ctx.get(), strings).value();
+    EXPECT_EQ("e275feac0fa9f86176ff9471432d39a1e0412b6955597f664994bec383c9acec", digest_hex(v2_strings, 0));
+    EXPECT_EQ("92c0a3cd8b571ac5634aa066fcc63d7b62155c36126a29231d97692ff2944875", digest_hex(v2_strings, 1));
+    EXPECT_EQ("6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d", digest_hex(v2_strings, 2));
+}
+
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_v2_const_args_match_materialized) {
+    constexpr size_t kNumRows = 3;
+    auto ctx = fingerprint_context({TYPE_VARCHAR, TYPE_VARCHAR});
+
+    Columns materialized{nullable_strings({"ab", "ab", "ab"}),
+                         nullable_strings({std::nullopt, std::nullopt, std::nullopt})};
+    ColumnPtr expected = EncryptionFunctions::encode_fingerprint_sha256_v2(ctx.get(), materialized).value();
+
+    Columns consts;
+    consts.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("ab"), kNumRows));
+    consts.emplace_back(ColumnHelper::create_const_null_column(kNumRows));
+    ColumnPtr actual = EncryptionFunctions::encode_fingerprint_sha256_v2(ctx.get(), consts).value();
+
+    ASSERT_EQ(kNumRows, actual->size());
+    for (size_t row = 0; row < kNumRows; row++) {
+        EXPECT_EQ(expected->get(row).get_slice(), actual->get(row).get_slice()) << "row " << row;
+    }
+}
+
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_v2_json) {
+    auto ctx = fingerprint_context({TYPE_JSON, TYPE_VARCHAR});
+    auto json = JsonColumn::create();
+    for (const char* text : {"1", "12"}) {
+        JsonValue value = JsonValue::parse(text).value();
+        json->append(&value);
+    }
+    Columns columns{std::move(json), nullable_strings({"2", ""})};
+
+    ColumnPtr v2 = EncryptionFunctions::encode_fingerprint_sha256_v2(ctx.get(), columns).value();
+    ASSERT_EQ(2, v2->size());
+    EXPECT_NE(v2->get(0).get_slice(), v2->get(1).get_slice());
 }
 
 } // namespace starrocks

@@ -1,3 +1,8 @@
+---
+displayed_sidebar: docs
+description: "Accumulates values into a DataSketches HyperLogLog (HLL) sketch and returns the serialized sketch as VARBINARY for approximate distinct counting."
+---
+
 # ds_hll_accumulate
 
 Accumulates values into a HyperLogLog sketch and returns the serialized sketch as a VARBINARY. This function is part of the DataSketches HLL family of functions for approximate distinct counting.

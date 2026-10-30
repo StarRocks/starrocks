@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.sleepycat.bind.tuple.TupleBinding;
 import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.Get;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.OperationResult;
@@ -62,6 +63,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 public class BDBHA implements HAProtocol {
     private static final Logger LOG = LogManager.getLogger(BDBHA.class);
@@ -145,6 +147,34 @@ public class BDBHA implements HAProtocol {
     public String getLeaderNodeName() {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         return replicationGroupAdmin.getMasterNodeName();
+    }
+
+    @Override
+    public String transferToLeader(String nodeName, int timeoutMs, boolean force) {
+        ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
+        if (replicationGroupAdmin == null) {
+            throw new IllegalStateException("replication group admin is not available, cannot transfer leader");
+        }
+        Set<String> candidates = new HashSet<>();
+        candidates.add(nodeName);
+        try {
+            // This runs on the current master and hands mastership to `nodeName`; BDBJE waits up to
+            // timeoutMs for the target replica to catch up, then completes the transfer. On the master
+            // this triggers the in-place safe demotion path (no System.exit on a clean handoff).
+            String winner = replicationGroupAdmin.transferMaster(candidates, timeoutMs, TimeUnit.MILLISECONDS, force);
+            LOG.info("transfer leader to {} (force={}, timeoutMs={}) succeeded, new leader is {}",
+                    nodeName, force, timeoutMs, winner);
+            return winner;
+        } catch (DatabaseException | IllegalStateException | IllegalArgumentException e) {
+            // Broader than the two declared checked exceptions on purpose: transferMaster also surfaces
+            // unchecked JE failures - notably MemberNotFoundException when the target was just ADDed and
+            // its membership is not quorum-acked yet (isAlive()/role pre-checks all pass in that window) -
+            // which would otherwise reach the user as raw JE text with no logging or context.
+            LOG.warn("failed to transfer leader to {} (force={})", nodeName, force, e);
+            throw new RuntimeException("failed to transfer leader to " + nodeName + ": " + e.getMessage()
+                    + " (the current leader should be unchanged - verify with SHOW FRONTENDS; retry after the"
+                    + " target is fully joined and caught up)", e);
+        }
     }
 
     @Override

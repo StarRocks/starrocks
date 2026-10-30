@@ -50,7 +50,7 @@ public class OdpsTable extends Table {
     }
 
     public OdpsTable(String catalogName, com.aliyun.odps.Table odpsTable) {
-        super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), odpsTable.getName(), TableType.ODPS,
+        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), odpsTable.getName(), TableType.ODPS,
                 EntityConvertUtils.getFullSchema(odpsTable));
         this.createTime = odpsTable.getCreatedTime().getTime();
         this.catalogName = catalogName;

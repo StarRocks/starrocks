@@ -428,7 +428,6 @@ public class DistinctAggregationOverWindowRule implements TreeRewriteRule {
                 }
             }
             analyticCalls.putAll(aggCalls);
-            Optional<LogicalWindowOperator> optNewWindowOp = Optional.empty();
 
             if (analyticCalls.isEmpty()) {
                 return Optional.empty();
@@ -677,9 +676,7 @@ public class DistinctAggregationOverWindowRule implements TreeRewriteRule {
                     windowOp.getWindowCall().entrySet().stream().collect(Collectors.groupingBy(this::classifyWindowCall,
                             Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
 
-            Map<ColumnRefOperator, CallOperator> analyticCalls = windowCallGroups.getOrDefault(0, Maps.newHashMap());
             Map<ColumnRefOperator, CallOperator> distinctAggCalls = windowCallGroups.getOrDefault(1, Maps.newHashMap());
-            Map<ColumnRefOperator, CallOperator> aggCalls = windowCallGroups.getOrDefault(2, Maps.newHashMap());
 
             if (distinctAggCalls.isEmpty()) {
                 return Optional.empty();

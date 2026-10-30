@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.CaseExpr;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LambdaArgument;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -32,9 +33,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.Type;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 public class ColumnRefFactory {
     private int nextId = 1;
@@ -45,6 +48,13 @@ public class ColumnRefFactory {
     private final Map<Integer, Integer> columnToRelationIds = Maps.newHashMap();
     private final Map<ColumnRefOperator, Column> columnRefToColumns = Maps.newHashMap();
     private final Map<ColumnRefOperator, Table> columnRefToTable = Maps.newHashMap();
+
+    // Cache of ColumnRefOperators resolved for LambdaArgument AST nodes during this planning session.
+    // Keyed by AST identity so that the same lambda argument referenced multiple times within a plan
+    // resolves to the same ColumnRefOperator id. Lifetime matches this factory: a re-plan creates a
+    // fresh factory and thus a fresh cache, which prevents stale ids from leaking across plans
+    // (see issue #72831 / PR #72832).
+    private final Map<LambdaArgument, ColumnRefOperator> lambdaArgRefs = new IdentityHashMap<>();
 
     // introduced to used to get unique id for query,
     // now used to identify nondeterministic function.
@@ -158,5 +168,10 @@ public class ColumnRefFactory {
 
     public int getNextUniqueId() {
         return id++;
+    }
+
+    public ColumnRefOperator computeLambdaArgRefIfAbsent(LambdaArgument arg,
+                                                         Function<LambdaArgument, ColumnRefOperator> creator) {
+        return lambdaArgRefs.computeIfAbsent(arg, creator);
     }
 }

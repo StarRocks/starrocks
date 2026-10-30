@@ -21,7 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -43,7 +43,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-public class ReplicationMgr extends FrontendDaemon {
+public class ReplicationMgr extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(ReplicationMgr.class);
 
     @SerializedName(value = "runningJobs")
@@ -60,9 +60,30 @@ public class ReplicationMgr extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         runRunningJobs();
         clearExpiredJobs();
+    }
+
+    // runningJobs / committedJobs / abortedJobs are persistent maps (saved/loaded via image,
+    // updated on followers via editlog replay). Their ENTRIES must not be removed on demotion -
+    // the next leader resumes those jobs from the same maps. But each job's in-memory task
+    // bookkeeping (runningTasks/finishedTasks/taskNum) is leader-session-only: demotion abandons
+    // the queued agent tasks and the BE finish reports get dropped at the task-queue lookup, so
+    // a re-elected leader in this same process would see stale non-empty bookkeeping, judge the
+    // job as still running (isCrashRecovery() == false), never re-send the tasks, and pin the
+    // job until the replication transaction times out. Reset every running job back to its
+    // deserialized-equivalent shape. No replay race: these fields are not journaled, and replay
+    // replaces whole job objects (which arrive with empty bookkeeping) rather than mutating them.
+    @Override
+    protected void onStopped() {
+        for (ReplicationJob job : runningJobs.values()) {
+            try {
+                job.resetLeaderSessionTaskState();
+            } catch (Throwable t) {
+                LOG.warn("reset replication job {} task state on leader handoff failed", job.getJobId(), t);
+            }
+        }
     }
 
     public void addReplicationJob(TTableReplicationRequest request) throws StarRocksException {

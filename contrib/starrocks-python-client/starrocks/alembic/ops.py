@@ -15,10 +15,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
+from alembic.autogenerate.rewriter import Rewriter
 from alembic.operations import Operations, ops
-from sqlalchemy import MetaData, Table
+from sqlalchemy import Column, MetaData, Table
 
 from starrocks.common.params import (
     SRKwargsPrefix,
@@ -179,6 +180,9 @@ class AlterViewOp(ops.MigrateOperation):
             f"existing_security={self.existing_security})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_view", self.schema, self.view_name)
 
 @Operations.register_operation("create_view")
 class CreateViewOp(ops.MigrateOperation):
@@ -267,6 +271,9 @@ class CreateViewOp(ops.MigrateOperation):
             f"kwargs={self.kwargs!r}"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("create_view", self.schema, self.view_name)
 
 @Operations.register_operation("drop_view")
 class DropViewOp(ops.MigrateOperation):
@@ -349,6 +356,9 @@ class DropViewOp(ops.MigrateOperation):
             f"kwargs=({self.kwargs!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("drop_view", self.schema, self.view_name)
 
 @Operations.register_operation("alter_materialized_view")
 class AlterMaterializedViewOp(ops.MigrateOperation):
@@ -428,6 +438,9 @@ class AlterMaterializedViewOp(ops.MigrateOperation):
             f"existing_properties={self.existing_properties!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_materialized_view", self.schema, self.view_name)
 
 @Operations.register_operation("create_materialized_view")
 class CreateMaterializedViewOp(CreateViewOp):
@@ -541,6 +554,9 @@ class CreateMaterializedViewOp(CreateViewOp):
             f"kwargs={self.kwargs!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("create_materialized_view", self.schema, self.view_name)
 
 @Operations.register_operation("drop_materialized_view")
 class DropMaterializedViewOp(DropViewOp):
@@ -618,6 +634,9 @@ class DropMaterializedViewOp(DropViewOp):
             f"kwargs={self.kwargs!r})"
         )
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("drop_materialized_view", self.schema, self.view_name)
 
 # Operation classes ordered according to StarRocks grammar:
 # engine → key → (comment) → partition → distribution → order by → properties
@@ -663,6 +682,10 @@ class AlterTableEngineOp(ops.AlterTableOp):
         return (f"AlterTableEngineOp(table_name={self.table_name!r}, "
                f"engine={self.engine!r}, schema={self.schema!r}, "
                f"existing_engine={self.existing_engine!r})")
+
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_table_engine", self.schema, self.table_name, self.engine)
 
 @Operations.register_operation("alter_table_key")
 class AlterTableKeyOp(ops.AlterTableOp):
@@ -722,6 +745,10 @@ class AlterTableKeyOp(ops.AlterTableOp):
                f"key_type={self.key_type!r}, key_columns={self.key_columns!r}, "
                f"schema={self.schema!r}, existing_key_type={self.existing_key_type!r}, "
                f"existing_key_columns={self.existing_key_columns!r})")
+
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_table_key", self.schema, self.table_name, self.key_type, self.key_columns)
 
 @Operations.register_operation("alter_table_partition")
 class AlterTablePartitionOp(ops.AlterTableOp):
@@ -784,6 +811,10 @@ class AlterTablePartitionOp(ops.AlterTableOp):
         return (f"AlterTablePartitionOp(table_name={self.table_name!r}, "
                f"partition_method={self.partition_method!r}, schema={self.schema!r}, "
                f"existing_partition_method={self.existing_partition_method!r})")
+
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_table_partition", self.schema, self.table_name, self.partition_method)
 
 @Operations.register_operation("alter_table_distribution")
 class AlterTableDistributionOp(ops.AlterTableOp):
@@ -860,6 +891,10 @@ class AlterTableDistributionOp(ops.AlterTableOp):
                f"schema={self.schema!r}, existing_distribution_method={self.existing_distribution_method!r}, "
                f"existing_buckets={self.existing_buckets!r})")
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_table_distribution", self.schema, self.table_name, self.distribution_method, self.buckets)
+
 
 @Operations.register_operation("alter_table_order")
 class AlterTableOrderOp(ops.AlterTableOp):
@@ -904,6 +939,10 @@ class AlterTableOrderOp(ops.AlterTableOp):
                f"order_by={self.order_by!r}, schema={self.schema!r}, "
                f"existing_order_by={self.existing_order_by!r})")
 
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_table_order", self.schema, self.table_name, self.order_by)
+
 
 @Operations.register_operation("alter_table_properties")
 class AlterTablePropertiesOp(ops.AlterTableOp):
@@ -947,3 +986,140 @@ class AlterTablePropertiesOp(ops.AlterTableOp):
         return (f"AlterTablePropertiesOp(table_name={self.table_name!r}, "
                f"properties={self.properties!r}, schema={self.schema!r}, "
                f"existing_properties={self.existing_properties!r})")
+
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return ("alter_table_properties", self.schema, self.table_name, self.properties)
+
+
+@Operations.register_operation("alter_table_columns")
+class AlterTableColumnsOp(ops.AlterTableOp):
+    """Represent a combined ALTER TABLE ADD/DROP COLUMN operation for StarRocks.
+
+    A single StarRocks table can only have one in-flight schema-change job at a
+    time, so emitting one ``ALTER TABLE ... ADD/DROP COLUMN`` per column fails
+    when the second statement is submitted while the first job is still
+    running. This operation collapses several column changes on the same table
+    into a single ``ALTER TABLE`` statement (a single schema-change job).
+
+    It is produced automatically by the :data:`combine_column_alters` rewriter
+    during autogenerate; it can also be used directly in a migration script.
+    """
+
+    def __init__(
+        self,
+        table_name: str,
+        adds: Optional[List[Column]] = None,
+        drops: Optional[List[Column]] = None,
+        schema: Optional[str] = None,
+    ):
+        """Invoke a combined ALTER TABLE ADD/DROP COLUMN operation.
+
+        Args:
+            table_name: The name of the table.
+            adds: Column objects to add.
+            drops: Column objects to drop (only the name is used to render the
+                statement; the full Column is retained so the operation is
+                reversible).
+            schema: The schema (StarRocks database) of the table.
+        """
+        super().__init__(table_name, schema=schema)
+        self.adds: List[Column] = list(adds or [])
+        self.drops: List[Column] = list(drops or [])
+
+    @classmethod
+    def alter_table_columns(
+        cls,
+        operations: Operations,
+        table_name: str,
+        adds: Optional[List[Column]] = None,
+        drops: Optional[List[Column]] = None,
+        schema: Optional[str] = None,
+    ):
+        """Invoke a combined ALTER TABLE ADD/DROP COLUMN operation for StarRocks."""
+        op = cls(table_name, adds=adds, drops=drops, schema=schema)
+        return operations.invoke(op)
+
+    def reverse(self) -> "AlterTableColumnsOp":
+        """Reverse the operation: drop what was added and re-add what was dropped."""
+        return AlterTableColumnsOp(
+            table_name=self.table_name,
+            adds=list(self.drops),
+            drops=list(self.adds),
+            schema=self.schema,
+        )
+
+    def __str__(self) -> str:
+        return (f"AlterTableColumnsOp(table_name={self.table_name!r}, "
+                f"adds={[c.name for c in self.adds]!r}, "
+                f"drops={[c.name for c in self.drops]!r}, schema={self.schema!r})")
+
+    def to_diff_tuple(self) -> Tuple[Any, ...]:
+        """Return Alembic diff tuple."""
+        return (
+            "alter_table_columns",
+            self.schema,
+            self.table_name,
+            [c.name for c in self.adds],
+            [c.name for c in self.drops],
+        )
+
+
+# Rewriter that coalesces multiple per-column ALTER TABLE operations on the same
+# table into a single AlterTableColumnsOp, so autogenerate emits one
+# ``ALTER TABLE ... ADD/DROP COLUMN`` statement (one schema-change job) instead
+# of one statement per column. Wire it into ``env.py`` via
+# ``context.configure(process_revision_directives=combine_column_alters)``.
+combine_column_alters = Rewriter()
+
+
+@combine_column_alters.rewrites(ops.ModifyTableOps)
+def _combine_column_alters(context, revision, op: ops.ModifyTableOps):
+    """Coalesce a table's AddColumnOp/DropColumnOp into a single combined op.
+
+    Every ``ADD COLUMN`` and ``DROP COLUMN`` for the table is folded into one
+    ``AlterTableColumnsOp`` (a single ``ALTER TABLE``, hence one
+    schema-change job), placed at the position of the first column change. Other
+    operations keep their relative position. With fewer than two column changes
+    there is nothing to combine and the container is returned unchanged.
+
+    No index-drop reordering hazard: the dialect's ``get_indexes`` does not
+    reflect StarRocks bitmap/secondary indexes, so autogenerate never emits a
+    ``DropIndexOp`` for them — removing an indexed column yields only a
+    ``DropColumnOp``. There is therefore no ``DROP INDEX`` that could be
+    reordered relative to a column drop, and StarRocks removes a column's index
+    together with the column anyway.
+    """
+    adds: List[Column] = []
+    drops: List[Column] = []
+    new_ops: List[Any] = []
+    combined_pos = -1  # index of the combined-op placeholder in new_ops; -1 until seen
+
+    for inner in op.ops:
+        if isinstance(inner, ops.AddColumnOp):
+            adds.append(inner.column)
+            if combined_pos == -1:
+                combined_pos = len(new_ops)
+                new_ops.append(None)  # placeholder for the combined op
+        elif isinstance(inner, ops.DropColumnOp):
+            drops.append(inner.to_column())
+            if combined_pos == -1:
+                combined_pos = len(new_ops)
+                new_ops.append(None)  # placeholder for the combined op
+        else:
+            new_ops.append(inner)
+
+    # Nothing to combine (0 or 1 column change): leave the container as-is.
+    if len(adds) + len(drops) < 2:
+        return op
+
+    # Drop the combined op into the placeholder slot, preserving the position of
+    # any non-column operations relative to the column changes.
+    new_ops[combined_pos] = AlterTableColumnsOp(
+        table_name=op.table_name,
+        adds=adds,
+        drops=drops,
+        schema=op.schema,
+    )
+    op.ops = new_ops
+    return op

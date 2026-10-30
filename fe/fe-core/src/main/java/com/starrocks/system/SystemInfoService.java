@@ -34,6 +34,7 @@
 
 package com.starrocks.system;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -49,6 +50,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -238,6 +240,9 @@ public class SystemInfoService implements GsonPostProcessable {
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(
                 newComputeNode, wal -> replayAddComputeNode((ComputeNode) wal));
         LOG.info("finished to add {} ", newComputeNode);
+
+        // compute nodes are changed, regenerate tablet number metrics
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public boolean isSingleBackendAndComputeNode() {
@@ -636,6 +641,9 @@ public class SystemInfoService implements GsonPostProcessable {
                 new DropComputeNodeLog(dropComputeNode.getId()),
                 wal -> removeComputeNode((DropComputeNodeLog) wal));
         LOG.info("finished to drop {}", dropComputeNode);
+
+        // compute nodes are changed, regenerate tablet number metrics
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -765,7 +773,7 @@ public class SystemInfoService implements GsonPostProcessable {
                 new DropBackendInfo(droppedBackend.getId()), wal -> removeBackend((DropBackendInfo) wal));
         LOG.info("finished to drop {}", droppedBackend);
 
-        // backends are changed, regenerated tablet number metrics
+        // backends are changed, regenerate tablet number metrics
         MetricRepo.generateBackendsTabletMetrics();
     }
 
@@ -1032,6 +1040,20 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return resultBackends;
+    }
+
+    /**
+     * Returns backend ids whose location matches {@code location}.
+     * Callers with a null/empty location should use {@link #getBackendIds()} / {@link #getTotalBackendNumber()}
+     * instead — matching against an empty requirement is undefined for unlabelled BEs.
+     */
+    public List<Long> getLocationMatchedBackendIds(Multimap<String, String> location) {
+        Preconditions.checkArgument(location != null && !location.isEmpty(),
+                "location must be non-null and non-empty");
+        return idToBackendRef.values().stream()
+                .filter(backend -> TabletChecker.isLocationMatch(location, backend.getSingleLevelLocationKV()))
+                .map(Backend::getId)
+                .toList();
     }
 
     public List<Long> getBackendIds() {

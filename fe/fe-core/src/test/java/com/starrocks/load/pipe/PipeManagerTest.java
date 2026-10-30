@@ -93,6 +93,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -230,7 +231,7 @@ public class PipeManagerTest {
         pm.clear();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        new UtFrameUtils.PseudoImage();
         long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
@@ -334,9 +335,48 @@ public class PipeManagerTest {
         };
     }
 
+    /**
+     * Stubs {@link TaskManager#executeTaskAsync} for the duration of the current test.
+     *
+     * <p>Deliberately a {@link MockUp} rather than {@code new Expectations(taskManager)}: the dynamic
+     * partial-mocking form records every call made on the live TaskManager singleton while its recording
+     * block is open, and that singleton's own dispatch scheduler calls
+     * {@code TaskManager#rescheduleDispatchIfIntervalChanged()} from a background thread once per
+     * {@code task_runs_dispatch_interval_ms}. A tick that lands inside the recording window is recorded as
+     * an expectation nothing ever replays, and the test then fails at teardown with "Missing 1 invocation
+     * to ... rescheduleDispatchIfIntervalChanged()". A MockUp redefines only the one method, so unrelated
+     * background traffic on the singleton stays invisible to it.</p>
+     */
+    private void mockTaskSubmission(Supplier<SubmitResult> submission) {
+        new MockUp<TaskManager>() {
+            @Mock
+            public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
+                return submission.get();
+            }
+        };
+    }
+
+    /** An accepted submission whose task run has already finished as FAILED. */
+    private static SubmitResult submittedWithFailedRun() {
+        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+        submit.setFuture(future);
+        future.run();
+        return submit;
+    }
+
+    /** An accepted submission whose task run has been cancelled. */
+    private static SubmitResult submittedWithCancelledRun() {
+        SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
+        FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
+        submit.setFuture(future);
+        future.cancel(true);
+        return submit;
+    }
+
     private void mockPollError(int errorCount) {
         // poll error
-        MockUp<HdfsUtil> mockHdfs = new MockUp<HdfsUtil>() {
+        new MockUp<HdfsUtil>() {
             private int count = 0;
 
             @Mock
@@ -481,15 +521,8 @@ public class PipeManagerTest {
         Assertions.assertEquals(Pipe.State.RUNNING, p3.getState());
         Assertions.assertEquals(1, p3.getRunningTasks().size());
 
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        new mockit.Expectations(taskManager) {
-            {
-                // submit error
-                taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
-                result = new SubmitResult("queryid", SubmitResult.SubmitStatus.FAILED);
-
-            }
-        };
+        // submit error
+        mockTaskSubmission(() -> new SubmitResult("queryid", SubmitResult.SubmitStatus.FAILED));
 
         Thread.sleep(1000);
         Assertions.assertEquals(1, p3.getRunningTasks().size());
@@ -586,42 +619,26 @@ public class PipeManagerTest {
 
     @Test
     public void testExecuteFailed() throws Exception {
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         mockRepoExecutor();
+
+        // One stub for the whole test; the flag below picks the outcome of the next submission.
+        AtomicBoolean cancelled = new AtomicBoolean(false);
+        mockTaskSubmission(() -> cancelled.get() ? submittedWithCancelledRun() : submittedWithFailedRun());
 
         // mock execution failed
         for (boolean retryAll : Lists.newArrayList(true, false)) {
             final String pipeName = "p3";
             Pipe p3 = preparePipe(pipeName);
-            new mockit.Expectations(taskManager) {
-                {
-                    taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
-                    SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
-                    FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
-                    submit.setFuture(future);
-                    future.run();
-                    result = submit;
-                }
-            };
             Assertions.assertEquals(0, p3.getRunningTasks().size());
             pipeRetryFailedTask(p3, retryAll);
             dropPipe(pipeName);
         }
 
         // mock execution cancelled
+        cancelled.set(true);
         for (boolean retryAll : Lists.newArrayList(true, false)) {
             final String pipeName = "p4";
             Pipe p4 = preparePipe(pipeName);
-            new mockit.Expectations(taskManager) {
-                {
-                    taskManager.executeTaskAsync((Task) any, (ExecuteOption) any);
-                    SubmitResult submit = new SubmitResult("queryid", SubmitResult.SubmitStatus.SUBMITTED);
-                    FutureTask<Constants.TaskRunState> future = new FutureTask<>(() -> Constants.TaskRunState.FAILED);
-                    submit.setFuture(future);
-                    future.cancel(true);
-                    result = submit;
-                }
-            };
             Assertions.assertEquals(0, p4.getRunningTasks().size());
             pipeRetryFailedTask(p4, retryAll);
             dropPipe(pipeName);
@@ -1052,7 +1069,7 @@ public class PipeManagerTest {
         pm.clear();
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
+        new UtFrameUtils.PseudoImage();
         long dbId = ctx.getGlobalStateMgr().getLocalMetastore().getDb(PIPE_TEST_DB).getId();
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 

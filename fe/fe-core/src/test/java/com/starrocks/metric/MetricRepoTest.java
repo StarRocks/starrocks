@@ -14,16 +14,23 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
+import com.starrocks.common.Version;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.JournalType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang3.StringUtils;
@@ -36,6 +43,15 @@ import java.util.List;
 import java.util.Set;
 
 public class MetricRepoTest extends PlanTestBase {
+
+    private ConnectContext createConnectContextForUser(String qualifiedUser, int connectionId) {
+        ConnectContext context = new ConnectContext();
+        context.setQualifiedUser(qualifiedUser);
+        context.setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setConnectionId(connectionId);
+        return context;
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -76,6 +92,140 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(StringUtils.isNotEmpty(json));
         Assertions.assertTrue(json.contains("test_metric"));
         Assertions.assertTrue(json.contains("brpc_pool_numactive"));
+    }
+
+    @Test
+    public void testConnectionTotalUsesLiveMapSize() {
+        ExecuteEnv.setup();
+        ConnectScheduler scheduler = ExecuteEnv.getInstance().getScheduler();
+        ConnectContext original = createConnectContextForUser("metric_user_1", 10001);
+        ConnectContext collision = createConnectContextForUser("metric_user_2", 10001);
+        try {
+            Assertions.assertTrue(scheduler.registerConnection(original).first);
+            Assertions.assertFalse(scheduler.registerConnection(collision).first);
+
+            SimpleCoreMetricVisitor visitor = new SimpleCoreMetricVisitor("starrocks_fe");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(false, false, false, false, false);
+            String output = MetricRepo.getMetric(visitor, params);
+            Assertions.assertEquals(1, scheduler.getCurrentConnectionMap().size());
+            Assertions.assertEquals(1, scheduler.getConnectionNum());
+            Assertions.assertTrue(output.contains("starrocks_fe_connection_total LONG 1"), output);
+        } finally {
+            scheduler.unregisterConnection(collision);
+            scheduler.unregisterConnection(original);
+        }
+    }
+
+    @Test
+    public void testRetainedJournalMetrics() {
+        MetricRepo.initializeEditLogRetained(JournalType.FE_META, 1L, 10L);
+        MetricRepo.recordEditLogBatch(JournalType.FE_META, 11L, 1L, 100L);
+        MetricRepo.initializeEditLogRetained(JournalType.STAR_MGR, 21L, 25L);
+        MetricRepo.recordEditLogBatch(JournalType.STAR_MGR, 26L, 1L, 200L);
+
+        MetricRepo.updateEditLogRetainedMinJournalId(JournalType.FE_META, 6L);
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(600L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.STAR_MGR));
+        Assertions.assertEquals(1200L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.STAR_MGR));
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricRepo.getMetricsByName("edit_log_retained").forEach(visitor::visit);
+        MetricRepo.getMetricsByName("edit_log_retained_bytes_estimate").forEach(visitor::visit);
+        String output = visitor.build();
+        Assertions.assertTrue(output.contains("journal=\"fe_meta\""), output);
+        Assertions.assertTrue(output.contains("journal=\"star_mgr\""), output);
+    }
+
+    @Test
+    public void testBuildInfoMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("build_info");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        Assertions.assertEquals(1L, metric.getValue());
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("starrocks_fe");
+        visitor.visit(metric);
+        String output = visitor.build();
+
+        Assertions.assertTrue(
+                output.contains("# HELP starrocks_fe_build_info StarRocks FE build information"), output);
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_build_info gauge"), output);
+
+        String buildInfoLine = output.lines()
+                .filter(line -> line.startsWith("starrocks_fe_build_info{"))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertTrue(
+                buildInfoLine.contains("version=\"" + Version.STARROCKS_VERSION + "\""), buildInfoLine);
+        Assertions.assertTrue(
+                buildInfoLine.contains("commit_hash=\"" + Version.STARROCKS_COMMIT_HASH + "\""), buildInfoLine);
+        Assertions.assertTrue(buildInfoLine.endsWith("} 1"), buildInfoLine);
+    }
+
+    @Test
+    public void testSPMMetricsExposure() {
+        MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
+        MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("spm_baseline_count"));
+        Assertions.assertTrue(output.contains("spm_rewrite_total"));
+        Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
+        Assertions.assertTrue(output.contains("result=\"hit\""));
+        Assertions.assertTrue(output.contains("result=\"captured\""));
+    }
+
+    @Test
+    public void testMaxJournalReplayLagMetricsExposure() {
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        // registered by MetricRepo.init(), and leader-aware so it always carries the is_leader label
+        Assertions.assertTrue(output.contains("max_journal_replay_lag"), output);
+        Assertions.assertTrue(output.contains("max_journal_replay_lag{is_leader="), output);
+    }
+
+    @Test
+    public void testAlterColumnMetricsExposure() {
+        // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
+        // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
+        AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
+        registry.updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
+        registry.updateAlterDuration(AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("alter_operation_total{"), output);
+        Assertions.assertTrue(output.contains("alter_duration_ms"), output);
+        Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
+    }
+  
+    public void testPlanAdvisorMetricsExposure() {
+        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL.getMetric("join").increase(1L);
+        MetricRepo.COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL.getMetric("agg").increase(2L);
+        MetricRepo.COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL.increase(3L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("plan_advisor_guide_generated_total"));
+        Assertions.assertTrue(output.contains("plan_advisor_guide_applied_total"));
+        Assertions.assertTrue(output.contains("plan_advisor_optimization_duration_ms_total"));
+        Assertions.assertTrue(output.contains("operator_type=\"join\""));
+        Assertions.assertTrue(output.contains("operator_type=\"agg\""));
     }
 
     @Test
@@ -425,20 +575,20 @@ public class MetricRepoTest extends PlanTestBase {
     @Test
     public void testIcebergDeleteMetrics() {
         // Test position delete metrics using basic method
-        IcebergMetricsMgr.increaseIcebergDeleteTotal("success", "none", "position");
-        IcebergMetricsMgr.increaseIcebergDeleteTotal("failed", "timeout", "position");
-        IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(123L, "position");
-        IcebergMetricsMgr.increaseIcebergDeleteRows(10L, "position");
-        IcebergMetricsMgr.increaseIcebergDeleteBytes(1000L, "position");
+        ConnectorMetricsMgr.increaseDeleteTotal("iceberg", "success", "none", "position");
+        ConnectorMetricsMgr.increaseDeleteTotal("iceberg", "failed", "timeout", "position");
+        ConnectorMetricsMgr.increaseDeleteDurationMs("iceberg", 123L, "position");
+        ConnectorMetricsMgr.increaseDeleteRows("iceberg", 10L, "position");
+        ConnectorMetricsMgr.increaseDeleteBytes("iceberg", 1000L, "position");
 
         // Test metadata delete metrics using basic method
-        IcebergMetricsMgr.increaseIcebergDeleteTotal("success", "none", "metadata");
-        IcebergMetricsMgr.increaseIcebergDeleteDurationMsTotal(456L, "metadata");
+        ConnectorMetricsMgr.increaseDeleteTotal("iceberg", "success", "none", "metadata");
+        ConnectorMetricsMgr.increaseDeleteDurationMs("iceberg", 456L, "metadata");
 
         // Test convenience methods for success/failure
-        IcebergMetricsMgr.increaseIcebergDeleteTotalSuccess("position");
-        IcebergMetricsMgr.increaseIcebergDeleteTotalFail("out of memory", "position");
-        IcebergMetricsMgr.increaseIcebergDeleteTotalFail(new RuntimeException("timeout"), "metadata");
+        ConnectorMetricsMgr.increaseDeleteTotalSuccess("iceberg", "position");
+        ConnectorMetricsMgr.increaseDeleteTotalFail("iceberg", "out of memory", "position");
+        ConnectorMetricsMgr.increaseDeleteTotalFail("iceberg", new RuntimeException("timeout"), "metadata");
 
         PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
         MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
@@ -468,36 +618,55 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-    public void testIcebergDeleteFailReasonClassification() {
+    public void testIcebergTimeTravelQueryMetric() {
+        MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.increase(1L);
+        MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric("snapshot").increase(1L);
+        MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric("branch").increase(1L);
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_iceberg_time_travel_query_total"),
+                "iceberg_time_travel_query_total should be exposed");
+        Assertions.assertTrue(output.contains("time_travel_type=\"snapshot\""),
+                "iceberg_time_travel_query_total should contain time_travel_type=snapshot");
+        Assertions.assertTrue(output.contains("time_travel_type=\"branch\""),
+                "iceberg_time_travel_query_total should contain time_travel_type=branch");
+    }
+
+    @Test
+    public void testDeleteFailReasonClassification() {
         // Test error classification from error message
-        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason("connection timeout"));
-        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason("request timed out"));
-        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason("java.lang.OutOfMemoryError"));
-        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason("out of memory"));
-        Assertions.assertEquals("access_denied", IcebergMetricsMgr.classifyFailReason("access denied"));
-        Assertions.assertEquals("access_denied", IcebergMetricsMgr.classifyFailReason("permission denied"));
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason("some other error"));
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason((String) null));
+        Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason("connection timeout"));
+        Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason("request timed out"));
+        Assertions.assertEquals("oom", ConnectorMetricsMgr.classifyFailReason("java.lang.OutOfMemoryError"));
+        Assertions.assertEquals("oom", ConnectorMetricsMgr.classifyFailReason("out of memory"));
+        Assertions.assertEquals("access_denied", ConnectorMetricsMgr.classifyFailReason("access denied"));
+        Assertions.assertEquals("access_denied", ConnectorMetricsMgr.classifyFailReason("permission denied"));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason("some other error"));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason((String) null));
 
         // Test error classification from throwable
-        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason(new OutOfMemoryError()));
-        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason(new java.util.concurrent.TimeoutException()));
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason(new RuntimeException("unknown error")));
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason((Throwable) null));
+        Assertions.assertEquals("oom", ConnectorMetricsMgr.classifyFailReason(new OutOfMemoryError()));
+        Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason(new java.util.concurrent.TimeoutException()));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason(new RuntimeException("unknown error")));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason((Throwable) null));
     }
 
     @Test
     public void testIcebergCompactionMetrics() {
         // manual compaction success
-        IcebergMetricsMgr.increaseIcebergCompactionTotalSuccess();
-        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(200L, "manual");
-        IcebergMetricsMgr.increaseIcebergCompactionInputFiles(4L, "manual");
-        IcebergMetricsMgr.increaseIcebergCompactionOutputFiles(2L, "manual");
-        IcebergMetricsMgr.increaseIcebergCompactionRemovedDeleteFiles(1L, "manual");
+        ConnectorMetricsMgr.increaseCompactionTotalSuccess("iceberg", "manual");
+        ConnectorMetricsMgr.increaseCompactionDurationMs("iceberg", 200L, "manual");
+        ConnectorMetricsMgr.increaseCompactionInputFiles("iceberg", 4L, "manual");
+        ConnectorMetricsMgr.increaseCompactionOutputFiles("iceberg", 2L, "manual");
+        ConnectorMetricsMgr.increaseCompactionRemovedDeleteFiles("iceberg", 1L, "manual");
 
         // auto compaction failure
-        IcebergMetricsMgr.increaseIcebergCompactionTotal("failed", "timeout", "auto");
-        IcebergMetricsMgr.increaseIcebergCompactionDurationMs(50L, "auto");
+        ConnectorMetricsMgr.increaseCompactionTotal("iceberg", "failed", "timeout", "auto");
+        ConnectorMetricsMgr.increaseCompactionDurationMs("iceberg", 50L, "auto");
 
         PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
         MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
@@ -523,52 +692,52 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-    public void testIcebergCompactionFailReasonNormalization() {
+    public void testCompactionFailReasonNormalization() {
         // normalizeStatus should cap to known values
-        Assertions.assertEquals("success", IcebergMetricsMgr.normalizeStatus("SUCCESS"));
-        Assertions.assertEquals("failed", IcebergMetricsMgr.normalizeStatus("FAILED"));
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeStatus(null));
-        Assertions.assertEquals("custom", IcebergMetricsMgr.normalizeStatus("custom"));
+        Assertions.assertEquals("success", ConnectorMetricsMgr.normalizeStatus("SUCCESS"));
+        Assertions.assertEquals("failed", ConnectorMetricsMgr.normalizeStatus("FAILED"));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.normalizeStatus(null));
+        Assertions.assertEquals("custom", ConnectorMetricsMgr.normalizeStatus("custom"));
 
         // normalizeReason fallback
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeReason(null));
-        Assertions.assertEquals("oom", IcebergMetricsMgr.normalizeReason("oom"));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.normalizeReason(null));
+        Assertions.assertEquals("oom", ConnectorMetricsMgr.normalizeReason("oom"));
 
         // classifyFailReason reuses delete logic
-        Assertions.assertEquals("timeout", IcebergMetricsMgr.classifyFailReason("timeout when compaction"));
-        Assertions.assertEquals("oom", IcebergMetricsMgr.classifyFailReason(new OutOfMemoryError()));
-        Assertions.assertEquals("access_denied", IcebergMetricsMgr.classifyFailReason("permission denied by s3"));
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.classifyFailReason("something else"));
+        Assertions.assertEquals("timeout", ConnectorMetricsMgr.classifyFailReason("timeout when compaction"));
+        Assertions.assertEquals("oom", ConnectorMetricsMgr.classifyFailReason(new OutOfMemoryError()));
+        Assertions.assertEquals("access_denied", ConnectorMetricsMgr.classifyFailReason("permission denied by s3"));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.classifyFailReason("something else"));
     }
 
     @Test
     public void testIcebergWriteMetrics() {
         // Test insert write metrics using basic method
-        IcebergMetricsMgr.increaseIcebergWriteTotal("success", "none", "insert");
-        IcebergMetricsMgr.increaseIcebergWriteTotal("failed", "timeout", "insert");
-        IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(123L, "insert");
-        IcebergMetricsMgr.increaseIcebergWriteRows(10L, "insert");
-        IcebergMetricsMgr.increaseIcebergWriteBytes(1000L, "insert");
-        IcebergMetricsMgr.increaseIcebergWriteFiles(1L, "insert");
+        ConnectorMetricsMgr.increaseWriteTotal("iceberg", "success", "none", "insert");
+        ConnectorMetricsMgr.increaseWriteTotal("iceberg", "failed", "timeout", "insert");
+        ConnectorMetricsMgr.increaseWriteDurationMs("iceberg", 123L, "insert");
+        ConnectorMetricsMgr.increaseWriteRows("iceberg", 10L, "insert");
+        ConnectorMetricsMgr.increaseWriteBytes("iceberg", 1000L, "insert");
+        ConnectorMetricsMgr.increaseWriteFiles("iceberg", 1L, "insert");
 
         // Test overwrite write metrics
-        IcebergMetricsMgr.increaseIcebergWriteTotal("success", "none", "overwrite");
-        IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(456L, "overwrite");
-        IcebergMetricsMgr.increaseIcebergWriteRows(20L, "overwrite");
-        IcebergMetricsMgr.increaseIcebergWriteBytes(2000L, "overwrite");
-        IcebergMetricsMgr.increaseIcebergWriteFiles(2L, "overwrite");
+        ConnectorMetricsMgr.increaseWriteTotal("iceberg", "success", "none", "overwrite");
+        ConnectorMetricsMgr.increaseWriteDurationMs("iceberg", 456L, "overwrite");
+        ConnectorMetricsMgr.increaseWriteRows("iceberg", 20L, "overwrite");
+        ConnectorMetricsMgr.increaseWriteBytes("iceberg", 2000L, "overwrite");
+        ConnectorMetricsMgr.increaseWriteFiles("iceberg", 2L, "overwrite");
 
         // Test ctas write metrics
-        IcebergMetricsMgr.increaseIcebergWriteTotal("success", "none", "ctas");
-        IcebergMetricsMgr.increaseIcebergWriteDurationMsTotal(789L, "ctas");
-        IcebergMetricsMgr.increaseIcebergWriteRows(30L, "ctas");
-        IcebergMetricsMgr.increaseIcebergWriteBytes(3000L, "ctas");
-        IcebergMetricsMgr.increaseIcebergWriteFiles(3L, "ctas");
+        ConnectorMetricsMgr.increaseWriteTotal("iceberg", "success", "none", "ctas");
+        ConnectorMetricsMgr.increaseWriteDurationMs("iceberg", 789L, "ctas");
+        ConnectorMetricsMgr.increaseWriteRows("iceberg", 30L, "ctas");
+        ConnectorMetricsMgr.increaseWriteBytes("iceberg", 3000L, "ctas");
+        ConnectorMetricsMgr.increaseWriteFiles("iceberg", 3L, "ctas");
 
         // Test convenience methods for success/failure
-        IcebergMetricsMgr.increaseIcebergWriteTotalSuccess("insert");
-        IcebergMetricsMgr.increaseIcebergWriteTotalFail("out of memory", "overwrite");
-        IcebergMetricsMgr.increaseIcebergWriteTotalFail(new RuntimeException("timeout"), "ctas");
+        ConnectorMetricsMgr.increaseWriteTotalSuccess("iceberg", "insert");
+        ConnectorMetricsMgr.increaseWriteTotalFail("iceberg", "out of memory", "overwrite");
+        ConnectorMetricsMgr.increaseWriteTotalFail("iceberg", new RuntimeException("timeout"), "ctas");
 
         PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
         MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
@@ -602,15 +771,34 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
-    public void testIcebergWriteTypeNormalization() {
+    public void testWriteTypeNormalization() {
         // Test write type normalization
-        Assertions.assertEquals("insert", IcebergMetricsMgr.normalizeWriteType("insert"));
-        Assertions.assertEquals("insert", IcebergMetricsMgr.normalizeWriteType("INSERT"));
-        Assertions.assertEquals("insert", IcebergMetricsMgr.normalizeWriteType("Insert"));
-        Assertions.assertEquals("overwrite", IcebergMetricsMgr.normalizeWriteType("overwrite"));
-        Assertions.assertEquals("overwrite", IcebergMetricsMgr.normalizeWriteType("OVERWRITE"));
-        Assertions.assertEquals("ctas", IcebergMetricsMgr.normalizeWriteType("ctas"));
-        Assertions.assertEquals("ctas", IcebergMetricsMgr.normalizeWriteType("CTAS"));
-        Assertions.assertEquals("unknown", IcebergMetricsMgr.normalizeWriteType(null));
+        Assertions.assertEquals("insert", ConnectorMetricsMgr.normalizeWriteType("insert"));
+        Assertions.assertEquals("insert", ConnectorMetricsMgr.normalizeWriteType("INSERT"));
+        Assertions.assertEquals("insert", ConnectorMetricsMgr.normalizeWriteType("Insert"));
+        Assertions.assertEquals("overwrite", ConnectorMetricsMgr.normalizeWriteType("overwrite"));
+        Assertions.assertEquals("overwrite", ConnectorMetricsMgr.normalizeWriteType("OVERWRITE"));
+        Assertions.assertEquals("ctas", ConnectorMetricsMgr.normalizeWriteType("ctas"));
+        Assertions.assertEquals("ctas", ConnectorMetricsMgr.normalizeWriteType("CTAS"));
+        Assertions.assertEquals("unknown", ConnectorMetricsMgr.normalizeWriteType(null));
+    }
+
+    @Test
+    public void testDictCacheMemoryMetric() {
+        // The gauge must be registered and expose a non-negative byte value on read.
+        Assertions.assertNotNull(MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
+        Long value = MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES.getValue();
+        Assertions.assertNotNull(value);
+        Assertions.assertTrue(value >= 0L, "dict cache memory must be non-negative, got " + value);
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_low_cardinality_dict_cache_bytes"),
+                "low_cardinality_dict_cache_bytes should be exposed");
+        Assertions.assertTrue(output.contains("# TYPE ut_low_cardinality_dict_cache_bytes gauge"),
+                "low_cardinality_dict_cache_bytes should be declared as a gauge");
     }
 }

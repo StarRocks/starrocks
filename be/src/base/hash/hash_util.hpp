@@ -14,8 +14,11 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include "base/compiler_util.h"
 #include "base/logging.h"
+#include "base/string/slice.h"
 
 // For cross compiling with clang, we need to be able to generate an IR file with
 // no sse instructions.  Attempting to load a precompiled IR file that contains
@@ -52,6 +55,8 @@ public:
 
     // refer to https://github.com/apache/commons-codec/blob/master/src/main/java/org/apache/commons/codec/digest/MurmurHash3.java
     static const uint32_t MURMUR3_32_SEED = 104729;
+    static const uint32_t XXHASH32_SEED = 0;
+    static const uint64_t XXHASH64_SEED = 0;
     static const uint64_t XXHASH3_64_SEED = 0;
 
     ALWAYS_INLINE static uint32_t rotl32(uint32_t x, int8_t r) { return (x << r) | (x >> (32 - r)); }
@@ -109,6 +114,7 @@ public:
     }
 
     static uint64_t xx_hash3_64(const void* key, int32_t len, uint64_t seed);
+    static uint32_t xx_hash32(const void* key, int32_t len, uint32_t seed);
     static uint64_t xx_hash64(const void* key, int32_t len, uint64_t seed);
 
     // default values recommended by http://isthe.com/chongo/tech/comp/fnv/
@@ -190,6 +196,17 @@ public:
         h *= m;
         h ^= h >> r;
         return h;
+    }
+
+    template <typename T>
+    static uint64_t murmur_hash64A(const T& value, unsigned int seed) {
+        if constexpr (std::is_same_v<std::decay_t<T>, Slice>) {
+            return murmur_hash64A(value.data, value.size, seed);
+        } else {
+            static_assert(std::is_trivially_copyable_v<std::decay_t<T>>,
+                          "murmur_hash64A requires trivially copyable types");
+            return murmur_hash64A(&value, sizeof(T), seed);
+        }
     }
 
     // Computes the hash value for data.  Will call either CrcHash or FnvHash

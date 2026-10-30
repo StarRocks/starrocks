@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "0000-01-01からの日付を返します。"
 ---
 
 # from_days

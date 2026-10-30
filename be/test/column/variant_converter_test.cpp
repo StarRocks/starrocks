@@ -1,0 +1,358 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "column/variant_converter.h"
+
+#include <arrow/util/endian.h>
+#include <gtest/gtest.h>
+
+#include <cstring>
+#include <limits>
+#include <optional>
+#include <random>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
+#include "base/time/tz_offset_cache.h"
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "gutil/casts.h"
+#include "types/date_value.h"
+#include "types/time_types.h"
+#include "types/timestamp_value.h"
+#include "types/variant.h"
+#include "types/variant_value.h"
+
+namespace starrocks {
+namespace {
+
+uint8_t primitive_header(VariantType type) {
+    return static_cast<uint8_t>(type) << 2;
+}
+
+template <typename T>
+std::string encode_primitive(VariantType type, T value) {
+    std::string bytes(1 + sizeof(T), '\0');
+    bytes[0] = primitive_header(type);
+    T little_endian_value = arrow::bit_util::ToLittleEndian(value);
+    memcpy(bytes.data() + 1, &little_endian_value, sizeof(T));
+    return bytes;
+}
+
+std::string encode_string(std::string_view value) {
+    std::string bytes(1 + sizeof(uint32_t) + value.size(), '\0');
+    bytes[0] = primitive_header(VariantType::STRING);
+
+    uint32_t length = arrow::bit_util::ToLittleEndian(static_cast<uint32_t>(value.size()));
+    memcpy(bytes.data() + 1, &length, sizeof(uint32_t));
+    memcpy(bytes.data() + 1 + sizeof(uint32_t), value.data(), value.size());
+    return bytes;
+}
+
+VariantRowValue make_variant_row(std::string value_bytes) {
+    return VariantRowValue(VariantMetadata::kEmptyMetadata, std::string_view(value_bytes));
+}
+
+template <LogicalType Type>
+void check_string_cast(std::string_view text, std::optional<RunTimeCppType<Type>> expected) {
+    std::vector<std::string> encodings{encode_string(text)};
+    if (text.size() < 64) {
+        std::string short_string(1, static_cast<char>((text.size() << 2) | 1));
+        short_string.append(text);
+        encodings.emplace_back(std::move(short_string));
+    }
+    for (const auto& encoding : encodings) {
+        SCOPED_TRACE(std::string(text));
+        auto value = make_variant_row(encoding);
+        ColumnBuilder<Type> strict_builder(1);
+        auto strict_status =
+                VariantRowConverter::cast_to<Type, true>(value.as_ref(), cctz::utc_time_zone(), strict_builder);
+        ASSERT_EQ(expected.has_value(), strict_status.ok()) << strict_status;
+        if (expected.has_value()) {
+            auto strict_column = strict_builder.build(false);
+            ASSERT_EQ(1, strict_column->size());
+            ASSERT_FALSE(strict_column->is_null(0));
+            EXPECT_EQ(expected.value(), ColumnHelper::cast_to_raw<Type>(strict_column.get())->get_data()[0]);
+        }
+
+        ColumnBuilder<Type> nullable_builder(1);
+        auto status =
+                VariantRowConverter::cast_to<Type, false>(value.as_ref(), cctz::utc_time_zone(), nullable_builder);
+        ASSERT_TRUE(status.ok()) << status;
+        auto column = nullable_builder.build(false);
+        ASSERT_EQ(1, column->size());
+        ASSERT_EQ(!expected.has_value(), column->is_null(0));
+        if (expected.has_value()) {
+            EXPECT_EQ(expected.value(), ColumnHelper::cast_to_raw<Type>(column.get())->get_data()[0]);
+        }
+    }
+}
+
+} // namespace
+
+TEST(VariantRowConverterTest, CastArithmeticAndTemporalValues) {
+    VariantRowValue int_row = make_variant_row(encode_primitive<int32_t>(VariantType::INT32, 42));
+    ColumnBuilder<TYPE_BIGINT> int_builder(1);
+    Status int_status =
+            VariantRowConverter::cast_to<TYPE_BIGINT, true>(int_row.as_ref(), cctz::utc_time_zone(), int_builder);
+    ASSERT_TRUE(int_status.ok()) << int_status;
+    auto int_column = int_builder.build(false);
+    auto* int_data = ColumnHelper::cast_to_raw<TYPE_BIGINT>(int_column.get());
+    ASSERT_EQ(1, int_data->size());
+    EXPECT_EQ(42, int_data->get_data()[0]);
+
+    int32_t days = DateValue::create(2025, 2, 2).to_days_since_unix_epoch();
+    VariantRowValue date_row = make_variant_row(encode_primitive<int32_t>(VariantType::DATE, days));
+    ColumnBuilder<TYPE_DATE> date_builder(1);
+    Status date_status =
+            VariantRowConverter::cast_to<TYPE_DATE, true>(date_row.as_ref(), cctz::utc_time_zone(), date_builder);
+    ASSERT_TRUE(date_status.ok()) << date_status;
+    auto date_column = date_builder.build(false);
+    auto* date_data = ColumnHelper::cast_to_raw<TYPE_DATE>(date_column.get());
+    ASSERT_EQ(1, date_data->size());
+    EXPECT_EQ(DateValue::create(2025, 2, 2), date_data->get_data()[0]);
+
+    int64_t time_micros = (1 * 3600 + 2 * 60 + 3) * USECS_PER_SEC + 456;
+    VariantRowValue time_row = make_variant_row(encode_primitive<int64_t>(VariantType::TIME_NTZ, time_micros));
+    ColumnBuilder<TYPE_TIME> time_builder(1);
+    Status time_status =
+            VariantRowConverter::cast_to<TYPE_TIME, true>(time_row.as_ref(), cctz::utc_time_zone(), time_builder);
+    ASSERT_TRUE(time_status.ok()) << time_status;
+    auto time_column = time_builder.build(false);
+    auto* time_data = ColumnHelper::cast_to_raw<TYPE_TIME>(time_column.get());
+    ASSERT_EQ(1, time_data->size());
+    EXPECT_DOUBLE_EQ(static_cast<double>(time_micros) / USECS_PER_SEC, time_data->get_data()[0]);
+
+    constexpr int64_t kSeconds = 1700000000;
+    constexpr int64_t kSubMicros = 123456;
+    VariantRowValue datetime_row = make_variant_row(
+            encode_primitive<int64_t>(VariantType::TIMESTAMP_NTZ, kSeconds * USECS_PER_SEC + kSubMicros));
+    ColumnBuilder<TYPE_DATETIME> datetime_builder(1);
+    Status datetime_status = VariantRowConverter::cast_to<TYPE_DATETIME, true>(datetime_row.as_ref(),
+                                                                               cctz::utc_time_zone(), datetime_builder);
+    ASSERT_TRUE(datetime_status.ok()) << datetime_status;
+    auto datetime_column = datetime_builder.build(false);
+    auto* datetime_data = ColumnHelper::cast_to_raw<TYPE_DATETIME>(datetime_column.get());
+    ASSERT_EQ(1, datetime_data->size());
+
+    TimestampValue expected;
+    expected.from_unix_second(kSeconds, kSubMicros);
+    EXPECT_EQ(expected, datetime_data->get_data()[0]);
+}
+
+// TIMESTAMP_TZ casts to DATETIME / DATE / TIME show the instant in the zone with its offset at that instant, the
+// same with a bound offset cache (as the column loops pass) as with the per-row cctz conversion, across DST changes,
+// in any order and far outside the usual range.
+TEST(VariantRowConverterTest, CastTimestampTzWithOffsetCache) {
+    std::mt19937_64 rng(3);
+    std::vector<int64_t> micros_values = {0,
+                                          -1,
+                                          1,
+                                          1719835200LL * USECS_PER_SEC + 1,
+                                          1729990800LL * USECS_PER_SEC - 1,
+                                          1729990800LL * USECS_PER_SEC,
+                                          std::numeric_limits<int64_t>::min() / 2,
+                                          std::numeric_limits<int64_t>::max() / 2};
+    for (int i = 0; i < 3000; i++) {
+        micros_values.push_back((static_cast<int64_t>(rng() % 6000000000ULL) - 2000000000LL) * USECS_PER_SEC +
+                                static_cast<int64_t>(rng() % USECS_PER_SEC));
+    }
+    for (const std::string name : {"America/Los_Angeles", "Europe/London", "UTC", "+05:45"}) {
+        cctz::time_zone zone;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(name, zone)) << name;
+        TzOffsetCache offset_cache;
+        offset_cache.bind(zone);
+        ColumnBuilder<TYPE_DATETIME> datetime_plain(micros_values.size()), datetime_cached(micros_values.size());
+        ColumnBuilder<TYPE_DATE> date_plain(micros_values.size()), date_cached(micros_values.size());
+        ColumnBuilder<TYPE_TIME> time_plain(micros_values.size()), time_cached(micros_values.size());
+        for (int64_t micros : micros_values) {
+            VariantRowValue row = make_variant_row(encode_primitive<int64_t>(VariantType::TIMESTAMP_TZ, micros));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATETIME, false>(row.as_ref(), zone, datetime_plain)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATETIME, false>(row.as_ref(), zone, datetime_cached,
+                                                                          &offset_cache)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATE, false>(row.as_ref(), zone, date_plain)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATE, false>(row.as_ref(), zone, date_cached, &offset_cache)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_TIME, false>(row.as_ref(), zone, time_plain)));
+            ASSERT_OK((VariantRowConverter::cast_to<TYPE_TIME, false>(row.as_ref(), zone, time_cached, &offset_cache)));
+        }
+        auto check = [&](auto& plain, auto& cached, const char* type) {
+            auto plain_column = plain.build(false);
+            auto cached_column = cached.build(false);
+            ASSERT_EQ(micros_values.size(), cached_column->size());
+            for (size_t i = 0; i < micros_values.size(); i++) {
+                ASSERT_EQ(plain_column->debug_item(i), cached_column->debug_item(i))
+                        << name << " " << type << " micros=" << micros_values[i];
+            }
+        };
+        check(datetime_plain, datetime_cached, "DATETIME");
+        check(date_plain, date_cached, "DATE");
+        check(time_plain, time_cached, "TIME");
+
+        // Spot values, independent of the conversion code.
+        if (name == "Europe/London") {
+            ColumnBuilder<TYPE_DATETIME> spot(2);
+            for (int64_t seconds : {1719835200LL, 1704110400LL}) {
+                VariantRowValue row =
+                        make_variant_row(encode_primitive<int64_t>(VariantType::TIMESTAMP_TZ, seconds * USECS_PER_SEC));
+                ASSERT_OK((VariantRowConverter::cast_to<TYPE_DATETIME, true>(row.as_ref(), zone, spot, &offset_cache)));
+            }
+            auto column = spot.build(false);
+            EXPECT_EQ("2024-07-01 13:00:00", column->debug_item(0));
+            EXPECT_EQ("2024-01-01 12:00:00", column->debug_item(1));
+        }
+    }
+}
+
+TEST(VariantRowConverterTest, CastBooleanAndString) {
+    VariantRowValue bool_row = make_variant_row(encode_string("TrUe"));
+    ColumnBuilder<TYPE_BOOLEAN> bool_builder(1);
+    Status bool_status =
+            VariantRowConverter::cast_to<TYPE_BOOLEAN, true>(bool_row.as_ref(), cctz::utc_time_zone(), bool_builder);
+    ASSERT_TRUE(bool_status.ok()) << bool_status;
+    auto bool_column = bool_builder.build(false);
+    auto* bool_data = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(bool_column.get());
+    ASSERT_EQ(1, bool_data->size());
+    EXPECT_EQ(1, bool_data->get_data()[0]);
+
+    VariantRowValue int_row = make_variant_row(encode_primitive<int32_t>(VariantType::INT32, 42));
+    ColumnBuilder<TYPE_VARCHAR> string_builder(1);
+    Status string_status =
+            VariantRowConverter::cast_to<TYPE_VARCHAR, true>(int_row.as_ref(), cctz::utc_time_zone(), string_builder);
+    ASSERT_TRUE(string_status.ok()) << string_status;
+    auto string_column = string_builder.build(false);
+    auto* string_data = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(string_column.get());
+    ASSERT_EQ(1, string_data->size());
+    EXPECT_EQ("42", string_data->get_slice(0).to_string());
+}
+
+TEST(VariantRowConverterTest, ThrowAndNullOnInvalidBooleanString) {
+    VariantRowValue invalid_bool_row = make_variant_row(encode_string("not_bool"));
+
+    ColumnBuilder<TYPE_BOOLEAN> throw_builder(1);
+    auto throw_status = VariantRowConverter::cast_to<TYPE_BOOLEAN, true>(invalid_bool_row.as_ref(),
+                                                                         cctz::utc_time_zone(), throw_builder);
+    EXPECT_FALSE(throw_status.ok());
+
+    ColumnBuilder<TYPE_BOOLEAN> null_builder(1);
+    Status null_status = VariantRowConverter::cast_to<TYPE_BOOLEAN, false>(invalid_bool_row.as_ref(),
+                                                                           cctz::utc_time_zone(), null_builder);
+    ASSERT_TRUE(null_status.ok()) << null_status;
+    auto null_column = null_builder.build(false);
+    ASSERT_TRUE(null_column->is_nullable());
+    auto* nullable = down_cast<NullableColumn*>(null_column.get());
+    EXPECT_TRUE(nullable->is_null(0));
+}
+
+TEST(VariantRowConverterTest, CastIntegerStrings) {
+    check_string_cast<TYPE_TINYINT>("-128", -128);
+    check_string_cast<TYPE_TINYINT>("127", 127);
+    check_string_cast<TYPE_SMALLINT>("-32768", -32768);
+    check_string_cast<TYPE_SMALLINT>("32767", 32767);
+    check_string_cast<TYPE_INT>("35", 35);
+    check_string_cast<TYPE_INT>("  +35  ", 35);
+    check_string_cast<TYPE_INT>("2147483647", std::numeric_limits<int32_t>::max());
+    check_string_cast<TYPE_INT>("-2147483648", std::numeric_limits<int32_t>::min());
+    check_string_cast<TYPE_BIGINT>("9223372036854775807", std::numeric_limits<int64_t>::max());
+    check_string_cast<TYPE_BIGINT>("-9223372036854775808", std::numeric_limits<int64_t>::min());
+    check_string_cast<TYPE_LARGEINT>("170141183460469231731687303715884105727", std::numeric_limits<int128_t>::max());
+    check_string_cast<TYPE_LARGEINT>("-170141183460469231731687303715884105728", std::numeric_limits<int128_t>::min());
+}
+
+TEST(VariantRowConverterTest, RejectInvalidAndOverflowIntegerStrings) {
+    for (const auto* text : {"", "  ", "not_a_number", "35x", "--35"}) {
+        check_string_cast<TYPE_INT>(text, std::nullopt);
+    }
+    check_string_cast<TYPE_TINYINT>("128", std::nullopt);
+    check_string_cast<TYPE_TINYINT>("-129", std::nullopt);
+    check_string_cast<TYPE_SMALLINT>("32768", std::nullopt);
+    check_string_cast<TYPE_INT>("2147483648", std::nullopt);
+    check_string_cast<TYPE_BIGINT>("9223372036854775808", std::nullopt);
+    check_string_cast<TYPE_LARGEINT>("170141183460469231731687303715884105728", std::nullopt);
+    check_string_cast<TYPE_INT>(std::string_view("35\0x", 4), std::nullopt);
+}
+
+TEST(VariantRowConverterTest, CastFloatingPointStrings) {
+    check_string_cast<TYPE_FLOAT>("2.5", 2.5f);
+    check_string_cast<TYPE_FLOAT>(" -2.5e1 ", -25.0f);
+    check_string_cast<TYPE_DOUBLE>("3.14", 3.14);
+    check_string_cast<TYPE_DOUBLE>("1e100", 1e100);
+    check_string_cast<TYPE_DOUBLE>("-0.0", -0.0);
+}
+
+TEST(VariantRowConverterTest, RejectInvalidAndNonFiniteStrings) {
+    for (const auto* text : {"", "bad", "1.5x", "NaN", "nan", "Inf", "-Infinity", "1e309"}) {
+        check_string_cast<TYPE_FLOAT>(text, std::nullopt);
+        check_string_cast<TYPE_DOUBLE>(text, std::nullopt);
+    }
+    check_string_cast<TYPE_FLOAT>("1e39", std::nullopt);
+}
+
+TEST(VariantRowConverterTest, CastDateAndDatetimeStrings) {
+    check_string_cast<TYPE_DATE>("2024-02-29", DateValue::create(2024, 2, 29));
+    check_string_cast<TYPE_DATE>("20240229", DateValue::create(2024, 2, 29));
+    check_string_cast<TYPE_DATE>(" 2025-02-02 ", DateValue::create(2025, 2, 2));
+    check_string_cast<TYPE_DATETIME>("2025-02-02 03:04:05", TimestampValue::create(2025, 2, 2, 3, 4, 5));
+    check_string_cast<TYPE_DATETIME>("2025-02-02 03:04:05.123456", TimestampValue::create(2025, 2, 2, 3, 4, 5, 123456));
+    check_string_cast<TYPE_DATETIME>("20250202030405", TimestampValue::create(2025, 2, 2, 3, 4, 5));
+    for (const auto* text : {"", "not_a_date", "2025-13-01"}) {
+        check_string_cast<TYPE_DATE>(text, std::nullopt);
+        check_string_cast<TYPE_DATETIME>(text, std::nullopt);
+    }
+}
+
+TEST(VariantRowConverterTest, CastTimeStrings) {
+    check_string_cast<TYPE_TIME>("01:02:03", 3723.0);
+    check_string_cast<TYPE_TIME>(" 1:2:3 ", 3723.0);
+    check_string_cast<TYPE_TIME>("00:00:00", 0.0);
+    check_string_cast<TYPE_TIME>("25:00:00", 90000.0);
+    check_string_cast<TYPE_TIME>("838:59:59", 3020399.0);
+    check_string_cast<TYPE_TIME>("839:00:00", 3020400.0);
+    // Do not reproduce VARCHAR's int32 overflow in total-second arithmetic.
+    check_string_cast<TYPE_TIME>("596524:00:00", 2147486400.0);
+    check_string_cast<TYPE_TIME>("2147483647:59:59", 7730941132799.0);
+}
+
+TEST(VariantRowConverterTest, RejectInvalidAndOverflowTimeStrings) {
+    for (const auto* text :
+         {"", "bad", "01:02", "01:02:03:04", "01:60:00", "01:00:60", "01::03", "-01:02:03", "01:02:03.5",
+          "2147483648:00:00", "18446744073709551615:00:00", "1:4294967296:00", "1:00:4294967296"}) {
+        check_string_cast<TYPE_TIME>(text, std::nullopt);
+    }
+}
+
+TEST(VariantRowConverterTest, CastFromRowRefMatchesRowValue) {
+    VariantRowValue int_row = make_variant_row(encode_primitive<int32_t>(VariantType::INT32, 7));
+    VariantRowRef int_ref = int_row.as_ref();
+
+    ColumnBuilder<TYPE_BIGINT> from_value_builder(1);
+    Status from_value_status = VariantRowConverter::cast_to<TYPE_BIGINT, true>(int_row.as_ref(), cctz::utc_time_zone(),
+                                                                               from_value_builder);
+    ASSERT_TRUE(from_value_status.ok()) << from_value_status;
+    auto from_value = from_value_builder.build(false);
+
+    ColumnBuilder<TYPE_BIGINT> from_ref_builder(1);
+    Status from_ref_status =
+            VariantRowConverter::cast_to<TYPE_BIGINT, true>(int_ref, cctz::utc_time_zone(), from_ref_builder);
+    ASSERT_TRUE(from_ref_status.ok()) << from_ref_status;
+    auto from_ref = from_ref_builder.build(false);
+
+    ASSERT_EQ(from_value->size(), from_ref->size());
+    EXPECT_EQ(ColumnHelper::cast_to_raw<TYPE_BIGINT>(from_value.get())->get_data()[0],
+              ColumnHelper::cast_to_raw<TYPE_BIGINT>(from_ref.get())->get_data()[0]);
+}
+
+} // namespace starrocks

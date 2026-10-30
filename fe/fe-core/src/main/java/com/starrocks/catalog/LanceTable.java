@@ -1,0 +1,86 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.catalog;
+
+import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.thrift.TLanceTable;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
+
+import java.util.List;
+
+public class LanceTable extends Table {
+
+    private final String uri;
+
+    private final String catalogName;
+
+    private final String dbName;
+
+    public LanceTable(long id, String name, List<Column> schema, String uri) {
+        this(id, null, name, schema, uri);
+    }
+
+    public LanceTable(long id, String catalogName, String name, List<Column> schema, String uri) {
+        this(id, catalogName, "", name, schema, uri);
+    }
+
+    public LanceTable(long id, String catalogName, String dbName, String name, List<Column> schema, String uri) {
+        super(id, name, TableType.LANCE, schema);
+        this.uri = uri;
+        this.catalogName = catalogName;
+        this.dbName = dbName;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return dbName == null ? "" : dbName;
+    }
+
+    @Override
+    public String getCatalogTableName() {
+        return getName();
+    }
+
+    public String getUri() {
+        return uri;
+    }
+
+    @Override
+    public String getTableLocation() {
+        return getUri();
+    }
+
+    @Override
+    public boolean isSupported() {
+        return false;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
+        TLanceTable tLanceTable = new TLanceTable();
+        tLanceTable.setLance_dataset_uri(getUri());
+
+        TTableDescriptor tTableDescriptor =
+                new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, getCatalogTableName(), getCatalogDBName());
+        tTableDescriptor.setLanceTable(tLanceTable);
+        return tTableDescriptor;
+    }
+}

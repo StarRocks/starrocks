@@ -91,6 +91,17 @@ public class OperatorTuningGuides {
 
     public void addOptimizedRecord(UUID queryId, long timeCost) {
         optimizedRecords.put(queryId, timeCost);
+        if (timeCost < originalTimeCost) {
+            PlanAdvisorMetrics.increaseOptimizationDuration(originalTimeCost - timeCost);
+        }
+    }
+
+    public List<TuningGuide> getAllTuningGuides() {
+        List<TuningGuide> guides = Lists.newArrayList();
+        for (OperatorGuideInfo operatorGuideInfo : operatorIdToTuningGuideInfo.values()) {
+            guides.addAll(operatorGuideInfo.tuningGuides);
+        }
+        return guides;
     }
 
     public boolean isUseful() {

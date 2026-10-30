@@ -19,9 +19,9 @@
 
 #include "column/chunk.h"
 #include "common/runtime_profile.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/source_operator.h"
-#include "exec/spill/dir_manager.h"
+#include "compute_env/spill/dir_manager.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "fs/fs.h"
 
 namespace starrocks::pipeline {
@@ -72,6 +72,7 @@ public:
 
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
+    virtual bool has_pending_io_tasks() const { return false; }
 
     PipeObservable& observable() { return _observable; }
 
@@ -148,6 +149,7 @@ public:
     bool is_all_sources_finished() const override;
     bool releaseable() const override { return true; }
     void enter_release_memory_mode() override;
+    bool has_pending_io_tasks() const override;
 
 private:
     std::shared_ptr<MemLimitedChunkQueue> _queue;

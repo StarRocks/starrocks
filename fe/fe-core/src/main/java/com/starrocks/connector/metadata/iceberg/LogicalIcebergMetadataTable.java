@@ -46,7 +46,7 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
 
     public static LogicalIcebergMetadataTable create(String catalogName, String originDb, String originTable) {
         return new LogicalIcebergMetadataTable(catalogName,
-                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
                 TABLE_NAME,
                 Table.TableType.METADATA,
                 builder()
@@ -65,6 +65,7 @@ public class LogicalIcebergMetadataTable extends MetadataTable {
                         .column("data_sequence_number", BIGINT)
                         .column("column_stats", VARBINARY)
                         .column("key_metadata", VARBINARY)
+                        .column("first_row_id", BIGINT)
                         .build(),
                 originDb,
                 originTable,

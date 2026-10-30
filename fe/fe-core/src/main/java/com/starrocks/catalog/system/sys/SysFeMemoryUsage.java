@@ -16,7 +16,9 @@ package com.starrocks.catalog.system.sys;
 
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
@@ -56,12 +58,18 @@ public class SysFeMemoryUsage {
         try {
             Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
-            throw new TException(e.getMessage(), e);
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
 
         TFeMemoryRes response = new TFeMemoryRes();
 
-        MemoryUsageTracker.MEMORY_USAGE.forEach((moduleName, module) -> {
+        // Collect rather than read what is already there. The periodic task stopped filling
+        // MEMORY_USAGE when estimateSize() was moved out of it, so reading the map answers an
+        // empty table on a server nobody has curled /api/memory_usage on -- which is every server,
+        // since that endpoint only answers 127.0.0.1.
+        MemoryUsageTracker.collectMemoryUsage().forEach((moduleName, module) -> {
             if (module != null) {
                 module.forEach((className, memoryStat) -> {
                     TFeMemoryItem item = new TFeMemoryItem();

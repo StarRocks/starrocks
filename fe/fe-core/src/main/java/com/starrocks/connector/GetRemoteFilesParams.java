@@ -35,6 +35,13 @@ public class GetRemoteFilesParams {
     private boolean enableColumnStats = false;
     private Optional<Boolean> isRecursive = Optional.empty();
     private boolean usedForDelete = false;
+    // Bounded-cost statistics-scan budgets. Each cap <= 0 means that dimension is unlimited; all three
+    // <= 0 (the default) disables the whole mechanism, so ordinary reads are byte-for-byte unaffected.
+    // A lazy split iterator that carries any positive cap accumulates as it emits tasks and stops early
+    // once a cap is reached, turning an oversized (partition, column) statistics scan into a bounded one.
+    private long scanBytesCap = -1;
+    private long scanFilesCap = -1;
+    private long scanRowsCap = -1;
 
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
@@ -49,6 +56,9 @@ public class GetRemoteFilesParams {
         this.enableColumnStats = builder.enableColumnStats;
         this.isRecursive = builder.isRecursive;
         this.usedForDelete = builder.usedForDelete;
+        this.scanBytesCap = builder.scanBytesCap;
+        this.scanFilesCap = builder.scanFilesCap;
+        this.scanRowsCap = builder.scanRowsCap;
     }
 
     public int getPartitionSize() {
@@ -73,7 +83,10 @@ public class GetRemoteFilesParams {
                 .setUseCache(useCache)
                 .setCheckPartitionExistence(checkPartitionExistence)
                 .setEnableColumnStats(enableColumnStats)
-                .setUsedForDelete(usedForDelete);
+                .setUsedForDelete(usedForDelete)
+                .setScanBytesCap(scanBytesCap)
+                .setScanFilesCap(scanFilesCap)
+                .setScanRowsCap(scanRowsCap);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -160,6 +173,24 @@ public class GetRemoteFilesParams {
         return usedForDelete;
     }
 
+    public long getScanBytesCap() {
+        return scanBytesCap;
+    }
+
+    public long getScanFilesCap() {
+        return scanFilesCap;
+    }
+
+    public long getScanRowsCap() {
+        return scanRowsCap;
+    }
+
+    // True when at least one bounded-cost statistics-scan budget is active. Used by connectors to
+    // decide whether to bypass the split cache and enforce early stop; false leaves reads untouched.
+    public boolean hasScanBudget() {
+        return scanBytesCap > 0 || scanFilesCap > 0 || scanRowsCap > 0;
+    }
+
     public static class Builder {
         private List<PartitionKey> partitionKeys;
         private List<String> partitionNames;
@@ -173,6 +204,9 @@ public class GetRemoteFilesParams {
         private boolean enableColumnStats = false;
         private Optional<Boolean> isRecursive = Optional.empty();
         private boolean usedForDelete = false;
+        private long scanBytesCap = -1;
+        private long scanFilesCap = -1;
+        private long scanRowsCap = -1;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -231,6 +265,21 @@ public class GetRemoteFilesParams {
 
         public Builder setUsedForDelete(boolean usedForDelete) {
             this.usedForDelete = usedForDelete;
+            return this;
+        }
+
+        public Builder setScanBytesCap(long scanBytesCap) {
+            this.scanBytesCap = scanBytesCap;
+            return this;
+        }
+
+        public Builder setScanFilesCap(long scanFilesCap) {
+            this.scanFilesCap = scanFilesCap;
+            return this;
+        }
+
+        public Builder setScanRowsCap(long scanRowsCap) {
+            this.scanRowsCap = scanRowsCap;
             return this;
         }
 

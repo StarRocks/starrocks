@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 0.9
+description: "Converts an input into the specified type."
 ---
 
 # CAST
@@ -11,10 +12,17 @@ Converts an input into the specified type. For example, `cast (input as BIGINT)`
 
 From v2.4, StarRocks supports conversion to the ARRAY type.
 
+:::note
+
+`CAST(input AS CHAR(N))` truncates the result to the first `N` characters, consistent with MySQL. For example, `CAST(1775580223839 AS CHAR(10))` returns `1775580223`. `CAST(input AS CHAR)` without a length and `CAST(input AS VARCHAR(N))` are not truncated.
+
+:::
+
 ## Syntax
 
 ```Haskell
-cast (input as type)
+cast(input as type)
+input :: type
 ```
 
 ## Parameters
@@ -60,7 +68,25 @@ Example 1: common data conversions
     +-------------------+
 ```
 
-Example 2: Convert the input into ARRAY.
+Example 2: Same conversions using the `::` shorthand.
+
+```Plain Text
+    select '9.5'::DECIMAL(10,2);
+    select NULL::INT;
+    select 1::BIGINT;
+    select '5'::INT::STRING;       -- chained cast
+    select (1 + 2)::DECIMAL(10,2); -- parenthesized expression
+```
+
+`::` is equivalent to `CAST(input AS type)` and uses StarRocks cast semantics.
+
+:::warning
+
+If a view or materialized view DDL uses `::`, the saved original definition can contain `::`. Such definitions are not backward compatible with older StarRocks versions or tools that do not parse the shorthand syntax.
+
+:::
+
+Example 3: Convert the input into ARRAY.
 
 ```Plain Text
     -- Convert string to ARRAY<ANY>.
@@ -117,7 +143,7 @@ Example 2: Convert the input into ARRAY.
     +--------------------------------------------------------------+
 ```
 
-Example 3: Convert data during loading.
+Example 4: Convert data during loading.
 
 ```bash
     curl --location-trusted -u <username>:<password> -T ~/user_data/bigint \

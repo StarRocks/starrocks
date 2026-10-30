@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Privileges granted to users or roles determine which operations can be performed on specific objects in StarRocks."
 sidebar_position: 20
 sidebar_label: "权限项"
 ---
@@ -20,6 +21,15 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 ### 系统级权限 (SYSTEM)
 
 <PrivCreateWarehouse />
+
+### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
+
+| 对象 | 权限 | 用途 |
+| --- | --- | --- |
+| AI FUNCTION | USAGE | 使用指定的 AI 函数。 |
+| AI PROVIDER | USAGE | 使用指定的 AI Provider。 |
+
+> 说明：调用 AI 函数需要同时具备函数和所选 Provider 的 USAGE 权限，包括默认 Provider。管理 Provider 需要 SYSTEM OPERATE 权限。
 
 ### 资源组权限 (RESOURCE GROUP)
 
@@ -95,6 +105,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 权限   | 用途                         |
 | ------ | ---------------------------- |
 | SELECT | 查询视图 (view) 中的数据。   |
+| EXPORT | 仅支持设置/取消 EXPORT 权限，尚不支持 EXPORT TABLE。 |
 | ALTER  | 修改一个视图的定义。         |
 | DROP   | 删除一个逻辑视图。           |
 | ALL    | 拥有对该视图的上述所有权限。 |
@@ -104,6 +115,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 权限    | 用途                                                         |
 | ------- | ------------------------------------------------------------ |
 | SELECT  | 查询时引用该物化视图 (materialized view) 的数据，以加速查询。 |
+| EXPORT  | 仅支持设置/取消 EXPORT 权限，尚不支持 EXPORT TABLE。 |
 | ALTER   | 更改物化视图。                                               |
 | REFRESH | 刷新物化视图。                                               |
 | DROP    | 删除物化视图。                                               |
@@ -121,9 +133,9 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 | 权限    | 用途                                                         |
 | ------- | ------------------------------------------------------------ |
-| ALTER | 更改存储卷的认证属性、注释或状态（enabled）。      |
+| ALTER | 更改存储卷的认证属性、注释或状态（enabled），以及设置指定存储卷为默认存储卷。      |
 | DROP  | 删除指定存储卷。                 |
-| USAGE | 查看指定存储卷的信息，设置指定存储卷为默认存储卷。   |
+| USAGE | 查看指定存储卷的信息。   |
 | ALL   | 拥有对该存储卷的上述所有权限。 |
 
 <PrivWarehouse />

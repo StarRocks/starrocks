@@ -83,6 +83,7 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
+                joinOperator.getPredicateCommonOperators(),
                 joinOperator.getProjection());
         OptExpression result = OptExpression.create(physicalNestLoopJoin, commutedExpr.getInputs());
         return Lists.newArrayList(result);

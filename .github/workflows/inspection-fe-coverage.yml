@@ -49,6 +49,9 @@ jobs:
     env:
       OSS_CMD: "ossutil64 --config-file /root/.ossutilconfig"
       JAVA_HOME: /var/local/env/jdk1.8.0_202
+      # Scratch dir the FE UT tarball unpacks into. Deliberately NOT the repo's own `fe/`,
+      # which is tracked and so survives `git clean`. See ci-report.yml.
+      FE_UT_UNPACK_DIR: fe-ut-report
     outputs:
       FE_COV_RES_FILE: ${{ steps.incremental_cov_report.outputs.FE_COV_RES_FILE }}
 
@@ -70,14 +73,17 @@ jobs:
             echo "::error::FE UT result not exit!"
             exit 1
           fi
-          mkdir fe && cd fe
+          # Unpack into a scratch dir, not the tracked `fe/`: that survives
+          # `git clean -ffdxq`, so a bare mkdir fails and the `cd` is skipped without
+          # tripping `set -e`, unpacking into the workspace root. See ci-report.yml.
+          rm -rf ${FE_UT_UNPACK_DIR} && mkdir ${FE_UT_UNPACK_DIR} && cd ${FE_UT_UNPACK_DIR}
           ${OSS_CMD} cp ${oss_path}/ . --recursive
           tar zxf fe_ut_report.tar.gz
 
       - name: Merge FE Coverage
         id: merge_report
         env:
-          fe_path: ${{ github.workspace }}/fe
+          fe_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}
         run: |
           export PATH=$JAVA_HOME/bin:$PATH;
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
@@ -91,8 +97,8 @@ jobs:
         id: generate-xml-report
         env:
           package_path: ${{ github.workspace }}/ci-tool/package
-          fe_path: ${{ github.workspace }}/fe
-          fe_core_path: ${{ github.workspace }}/fe/fe-core
+          fe_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}
+          fe_core_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}/fe-core
         run: |
           rm -rf result
           export PATH=$JAVA_HOME/bin:$PATH;
@@ -109,7 +115,7 @@ jobs:
       - name: Incremental Coverage Report - Total
         id: incremental_cov_report
         env:
-          fe_path: ${{ github.workspace }}/fe
+          fe_path: ${{ github.workspace }}/${{ env.FE_UT_UNPACK_DIR }}
         run: |
           rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
           export PATH=$JAVA_HOME/bin:$PATH;

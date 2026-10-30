@@ -1,0 +1,726 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "cache/scan/cache_input_stream.h"
+
+#include <gtest/gtest.h>
+
+#include "base/testutil/assert.h"
+#include "cache/datacache.h"
+#include "cache/disk_cache/starcache_engine.h"
+#include "cache/disk_cache/test_cache_utils.h"
+#include "cache/peer_cache_engine.h"
+#include "common/config_cache_fwd.h"
+#include "exec/exec_env.h"
+#include "fs/fs_util.h"
+#include "runtime/current_thread.h"
+
+namespace starrocks {
+
+namespace {
+
+bool g_cache_input_stream_test_env_initialized = false;
+MemTracker* g_cache_input_stream_test_mem_tracker = nullptr;
+
+bool cache_input_stream_test_env_initialized() {
+    return g_cache_input_stream_test_env_initialized;
+}
+
+MemTracker* cache_input_stream_test_mem_tracker() {
+    return g_cache_input_stream_test_mem_tracker;
+}
+
+} // namespace
+
+class MockSeekableInputStream : public io::SeekableInputStream {
+public:
+    explicit MockSeekableInputStream(char* contents, int64_t size) : _contents(contents), _size(size) {}
+
+    StatusOr<int64_t> read(void* data, int64_t count) override {
+        count = std::min(count, _size - _offset);
+        memcpy(data, &_contents[_offset], count);
+        _offset += count;
+        return count;
+    }
+
+    Status seek(int64_t position) override {
+        _offset = std::min<int64_t>(position, _size);
+        return Status::OK();
+    }
+
+    StatusOr<int64_t> position() override { return _offset; }
+
+    StatusOr<int64_t> get_size() override { return _size; }
+
+private:
+    const char* _contents;
+    int64_t _size;
+    int64_t _offset{0};
+};
+
+class FailOnceSeekableInputStream : public MockSeekableInputStream {
+public:
+    using MockSeekableInputStream::MockSeekableInputStream;
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        ++_read_count;
+        if (_read_count == 1) {
+            // Leave a deterministic invalid tail after a partial remote read.
+            memset(out, 'x', count);
+            RETURN_IF_ERROR(MockSeekableInputStream::read_at_fully(offset, out, std::min<int64_t>(count, 16)));
+            return Status::IOError("injected partial read failure");
+        }
+        return MockSeekableInputStream::read_at_fully(offset, out, count);
+    }
+
+    int read_count() const { return _read_count; }
+
+private:
+    int _read_count = 0;
+};
+
+class CacheInputStreamTest : public ::testing::Test {
+public:
+    static DiskCacheOptions cache_options() {
+        DiskCacheOptions options;
+        options.mem_space_size = 100 * MB;
+        options.enable_checksum = false;
+        options.max_concurrent_inserts = 1500000;
+        options.max_flying_memory_mb = 100;
+        options.block_size = block_size;
+        options.skip_read_factor = 1.0;
+        return options;
+    }
+
+    static void TearDownTestCase() {
+        auto cache = BlockCache::instance();
+        if (cache) {
+            BlockCache::instance()->shutdown();
+        }
+    }
+
+    void SetUp() override {
+        SetUpCurrentThreadMemTracker();
+        _saved_enable_auto_adjust = config::enable_datacache_disk_auto_adjust;
+        config::enable_datacache_disk_auto_adjust = false;
+
+        DiskCacheOptions options = cache_options();
+        auto block_cache = TestCacheUtils::create_cache(options);
+        DataCache::GetInstance()->set_block_cache(block_cache);
+    }
+    void TearDown() override {
+        config::enable_datacache_disk_auto_adjust = _saved_enable_auto_adjust;
+        TearDownCurrentThreadMemTracker();
+    }
+
+    void SetUpCurrentThreadMemTracker() {
+        g_cache_input_stream_test_env_initialized = true;
+        g_cache_input_stream_test_mem_tracker = &_mem_tracker;
+        CurrentThread::set_mem_tracker_source(cache_input_stream_test_env_initialized,
+                                              cache_input_stream_test_mem_tracker);
+        tls_mem_tracker = nullptr;
+    }
+
+    void TearDownCurrentThreadMemTracker() {
+        tls_thread_status.set_mem_tracker(nullptr);
+        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        g_cache_input_stream_test_env_initialized = false;
+        g_cache_input_stream_test_mem_tracker = nullptr;
+    }
+
+    static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
+        ASSERT_OK(stream->seek(offset));
+        auto res = stream->read(data, size);
+        ASSERT_TRUE(res.ok());
+    }
+
+    static void gen_test_data(char* data, int64_t size, int64_t block_size) {
+        for (int i = 0; i <= (size - 1) / block_size; ++i) {
+            int64_t offset = i * block_size;
+            int64_t count = std::min(block_size, size - offset);
+            memset(data + offset, 'a' + i, count);
+        }
+    }
+
+    static bool check_data_content(char* data, int64_t size, char content) {
+        for (int i = 0; i < size; ++i) {
+            if (data[i] != content) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static const int64_t block_size;
+
+private:
+    bool _saved_enable_auto_adjust = false;
+    MemTracker _mem_tracker;
+};
+
+const int64_t CacheInputStreamTest::block_size = 256 * 1024;
+
+TEST_F(CacheInputStreamTest, test_aligned_read) {
+    const int64_t block_count = 3;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file1";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    auto& stats = cache_stream.stats();
+
+    // first read from backend
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
+
+    // first read from cache
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_block_cache_count, block_count);
+}
+
+TEST_F(CacheInputStreamTest, test_random_read) {
+    const int64_t block_count = 3;
+
+    const int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file2";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    auto& stats = cache_stream.stats();
+
+    // first read from backend
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
+
+    // seek to a custom postion in second block, and read multiple block
+    int64_t off_in_block = 100;
+    ASSERT_OK(cache_stream.seek(block_size + off_in_block));
+    ASSERT_EQ(cache_stream.position().value(), block_size + off_in_block);
+
+    char buffer[block_size * 2];
+    auto res = cache_stream.read(buffer, block_size * 2);
+    ASSERT_TRUE(res.ok());
+
+    ASSERT_TRUE(check_data_content(buffer, block_size - off_in_block, 'a' + 1));
+    ASSERT_TRUE(check_data_content(buffer + block_size - off_in_block, block_size, 'a' + 2));
+
+    ASSERT_EQ(stats.read_block_cache_count, 2);
+}
+
+TEST_F(CacheInputStreamTest, test_file_overwrite) {
+    const int64_t block_count = 3;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file3";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    auto& stats = cache_stream.stats();
+
+    // first read from backend
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
+
+    // first read from cache
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_block_cache_count, block_count);
+
+    // With different modification time, the old cache cannot be used
+    CacheInputStream cache_stream2(sb_stream, file_name, data_size, 2000000);
+    cache_stream2.set_enable_populate_cache(true);
+    auto& stats2 = cache_stream2.stats();
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream2, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats2.read_block_cache_count, 0);
+}
+
+TEST_F(CacheInputStreamTest, test_read_from_io_buffer) {
+    const int64_t block_count = 1;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file3";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
+    auto& stats = cache_stream.stats();
+
+    // read from backend, cache the data
+    char buffer[block_size];
+    read_stream_data(&cache_stream, 0, block_size, buffer);
+    ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, 1);
+
+    // read the first 1024 bytes from cache, actually it will read the whole block from cache
+    // and save it to block buffer.
+    read_stream_data(&cache_stream, 0, 1024, buffer);
+    ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+    ASSERT_EQ(stats.read_block_cache_count, 1);
+
+    read_stream_data(&cache_stream, 1024, 1024, buffer);
+    ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+    ASSERT_EQ(stats.read_block_buffer_count, 1);
+}
+
+TEST_F(CacheInputStreamTest, test_read_zero_copy) {
+    int64_t data_size = block_size + 1024;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file3";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(false);
+
+    // read from backend, cache the data
+    size_t count = data_size - 10;
+    char buffer[count];
+    read_stream_data(&cache_stream, 10, count, buffer);
+    ASSERT_TRUE(check_data_content(buffer, block_size - 10, 'a'));
+    ASSERT_TRUE(check_data_content(buffer + block_size - 10, 1024, 'b'));
+}
+
+TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
+    const int64_t block_count = 1;
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file4";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
+    auto& stats = cache_stream.stats();
+
+    // read from backend, cache the data
+    char buffer[block_size];
+    read_stream_data(&cache_stream, 0, block_size, buffer);
+    ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, 1);
+
+    // try read zero length data, expect no crash
+    read_stream_data(&cache_stream, 0, 0, nullptr);
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+}
+
+TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
+    const std::string cache_dir = "./cache_input_stream_cache_dir";
+    fs::create_directories(cache_dir);
+
+    DiskCacheOptions options = cache_options();
+    // Because the cache adaptor only work for disk cache.
+    options.dir_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
+    auto block_cache = TestCacheUtils::create_cache(options);
+    DataCache::GetInstance()->set_block_cache(block_cache);
+
+    const int64_t block_count = 2;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file5";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_cache_io_adaptor(true);
+    auto& stats = cache_stream.stats();
+
+    const size_t read_size = block_size * block_count;
+    sb_stream->_shared_io_bytes = read_size;
+    sb_stream->_shared_io_timer = 10000;
+
+    // first read from backend
+    {
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        ASSERT_EQ(stats.read_block_cache_count, 0);
+        ASSERT_EQ(stats.write_block_cache_count, block_count);
+    }
+
+    auto cache = BlockCache::instance();
+    const int kAdaptorWindowSize = 50;
+
+    {
+        // Record read latencyr to ensure cache latency > remote latency
+        // so all blocks read from remote.
+        for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
+            cache->record_read_local_cache(read_size, 1000000000);
+            cache->record_read_remote_storage(read_size, 10, true);
+        }
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        ASSERT_EQ(stats.read_block_cache_count, 0);
+    }
+
+    {
+        // Record read latencyr to ensure cache latency < remote latency
+        // so all blocks read from cache.
+        for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
+            cache->record_read_local_cache(read_size, 10);
+            cache->record_read_remote_storage(read_size, 1000000000, true);
+        }
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        ASSERT_EQ(stats.read_block_cache_count, block_count);
+    }
+    fs::remove_all(cache_dir);
+}
+
+TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {
+    const int64_t block_count = 2;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file6";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
+
+    // Add a dummy block buffer to check the duplicate shared buffer.
+    CacheInputStream::BlockBuffer dummy_block_buffer;
+    dummy_block_buffer.offset = 10000000;
+    cache_stream._block_map[dummy_block_buffer.offset] = dummy_block_buffer;
+
+    const size_t read_size = block_size * block_count;
+    std::vector<SharedBufferedInputStream::IORange> io_ranges;
+    io_ranges.emplace_back(0, read_size);
+    sb_stream->set_io_ranges(io_ranges);
+
+    // first read from backend
+    {
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+        ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
+        //ASSERT_EQ(stats.write_cache_count, block_count);
+    }
+
+    // second read from shared buffer
+    {
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_EQ(sb_stream->shared_io_bytes(), read_size);
+    }
+}
+
+TEST_F(CacheInputStreamTest, failed_shared_buffer_read_does_not_populate_cache) {
+    std::string data(block_size, 'a');
+    const std::string file_name = "test_failed_shared_buffer_read";
+    auto stream = std::make_shared<FailOnceSeekableInputStream>(data.data(), data.size());
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data.size());
+    sb_stream->set_align_size(block_size);
+    ASSERT_OK(sb_stream->set_io_ranges({SharedBufferedInputStream::IORange(0, block_size)}));
+
+    CacheInputStream cache_stream(sb_stream, file_name, data.size(), 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_async_populate_mode(false);
+
+    std::string result(block_size, '\0');
+    auto status = cache_stream.read_at_fully(0, result.data(), result.size());
+    ASSERT_TRUE(status.is_io_error()) << status.to_string();
+    ASSERT_EQ("injected partial read failure", status.message());
+    ASSERT_EQ(1, stream->read_count());
+    ASSERT_TRUE(sb_stream->peek(16).status().is_not_supported());
+    ASSERT_TRUE(sb_stream->peek_shared_buffer(16, nullptr).status().is_not_supported());
+    ASSERT_TRUE(cache_stream.peek(16).status().is_not_supported());
+    ASSERT_EQ(0, cache_stream.stats().write_block_cache_count);
+
+    // Retrying must perform another remote read instead of reusing partial data.
+    ASSERT_OK(cache_stream.read_at_fully(0, result.data(), result.size()));
+    ASSERT_EQ(2, stream->read_count());
+    ASSERT_EQ(data, result);
+    ASSERT_EQ(1, cache_stream.stats().write_block_cache_count);
+    ASSERT_EQ(2, sb_stream->shared_io_count());
+
+    // A new stream with the same cache key must find the complete, correct block.
+    std::string wrong_data(block_size, 'z');
+    auto new_stream = std::make_shared<MockSeekableInputStream>(wrong_data.data(), wrong_data.size());
+    auto new_sb_stream = std::make_shared<SharedBufferedInputStream>(new_stream, file_name, wrong_data.size());
+    CacheInputStream new_cache_stream(new_sb_stream, file_name, wrong_data.size(), 1000000);
+    ASSERT_OK(new_cache_stream.read_at_fully(0, result.data(), result.size()));
+    ASSERT_EQ(data, result);
+    ASSERT_EQ(1, new_cache_stream.stats().read_block_cache_count);
+    ASSERT_EQ(0, new_sb_stream->shared_io_count());
+    ASSERT_EQ(0, new_sb_stream->direct_io_count());
+}
+
+TEST_F(CacheInputStreamTest, test_peek) {
+    const int64_t block_count = 2;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file6";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
+    cache_stream.set_enable_async_populate_mode(true);
+
+    const size_t read_size = block_size * block_count;
+    std::vector<SharedBufferedInputStream::IORange> io_ranges;
+    io_ranges.emplace_back(0, read_size);
+    sb_stream->set_io_ranges(io_ranges);
+
+    // first read from backend
+    {
+        const size_t read_size = block_size;
+        char buffer[read_size];
+        read_stream_data(&cache_stream, 0, read_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+    }
+
+    // peek read from shared buffer
+    {
+        const size_t peek_size = block_size;
+        auto res = cache_stream.peek(peek_size);
+        ASSERT_TRUE(res.ok());
+        auto str_view = res.value();
+        ASSERT_EQ(str_view.length(), peek_size);
+    }
+}
+
+class BufferedPeerCacheEngine : public PeerCacheEngine {
+public:
+    explicit BufferedPeerCacheEngine(const std::string& data) : _data(data) {}
+
+    Status read(const std::string& key, size_t offset, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override {
+        if (offset > _data.size() || size > _data.size() - offset) {
+            return Status::InvalidArgument("peer read exceeds file size");
+        }
+        buffer->raw_buf().append(_data.data() + offset, size);
+        return Status::OK();
+    }
+
+private:
+    const std::string _data;
+};
+
+TEST_F(CacheInputStreamTest, test_peer_cache_read_without_block_buffer) {
+    std::string data(2 * block_size + 31, '\0');
+    for (size_t i = 0; i < data.size(); ++i) {
+        data[i] = static_cast<char>('a' + i % 23);
+    }
+    // Different source bytes make an unintended fallback observable.
+    std::string source(data.size(), 'x');
+    auto peer_cache = std::make_shared<BufferedPeerCacheEngine>(data);
+    ASSERT_OK(peer_cache->init(RemoteCacheOptions{}));
+    BlockCache::instance()->_remote_cache = peer_cache;
+
+    for (bool enable_block_buffer : {false, true}) {
+        for (bool populate_cache : {false, true}) {
+            SCOPED_TRACE(::testing::Message()
+                         << "block_buffer=" << enable_block_buffer << ", populate=" << populate_cache);
+            const std::string file_name =
+                    "peer_read_" + std::to_string(enable_block_buffer) + "_" + std::to_string(populate_cache);
+            auto stream = std::make_shared<MockSeekableInputStream>(source.data(), source.size());
+            auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data.size());
+            CacheInputStream cache_stream(sb_stream, file_name, data.size(), 1000000);
+            cache_stream.set_enable_block_buffer(enable_block_buffer);
+            cache_stream.set_enable_populate_cache(populate_cache);
+            cache_stream.set_enable_async_populate_mode(false);
+            cache_stream.set_enable_cache_io_adaptor(false);
+            cache_stream.set_peer_cache_node("peer:1234");
+
+            auto check_read = [&](int64_t offset, int64_t size) {
+                std::string result(size, '?');
+                ASSERT_OK(cache_stream.read_at_fully(offset, result.data(), size));
+                ASSERT_EQ(result, data.substr(offset, size));
+            };
+            check_read(37, 71);
+            check_read(block_size - 11, 40);
+            check_read(2 * block_size + 7, 24);
+            check_read(0, block_size);
+            ASSERT_GT(cache_stream.stats().read_peer_cache_count, 0);
+            if (!enable_block_buffer) {
+                ASSERT_TRUE(cache_stream._block_map.empty());
+                ASSERT_EQ(cache_stream.stats().read_block_buffer_count, 0);
+            }
+        }
+    }
+}
+
+class FailingPeerCacheEngine : public PeerCacheEngine {
+public:
+    Status read(const std::string& key, size_t offset, size_t size, IOBuffer* buffer,
+                DiskCacheReadOptions* options) override {
+        return Status::IOError("injected peer cache error");
+    }
+};
+
+TEST_F(CacheInputStreamTest, test_read_cache_error_falls_back_to_remote) {
+    const int64_t block_count = 3;
+    const int64_t data_size = block_size * block_count;
+    std::vector<char> data(data_size);
+    gen_test_data(data.data(), data_size, block_size);
+    auto peer_cache = std::make_shared<FailingPeerCacheEngine>();
+    ASSERT_OK(peer_cache->init(RemoteCacheOptions{}));
+    BlockCache::instance()->_remote_cache = peer_cache;
+
+    const std::string file_name = "test_read_cache_error";
+    auto stream = std::make_shared<MockSeekableInputStream>(data.data(), data_size);
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data_size);
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_peer_cache_node("peer:1234");
+
+    std::vector<char> buffer(data_size);
+    ASSERT_OK(cache_stream.read_at_fully(0, buffer.data(), data_size));
+    ASSERT_EQ(0, memcmp(buffer.data(), data.data(), data_size));
+    const auto& stats = cache_stream.stats();
+    // Every block misses locally, and the peer read error is counted rather than returned.
+    ASSERT_EQ(block_count, stats.read_cache_error_count);
+    ASSERT_EQ(0, stats.read_peer_cache_count);
+    ASSERT_EQ(0, stats.skip_read_peer_cache_count);
+}
+
+TEST_F(CacheInputStreamTest, test_try_peer_cache) {
+    const int64_t block_count = 3;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_try_peer_cache";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<SharedBufferedInputStream> sb_stream(new SharedBufferedInputStream(stream, file_name, data_size));
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+
+    cache_stream.set_peer_cache_node("1.1.1.1:1");
+    ASSERT_EQ(cache_stream._peer_host, "1.1.1.1");
+    ASSERT_EQ(cache_stream._peer_port, 1);
+    // Replace with a invalid ip for test
+    cache_stream._peer_host = "127.0.0.1";
+    auto& stats = cache_stream.stats();
+
+    // first read from backend
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_block_cache_count, 0);
+    ASSERT_EQ(stats.write_block_cache_count, block_count);
+
+    // first read from local cache
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_block_cache_count, block_count);
+}
+
+TEST_F(CacheInputStreamTest, test_remove_cached_blocks) {
+    const int64_t block_count = 4;
+    const int64_t data_size = block_size * block_count;
+    std::vector<char> data(data_size + 1);
+    gen_test_data(data.data(), data_size, block_size);
+    const std::string file_name = "test_remove_cached_blocks";
+    const int64_t modification_time = 1000000;
+
+    // Populate all the blocks. Nothing is read from the datacache, so nothing is removed.
+    {
+        std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data.data(), data_size));
+        auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data_size);
+        CacheInputStream cache_stream(sb_stream, file_name, data_size, modification_time);
+        cache_stream.set_enable_populate_cache(true);
+        std::vector<char> buffer(data_size);
+        ASSERT_OK(cache_stream.read_at_fully(0, buffer.data(), data_size));
+        ASSERT_EQ(block_count, cache_stream.stats().write_block_cache_count);
+        ASSERT_EQ(0, cache_stream.remove_cached_blocks());
+    }
+
+    // Only the blocks read from the datacache are removed.
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data.data(), data_size));
+    auto sb_stream = std::make_shared<SharedBufferedInputStream>(stream, file_name, data_size);
+    CacheInputStream cache_stream(sb_stream, file_name, data_size, modification_time);
+    std::vector<char> buffer(2 * block_size);
+    ASSERT_OK(cache_stream.read_at_fully(block_size, buffer.data(), 2 * block_size));
+    ASSERT_EQ(2, cache_stream.stats().read_block_cache_count);
+    ASSERT_EQ(2, cache_stream.remove_cached_blocks());
+
+    auto* cache = BlockCache::instance();
+    const std::string cache_key = CacheInputStream::calc_cache_key(file_name, data_size, modification_time);
+    ASSERT_TRUE(cache->exist(cache_key, 0, block_size));
+    ASSERT_FALSE(cache->exist(cache_key, block_size, block_size));
+    ASSERT_FALSE(cache->exist(cache_key, 2 * block_size, block_size));
+    ASSERT_TRUE(cache->exist(cache_key, 3 * block_size, block_size));
+}
+
+} // namespace starrocks

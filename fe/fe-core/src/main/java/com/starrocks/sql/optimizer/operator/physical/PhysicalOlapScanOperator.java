@@ -46,6 +46,7 @@ import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     private DistributionSpec distributionSpec;
+    private boolean parallelRangeScan;
     private long selectedIndexMetaId;
     private List<Long> selectedTabletId;
     private List<Long> hintsReplicaId;
@@ -101,6 +102,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     public PhysicalOlapScanOperator(LogicalOlapScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
         this.distributionSpec = scanOperator.getDistributionSpec();
+        this.parallelRangeScan = scanOperator.isParallelRangeScan();
         this.selectedIndexMetaId = scanOperator.getSelectedIndexMetaId();
         this.gtid = scanOperator.getGtid();
         this.selectedPartitionId = scanOperator.getSelectedPartitionId();
@@ -148,7 +150,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         for (Long partitionId : getSelectedPartitionId()) {
             final Partition partition = ((OlapTable) getTable()).getPartition(partitionId);
             for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                final MaterializedIndex selectedTable = subPartition.getLatestIndex(getSelectedIndexMetaId());
+                final MaterializedIndex selectedTable = subPartition.getQueryableIndex(getSelectedIndexMetaId());
                 totalTabletsNum += selectedTable.getTablets().size();
             }
         }
@@ -251,7 +253,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexMetaId, selectedPartitionId,
+        return Objects.hash(super.hashCode(), parallelRangeScan, selectedIndexMetaId, selectedPartitionId,
                 selectedTabletId, sample);
     }
 
@@ -267,12 +269,22 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             return false;
         }
         PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
-        return selectedIndexMetaId == that.selectedIndexMetaId &&
+        return parallelRangeScan == that.parallelRangeScan &&
+                selectedIndexMetaId == that.selectedIndexMetaId &&
                 gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(sample, that.sample) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId);
+    }
+
+    // Only for construction/copy before memo insertion; never switch a memo implementation's mode.
+    public void setParallelRangeScan(boolean parallelRangeScan) {
+        this.parallelRangeScan = parallelRangeScan;
+    }
+
+    public boolean isParallelRangeScan() {
+        return parallelRangeScan;
     }
 
     public DistributionSpec getDistributionSpec() {
@@ -307,6 +319,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         public Builder withOperator(PhysicalOlapScanOperator operator) {
             super.withOperator(operator);
             builder.distributionSpec = operator.distributionSpec;
+            builder.parallelRangeScan = operator.parallelRangeScan;
             builder.selectedIndexMetaId = operator.selectedIndexMetaId;
             builder.gtid = operator.gtid;
             builder.selectedTabletId = operator.selectedTabletId;
@@ -319,10 +332,16 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             builder.needOutputChunkByBucket = operator.needOutputChunkByBucket;
             builder.usePkIndex = operator.usePkIndex;
             builder.globalDicts = operator.globalDicts;
+            builder.globalDictsExpr = operator.globalDictsExpr;
+
             builder.prunedPartitionPredicates = operator.prunedPartitionPredicates;
             builder.vectorSearchOptions = operator.vectorSearchOptions;
             builder.sample = operator.getSample();
             builder.columnAccessPaths = operator.columnAccessPaths;
+
+            builder.withoutColocateRequirement = operator.withoutColocateRequirement;
+            builder.needOutputChunkByBucket = operator.needOutputChunkByBucket;
+            builder.needSortedByKeyPerTablet = operator.needSortedByKeyPerTablet;
             return this;
         }
 

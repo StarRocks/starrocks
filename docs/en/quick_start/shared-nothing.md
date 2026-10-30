@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 1
+sidebar_position: 20
 description: "StarRocks in Docker: Query real data with JOINs"
 ---
 import DDL from '../_assets/quick-start/_DDL.mdx'

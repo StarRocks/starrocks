@@ -19,6 +19,7 @@
 
 #include "column/array_column.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 class HashFunctionsTest : public ::testing::Test {
@@ -29,8 +30,7 @@ public:
 TEST_F(HashFunctionsTest, hashTest) {
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("test1234567");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"test1234567"});
 
         columns.emplace_back(std::move(tc1));
 
@@ -44,11 +44,8 @@ TEST_F(HashFunctionsTest, hashTest) {
 
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("test1234567");
-
-        auto tc2 = BinaryColumn::create();
-        tc2->append("asdf213");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"test1234567"});
+        auto tc2 = ColumnTestHelper::build_column<Slice>({"asdf213"});
 
         columns.emplace_back(std::move(tc1));
         columns.emplace_back(std::move(tc2));
@@ -63,11 +60,8 @@ TEST_F(HashFunctionsTest, hashTest) {
 
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("test1234567");
-
-        auto tc2 = BinaryColumn::create();
-        tc2->append("asdf213");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"test1234567"});
+        auto tc2 = ColumnTestHelper::build_column<Slice>({"asdf213"});
 
         auto tc3 = ColumnHelper::create_const_null_column(1);
 
@@ -85,9 +79,7 @@ TEST_F(HashFunctionsTest, hashTest) {
 TEST_F(HashFunctionsTest, test_xx_hash3_64) {
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
-        tc1->append("starrocks");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "starrocks"});
         columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -100,13 +92,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
 
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
-        tc1->append("hello");
-
-        auto tc2 = BinaryColumn::create();
-        tc2->append("world");
-        tc2->append("starrocks");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "hello"});
+        auto tc2 = ColumnTestHelper::build_column<Slice>({"world", "starrocks"});
 
         columns.emplace_back(std::move(tc1));
         columns.emplace_back(std::move(tc2));
@@ -121,13 +108,11 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
 
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello"});
 
         auto tc2 = ColumnHelper::create_const_null_column(1);
 
-        auto tc3 = BinaryColumn::create();
-        tc3->append("world");
+        auto tc3 = ColumnTestHelper::build_column<Slice>({"world"});
 
         columns.emplace_back(std::move(tc1));
         columns.emplace_back(std::move(tc2));
@@ -140,14 +125,110 @@ TEST_F(HashFunctionsTest, test_xx_hash3_64) {
     }
 }
 
+TEST_F(HashFunctionsTest, test_xx_hash32) {
+    {
+        Columns columns;
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "starrocks"});
+        columns.emplace_back(std::move(tc1));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::xx_hash32(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(-83855367, v->immutable_data()[0]);
+        ASSERT_EQ(96518622, v->immutable_data()[1]);
+    }
+
+    {
+        Columns columns;
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "hello"});
+        auto tc2 = ColumnTestHelper::build_column<Slice>({"world", "starrocks"});
+
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::xx_hash32(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(-920844969, v->immutable_data()[0]);
+        ASSERT_EQ(-2119282653, v->immutable_data()[1]);
+    }
+
+    {
+        Columns columns;
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello"});
+
+        auto tc2 = ColumnHelper::create_const_null_column(1);
+
+        auto tc3 = ColumnTestHelper::build_column<Slice>({"world"});
+
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::xx_hash32(ctx.get(), columns).value();
+
+        ASSERT_TRUE(result->is_null(0));
+    }
+}
+
+TEST_F(HashFunctionsTest, test_xx_hash64) {
+    {
+        Columns columns;
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "starrocks"});
+        columns.emplace_back(std::move(tc1));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::xx_hash64(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(2794345569481354659, v->immutable_data()[0]);
+        ASSERT_EQ(-4658618225489912820, v->immutable_data()[1]);
+    }
+
+    {
+        Columns columns;
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "hello"});
+        auto tc2 = ColumnTestHelper::build_column<Slice>({"world", "starrocks"});
+
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::xx_hash64(ctx.get(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(8004569595807101537, v->immutable_data()[0]);
+        ASSERT_EQ(-3510511488127534002, v->immutable_data()[1]);
+    }
+
+    {
+        Columns columns;
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello"});
+
+        auto tc2 = ColumnHelper::create_const_null_column(1);
+
+        auto tc3 = ColumnTestHelper::build_column<Slice>({"world"});
+
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnPtr result = HashFunctions::xx_hash64(ctx.get(), columns).value();
+
+        ASSERT_TRUE(result->is_null(0));
+    }
+}
+
 #define INT128_LITERAL(high, low) (((int128_t)high << 64) | (uint64_t)low)
 
 TEST_F(HashFunctionsTest, test_xx_hash3_128) {
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
-        tc1->append("starrocks");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "starrocks"});
         columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -160,13 +241,8 @@ TEST_F(HashFunctionsTest, test_xx_hash3_128) {
 
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
-        tc1->append("hello");
-
-        auto tc2 = BinaryColumn::create();
-        tc2->append("world");
-        tc2->append("starrocks");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello", "hello"});
+        auto tc2 = ColumnTestHelper::build_column<Slice>({"world", "starrocks"});
 
         columns.emplace_back(std::move(tc1));
         columns.emplace_back(std::move(tc2));
@@ -181,13 +257,11 @@ TEST_F(HashFunctionsTest, test_xx_hash3_128) {
 
     {
         Columns columns;
-        auto tc1 = BinaryColumn::create();
-        tc1->append("hello");
+        auto tc1 = ColumnTestHelper::build_column<Slice>({"hello"});
 
         auto tc2 = ColumnHelper::create_const_null_column(1);
 
-        auto tc3 = BinaryColumn::create();
-        tc3->append("world");
+        auto tc3 = ColumnTestHelper::build_column<Slice>({"world"});
 
         columns.emplace_back(std::move(tc1));
         columns.emplace_back(std::move(tc2));

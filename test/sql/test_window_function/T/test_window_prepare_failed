@@ -1,0 +1,29 @@
+-- name: test_window_prepare_failed @sequential
+
+CREATE TABLE `t0` (
+  `k` int(11) NULL,
+  `v` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 values (1, 1), (1, 2), (2, 3);
+
+-- Analytor::prepare fails after the aggregate FunctionContexts have been created, so the analytor is
+-- closed from its destructor while still half-prepared. It must report the error instead of crashing the BE.
+admin enable failpoint 'analytor_prepare_failed';
+[UC]select k, sum(v) over(partition by k) from t0;
+[UC]select k, sum(v) over(partition by k order by v rows between 1 preceding and current row) from t0;
+[UC]select k, sum(v) over(partition by k), max(v) over(partition by k) from t0;
+admin disable failpoint 'analytor_prepare_failed';
+
+-- the BE must still be alive and window functions must still work
+select k, sum(v) over(partition by k order by v) as s from t0 order by k, v;
+select k, row_number() over(partition by k order by v) as rn from t0 order by k, v;
+
+CLEANUP {
+  admin disable failpoint 'analytor_prepare_failed';
+} END CLEANUP

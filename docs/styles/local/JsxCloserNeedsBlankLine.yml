@@ -1,0 +1,5 @@
+extends: script
+message: "Add a blank line before '%s'. Without it, the MDX parser may treat this closing tag as list or paragraph continuation, causing a build failure in translated output."
+level: error
+scope: raw
+script: JsxCloserNeedsBlankLine.tengo

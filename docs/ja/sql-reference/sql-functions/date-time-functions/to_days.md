@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "日付と0000-01-01の間の日数を返します。"
 ---
 
 # to_days

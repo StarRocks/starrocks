@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
 
@@ -29,6 +30,7 @@ namespace starrocks {
 // forehead declar class, because jni function init in StarRocksServer.
 class StarRocksServer;
 class RuntimeState;
+class TAuthInfo;
 } // namespace starrocks
 
 namespace starrocks {
@@ -104,9 +106,6 @@ public:
     virtual Status start(RuntimeState* state);
     // Must only return one row at most each time
     virtual Status get_next(ChunkPtr* chunk, bool* eos);
-    // factory function
-    static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
-
     TAuthInfo build_auth_info();
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
@@ -128,9 +127,9 @@ protected:
 
     // schema scanner state
     SchemaScannerState _ss_state;
-    bool _is_init;
+    bool _is_init{false};
     // this is used for sub class
-    SchemaScannerParam* _param;
+    SchemaScannerParam* _param{nullptr};
     // pointer to schema table's column desc
     ColumnDesc* _columns;
     int _column_num;

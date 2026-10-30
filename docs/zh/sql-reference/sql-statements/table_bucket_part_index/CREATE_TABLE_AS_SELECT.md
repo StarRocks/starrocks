@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE TABLE AS SELECT 创建新表并使用查询结果填充，支持同步和异步模式。"
 keywords: ['CTAS']
 ---
 
@@ -49,7 +50,7 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 | **参数**          | **必填** | **描述**                                                     |
 | ----------------- | -------- | ------------------------------------------------------------ |
 | TEMPORARY         | 否       | 创建临时表。从 v3.3.1 版本开始，StarRocks 支持在 Default Catalog 中创建临时表。更多信息，请参见 [临时表](../../../table_design/StarRocks_table_design.md#临时表)。目前，StarRocks 不支持通过 SUBMIT TASK 发起异步任务创建临时表。 |
-| column_name       | 否       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为 VARCHAR(65533)。 |
+| column_name       | 否       | 新表的列名。您无需指定列类型。StarRocks 会自动选择合适的列类型，并将 FLOAT 和 DOUBLE 转换为 DECIMAL(38,9)；将 CHAR、VARCHAR 和 STRING 转换为保留其声明长度的 VARCHAR（STRING 等同于 VARCHAR(65533)）。没有声明长度的字符串表达式（例如 `concat()` 的结果）会转换为 VARCHAR(1048576)。 |
 | index_definition  | 否       | 自 3.1.8 开始支持为新表创建 Bitmap 索引，语法是 `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] [COMMENT '']`。有关参数说明和使用限制，请参见 [Bitmap 索引](../../../table_design/indexes/Bitmap_index.md)。|
 | key_desc          | 否       | 语法是 `key_type (<col_name1> [, <col_name2>, ...])`。<br />**参数**：<ul><li>`key_type`：新表的 Key 类型。有效值：`DUPLICATE KEY` 和 `PRIMARY KEY`。默认值：`DUPLICATE KEY`。</li><li> `col_name`：组成 Key 的列。</li></ul>|
 | COMMENT           | 否       | 新表注释。                                                   |
@@ -84,21 +85,21 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT * FROM order;
+AS SELECT * FROM `order`;
 ```
 
 示例二：同步查询原表 `order`中的 `k1`、`k2` 和 `k3` 列并根据查询结果创建新表 `order_new`，然后将查询结果插入到新表中，并指定新表中列的名称为 `a`、`b` 和 `c`。
 
 ```SQL
 CREATE TABLE order_new (a, b, c)
-AS SELECT k1, k2, k3 FROM order;
+AS SELECT k1, k2, k3 FROM `order`;
 ```
 
 或
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
+AS SELECT k1 AS a, k2 AS b, k3 AS c FROM `order`;
 ```
 
 示例三：同步查询原表 `employee`中 `salary` 列的最大值并根据查询结果创建新表 `employee_new` ，然后将查询结果插入到新表中，并指定新表中列名为 `salary_new`。

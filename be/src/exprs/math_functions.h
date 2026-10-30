@@ -173,6 +173,9 @@ public:
     DEFINE_VECTORIZED_FN(cosine_similarity2);
 
     template <LogicalType TYPE>
+    DEFINE_VECTORIZED_FN(inner_product);
+
+    template <LogicalType TYPE>
     DEFINE_VECTORIZED_FN(l2_distance);
 
     template <LogicalType TYPE>
@@ -234,6 +237,7 @@ public:
     DEFINE_VECTORIZED_FN(iceberg_bucket_string);
     DEFINE_VECTORIZED_FN(iceberg_bucket_date);
     DEFINE_VECTORIZED_FN(iceberg_bucket_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_bucket_timestamptz_datetime);
     template <typename T>
     static vector<uint8_t> int_to_byte_array(T value);
     DEFINE_VECTORIZED_FN_TEMPLATE(iceberg_bucket_decimal);
@@ -360,8 +364,8 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(pmod) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
+        const auto& l = VECTORIZED_FN_ARGS(0);
+        const auto& r = VECTORIZED_FN_ARGS(1);
 
         if constexpr (Type == TYPE_FLOAT || Type == TYPE_DOUBLE) {
             return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, pmodFloatImpl>::evaluate<Type>(l, r);
@@ -377,8 +381,8 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(fmod) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
+        const auto& l = VECTORIZED_FN_ARGS(0);
+        const auto& r = VECTORIZED_FN_ARGS(1);
 
         return VectorizedUnstrictBinaryFunction<RValueCheckZeroImpl, fmodImpl>::evaluate<Type>(l, r);
     }
@@ -392,8 +396,8 @@ public:
      */
     template <LogicalType Type>
     DEFINE_VECTORIZED_FN(mod) {
-        auto l = VECTORIZED_FN_ARGS(0);
-        auto r = VECTORIZED_FN_ARGS(1);
+        const auto& l = VECTORIZED_FN_ARGS(0);
+        const auto& r = VECTORIZED_FN_ARGS(1);
 
         if constexpr (lt_is_decimalv2<Type>) {
             return VectorizedUnstrictBinaryFunction<RValueCheckZeroDecimalv2Impl, modDecimalv2Impl>::evaluate<Type>(l,
@@ -566,6 +570,13 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(RValueCheckZeroDecimalv2Impl, a, b) {
 
 // pmod
 DEFINE_BINARY_FUNCTION_WITH_IMPL(pmodImpl, a, b) {
+    // Guard against SIGFPE: on x86 the idiv instruction raises #DE when computing
+    // TYPE_MIN % -1 (the quotient overflows the result width). pmod(a, -1) == 0 for
+    // every a, so short-circuit before the hardware divide. The operator path in
+    // arithmetic_operation.h already carries this guard; mirror it for the function.
+    if (b == -1) {
+        return ResultType(0);
+    }
     return ((a % (b + (b == 0))) + b) % (b + (b == 0));
 }
 
@@ -578,6 +589,10 @@ DEFINE_BINARY_FUNCTION(fmodImpl, fmod);
 
 // mod
 DEFINE_BINARY_FUNCTION_WITH_IMPL(modImpl, a, b) {
+    // See pmodImpl: avoid SIGFPE on TYPE_MIN % -1. a % -1 == 0 for every a.
+    if (b == -1) {
+        return ResultType(0);
+    }
     return (a % (b + (b == 0)));
 }
 

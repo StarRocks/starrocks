@@ -208,6 +208,72 @@ public class CompactionMgrTest {
     }
 
     @Test
+    public void testTriggerUnshareCompactionHasHighestPriority() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        PartitionStatistics statistics = compactionManager.triggerUnshareCompaction(partition);
+
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE, statistics.getPriority());
+        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(new HashSet<>());
+        Assertions.assertEquals(1, compactionList.size());
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE, compactionList.get(0).getPriority());
+    }
+
+    @Test
+    public void testRepeatedUnshareTriggerKeepsRetryDeadline() {
+        String oldSelector = Config.lake_compaction_selector;
+        Config.lake_compaction_selector = "ScoreSelector";
+        try {
+            CompactionMgr compactionManager = new CompactionMgr();
+            PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+            compactionManager.triggerUnshareCompaction(partition);
+            Assertions.assertEquals(1, compactionManager.choosePartitionsToCompact(new HashSet<>()).size());
+
+            // The scheduler defers the pending UNSHARE (e.g. its request could not be sent). SplitTabletJob keeps
+            // re-triggering it on every reshard tick, which must not erase the retry deadline.
+            compactionManager.enableCompactionAfter(partition, 60_000);
+            compactionManager.triggerUnshareCompaction(partition);
+            Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
+                    compactionManager.getStatistics(partition).getPriority());
+            Assertions.assertTrue(compactionManager.choosePartitionsToCompact(new HashSet<>()).isEmpty());
+
+            // Once the request is dropped back to DEFAULT, the next trigger is a new request and runs at once.
+            compactionManager.resetPriority(partition);
+            compactionManager.triggerUnshareCompaction(partition);
+            Assertions.assertEquals(1, compactionManager.choosePartitionsToCompact(new HashSet<>()).size());
+        } finally {
+            Config.lake_compaction_selector = oldSelector;
+        }
+    }
+
+    @Test
+    public void testTriggerClearsRetryDeadline() {
+        String oldSelector = Config.lake_compaction_selector;
+        Config.lake_compaction_selector = "ScoreSelector";
+        try {
+            CompactionMgr compactionManager = new CompactionMgr();
+            PartitionIdentifier manual = new PartitionIdentifier(1, 2, 3);
+            PartitionIdentifier unshare = new PartitionIdentifier(1, 2, 4);
+            for (PartitionIdentifier partition : List.of(manual, unshare)) {
+                compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
+                        Quantiles.compute(Lists.newArrayList(1d)));
+                compactionManager.enableCompactionAfter(partition, 60_000);
+            }
+
+            // A new manual or UNSHARE request runs on the next cycle even while the partition is cooling down.
+            compactionManager.triggerManualCompaction(manual);
+            compactionManager.triggerUnshareCompaction(unshare);
+            Set<PartitionIdentifier> chosen = new HashSet<>();
+            for (PartitionStatisticsSnapshot snapshot : compactionManager.choosePartitionsToCompact(new HashSet<>())) {
+                chosen.add(snapshot.getPartition());
+            }
+            Assertions.assertEquals(Set.of(manual, unshare), chosen);
+        } finally {
+            Config.lake_compaction_selector = oldSelector;
+        }
+    }
+
+    @Test
     public void testExistCompaction() {
         long txnId = 11111;
         CompactionMgr compactionManager = new CompactionMgr();
@@ -223,7 +289,7 @@ public class CompactionMgrTest {
                 Database db = new Database();
                 Table table = new LakeTable();
                 PhysicalPartition partition = new PhysicalPartition(123, 123,  new MaterializedIndex());
-                CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "");
+                CompactionJob job = new CompactionJob(db, table, partition, txnId, false, null, "", null);
                 r.put(partitionIdentifier, job);
                 return r;
             }
@@ -319,5 +385,32 @@ public class CompactionMgrTest {
 
         compactionMgr.removeFromStartupActiveCompactionTransactionMap(txnId);
         Assertions.assertEquals(0, activeCompactionTransactionMap.size());
+    }
+
+    /**
+     * A priority-carrying request that is abandoned before it starts must not leave the marker behind.
+     * The scheduler's own reset only covers partitions that reached runningCompactions, and ScoreSelector
+     * admits any non-DEFAULT priority regardless of score or cooldown -- so a marker left on a partition
+     * that never starts gets it reselected and refused every cycle, and its ordinary compaction never
+     * resumes.
+     */
+    @Test
+    public void testResetPriorityClearsAnAbandonedMarker() {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionMgr.handleLoadingFinished(partition, 1, System.currentTimeMillis(), new Quantiles(0, 0, 0));
+
+        compactionMgr.triggerUnshareCompaction(partition);
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
+                compactionMgr.getStatistics(partition).getPriority());
+
+        compactionMgr.resetPriority(partition);
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.DEFAULT,
+                compactionMgr.getStatistics(partition).getPriority(),
+                "an abandoned UNSHARE request must not keep the partition at a non-default priority");
+
+        // Unknown partitions are a no-op rather than an error: the scheduler may drop a request for a
+        // partition the manager has already forgotten.
+        compactionMgr.resetPriority(new PartitionIdentifier(9, 9, 9));
     }
 }

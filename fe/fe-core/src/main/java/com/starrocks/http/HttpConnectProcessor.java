@@ -47,6 +47,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Optional;
 
 // inherit ConnectProcessor  to record the audit log and Query Detail
 public class HttpConnectProcessor extends ConnectProcessor {
@@ -79,7 +80,6 @@ public class HttpConnectProcessor extends ConnectProcessor {
 
         // http sql doesn't support multi stmt
         ctx.setIsLastStmt(true);
-        ctx.setSingleStmt(true);
 
         //  for http protocal, if current FE can't read, just let client talk with leader
         if (executor.isForwardToLeader()) {
@@ -133,11 +133,14 @@ public class HttpConnectProcessor extends ConnectProcessor {
     public void processOnce() throws IOException {
         // set status of query to OK.
         ctx.getState().reset();
+        ctx.setMultiStmt(false);
         executor = null;
 
         // only handle query，so no need to dispatch
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
+        // Set by an INSERT that reads Hive for itself only, see InsertAnalyzer; this context outlives the statement.
+        ctx.setUseConnectorMetadataCache(Optional.empty());
         ctx.setResourceGroup(null);
         ctx.resetErrorCode();
         this.handleQuery();

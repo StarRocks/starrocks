@@ -14,7 +14,7 @@
 
 #include "analytic_source_operator.h"
 
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 

@@ -20,9 +20,9 @@ namespace starrocks::csv {
 
 class DatetimeConverter final : public Converter {
 public:
-    Status write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+    Status write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                         const Options& options) const override;
-    Status write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+    Status write_quoted_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;
     bool read_quoted_string(Column* column, const Slice& s, const Options& options) const override;

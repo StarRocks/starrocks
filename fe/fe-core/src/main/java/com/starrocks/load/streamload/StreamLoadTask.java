@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -32,6 +33,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -978,9 +980,15 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             }
             if (coord.join(waitSecond)) {
                 Status status = coord.getExecStatus();
+                // Record where the rejected rows are logged before any check below fails the load, also when
+                // every row was rejected: information_schema.load_tracking_logs reads them through this URL.
+                this.trackingUrl = coord.getTrackingUrl();
                 Map<String, String> loadCounters = coord.getLoadCounters();
                 if (loadCounters == null || loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL) == null) {
-                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
+                    // A load that was cancelled never reports its counters, so reaching this without an
+                    // OK status means the load stopped for a reason the user needs to see. Reporting
+                    // "no rows imported" here would hide it behind what looks like a data problem.
+                    throw new LoadException(status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg());
                 }
                 this.numRowsNormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_NORMAL_ALL));
                 this.numRowsAbnormal = Long.parseLong(loadCounters.get(LoadEtlTask.DPP_ABNORMAL_ALL));
@@ -988,14 +996,18 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 this.numLoadBytesTotal = Long.parseLong(loadCounters.get(LoadJob.LOADED_BYTES));
 
                 if (numRowsNormal == 0) {
-                    throw new LoadException(ERR_NO_ROWS_IMPORTED.formatErrorMsg());
+                    String msg = status.ok() ? ERR_NO_ROWS_IMPORTED.formatErrorMsg() : status.getErrorMsg();
+                    // Point to the rejected rows, as the error of a load over the max filter ratio does.
+                    if (!Strings.isNullOrEmpty(trackingUrl)) {
+                        msg += ", tracking_url: " + trackingUrl;
+                    }
+                    throw new LoadException(msg);
                 }
 
                 if (coord.isEnableLoadProfile()) {
                     collectProfile(false);
                 }
 
-                this.trackingUrl = coord.getTrackingUrl();
                 if (!status.ok()) {
                     throw new LoadException(status.getErrorMsg());
                 }
@@ -1135,10 +1147,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterPrepared(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterPrepared(TransactionState txnState) throws StarRocksException {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -1180,11 +1189,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
-
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         // sync stream load collect profile, here we collect profile only when be has reported
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(false);
@@ -1211,19 +1216,21 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     public RuntimeProfile buildTopLevelProfile(boolean isAborted) {
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
-                TimeUtils.longToTimeString(createTimeMs));
+                TimeUtils.longToTimeStringWithTimeZone(createTimeMs, profileZone));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - createTimeMs;
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.END_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(currentTimestamp, profileZone));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
         summaryProfile.addInfoString(ProfileManager.LOAD_TYPE, getStringByType());
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isAborted ? "Aborted" : "Finished");
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, getStmt());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, dbName);
@@ -1298,12 +1305,8 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason)
             throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
-
         if (isSyncStreamLoad() && coord != null && coord.isProfileAlreadyReported()) {
             collectProfile(true);
         }
@@ -1352,10 +1355,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterVisible(TransactionState txnState) {
         writeLock();
         try {
             for (int i = 0; i < channelNum; i++) {
@@ -1407,6 +1407,50 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     /**
+     * Mark this sub-task COMMITED (or FINISHED when the transaction is already visible)
+     * after the parent multi-statement transaction committed successfully.
+     * Sub-tasks of a multi-statement transaction are not registered as transaction state
+     * callbacks (the explicit transaction carries no callback id), so
+     * afterCommitted/afterVisible are never invoked on them; the parent task drives their
+     * terminal state instead. Without this, display outlets that delegate to sub-tasks
+     * (information_schema.loads, SHOW STREAM LOAD) would show PREPARING forever.
+     * A COMMITED sub-task may be upgraded to FINISHED by a later call with visible=true
+     * (the transaction became visible after the commit returned).
+     */
+    public void markCommittedByParent(boolean visible, long finishTimeMs) {
+        boolean becameVisible = false;
+        writeLock();
+        try {
+            if (state == State.CANCELLED || state == State.FINISHED) {
+                return;
+            }
+            State finalState = visible ? State.FINISHED : State.COMMITED;
+            if (state == finalState) {
+                return;
+            }
+            for (int i = 0; i < channelNum; i++) {
+                this.channels.set(i, finalState);
+            }
+            this.state = finalState;
+            if (this.commitTimeMs <= 0) {
+                this.commitTimeMs = finishTimeMs;
+            }
+            this.isCommitting = false;
+            if (visible) {
+                this.endTimeMs = finishTimeMs;
+                gcObject();
+                becameVisible = true;
+            }
+        } finally {
+            writeUnlock();
+            QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
+        }
+        if (becameVisible) {
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, "StreamLoad: label[" + label + "]");
+        }
+    }
+
+    /**
      * Cancel the coordinator and set task state to CANCELLED without aborting the transaction.
      * This is used for sub-tasks in multi-statement transactions where the parent task
      * manages the transaction lifecycle.
@@ -1434,20 +1478,31 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     }
 
     private void replayTxnAttachment(TransactionState txnState) {
-        if (txnState.getTxnCommitAttachment() == null) {
+        TxnCommitAttachment txnCommitAttachment = txnState.getTxnCommitAttachment();
+        if (txnCommitAttachment == null) {
             return;
         }
-        StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnState.getTxnCommitAttachment();
-        this.trackingUrl = attachment.getTrackingURL();
-        this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
-        this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
-        this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
-        this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
-        this.endTimeMs = attachment.getEndTimeMs();
-        this.numRowsNormal = attachment.getNumRowsNormal();
-        this.numRowsAbnormal = attachment.getNumRowsAbnormal();
-        this.numRowsUnselected = attachment.getNumRowsUnselected();
-        this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+        if (txnCommitAttachment instanceof StreamLoadTxnCommitAttachment) {
+            StreamLoadTxnCommitAttachment attachment = (StreamLoadTxnCommitAttachment) txnCommitAttachment;
+            this.trackingUrl = attachment.getTrackingURL();
+            this.beforeLoadTimeMs = attachment.getBeforeLoadTimeMs();
+            this.startLoadingTimeMs = attachment.getStartLoadingTimeMs();
+            this.startPreparingTimeMs = attachment.getStartPreparingTimeMs();
+            this.finishPreparingTimeMs = attachment.getFinishPreparingTimeMs();
+            this.endTimeMs = attachment.getEndTimeMs();
+            this.numRowsNormal = attachment.getNumRowsNormal();
+            this.numRowsAbnormal = attachment.getNumRowsAbnormal();
+            this.numRowsUnselected = attachment.getNumRowsUnselected();
+            this.numLoadBytesTotal = attachment.getNumLoadBytesTotal();
+            return;
+        }
+        if (txnCommitAttachment instanceof ManualLoadTxnCommitAttachment
+                || txnCommitAttachment instanceof RLTaskTxnCommitAttachment) {
+            setLoadState(txnCommitAttachment, txnState.getReason());
+            return;
+        }
+        LOG.warn("ignore unsupported txn commit attachment {} while replaying stream load task {}",
+                txnCommitAttachment.getClass().getName(), label);
     }
 
     public OlapTable getTable() throws MetaNotFoundException {
@@ -1664,6 +1719,7 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
     @Override
     public void gsonPostProcess() throws IOException {
         loadId = new TUniqueId(loadIdHi, loadIdLo);
+        init();
     }
 
     @Override
@@ -1738,6 +1794,21 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
             info.setLoad_start_time(TimeUtils.longToTimeString(startLoadingTimeMs));
             info.setLoad_commit_time(TimeUtils.longToTimeString(commitTimeMs));
             info.setLoad_finish_time(TimeUtils.longToTimeString(endTimeMs));
+            // New BE prefers these UTC epoch-ms fields and converts to the session
+            // zone on materialization, so the rendered column value matches whatever
+            // zone the querying session is in.
+            if (createTimeMs > 0) {
+                info.setCreate_time_ms(createTimeMs);
+            }
+            if (startLoadingTimeMs > 0) {
+                info.setLoad_start_time_ms(startLoadingTimeMs);
+            }
+            if (commitTimeMs > 0) {
+                info.setLoad_commit_time_ms(commitTimeMs);
+            }
+            if (endTimeMs > 0) {
+                info.setLoad_finish_time_ms(endTimeMs);
+            }
 
             info.setType(getStringByType());
 

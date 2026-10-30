@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts an unsigned BIGINT to a BITMAP containing that single element."
 ---
 
 # to_bitmap

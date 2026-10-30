@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "在数组末尾添加一个新的元素。"
 ---
 
 # array_append

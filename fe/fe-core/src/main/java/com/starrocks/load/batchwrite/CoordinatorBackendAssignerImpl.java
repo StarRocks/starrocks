@@ -71,7 +71,9 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     private final AtomicLong taskIdAllocator;
     private final PriorityBlockingQueue<Task> taskPriorityQueue;
-    private final ExecutorService singleExecutor;
+    // Not final: recreated by {@link #start()} if a previous {@link #stop()} shut it down,
+    // so the assigner is reusable across leader demotion / re-election cycles.
+    private volatile ExecutorService singleExecutor;
 
     // Registered load. load id -> LoadMeta
     private final ConcurrentHashMap<Long, LoadMeta> registeredLoadMetas;
@@ -93,8 +95,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     public CoordinatorBackendAssignerImpl() {
         this.taskIdAllocator = new AtomicLong(0);
         this.taskPriorityQueue = new PriorityBlockingQueue<>(32, TaskComparator.INSTANCE);
-        this.singleExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
-                1, "coordinator-be-assigner", true);
+        this.singleExecutor = null;
         this.registeredLoadMetas = new ConcurrentHashMap<>();
         this.warehouseMetas = new HashMap<>();
         this.numPendingTasksForDetectUnavailableNodes = new AtomicLong(0);
@@ -103,9 +104,52 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
     }
 
     @Override
-    public void start() {
-        this.singleExecutor.submit(this::runSchedule);
+    public synchronized void start() {
+        if (singleExecutor != null && !singleExecutor.isShutdown()) {
+            LOG.warn("CoordinatorBackendAssigner already running, skip duplicate start()");
+            return;
+        }
+        // No restart guard: BatchWriteMgr.onStopped() calls stop() (which waits until the runSchedule
+        // worker terminates) before the batch-write daemon clears isRunning, so the re-activation
+        // cleanliness gate has already guaranteed the previous worker terminated before start() runs.
+        singleExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                1, "coordinator-be-assigner", true);
+        singleExecutor.submit(this::runSchedule);
         LOG.info("Start coordinator be assigner");
+    }
+
+    @Override
+    public synchronized void stop() {
+        // shutdownNow() interrupts the runSchedule worker so its blocking poll() returns; runSchedule
+        // treats InterruptedException as an exit signal. Wait until the worker actually exits (no
+        // deadline) so BatchWriteMgr.onStopped() - which calls this before it lets the batch-write
+        // daemon clear isRunning - does not report the daemon quiescent while this worker is still
+        // alive, and so the state clears below always run against a terminated schedule loop.
+        if (singleExecutor != null) {
+            singleExecutor.shutdownNow();
+            boolean terminated = false;
+            while (!terminated) {
+                try {
+                    terminated = singleExecutor.awaitTermination(1, TimeUnit.MINUTES);
+                    if (!terminated) {
+                        LOG.warn("coordinator-be-assigner worker has not exited after shutdownNow; still waiting");
+                    }
+                } catch (InterruptedException ie) {
+                    Thread.interrupted();
+                }
+            }
+        }
+        // Now that the schedule loop has terminated, drop the leader-session state it owned.
+        // BatchWriteMgr.onStopped() pushes async UNREGISTER_LOAD tasks for each merge-commit
+        // job before calling stop(), but those tasks are discarded by shutdownNow(); without
+        // an explicit clear here, warehouseMetas / registeredLoadMetas / taskPriorityQueue
+        // would survive into the next leader session and let stale load ownership leak into
+        // new backend assignments. Safe to mutate without further locking because the only
+        // writer (runSchedule) has just terminated.
+        taskPriorityQueue.clear();
+        registeredLoadMetas.clear();
+        warehouseMetas.clear();
+        numPendingTasksForDetectUnavailableNodes.set(0);
     }
 
     /**
@@ -127,6 +171,12 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     LOG.debug("Set schedule interval to {} ms", checkIntervalMs);
                 }
                 task = taskPriorityQueue.poll(checkIntervalMs, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException ie) {
+                // shutdownNow() interrupts this thread on leader demotion; exit the schedule
+                // loop so the worker can be replaced by a fresh one on the next start().
+                Thread.currentThread().interrupt();
+                LOG.info("Coordinator be assigner interrupted, exiting");
+                return;
             } catch (Throwable throwable) {
                 LOG.warn("Failed to poll task queue", throwable);
                 continue;

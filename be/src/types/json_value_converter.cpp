@@ -37,10 +37,13 @@ public:
     static StatusOr<JsonValue> create(SimdJsonValue value) {
         try {
             vpack::Builder builder;
-            RETURN_IF_ERROR(convert(value, {}, false, &builder));
+            RETURN_IF_ERROR(convert(value, {}, false, &builder, 0, JsonValue::max_nesting_depth()));
             return JsonValue(builder.slice());
         } catch (simdjson::simdjson_error& e) {
-            std::string_view view(value.get_raw_json_string().raw());
+            // raw_json_token() returns a bounded string_view into the input buffer. Constructing a
+            // string_view from get_raw_json_string().raw() instead (a bare, non-NUL-terminated
+            // const char*) runs strlen off the end of a non-NUL-terminated load buffer.
+            std::string_view view = value.raw_json_token();
             // truncate the raw json string if it is too large
             bool too_large = view.size() > MAX_VALUE_LENGTH_FOR_ERRMSG;
             size_t size = too_large ? MAX_VALUE_LENGTH_FOR_ERRMSG : view.size();
@@ -58,25 +61,37 @@ public:
     static StatusOr<JsonValue> create(SimdJsonObject value) {
         try {
             vpack::Builder builder;
-            RETURN_IF_ERROR(convert(value, {}, false, &builder));
+            RETURN_IF_ERROR(convert(value, {}, false, &builder, 0, JsonValue::max_nesting_depth()));
             return JsonValue(builder.slice());
         } catch (simdjson::simdjson_error& e) {
-            std::string_view view(value.raw_json());
-            auto err_msg = strings::Substitute("Failed to convert simdjson value, json=$0, error=$1", view.data(),
+            // raw_json() spans the object but consume()s it, so on a malformed document (iterate()
+            // validates lazily, so a value-materialization error can fire before a structural error)
+            // it can return an error. get() is noexcept and leaves `view` empty on error, so a
+            // failing raw_json() cannot throw a second exception out of this catch. Pass the bounded
+            // view (never view.data(), which would run strlen off the end of a non-NUL-terminated
+            // load buffer). The error code is ignored on purpose; `view` just stays empty. GCC does not let a (void)
+            // cast silence simdjson's warn_unused_result, so keep it in an unused variable instead.
+            std::string_view view;
+            [[maybe_unused]] auto ignored = value.raw_json().get(view);
+            auto err_msg = strings::Substitute("Failed to convert simdjson value, json=$0, error=$1", view,
                                                simdjson::error_message(e.error()));
             return Status::DataQualityError(err_msg);
         }
     }
 
 private:
-    static Status convert(SimdJsonValue value, std::string_view field_name, bool is_object, vpack::Builder* builder) {
+    // This path recurses once per JSON nesting level and builds the vpack::Builder directly, never
+    // through vpack::Parser, so the parser's maxNestingDepth cap does not reach it. Apply the shared
+    // JSON depth cap (JsonValue::max_nesting_depth()) here too, resolved once and threaded down.
+    static Status convert(SimdJsonValue value, std::string_view field_name, bool is_object, vpack::Builder* builder,
+                          int depth, int max_depth) {
         switch (value.type()) {
         case so::json_type::array: {
-            RETURN_IF_ERROR(convert(value.get_array().value(), field_name, is_object, builder));
+            RETURN_IF_ERROR(convert(value.get_array().value(), field_name, is_object, builder, depth, max_depth));
             break;
         }
         case so::json_type::object: {
-            RETURN_IF_ERROR(convert(value.get_object().value(), field_name, is_object, builder));
+            RETURN_IF_ERROR(convert(value.get_object().value(), field_name, is_object, builder, depth, max_depth));
             break;
         }
         case so::json_type::number: {
@@ -97,11 +112,19 @@ private:
             RETURN_IF_ERROR(convert_null(field_name, is_object, builder));
             break;
         }
+        default: {
+            auto err_msg = strings::Substitute("Unsupported simdjson value type. field_name=$0", field_name);
+            return Status::InvalidArgument(err_msg);
+        }
         }
         return Status::OK();
     }
 
-    static Status convert(SimdJsonObject obj, std::string_view field_name, bool is_object, vpack::Builder* builder) {
+    static Status convert(SimdJsonObject obj, std::string_view field_name, bool is_object, vpack::Builder* builder,
+                          int depth, int max_depth) {
+        if (depth + 1 > max_depth) {
+            return Status::DataQualityError(strings::Substitute("JSON nesting depth exceeds maximum $0", max_depth));
+        }
         if (is_object) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Object));
         } else {
@@ -111,20 +134,24 @@ private:
             faststring buffer;
             auto key = field_unescaped_key_safe(field, &buffer);
             auto value = field.value().value();
-            RETURN_IF_ERROR(convert(value, key.value(), true, builder));
+            RETURN_IF_ERROR(convert(value, key.value(), true, builder, depth + 1, max_depth));
         }
         builder->close();
         return Status::OK();
     }
 
-    static Status convert(SimdJsonArray arr, std::string_view field_name, bool is_object, vpack::Builder* builder) {
+    static Status convert(SimdJsonArray arr, std::string_view field_name, bool is_object, vpack::Builder* builder,
+                          int depth, int max_depth) {
+        if (depth + 1 > max_depth) {
+            return Status::DataQualityError(strings::Substitute("JSON nesting depth exceeds maximum $0", max_depth));
+        }
         if (is_object) {
             builder->add(toStringRef(field_name), vpack::Value(vpack::ValueType::Array));
         } else {
             builder->add(vpack::Value(vpack::ValueType::Array));
         }
         for (auto element : arr) {
-            RETURN_IF_ERROR(convert(element.value(), {}, false, builder));
+            RETURN_IF_ERROR(convert(element.value(), {}, false, builder, depth + 1, max_depth));
         }
         builder->close();
         return Status::OK();
@@ -189,10 +216,11 @@ private:
 
     static inline Status convert(std::string_view str, std::string_view field_name, bool is_object,
                                  vpack::Builder* builder) {
+        auto value = vpack::ValuePair(toStringRef(str), vpack::ValueType::String);
         if (is_object) {
-            builder->add(toStringRef(field_name), vpack::Value(str));
+            builder->add(toStringRef(field_name), value);
         } else {
-            builder->add(vpack::Value(str));
+            builder->add(value);
         }
         return Status::OK();
     }
@@ -216,7 +244,9 @@ private:
     }
 
 private:
-    static inline vpack::StringRef toStringRef(std::string_view view) { return {view.data(), view.length()}; }
+    static inline vpack::StringRef toStringRef(std::string_view view) {
+        return {view.empty() ? "" : view.data(), view.length()};
+    }
 };
 
 // Convert SIMD-JSON object/value to a JsonValue

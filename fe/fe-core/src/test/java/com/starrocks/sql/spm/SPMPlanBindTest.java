@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,6 +57,47 @@ public class SPMPlanBindTest extends PlanTestBase {
         Preconditions.checkState(statements.size() == 1);
         Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
         return (CreateBaselinePlanStmt) statements.get(0);
+    }
+
+    @Test
+    public void testAIFunctionIsNotSupported() {
+        String oldEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        String oldModel = AIProviderTestUtil.chatProperty("model");
+        String oldProvider = AIProviderTestUtil.chatProperty("protocol");
+        try {
+            AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+            AIProviderTestUtil.setChatProperty("model", "default-model");
+            AIProviderTestUtil.setChatProperty("protocol", "openai");
+
+            CreateBaselinePlanStmt aiPlan = createBaselinePlanStmt(
+                    "select generated from "
+                            + "(select ai_complete(cast(v2 as varchar)) generated from t0) t");
+            CreateBaselinePlanStmt aiBind = createBaselinePlanStmt(
+                    "select ai_complete(cast(v2 as varchar)) from t0",
+                    "select cast(v2 as varchar) from t0");
+            CreateBaselinePlanStmt setOperationOrderByAI = createBaselinePlanStmt(
+                    "select 'a' x union all select 'b' x order by ai_complete(x)");
+            CreateBaselinePlanStmt valuesNestedAI = createBaselinePlanStmt(
+                    "select x from (values (concat(ai_complete('p'), '!'))) v(x)");
+            Assertions.assertAll(
+                    () -> assertAIFunctionNotSupported("derived plan", aiPlan),
+                    () -> assertAIFunctionNotSupported("bind SQL", aiBind),
+                    () -> assertAIFunctionNotSupported("set-operation ORDER BY", setOperationOrderByAI),
+                    () -> assertAIFunctionNotSupported("nested VALUES", valuesNestedAI));
+        } finally {
+            AIProviderTestUtil.setChatProperty("endpoint", oldEndpoint);
+            AIProviderTestUtil.setChatProperty("model", oldModel);
+            AIProviderTestUtil.setChatProperty("protocol", oldProvider);
+        }
+    }
+
+    private void assertAIFunctionNotSupported(String caseName, CreateBaselinePlanStmt statement) {
+        UnsupportedException exception = Assertions.assertThrows(
+                UnsupportedException.class,
+                () -> new SPMPlanBuilder(connectContext, statement).execute(),
+                caseName);
+        Assertions.assertEquals(
+                "SQL plan management does not support AI functions", exception.getMessage(), caseName);
     }
 
     @Test

@@ -1,5 +1,7 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
+description: "BladePipe はリアルタイムエンドツーエンドデータレプリケーションツールとして 30 以上のデータベースから StarRocks へ超低レイテンシーでデータを移動します。"
 ---
 
 # BladePipe
@@ -29,13 +31,13 @@ BladePipe は視覚化された管理インターフェースを提供し、**�
 
 :::info
 
-サポートされている機能とパラメータ設定の詳細については、[BladePipe Connections](https://doc.bladepipe.com/dataMigrationAndSync/connection/mysql2?target=StarRocks) を参照してください。
+サポートされている機能とパラメータ設定の詳細については、[BladePipe Connections](https://www.bladepipe.com/docs/dataMigrationAndSync/connection/mysql2/?target=StarRocks) を参照してください。
 
 :::
 
 ## Installation
 
-[Install BladePipe Worker (Docker)](https://doc.bladepipe.com/productOP/docker/install_worker_docker) または [Install BladePipe Worker (Binary)](https://doc.bladepipe.com/productOP/binary/install_worker_binary) の指示に従って、BladePipe Worker をダウンロードしてインストールしてください。
+[BladePipe](https://www.bladepipe.com/docs/quick/quick_start/)
 
 ## Example
 
@@ -56,7 +58,7 @@ MySQL インスタンスを例にとり、MySQL から StarRocks へのデータ
 
 ### Create DataJob
 
-1. **DataJob** > [**Create DataJob**](https://doc.bladepipe.com/operation/job_manage/create_job/create_full_incre_task) をクリックします。
+1. **DataJob** > [**Create DataJob**](https://www.bladepipe.com/docs/operation/job_manage/create_job/create_full_incre_task/) をクリックします。
 
 2. ソースとターゲットの DataSource を選択し、**Test Connection** をクリックして、ソースとターゲットの DataSource への接続が両方とも成功していることを確認します。
 

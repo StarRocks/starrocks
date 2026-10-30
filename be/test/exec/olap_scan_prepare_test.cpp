@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/olap_scan_prepare.h"
-
 #include <gtest/gtest.h>
 
+#include "compute_env/global_dict/fragment_dict_state.h"
+#include "compute_env/load/stream_load_pipe.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/tablet_scanner.h"
 #include "exprs/column_ref.h"
 #include "exprs/in_const_predicate.hpp"
 #include "formats/parquet/parquet_test_util/util.h"
-#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
 #include "storage/predicate_parser.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -71,6 +72,35 @@ protected:
     ColumnPredicatePtrs _predicate_free_pool;
     std::vector<BoxedExprContext> _expr_containers;
 };
+
+static TExprNode create_compound_pred_node(TExprOpcode::type opcode) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::COMPOUND_PRED);
+    node.__set_num_children(2);
+    node.__set_opcode(opcode);
+    node.__set_child_type(TPrimitiveType::BOOLEAN);
+    node.__set_type(TypeDescriptor(TYPE_BOOLEAN).to_thrift());
+    node.__set_is_nullable(true);
+    return node;
+}
+
+static void append_int_eq_pred(std::vector<TExprNode>* nodes, SlotId slot_id, int32_t value) {
+    nodes->emplace_back(ExprsTestHelper::create_binary_pred_node(TPrimitiveType::INT, TExprOpcode::EQ));
+    nodes->emplace_back(ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true));
+    nodes->emplace_back(ExprsTestHelper::create_literal<TYPE_INT, int32_t>(value, false));
+}
+
+static TExpr create_or_pred_with_false_and_branch(SlotId slot_id) {
+    TExpr texpr;
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_OR));
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_OR));
+    append_int_eq_pred(&texpr.nodes, slot_id, 1);
+    append_int_eq_pred(&texpr.nodes, slot_id, 2);
+    texpr.nodes.emplace_back(create_compound_pred_node(TExprOpcode::COMPOUND_AND));
+    append_int_eq_pred(&texpr.nodes, slot_id, 1);
+    append_int_eq_pred(&texpr.nodes, slot_id, 2);
+    return texpr;
+}
 
 template <LogicalType Type>
 StatusOr<RuntimeFilterProbeDescriptor*> ChunkPredicateBuilderTest::_gen_runtime_filter_desc(SlotId slot_id) {
@@ -366,6 +396,25 @@ TEST_F(ChunkPredicateBuilderTest, normalize_or_not_in_has_null_date) {
     ASSERT_FALSE(normalized);
 }
 
+TEST_F(ChunkPredicateBuilderTest, normalize_or_with_false_and_branch) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    _texprs.emplace_back(create_or_pred_with_false_and_branch(slot_id));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+    ASSERT_FALSE(builder.is_pred_normalized(0));
+
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
+}
+
 TEST_F(ChunkPredicateBuilderTest, rt_has_no_null) {
     SlotId slot_id = 1;
     parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_INT_DESC, 1}, {"c2", TYPE_INT_DESC, 2}, {""}};
@@ -407,6 +456,47 @@ TEST_F(ChunkPredicateBuilderTest, rt_has_null) {
     ASSERT_EQ(ret3.value().debug_string(),
               "{\"and\":[{\"or\":[{\"pred\":\"(ColumnId(1) IS "
               "NULL)\"},{\"and\":[{\"pred\":\"(columnId(1)>=10)\"},{\"pred\":\"(columnId(1)<=20)\"}]}]}]}");
+}
+
+// An IN list over the strings of a dictionary encoded column, too long for normalize_in_or_equal_predicate,
+// reaches the join runtime filter pass unnormalized. That pass maps the column through the dictionary, so it
+// must not read this predicate as one over dictionary codes.
+TEST_F(ChunkPredicateBuilderTest, varchar_long_in_on_dict_column_is_not_read_as_codes) {
+    SlotId slot_id = 1;
+    parquet::Utils::SlotDesc slot_descs[] = {{"c1", TYPE_VARCHAR_DESC, 1}, {"c2", TYPE_VARCHAR_DESC, 2}, {""}};
+    _opts.tuple_desc = parquet::Utils::create_tuple_descriptor(&_runtime_state, &_pool, slot_descs);
+
+    std::vector<std::string> dict_words;
+    for (int i = 0; i < 50; i++) {
+        dict_words.emplace_back("k" + std::to_string(i));
+    }
+    GlobalDictMap forward;
+    RGlobalDictMap reverse;
+    for (size_t i = 0; i < dict_words.size(); i++) {
+        auto code = static_cast<int32_t>(i + 1);
+        forward.emplace(Slice(dict_words[i]), code);
+        reverse.emplace(code, Slice(dict_words[i]));
+    }
+    _fragment_dict_state->mutable_query_global_dicts()->emplace(slot_id,
+                                                                std::make_pair(std::move(forward), std::move(reverse)));
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 2048; i++) {
+        values.emplace_back("k" + std::to_string(i));
+    }
+    _texprs.emplace_back(ExprsTestHelper::create_in_pred_texpr<TYPE_VARCHAR, std::string>(slot_id, values, false));
+    ASSERT_OK(ExprsTestHelper::create_and_open_conjunct_ctxs(&_pool, &_runtime_state, &_texprs, &_expr_ctxs));
+    ASSERT_EQ(_expr_ctxs.size(), 1);
+
+    _expr_containers.emplace_back(BoxedExprContext(_expr_ctxs[0]));
+
+    ChunkPredicateBuilder<BoxedExprContext, CompoundNodeType::AND> builder(_opts, _expr_containers, true);
+    ASSIGN_OR_ASSERT_FAIL(auto normalized, builder.parse_conjuncts());
+    ASSERT_TRUE(normalized);
+
+    // Too long to become a column range, so nothing is pushed down; the conjunct is evaluated as it is.
+    ASSIGN_OR_ASSERT_FAIL(auto pred, builder.get_predicate_tree_root(_int_pred_parser, _predicate_free_pool));
+    ASSERT_EQ(pred.debug_string(), "{\"and\":[]}");
 }
 
 TEST_F(ChunkPredicateBuilderTest, varchar_rt_has_no_null) {

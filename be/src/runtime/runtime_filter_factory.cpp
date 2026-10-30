@@ -14,6 +14,8 @@
 
 #include "runtime/runtime_filter_factory.h"
 
+#include <memory>
+
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/system/cpu_info.h"
@@ -45,6 +47,25 @@ RuntimeFilter* RuntimeFilterFactory::to_empty_filter(ObjectPool* pool, RuntimeFi
             [&]<LogicalType LT>() -> RuntimeFilter* {
                 return new ComposedRuntimeEmptyFilter<LT>(*down_cast<const MinMaxRuntimeFilter<LT>*>(min_max_filter),
                                                           *membership_filter);
+            });
+
+    if (pool != nullptr && filter != nullptr) {
+        return pool->add(filter);
+    } else {
+        return filter;
+    }
+}
+
+RuntimeFilter* RuntimeFilterFactory::create_pass_all_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter =
+            type_dispatch_filter(type, static_cast<RuntimeFilter*>(nullptr), [&]<LogicalType LT>() -> RuntimeFilter* {
+                auto rf = std::make_unique<ComposedRuntimeEmptyFilter<LT>>();
+                rf->get_membership_filter()->set_join_mode(join_mode);
+                if (!rf->min_max_filter().set_pass_all()) {
+                    return nullptr;
+                }
+                rf->insert_null();
+                return rf.release();
             });
 
     if (pool != nullptr && filter != nullptr) {
@@ -136,17 +157,8 @@ static std::pair<CppType, CppType> calc_min_max_from_columns(const Columns& colu
 struct TryCreateRuntimeBitsetFilter {
     template <LogicalType LT>
     RuntimeFilter* operator()(const Columns& columns, size_t column_offset, size_t row_count) {
-        static auto cache_sizes = [] {
-            static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
-            static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;
-
-            const auto& cache_sizes = CpuInfo::get_cache_sizes();
-            const auto cur_l2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
-            const auto cur_l3_cache_size = cache_sizes[CpuInfo::L3_CACHE];
-            return std::pair{cur_l2_cache_size ? cur_l2_cache_size : DEFAULT_L2_CACHE_SIZE,
-                             cur_l3_cache_size ? cur_l3_cache_size : DEFAULT_L3_CACHE_SIZE};
-        }();
-        const auto& [l2_cache_size, l3_cache_size] = cache_sizes;
+        const size_t l2_cache_size = CpuInfo::get_l2_cache_size();
+        const size_t l3_cache_size = CpuInfo::get_l3_cache_size();
 
         const auto [min_value, max_value] = calc_min_max_from_columns<LT>(columns, column_offset);
         const size_t value_interval = static_cast<size_t>(RuntimeBitsetFilter<LT>::to_numeric(max_value)) -
@@ -173,16 +185,13 @@ struct TryCreateRuntimeBitsetFilter {
     }
 };
 
-RuntimeFilter* RuntimeFilterFactory::create_join_filter(ObjectPool* pool, LogicalType type, int8_t join_mode,
-                                                        const Columns& columns, size_t column_offset,
-                                                        size_t row_count) {
+RuntimeFilter* RuntimeFilterFactory::try_create_bitset_filter(ObjectPool* pool, LogicalType type,
+                                                              const Columns& columns, size_t column_offset,
+                                                              size_t row_count) {
     RuntimeFilter* filter =
             type_dispatch_bitset_filter(type, static_cast<RuntimeFilter*>(nullptr), TryCreateRuntimeBitsetFilter(),
                                         columns, column_offset, row_count);
-    if (filter == nullptr) {
-        return create_bloom_filter(pool, type, join_mode);
-    }
-    if (pool != nullptr) {
+    if (filter != nullptr && pool != nullptr) {
         return pool->add(filter);
     }
     return filter;

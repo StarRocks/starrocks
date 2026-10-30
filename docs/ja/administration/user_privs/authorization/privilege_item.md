@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ユーザー・ロールに付与できる権限とそれぞれのオブジェクト上での操作内容を説明します。"
 sidebar_position: 20
 sidebar_label: "権限項目"
 ---
@@ -24,6 +25,16 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 ### SYSTEM
 
 <PrivCreateWarehouse />
+
+### AI FUNCTION / AI PROVIDER {/* #ai-function-privileges */}
+
+| オブジェクト | 権限 | 用途 |
+| --- | --- | --- |
+| AI FUNCTION | USAGE | 指定された AI 関数を使用します。 |
+| AI PROVIDER | USAGE | 指定された AI Provider を使用します。 |
+
+> 注意: AI 関数の呼び出しには、関数と選択した Provider の両方の USAGE 権限が必要です。デフォルト Provider も対象です。Provider の管理には SYSTEM OPERATE 権限が必要です。
+
 
 ### RESOURCE GROUP
 
@@ -99,6 +110,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                             |
 | ---- | -------------------------------- |
 | SELECT | ビューのデータをクエリします。   |
+| EXPORT | EXPORT 権限の付与・取り消しのみ対応。EXPORT TABLE は未サポート。 |
 | ALTER  | ビューの定義を変更します。       |
 | DROP   | ビューを削除します。             |
 | ALL    | ビューに対して上記すべての権限を持ちます。 |
@@ -108,6 +120,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                                          |
 | ---- | --------------------------------------------- |
 | SELECT | クエリを高速化するためにマテリアライズドビューをクエリします。 |
+| EXPORT | EXPORT 権限の付与・取り消しのみ対応。EXPORT TABLE は未サポート。 |
 | ALTER  | マテリアライズドビューを変更します。         |
 | REFRESH | マテリアライズドビューを更新します。         |
 | DROP   | マテリアライズドビューを削除します。         |
@@ -125,9 +138,9 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 | 権限 | 説明                             |
 | ---- | ------------------------------------------------------------ |
-| ALTER | ストレージボリュームの資格情報プロパティ、コメント、またはステータス（有効）を変更します。 |
+| ALTER | ストレージボリュームの資格情報プロパティ、コメント、またはステータス（有効）を変更し、ストレージボリュームをデフォルトのストレージボリュームとして設定します。 |
 | DROP  | ストレージボリュームを削除します。               |
-| USAGE | ストレージボリュームを説明し、デフォルトのストレージボリュームとして設定します。   |
+| USAGE | ストレージボリュームを説明します。   |
 | ALL   | ストレージボリュームに対して上記すべての権限を持ちます。  |
 
 <PrivWarehouse />

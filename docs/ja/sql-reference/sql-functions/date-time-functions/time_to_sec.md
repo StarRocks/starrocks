@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "時間値を秒数に変換します。"
 ---
 
 # time_to_sec

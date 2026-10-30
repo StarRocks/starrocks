@@ -40,8 +40,12 @@
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TSocket.h>
 
+#include "base/auth/credential_mask.h"
 #include "base/time/monotime.h"
+#include "common/config_thrift_server_fwd.h"
 #include "common/util/thrift_server.h"
+#include "gen_cpp/InternalService_types.h"
+#include "gen_cpp/QueryPlanExtra_types.h"
 #include "gen_cpp/Types_types.h"
 
 // TCompactProtocol requires some #defines to work right.  They also define UNLIKLEY
@@ -56,11 +60,60 @@
 
 namespace starrocks {
 
+namespace {
+
+void redact_plan_credentials(TPlanNode& node) {
+    if (!node.__isset.ai_project_node) {
+        return;
+    }
+    for (auto& [id, provider] : node.ai_project_node.ai_provider_mapping) {
+        auto key = provider.params.find("api_key");
+        if (key != provider.params.end()) {
+            key->second = std::string(kCredentialMask);
+        }
+    }
+}
+
+void redact_plan_credentials(TPlanFragment& fragment) {
+    for (auto& node : fragment.plan.nodes) {
+        redact_plan_credentials(node);
+    }
+}
+
+} // namespace
+
+std::string thrift_plan_debug_string(const TPlanNode& node) {
+    auto copy = node;
+    redact_plan_credentials(copy);
+    return apache::thrift::ThriftDebugString(copy);
+}
+
+std::string thrift_plan_debug_string(const TPlanFragment& fragment) {
+    auto copy = fragment;
+    redact_plan_credentials(copy);
+    return apache::thrift::ThriftDebugString(copy);
+}
+
+std::string thrift_plan_debug_string(const TExecPlanFragmentParams& request) {
+    auto copy = request;
+    redact_plan_credentials(copy.fragment);
+    return apache::thrift::ThriftDebugString(copy);
+}
+
+std::string thrift_plan_debug_string(const TQueryPlanInfo& info) {
+    auto copy = info;
+    redact_plan_credentials(copy.plan_fragment);
+    return apache::thrift::ThriftDebugString(copy);
+}
+
+std::shared_ptr<apache::thrift::TConfiguration> create_thrift_configuration() {
+    return std::make_shared<apache::thrift::TConfiguration>(
+            config::thrift_max_message_size, config::thrift_max_frame_size, config::thrift_max_recursion_depth);
+}
+
 ThriftSerializer::ThriftSerializer(bool compact, int initial_buffer_size)
-        : _mem_buffer(new apache::thrift::transport::TMemoryBuffer(
-                  initial_buffer_size, std::make_shared<apache::thrift::TConfiguration>(
-                                               config::thrift_max_message_size, config::thrift_max_frame_size,
-                                               config::thrift_max_recursion_depth))) {
+        : _mem_buffer(
+                  new apache::thrift::transport::TMemoryBuffer(initial_buffer_size, create_thrift_configuration())) {
     if (compact) {
         apache::thrift::protocol::TCompactProtocolFactoryT<apache::thrift::transport::TMemoryBuffer> factory;
         _protocol = factory.getProtocol(_mem_buffer);
@@ -101,7 +154,7 @@ static void thrift_output_function(const char* output) {
 }
 
 void init_thrift_logging() {
-    apache::thrift::GlobalOutput.setOutputFunction(thrift_output_function);
+    apache::thrift::TOutput::instance().setOutputFunction(thrift_output_function);
 }
 
 Status wait_for_local_server(const ThriftServer& server, int num_retries, int retry_interval_ms) {

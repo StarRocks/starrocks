@@ -300,6 +300,44 @@ public class SkewJoinV2Test extends PlanTestBase {
     }
 
     @Test
+    public void testSkewJoinV2KeepsDerivedDictExprs() throws Exception {
+        boolean oldMockDictManager = FeConstants.USE_MOCK_DICT_MANAGER;
+        boolean oldLowCardinality = connectContext.getSessionVariable().isEnableLowCardinalityOptimize();
+        boolean oldV2 = connectContext.getSessionVariable().isUseLowCardinalityOptimizeV2();
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(true);
+
+            // t1.u is a DERIVED dict (upper over S_ADDRESS) defined below the shuffle that the skew
+            // rewrite replaces with split produce/consume; the fragments above must still receive its
+            // global dict expr, otherwise BE cannot build the dictionary to decode u.
+            String sql = "select ifnull(t1.u, 'x') v, s2.S_ADDRESS from " +
+                    "(select distinct upper(S_ADDRESS) u, S_SUPPKEY k from supplier) t1 " +
+                    "join[skew|t1.k(1,2)] supplier s2 on t1.k = s2.S_SUPPKEY";
+            String plan = getVerboseExplain(sql);
+            // the top fragment evaluates ifnull() as a DictMapping over the derived dict 21 ...
+            assertContains(plan, "18 <-> DictDecode([21: upper, INT, true], [ifnull[(<place-holder>, 'x')");
+            // ... so it must carry 21's global dict expr (it arrives through the split consumers)
+            assertContains(plan, "  RESULT SINK\n" +
+                    "\n" +
+                    "  Global Dict Exprs:\n" +
+                    "    21: DictDefine(19: S_ADDRESS, [upper(<place-holder>)])\n" +
+                    "\n" +
+                    "  13:Decode");
+            // and the split-producing fragment keeps the exprs of the fragment it was built from
+            assertContains(plan, "  Split expr: [1: S_SUPPKEY, INT, false] IN (1, 2)\n" +
+                    "\n" +
+                    "  Global Dict Exprs:\n" +
+                    "    21: DictDefine(19: S_ADDRESS, [upper(<place-holder>)])");
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = oldMockDictManager;
+            connectContext.getSessionVariable().setEnableLowCardinalityOptimize(oldLowCardinality);
+            connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(oldV2);
+        }
+    }
+
+    @Test
     public void testSkewJoinV2WithComplexPredicate1() throws Exception {
         String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on abs(v1) = abs(v4) ";
         String sqlPlan = getVerboseExplain(sql);
@@ -576,9 +614,10 @@ public class SkewJoinV2Test extends PlanTestBase {
             try {
                 String sql = "select v2, v5 from t0 left join[shuffle] t1 on v1 = v4";
                 String plan = getVerboseExplain(sql);
-                assertCContains(plan, "SplitCastDataSink:\n" +
+                assertCContains(plan, "Input Partition: RANDOM\n" +
+                        "  SplitCastDataSink:\n" +
                         "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
-                        "  OutPut Exchange Id: 02\n" +
+                        "  OutPut Exchange Id: 01\n" +
                         "  Split expr: [1: v1, BIGINT, true] IS NOT NULL\n" +
                         "  OutPut Partition: RANDOM\n" +
                         "  OutPut Exchange Id: 06\n" +
@@ -592,6 +631,17 @@ public class SkewJoinV2Test extends PlanTestBase {
                         "  |    6:EXCHANGE\n" +
                         "  |       distribution type: ROUND_ROBIN\n" +
                         "  |       cardinality: 20000000");
+                assertContains(plan, "Input Partition: RANDOM\n" +
+                        "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
+                        "  OutPut Exchange Id: 03\n" +
+                        "\n" +
+                        "  2:OlapScanNode\n" +
+                        "     table: t1, rollup: t1\n" +
+                        "     preAggregation: on\n" +
+                        "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                        "     tabletList=10016,10018,10020\n" +
+                        "     actualRows=0, avgRowSize=9.0\n" +
+                        "     cardinality: 20000000");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

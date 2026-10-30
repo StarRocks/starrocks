@@ -72,9 +72,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.planner.DescriptorTable;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -166,6 +163,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
+    // compression dict info
+    @SerializedName(value = "hasZstdCompressionChange")
+    private boolean hasZstdCompressionChange;
+    @SerializedName(value = "zstdCompressionColumns")
+    private Set<ColumnId> zstdCompressionColumns = null;
+    @SerializedName(value = "zstdCompressionPageSizes")
+    private Map<ColumnId, Integer> zstdCompressionPageSizes = null;
+
     // alter index info
     @SerializedName(value = "indexChange")
     private boolean indexChange = false;
@@ -189,7 +194,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     private OlapTableHistorySchema historySchema;
 
     // save all schema change tasks
-    private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
@@ -203,6 +209,29 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     // for deserialization
     private SchemaChangeJobV2() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled (runWaitingTxnJob: "DO NOT
+        // write edit log here"); map it back so the re-elected leader re-enters
+        // runWaitingTxnJob and re-sends every AlterReplicaTask, as a restarted FE would.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Always start from a fresh batch: runWaitingTxnJob APPENDS to it, so a stale (even
+        // partially filled) batch would double-add tasks whose duplicates never receive
+        // finish callbacks (AgentTaskQueue de-dups by signature) and wedge the job until its
+        // timeout-cancel.
+        schemaChangeBatchTask = new AgentBatchTask();
+        createReplicaLatch = null;
+        waitingCreatingReplica.set(false);
+        isCancelling.set(false);
+        if (jobState == JobState.PENDING) {
+            // Discard a watershed allocated by a fenced PENDING -> WAITING_TXN attempt; it
+            // was never journaled and runPendingJob re-generates it.
+            watershedTxnId = -1;
+        }
     }
 
     protected SchemaChangeJobV2(SchemaChangeJobV2 job) {
@@ -242,6 +271,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.hasBfChange = job.hasBfChange;
         this.bfColumns = job.bfColumns == null ? null : Sets.newHashSet(job.bfColumns);
         this.bfFpp = job.bfFpp;
+        // See the note in LakeTableSchemaChangeJob's copy constructor: this is what
+        // copyForPersist() serializes, and onFinished() reads these three fields.
+        this.hasZstdCompressionChange = job.hasZstdCompressionChange;
+        this.zstdCompressionColumns =
+                job.zstdCompressionColumns == null ? null : Sets.newHashSet(job.zstdCompressionColumns);
+        this.zstdCompressionPageSizes =
+                job.zstdCompressionPageSizes == null ? null : Maps.newHashMap(job.zstdCompressionPageSizes);
         this.indexChange = job.indexChange;
         this.indexes = job.indexes == null ? null : new ArrayList<>(job.indexes);
         this.watershedTxnId = job.watershedTxnId;
@@ -300,6 +336,13 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.bfFpp = bfFpp;
     }
 
+    public void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns,
+                                Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.hasZstdCompressionChange = hasZstdCompressionChange;
+        this.zstdCompressionColumns = zstdCompressionColumns;
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
+    }
+
     public void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
         this.indexChange = indexChange;
         this.indexes = indexes;
@@ -333,6 +376,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         this.historySchema = historySchema;
     }
 
+    @Override
     public Optional<OlapTableHistorySchema> getHistorySchema() {
         return Optional.ofNullable(historySchema);
     }
@@ -340,27 +384,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     @Override
     public boolean isExpire() {
         boolean expiredByTime = super.isExpire();
-        boolean expiredByHistorySchema = true;
-        if (historySchema != null && !historySchema.isExpired()) {
-            try {
-                expiredByHistorySchema = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().
-                    isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId, Lists.newArrayList(tableId));
-            } catch (Exception e) {
-                // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
-                // so could clean the history schema safely
-            }
-            if (expiredByHistorySchema) {
-                historySchema.setExpire();
-                LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
-                        jobId, tableName, historySchema.getHistoryTxnIdThreshold());
-            }
-        }
+        boolean expiredByHistorySchema = expireHistorySchema(historySchema);
         return expiredByTime && expiredByHistorySchema;
     }
 
     /**
-     * clear some date structure in this job to save memory
-     * these data structures must not used in getInfo method
+     * Clears the per-tablet and per-partition data structures of this job to save memory. getInfo reads none
+     * of them except the schema change batch task, and only while the job is RUNNING, so it is safe once the
+     * job is done.
      */
     @Override
     public void pruneMeta() {
@@ -368,6 +399,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         physicalPartitionIndexMap.clear();
         indexMetaIdToSchema.clear();
         indexMetaIdToShortKey.clear();
+        schemaChangeBatchTask = new AgentBatchTask();
+        // A cancel in PENDING or a replica creation timeout leaves a mark for every replica not created.
+        createReplicaLatch = null;
     }
 
     /**
@@ -412,7 +446,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         try {
             long baseIndexMetaId = tbl.getBaseIndexMetaId();
             Preconditions.checkState(tbl.getState() == OlapTableState.SCHEMA_CHANGE);
-            MaterializedIndexMeta index = tbl.getIndexMetaByMetaId(tbl.getBaseIndexMetaId());
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = tbl.getPhysicalPartition(physicalPartitionId);
                 if (physicalPartition == null) {
@@ -441,6 +474,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
+                            .setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes)
                             .setIndexes(originIndexMetaId == baseIndexMetaId ?
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
@@ -663,24 +697,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     Map<Integer, TExpr> mcExprs = new HashMap<>();
                     TAlterTabletMaterializedColumnReq generatedColumnReq = new TAlterTabletMaterializedColumnReq();
                     if (hasNewGeneratedColumn) {
-                        DescriptorTable descTbl = new DescriptorTable();
-                        TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
-                        Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
-
-                        /*
-                         * The expression substitution is needed here, because all slotRefs in
-                         * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                         * if it is init by SlotDescriptor. The slot information will be used by be to indentify
-                         * the column location in a chunk.
-                         */
-                        for (Column col : tbl.getFullSchema()) {
-                            SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
-                            slotDesc.setType(col.getType());
-                            slotDesc.setColumn(new Column(col));
-                            slotDesc.setIsMaterialized(true);
-                            slotDesc.setIsNullable(col.isAllowNull());
-
-                            slotDescByName.put(col.getName(), slotDesc);
+                        // Build slotId mapping from fullSchema (slot ids = positional index)
+                        Map<String, Integer> slotIdByName = Maps.newHashMap();
+                        for (int i = 0; i < tbl.getFullSchema().size(); i++) {
+                            Column col = tbl.getFullSchema().get(i);
+                            slotIdByName.put(col.getName(), i);
                         }
 
                         for (Column generatedColumn : diffGeneratedColumnSchema) {
@@ -688,16 +709,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : tbl.getBaseSchema()) {
-                                SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-
-                                if (slotDesc == null) {
+                                Integer slotId = slotIdByName.get(col.getName());
+                                if (slotId == null) {
                                     throw new AlterCancelException("Expression for generated column can not find " +
                                             "the ref column");
                                 }
 
-                                SlotRef slotRef = new SlotRef(slotDesc);
-                                slotRef.setColumnName(col.getName());
-                                outputExprs.add(slotRef);
+                                outputExprs.add(SlotRef.createAnalyzed(slotId,
+                                        col.getName(), col.getType(), col.isAllowNull()));
                             }
 
                             TableName tableName = new TableName(db.getFullName(), tbl.getName());
@@ -762,7 +781,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     List<TColumn> originSchemaTColumns = indexToThriftColumns.get(originIdxMetaId);
                     if (originSchemaTColumns == null) {
                         originSchemaTColumns = tbl.getSchemaByIndexMetaId(originIdxMetaId).stream()
-                                .map(Column::toThrift)
+                                .map(column -> {
+                                    TColumn tColumn = column.toThrift();
+                                    // BE rebuilds the base schema from these and diffs it against the new
+                                    // one to choose between hard-linking the existing files and rewriting
+                                    // them. Without the per-column ZSTD fields the base always reads as
+                                    // "no ZSTD", so every later schema change on such a table pays a full
+                                    // rewrite that changes no encoding. Only those fields are filled in
+                                    // here: is_bloom_filter_column and has_bitmap_index have the same
+                                    // problem on this path and predate this feature.
+                                    column.setIndexFlag(tColumn, List.of(), null,
+                                            tbl.getZstdCompressionColumnIds(), tbl.getZstdCompressionPageSizes());
+                                    return tColumn;
+                                })
                                 .collect(Collectors.toList());
                         indexToThriftColumns.put(originIdxMetaId, originSchemaTColumns);
                     }
@@ -896,6 +927,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE);
         }
 
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
+        }
+
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
     }
@@ -1019,6 +1055,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         if (hasBfChange) {
             tbl.setBloomFilterInfo(bfColumns, bfFpp);
         }
+        // update compression dict columns
+        if (hasZstdCompressionChange) {
+            tbl.setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes);
+        }
         // update index
         if (indexChange) {
             tbl.setIndexes(indexes);
@@ -1037,8 +1077,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             // If waitingCreatingReplica == false, we will assume that
             // cancel thread will get the object lock very quickly.
             if (waitingCreatingReplica.get()) {
-                Preconditions.checkState(createReplicaLatch != null);
-                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+                // No latch means the wait has ended since, and the job was reset or pruned.
+                MarkedCountDownLatch<Long, Long> latch = createReplicaLatch;
+                if (latch != null) {
+                    latch.countDownToZero(new Status(TStatusCode.OK, ""));
+                }
             }
             synchronized (this) {
                 return cancelInternal(errMsg);
@@ -1268,8 +1311,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && schemaChangeBatchTask.getTaskNum() > 0) {
-            progress = schemaChangeBatchTask.getFinishedTaskNum() + "/" + schemaChangeBatchTask.getTaskNum();
+        // Read once: this runs without the job lock, and pruning the done job replaces the batch.
+        AgentBatchTask batchTask = schemaChangeBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            progress = batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum();
         }
 
         // one line for one shadow index

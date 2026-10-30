@@ -22,8 +22,8 @@
 
 #include "column/json_column.h"
 #include "gutil/casts.h"
+#include "storage/json_path_deriver.h"
 #include "types/json_value.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 

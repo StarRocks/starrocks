@@ -17,6 +17,7 @@
 
 #include "common/thread/threadpool.h"
 
+#include <bvar/bvar.h>
 #include <gflags/gflags_declare.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
@@ -30,6 +31,7 @@
 #include <memory>
 #include <mutex>
 #include <ostream>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -41,8 +43,11 @@
 #include "base/metrics.h"
 #include "base/random/random.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
 #include "base/time/monotime.h"
+#include "base/utility/defer_op.h"
 #include "base/utility/scoped_cleanup.h"
+#include "common/config_thread_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
@@ -67,6 +72,15 @@ DECLARE_int32(thread_inject_start_latency_ms);
 namespace starrocks {
 
 static const char* kDefaultPoolName = "test";
+
+// Our bvar lacks Variable::find_exposed; describe_exposed returns the Adder value.
+static int64_t threadpool_task_exception_total_value() {
+    const std::string desc = bvar::Variable::describe_exposed("threadpool_task_exception_total");
+    if (desc.empty()) {
+        return -1;
+    }
+    return std::stoll(desc);
+}
 
 class ThreadPoolTest : public ::testing::Test {
 public:
@@ -989,5 +1003,390 @@ TEST_F(ThreadPoolTest, TestLIFOThreadWakeUps) {
     NO_PENDING_FATALS();
 }
 */
+
+// Regression test for a use-after-free bug in do_submit().
+//
+// When the pool has min_threads=0 and all threads have exited, a new submit
+// must create a thread. The old code enqueued the task first, then attempted
+// thread creation. If creation failed (e.g. EAGAIN), it returned an error
+// WITHOUT removing the task from the queue. The caller, seeing the error,
+// would perform its own cleanup (e.g. counting down a latch). A later
+// successful submit could then create a thread that picks up the orphaned
+// task, executing it against already-destroyed state (use-after-free).
+//
+// The fix creates the thread BEFORE enqueuing the task when the pool has
+// zero threads. If thread creation fails, the task is never enqueued.
+TEST_F(ThreadPoolTest, TestSubmitFailsCleanlyWhenNoThreadsExist) {
+    // Pool with min_threads=0 so all threads can idle-exit.
+    ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
+                                                  .set_min_threads(0)
+                                                  .set_max_threads(4)
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                        .ok());
+
+    // Wait for threads to exit (min_threads=0, short idle timeout).
+    ASSERT_EQ(0, _pool->num_threads());
+
+    // Inject create_thread failure to simulate EAGAIN (resource exhaustion).
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [](void* arg) {
+        auto* status = static_cast<Status*>(arg);
+        *status = Status::RuntimeError("Could not create thread: Resource temporarily unavailable");
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SCOPED_CLEANUP({
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic<int> run_count{0};
+    Status s = _pool->submit_func([&]() { run_count++; });
+    // Submit should fail because thread creation failed.
+    ASSERT_FALSE(s.ok());
+    // The task must NOT have been enqueued.
+    ASSERT_EQ(0, _pool->_total_queued_tasks);
+    ASSERT_EQ(0, run_count);
+
+    // Now disable the failure injection and verify normal operation resumes.
+    SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+    SyncPoint::GetInstance()->DisableProcessing();
+
+    CountDownLatch latch(1);
+    s = _pool->submit_func([&]() {
+        run_count++;
+        latch.count_down();
+    });
+    ASSERT_TRUE(s.ok());
+    latch.wait();
+    ASSERT_EQ(1, run_count);
+    _pool->wait();
+    _pool->shutdown();
+}
+
+// Verify that when thread creation fails but other threads exist in the pool,
+// the task is still enqueued and eventually processed (no error returned).
+TEST_F(ThreadPoolTest, TestSubmitSucceedsWhenThreadCreationFailsButThreadsExist) {
+    // Pool with min_threads=1 so at least one thread always exists.
+    ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
+                                                  .set_min_threads(1)
+                                                  .set_max_threads(4)
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(kThreadIdleTimeoutMs)))
+                        .ok());
+    ASSERT_EQ(1, _pool->num_threads());
+
+    // Block the existing thread so a new submit requires a new thread.
+    CountDownLatch block_latch(1);
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&block_latch)).ok());
+
+    // Now inject create_thread failure.
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [](void* arg) {
+        auto* status = static_cast<Status*>(arg);
+        *status = Status::RuntimeError("Could not create thread: Resource temporarily unavailable");
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    // Submit should succeed because existing thread can process the task.
+    std::atomic<int> run_count{0};
+    Status s = _pool->submit_func([&]() { run_count++; });
+    ASSERT_TRUE(s.ok());
+
+    // Disable failure injection and unblock.
+    SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+    SyncPoint::GetInstance()->DisableProcessing();
+    block_latch.count_down();
+
+    _pool->wait();
+    ASSERT_EQ(1, run_count);
+    _pool->shutdown();
+}
+
+// Verify the original crash scenario: a stack-allocated latch captured by
+// reference in a task. If the task were orphaned in the queue after a failed
+// submit, a later thread would execute it and count_down a destroyed latch.
+// With the fix, the task is never enqueued, so the latch is safe.
+TEST_F(ThreadPoolTest, TestSubmitFailureDoesNotCauseUseAfterFree) {
+    ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
+                                                  .set_min_threads(0)
+                                                  .set_max_threads(4)
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                        .ok());
+    ASSERT_EQ(0, _pool->num_threads());
+
+    // First call: fail. Subsequent calls: succeed.
+    std::atomic<int> create_call_count{0};
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [&](void* arg) {
+        if (create_call_count.fetch_add(1) == 0) {
+            auto* status = static_cast<Status*>(arg);
+            *status = Status::RuntimeError("Could not create thread: Resource temporarily unavailable");
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SCOPED_CLEANUP({
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Simulate the crash scenario: stack-allocated latch, task captured by ref.
+    {
+        const int kNumTasks = 5;
+        CountDownLatch latch(kNumTasks);
+        int submit_failures = 0;
+
+        for (int i = 0; i < kNumTasks; i++) {
+            Status s = _pool->submit_func([&latch]() { latch.count_down(); });
+            if (!s.ok()) {
+                // Caller counts down on failure (like the original bug scenario).
+                latch.count_down();
+                submit_failures++;
+            }
+        }
+        // First submit should fail (injected), rest should succeed.
+        ASSERT_EQ(1, submit_failures);
+        // Wait for all count_downs (from both successful tasks and caller cleanup).
+        latch.wait();
+    }
+    // If the orphaned task bug existed, this point would crash (use-after-free
+    // on the destroyed latch). With the fix, we reach here safely.
+
+    _pool->wait();
+    _pool->shutdown();
+}
+
+// With enable_threadpool_catch_task_exception turned on, a task that throws must not take
+// the worker thread down: the pool keeps draining its queue and later tasks still run.
+//
+// The default (false) path cannot be covered here: without an enclosing catch clause the
+// exception finds no handler and terminates the whole test process at the throw point.
+// Verifying it would need a death test, which is unreliable in a process that already owns
+// pool threads, so the off path is left to the compile-time structure and to review.
+TEST_F(ThreadPoolTest, TestTaskExceptionIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    // Serialized on a single worker thread, so the throwing task is guaranteed to run first.
+    ASSERT_TRUE(_pool->submit_func([]() { throw std::runtime_error("injected in threadpool test"); }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    // The worker survived the throw and kept executing the queue.
+    ASSERT_EQ(2, ran_after_throw.load());
+    ASSERT_EQ(1, _pool->num_threads());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
+    _pool->shutdown();
+}
+
+TEST_F(ThreadPoolTest, TestTaskBadAllocIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    ASSERT_TRUE(_pool->submit_func([]() { throw std::bad_alloc(); }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    ASSERT_EQ(1, ran_after_throw.load());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
+    _pool->shutdown();
+}
+
+TEST_F(ThreadPoolTest, TestTaskUnknownExceptionIsSwallowedWhenEnabled) {
+    const bool saved = config::enable_threadpool_catch_task_exception;
+    config::enable_threadpool_catch_task_exception = true;
+    SCOPED_CLEANUP({ config::enable_threadpool_catch_task_exception = saved; });
+
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(1)).ok());
+
+    std::atomic<int> ran_after_throw{0};
+    const int64_t before = threadpool_task_exception_total_value();
+    ASSERT_GE(before, 0);
+
+    // Non-std::exception types take the catch(...) branch.
+    ASSERT_TRUE(_pool->submit_func([]() { throw 42; }).ok());
+    ASSERT_TRUE(_pool->submit_func([&]() { ran_after_throw.fetch_add(1); }).ok());
+
+    _pool->wait();
+
+    ASSERT_EQ(1, ran_after_throw.load());
+    ASSERT_EQ(before + 1, threadpool_task_exception_total_value());
+
+    _pool->shutdown();
+}
+
+// A submit() that throws must leave nothing behind. The caller takes the exception as "the runnable was
+// never accepted" and rolls back whatever the runnable was going to do -- e.g.
+// TabletParallelCompactionManager::submit_subtasks_from_groups() unregisters the subtask and returns its
+// limiter token -- so a runnable left in the token's entries would be dispatched by the next submission
+// against state that no longer exists, and a token left on the dispatch queue without an entry would
+// crash the worker that pops it. Covered for both the pool's own concurrent token and a serial token,
+// whose IDLE -> RUNNING transition must not happen either.
+TEST_F(ThreadPoolTest, TestThrowingSubmitLeavesNothingBehind) {
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(2)).ok());
+
+    // Throw from inside do_submit() once the token is on the dispatch queue but before its entry is pushed,
+    // which is what a std::bad_alloc from the entry push looks like.
+    std::atomic<bool> armed{true};
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::do_submit:before_push_entry", [&](void*) {
+        if (armed.load()) {
+            throw std::bad_alloc();
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SCOPED_CLEANUP({
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::do_submit:before_push_entry");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic<int> dropped_runs{0};
+    std::unique_ptr<ThreadPoolToken> token = _pool->new_token(ThreadPool::ExecutionMode::SERIAL);
+    ASSERT_THROW((void)_pool->submit_func([&]() { dropped_runs++; }), std::bad_alloc);
+    ASSERT_THROW((void)token->submit_func([&]() { dropped_runs++; }), std::bad_alloc);
+    ASSERT_TRUE(_pool->_queue.empty());
+    ASSERT_EQ(0, _pool->_total_queued_tasks);
+    ASSERT_TRUE(token->_entries.empty());
+    ASSERT_EQ(ThreadPoolToken::State::IDLE, token->state());
+
+    // The pool is still usable, and the next submissions run only their own tasks.
+    armed.store(false);
+    CountDownLatch latch(2);
+    ASSERT_TRUE(_pool->submit_func([&]() { latch.count_down(); }).ok());
+    ASSERT_TRUE(token->submit_func([&]() { latch.count_down(); }).ok());
+    latch.wait();
+    _pool->wait();
+    ASSERT_EQ(0, dropped_runs.load());
+    token->shutdown();
+    _pool->shutdown();
+}
+
+// Thread::create() allocates and can throw. do_submit() calls it after a task has been accepted (to add a
+// worker for it) and, for the pool's very first thread, before: a throw escaping the former would make the
+// caller roll back work the queued task is about to do (see TestThrowingSubmitLeavesNothingBehind for why
+// that matters), and either would leave _num_threads_pending_start incremented, which shutdown() waits on
+// forever. Both must come back as a Status with the pending count settled.
+TEST_F(ThreadPoolTest, TestThreadCreationThrowIsContained) {
+    // After acceptance: the one resident thread is busy, so the submit wants a second one. The pool is
+    // built before thread creation is made to throw, or init() would fail to start that resident thread.
+    ASSERT_TRUE(
+            rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(1).set_max_threads(4)).ok());
+    ASSERT_EQ(1, _pool->num_threads());
+    CountDownLatch block_latch(1);
+    // Whatever happens below, never leave the resident thread parked on this latch: it lives on this
+    // stack, and a worker still waiting on it would hang the pool's shutdown forever.
+    DeferOp unblock([&]() {
+        block_latch.count_down();
+        _pool->wait();
+    });
+    ASSERT_TRUE(_pool->submit(SlowTask::new_slow_task(&block_latch)).ok());
+    // num_threads() also counts a thread that is still starting up. Wait until the resident thread has
+    // really started and is the one blocked on the task, so the submit below sees a busy thread and not
+    // a pending one, and so _num_threads_pending_start is back to zero before this test reads it.
+    for (int i = 0; i < 10000 && _pool->active_threads() < 1; i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_EQ(1, _pool->active_threads());
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
+
+    SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [](void*) { throw std::bad_alloc(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    SCOPED_CLEANUP({
+        SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic<int> run_count{0};
+    Status s;
+    ASSERT_NO_THROW(s = _pool->submit_func([&]() { run_count++; }));
+    // The task was accepted before the thread creation was attempted, so the pool owns it and runs it once
+    // the resident thread is free.
+    ASSERT_TRUE(s.ok()) << s;
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
+    block_latch.count_down();
+    _pool->wait();
+    ASSERT_EQ(1, run_count.load());
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
+    // Hangs here if the pending-thread count leaked.
+    _pool->shutdown();
+
+    // Before acceptance: no thread exists, so the submit has to create the sole thread first.
+    ASSERT_TRUE(rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName)
+                                                  .set_min_threads(0)
+                                                  .set_max_threads(4)
+                                                  .set_idle_timeout(MonoDelta::FromMilliseconds(1)))
+                        .ok());
+    ASSERT_EQ(0, _pool->num_threads());
+    ASSERT_NO_THROW(s = _pool->submit_func([&]() { run_count++; }));
+    ASSERT_FALSE(s.ok());
+    ASSERT_EQ(0, _pool->_total_queued_tasks);
+    ASSERT_EQ(0, _pool->_num_threads_pending_start);
+
+    // With thread creation working again the pool is usable, and shutdown() completes.
+    SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+    CountDownLatch latch(1);
+    ASSERT_TRUE(_pool->submit_func([&]() { latch.count_down(); }).ok());
+    latch.wait();
+    _pool->wait();
+    ASSERT_EQ(1, run_count.load());
+    _pool->shutdown();
+}
+
+// A pool whose minimum threads cannot all be started must fail to build without hanging. init() sets
+// _num_threads_pending_start to the whole minimum up front and, on a failure, calls shutdown(), which
+// waits for that count to drain -- but the thread that failed and the ones never attempted have nobody
+// to take their slots. Covered for a creation failure reported as a Status and for one that throws,
+// which create_thread() turns into a Status as well.
+TEST_F(ThreadPoolTest, TestInitFailureDoesNotHangShutdown) {
+    for (bool throwing : {false, true}) {
+        std::atomic<int> attempts{0};
+        SyncPoint::GetInstance()->SetCallBack("ThreadPool::create_thread", [&](void* arg) {
+            // The first thread starts; the second one fails.
+            if (attempts.fetch_add(1) == 0) {
+                return;
+            }
+            if (throwing) {
+                throw std::bad_alloc();
+            }
+            *static_cast<Status*>(arg) =
+                    Status::RuntimeError("Could not create thread: Resource temporarily unavailable");
+        });
+        SyncPoint::GetInstance()->EnableProcessing();
+        SCOPED_CLEANUP({
+            SyncPoint::GetInstance()->ClearCallBack("ThreadPool::create_thread");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        // Hangs inside init()'s shutdown() if the failed slots are not given up.
+        Status s = rebuild_pool_with_builder(ThreadPoolBuilder(kDefaultPoolName).set_min_threads(3).set_max_threads(3));
+        ASSERT_FALSE(s.ok());
+        ASSERT_EQ(2, attempts.load());
+        // The one thread that did start has taken its slot and exited; nothing is left pending.
+        ASSERT_EQ(0, _pool->_num_threads_pending_start);
+        ASSERT_EQ(0, _pool->num_threads());
+    }
+
+    // The fixture's pool is usable again once thread creation works.
+    ASSERT_OK(rebuild_pool_with_min_max(1, 1));
+    _pool->shutdown();
+}
 
 } // namespace starrocks

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "MySQLデータベースの現在のバージョンを返します。"
 ---
 
 # version
@@ -36,4 +37,4 @@ mysql> select version();
 
 ## References
 
-[current_version](../utility-functions/current_version.md)
+[current_version](./current_version.md)

@@ -56,6 +56,10 @@ public class Bucket {
         return upperRepeats;
     }
 
+    public Optional<Long> getDistinctCount() {
+        return distinctCount;
+    }
+
     public Optional<Long> getRowCountInBucket(double value, Long previousBucketCount, double distinctValuesCount,
                                               boolean useFixedPointEstimation) {
         if (lower <= value && value < upper) {

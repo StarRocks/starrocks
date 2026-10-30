@@ -3,6 +3,7 @@
 !.cursorrules
 !AGENTS.md
 !CLAUDE.md
+!module_boundary_manifest.json
 !benchmark/
 !cmake_modules/
 !src/

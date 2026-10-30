@@ -20,7 +20,7 @@
 #include "base/string/slice.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
 #include "types/datum.h"
@@ -147,17 +147,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_FALSE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-        EXPECT_FALSE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
-
-        EXPECT_EQ(22, result->get(0).get_int32());
-        EXPECT_EQ(55, result->get(1).get_int32());
-        EXPECT_EQ(77, result->get(2).get_int32());
-        EXPECT_EQ(99, result->get(3).get_int32());
+        EXPECT_EQ("[22, 55, 77, 99, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -187,15 +177,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
-
-        EXPECT_EQ(33, result->get(0).get_int32());
-        EXPECT_EQ(88, result->get(2).get_int32());
+        EXPECT_EQ("[33, NULL, 88, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -227,15 +209,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
-
-        EXPECT_EQ(33, result->get(0).get_int32());
-        EXPECT_EQ(88, result->get(2).get_int32());
+        EXPECT_EQ("[33, NULL, 88, NULL, NULL]", result->debug_string());
     }
 }
 
@@ -308,18 +282,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(6, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_FALSE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-        EXPECT_FALSE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
-        EXPECT_TRUE(result->is_null(5));
-
-        EXPECT_EQ(22, result->get(0).get_int32());
-        EXPECT_EQ(55, result->get(1).get_int32());
-        EXPECT_EQ(77, result->get(2).get_int32());
-        EXPECT_EQ(99, result->get(3).get_int32());
+        EXPECT_EQ("[22, 55, 77, 99, NULL, NULL]", result->debug_string());
     }
 
     // Inputs:
@@ -351,16 +314,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(6, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
-        EXPECT_TRUE(result->is_null(5));
-
-        EXPECT_EQ(33, result->get(0).get_int32());
-        EXPECT_EQ(88, result->get(2).get_int32());
+        EXPECT_EQ("[33, NULL, 88, NULL, NULL, NULL]", result->debug_string());
     }
 }
 
@@ -424,12 +378,7 @@ TEST_F(MapElementExprTest, test_map_const) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(5, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_TRUE(result->is_null(1));
-        EXPECT_TRUE(result->is_null(2));
-        EXPECT_TRUE(result->is_null(3));
-        EXPECT_TRUE(result->is_null(4));
+        EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
     {
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
@@ -461,7 +410,7 @@ TEST_F(MapElementExprTest, test_map_const) {
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         // corner test
-        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+        ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_constant());
         EXPECT_EQ(33, result->get(0).get_int32());
@@ -516,14 +465,7 @@ TEST_F(MapElementExprTest, test_const_map_int_variable_int) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(3, result->size());
-        EXPECT_FALSE(result->is_null(0));
-        EXPECT_FALSE(result->is_null(1));
-        EXPECT_FALSE(result->is_null(2));
-
-        EXPECT_EQ(11, result->get(0).get_int32());
-        EXPECT_EQ(22, result->get(1).get_int32());
-        EXPECT_EQ(33, result->get(2).get_int32());
+        EXPECT_EQ("[11, 22, 33]", result->debug_string());
     }
 }
 // NOLINTNEXTLINE
@@ -578,11 +520,7 @@ TEST_F(MapElementExprTest, test_map_null_key) {
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
-        EXPECT_EQ(2, result->size());
-        EXPECT_TRUE(result->is_null(0));
-        EXPECT_FALSE(result->is_null(1));
-
-        EXPECT_EQ(66, result->get(1).get_int32());
+        EXPECT_EQ("[NULL, 66]", result->debug_string());
     }
 }
 

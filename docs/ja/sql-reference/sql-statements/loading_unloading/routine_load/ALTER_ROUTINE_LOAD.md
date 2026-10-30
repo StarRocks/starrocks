@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "PAUSED 状態の Routine Load ジョブを変更します。"
 ---
 
 # ALTER ROUTINE LOAD
@@ -88,8 +89,8 @@ FROM data_source
   - **`data_source_properties`**
 
     データソースのプロパティ。現在、以下のプロパティのみ変更可能です:
-    - `kafka_partitions` および `kafka_offsets`: StarRocks は既に消費された Kafka パーティションのオフセットの変更のみをサポートし、新しい Kafka パーティションの追加はサポートしていません。
-    - `property.*`: Kafka のデータソース用のカスタムパラメータ、例: `property.kafka_default_offsets`。
+    - `kafka_partitions` および `kafka_offsets`: デフォルトでは、StarRocks は既に消費された Kafka パーティションのオフセットの変更のみをサポートし、新しい Kafka パーティションの追加はサポートしていません。同じステートメントで `property.kafka_partition_discovery` を `true` に設定した場合、リストされたパーティションは Kafka トピックに実際に存在するパーティションに対して検証されるため、固定リスト外のパーティションにもオフセットを指定できます。
+    - `property.*`: Kafka のデータソース用のカスタムパラメータ、例: `property.kafka_default_offsets`。なお、`property.kafka_partition_discovery` は `true` にのみ設定でき、ジョブ作成時に固定されたパーティションリストを解除してパーティションの自動発見を再度有効にします。`false` に戻すことはサポートされていません。パーティションを再度固定するには、ジョブを再作成してください。
 
 ## 例
 

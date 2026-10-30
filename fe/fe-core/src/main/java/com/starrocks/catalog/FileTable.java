@@ -29,7 +29,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
-import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
@@ -94,7 +94,7 @@ public class FileTable extends Table {
             throw new DdlException("not supported format: " + format);
         }
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
-        fileProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
+        fileProperties.put(CloudConfigurationConstants.AZURE_PATH_KEY, path);
     }
 
     @Override
@@ -202,9 +202,15 @@ public class FileTable extends Table {
     public void onReload() {
     }
 
+    /**
+     * Not a lock target, although it lives in an internal database. The data is in the file system, and
+     * nothing writes to a published FileTable: ALTER TABLE rejects it and listing files caches nothing on the
+     * object. So the reference a query resolves is already a consistent snapshot, and planning -- which lists
+     * the files for statistics and scan ranges -- runs without the lock.
+     */
     @Override
-    public void onDrop(Database db, boolean force, boolean replay) {
-        super.onDrop(db, force, replay);
+    public boolean isMetaLockTarget() {
+        return false;
     }
 
     @Override

@@ -88,7 +88,7 @@ public class BrokerLoadPendingTaskTest {
         brokerLoadPendingTask.executeTask();
         BrokerPendingTaskAttachment brokerPendingTaskAttachment =
                 Deencapsulation.getField(brokerLoadPendingTask, "attachment");
-        Assertions.assertEquals(1, brokerPendingTaskAttachment.getFileNumByTable(aggKey));
         Assertions.assertEquals(tBrokerFileStatus, brokerPendingTaskAttachment.getFileStatusByTable(aggKey).get(0).get(0));
+        Assertions.assertEquals(1, brokerPendingTaskAttachment.getFileStatusByTable(aggKey).get(0).size());
     }
 }

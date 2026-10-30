@@ -1,3 +1,0 @@
--- name: test_show_proc
-show proc '/transactions/${db[0]}';
-

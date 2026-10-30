@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCacheStatsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFetchOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
@@ -58,8 +60,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -277,6 +277,17 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitLogicalAIProject(OptExpression optExpression, Integer step) {
+            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
+
+            LogicalAIProjectOperator project = optExpression.getOp().cast();
+            return new OperatorStr("logical AI project (" +
+                    project.getColumnRefMap().values().stream().map(scalarOperatorStringFunction::apply)
+                            .collect(Collectors.joining(",")) + ")",
+                    step, Collections.singletonList(child));
+        }
+
+        @Override
         public OperatorStr visitLogicalFilter(OptExpression optExpression, Integer step) {
             OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
 
@@ -434,6 +445,19 @@ public class LogicalPlanPrinter {
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
         }
 
+        @Override
+        public OperatorStr visitPhysicalCacheStatsScan(OptExpression optExpression, Integer step) {
+            PhysicalCacheStatsScanOperator scan = (PhysicalCacheStatsScanOperator) optExpression.getOp();
+            StringBuilder sb = new StringBuilder("CACHE STATS SCAN (");
+            sb.append("columns").append(scan.getUsedColumns());
+            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(")");
+            if (scan.getLimit() >= 0) {
+                sb.append(" Limit ").append(scan.getLimit());
+            }
+            return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
         private OperatorStr visitScanCommon(OptExpression optExpression, Integer step, String scanName) {
             PhysicalScanOperator scan = (PhysicalScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder(scanName + " (");
@@ -444,6 +468,17 @@ public class LogicalPlanPrinter {
                 sb.append(" Limit ").append(scan.getLimit());
             }
             return new OperatorStr(sb.toString(), step, Collections.emptyList());
+        }
+
+        /**
+         * Every scan without its own visitor above lands here. The base class's visitPhysicalScan goes back to
+         * visit(), which dispatches on the operator again and so recursed until the stack overflowed -- a FILE,
+         * HUDI, ES, DELTA LAKE, ... scan could not be printed. Named from the operator type, e.g. "FILE SCAN".
+         */
+        @Override
+        public OperatorStr visitPhysicalScan(OptExpression optExpression, Integer step) {
+            String scanName = optExpression.getOp().getOpType().name().replaceFirst("^PHYSICAL_", "").replace('_', ' ');
+            return visitScanCommon(optExpression, step, scanName);
         }
 
         @Override
@@ -476,7 +511,22 @@ public class LogicalPlanPrinter {
             return visitScanCommon(optExpression, step, "PAIMON SCAN");
         }
 
+        @Override
+        public OperatorStr visitPhysicalFlussScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "FLUSS SCAN");
+        }
+
+        @Override
+        public OperatorStr visitPhysicalLanceScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "LANCE SCAN");
+        }
+
         public OperatorStr visitPhysicalProject(OptExpression optExpression, Integer step) {
+            return visit(optExpression.getInputs().get(0), step);
+        }
+
+        @Override
+        public OperatorStr visitPhysicalAIProject(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
         }
 
@@ -712,38 +762,6 @@ public class LogicalPlanPrinter {
         @Override
         public OperatorStr visitPhysicalNoCTE(OptExpression optExpression, Integer step) {
             return visit(optExpression.getInputs().get(0), step);
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamScan(OptExpression optExpression, Integer step) {
-            // TODO
-            return new OperatorStr("PhysicalStreamScan", step, Collections.emptyList());
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamJoin(OptExpression optExpression, Integer step) {
-            OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
-            OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);
-
-            PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder().append("StreamJoin/").append(join.getJoinType()).append(" (");
-            sb.append("join-predicate [").append(join.getOnPredicate()).append("] ");
-            sb.append("post-join-predicate [").append(join.getPredicate()).append("]");
-            sb.append(")");
-
-            return new OperatorStr(sb.toString(), step, Arrays.asList(leftChild, rightChild));
-        }
-
-        @Override
-        public OperatorStr visitPhysicalStreamAgg(OptExpression optExpression, Integer step) {
-            OperatorStr child = visit(optExpression.getInputs().get(0), step + 1);
-
-            PhysicalStreamAggOperator aggregate = (PhysicalStreamAggOperator) optExpression.getOp();
-            StringBuilder sb = new StringBuilder("StreamAgg ");
-            sb.append(" aggregate [" + aggregate.getAggregations() + "]");
-            sb.append(" group by [" + aggregate.getGroupBys() + "]");
-            sb.append(" having [" + aggregate.getPredicate() + "]");
-            return new OperatorStr(sb.toString(), step, Collections.singletonList(child));
         }
 
         @Override

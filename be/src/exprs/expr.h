@@ -39,12 +39,13 @@
 #include <vector>
 
 #include "column/vectorized_fwd.h"
+#include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/function_context.h"
 #include "exprs/jit/expr_jit_types.h"
+#include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
-#include "runtime/descriptors.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -257,7 +258,10 @@ protected:
 
     // function opcode
 
-    TExprNodeType::type _node_type;
+    // Default-initialized so that the complex-type branch of Expr(TypeDescriptor, bool), which has
+    // no literal node type to assign, leaves a defined value behind rather than an indeterminate
+    // one that node_type() / is_cast_expr() would read.
+    TExprNodeType::type _node_type{};
 
     // Used to check what opcode
     TExprOpcode::type _opcode;

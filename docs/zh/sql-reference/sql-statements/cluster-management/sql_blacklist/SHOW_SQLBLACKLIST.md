@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW SQLBLACKLIST displays the SQL regular expressions in the SQL blacklist."
 ---
 
 # SHOW SQLBLACKLIST

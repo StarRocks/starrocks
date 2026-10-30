@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 description: 計算とストレージの分離
 displayed_sidebar: docs
 ---
@@ -47,7 +48,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 ### curl
 
-`curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行してインストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/dlwiz/?type=bin) 。
+`curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS のプロンプトで `curl` または `curl.exe` を実行してインストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を取得してください](https://curl.se/) 。
 
 ### `/etc/hosts`
 

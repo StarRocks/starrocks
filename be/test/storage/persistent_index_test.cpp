@@ -23,6 +23,13 @@
 #include "base/string/faststring.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -647,6 +654,241 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index_wal) {
 
     config::l0_max_mem_usage = old_val;
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+}
+
+// Regression test: PersistentIndex::insert(check_l1=true) must reject fixed-size keys that already
+// live in L1. This used to be silently skipped -- the L1/L2 existence check was driven off a wrong
+// (offset-based) key size that never matched the length-keyed immutable shard info, so it always
+// returned OK.
+TEST_P(PersistentIndexTest, test_insert_existing_key_in_l1) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    config::skip_pindex_l1_l2_check_in_insert = false;
+    DeferOp restore_skip_check([&]() { config::skip_pindex_l1_l2_check_in_insert = old_skip_check; });
+
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_insert_existing_key_in_l1";
+    const std::string kIndexFile = kPersistentIndexDir + "/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    int64_t old_val = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10240; // force an L0 -> L1 flush
+    DeferOp defer([&]() {
+        config::l0_max_mem_usage = old_val;
+        (void)fs::remove_all(kPersistentIndexDir);
+    });
+
+    using Key = uint64_t;
+    const int N = 10000;
+    vector<Key> keys(N);
+    vector<Slice> key_slices;
+    vector<IndexValue> values(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+        values[i] = i * 2;
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+
+    { // create empty l0 index file
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    PersistentIndexMetaPB index_meta;
+    EditVersion version(0, 0);
+    index_meta.set_key_size(sizeof(Key));
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+    version.to_pb(snapshot_meta->mutable_version());
+
+    PersistentIndex index(kPersistentIndexDir);
+    ASSERT_OK(index.load(index_meta));
+
+    // upsert all keys and flush them down into L1
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+    ASSERT_OK(index.prepare(EditVersion(1, 0), N));
+    ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+    ASSERT_OK(index.commit(&index_meta));
+    ASSERT_OK(index.on_commited());
+
+    // The keys now live in L1 and L0 is empty. insert()-ing the same keys with
+    // check_l1=true must be rejected because they already exist in L1.
+    const int dup_n = 100;
+    ASSERT_OK(index.prepare(EditVersion(2, 0), dup_n));
+    auto st = index.insert(dup_n, key_slices.data(), values.data(), true);
+    // Correct behavior: AlreadyExist. With the bug this returns OK.
+    ASSERT_TRUE(st.is_already_exist()) << "insert() should reject keys already present in L1, but got: " << st;
+}
+
+// Regression test for the var-len side of the same bug: the L1/L2 existence check used to be skipped
+// entirely for var-len primary keys (_fixed_key_size == 0). The keys here span a range of lengths
+// (including > kSliceMaxFixLength) so both the fixlen and var-len immutable shards are exercised.
+TEST_P(PersistentIndexTest, test_insert_existing_varlen_key_in_l1) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    config::skip_pindex_l1_l2_check_in_insert = false;
+    DeferOp restore_skip_check([&]() { config::skip_pindex_l1_l2_check_in_insert = old_skip_check; });
+
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_insert_existing_varlen_key_in_l1";
+    const std::string kIndexFile = kPersistentIndexDir + "/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    int64_t old_val = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10240; // force an L0 -> L1 flush
+    DeferOp defer([&]() {
+        config::l0_max_mem_usage = old_val;
+        (void)fs::remove_all(kPersistentIndexDir);
+    });
+
+    const int N = 10000;
+    // Mixed-length keys: (i % 100 + 1) filler chars plus a unique numeric suffix, so lengths span
+    // ~1..100 bytes and cross kSliceMaxFixLength (64). The numeric suffix keeps every key unique.
+    auto make_key = [](char filler, int i) { return std::string(i % 100 + 1, filler) + std::to_string(i); };
+
+    std::vector<std::string> keys(N);
+    std::vector<Slice> key_slices;
+    std::vector<IndexValue> values(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = make_key('a', i);
+        values[i] = i * 2;
+        key_slices.emplace_back(keys[i].data(), keys[i].size());
+    }
+
+    { // create empty l0 index file
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    PersistentIndexMetaPB index_meta;
+    EditVersion version(0, 0);
+    index_meta.set_key_size(0); // var-len
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+    version.to_pb(snapshot_meta->mutable_version());
+
+    PersistentIndex index(kPersistentIndexDir);
+    ASSERT_OK(index.load(index_meta));
+
+    // upsert all keys and flush them down into L1
+    std::vector<IndexValue> old_values(N, IndexValue(NullIndexValue));
+    ASSERT_OK(index.prepare(EditVersion(1, 0), N));
+    ASSERT_OK(index.upsert(N, key_slices.data(), values.data(), old_values.data()));
+    ASSERT_OK(index.commit(&index_meta));
+    ASSERT_OK(index.on_commited());
+
+    // Brand-new keys (different filler) of the same mixed lengths must be accepted -- they do not
+    // exist in L1. This also guards against probing a key against a wrong-length fixlen shard.
+    const int new_n = 1000;
+    std::vector<std::string> new_keys(new_n);
+    std::vector<Slice> new_key_slices;
+    std::vector<IndexValue> new_values(new_n);
+    new_key_slices.reserve(new_n);
+    for (int i = 0; i < new_n; i++) {
+        new_keys[i] = make_key('b', i);
+        new_values[i] = i;
+        new_key_slices.emplace_back(new_keys[i].data(), new_keys[i].size());
+    }
+    ASSERT_OK(index.prepare(EditVersion(2, 0), new_n));
+    ASSERT_OK(index.insert(new_n, new_key_slices.data(), new_values.data(), true));
+
+    // Re-inserting keys that already live in L1 with check_l1=true must be rejected.
+    const int dup_n = 100;
+    ASSERT_OK(index.prepare(EditVersion(3, 0), dup_n));
+    auto st = index.insert(dup_n, key_slices.data(), values.data(), true);
+    ASSERT_TRUE(st.is_already_exist()) << "insert() should reject var-len keys already present in L1, but got: " << st;
+}
+
+TEST_P(PersistentIndexTest, test_insert_immutable_check_config) {
+    const bool old_skip_check = config::skip_pindex_l1_l2_check_in_insert;
+    const int64_t old_max_mem_usage = config::l0_max_mem_usage;
+    DeferOp restore_config([&]() {
+        config::skip_pindex_l1_l2_check_in_insert = old_skip_check;
+        config::l0_max_mem_usage = old_max_mem_usage;
+    });
+    ASSERT_TRUE(config::skip_pindex_l1_l2_check_in_insert); // default: check only the memtable
+    config::l0_max_mem_usage = 104857600;
+
+    for (size_t key_size : {size_t(8), size_t(0)}) {
+        // The variable-length case exercises both fixed-length and variable-length immutable shards.
+        std::vector<std::string> keys = key_size == 0 ? std::vector<std::string>{"short", std::string(100, 'a')}
+                                                      : std::vector<std::string>{"key_0001", "key_0002"};
+        std::vector<Slice> key_slices;
+        for (const auto& key : keys) {
+            key_slices.emplace_back(key);
+        }
+        std::vector<IndexValue> values{IndexValue(1), IndexValue(2)};
+        std::vector<IndexValue> new_values{IndexValue(3), IndexValue(4)};
+        for (const std::string level : {"l0", "l1", "tmp_l1", "l2"}) {
+            for (bool skip_check : {true, false}) {
+                for (bool check_l1 : {true, false}) {
+                    SCOPED_TRACE(testing::Message() << "key_size=" << key_size << " level=" << level
+                                                    << " skip_check=" << skip_check << " check_l1=" << check_l1);
+                    config::skip_pindex_l1_l2_check_in_insert = skip_check;
+                    const std::string dir = "./PersistentIndexTest_test_insert_immutable_check_config";
+                    auto* fs = FileSystem::Default();
+                    ASSERT_OK(fs->create_dir(dir));
+                    DeferOp cleanup([&]() { (void)fs::remove_all(dir); });
+                    ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(dir + "/index.l0.0.0"));
+                    ASSERT_OK(wfile->close());
+
+                    PersistentIndexMetaPB meta;
+                    meta.set_key_size(key_size);
+                    meta.set_size(0);
+                    EditVersion(0, 0).to_pb(meta.mutable_version());
+                    auto* l0_meta = meta.mutable_l0_meta();
+                    l0_meta->set_format_version(PERSISTENT_INDEX_VERSION_5);
+                    EditVersion(0, 0).to_pb(l0_meta->mutable_snapshot()->mutable_version());
+                    if (level == "l1" || level == "l2") {
+                        // Build an immutable index with an empty L0 so rejection cannot come from the memtable.
+                        ASSIGN_OR_ABORT(auto builder, ShardByLengthMutableIndex::create(key_size, dir));
+                        ASSERT_OK(builder->insert(keys.size(), key_slices.data(), values.data()));
+                        ASSERT_OK(builder->flush_to_immutable_index(dir + "/index." + level + ".1.0", EditVersion(1, 0),
+                                                                    true, true));
+                        meta.set_size(keys.size());
+                        EditVersion(1, 0).to_pb(meta.mutable_version());
+                        if (level == "l1") {
+                            EditVersion(1, 0).to_pb(meta.mutable_l1_version());
+                        } else {
+                            EditVersion(1, 0).to_pb(meta.add_l2_versions());
+                            meta.add_l2_version_merged(false);
+                        }
+                    }
+                    PersistentIndex index(dir);
+                    ASSERT_OK(index.load(meta));
+                    ASSERT_OK(index.prepare(EditVersion(2, 0), keys.size()));
+                    if (level == "l0" || level == "tmp_l1") {
+                        ASSERT_OK(index.insert(keys.size(), key_slices.data(), values.data(), check_l1));
+                        if (level == "tmp_l1") {
+                            ASSERT_OK(index.flush_advance());
+                        }
+                    }
+
+                    auto st = index.insert(keys.size(), key_slices.data(), new_values.data(), check_l1);
+                    const bool reject = level == "l0" || (!skip_check && (level != "l1" || check_l1));
+                    if (reject) {
+                        ASSERT_TRUE(st.is_already_exist()) << st;
+                    } else {
+                        ASSERT_OK(st);
+                        std::vector<IndexValue> actual(keys.size());
+                        ASSERT_OK(index.get(keys.size(), key_slices.data(), actual.data()));
+                        ASSERT_EQ(new_values, actual);
+                        // Skipping immutable files must never skip duplicate detection in L0.
+                        ASSERT_TRUE(index.insert(keys.size(), key_slices.data(), new_values.data(), check_l1)
+                                            .is_already_exist());
+                    }
+                }
+            }
+        }
+    }
 }
 
 TEST_P(PersistentIndexTest, test_l0_max_file_size) {
@@ -1292,6 +1534,157 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index_wal) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
+namespace {
+
+class PersistentIndexReadCountingStream final : public io::SeekableInputStreamWrapper {
+public:
+    explicit PersistentIndexReadCountingStream(std::shared_ptr<io::SeekableInputStream> stream)
+            : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(std::move(stream)) {}
+
+    Status read_at_fully(int64_t offset, void* out, int64_t count) override {
+        if (fail_reads) {
+            return Status::IOError("injected immutable-index read failure");
+        }
+        read_bytes += count;
+        read_calls++;
+        return _stream->read_at_fully(offset, out, count);
+    }
+
+    void reset_counts() {
+        read_bytes = 0;
+        read_calls = 0;
+    }
+
+    int64_t read_bytes = 0;
+    size_t read_calls = 0;
+    bool fail_reads = false;
+
+private:
+    std::shared_ptr<io::SeekableInputStream> _stream;
+};
+
+} // namespace
+
+TEST_P(PersistentIndexTest, test_check_not_exist_uses_get_io_path) {
+    const bool old_filter = config::enable_pindex_filter;
+    const bool old_read_by_page = config::enable_pindex_read_by_page;
+    DeferOp restore_config([&]() {
+        config::enable_pindex_filter = old_filter;
+        config::enable_pindex_read_by_page = old_read_by_page;
+    });
+    for (size_t key_size : {size_t(8), size_t(0)}) {
+        SCOPED_TRACE(testing::Message() << "key_size=" << key_size);
+        const std::string dir = "./PersistentIndexTest_test_check_not_exist_uses_get_io_path";
+        auto* fs = FileSystem::Default();
+        ASSERT_OK(fs->create_dir(dir));
+        DeferOp cleanup([&]() { (void)fs::remove_all(dir); });
+        const std::string path = dir + "/index.l1.1.0";
+        const size_t n = 20000; // Enough data for many pages in each probed shard.
+        auto make_key = [key_size](uint64_t i) {
+            if (key_size != 0) {
+                return std::string(reinterpret_cast<const char*>(&i), sizeof(i));
+            }
+            return (i % 2 == 0 ? "short_" : std::string(100, 'a')) + std::to_string(i);
+        };
+        std::vector<std::string> keys(n);
+        std::vector<Slice> key_slices;
+        std::vector<IndexValue> values(n);
+        for (size_t i = 0; i < n; i++) {
+            keys[i] = make_key(i);
+            key_slices.emplace_back(keys[i]);
+            values[i] = IndexValue(i + 1);
+        }
+        values.back() = IndexValue(NullIndexValue);
+        ASSIGN_OR_ABORT(auto builder, ShardByLengthMutableIndex::create(key_size, dir));
+        ASSERT_OK(builder->insert(n, key_slices.data(), values.data()));
+        ASSERT_OK(builder->flush_to_immutable_index(path, EditVersion(1, 0), true, true));
+        ASSIGN_OR_ABORT(auto file, fs->new_random_access_file(path));
+        auto stream = std::make_shared<PersistentIndexReadCountingStream>(file->stream());
+        ASSIGN_OR_ABORT(auto index, ImmutableIndex::load(std::make_unique<RandomAccessFile>(stream, path), true));
+
+        // Select an absent key that is definitely rejected by the loaded Bloom filter, so the
+        // zero-data-I/O assertion does not depend on its false-positive rate.
+        config::enable_pindex_filter = true;
+        std::string missing_key;
+        bool filtered = false;
+        for (size_t i = n + 1; i < n + 200; i += 2) {
+            missing_key = make_key(i);
+            Slice probe(missing_key);
+            KeysInfo keys_info;
+            keys_info.key_infos.emplace_back(0, key_index_hash(probe.data, probe.size));
+            KeysInfo found;
+            IndexValue value;
+            IOStat stat;
+            ASSERT_OK(index->get(1, &probe, keys_info, &value, &found, key_size, &stat));
+            ASSERT_EQ(0, found.size());
+            if (stat.filtered_kv_cnt == 1) {
+                filtered = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(filtered);
+        Slice missing_probe(missing_key);
+        // For variable-length indexes both probes use the >64-byte shard; the file also contains
+        // shorter fixed-length shards, exercising the key-length guard in check_not_exist().
+        Slice live_probe = key_slices[n - 3];
+        Slice tombstone_probe = key_slices.back();
+        for (bool filter : {false, true}) {
+            config::enable_pindex_filter = filter;
+            int64_t whole_shard_bytes = 0;
+            for (bool read_by_page : {false, true}) {
+                SCOPED_TRACE(testing::Message() << "filter=" << filter << " read_by_page=" << read_by_page);
+                config::enable_pindex_read_by_page = read_by_page;
+                KeysInfo keys_info;
+                keys_info.key_infos.emplace_back(0, key_index_hash(live_probe.data, live_probe.size));
+                KeysInfo found;
+                IndexValue value;
+                stream->reset_counts();
+                ASSERT_OK(index->get(1, &live_probe, keys_info, &value, &found, key_size));
+                ASSERT_EQ(1, found.size());
+                ASSERT_EQ(values[n - 3], value);
+                const auto get_read_bytes = stream->read_bytes;
+                const auto get_read_calls = stream->read_calls;
+                ASSERT_GT(get_read_bytes, 0);
+                if (!read_by_page) {
+                    whole_shard_bytes = get_read_bytes;
+                } else {
+                    ASSERT_LT(get_read_bytes, whole_shard_bytes);
+                }
+
+                stream->reset_counts();
+                auto st = index->check_not_exist(1, &live_probe);
+                ASSERT_TRUE(st.is_already_exist()) << st;
+                ASSERT_EQ(get_read_bytes, stream->read_bytes);
+                ASSERT_EQ(get_read_calls, stream->read_calls);
+                ASSERT_TRUE(index->check_not_exist(1, &tombstone_probe).is_already_exist());
+
+                stream->reset_counts();
+                ASSERT_OK(index->check_not_exist(1, &missing_probe));
+                if (filter) {
+                    ASSERT_EQ(0, stream->read_calls);
+                } else {
+                    ASSERT_GT(stream->read_bytes, 0);
+                }
+                stream->reset_counts();
+                ASSERT_OK(index->check_not_exist(0, nullptr));
+                ASSERT_EQ(0, stream->read_calls);
+                std::string short_key = "x";
+                Slice short_probe(short_key);
+                ASSERT_OK(index->check_not_exist(1, &short_probe));
+                if (key_size != 0) {
+                    ASSERT_EQ(0, stream->read_calls);
+                }
+
+                stream->fail_reads = true;
+                st = index->check_not_exist(1, &live_probe);
+                stream->fail_reads = false;
+                ASSERT_TRUE(st.is_io_error()) << st;
+                ASSERT_NE(std::string::npos, st.to_string().find("injected immutable-index read failure"));
+            }
+        }
+    }
+}
+
 TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     using Key = uint64_t;
     const int N = 200000;
@@ -1322,7 +1715,7 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     ASSERT_TRUE(idx->flush_to_immutable_index(writer, nshard, npage_hint, page_size, nbucket, true).ok());
     writer->finish();
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file("./index.l1.1.1"));
     auto st_load = ImmutableIndex::load(std::move(rf), true);
     if (!st_load.ok()) {
@@ -1347,7 +1740,7 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     for (size_t i = 0; i < N; i++) {
         ASSERT_EQ(values[i], get_values[i]);
     }
-    ASSERT_TRUE(idx_loaded->check_not_exist(N, key_slices.data(), sizeof(Key)).is_already_exist());
+    ASSERT_TRUE(idx_loaded->check_not_exist(N, key_slices.data()).is_already_exist());
 
     vector<Key> check_not_exist_keys(10);
     vector<Slice> check_not_exist_key_slices(10);
@@ -1355,13 +1748,13 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
         check_not_exist_keys[i] = N + i;
         check_not_exist_key_slices[i] = Slice((uint8_t*)(&check_not_exist_keys[i]), sizeof(Key));
     }
-    ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_key_slices.data(), sizeof(Key)).ok());
+    ASSERT_TRUE(idx_loaded->check_not_exist(10, check_not_exist_key_slices.data()).ok());
     ASSERT_TRUE(fs::remove_all("./index.l1.1.1").ok());
 }
 
 TEST_P(PersistentIndexTest, test_flush_varlen_to_immutable) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_varlen_to_immutable";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     PersistentIndex index(kPersistentIndexDir);
@@ -1408,9 +1801,9 @@ TEST_P(PersistentIndexTest, test_flush_varlen_to_immutable) {
         ASSERT_EQ(values[i], get_values[i]);
     }
 
-    auto st_check = idx_loaded->check_not_exist(N, keys_slice.data(), 0);
+    auto st_check = idx_loaded->check_not_exist(N, keys_slice.data());
     LOG(WARNING) << "check status is " << st_check;
-    ASSERT_TRUE(idx_loaded->check_not_exist(N, keys_slice.data(), 0).is_already_exist());
+    ASSERT_TRUE(idx_loaded->check_not_exist(N, keys_slice.data()).is_already_exist());
 
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
@@ -1471,19 +1864,19 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
     size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
     LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
-    auto chunk = ChunkHelper::new_chunk(schema, size);
-    auto cols = chunk->mutable_columns();
+    auto chunk = ChunkFactory::new_chunk(schema, size);
+    auto cols = chunk->columns();
     if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
         for (size_t i = 0; i < size; i++) {
-            cols[0]->append_datum(Datum(varlen_keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(i + 1)));
-            cols[2]->append_datum(Datum((int32_t)(i + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(varlen_keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(i + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(i + 2)));
         }
     } else {
         for (size_t i = 0; i < size; i++) {
-            cols[0]->append_datum(Datum(keys[i]));
-            cols[1]->append_datum(Datum((int16_t)(keys[i] % size + 1)));
-            cols[2]->append_datum(Datum((int32_t)(keys[i] % size + 2)));
+            cols[0]->as_mutable_ptr()->append_datum(Datum(keys[i]));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(keys[i] % size + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(keys[i] % size + 2)));
         }
     }
     if (one_delete == nullptr && (size > 0)) {
@@ -1555,19 +1948,23 @@ void build_persistent_index_from_tablet(size_t N) {
         std::vector<uint64_t> persistent_results;
         primary_results.resize(pks.size());
         persistent_results.resize(pks.size());
-        primary_index.get(pks, &primary_results);
+        ASSERT_OK(primary_index.get(pks, &primary_results));
         if (pks.is_binary()) {
-            persistent_index.get(pks.size(), reinterpret_cast<const Slice*>(pks.raw_data()),
-                                 reinterpret_cast<IndexValue*>(persistent_results.data()));
+            Buffer<Slice> slices;
+            ColumnHelper::build_slices(&pks, slices);
+            ASSERT_OK(persistent_index.get(pks.size(), slices.data(),
+                                           reinterpret_cast<IndexValue*>(persistent_results.data())));
         } else {
             size_t key_size = primary_index.key_size();
             ASSERT_TRUE(key_size == sizeof(uint64_t));
+            RawDataVisitor visitor;
+            ASSERT_OK(pks.accept(&visitor));
             std::vector<Slice> col_key_slices;
-            for (size_t i = 0; i < pks.size(); ++i) {
-                col_key_slices.emplace_back(pks.raw_data() + i * key_size, key_size);
+            for (size_t j = 0; j < pks.size(); ++j) {
+                col_key_slices.emplace_back(visitor.result() + j * key_size, key_size);
             }
-            persistent_index.get(pks.size(), col_key_slices.data(),
-                                 reinterpret_cast<IndexValue*>(persistent_results.data()));
+            ASSERT_OK(persistent_index.get(pks.size(), col_key_slices.data(),
+                                           reinterpret_cast<IndexValue*>(persistent_results.data())));
         }
 
         ASSERT_EQ(primary_results.size(), persistent_results.size());
@@ -1592,18 +1989,22 @@ void build_persistent_index_from_tablet(size_t N) {
             std::vector<uint64_t> persistent_results;
             primary_results.resize(pks.size());
             persistent_results.resize(pks.size());
-            primary_index.get(pks, &primary_results);
+            ASSERT_OK(primary_index.get(pks, &primary_results));
             if (pks.is_binary()) {
-                persistent_index.get(pks.size(), reinterpret_cast<const Slice*>(pks.raw_data()),
-                                     reinterpret_cast<IndexValue*>(persistent_results.data()));
+                Buffer<Slice> slices;
+                ColumnHelper::build_slices(&pks, slices);
+                ASSERT_OK(persistent_index.get(pks.size(), slices.data(),
+                                               reinterpret_cast<IndexValue*>(persistent_results.data())));
             } else {
                 size_t key_size = primary_index.key_size();
+                RawDataVisitor visitor;
+                ASSERT_OK(pks.accept(&visitor));
                 std::vector<Slice> col_key_slices;
-                for (size_t i = 0; i < pks.size(); ++i) {
-                    col_key_slices.emplace_back(pks.raw_data() + i * key_size, key_size);
+                for (size_t j = 0; j < pks.size(); ++j) {
+                    col_key_slices.emplace_back(visitor.result() + j * key_size, key_size);
                 }
-                persistent_index.get(pks.size(), col_key_slices.data(),
-                                     reinterpret_cast<IndexValue*>(persistent_results.data()));
+                ASSERT_OK(persistent_index.get(pks.size(), col_key_slices.data(),
+                                               reinterpret_cast<IndexValue*>(persistent_results.data())));
             }
             ASSERT_EQ(primary_results.size(), persistent_results.size());
             for (size_t j = 0; j < primary_results.size(); ++j) {
@@ -2033,7 +2434,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
 TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_for_pindex";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     config::l0_max_mem_usage = 10240;
@@ -2183,7 +2584,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 TEST_P(PersistentIndexTest, test_bloom_filter_working) {
     write_pindex_bf = true;
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_working";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;

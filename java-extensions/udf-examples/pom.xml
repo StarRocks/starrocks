@@ -20,6 +20,13 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- For vectorized ("input"="arrow") UDF examples. Provided at runtime by the
+             udf-extensions jar on the BE classpath, so scope it provided. -->
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-vector</artifactId>
+            <scope>provided</scope>
+        </dependency>
     </dependencies>
 
 </project>

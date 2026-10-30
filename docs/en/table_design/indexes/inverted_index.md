@@ -2,6 +2,7 @@
 displayed_sidebar: docs
 toc_max_heading_level: 4
 sidebar_position: 50
+description: "How to create and use full-text inverted indexes in StarRocks (from v3.3) to accelerate text keyword searches and LIKE queries by indexing individual words."
 ---
 
 import Beta from '../../_assets/commonMarkdown/_beta.mdx'
@@ -14,7 +15,7 @@ Since version 3.3.0, StarRocks supports full-text inverted indexes, which can br
 
 Primary Key tables support full-text inverted indexes from v4.0 onwards.
 
-The full-text inverted index is not yet supported in shared-data clusters.
+Since v4.1, StarRocks supports a **built-in** inverted index implementation in addition to the default CLucene-based implementation. The built-in implementation supports both **shared-nothing** and **shared-data** clusters. For details, see [built-in inverted index](#built-in-inverted-index).
 
 ## Overview
 
@@ -104,6 +105,9 @@ When a full-text inverted index column is enabled with tokenization (`parser` = 
 - `<col_name> (NOT) MATCH_ALL 'keyword1, keyword2'`
 
 Here, keyword must be a string literal; expressions are not supported.
+
+For a nullable indexed column, rows whose value is `NULL` are not returned by `NOT MATCH`, `NOT MATCH_ANY`, or `NOT MATCH_ALL`.
+
 1. Create a table and insert a few rows of test data.
 
       ```SQL
@@ -156,7 +160,7 @@ Here, keyword must be a string literal; expressions are not supported.
     ```
 **Notes:**
 
-- During queries, keywords can be matched fuzzily using `%`, in the format of `%keyword%`. However, the keyword must contain a part of a word. For example, if the keyword is <code>starrocks&nbsp;</code>, it cannot match the word `starrocks` because it contains spaces.
+- During queries, keywords can be matched fuzzily using `%`, in the format of `%keyword%`. However, the keyword must contain a part of a word. For example, if the keyword is `starrocks `, it cannot match the word `starrocks` because it contains spaces.
 
     ```SQL
     MySQL [example_db]> SELECT * FROM t WHERE t.value MATCH "star%";
@@ -252,3 +256,186 @@ If the full-text inverted index does not tokenize the indexed column, that is, `
 ## Verify whether a query is accelerated by the full-text inverted index
 
 After executing the query, you can view the detailed metrics `GinFilterRows` and `GinFilter` in the scan node of the Query Profile to see the number of rows filtered and the filtering time using the full-text inverted index.
+
+## Built-in inverted index
+
+Since v4.1, StarRocks provides a **built-in** inverted index implementation in addition to the default CLucene-based implementation. The built-in implementation is StarRocks' native inverted index built on top of bitmap index, and supports both **shared-nothing** and **shared-data** clusters.
+
+:::note
+The CLucene-based inverted index implementation is not supported in shared-data clusters. For shared-data clusters, you must use the built-in implementation.
+:::
+
+### Implementation comparison
+
+| Implementation | Supported since | Shared-nothing | Shared-data | Description |
+|---------------|----------------|----------------|-------------|-------------|
+| **CLucene** (default) | v3.3.0 | Yes | No | Based on the CLucene full-text search library. This is the default implementation for shared-nothing clusters. |
+| **built-in** | v4.1.0 | Yes | Yes | StarRocks' native inverted index implementation. Supports both shared-nothing and shared-data clusters. |
+
+You can explicitly specify the implementation type using the `imp_lib` parameter when creating an index. If not specified, the system automatically selects the appropriate implementation based on the cluster mode:
+- In shared-nothing clusters, the default is CLucene.
+- In shared-data clusters, the default is built-in (CLucene is not supported).
+
+### Create built-in inverted index
+
+#### Create at table creation
+
+```SQL
+-- Create table with built-in inverted index
+CREATE TABLE `t_builtin` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english", "imp_lib" = "builtin") COMMENT 'builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`)
+PROPERTIES (
+"replicated_storage" = "false"
+);
+```
+
+#### Add after table creation
+
+```SQL
+ALTER TABLE t ADD INDEX idx_builtin (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin');
+-- Or
+CREATE INDEX idx_builtin ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin');
+```
+
+### Built-in inverted index in shared-data clusters
+
+In shared-data clusters, the built-in implementation is automatically selected even if `imp_lib` is not specified. You can create the index using the same syntax as for a regular inverted index:
+
+```SQL
+-- In a shared-data cluster, this automatically uses the built-in implementation
+CREATE TABLE `t_shared_data` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english") COMMENT 'english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`);
+```
+
+You can also explicitly specify `"imp_lib" = "builtin"` for clarity:
+
+```SQL
+CREATE TABLE `t_shared_data_explicit` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_english (`value`) USING GIN ("parser" = "english", "imp_lib" = "builtin") COMMENT 'builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`);
+```
+
+### dict_gram_num
+
+The `dict_gram_num` parameter is available exclusively for the **built-in** inverted index implementation. It controls the n-gram size used to build an n-gram dictionary index on top of the inverted index dictionary, which can significantly accelerate wildcard and substring queries.
+
+#### How it works
+
+When `dict_gram_num` is set to a positive integer (e.g., `2`), the built-in inverted index splits each dictionary entry into n-grams (substrings of the specified character length) during index construction. For example, if `dict_gram_num` is set to `2` and a dictionary entry is `"starrocks"`, the following 2-grams are generated: `"st"`, `"ta"`, `"ar"`, `"rr"`, `"ro"`, `"oc"`, `"ck"`, `"ks"`.
+
+During a query like `MATCH '%rock%'`, the query string `"rock"` is also split into 2-grams (`"ro"`, `"oc"`, `"ck"`), and the n-gram index quickly narrows down candidate dictionary entries, avoiding a full dictionary scan. This greatly improves the performance of wildcard queries, especially on columns with a large number of distinct values.
+
+#### Parameter details
+
+| Parameter | Default | Valid range | Description |
+|-----------|---------|-------------|-------------|
+| `dict_gram_num` | `-1` (disabled) | Positive integers (e.g., `1`, `2`, `3`, ...) | The n-gram size for building the dictionary n-gram index. Only valid with `imp_lib` = `builtin`. |
+
+#### Guidelines for choosing dict_gram_num
+
+- A smaller value (e.g., `2`) generates more n-grams per dictionary entry, increasing index size but providing better filtering for short query patterns.
+- A larger value (e.g., `4`) generates fewer n-grams, resulting in smaller index size but less effective filtering for short query patterns.
+- If your queries primarily use short wildcard patterns (e.g., `%ab%`), a smaller `dict_gram_num` value (such as `2`) is recommended.
+- If the query pattern is shorter than the `dict_gram_num` value, the n-gram index cannot be used for that query and falls back to a full dictionary scan.
+
+#### Examples
+
+**Create built-in inverted index with `dict_gram_num`**
+
+1. Create a table with a built-in inverted index and `dict_gram_num` set to `2`.
+
+    ```SQL
+    CREATE TABLE `t_gram` (
+        `id1` bigint(20) NOT NULL COMMENT "",
+        `text_val` varchar(255) NOT NULL COMMENT "",
+        INDEX idx_gram (`text_val`) USING GIN (
+            "parser" = "english",
+            "imp_lib" = "builtin",
+            "dict_gram_num" = "2"
+        ) COMMENT 'builtin index with ngram'
+    )
+    DUPLICATE KEY(`id1`)
+    DISTRIBUTED BY HASH(`id1`)
+    PROPERTIES (
+    "replicated_storage" = "false"
+    );
+    ```
+
+2. Insert test data.
+
+    ```SQL
+    INSERT INTO t_gram VALUES
+        (1, "starrocks is a high performance database"),
+        (2, "apache spark is a data processing engine"),
+        (3, "rocksdb is an embedded key value store");
+    ```
+
+3. Query with wildcard patterns. The n-gram dictionary index accelerates these queries.
+
+    ```SQL
+    -- Query for rows containing "rock" in the text
+    MySQL [example_db]> SELECT * FROM t_gram WHERE text_val MATCH "%rock%";
+    +------+--------------------------------------------+
+    | id1  | text_val                                   |
+    +------+--------------------------------------------+
+    |    1 | starrocks is a high performance database   |
+    |    3 | rocksdb is an embedded key value store      |
+    +------+--------------------------------------------+
+    2 rows in set (0.01 sec)
+    ```
+
+**Add `dict_gram_num` to an existing table**
+
+You can also specify `dict_gram_num` when adding a built-in inverted index after table creation:
+
+```SQL
+CREATE INDEX idx_gram ON t (v) USING GIN('parser' = 'english', 'imp_lib' = 'builtin', 'dict_gram_num' = '3');
+```
+
+### lower_case
+
+The `lower_case` parameter is available exclusively for the **built-in** inverted index implementation with English tokenization (`"parser" = "english"`). It controls whether English tokens are normalized to lowercase when the index is built and when queries are matched against it.
+
+#### Parameter details
+
+| Parameter | Default | Valid values | Description |
+|-----------|---------|--------------|-------------|
+| `lower_case` | `true` | `true`, `false` | Whether to normalize English tokens to lowercase. Only valid with `"imp_lib" = "builtin"` and `"parser" = "english"`. |
+
+- `true` (default): Uppercase English letters are converted to lowercase both when the index is built and when query keywords are matched, so matching is case-insensitive. This preserves the existing behavior.
+- `false`: Case is preserved during both indexing and matching, so matching is case-sensitive. Use this when you need to distinguish words that differ only in case, such as `Apple`, `apple`, and `APPLE`.
+
+#### Example
+
+Create a built-in English inverted index with case-sensitive matching:
+
+```SQL
+CREATE TABLE `t_case` (
+    `id1` bigint(20) NOT NULL COMMENT "",
+    `value` varchar(255) NOT NULL COMMENT "",
+    INDEX gin_cs (`value`) USING GIN (
+        "parser" = "english",
+        "imp_lib" = "builtin",
+        "lower_case" = "false"
+    ) COMMENT 'case-sensitive builtin english index'
+)
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`)
+PROPERTIES (
+    "replicated_storage" = "false"
+);
+```

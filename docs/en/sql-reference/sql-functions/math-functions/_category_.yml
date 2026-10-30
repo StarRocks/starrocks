@@ -3,4 +3,5 @@ label: 'Math'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: math-functions

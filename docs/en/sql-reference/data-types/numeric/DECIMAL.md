@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DECIMAL(P[,S]) is a high-precision fixed-point value."
 ---
 
 # DECIMAL

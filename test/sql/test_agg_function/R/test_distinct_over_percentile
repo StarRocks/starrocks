@@ -1,0 +1,19 @@
+-- name: test_distinct_over_percentile
+select count(distinct percentile_hash(cast(1 as double)));
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 56. Detail message: DISTINCT aggregation is not supported for PERCENTILE type: count(DISTINCT percentile_hash(CAST(1 AS DOUBLE))).')
+-- !result
+create table t_obj (k int, b bitmap bitmap_union, h hll hll_union) aggregate key(k) distributed by hash(k) buckets 1 properties("replication_num"="1");
+-- result:
+-- !result
+insert into t_obj values (1, to_bitmap(10), hll_hash(10)), (1, to_bitmap(20), hll_hash(20)), (2, to_bitmap(10), hll_hash(10));
+-- result:
+-- !result
+select count(distinct b), count(distinct h) from t_obj;
+-- result:
+2	2
+-- !result
+select count(distinct to_bitmap(v)) from (select 10 v union all select 20 union all select 10) t;
+-- result:
+2
+-- !result

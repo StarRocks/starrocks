@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/object_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
@@ -28,6 +28,9 @@ class BitmapUnionIntAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionIntAggregateFunction<LT, T>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
+
+    // bitmap_union_int returns a cardinality (0, never NULL), even over a nullable input or an empty window frame.
+    bool is_result_non_nullable() const override { return true; }
 
     bool is_exception_safe() const override { return false; }
 

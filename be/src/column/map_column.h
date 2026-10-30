@@ -56,10 +56,6 @@ public:
 
     bool is_map() const override { return true; }
 
-    const uint8_t* raw_data() const override;
-
-    uint8_t* mutable_raw_data() override;
-
     size_t size() const override;
 
     size_t capacity() const override;
@@ -174,12 +170,6 @@ public:
         RETURN_IF_ERROR(_values->capacity_limit_reached());
         return _offsets->capacity_limit_reached();
     }
-
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override { return _keys->has_large_column() || _values->has_large_column(); }
 
     void check_or_die() const override;
 

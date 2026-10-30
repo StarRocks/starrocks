@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.common.AnalysisException;
@@ -24,23 +23,17 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
-import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.Type;
 
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAdjusters;
-import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
 
 public class MultiRangePartitionDesc extends PartitionDesc {
 
@@ -50,14 +43,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private final String partitionEnd;
     private Long step;
     private final String timeUnit;
-    private static final SimpleDateFormat DATEKEY_SDF = new SimpleDateFormat("yyyyMMdd");
-    public static final ImmutableSet<TimestampArithmeticExpr.TimeUnit> SUPPORTED_TIME_UNIT_TYPE = ImmutableSet.of(
-            TimestampArithmeticExpr.TimeUnit.HOUR,
-            TimestampArithmeticExpr.TimeUnit.DAY,
-            TimestampArithmeticExpr.TimeUnit.WEEK,
-            TimestampArithmeticExpr.TimeUnit.MONTH,
-            TimestampArithmeticExpr.TimeUnit.YEAR
-    );
 
     public MultiRangePartitionDesc(String partitionBegin, String partitionEnd, Long step,
                                    String timeUnit, NodePosition pos) {
@@ -144,7 +129,6 @@ public class MultiRangePartitionDesc extends PartitionDesc {
         // it will follow this configuration to set day of week
         int dayOfWeek = 1;
         int dayOfMonth = 1;
-        TimeZone timeZone = TimeUtils.getSystemTimeZone();
         String partitionPrefix = defaultPrefix;
         if (context.isTempPartition()) {
             partitionPrefix = defaultTempPartitionPrefix;
@@ -179,13 +163,14 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             }
         }
 
-        DateTimeFormatter outputDateFormat = DateUtils.DATE_FORMATTER;
-        if (context.getFirstPartitionColumnType().isDatetime()) {
-            outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
-        }
+        DateTimeFormatter outputDateFormat =
+                PartitionTimeUtils.getPartitionBoundFormatter(context.getFirstPartitionColumnType());
 
         TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
         Preconditions.checkNotNull(timeUnitType);
+        if (!PartitionTimeUtils.BATCH_PARTITION_TIME_UNITS.contains(timeUnitType)) {
+            throw new AnalysisException("Batch build partition does not support time interval type: " + timeUnit);
+        }
 
         if (context.isAutoPartitionTable()) {
             PartitionDescAnalyzer.checkManualAddPartitionDateAligned(
@@ -195,54 +180,16 @@ public class MultiRangePartitionDesc extends PartitionDesc {
                     context.getFirstPartitionColumnType());
         }
 
-        String partitionName;
         while (beginTime.isBefore(endTime)) {
+            // The first lower bound is START as the user wrote it; only the name and the
+            // following bounds are aligned.
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(outputDateFormat));
 
-            switch (timeUnitType) {
-                case HOUR:
-                    partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER);
-                    beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                    beginTime = beginTime.plusHours(timeInterval);
-                    break;
-                case DAY:
-                    partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
-                    beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                    beginTime = beginTime.plusDays(timeInterval);
-                    break;
-                case WEEK:
-                    // Compatible with dynamic partitioning
-                    // First calculate the first day of the week, then calculate the week of the year
-                    beginTime = beginTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
-                    Calendar calendar = Calendar.getInstance(timeZone);
-                    try {
-                        calendar.setTime(DATEKEY_SDF.parse(beginTime.format(DateUtils.DATEKEY_FORMATTER)));
-                    } catch (ParseException e) {
-                        throw new RuntimeException(e);
-                    }
-                    int weekOfYear = calendar.get(Calendar.WEEK_OF_YEAR);
-                    if (weekOfYear <= 1 && calendar.get(Calendar.MONTH) >= 11) {
-                        // eg: JDK think 2019-12-30 as the first week of year 2020, we need to handle this.
-                        // to make it as the 53rd week of year 2019.
-                        weekOfYear += 52;
-                    }
-                    partitionName = partitionPrefix + String.format("%s_%02d", calendar.get(Calendar.YEAR), weekOfYear);
-                    beginTime = beginTime.plusWeeks(timeInterval);
-                    break;
-                case MONTH:
-                    partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER);
-                    beginTime = beginTime.withDayOfMonth(dayOfMonth);
-                    beginTime = beginTime.plusMonths(timeInterval);
-                    break;
-                case YEAR:
-                    partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER);
-                    beginTime = beginTime.withDayOfYear(1);
-                    beginTime = beginTime.plusYears(timeInterval);
-                    break;
-                default:
-                    throw new AnalysisException("Batch build partition does not support time interval type: " +
-                            timeUnit);
-            }
+            beginTime = PartitionTimeUtils.alignToUnitStart(beginTime, timeUnitType, dayOfWeek, dayOfMonth);
+            String partitionName = partitionPrefix
+                    + PartitionTimeUtils.formatPartitionNameSuffix(beginTime, timeUnitType);
+            beginTime = PartitionTimeUtils.plus(beginTime, timeUnitType, timeInterval);
+
             if (timeUnitType != TimestampArithmeticExpr.TimeUnit.DAY && beginTime.isAfter(endTime)) {
                 beginTime = endTime;
             }

@@ -24,11 +24,12 @@
 #include "base/utility/defer_op.h"
 #include "butil/time.h"
 #include "column/const_column.h"
+#include "column/flat_json/json_flattener.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_json_flat_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/json_functions.h"
@@ -36,9 +37,9 @@
 #include "gtest/gtest-param-test.h"
 #include "gutil/casts.h"
 #include "gutil/strings/strip.h"
+#include "storage/json_path_deriver.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -145,9 +146,84 @@ INSTANTIATE_TEST_SUITE_P(FlatJsonQueryTest, FlatJsonQueryTestFixture2,
 
         // array result
         std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, std::vector<LogicalType> {TYPE_JSON}, "$.k1[*].k2", R"( [1, 2] )"),
-        std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, std::vector<LogicalType> {TYPE_JSON}, "$.k1[*]", R"( [{"k2": 1}, {"k2": 2}] )")
+        std::make_tuple(R"( {"k1": [{"k2": 1}, {"k2": 2}]} )", std::vector<std::string>{"k1"}, std::vector<LogicalType> {TYPE_JSON}, "$.k1[*]", R"( [{"k2": 1}, {"k2": 2}] )"),
+
+        // the root rebuilds the document from every flat path
+        std::make_tuple(R"( {"k1":1, "k2":"hehe"} )", std::vector<std::string>{"k1", "k2"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_VARCHAR}, "$", R"( {"k1": 1, "k2": "hehe"} )"),
+        std::make_tuple(R"( {"k1": {"k2": 1}, "k3": true} )", std::vector<std::string>{"k1.k2", "k3"}, std::vector<LogicalType> {TYPE_BIGINT, TYPE_JSON}, "$", R"( {"k1": {"k2": 1}, "k3": true} )"),
+        std::make_tuple(R"( {"k1": {"k2": 1}} )", std::vector<std::string>{"k1.k2"}, std::vector<LogicalType> {TYPE_BIGINT}, "$.k1", R"( {"k2": 1} )")
         ));
 // clang-format on
+
+// json_query(j, '$') over a flat column rebuilds the document: from the flat paths, from the remain, or from both. A
+// row is NULL exactly where the input row is, also when none of the flat paths occurs in it.
+TEST(FlatJsonQueryRootTest, rebuild_root_from_flat_paths_and_remain) {
+    const std::vector<std::string> docs = {R"({"a": 1, "b": {"c": true}})", R"({"a": "str"})",
+                                           R"({"b": {"c": false}, "d": [1, 2]})", ""};
+    struct Layout {
+        std::vector<std::string> paths;
+        std::vector<LogicalType> types;
+        bool has_remain;
+        std::vector<std::string> expected;
+    };
+    const std::vector<Layout> layouts = {
+            // only the flat paths were read: the rebuilt document holds just them
+            {{"a"}, {TYPE_JSON}, false, {R"({"a": 1})", R"({"a": "str"})", "{}", ""}},
+            // only the remain was read
+            {{}, {}, true, docs},
+            {{"a", "b.c"}, {TYPE_JSON, TYPE_JSON}, true, docs},
+    };
+
+    for (const auto& layout : layouts) {
+        auto json_col = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+        for (const auto& doc : docs) {
+            if (doc.empty()) {
+                json_col->append_nulls(1);
+                continue;
+            }
+            JsonValue json;
+            ASSERT_TRUE(JsonValue::parse(doc, &json).ok());
+            json_col->append_datum(Datum(&json));
+        }
+
+        auto flat_json = JsonColumn::create();
+        if (layout.paths.empty()) {
+            // the flattener needs a path; a remain-only column is the documents themselves
+            MutableColumns remain;
+            remain.emplace_back(json_col->data_column()->clone());
+            flat_json->set_flat_columns(layout.paths, layout.types, std::move(remain));
+        } else {
+            JsonFlattener jf(layout.paths, layout.types, layout.has_remain);
+            jf.flatten(json_col.get());
+            flat_json->set_flat_columns(layout.paths, layout.types, jf.mutable_result());
+        }
+        ASSERT_EQ(layout.has_remain, flat_json->has_remain());
+        ColumnPtr input = NullableColumn::create(std::move(flat_json), json_col->null_column()->clone());
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ColumnBuilder<TYPE_VARCHAR> path(1);
+        path.append("$");
+        Columns columns{input, path.build(true)};
+        ctx->set_constant_columns(columns);
+        ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+        ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
+        ASSERT_EQ(docs.size(), result->size());
+        for (size_t i = 0; i < docs.size(); i++) {
+            Datum datum = result->get(i);
+            if (layout.expected[i].empty()) {
+                ASSERT_TRUE(datum.is_null()) << "row " << i;
+                continue;
+            }
+            ASSERT_FALSE(datum.is_null()) << "row " << i;
+            JsonValue expected;
+            ASSERT_TRUE(JsonValue::parse(layout.expected[i], &expected).ok());
+            ASSERT_EQ(0, datum.get_json()->compare(expected))
+                    << "row " << i << ": " << datum.get_json()->to_string_uncheck() << " vs " << layout.expected[i];
+        }
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+}
 
 class FlatJsonQueryErrorTestFixture
         : public ::testing::TestWithParam<std::tuple<std::string, std::vector<std::string>, std::string>> {
@@ -428,8 +504,9 @@ INSTANTIATE_TEST_SUITE_P(JsonKeysTest, FlatJsonKeysTestFixture2,
 // 5. get_json_int execpted result
 // 6. get_json_string expected result
 // 7. get_json_double expected result
+// 8. get_json_scalar expected result
 using GetJsonXXXParam = std::tuple<std::string, std::string, std::vector<std::string>, std::vector<LogicalType>, int,
-                                   int, std::string, double>;
+                                   int, std::string, double, std::string>;
 
 class FlatGetJsonXXXTestFixture2 : public ::testing::TestWithParam<GetJsonXXXParam> {
 public:
@@ -573,32 +650,56 @@ TEST_P(FlatGetJsonXXXTestFixture2, get_json_double) {
     }
 }
 
+TEST_P(FlatGetJsonXXXTestFixture2, get_json_scalar) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    std::string param_result = std::get<8>(GetParam());
+
+    ColumnPtr result = JsonFunctions::get_native_json_scalar_string(_ctx.get(), columns).value();
+    ASSERT_TRUE(!!result);
+
+    ASSERT_EQ(1, result->size());
+    Datum datum = result->get(0);
+    if (param_result == "NULL") {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        auto value = datum.get_slice();
+        std::string value_str(value);
+        ASSERT_EQ(param_result, value_str);
+    }
+}
+
 // clang-format off
 INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, FlatGetJsonXXXTestFixture2,
     ::testing::Values(
-        std::make_tuple(R"( {"k1":1} )", "NULL", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1),
-        std::make_tuple(R"( {"k0": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1),
-        std::make_tuple(R"( {"k1": 1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0),
-        std::make_tuple(R"( {"k1": -10} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -10, R"( -10 )", -10),
-        std::make_tuple(R"( {"k1": 1.1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, R"( 1.1 )", 1.1),
-        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 3, R"( 3 )", 3.0),
-        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 3, R"( 3.14 )", 3.14),
-        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, R"( 0 )", 0.0),
-        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 0, R"( 0.14 )", 0.14),
-        std::make_tuple(R"( {"k1": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( NULL )", -1),
-        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, R"( NULL )", -1),
-        std::make_tuple(R"( {"k1": {"k2": 1}} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( {"k2": 1} )", -1),
-        std::make_tuple(R"( {"k1": [1,2,3] } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( [1, 2, 3] )", -1),
-        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0),
-        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, "0", 0.0),
-        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, "true", 1.0),
-        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 0, 0, "false", 0.0),
-        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -1, "true", -1),
-        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 0, -1, "false", -1),
-        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1),
+        std::make_tuple(R"( {"k1":1} )", "NULL", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1, "NULL"),
+        std::make_tuple(R"( {"k0": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1, "NULL"),
+        std::make_tuple(R"( {"k1": 1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0, "1"),
+        std::make_tuple(R"( {"k1": -10} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -10, R"( -10 )", -10, "-10"),
+        std::make_tuple(R"( {"k1": 1.1} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, R"( 1.1 )", 1.1, "NULL"),
+        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 3, R"( 3 )", 3.0, "3"),
+        std::make_tuple(R"( {"k1": 3.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 3, R"( 3.14 )", 3.14, "3.14"),
+        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, R"( 0 )", 0.0, "0"),
+        std::make_tuple(R"( {"k1": 0.14} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_DOUBLE}, 1, 0, R"( 0.14 )", 0.14, "0.14"),
+        std::make_tuple(R"( {"k1": null} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( NULL )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, R"( NULL )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": {"k2": 1}} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( {"k2": 1} )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": [1,2,3] } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, -1, -1, R"( [1, 2, 3] )", -1, "NULL"),
+        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 1, 1, "1", 1.0, "1"),
+        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, 0, 0, "0", 0.0, "0"),
+        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 1, 1, "true", 1.0, "NULL"),
+        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_JSON}, 0, 0, "false", 0.0, "NULL"),
+        std::make_tuple(R"( {"k1": true} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 1, -1, "true", -1,  "true"),
+        std::make_tuple(R"( {"k1": false} )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, 0, -1, "false", -1, "false"),
+        std::make_tuple(R"( {"k1": "value" } )", "$.k1", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_VARCHAR}, -1, -1, R"( value )", -1, "value"),
         // Test case to cover the bug fix: empty flat_path should not cause crash when calling substr(1)
-        // When path is "$", flat_path will be empty, and calling substr(1) on empty string would throw std::out_of_range
-        std::make_tuple(R"( {"k1": 1} )", "$", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, "NULL", -1)
+        // When path is "$", flat_path will be empty, and calling substr(1) on empty string would throw std::out_of_range.
+        // get_json_string reads the rebuilt document, as it does on a column that is not flat.
+        std::make_tuple(R"( {"k1": 1} )", "$", std::vector<std::string> { "k1"}, std::vector<LogicalType> {TYPE_BIGINT}, -1, -1, R"( {"k1": 1} )", -1, "NULL")
     ));
 // clang-format on
 

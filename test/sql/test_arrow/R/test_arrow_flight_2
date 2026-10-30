@@ -85,9 +85,7 @@ SELECT * FROM test order by id asc;
 5	Eve	30
 -- !result
 
-SHOW CREATE TABLE test;
--- result:
--- !result
+[UC]SHOW CREATE TABLE test;
 
 CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 -- result:

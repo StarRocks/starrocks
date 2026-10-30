@@ -1,10 +1,17 @@
 ---
 displayed_sidebar: docs
+description: "Ubuntu オペレーティングシステムで StarRocks をソースからコンパイルする方法。"
 ---
 
 # Ubuntu で StarRocks をコンパイルする
 
 このトピックでは、Ubuntu オペレーティングシステムで StarRocks をコンパイルする方法について説明します。StarRocks は、x86_64 および AArch64 アーキテクチャの両方でのコンパイルをサポートしています。
+
+:::note
+
+StarRocks v4.1 以前は Ubuntu 22.04 で、v4.2 以降は Ubuntu 24.04 でコンパイルしてください。
+
+:::
 
 ## 前提条件
 

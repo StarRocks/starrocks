@@ -27,6 +27,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -117,18 +119,60 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void xxHash32() {
+        ConstantOperator operator = ScalarOperatorFunctions.xxHash32(ConstantOperator.createNull(VarcharType.VARCHAR));
+        assertTrue(operator.isNull());
+        assertEquals(IntegerType.INT, operator.getType());
+
+        assertEquals(-83855367, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("hello")).getInt());
+
+        assertEquals(96518622, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("starrocks")).getInt());
+
+        assertEquals(-920844969, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("world")).getInt());
+
+        assertEquals(-349168521, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("abcdefghijklmnopQRST")).getInt());
+
+        assertEquals(531093706, ScalarOperatorFunctions.xxHash32(
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("0123456789abcdefXYZ")).getInt());
+    }
+
+    @Test
     public void xxHash64() {
         ConstantOperator operator = ScalarOperatorFunctions.xxHash64(ConstantOperator.createNull(VarcharType.VARCHAR));
         assertTrue(operator.isNull());
         assertEquals(IntegerType.BIGINT, operator.getType());
 
-        assertEquals(-2612172575022167352L, ScalarOperatorFunctions.xxHash64(
+        assertEquals(2794345569481354659L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("hello")).getBigint());
+
+        assertEquals(-4658618225489912820L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("starrocks")).getBigint());
+
+        assertEquals(8004569595807101537L, ScalarOperatorFunctions.xxHash64(
+                ConstantOperator.createVarchar("hello"),
+                ConstantOperator.createVarchar("world")).getBigint());
+    }
+
+    @Test
+    public void xxHash3_64() {
+        ConstantOperator operator =
+                ScalarOperatorFunctions.xxHash3_64(ConstantOperator.createNull(VarcharType.VARCHAR));
+        assertTrue(operator.isNull());
+        assertEquals(IntegerType.BIGINT, operator.getType());
+
+        assertEquals(-2612172575022167352L, ScalarOperatorFunctions.xxHash3_64(
                 ConstantOperator.createVarchar("NULL")).getBigint());
 
-        assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash64(
+        assertEquals(8354710922730016039L, ScalarOperatorFunctions.xxHash3_64(
                 ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070")).getBigint());
 
-        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash64(
+        assertEquals(2897331577432926379L, ScalarOperatorFunctions.xxHash3_64(
                 ConstantOperator.createVarchar("41c630d2-e339-380b-a65a-f295ca422070"),
                 ConstantOperator.createVarchar("cd824fbe-8134-8015-7f4a-000004ffffff")).getBigint());
     }
@@ -701,6 +745,19 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void nextDayWithFoldedBinaryDow() {
+        // Folding cast(<varbinary> as varchar) used to yield the java default byte[] toString(), which then
+        // poisoned every function reading the folded value: next_day reported
+        // "[B@3461c8cb not supported in next_day dow_string".
+        ConstantOperator dow = ConstantOperator
+                .createBinary("Sunday".getBytes(StandardCharsets.UTF_8), VarbinaryType.VARBINARY)
+                .castTo(VarcharType.VARCHAR).get();
+        assertEquals("Sunday", dow.getVarchar());
+        assertEquals("2015-03-29T09:23:55",
+                ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, dow).getDate().toString());
+    }
+
+    @Test
     public void previousDay() {
         assertEquals("2015-03-22T09:23:55", ScalarOperatorFunctions.previousDay(O_DT_20150323_092355,
                 ConstantOperator.createVarchar("Sunday")).getDate().toString());
@@ -981,7 +1038,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void subtractDouble() {
         assertEquals(0.0,
-                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test
@@ -1077,7 +1134,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void divideDouble() {
         assertEquals(1.0,
-                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test

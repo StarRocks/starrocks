@@ -19,6 +19,8 @@ include "Status.thrift"
 include "Types.thrift"
 
 const i64 IS_SET_DEFAULT_ROWSET_TO_BETA_BIT = 0x01;
+// Set by an FE that ignores the finish report of an ALTER task whose alter_job_id is not the job of the queued task.
+const i64 IS_ALTER_FINISH_MATCHED_BY_JOB_ID_BIT = 0x02;
 
 struct TMasterInfo {
     1: required Types.TNetworkAddress network_address

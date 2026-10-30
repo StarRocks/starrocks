@@ -211,9 +211,13 @@ public class MvRewriteHiveTest extends MVTestBase {
 
             long mvMaxBaseTableRefreshTimestamp = mv1.maxBaseTableRefreshTimestamp().get();
 
-            long mvRefreshTimeStamp = mv1.getLastRefreshTime();
-            Assertions.assertTrue(mvRefreshTimeStamp == mvMaxBaseTableRefreshTimestamp);
-            Assertions.assertTrue((mvMaxBaseTableRefreshTimestamp - mvRefreshTimeStamp) / 1000 < 60);
+            // The staleness baseline is the confirmed complete refresh's start time (wall-clock millis),
+            // and maxBaseTableRefreshTimestamp() is unit-normalized to millis, so the gap below is
+            // meaningful even for Hive whose native modified time is epoch seconds. lastRefreshTime
+            // stays in the connector-native unit and no longer participates in the staleness gap.
+            long lastFreshnessConfirmedAt = mv1.getRefreshScheme().getLastFreshnessConfirmedAt();
+            Assertions.assertTrue(lastFreshnessConfirmedAt > 0);
+            Assertions.assertTrue((mvMaxBaseTableRefreshTimestamp - lastFreshnessConfirmedAt) / 1000 < 60);
             Assertions.assertTrue(mv1.isStalenessSatisfied());
 
             Set<String> partitionsToRefresh = getPartitionNamesToRefreshForMv(mv1);
@@ -309,6 +313,28 @@ public class MvRewriteHiveTest extends MVTestBase {
         String plan = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan, "hive_partitioned_mv");
         dropMv("test", "hive_partitioned_mv");
+    }
+
+    @Test
+    public void testFilteredLooseHiveMvAggregateRetainsPruningColumns() throws Exception {
+        String mvName = "hive_loose_filtered_aggregate_mv";
+        createAndRefreshMv("CREATE MATERIALIZED VIEW " + mvName +
+                " PARTITION BY l_shipdate DISTRIBUTED BY HASH(l_orderkey) BUCKETS 1" +
+                " REFRESH DEFERRED MANUAL PROPERTIES (\"replication_num\"=\"1\"," +
+                " \"force_external_table_query_rewrite\"=\"true\", \"query_rewrite_consistency\"=\"loose\")" +
+                " AS SELECT l_orderkey, l_shipdate FROM hive0.partitioned_db.lineitem_par" +
+                " WHERE l_shipdate >= '1998-01-03'");
+        try {
+            MaterializedView mv = getMv("test", mvName);
+            mv.getVisiblePartitions().forEach(p -> p.getDefaultPhysicalPartition().updateVisibleVersion(2L));
+            // Neither aggregate outputs the partition column. The MV pruning predicate must still
+            // have an input column after the rewrite, including when a UNION compensates its range.
+            String query = "SELECT count(*), sum(l_orderkey) FROM hive0.partitioned_db.lineitem_par";
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName, "UNION");
+            PlanTestBase.assertContains(getFragmentPlan(query + " WHERE l_shipdate >= '1998-01-03'"), mvName);
+        } finally {
+            dropMv("test", mvName);
+        }
     }
 
     @Test

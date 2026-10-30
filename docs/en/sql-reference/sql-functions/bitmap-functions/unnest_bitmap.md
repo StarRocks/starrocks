@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "unnest_bitmap is a table function that takes a bitmap and converts elements in that bitmap into multiple rows of a table."
 ---
 
 # unnest_bitmap

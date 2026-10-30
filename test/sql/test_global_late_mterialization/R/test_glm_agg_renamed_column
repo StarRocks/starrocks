@@ -1,0 +1,97 @@
+-- name: test_glm_agg_renamed_column
+CREATE TABLE `tj` (
+  `k` int(11) NOT NULL COMMENT "",
+  `j` json NULL COMMENT "",
+  `s` varchar(64) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE `td` (
+  `k` int(11) NOT NULL COMMENT "",
+  `d` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1");
+-- result:
+-- !result
+insert into tj values (1, '{"a": "x", "n": 1.5}', 'p'), (2, '{"a": "y", "n": 2.5}', 'q'), (3, '{"a": "z", "n": 3.5}', 'r');
+-- result:
+-- !result
+insert into td values (1, 10), (2, 20), (3, 30);
+-- result:
+-- !result
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+set cbo_prune_json_subfield = true;
+-- result:
+-- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
+select k, m from (select k, max(a) as m from (select t.k as k, get_json_string(t.j, '$.a') as a from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	x
+2	y
+3	z
+-- !result
+select k, m from (select k, max(n) as m from (select t.k as k, get_json_double(t.j, '$.n') as n from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	1.5
+2	2.5
+3	3.5
+-- !result
+select k, a from (select k, a from (select t.k as k, get_json_string(t.j, '$.a') as a from tj t join td d on d.k = t.k) x group by k, a limit 5) y order by k;
+-- result:
+1	x
+2	y
+3	z
+-- !result
+select k, m from (select k, any_value(a) as m from (select t.k as k, get_json_string(t.j, '$.a') as a from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	x
+2	y
+3	z
+-- !result
+select k, m from (select k, max(concat(a, '!')) as m from (select t.k as k, get_json_string(t.j, '$.a') as a from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	x!
+2	y!
+3	z!
+-- !result
+select k, m from (select k, max(s) as m from (select t.k as k, t.s as s from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	p
+2	q
+3	r
+-- !result
+set enable_global_late_materialization_cost_based = true;
+-- result:
+-- !result
+select k, m from (select k, max(a) as m from (select t.k as k, get_json_string(t.j, '$.a') as a from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	x
+2	y
+3	z
+-- !result
+select k, m from (select k, max(n) as m from (select t.k as k, get_json_double(t.j, '$.n') as n from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	1.5
+2	2.5
+3	3.5
+-- !result
+set enable_global_late_materialization = false;
+-- result:
+-- !result
+select k, m from (select k, max(a) as m from (select t.k as k, get_json_string(t.j, '$.a') as a from tj t join td d on d.k = t.k) x group by k limit 5) y order by k;
+-- result:
+1	x
+2	y
+3	z
+-- !result

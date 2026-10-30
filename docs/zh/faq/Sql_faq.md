@@ -1,19 +1,14 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "StarRocks SQL 查询常见问题。"
 ---
 
 # 查询常见问题
 
-## 构建物化视图失败：fail to allocate memory
-
-修改 `be.conf` 中的`memory_limitation_per_thread_for_schema_change`。
-
-该参数表示单个 schema change 任务允许占用的最大内存，默认大小 2G。修改完成后，需重启 BE 使配置生效。
-
 ## StarRocks 会缓存查询结果吗？
 
 StarRocks 不直接缓存最终查询结果。从 2.5 版本开始，StarRocks 会将多阶段聚合查询的第一阶段聚合的中间结果缓存在 Query Cache 里，后续查询可以复用之前缓存的结果，加速计算。Query Cache 占用所在 BE 的内存。更多信息，参见 [Query Cache](../using_starrocks/caching/query_cache.md)。
-<!-- StarRocks 不直接缓存查询结果。而是使用 Page Cache 将原始数据分成 page 缓存在 BE 内存上，后续查询同一个 page 时，可以直接使用 cache 中的数据。2.4 版本及以后默认开启 Page Cache。您可以通过设置 `be.conf` 中的 `storage_page_cache_limit` 来限制 page cache 的大小，默认为系统内存的 20%。修改完成后，需重启 BE 使配置生效。-->
 
 ## 当字段为NULL时，除了is null， 其他所有的计算结果都是false
 
@@ -116,7 +111,7 @@ client连接的时候加上`-A`参数，比如 `mysql -uroot -h127.0.0.1 -P8867 
 
 ## BE 和 FE 日志文件太多，怎么处理？
 
-调整日志级别和参数大小，详情参考 log 相关的参数默认值和作用说明：[参数配置](../administration/management/FE_configuration.md)。
+调整日志级别和参数大小，详情参考 log 相关的参数默认值和作用说明：[参数配置](../administration/configuration/FE_parameters/FE_parameters.md)。
 
 ## 更改副本数失败：table lineorder is colocate table, cannot change replicationNum
 

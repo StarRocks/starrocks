@@ -17,8 +17,7 @@ package com.starrocks.sql;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -34,6 +33,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.optimizer.base.ConnectorSinkShuffleSpec;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.system.SystemInfoService;
@@ -88,8 +88,8 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 10, 0, 50, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertTrue(enabled);
     }
 
@@ -108,8 +108,8 @@ public class InsertPlannerTest {
             setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                     queryStatement, selectRelation, 10, 0, 50, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-            boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                    insertStmt, icebergTable, sessionVariable);
+            boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
             assertTrue(enabled);
         } finally {
             setInsertPlannerLoggerLevel(Level.INFO);
@@ -134,8 +134,8 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 10, 0, 1500, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertTrue(enabled);
     }
 
@@ -157,8 +157,8 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 10, 0, 5, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertFalse(enabled);
     }
 
@@ -180,8 +180,7 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 10, 0, 100, 100L, 2.0, true, partitionRef, null, false, nodeMgr, clusterInfo);
 
-        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
-                insertStmt, icebergTable);
+        long partitionCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
         assertEquals(1L, partitionCount);
     }
 
@@ -202,8 +201,8 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 0, 0, 50, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertFalse(enabled);
     }
 
@@ -224,8 +223,8 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 1, 0, 1000, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertFalse(enabled);
     }
 
@@ -244,8 +243,8 @@ public class InsertPlannerTest {
             setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                     queryStatement, selectRelation, 1, 0, 1000, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-            boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                    insertStmt, icebergTable, sessionVariable);
+            boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
             assertFalse(enabled);
         } finally {
             setInsertPlannerLoggerLevel(Level.INFO);
@@ -269,8 +268,8 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 10, 0, 1, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertFalse(enabled);
     }
 
@@ -289,8 +288,8 @@ public class InsertPlannerTest {
             setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                     queryStatement, selectRelation, 10, 0, 1, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-            boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                    insertStmt, icebergTable, sessionVariable);
+            boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
             assertFalse(enabled);
         } finally {
             setInsertPlannerLoggerLevel(Level.INFO);
@@ -339,7 +338,7 @@ public class InsertPlannerTest {
 
                 // Return empty partition list
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new ArrayList<String>();
                 minTimes = 0;
 
@@ -369,14 +368,13 @@ public class InsertPlannerTest {
             }
         };
 
-        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
-                insertStmt, icebergTable);
+        long partitionCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
         // Empty partition list returns 0 (new table with no partitions yet)
         // This correctly disables shuffle since estimatedPartitionCount (0) <= 1
         assertEquals(0L, partitionCount);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertFalse(enabled);
     }
 
@@ -398,8 +396,8 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 5, 5, 50, 100L, 2.0, false, null, null, false, nodeMgr, clusterInfo);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertTrue(enabled);
     }
 
@@ -424,7 +422,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new ArrayList<String>(); // Empty partition list
                 minTimes = 0;
 
@@ -454,8 +452,7 @@ public class InsertPlannerTest {
             }
         };
 
-        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
-                insertStmt, icebergTable);
+        long partitionCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
         // Empty partition list returns 0 (new table with no partitions yet)
         assertEquals(0L, partitionCount);
     }
@@ -481,7 +478,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new Exception("Failed to get partitions");
                 minTimes = 0;
 
@@ -503,8 +500,7 @@ public class InsertPlannerTest {
             }
         };
 
-        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
-                insertStmt, icebergTable);
+        long partitionCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
         assertEquals(-1L, partitionCount);
     }
 
@@ -534,7 +530,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new ArrayList<String>();
                 minTimes = 0;
 
@@ -613,8 +609,7 @@ public class InsertPlannerTest {
             }
         };
 
-        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
-                insertStmt, icebergTable);
+        long partitionCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
         assertEquals(50L, partitionCount);
     }
 
@@ -640,8 +635,7 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 10, 0, 100, 200L, 10.0, false, null, predicate, true, nodeMgr, clusterInfo);
 
-        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
-                insertStmt, icebergTable);
+        long partitionCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
         assertEquals(2L, partitionCount);
     }
 
@@ -673,12 +667,11 @@ public class InsertPlannerTest {
         setupMockExpectationsForAdaptiveShuffle(gsm, metadataMgr, icebergTable, insertStmt, sessionVariable,
                 queryStatement, selectRelation, 10, 0, 200, 100L, 2.0, false, null, predicate, true, nodeMgr, clusterInfo);
 
-        long partitionCount = Deencapsulation.invoke(insertPlanner, "estimatePartitionCountForInsert",
-                insertStmt, icebergTable);
+        long partitionCount = InsertPartitionEstimator.estimatePartitionCountForInsert(insertStmt, icebergTable);
         assertEquals(-1L, partitionCount);
 
-        boolean enabled = Deencapsulation.invoke(insertPlanner, "shouldEnableAdaptiveGlobalShuffle",
-                insertStmt, icebergTable, sessionVariable);
+        boolean enabled = ConnectorSinkShuffleSpec.forTable(icebergTable).get()
+                    .shouldEnableAdaptiveGlobalShuffle(insertStmt, sessionVariable);
         assertFalse(enabled);
     }
 
@@ -730,11 +723,11 @@ public class InsertPlannerTest {
 
                 // MetadataMgr setup for partition names
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = new Delegate<List<String>>() {
                     @SuppressWarnings("unused")
                     List<String> delegate(String catalog, String db, String table,
-                                          ConnectorMetadatRequestContext context) {
+                                          ConnectorMetadataRequestContext context) {
                         List<String> partitions = new ArrayList<>();
                         for (int i = 0; i < partitionCount; i++) {
                             partitions.add("p" + i);
@@ -836,7 +829,7 @@ public class InsertPlannerTest {
 
                 // 100 existing partitions
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -919,7 +912,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1032,7 +1025,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1124,7 +1117,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1219,7 +1212,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1328,7 +1321,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 
@@ -1438,7 +1431,7 @@ public class InsertPlannerTest {
                 minTimes = 0;
 
                 metadataMgr.listPartitionNames(anyString, anyString, anyString,
-                        withInstanceOf(ConnectorMetadatRequestContext.class));
+                        withInstanceOf(ConnectorMetadataRequestContext.class));
                 result = createPartitionList(100);
                 minTimes = 0;
 

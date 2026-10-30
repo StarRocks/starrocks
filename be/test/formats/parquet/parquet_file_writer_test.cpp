@@ -15,22 +15,30 @@
 #include "formats/parquet/parquet_file_writer.h"
 
 #include <gtest/gtest.h>
+#include <parquet/file_reader.h>
+#include <parquet/metadata.h>
 
 #include <filesystem>
 #include <memory>
+#include <random>
 
 #include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/struct_column.h"
+#include "common/config_exec_fwd.h"
 #include "formats/parquet/file_reader.h"
+#include "formats/parquet/level_builder.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+#include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks::formats {
 
@@ -46,9 +54,11 @@ public:
     void TearDown() override {}
 
 protected:
+    HdfsScannerContext _scanner_ctx;
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
-        ctx->lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
+
+        ctx->format_scan_context.lazy_column_coalesce_counter = &_lazy_column_coalesce_counter;
 
         std::vector<parquet::Utils::SlotDesc> slot_descs;
         for (auto& type_desc : type_descs) {
@@ -59,12 +69,15 @@ protected:
 
         TupleDescriptor* tuple_desc =
                 parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
-        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        parquet::Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
         ctx->slot_descs = tuple_desc->slots();
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_range = _create_scan_range(_file_path, file_size);
-        ctx->timezone = "Asia/Shanghai";
-        ctx->stats = &_hdfs_scan_stats;
+        ctx->format_scan_context.scan_range_offset = ctx->scan_range->offset;
+        ctx->format_scan_context.scan_range_length = ctx->scan_range->length;
+        ctx->format_scan_context.timezone = "Asia/Shanghai";
+        ctx->format_scan_context.stats = &_hdfs_stats;
+        ctx->format_scan_context.predicate_tree = &ctx->predicates.predicate_tree;
 
         return ctx;
     }
@@ -93,7 +106,7 @@ protected:
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
 
-        auto st = file_reader->init(ctx);
+        auto st = file_reader->init(&ctx->format_scan_context);
         if (!st.ok()) {
             std::cout << st.to_string() << std::endl;
             return nullptr;
@@ -113,7 +126,7 @@ protected:
                                                                 std::vector<bool> nullable = {},
                                                                 std::vector<std::string> column_names = {});
 
-    HdfsScanStats _hdfs_scan_stats;
+    FormatScannerStats _hdfs_stats;
     MemoryFileSystem _fs;
     std::string _file_path{"/dummy_file.parquet"};
     std::unique_ptr<parquet::ParquetOutputStream> _output_stream;
@@ -436,6 +449,66 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
+// DATETIME values written as INT96 are shifted to UTC by the offset in force at 00:00 of their day read as UTC (the
+// writer's model, kept as is), and as INT64 they are stored as they are, for random values across DST changes and
+// null rows, in DST zones and a fixed one.
+TEST(ParquetLevelBuilderTest, DatetimeOffsetsMatchReference) {
+    std::mt19937_64 rng(37);
+    const size_t n = 3000;
+    auto data = TimestampColumn::create();
+    auto nulls = NullColumn::create();
+    for (size_t i = 0; i < n; i++) {
+        TimestampValue tv;
+        tv.from_unix_second(static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL,
+                            static_cast<int64_t>(rng() % 1000000));
+        data->append(tv);
+        nulls->append(i % 9 == 4);
+    }
+    ColumnPtr column = NullableColumn::create(std::move(data), std::move(nulls));
+    const auto& values =
+            down_cast<const TimestampColumn*>(down_cast<const NullableColumn*>(column.get())->data_column().get())
+                    ->get_data();
+
+    for (const std::string zone : {"America/Los_Angeles", "Europe/London", "Asia/Shanghai", "-03:00"}) {
+        cctz::time_zone ctz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(zone, ctz));
+        for (bool int96 : {true, false}) {
+            SCOPED_TRACE(zone + (int96 ? " INT96" : " INT64"));
+            auto node =
+                    int96 ? ::parquet::schema::PrimitiveNode::Make("c0", ::parquet::Repetition::OPTIONAL,
+                                                                   ::parquet::Type::INT96)
+                          : ::parquet::schema::PrimitiveNode::Make(
+                                    "c0", ::parquet::Repetition::OPTIONAL,
+                                    ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::MICROS),
+                                    ::parquet::Type::INT64);
+            parquet::LevelBuilder builder(TYPE_DATETIME_DESC, node, zone, false, int96);
+            ASSERT_OK(builder.init());
+            bool called = false;
+            ASSERT_OK(builder.write(parquet::LevelBuilderContext(n), column, [&](const parquet::LevelBuilderResult& r) {
+                called = true;
+                for (size_t i = 0; i < n; i++) {
+                    if (i % 9 == 4) {
+                        continue;
+                    }
+                    Timestamp ts = values[i].timestamp();
+                    if (int96) {
+                        int offset = timestamp::get_timezone_offset_by_timestamp(ts, ctz);
+                        Timestamp utc = timestamp::sub<TimeUnit::SECOND>(ts, offset);
+                        const auto* v = reinterpret_cast<const ::parquet::Int96*>(r.values) + i;
+                        ASSERT_EQ(timestamp::to_julian(utc), *reinterpret_cast<const int32_t*>(&v->value[2])) << i;
+                        ASSERT_EQ(timestamp::to_time(utc) * 1000, *reinterpret_cast<const int64_t*>(&v->value[0])) << i;
+                    } else {
+                        int64_t want = static_cast<int64_t>(timestamp::to_julian(ts)) * USECS_PER_DAY +
+                                       timestamp::to_time(ts) - timestamp::UNIX_EPOCH_SECONDS * USECS_PER_SEC;
+                        ASSERT_EQ(want, reinterpret_cast<const int64_t*>(r.values)[i]) << i;
+                    }
+                }
+            }));
+            ASSERT_TRUE(called);
+        }
+    }
+}
+
 TEST_F(ParquetFileWriterTest, TestWriteVarchar) {
     std::vector type_descs{TYPE_VARCHAR_DESC};
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
@@ -462,7 +535,7 @@ TEST_F(ParquetFileWriterTest, TestWriteVarchar) {
 
 TEST_F(ParquetFileWriterTest, TestWriteArray) {
     std::vector<TypeDescriptor> type_descs;
-    type_descs.push_back(TYPE_INT_ARRAY_DESC);
+    type_descs.push_back(TYPE_ARRAY_INT_DESC);
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
 
     // [1], NULL, [], [2, NULL, 3]
@@ -593,7 +666,7 @@ TEST_F(ParquetFileWriterTest, TestWriteNestedArray) {
     // type_descs
     std::vector<TypeDescriptor> type_descs;
     auto type_int_array_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
-    type_int_array_array.children.push_back(TYPE_INT_ARRAY_DESC);
+    type_int_array_array.children.push_back(TYPE_ARRAY_INT_DESC);
     type_descs.push_back(type_int_array_array);
     ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs));
 
@@ -717,6 +790,33 @@ TEST_F(ParquetFileWriterTest, TestWriteWithFieldID) {
     ASSERT_EQ(result.file_statistics.record_count, 8);
 }
 
+TEST_F(ParquetFileWriterTest, TestWriteWithIcebergRowLineageFieldIDs) {
+    std::vector type_descs{TYPE_INT_DESC, TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC, TYPE_BIGINT_DESC};
+    _writer_options->column_ids = {FileColumnId{1, {}}, FileColumnId{2, {}}, FileColumnId{2147483540, {}},
+                                   FileColumnId{2147483539, {}}};
+    ASSIGN_OR_ASSERT_FAIL(auto writer,
+                          _create_writer(type_descs, {}, {"id", "name", "_row_id", "_last_updated_sequence_number"}));
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto id_col = ColumnTestHelper::build_nullable_column<int32_t>({1, 2}, {0, 0});
+        auto name_col = ColumnTestHelper::build_nullable_column<Slice>({"alice", "bob"}, {0, 0});
+        auto row_id_col = ColumnTestHelper::build_nullable_column<int64_t>({10, 11}, {0, 0});
+        auto seq_col = ColumnTestHelper::build_nullable_column<int64_t>({20, 21}, {0, 0});
+
+        chunk->append_column(std::move(id_col), 0);
+        chunk->append_column(std::move(name_col), 1);
+        chunk->append_column(std::move(row_id_col), 2);
+        chunk->append_column(std::move(seq_col), 3);
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 2);
+}
+
 TEST_F(ParquetFileWriterTest, TestUnknownCompression) {
     std::vector type_descs{TYPE_BOOLEAN_DESC};
     _compression_type = TCompressionType::UNKNOWN_COMPRESSION;
@@ -792,7 +892,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsAllRequired) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Check that both columns are REQUIRED
@@ -833,7 +933,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsMixed) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Check first column is OPTIONAL
@@ -876,7 +976,7 @@ TEST_F(ParquetFileWriterTest, TestNullableColumnsDefaultEmpty) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Check that both columns are OPTIONAL (default behavior)
@@ -920,7 +1020,7 @@ TEST_F(ParquetFileWriterTest, TestIcebergDeleteFileColumnsRequired) {
     ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
     auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
     auto ctx = _create_scan_context(type_descs);
-    ASSERT_OK(file_reader->init(ctx));
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
     auto file_metadata = file_reader->get_file_metadata();
 
     // Verify column names
@@ -934,6 +1034,214 @@ TEST_F(ParquetFileWriterTest, TestIcebergDeleteFileColumnsRequired) {
         EXPECT_EQ(repetition, tparquet::FieldRepetitionType::REQUIRED)
                 << "Column " << field->name << " should be REQUIRED for Iceberg delete files but is " << repetition;
     }
+}
+
+TEST_F(ParquetFileWriterTest, TestRequiredColumnRejectsNull) {
+    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
+    std::vector<std::string> column_names = {"a", "b"};
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {true, false}, column_names));
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col0 = ColumnTestHelper::build_nullable_column<Slice>({"x", "y", "z"}, {0, 0, 0});
+        chunk->append_column(std::move(col0), chunk->num_columns());
+
+        // "b" is declared REQUIRED but carries a null in row 1
+        auto col1 = ColumnTestHelper::build_nullable_column<int64_t>({100, 0, 300}, {0, 1, 0});
+        chunk->append_column(std::move(col1), chunk->num_columns());
+    }
+
+    auto st = writer->write(chunk.get());
+    ASSERT_FALSE(st.ok()) << "writing NULL into a REQUIRED column must fail";
+    EXPECT_TRUE(st.message().find("b") != std::string::npos)
+            << "error should name the offending column, got: " << st.message();
+}
+
+TEST_F(ParquetFileWriterTest, TestRequiredColumnRejectsNullBeforeWritingAnyColumn) {
+    // "a" OPTIONAL, "b" REQUIRED: only "b" is evaluated up front, so this pins that a violation
+    // on "b" still stops "a" from reaching the row group, which would otherwise leave the
+    // writer holding a row group with mismatched column chunk lengths.
+    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
+    std::vector<std::string> column_names = {"a", "b"};
+    ASSIGN_OR_ASSERT_FAIL(auto writer, _create_writer(type_descs, {true, false}, column_names));
+
+    auto good_chunk = std::make_shared<Chunk>();
+    {
+        auto col0 = ColumnTestHelper::build_column<Slice>({"x", "y", "z"});
+        good_chunk->append_column(std::move(col0), 0);
+        auto col1 = ColumnTestHelper::build_column<int64_t>({1, 2, 3});
+        good_chunk->append_column(std::move(col1), 1);
+    }
+    ASSERT_OK(writer->write(good_chunk.get()));
+    ASSERT_NE(writer->_rowgroup_writer, nullptr);
+    const int64_t buffered_before = writer->_rowgroup_writer->estimated_buffered_bytes();
+    ASSERT_GT(buffered_before, 0);
+
+    auto bad_chunk = std::make_shared<Chunk>();
+    {
+        // column "a" is perfectly valid ...
+        auto col0 = ColumnTestHelper::build_nullable_column<Slice>({"p", "q", "r"}, {0, 0, 0});
+        bad_chunk->append_column(std::move(col0), bad_chunk->num_columns());
+        // ... but column "b" is not, so nothing from this chunk may reach the row group
+        auto col1 = ColumnTestHelper::build_nullable_column<int64_t>({4, 0, 6}, {0, 1, 0});
+        bad_chunk->append_column(std::move(col1), bad_chunk->num_columns());
+    }
+    ASSERT_FALSE(writer->write(bad_chunk.get()).ok());
+
+    EXPECT_EQ(writer->_rowgroup_writer->estimated_buffered_bytes(), buffered_before)
+            << "column \"a\" of the rejected chunk leaked into the row group";
+}
+
+TEST_F(ParquetFileWriterTest, TestColumnDictionaryEncodingDisabled) {
+    // Test that disabling dictionary encoding for specific column works correctly
+    // This test verifies the fix for Iceberg position delete file compression issue
+    std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
+    std::vector<std::string> column_names = {"file_path", "pos"};
+
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
+    // Use a unique file path for this test to avoid conflicts with _file_path
+    std::string file_path = "/test_dict_disabled.parquet";
+    auto fs = std::shared_ptr<MemoryFileSystem>(&_fs, [](MemoryFileSystem*) {});
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names, column_evaluators,
+                                            std::nullopt, nullptr, _runtime_state);
+
+    // Disable dictionary encoding for "pos" column (simulating Iceberg delete file optimization)
+    std::unordered_map<std::string, bool> column_dict_config;
+    column_dict_config["pos"] = false;
+    factory.set_column_dictionary_enabled(std::move(column_dict_config));
+
+    ASSERT_OK(factory.init());
+
+    auto maybe_writer = factory.create(file_path);
+    ASSERT_OK(maybe_writer.status());
+
+    auto writer = std::move(maybe_writer.value().writer);
+    ASSERT_OK(writer->init());
+
+    // Write monotonically increasing pos values (typical for position delete files)
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // file_path column - repeated values (good for dictionary encoding)
+        auto col0 = ColumnTestHelper::build_column<Slice>({"s3://bucket/table/data/file1.parquet",
+                                                           "s3://bucket/table/data/file1.parquet",
+                                                           "s3://bucket/table/data/file1.parquet"});
+        chunk->append_column(std::move(col0), 0);
+
+        // pos column - monotonically increasing (poor for dictionary encoding, should use PLAIN)
+        auto col1 = ColumnTestHelper::build_column<int64_t>({100, 200, 300});
+        chunk->append_column(std::move(col1), 1);
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 3);
+
+    // Verify encoding using StarRocks parquet FileReader
+    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(file_path));
+    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(file_path));
+    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
+
+    auto ctx = _create_scan_context(type_descs);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    auto file_metadata = file_reader->get_file_metadata();
+
+    ASSERT_EQ(file_metadata->t_metadata().row_groups.size(), 1);
+
+    // Check row group 0
+    const auto& row_group = file_metadata->t_metadata().row_groups[0];
+
+    // file_path column (index 0) - should use dictionary encoding
+    const auto& file_path_col = row_group.columns[0];
+    const auto& file_path_encodings = file_path_col.meta_data.encodings;
+    bool has_dict_encoding_file_path = false;
+    for (const auto& enc : file_path_encodings) {
+        if (enc == tparquet::Encoding::RLE_DICTIONARY || enc == tparquet::Encoding::PLAIN_DICTIONARY) {
+            has_dict_encoding_file_path = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(has_dict_encoding_file_path) << "file_path column should use dictionary encoding (repeated values)";
+
+    // pos column (index 1) - should NOT use dictionary encoding (disabled)
+    const auto& pos_col = row_group.columns[1];
+    const auto& pos_encodings = pos_col.meta_data.encodings;
+    bool has_dict_encoding_pos = false;
+    for (const auto& enc : pos_encodings) {
+        if (enc == tparquet::Encoding::RLE_DICTIONARY || enc == tparquet::Encoding::PLAIN_DICTIONARY) {
+            has_dict_encoding_pos = true;
+            break;
+        }
+    }
+    EXPECT_FALSE(has_dict_encoding_pos) << "pos column should NOT use dictionary encoding (configured to disable)";
+
+    // Verify pos column uses PLAIN encoding
+    bool has_plain_encoding = false;
+    for (const auto& enc : pos_encodings) {
+        if (enc == tparquet::Encoding::PLAIN) {
+            has_plain_encoding = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(has_plain_encoding) << "pos column should use PLAIN encoding";
+}
+
+TEST_F(ParquetFileWriterTest, TestColumnDictionaryEncodingEnabledByDefault) {
+    // Test that dictionary encoding is enabled by default when not explicitly disabled
+    std::vector type_descs{TYPE_BIGINT_DESC};
+    std::vector<std::string> column_names = {"col1"};
+
+    auto column_evaluators = std::make_shared<std::vector<std::unique_ptr<ColumnEvaluator>>>(
+            ColumnSlotIdEvaluator::from_types(type_descs));
+    // Use a unique file path for this test to avoid conflicts with _file_path
+    std::string file_path = "/test_dict_default.parquet";
+    auto fs = std::shared_ptr<MemoryFileSystem>(&_fs, [](MemoryFileSystem*) {});
+    auto factory = ParquetFileWriterFactory(fs, TCompressionType::NO_COMPRESSION, {}, column_names, column_evaluators,
+                                            std::nullopt, nullptr, _runtime_state);
+
+    // Do NOT call set_column_dictionary_enabled - should use default (enabled)
+    ASSERT_OK(factory.init());
+
+    auto maybe_writer = factory.create(file_path);
+    ASSERT_OK(maybe_writer.status());
+
+    auto writer = std::move(maybe_writer.value().writer);
+    ASSERT_OK(writer->init());
+
+    // Write repeated values (good for dictionary encoding)
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col = ColumnTestHelper::build_column<int64_t>({100, 100, 100, 100, 100});
+        chunk->append_column(std::move(col), 0);
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->close();
+    ASSERT_OK(result.io_status);
+
+    // Verify encoding using StarRocks parquet FileReader
+    ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(file_path));
+    ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(file_path));
+    auto file_reader = std::make_shared<parquet::FileReader>(config::vector_chunk_size, file.get(), file_size);
+
+    auto ctx = _create_scan_context(type_descs);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+    auto file_metadata = file_reader->get_file_metadata();
+
+    const auto& row_group = file_metadata->t_metadata().row_groups[0];
+    const auto& col_chunk = row_group.columns[0];
+    const auto& encodings = col_chunk.meta_data.encodings;
+
+    // Should have dictionary encoding (default behavior)
+    bool has_dict_encoding = false;
+    for (const auto& enc : encodings) {
+        if (enc == tparquet::Encoding::RLE_DICTIONARY || enc == tparquet::Encoding::PLAIN_DICTIONARY) {
+            has_dict_encoding = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(has_dict_encoding) << "Column should use dictionary encoding by default";
 }
 
 } // namespace starrocks::formats

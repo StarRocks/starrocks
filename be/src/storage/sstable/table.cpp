@@ -11,7 +11,6 @@
 #include "base/debug/trace.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/sstable/block.h"
 #include "storage/sstable/comparator.h"
@@ -43,8 +42,7 @@ struct Table::Rep {
     Block* index_block = nullptr;
 };
 
-Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, Table** table) {
-    *table = nullptr;
+Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size, std::unique_ptr<Table>& table) {
     if (size < Footer::kEncodedLength) {
         return Status::Corruption("file is too short to be an sstable");
     }
@@ -81,8 +79,8 @@ Status Table::Open(const Options& options, RandomAccessFile* file, uint64_t size
         rep->cache_id = (options.block_cache ? options.block_cache->new_id() : 0);
         rep->filter_data = nullptr;
         rep->filter = nullptr;
-        *table = new Table(rep);
-        (*table)->ReadMeta(footer);
+        table.reset(new Table(rep));
+        table->ReadMeta(footer);
     }
 
     return s;
@@ -120,6 +118,50 @@ Status Table::sample_keys(std::vector<std::string>* keys, size_t sample_interval
     }
     auto st = iiter->status();
     return st;
+}
+
+Status Table::sample_keys_in_range(std::vector<std::string>* keys, const Slice& seek_key, const Slice& stop_key,
+                                   size_t max_samples) const {
+    if (max_samples == 0) {
+        return Status::OK();
+    }
+    const Comparator* comparator = rep_->options.comparator;
+    auto new_index_iter = [&]() {
+        std::unique_ptr<Iterator> iter(rep_->index_block->NewIterator(comparator));
+        if (seek_key.empty()) {
+            iter->SeekToFirst();
+        } else {
+            iter->Seek(seek_key);
+        }
+        return iter;
+    };
+    auto before_stop = [&](const Slice& key) { return stop_key.empty() || comparator->Compare(key, stop_key) < 0; };
+
+    // Count the in-range index entries first. The index block is already resident, so the extra walk
+    // costs no IO and lets the second pass space the samples evenly over the caller's range instead
+    // of over the whole table.
+    size_t in_range_count = 0;
+    {
+        auto iter = new_index_iter();
+        for (; iter->Valid() && before_stop(iter->key()); iter->Next()) {
+            ++in_range_count;
+        }
+        if (!iter->status().ok()) {
+            return iter->status();
+        }
+    }
+    if (in_range_count == 0) {
+        return Status::OK();
+    }
+
+    const size_t step = (in_range_count + max_samples - 1) / max_samples;
+    auto iter = new_index_iter();
+    for (size_t index = 0; iter->Valid() && before_stop(iter->key()); iter->Next(), ++index) {
+        if (index % step == 0) {
+            keys->emplace_back(iter->key().to_string());
+        }
+    }
+    return iter->status();
 }
 
 void Table::ReadMeta(const Footer& footer) {
@@ -271,7 +313,7 @@ template <class ForwardIt>
 Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt begin, ForwardIt end,
                        std::vector<std::string>* values) {
     Status s;
-    Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+    std::unique_ptr<Iterator> iiter(rep_->index_block->NewIterator(rep_->options.comparator));
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
@@ -331,7 +373,6 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     if (s.ok()) {
         s = iiter->status();
     }
-    delete iiter;
     TRACE_COUNTER_INCREMENT("continue_block_read_cnt", continue_block_read_cnt);
     TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", sst_bloom_filter_rows);
     TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
@@ -340,10 +381,16 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     return s;
 }
 
+size_t Table::index_block_memory_usage() const {
+    return (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
+}
+
+size_t Table::filter_memory_usage() const {
+    return rep_->filter_data_size;
+}
+
 size_t Table::memory_usage() const {
-    const size_t index_block_sz = (rep_->index_block != nullptr) ? rep_->index_block->size() : 0;
-    const size_t filter_data_sz = rep_->filter_data_size;
-    return index_block_sz + filter_data_sz;
+    return index_block_memory_usage() + filter_memory_usage();
 }
 
 // If new container wants to be supported in MultiGet, the initialization can be added here.

@@ -22,6 +22,7 @@
 #include "base/testutil/assert.h"
 #include "cache/datacache_utils.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/config_cache_fwd.h"
 #include "common/statusor.h"
 #include "fs/fs_util.h"
 

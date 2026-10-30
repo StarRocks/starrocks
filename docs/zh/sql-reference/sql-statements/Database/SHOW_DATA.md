@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW DATA is used to display the amount of data, the number of copies, and the number of statistical rows in a database or a database table."
 ---
 
 # SHOW DATA

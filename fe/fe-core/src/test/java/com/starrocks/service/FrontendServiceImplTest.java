@@ -15,14 +15,22 @@
 package com.starrocks.service;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
+import com.starrocks.authentication.AuthCredentialKind;
+import com.starrocks.authentication.AuthCredentials;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.JWTAuthenticationProvider;
+import com.starrocks.authentication.LDAPAuthProvider;
+import com.starrocks.authentication.MockTokenUtils;
+import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -33,39 +41,56 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.MetricVisitor;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.FrontendService;
+import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
+import com.starrocks.thrift.TBeginRemoteTxnRequest;
+import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.TFeMetricsResult;
+import com.starrocks.thrift.TFeResult;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
+import com.starrocks.thrift.TGetPartitionAccessTimesRequest;
+import com.starrocks.thrift.TGetPartitionAccessTimesResponse;
+import com.starrocks.thrift.TGetProfileRequest;
+import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetTableSchemaRequest;
 import com.starrocks.thrift.TGetTableSchemaResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
@@ -87,19 +112,22 @@ import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TLoadTxnRollbackRequest;
 import com.starrocks.thrift.TLoadTxnRollbackResult;
 import com.starrocks.thrift.TLoadType;
+import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TPlanFragmentExecParams;
+import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
-import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
@@ -129,13 +157,19 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.mockito.internal.util.collections.Sets;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -147,6 +181,7 @@ import static com.starrocks.thrift.TFileType.FILE_STREAM;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -186,6 +221,219 @@ public class FrontendServiceImplTest {
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+    }
+
+    @Test
+    public void testMvReportIsCompatibilityNoOp() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+        request.setTask_type(MVTaskType.START_MAINTENANCE);
+
+        TMVReportEpochResponse response = impl.mvReport(request);
+        Assertions.assertNotNull(response);
+    }
+
+    @Test
+    public void testGetFeMetrics() throws TException {
+        // information_schema.fe_metrics is served over this RPC instead of scraping HTTP /metrics.
+        // It returns the same JSON payload as /metrics?type=json with an OK status.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TFeMetricsResult result = impl.getFeMetrics();
+        Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        Assertions.assertNotNull(result.getJson_metrics());
+    }
+
+    @Test
+    public void testGetFeMetricsReturnsErrorStatusOnException() throws TException {
+        // When metric collection throws, getFeMetrics must return an INTERNAL_ERROR status
+        // (with an error message) instead of propagating the exception.
+        new MockUp<MetricRepo>() {
+            @Mock
+            public String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
+                throw new RuntimeException("boom");
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TFeMetricsResult result = impl.getFeMetrics();
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        Assertions.assertFalse(result.getStatus().getError_msgs().isEmpty());
+    }
+
+    @Test
+    public void testCheckAuthRejectsMissingCredentials() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TFeResult nullRequestResult = impl.checkAuth(null);
+        Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, nullRequestResult.getStatus().getStatus_code());
+
+        TFeResult emptyRequestResult = impl.checkAuth(new TAuthenticateParams());
+        Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, emptyRequestResult.getStatus().getStatus_code());
+
+        TAuthenticateParams missingPasswordRequest = new TAuthenticateParams();
+        missingPasswordRequest.setUser("root");
+        TFeResult missingPasswordResult = impl.checkAuth(missingPasswordRequest);
+        Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, missingPasswordResult.getStatus().getStatus_code());
+    }
+
+    private static TAuthenticateParams buildAuthParams(TPrivilegeRequirement priv) {
+        TAuthenticateParams params = new TAuthenticateParams();
+        params.setUser("ut_user");
+        params.setPasswd("ut_pwd");
+        if (priv != null) {
+            params.setRequired_privilege(priv);
+        }
+        return params;
+    }
+
+    @Test
+    public void testCheckAuth_None_validCredentials_succeeds() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenReturn(UserIdentity.ROOT);
+
+            TFeResult result = impl.checkAuth(buildAuthParams(null));
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Operate_authorized_succeeds() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenReturn(UserIdentity.ROOT);
+            // checkSystemAction is void; default mock = no-op (i.e. authorized)
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            mockedAuthz.verify(
+                    () -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.OPERATE)));
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Operate_denied_returnsNotAuthorized() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenReturn(UserIdentity.ROOT);
+            mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.OPERATE)))
+                    .thenThrow(new AccessDeniedException("internal denial reason — operator only"));
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+            // The internal denial reason MUST NOT leak to the HTTP client; only a
+            // generic "Access denied for user@host" is exposed.
+            String errMsg = String.join(";", result.getStatus().getError_msgs());
+            Assertions.assertFalse(errMsg.contains("internal denial reason"));
+            Assertions.assertTrue(errMsg.startsWith("Access denied for"));
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Node_authorized_succeeds() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenReturn(UserIdentity.ROOT);
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.NODE));
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            mockedAuthz.verify(
+                    () -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.NODE)));
+        }
+    }
+
+    @Test
+    public void testCheckAuth_Node_denied_returnsNotAuthorized() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenReturn(UserIdentity.ROOT);
+            mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.NODE)))
+                    .thenThrow(new AccessDeniedException("denied"));
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.NODE));
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_AuthenticationException_returnsNotAuthorized() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenThrow(new AuthenticationException("wrong password"));
+
+            TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_nullRequiredPrivilege_returnsInternalError() throws TException {
+        // A newer BE may send a thrift enum value this FE does not know.
+        // TPrivilegeRequirement.findByValue would return null in the generated thrift
+        // accessor, but isSetRequired_privilege() would still report true. Spy on a
+        // real request to reproduce that combination and verify the pre-switch
+        // null-guard rejects cleanly instead of throwing NPE on switch(null).
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TAuthenticateParams real = buildAuthParams(TPrivilegeRequirement.OPERATE);
+        TAuthenticateParams spy = Mockito.spy(real);
+        Mockito.doReturn(true).when(spy).isSetRequired_privilege();
+        Mockito.doReturn(null).when(spy).getRequired_privilege();
+
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenReturn(UserIdentity.ROOT);
+
+            TFeResult result = impl.checkAuth(spy);
+            Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        }
+    }
+
+    @Test
+    public void testCheckAuth_debugLogEnabled_doesNotCrash() throws TException {
+        // Flip the FrontendServiceImpl logger to DEBUG so the isDebugEnabled() guard
+        // fires and the LOG.debug(...) format call executes. Asserts the call doesn't
+        // NPE when host / required_privilege are unset.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        org.apache.logging.log4j.core.config.Configurator.setLevel(
+                FrontendServiceImpl.class.getName(), org.apache.logging.log4j.Level.DEBUG);
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenReturn(UserIdentity.ROOT);
+            TAuthenticateParams params = new TAuthenticateParams();
+            params.setUser("ut_user");
+            params.setPasswd("ut_pwd");
+            // intentionally leave host + required_privilege unset to exercise the
+            // ternaries in the debug log.
+            TFeResult result = impl.checkAuth(params);
+            Assertions.assertNotNull(result.getStatus());
+        } finally {
+            org.apache.logging.log4j.core.config.Configurator.setLevel(
+                    FrontendServiceImpl.class.getName(), org.apache.logging.log4j.Level.INFO);
+        }
     }
 
     private static ConnectContext connectContext;
@@ -265,6 +513,18 @@ public class FrontendServiceImplTest {
                                 "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
                                 "PARTITION BY date_trunc('hour', event_day)\n" +
                                 "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\"\n" +
+                                ");")
+                    .withTable("CREATE TABLE site_access_multi_expr (\n" +
+                                "    event_day DATETIME,\n" +
+                                "    site_id INT DEFAULT '10',\n" +
+                                "    city_code VARCHAR(100),\n" +
+                                "    pv BIGINT DEFAULT '0'\n" +
+                                ")\n" +
+                                "DUPLICATE KEY(event_day, site_id, city_code)\n" +
+                                "PARTITION BY site_id, date_trunc('day', event_day)\n" +
+                                "DISTRIBUTED BY HASH(event_day, site_id)\n" +
                                 "PROPERTIES (\n" +
                                 "\"replication_num\" = \"1\"\n" +
                                 ");")
@@ -626,6 +886,53 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testLoadTxnRequestsRejectLeaderDemoting() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return true;
+            }
+
+            @Mock
+            public boolean isLeaderWorkAdmissionOpen() {
+                return false;
+            }
+
+            @Mock
+            public boolean isLeaderDemoting() {
+                return true;
+            }
+        };
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+        beginRequest.setLabel(UUID.randomUUID().toString());
+        beginRequest.setDb("test");
+        beginRequest.setTbl("site_access_auto");
+        beginRequest.setUser("root");
+        beginRequest.setPasswd("");
+        assertLeaderDemotionRejected(impl.loadTxnBegin(beginRequest).getStatus());
+
+        TLoadTxnCommitRequest commitRequest = new TLoadTxnCommitRequest();
+        commitRequest.setDb("test");
+        commitRequest.setTbl("site_access_auto");
+        commitRequest.setTxnId(1001L);
+        assertLeaderDemotionRejected(impl.loadTxnCommit(commitRequest).getStatus());
+        assertLeaderDemotionRejected(impl.loadTxnPrepare(commitRequest).getStatus());
+
+        TLoadTxnRollbackRequest rollbackRequest = new TLoadTxnRollbackRequest();
+        rollbackRequest.setDb("test");
+        rollbackRequest.setTbl("site_access_auto");
+        rollbackRequest.setTxnId(1001L);
+        assertLeaderDemotionRejected(impl.loadTxnRollback(rollbackRequest).getStatus());
+    }
+
+    private static void assertLeaderDemotionRejected(TStatus status) {
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, status.getStatus_code());
+        Assertions.assertTrue(status.getError_msgs().get(0).contains("leader is demoting"));
+    }
+
+    @Test
     public void testCreatePartitionApiSlice() throws TException {
         new MockUp<GlobalTransactionMgr>() {
             @Mock
@@ -834,6 +1141,79 @@ public class FrontendServiceImplTest {
         Config.max_partitions_in_one_batch = 4096;
     }
 
+    @Test
+    public void testAutomaticPartitionFirstBatchOverLimitIsRejected() throws TException {
+        // A brand-new transaction has not cached any partition yet, so the per-batch limit must be
+        // evaluated against the partitions this request wants to create, not against the empty cache.
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("2035-07-01"));
+        partitionValues.add(Lists.newArrayList("2035-08-01"));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        int partitionNumBefore = ((OlapTable) table).getNumberOfPartitions();
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 1;
+            TCreatePartitionResult result = impl.createPartition(request);
+            Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, result.getStatus().getStatus_code());
+            Assertions.assertTrue(result.getStatus().getError_msgs().get(0).contains("max_partitions_in_one_batch"));
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+        // nothing must have been created before the limit kicked in
+        Assertions.assertEquals(partitionNumBefore, ((OlapTable) table).getNumberOfPartitions());
+    }
+
+    @Test
+    public void testAutomaticPartitionReRequestOfCachedPartitionsIsNotDoubleCounted() throws TException {
+        // Re-asking for partitions the same transaction already created must not be counted twice,
+        // otherwise a retrying sink would be rejected once the cache alone reaches the limit.
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("2036-07-01"));
+        partitionValues.add(Lists.newArrayList("2036-08-01"));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 2;
+            Assertions.assertEquals(TStatusCode.OK, impl.createPartition(request).getStatus().getStatus_code());
+            // second call asks for exactly the two partitions already cached by this transaction
+            Assertions.assertEquals(TStatusCode.OK, impl.createPartition(request).getStatus().getStatus_code());
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+    }
+
     private TGetTablesParams buildListTableStatusParam() {
         TGetTablesParams request = new TGetTablesParams();
         request.setDb("test");
@@ -860,7 +1240,7 @@ public class FrontendServiceImplTest {
         params.setCurrent_user_ident(tUserIdentity);
 
         TGetTablesResult result = impl.getTableNames(params);
-        Assertions.assertEquals(18, result.tables.size());
+        Assertions.assertEquals(19, result.tables.size());
     }
 
     @Test
@@ -1098,6 +1478,82 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testDescribeTableAndShowCreateTableExpressionPartition() throws Exception {
+        // site_access_hour: PARTITION BY date_trunc - ExpressionRangePartitionInfo, no generated column in schema.
+        // Verify DESC never shows __generated_partition_column_, SHOW CREATE TABLE shows partition expr.
+        starRocksAssert.useDatabase("test");
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        request.setDb("test");
+        request.setTable_name("site_access_hour");
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+
+        TDescribeTableResult response = impl.describeTable(request);
+        List<String> columnNames = response.getColumns().stream()
+                .map(c -> c.getColumnDesc().getColumnName())
+                .collect(Collectors.toList());
+        Assertions.assertFalse(columnNames.stream().anyMatch(
+                        name -> name.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)),
+                "DESC should not contain expression partition generated columns: " + columnNames);
+        Assertions.assertTrue(columnNames.contains("event_day"));
+
+        // SHOW CREATE TABLE: show user-created form with partition expression, not generated column
+        com.starrocks.sql.ast.ShowCreateTableStmt stmt =
+                (com.starrocks.sql.ast.ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                        "show create table site_access_hour", connectContext);
+        String createTableSql = GlobalStateMgr.getCurrentState().getShowExecutor().execute(stmt, connectContext)
+                .getResultRows().get(0).get(1);
+        Assertions.assertFalse(createTableSql.contains(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX),
+                "SHOW CREATE TABLE should not contain internal generated partition columns: " + createTableSql);
+        Assertions.assertTrue(createTableSql.contains("date_trunc"),
+                "SHOW CREATE TABLE should show partition expression: " + createTableSql);
+        Assertions.assertTrue(
+                java.util.regex.Pattern.compile("PARTITION BY\\s+date_trunc\\s*\\([^)]*event_day[^)]*\\)")
+                        .matcher(createTableSql).find(),
+                "SHOW CREATE TABLE partition clause should explicitly use expression form: " + createTableSql);
+    }
+
+    @Test
+    public void testDescribeTableHidesGeneratedPartitionColumnsMultiExpr() throws Exception {
+        starRocksAssert.useDatabase("test");
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TDescribeTableParams request = new TDescribeTableParams();
+        request.setDb("test");
+        request.setTable_name("site_access_multi_expr");
+        TUserIdentity userIdentity = new TUserIdentity();
+        userIdentity.setUsername("root");
+        userIdentity.setHost("%");
+        userIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(userIdentity);
+
+        TDescribeTableResult response = impl.describeTable(request);
+        List<String> columnNames = response.getColumns().stream()
+                .map(c -> c.getColumnDesc().getColumnName())
+                .collect(Collectors.toList());
+        Assertions.assertFalse(columnNames.stream().anyMatch(
+                        name -> name.startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)),
+                "DESC should not show generated partition columns: " + columnNames);
+        Assertions.assertTrue(columnNames.contains("event_day"));
+        Assertions.assertTrue(columnNames.contains("site_id"));
+
+        com.starrocks.sql.ast.ShowCreateTableStmt showStmt =
+                (com.starrocks.sql.ast.ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                        "show create table site_access_multi_expr", connectContext);
+        String ddl = GlobalStateMgr.getCurrentState().getShowExecutor().execute(showStmt, connectContext)
+                .getResultRows().get(0).get(1);
+        Assertions.assertFalse(ddl.contains(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX),
+                "SHOW CREATE TABLE should not contain generated partition columns: " + ddl);
+        Assertions.assertTrue(ddl.contains("date_trunc"),
+                "SHOW CREATE TABLE should show partition expression: " + ddl);
+        Assertions.assertFalse(ddl.contains("__generated_partition_column"),
+                "Column definitions should not include generated partition columns: " + ddl);
+    }
+
+    @Test
     public void testGetSpecialColumn() throws Exception {
         starRocksAssert.withDatabase("test_table").useDatabase("test_table")
                     .withTable("CREATE TABLE `ye$test` (\n" +
@@ -1191,11 +1647,19 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
         Assertions.assertNull(result2.getReason());
         request.setTxnId(transactionId);
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        // Mock isLeader() instead of flipping feType: leader daemons check feType directly and stop
+        // themselves for good once it is not LEADER, which leaves later alter jobs in this class PENDING.
+        AtomicBoolean actAsFollower = new AtomicBoolean(true);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader(mockit.Invocation invocation) {
+                return !actAsFollower.get() && invocation.<Boolean>proceed();
+            }
+        };
         TGetLoadTxnStatusResult result3 = impl.getLoadTxnStatus(request);
         Assertions.assertEquals(TTransactionStatus.UNKNOWN, result3.getStatus());
         Assertions.assertNull(result3.getReason());
-        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+        actAsFollower.set(false);
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assertions.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
         Assertions.assertEquals("", result4.getReason());
@@ -1244,7 +1708,7 @@ public class FrontendServiceImplTest {
         request.keys = Lists.newArrayList("mysql_server_version");
         request.values = Lists.newArrayList("5.1.1");
 
-        TSetConfigResponse result = impl.setConfig(request);
+        impl.setConfig(request);
         Assertions.assertEquals("5.1.1", GlobalVariable.version);
 
         request.keys = Lists.newArrayList("adaptive_choose_instances_threshold");
@@ -1498,8 +1962,47 @@ public class FrontendServiceImplTest {
         loadRequest.setAuth_code(100);
         loadRequest.setUser("user1");
         loadRequest.setUser_ip("127.0.0.1");
-        TStreamLoadPutResult loadResult1 = impl.streamLoadPut(loadRequest);
-        TStreamLoadPutResult loadResult2 = impl.streamLoadPut(loadRequest);
+        impl.streamLoadPut(loadRequest);
+        impl.streamLoadPut(loadRequest);
+    }
+
+    @Test
+    public void testStreamLoadPutPipeline() throws Exception {
+        // Cover the pipeline stream load path (Config.enable_pipeline_stream_load + backend_id):
+        // FrontendServiceImpl pipeline branch -> LoadPlanner (syncStreamLoad) -> StreamLoadScanNode
+        // pinned-BE branch -> DefaultCoordinator.buildLocalStreamLoadParams. The mock cluster has
+        // backend 10001, so the scan is pinned to it and a BE-local params blob is materialized.
+        boolean savedFlag = Config.enable_pipeline_stream_load;
+        Config.enable_pipeline_stream_load = true;
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest beginRequest = new TLoadTxnBeginRequest();
+            beginRequest.setLabel("test_pipeline_label");
+            beginRequest.setDb("test");
+            beginRequest.setTbl("site_access_empty");
+            beginRequest.setUser("root");
+            beginRequest.setPasswd("");
+            TLoadTxnBeginResult beginResult = impl.loadTxnBegin(beginRequest);
+            Assertions.assertEquals(TStatusCode.OK, beginResult.getStatus().getStatus_code());
+
+            TStreamLoadPutRequest loadRequest = new TStreamLoadPutRequest();
+            loadRequest.setDb("test");
+            loadRequest.setTbl("site_access_empty");
+            loadRequest.setTxnId(beginResult.getTxnId());
+            loadRequest.setLoadId(new TUniqueId(4, 5));
+            loadRequest.setFileType(TFileType.FILE_STREAM);
+            loadRequest.setUser("root");
+            loadRequest.setColumnSeparator(",");
+            // Pin the scan to the mock backend that "owns the pipe".
+            loadRequest.setBackend_id(10001);
+
+            TStreamLoadPutResult result = impl.streamLoadPut(loadRequest);
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertNotNull(result.getParams());
+            Assertions.assertTrue(result.getParams().is_pipeline);
+        } finally {
+            Config.enable_pipeline_stream_load = savedFlag;
+        }
     }
 
     @Test
@@ -1515,6 +2018,40 @@ public class FrontendServiceImplTest {
         doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any(), any());
         TStreamLoadPutResult result = impl.streamLoadPut(request);
         Assertions.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testIsAuthorizedByInternalToken() {
+        // Direct unit test for the bypass helper -- standalone so each
+        // fall-through branch is pinned without spinning up the full
+        // requestMergeCommit RPC flow.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        // null / empty token -> always reject, regardless of table.
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken(null, "_statistics_", "rejected_records"));
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken("", "_statistics_", "rejected_records"));
+
+        // Non-empty token + wrong database -> reject (line 1158: a leaked
+        // token cannot be reused on a non-system table).
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken("some-token", "user_db", "rejected_records"));
+
+        // Non-empty token + wrong table in the system database -> reject.
+        Assertions.assertFalse(impl.isAuthorizedByInternalToken("some-token", "_statistics_", "query_history"));
+
+        // Token mismatch on the right table -> reject. NodeMgr.getToken()
+        // in the test fixture returns a real cluster token; we ensure ours
+        // does not equal it.
+        String realToken = GlobalStateMgr.getCurrentState().getNodeMgr().getToken();
+        Assertions.assertNotEquals("attacker-supplied-token", realToken);
+        Assertions.assertFalse(
+                impl.isAuthorizedByInternalToken("attacker-supplied-token", "_statistics_", "rejected_records"));
+
+        // Matching token + matching db/tbl -> accept. This is the only
+        // input combination that should ever return true.
+        if (realToken != null && !realToken.isEmpty()) {
+            Assertions.assertTrue(
+                    impl.isAuthorizedByInternalToken(realToken, "_statistics_", "rejected_records"));
+        }
     }
 
     @Test
@@ -1595,55 +2132,6 @@ public class FrontendServiceImplTest {
         request.tbl = "mv";
         e = Assertions.assertThrows(StarRocksException.class, () -> impl.streamLoadPutImpl(context, request));
         Assertions.assertTrue(e.getMessage().contains("is a materialized view"));
-    }
-
-    @Test
-    public void testAddListPartitionConcurrency() throws StarRocksException, TException {
-        new MockUp<GlobalTransactionMgr>() {
-            @Mock
-            public TransactionState getTransactionState(long dbId, long transactionId) {
-                return new TransactionState();
-            }
-        };
-
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_list");
-        List<List<String>> partitionValues = Lists.newArrayList();
-        List<String> values = Lists.newArrayList();
-        values.add("1990-04-24");
-        partitionValues.add(values);
-        List<String> values2 = Lists.newArrayList();
-        values2.add("1990-04-25");
-        partitionValues.add(values2);
-        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-        TCreatePartitionRequest request = new TCreatePartitionRequest();
-        request.setDb_id(db.getId());
-        request.setTable_id(table.getId());
-        request.setPartition_values(partitionValues);
-        TCreatePartitionResult partition = impl.createPartition(request);
-
-        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
-        Database testDb = currentState.getLocalMetastore().getDb("test");
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(testDb.getFullName(), "site_access_list");
-        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
-        List<PartitionDesc> partitionDescs = Lists.newArrayList();
-        Partition p19910425 = olapTable.getPartition("p19900425");
-
-        partitionDescs.add(new ListPartitionDesc(Lists.newArrayList("p19900425"),
-                    Lists.newArrayList(new SingleItemListPartitionDesc(true, "p19900425",
-                                Lists.newArrayList("1990-04-25"), Maps.newHashMap()))));
-
-        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDescs.get(0),
-                    defaultDistributionInfo.toDistributionDesc(table.getIdToColumn()), Maps.newHashMap(), false);
-
-        List<Partition> partitionList = Lists.newArrayList();
-        partitionList.add(p19910425);
-
-        currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
-                    addPartitionClause.isTempPartition(), partitionInfo, partitionList, Sets.newSet("p19900425"));
-
     }
 
     @Test
@@ -1908,6 +2396,126 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testGetQueryProfileWithoutRequestAllFrontend() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetProfileRequest request = new TGetProfileRequest();
+        request.setQuery_id(Lists.newArrayList("3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90"));
+        request.setIs_request_all_frontend(false);
+
+        try (MockedStatic<ProfileManager> profileManagerMock = mockStatic(ProfileManager.class)) {
+            ProfileManager profileManager = Mockito.mock(ProfileManager.class);
+            profileManagerMock.when(ProfileManager::getInstance).thenReturn(profileManager);
+            Mockito.when(profileManager.getProfile("3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90")).thenReturn(null);
+            TGetProfileResponse response = impl.getQueryProfile(request);
+
+            Assertions.assertEquals(Lists.newArrayList(""), response.getQuery_result());
+        }
+    }
+
+    @Test
+    public void testGetQueryProfileRequestAllFrontend() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        String queryId = "3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90";
+
+        TGetProfileRequest request = new TGetProfileRequest();
+        request.setQuery_id(Lists.newArrayList(queryId));
+        request.setIs_request_all_frontend(true);
+
+        Frontend self = new Frontend(FrontendNodeType.FOLLOWER, "self", "127.0.0.1", 9010);
+        self.setRpcPort(9020);
+        Frontend remote = new Frontend(FrontendNodeType.FOLLOWER, "remote", "127.0.0.2", 9010);
+        remote.setRpcPort(9021);
+        remote.setAlive(true);
+
+        RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        summaryProfile.addInfoString(ProfileManager.QUERY_ID, queryId);
+        summaryProfile.addInfoString(ProfileManager.START_TIME, "2025-04-01 11:00:00");
+        summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, "50ms");
+        summaryProfile.addInfoString(ProfileManager.QUERY_STATE, "Finished");
+        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, "SELECT 1");
+        summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+
+        TGetProfileResponse remoteResponse = new TGetProfileResponse();
+        remoteResponse.setQuery_result(Lists.newArrayList(summaryProfile.toString()));
+
+        try (MockedStatic<ProfileManager> profileManagerMock = mockStatic(ProfileManager.class);
+                MockedStatic<GlobalStateMgr> globalStateMgrMock = mockStatic(GlobalStateMgr.class);
+                MockedStatic<ThriftRPCRequestExecutor> thriftMock = mockStatic(ThriftRPCRequestExecutor.class)) {
+
+            ProfileManager profileManager = Mockito.mock(ProfileManager.class);
+            profileManagerMock.when(ProfileManager::getInstance).thenReturn(profileManager);
+            Mockito.when(profileManager.getProfile(queryId)).thenReturn(null);
+
+            GlobalStateMgr globalStateMgr = Mockito.mock(GlobalStateMgr.class);
+            NodeMgr nodeMgr = Mockito.mock(NodeMgr.class);
+            globalStateMgrMock.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
+            Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(nodeMgr);
+            Mockito.when(nodeMgr.getOtherFrontends()).thenReturn(Lists.newArrayList(remote));
+
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenReturn(remoteResponse);
+
+            TGetProfileResponse response = impl.getQueryProfile(request);
+
+            Assertions.assertEquals(Lists.newArrayList(summaryProfile.toString()), response.getQuery_result());
+        }
+    }
+
+    @Test
+    public void testGetQueryProfileRequestAllFrontendWithRpcFailure() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        String queryId = "3f7a9c2e-6b1d-4f8a-9e73-2c5d8a1b4f90";
+
+        TGetProfileRequest request = new TGetProfileRequest();
+        request.setQuery_id(Lists.newArrayList(queryId));
+        request.setIs_request_all_frontend(true);
+
+        Frontend failedFrontend = new Frontend(FrontendNodeType.FOLLOWER, "node01", "127.0.0.2", 9010);
+        failedFrontend.setRpcPort(9021);
+        failedFrontend.setAlive(true);
+
+        Frontend frontend = new Frontend(FrontendNodeType.FOLLOWER, "node02", "127.0.0.3", 9010);
+        frontend.setRpcPort(9022);
+        frontend.setAlive(true);
+
+        try (MockedStatic<ProfileManager> profileManagerMock = mockStatic(ProfileManager.class);
+                MockedStatic<GlobalStateMgr> globalStateMgrMock = mockStatic(GlobalStateMgr.class);
+                MockedStatic<ThriftRPCRequestExecutor> thriftMock = mockStatic(ThriftRPCRequestExecutor.class)) {
+
+            ProfileManager profileManager = Mockito.mock(ProfileManager.class);
+            profileManagerMock.when(ProfileManager::getInstance).thenReturn(profileManager);
+            Mockito.when(profileManager.getProfile(queryId)).thenReturn(null);
+
+            GlobalStateMgr globalStateMgr = Mockito.mock(GlobalStateMgr.class);
+            NodeMgr nodeMgr = Mockito.mock(NodeMgr.class);
+            globalStateMgrMock.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
+            Mockito.when(globalStateMgr.getNodeMgr()).thenReturn(nodeMgr);
+            Mockito.when(nodeMgr.getOtherFrontends()).thenReturn(Lists.newArrayList(failedFrontend, frontend));
+
+            thriftMock.when(() -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenAnswer(invocation -> {
+                        TNetworkAddress address = invocation.getArgument(1);
+                        ThriftRPCRequestExecutor.MethodCallable callable = invocation.getArgument(2);
+                        FrontendService.Client client = Mockito.mock(FrontendService.Client.class);
+                        Mockito.when(client.getQueryProfile(any())).thenAnswer(clientInvocation -> {
+                            TGetProfileRequest forwardedRequest = clientInvocation.getArgument(0);
+                            Assertions.assertEquals(Lists.newArrayList(queryId), forwardedRequest.getQuery_id());
+                            Assertions.assertFalse(forwardedRequest.isIs_request_all_frontend());
+                            if (failedFrontend.getHost().equals(address.getHostname())) {
+                                throw new TException("rpc failure");
+                            }
+                            return new TGetProfileResponse();
+                        });
+                        return callable.apply(client);
+                    });
+
+            TGetProfileResponse response = impl.getQueryProfile(request);
+
+            Assertions.assertEquals(Lists.newArrayList(""), response.getQuery_result());
+        }
+    }
+
+    @Test
     public void testCreatePartitionSkipDroppedPartition() throws TException {
         // Test that when a partition is dropped between create and get (e.g. by TTL cleaner),
         // the partition should be skipped instead of causing NPE
@@ -1957,5 +2565,669 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
         // partitions should be empty since the created partition was "dropped" by TTL
         Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
+    }
+
+    @Test
+    public void testGetPartitionAccessTimes() throws Exception {
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "site_access_auto");
+
+            // Record a query access on every (logical) partition of the table on this (local) FE.
+            List<Long> partitionIds = table.getPartitions().stream()
+                    .map(Partition::getId).collect(Collectors.toList());
+            GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr()
+                    .recordAccess(db.getId(), table.getId(), partitionIds);
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+            // Batch request carrying this table; the handler is lock-free and returns logicalPartitionId -> ms.
+            TGetPartitionAccessTimesRequest request = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef ref = new TPartitionAccessTimeTableRef();
+            ref.setDb_id(db.getId());
+            ref.setTable_id(table.getId());
+            request.setTables(Lists.newArrayList(ref));
+
+            TGetPartitionAccessTimesResponse response = impl.getPartitionAccessTimes(request);
+            Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+            Map<Long, Long> accessTimes = response.getPartition_id_to_access_time_ms();
+            Assertions.assertNotNull(accessTimes);
+            Assertions.assertEquals(partitionIds.size(), accessTimes.size());
+            for (Long pid : partitionIds) {
+                Assertions.assertTrue(accessTimes.getOrDefault(pid, 0L) > 0);
+            }
+
+            // A table absent on this FE (bogus id) must not fail: the lock-free snapshot returns empty.
+            TGetPartitionAccessTimesRequest missingReq = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef missingRef = new TPartitionAccessTimeTableRef();
+            missingRef.setDb_id(db.getId());
+            missingRef.setTable_id(-1L);
+            missingReq.setTables(Lists.newArrayList(missingRef));
+            TGetPartitionAccessTimesResponse missingResp = impl.getPartitionAccessTimes(missingReq);
+            Assertions.assertEquals(TStatusCode.OK, missingResp.getStatus().getStatus_code());
+            Assertions.assertTrue(missingResp.getPartition_id_to_access_time_ms().isEmpty());
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
+    /**
+     * Register an LDAP security integration and put it on the authentication chain, then stub the LDAP bind
+     * so no directory server is needed. Returns a counter of bind attempts: asserting it is non-zero proves
+     * the chain actually reached the integration instead of skipping it.
+     */
+    private AtomicInteger withLdapSecurityIntegration(String name, String validPassword) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
+                AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name());
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_DN_PATTERN,
+                "uid=${USER},ou=People,dc=example,dc=com");
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateSecurityIntegration(name, properties);
+        Config.authentication_chain = new String[] {"native", name};
+
+        AtomicInteger bindCount = new AtomicInteger();
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            public void checkPassword(String dn, String password) throws Exception {
+                bindCount.incrementAndGet();
+                if (!validPassword.equals(password)) {
+                    throw new AuthenticationException("invalid credentials");
+                }
+            }
+        };
+        return bindCount;
+    }
+
+    private void dropLdapSecurityIntegration(String name, String[] savedAuthChain) throws Exception {
+        Config.authentication_chain = savedAuthChain;
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropSecurityIntegration(name);
+    }
+
+    @Test
+    public void testLoadTxnBeginAuthenticatesSecurityIntegrationLdapUser() throws Exception {
+        // The load RPCs build their own ConnectContext, so before the fix the chain compared the integration
+        // against an unset authPlugin and skipped it: an LDAP user defined by a security integration could
+        // never authenticate here. This runs the real chain (only the LDAP bind is stubbed) and isolates the
+        // authentication step; the privilege step has its own cases below.
+        String siName = "ldap_corp_txn_auth";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("ldap_user");
+            request.setPasswd("ldap_password");
+            // the BE always fills user_ip in; the ephemeral identity is keyed on it
+            request.setUser_ip("10.1.2.3");
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertEquals(1, bindCount.get(), "the chain must reach the LDAP integration");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    @Test
+    public void testLoadTxnBeginRejectsSecurityIntegrationUserWithoutPrivilege() throws Exception {
+        // Pairs with the case above: letting the chain match more integrations must not loosen authorization.
+        // The LDAP user authenticates but its groups map to no role holding INSERT, so the load is refused.
+        String siName = "ldap_corp_txn_priv";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("ldap_user");
+            request.setPasswd("ldap_password");
+            // the BE always fills user_ip in; the ephemeral identity is keyed on it
+            request.setUser_ip("10.1.2.3");
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+
+            Assertions.assertNotEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertTrue(String.join(";", result.getStatus().getError_msgs()).contains("INSERT"),
+                    "the refusal must name the missing privilege: " + result.getStatus().getError_msgs());
+            Assertions.assertEquals(1, bindCount.get(), "authentication itself must have succeeded");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    @Test
+    public void testLoadTxnBeginRejectsSecurityIntegrationUserWithWrongPassword() throws Exception {
+        String siName = "ldap_corp_txn_pwd";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("ldap_user");
+            request.setPasswd("wrong_password");
+            request.setUser_ip("10.1.2.3");
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+
+            Assertions.assertNotEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertEquals(1, bindCount.get(), "the LDAP bind must have been attempted and failed");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    @Test
+    public void testLoadTxnBeginAuthorizesOnTheAuthenticatedContext() throws Exception {
+        // A user coming from a security integration is ephemeral and owns no roles of its own: every
+        // privilege it has comes from the roles its groups map to, and authentication puts those on the
+        // context it authenticated. Authorizing on a fresh context instead would come back with no roles
+        // and reject an LDAP user that does have INSERT through a group.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel("test_label_group_derived_roles");
+        request.setDb("test");
+        request.setTbl("site_access_auto");
+        request.setUser("ldap_user");
+        request.setPasswd("ldap_password");
+        // the BE always fills user_ip in; without it the ephemeral identity would carry a null host
+        request.setUser_ip("10.1.2.3");
+
+        UserIdentity ephemeralUser = UserIdentity.createEphemeralUserIdent("ldap_user", "10.1.2.3");
+        Set<Long> groupDerivedRoles = Set.of(1234L);
+        AtomicReference<ConnectContext> authenticatedContext = new AtomicReference<>();
+        AtomicReference<ConnectContext> authorizedContext = new AtomicReference<>();
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(
+                            any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authContext = invocation.getArgument(0);
+                        // Stand in for the real handler, which resolves groups and the roles they map to.
+                        authContext.setCurrentUserIdentity(ephemeralUser);
+                        authContext.setCurrentRoleIds(groupDerivedRoles);
+                        authenticatedContext.set(authContext);
+                        return ephemeralUser;
+                    });
+            mockedAuthz.when(() -> Authorizer.checkTableAction(any(ConnectContext.class), any(String.class),
+                            any(String.class), eq(PrivilegeType.INSERT)))
+                    .thenAnswer(invocation -> {
+                        authorizedContext.set(invocation.getArgument(0));
+                        return null;
+                    });
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        }
+
+        Assertions.assertNotNull(authorizedContext.get(), "the INSERT check must run");
+        Assertions.assertSame(authenticatedContext.get(), authorizedContext.get());
+        Assertions.assertEquals(groupDerivedRoles, authorizedContext.get().getCurrentRoleIds());
+    }
+
+    private void withJwtSecurityIntegration(String name) {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, AuthPlugin.Server.AUTHENTICATION_JWT.name());
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
+        properties.put(JWTAuthenticationProvider.JWT_REQUIRED_ISSUER, "http://localhost:38080/realms/master");
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateSecurityIntegration(name, properties);
+        Config.authentication_chain = new String[] {"native", name};
+    }
+
+    @Test
+    public void testLoadTxnBeginRoutesABearerTokenByAuthType() throws Exception {
+        // TC-L3-48-01: auth_type="bearer" means "passwd carries a token": the FE routes it through
+        // the issuer-based chain instead of treating it as a password for `user`.
+        String siName = "jwt_corp_txn_bearer";
+        String[] savedAuthChain = Config.authentication_chain;
+        withJwtSecurityIntegration(siName);
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("harbor");
+            request.setPasswd(new MockTokenUtils().generateTestOIDCToken(3600 * 1000));
+            request.setAuth_type("bearer");
+            request.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult begun = impl.loadTxnBegin(request);
+            Assertions.assertEquals(TStatusCode.OK, begun.getStatus().getStatus_code(), String.valueOf(begun.getStatus()));
+            // Release the transaction: the per-BE stream load limit counts every open one, and other
+            // tests in this class begin theirs against the same limit.
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(), begun.getTxnId(),
+                    "test cleanup");
+
+            // The same bytes without the auth_type are a password login for `harbor`, which fails: the
+            // field is what selects the path, not the shape of the secret.
+            request.unsetAuth_type();
+            request.setLabel(UUID.randomUUID().toString());
+            Assertions.assertNotEquals(TStatusCode.OK, impl.loadTxnBegin(request).getStatus().getStatus_code());
+        } finally {
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
+    public void testBearerStreamLoadIsRecordedUnderTheTokenUser() throws Exception {
+        // A BE forwarding a Bearer stream load sends an empty `user`: the principal is in the
+        // token. Both the load task and the pipeline put stage must carry the user the token
+        // authenticated as, or SHOW STREAM LOAD shows no user and user-scoped resource groups
+        // never match.
+        String siName = "jwt_corp_load_user";
+        String[] savedAuthChain = Config.authentication_chain;
+        boolean savedPipelineStreamLoad = Config.enable_pipeline_stream_load;
+        withJwtSecurityIntegration(siName);
+        long txnId = -1;
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            String token = new MockTokenUtils().generateTestOIDCToken(3600 * 1000);
+            TLoadTxnBeginRequest begin = new TLoadTxnBeginRequest();
+            begin.setLabel(UUID.randomUUID().toString());
+            begin.setDb("test");
+            begin.setTbl("site_access_auto");
+            begin.setUser("");
+            begin.setPasswd(token);
+            begin.setAuth_type("bearer");
+            begin.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult begun = impl.loadTxnBegin(begin);
+            Assertions.assertEquals(TStatusCode.OK, begun.getStatus().getStatus_code(),
+                    String.valueOf(begun.getStatus()));
+            txnId = begun.getTxnId();
+            Assertions.assertEquals("harbor", GlobalStateMgr.getCurrentState().getStreamLoadMgr()
+                    .getTaskByLabel(begin.getLabel()).getUser());
+
+            // The put stage: authenticating the token set the context's user; the pipeline branch
+            // must not overwrite it with the empty declared one. Planning itself may fail here.
+            Config.enable_pipeline_stream_load = true;
+            TStreamLoadPutRequest put = new TStreamLoadPutRequest();
+            put.setDb("test");
+            put.setTbl("site_access_auto");
+            put.setUser("");
+            put.setPasswd(token);
+            put.setAuth_type("bearer");
+            put.setUser_ip("10.1.2.3");
+            put.setTxnId(txnId);
+            put.setBackend_id(10001);
+            put.setFileType(TFileType.FILE_STREAM);
+            ConnectContext context = new ConnectContext();
+            context.setQualifiedUser("harbor");
+            try {
+                impl.streamLoadPutImpl(context, put);
+            } catch (Exception e) {
+                // Only the user set before planning matters.
+            }
+            Assertions.assertEquals("harbor", context.getQualifiedUser());
+        } finally {
+            Config.enable_pipeline_stream_load = savedPipelineStreamLoad;
+            if (txnId != -1) {
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(),
+                        txnId, "test cleanup");
+            }
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                    .replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
+    public void testStreamLoadPutRecoversASecurityIntegrationUser() throws Exception {
+        // TC-L3-48-04: a security-integration user is not in the native table, so the put stage cannot
+        // look the identity up; it has to authenticate the credential again. The request then fails on
+        // its column mapping exactly like root's does - which is the proof it got past authentication.
+        String siName = "ldap_corp_put";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+            request.setDb("test");
+            request.setTbl("site_access_hour");
+            request.setUser("ldap_user");
+            request.setPasswd("ldap_password");
+            request.setUser_ip("10.1.2.3");
+            request.setTxnId(1024);
+            request.setColumnSeparator(",");
+            request.setFileType(TFileType.FILE_STREAM);
+            request.setColumns("col1,event_day=str_to_date(col1)");
+
+            TStatus status = impl.streamLoadPut(request).getStatus();
+            Assertions.assertEquals(TStatusCode.ANALYSIS_ERROR, status.getStatus_code(), String.valueOf(status));
+            Assertions.assertTrue(status.getError_msgs().get(0).contains("str_to_date"), String.valueOf(status));
+            Assertions.assertEquals(1, bindCount.get(), "the identity was recovered by authenticating the credential");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    /**
+     * TC-L3-48-08 / AC-16: every load RPC that carries a credential routes it by `auth_type` the same
+     * way - unset and "basic" read `passwd` as a password for `user`, "bearer" reads it as a token.
+     * Seven entry points, one table, so an eighth added without the switch goes red.
+     */
+    @Test
+    public void testEveryLoadEntryPointRoutesTheCredentialByAuthType() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        java.util.concurrent.atomic.AtomicReference<AuthCredentials> seen = new java.util.concurrent.atomic.AtomicReference<>();
+        try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> ignoredAuthz = mockStatic(Authorizer.class)) {
+            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        seen.set(invocation.getArgument(1));
+                        ConnectContext ctx = invocation.getArgument(0);
+                        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+                        ctx.setQualifiedUser("root");
+                        return UserIdentity.ROOT;
+                    });
+
+            java.util.Map<String, java.util.function.Consumer<String>> entryPoints = new java.util.LinkedHashMap<>();
+            entryPoints.put("checkAuth", authType -> {
+                TAuthenticateParams p = new TAuthenticateParams();
+                p.setUser("u");
+                p.setPasswd("secret");
+                p.setHost("10.1.2.3");
+                if (authType != null) {
+                    p.setAuth_type(authType);
+                }
+                try {
+                    impl.checkAuth(p);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("loadTxnBegin", authType -> {
+                TLoadTxnBeginRequest r = new TLoadTxnBeginRequest();
+                r.setLabel(UUID.randomUUID().toString());
+                r.setDb("test");
+                r.setTbl("site_access_auto");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    TLoadTxnBeginResult begun = impl.loadTxnBegin(r);
+                    if (begun.getStatus().getStatus_code() == TStatusCode.OK) {
+                        // release it: the per-BE stream load limit counts open transactions
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                                GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId(),
+                                begun.getTxnId(), "test cleanup");
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("streamLoadPut", authType -> {
+                TStreamLoadPutRequest r = new TStreamLoadPutRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                r.setFileType(TFileType.FILE_STREAM);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                impl.streamLoadPut(r);
+            });
+            entryPoints.put("loadTxnCommit", authType -> {
+                TLoadTxnCommitRequest r = new TLoadTxnCommitRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.loadTxnCommit(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("loadTxnPrepare", authType -> {
+                TLoadTxnCommitRequest r = new TLoadTxnCommitRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.loadTxnPrepare(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("loadTxnRollback", authType -> {
+                TLoadTxnRollbackRequest r = new TLoadTxnRollbackRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setTxnId(-1);
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.loadTxnRollback(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+            entryPoints.put("requestMergeCommit", authType -> {
+                TMergeCommitRequest r = new TMergeCommitRequest();
+                r.setDb("test");
+                r.setTbl("site_access_hour");
+                r.setUser("u");
+                r.setPasswd("secret");
+                r.setUser_ip("10.1.2.3");
+                r.setBackend_id(10001);
+                r.setBackend_host("127.0.0.1");
+                r.setParams(new java.util.HashMap<>());
+                if (authType != null) {
+                    r.setAuth_type(authType);
+                }
+                try {
+                    impl.requestMergeCommit(r);
+                } catch (TException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+
+            for (java.util.Map.Entry<String, java.util.function.Consumer<String>> ep : entryPoints.entrySet()) {
+                for (String authType : new String[] {null, "basic", "bearer"}) {
+                    seen.set(null);
+                    ep.getValue().accept(authType);
+                    AuthCredentials cred = seen.get();
+                    Assertions.assertNotNull(cred, ep.getKey() + " with auth_type=" + authType + " never authenticated");
+                    boolean bearer = "bearer".equals(authType);
+                    Assertions.assertEquals(bearer ? AuthCredentialKind.BEARER_TOKEN : AuthCredentialKind.PLAIN_PASSWORD,
+                            cred.kind(), ep.getKey() + " with auth_type=" + authType);
+                    Assertions.assertEquals(bearer ? null : "u", cred.userDeclared(), ep.getKey() + ": declared user");
+                    Assertions.assertEquals("secret", new String(cred.rawSecret(), java.nio.charset.StandardCharsets.UTF_8),
+                            ep.getKey() + ": the secret bytes are passed through untouched");
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testATokenSentWithoutAuthTypeIsJustAWrongPassword() throws Exception {
+        // TC-L3-410-03: what an old FE, or a BE that predates the field, makes of a Bearer token: it
+        // arrives as `passwd` with no auth_type, so it is checked as the password of `user` and fails.
+        // Documented upgrade behaviour - a 401, never an accidental login.
+        String siName = "jwt_corp_compat";
+        String[] savedAuthChain = Config.authentication_chain;
+        withJwtSecurityIntegration(siName);
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("harbor");
+            request.setPasswd(new MockTokenUtils().generateTestOIDCToken(3600 * 1000));
+            request.setUser_ip("10.1.2.3");
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+            Assertions.assertNotEquals(TStatusCode.OK, result.getStatus().getStatus_code(), String.valueOf(result.getStatus()));
+            Assertions.assertTrue(String.valueOf(result.getStatus().getError_msgs()).contains("Access denied"),
+                    String.valueOf(result.getStatus()));
+        } finally {
+            Config.authentication_chain = savedAuthChain;
+            GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropSecurityIntegration(siName);
+        }
+    }
+
+    @Test
+    public void testStreamLoadPutFallsBackToTheDeclaredNameWhenTheCredentialFails() throws Exception {
+        // The put stage re-authenticates a user the native table does not know. When that fails it must not
+        // fail the request on its own - loadTxnBegin is the gate - but the identity it falls back to is only
+        // the declared name: an unauthenticated user gets no roles, in particular no group-derived ones.
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        AtomicReference<ConnectContext> planned = new AtomicReference<>();
+        Mockito.doAnswer(invocation -> {
+            planned.set(invocation.getArgument(0));
+            return null;
+        }).when(impl).streamLoadPutImpl(any(ConnectContext.class), any(TStreamLoadPutRequest.class));
+        AtomicInteger attempts = new AtomicInteger();
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        attempts.incrementAndGet();
+                        throw new AuthenticationException("Access denied");
+                    });
+            TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+            request.setDb("test");
+            request.setTbl("site_access_hour");
+            request.setUser("ghost_user");
+            request.setPasswd("wrong_password");
+            request.setUser_ip("10.1.2.3");
+            request.setTxnId(1024);
+            request.setFileType(TFileType.FILE_STREAM);
+            impl.streamLoadPut(request);
+        }
+
+        Assertions.assertEquals(1, attempts.get(), "the put stage must try the credential before falling back");
+        ConnectContext context = planned.get();
+        Assertions.assertNotNull(context, "the request goes on to planning");
+        Assertions.assertEquals(UserIdentity.createAnalyzedUserIdentWithIp("ghost_user", "10.1.2.3"),
+                context.getCurrentUserIdentity());
+        Assertions.assertTrue(context.getCurrentRoleIds().isEmpty(), String.valueOf(context.getCurrentRoleIds()));
+    }
+
+    @Test
+    public void testExternalTableCheckAuthorizesOnTheAuthenticatedContext() throws Exception {
+        // beginRemoteTxn of a StarRocks external table: the source cluster sends "user@host". The host part is
+        // stripped before authenticating, and INSERT is checked on the very context authentication filled in,
+        // so a security-integration user whose INSERT comes from a group mapping is accepted.
+        boolean savedCheck = Config.enable_starrocks_external_table_auth_check;
+        Config.enable_starrocks_external_table_auth_check = true;
+        UserIdentity ephemeralUser = UserIdentity.createEphemeralUserIdent("ldap_user", "10.1.2.3");
+        Set<Long> groupDerivedRoles = Set.of(1234L);
+        AtomicReference<AuthCredentials> seen = new AtomicReference<>();
+        AtomicReference<ConnectContext> authenticatedContext = new AtomicReference<>();
+        List<ConnectContext> authorizedContexts = new ArrayList<>();
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(AuthCredentials.class)))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authContext = invocation.getArgument(0);
+                        authContext.setCurrentUserIdentity(ephemeralUser);
+                        authContext.setCurrentRoleIds(groupDerivedRoles);
+                        seen.set(invocation.getArgument(1));
+                        authenticatedContext.set(authContext);
+                        return ephemeralUser;
+                    });
+            mockedAuthz.when(() -> Authorizer.checkTableAction(any(ConnectContext.class), any(String.class),
+                            any(String.class), eq(PrivilegeType.INSERT)))
+                    .thenAnswer(invocation -> {
+                        authorizedContexts.add(invocation.getArgument(0));
+                        return null;
+                    });
+
+            TAuthenticateParams params = new TAuthenticateParams();
+            params.setUser("ldap_user@10.1.2.3");
+            params.setPasswd("ldap_password");
+            params.setHost("10.1.2.3");
+            params.setDb_name("test");
+            params.setTable_names(List.of("site_access_hour", "site_access_auto"));
+            TStatus status = FrontendServiceImpl.checkAuthAndExternalTablePriv(params);
+            Assertions.assertEquals(TStatusCode.OK, status.getStatus_code(), String.valueOf(status));
+        } finally {
+            Config.enable_starrocks_external_table_auth_check = savedCheck;
+        }
+
+        AuthCredentials cred = seen.get();
+        Assertions.assertEquals("ldap_user", cred.userDeclared(), "the @host suffix is not part of the user name");
+        Assertions.assertEquals(AuthCredentialKind.PLAIN_PASSWORD, cred.kind());
+        Assertions.assertEquals("ldap_password", new String(cred.rawSecret(), java.nio.charset.StandardCharsets.UTF_8));
+        Assertions.assertEquals(2, authorizedContexts.size(), "INSERT is checked on every table");
+        for (ConnectContext authorized : authorizedContexts) {
+            Assertions.assertSame(authenticatedContext.get(), authorized);
+            Assertions.assertEquals(groupDerivedRoles, authorized.getCurrentRoleIds());
+        }
+    }
+
+    @Test
+    public void testExternalTableCheckRefusesAWrongPassword() throws Exception {
+        // The real chain this time: root with its real (empty) password is let through, the same user with a
+        // wrong password is refused, and beginRemoteTxn stops there instead of opening a transaction.
+        boolean savedCheck = Config.enable_starrocks_external_table_auth_check;
+        Config.enable_starrocks_external_table_auth_check = true;
+        try {
+            TAuthenticateParams params = new TAuthenticateParams();
+            params.setUser("root@127.0.0.1");
+            params.setPasswd("");
+            params.setHost("127.0.0.1");
+            params.setDb_name("test");
+            params.setTable_names(List.of("site_access_hour"));
+            TStatus accepted = FrontendServiceImpl.checkAuthAndExternalTablePriv(params);
+            Assertions.assertEquals(TStatusCode.OK, accepted.getStatus_code(), String.valueOf(accepted));
+
+            params.setPasswd("wrong_password");
+            TStatus refused = FrontendServiceImpl.checkAuthAndExternalTablePriv(params);
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, refused.getStatus_code(), String.valueOf(refused));
+            Assertions.assertTrue(refused.getError_msgs().contains("Please check that your user or password is correct"),
+                    String.valueOf(refused));
+
+            TBeginRemoteTxnRequest request = new TBeginRemoteTxnRequest();
+            request.setAuth_info(params);
+            TBeginRemoteTxnResponse response = new FrontendServiceImpl(exeEnv).beginRemoteTxn(request);
+            Assertions.assertEquals(TStatusCode.NOT_AUTHORIZED, response.getStatus().getStatus_code(),
+                    String.valueOf(response.getStatus()));
+        } finally {
+            Config.enable_starrocks_external_table_auth_check = savedCheck;
+        }
     }
 }

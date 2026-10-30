@@ -20,6 +20,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -35,17 +36,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.NonDeterministicVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
 import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static com.starrocks.sql.optimizer.operator.OpRuleBit.OP_SPLIT_WINDOW_SKEW;
 
 /*
  * Rule Objective:
@@ -120,14 +123,24 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         if (input.getOp() instanceof LogicalWindowOperator lwo) {
+            if (lwo.isOpRuleBitSet(OP_SPLIT_WINDOW_SKEW)) {
+                return false;
+            }
+            OptExpression child = input.inputAt(0);
+            if (child.getOp().accept(new NonDeterministicVisitor(), child, null)) {
+                return false;
+            }
+
             List<ScalarOperator> partitionExprs = lwo.getPartitionExpressions();
 
             // Rule only applies if there is exactly one partition expression,
             // and that expression is a direct ColumnReference (not a function or expression).
+            // An explicit [merge_sort] hint picks the merge-sort strategy instead, so leave it alone.
             return partitionExprs != null
                     && partitionExprs.size() == 1
                     && lwo.getOrderByElements() != null
-                    && !lwo.getOrderByElements().isEmpty();
+                    && !lwo.getOrderByElements().isEmpty()
+                    && !lwo.isForceMergeSort();
         }
         return false;
     }
@@ -206,8 +219,14 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
 
         // 4. Build Union
         LogicalUnionOperator unionOp = buildUnionOperator(context, child, window, unskewedBranch);
+        OptExpression unionExpr = OptExpression.create(unionOp, skewedBranch.root, unskewedBranch.root);
+        // The split builds a fresh UNION subtree and the duplicated branch starts without logical properties or
+        // statistics. Derive logical properties first so statistics estimators can inspect output columns, then
+        // calculate fresh statistics for the duplicated branch.
+        deriveLogicalProperty(unionExpr);
+        Utils.calculateStatistics(unionExpr, context);
 
-        return Lists.newArrayList(OptExpression.create(unionOp, skewedBranch.root, unskewedBranch.root));
+        return Lists.newArrayList(unionExpr);
     }
 
     private LogicalUnionOperator buildUnionOperator(OptimizerContext context,
@@ -280,7 +299,20 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             windowBuilder.setPartitionExpressions(partitionExprs);
         }
 
-        return new BranchResult(OptExpression.create(windowBuilder.build(), filterExpr), mapping);
+        LogicalWindowOperator branchWindow = windowBuilder.build();
+        branchWindow.setOpRuleBit(OP_SPLIT_WINDOW_SKEW);
+        return new BranchResult(OptExpression.create(branchWindow, filterExpr), mapping);
+    }
+
+    private void deriveLogicalProperty(OptExpression root) {
+        if (root.getLogicalProperty() != null) {
+            return;
+        }
+
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+        root.deriveLogicalPropertyItself();
     }
 
     private List<ScalarOperator> rewriteExpressions(List<ScalarOperator> exprs, OptExpressionDuplicator duplicator) {
@@ -367,17 +399,26 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             }
 
             ColumnStatistic colStat = statistics.getColumnStatistic(col);
-            var skewInfo = DataSkew.getColumnSkewInfo(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1));
-            if (skewInfo.isSkewed()) {
-
-                if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
-                    return List.of(new SkewedInfo(col, ConstantOperator.createNull(col.getType())));
-                }
-
-                return skewInfo.maybeMcvs().stream().flatMap(Collection::stream).map(p -> (new SkewedInfo(col,
-                        ConstantOperator.createVarchar(p.first)))).toList();
-            }
+            // Window split can only peel off one value (see size-guard in transform) so we pick a single dominant skew
+            DataSkew.SkewCandidates candidates = 
+                    DataSkew.getSkewCandidates(statistics, colStat, DataSkew.Thresholds.withMcvLimit(1), 0.0);
+            return pickDominantSkew(col, candidates)
+                    .map(value -> List.of(new SkewedInfo(col, value)))
+                    .orElse(Collections.emptyList());       
         }
         return Collections.emptyList();
+    }
+
+    private Optional<ConstantOperator> pickDominantSkew(ColumnRefOperator col, DataSkew.SkewCandidates candidates) {
+        if (!candidates.isSkewed()) {
+            return Optional.empty();
+        }
+        double nullFraction = candidates.nullSkewFactor().orElse(0.0);
+        double mcvFraction = candidates.maxMcvRatio().orElse(0.0);
+        if (nullFraction >= mcvFraction) {
+            return Optional.of(ConstantOperator.createNull(col.getType()));
+        }
+        String topValue = candidates.mcvs().get(0).first;
+        return ConstantOperator.createVarchar(topValue).castTo(col.getType());
     }
 }

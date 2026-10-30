@@ -48,6 +48,20 @@ under the License.
         <async.profiler.lib>${env.STARROCKS_HOME}/build-support/libasyncProfiler.so</async.profiler.lib>
         <async.profiler.output>${env.STARROCKS_HOME}/output/fe/log/proc_profile/prof-%t-%p.html</async.profiler.output>
         <async.profiler.arg></async.profiler.arg>
+
+        <!-- Empty unless the jdk-allow-security-manager profile below activates it. -->
+        <security.manager.arg></security.manager.arg>
+
+        <!-- Raise the FE metadata lock rules from warn to error in the test JVM, so a test that
+             breaks one fails instead of logging it: lock.invariant.strict for a lock on an object the
+             FE does not own, lock.blocking.strict for a wait on an external system (HMS, JDBC, iceberg
+             catalog, BRPC, ...) under a lock, lock.snapshot.strict for a planning copy of a published
+             table taken without its lock. On for every `mvn test`; production is unaffected.
+             Pass -Dlock.invariant.strict=false / -Dlock.blocking.strict=false /
+             -Dlock.snapshot.strict=false to fall back to warn. -->
+        <lock.invariant.strict>true</lock.invariant.strict>
+        <lock.blocking.strict>true</lock.blocking.strict>
+        <lock.snapshot.strict>true</lock.snapshot.strict>
     </properties>
 
     <profiles>
@@ -111,12 +125,35 @@ under the License.
                 <async.profiler.arg>-agentpath:${async.profiler.lib}=start,event=cpu,file=${async.profiler.output}</async.profiler.arg>
             </properties>
         </profile>
+
+        <!-- CreateFunctionAnalyzer installs a UDFSecurityManager around UDF class loading.
+             JDK 18+ (JEP 411) rejects System.setSecurityManager unless the JVM is started
+             with -Djava.security.manager=allow, so the test JVM needs the flag to exercise
+             that path. The range is bounded on both ends on purpose: the flag is a no-op on
+             JDK 17, and JDK 24+ (JEP 486) makes the launcher reject any value other than
+             'disallow', which would stop the test JVM from starting at all. -->
+        <profile>
+            <id>jdk-allow-security-manager</id>
+            <activation>
+                <jdk>[18,24)</jdk>
+            </activation>
+            <properties>
+                <security.manager.arg>-Djava.security.manager=allow</security.manager.arg>
+            </properties>
+        </profile>
     </profiles>
 
     <dependencies>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>fe-grammar</artifactId>
+        </dependency>
+
+        <!-- xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+             jars that still reference it (commons-compress, clickhouse-jdbc, ...) -->
+        <dependency>
+            <groupId>org.tukaani</groupId>
+            <artifactId>xz</artifactId>
         </dependency>
 
         <dependency>
@@ -198,6 +235,12 @@ under the License.
             <artifactId>guava</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.google.code.findbugs/jsr305 -->
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-core -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -221,6 +264,13 @@ under the License.
         <dependency>
             <groupId>com.github.hazendaz.jmockit</groupId>
             <artifactId>jmockit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk -->
+        <dependency>
+            <groupId>com.unboundid</groupId>
+            <artifactId>unboundid-ldapsdk</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -265,9 +315,9 @@ under the License.
             <artifactId>commons-io</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-core -->
+        <!-- https://mvnrepository.com/artifact/com.starrocks/jprotobuf-rpc-core -->
         <dependency>
-            <groupId>com.baidu</groupId>
+            <groupId>com.starrocks</groupId>
             <artifactId>jprotobuf-rpc-core</artifactId>
         </dependency>
 
@@ -281,6 +331,13 @@ under the License.
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- for HangingTestWatchdog, a TestExecutionListener -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -535,12 +592,38 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+            <exclusions>
+                <!-- CVE-2026-10050: Jetty client-side Digest auth bypass. jetty-security
+                     is only reachable via Hadoop's embedded HttpServer2, which StarRocks
+                     never instantiates (it uses Hadoop purely as an FS client). -->
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-security</artifactId>
+                </exclusion>
+                <!-- jetty-http is consumed only by the unused Jetty server stack
+                     (jetty-server/servlet/webapp) and the excluded jetty-client.
+                     Raw references elsewhere (kudu-client, hive-apache, paimon-s3/oss)
+                     sit in server-side or metrics-binder classes never loaded by FE. -->
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-http</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
+            <exclusions>
+                <!-- CVE-2026-10050: the vulnerable DigestAuthentication.apply() lives in
+                     jetty-client, pulled via hadoop-yarn-client -> websocket-client. The
+                     YARN websocket timeline client is unused by StarRocks. -->
+                <exclusion>
+                    <groupId>org.eclipse.jetty</groupId>
+                    <artifactId>jetty-client</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -661,6 +744,13 @@ under the License.
             <artifactId>parquet-common</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.orc/orc-core
+             Used by the tablet pre-split meta-tier sampler to read ORC stripe statistics. -->
+        <dependency>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-core</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
@@ -674,6 +764,27 @@ under the License.
         <dependency>
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-oss</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-lake-paimon</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.fluss</groupId>
+            <artifactId>fluss-flink-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.flink</groupId>
+            <artifactId>flink-core</artifactId>
         </dependency>
 
         <dependency>
@@ -787,8 +898,7 @@ under the License.
         <!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
         <dependency>
             <groupId>org.mockito</groupId>
-            <artifactId>mockito-inline</artifactId>
-            <version>4.11.0</version>
+            <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
 
@@ -796,6 +906,18 @@ under the License.
         <dependency>
             <groupId>org.apache.ranger</groupId>
             <artifactId>ranger-plugins-common</artifactId>
+        </dependency>
+
+        <!-- Solr audit destination (split out of the monolithic audit jar in Ranger 2.8.0).
+             Required because ranger-starrocks-audit.xml sets xasecure.audit.solr.is.enabled=true. -->
+        <dependency>
+            <groupId>org.apache.ranger</groupId>
+            <artifactId>ranger-audit-dest-solr</artifactId>
+        </dependency>
+        <!-- ZooKeeper classes that solr-solrj needs on every Solr audit send; see fe/pom.xml. -->
+        <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
         </dependency>
 
         <dependency>
@@ -866,6 +988,16 @@ under the License.
         </dependency>
         <dependency>
             <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-compression</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
             <artifactId>flight-core</artifactId>
         </dependency>
         <dependency>
@@ -882,9 +1014,55 @@ under the License.
             <artifactId>arrow-jdbc</artifactId>
         </dependency>
 
+        <!-- zstd for the MySQL compressed protocol -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bundle</artifactId>
+            <artifactId>glue</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>dynamodb</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>kms</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3-transfer-manager</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sso</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ssooidc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sts</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
         </dependency>
 
         <dependency>
@@ -1066,13 +1244,29 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
 
+                    <!-- -XX:TieredStopAtLevel=1 lowers the default code cache to 48m. A planner-heavy test class can
+                         fill it, and once there is no room left for an adapter the forked JVM fails the build even
+                         though every test passed, so reserve 128m. -->
+                    <!-- starrocks.lock.invariant.strict.in.test, starrocks.lock.blocking.strict.in.test and
+                         starrocks.lock.snapshot.strict.in.test raise lock_target_validation_mode /
+                         lock_blocking_call_validation_mode / lock_snapshot_copy_validation_mode from warn to
+                         error for the whole test JVM, so a newly introduced violation fails the test that
+                         introduced it. FeConstants.runningUnitTest cannot serve this purpose: it is opt-in
+                         per test class. They follow ${lock.invariant.strict}, ${lock.blocking.strict} and
+                         ${lock.snapshot.strict}; see those properties for the defaults. -->
                     <argLine>
-                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/1.49.4/jmockit-1.49.4.jar
+                        -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/${jmockit.version}/jmockit-${jmockit.version}.jar
+                        -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
                         ${async.profiler.arg}
                         -Xmx4096m
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
+                        -XX:ReservedCodeCacheSize=128m
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
+                        ${security.manager.arg}
+                        -Dstarrocks.lock.invariant.strict.in.test=${lock.invariant.strict}
+                        -Dstarrocks.lock.blocking.strict.in.test=${lock.blocking.strict}
+                        -Dstarrocks.lock.snapshot.strict.in.test=${lock.snapshot.strict}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>

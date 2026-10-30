@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL DECOMMISSION 撤销一个节点下线操作。"
 ---
 
 # CANCEL DECOMMISSION

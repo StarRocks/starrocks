@@ -1,5 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
+description: "FAQ for common StarRocks operation and maintenance questions."
 ---
 
 # Operation and Maintenance
@@ -82,7 +84,7 @@ Run `SHOW FRONTENDS;` and check the `Version` field.
 ## Does StarRocks support DELETE with nested subqueries?
 
 From v2.3 onwards, Primary Key tables supports full DELETE WHERE syntax.
-See [Reference - DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/) for details.
+See [Reference - DELETE](../sql-reference/sql-statements/table_bucket_part_index/DELETE.md) for details.
 
 ## For dynamic partitions, if I don't want old partitions automatically cleaned, can I simply omit dynamic_partition.start?
 
@@ -114,7 +116,7 @@ Check for single-replica tables. Other repairs may be blocked if they continuous
 
 ## What does this BE log mean? "tcmalloc: large alloc xxxxxxxx bytes"
 
-A large memory allocation request occurred, often caused by large queries. Check the corresponding `query_id` in `be.INFO` to locate the SQL.
+This is a legacy allocator large-allocation diagnostic. A large memory allocation request occurred, often caused by large queries. Check the corresponding `query_id` in `be.INFO` to locate the SQL, and use `/mem_tracker` and `/memz` to inspect current memory usage.
 
 ## Will tablet migration after adding nodes cause disk I/O fluctuations?
 
@@ -186,7 +188,7 @@ Check OS file descriptor limits by running `cat /proc/$pid/limits`, and run `lso
 ## Are there limits on partition and bucket numbers?
 
 - For partitions, the default limit `4096` (configurable via the FE configuration `max_partitions_in_one_batch`).
-- For buckets, there is no limit. The recommended size for each bucket is 1 GB.
+- For buckets, there is no limit. The recommended size for each bucket is 1 GB. For shared-data clusters of v4.1 or later, which support large-capacity tablets, the recommended size is 10 GB to 50 GB, and no more than 100 GB.
 
 ## How to manually switch FE leader?
 

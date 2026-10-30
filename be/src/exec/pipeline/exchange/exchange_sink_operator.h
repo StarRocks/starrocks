@@ -23,15 +23,15 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
-#include "exec/data_sink.h"
+#include "exec/pipeline/exchange/exchange_compression_strategy.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/data_sink.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "serde/compress_strategy.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace butil {
 class IOBuf;
@@ -94,10 +94,25 @@ public:
 
     void set_execute_mode(int performance_level) override;
 
+#ifdef BE_TEST
+    // For testing only: inject a custom codec to simulate exceed_max_input_size scenarios.
+    void set_compress_codec_for_testing(const BlockCompressionCodec* codec) { _compress_codec = codec; }
+    // For testing only: rows currently held by the shuffle partial chunks of this operator.
+    size_t num_buffered_shuffle_rows_for_testing() const;
+    void set_enable_shuffle_buffer_flush_for_testing(bool enable) { _enable_shuffle_buffer_flush = enable; }
+#endif
+
 private:
+    // Send and clear every non-empty shuffle partial chunk, then release partial chunks in order until
+    // the retained capacity is below half of buffer_mem_limit. Called when the bytes the partial chunks
+    // retain exceed config::exchange_sink_buffer_flush_threshold_bytes, which otherwise is
+    // unbounded: a partial chunk is only sent once it holds chunk_size rows, and with many
+    // destinations x dest_dop and wide rows the partial chunks can hold the whole input.
+    Status _flush_shuffle_buffers(RuntimeState* state, int64_t buffer_mem_limit);
+
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns
-        return sz > runtime_state()->chunk_size() * 512;
+        return sz > get_factory()->runtime_state()->chunk_size() * 512;
     }
     void _calc_hash_values_and_bucket_ids();
 
@@ -185,7 +200,7 @@ private:
     CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
     const BlockCompressionCodec* _compress_codec = nullptr;
     std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
-    std::shared_ptr<serde::CompressStrategy> _compress_strategy;
+    std::shared_ptr<ExchangeCompressionStrategy> _compress_strategy;
 
     RuntimeProfile::Counter* _serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
@@ -195,8 +210,25 @@ private:
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _raw_input_bytes_counter = nullptr;
     RuntimeProfile::Counter* _serialized_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _compressed_input_bytes_counter = nullptr;
     RuntimeProfile::Counter* _compressed_bytes_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _pass_through_buffer_peak_mem_usage = nullptr;
+    // Memory retained by the per-(channel, driver_sequence) partial chunks that buffer shuffled rows until
+    // a chunk fills up. There are #destinations x dest_dop of them per sink driver and their capacity
+    // never shrinks, so this is where high-cardinality shuffles usually keep their memory.
+    RuntimeProfile::HighWaterMarkCounter* _shuffle_chunk_buffer_peak_mem_usage = nullptr;
+    RuntimeProfile::Counter* _shuffle_chunk_buffer_num_counter = nullptr;
+    // Bytes currently retained by all shuffle partial chunks (the current value behind the peak counter).
+    int64_t _shuffle_buffered_bytes = 0;
+    // Session variable enable_exchange_sink_buffer_flush: whether to flush the partial chunks
+    // once they retain more than config::exchange_sink_buffer_flush_threshold_bytes.
+    bool _enable_shuffle_buffer_flush = true;
+    // How many times, and how many rows, the partial chunks were flushed because of the memory limit.
+    RuntimeProfile::Counter* _shuffle_buffer_flush_counter = nullptr;
+    RuntimeProfile::Counter* _shuffle_buffer_flush_rows_counter = nullptr;
+    RuntimeProfile::Counter* _shuffle_buffer_release_counter = nullptr;
+    // Largest single serialized (uncompressed) chunk, to spot wide rows such as big agg intermediate states.
+    RuntimeProfile::HighWaterMarkCounter* _peak_serialized_chunk_bytes = nullptr;
 
     std::atomic<bool> _is_finished = false;
     std::atomic<bool> _is_cancelled = false;

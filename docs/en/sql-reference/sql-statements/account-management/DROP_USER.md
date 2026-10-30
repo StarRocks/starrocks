@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP USER drops a specified user identity."
 ---
 
 # DROP USER

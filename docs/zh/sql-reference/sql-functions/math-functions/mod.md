@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回dividend除以divisor后的余数。"
 ---
 
 # mod

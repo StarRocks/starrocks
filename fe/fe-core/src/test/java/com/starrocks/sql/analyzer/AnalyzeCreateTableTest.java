@@ -19,6 +19,9 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.TypeFactory;
 import mockit.Expectations;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -65,6 +68,31 @@ public class AnalyzeCreateTableTest {
         Assertions.assertEquals("table1", stmt.getTableName());
         Assertions.assertNull(stmt.getPartitionDesc());
         Assertions.assertNull(stmt.getProperties());
+    }
+
+    @Test
+    public void testVarbinaryWithoutLengthMaterializesDefaultLength() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create table test.table_varbinary_default (col1 int, col2 varbinary) engine=olap " +
+                        "duplicate key(col1) distributed by hash(col1) buckets 10");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), type.getLength());
+        Assertions.assertEquals("varbinary(" + TypeFactory.getOlapMaxVarcharLength() + ")",
+                type.toSql());
+    }
+
+    @Test
+    public void testExternalFileTableVarbinaryKeepsUnspecifiedLength() {
+        CreateTableStmt stmt = (CreateTableStmt) analyzeSuccess(
+                "create external table test.file_varbinary (col1 int, col2 varbinary) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"parquet\")");
+        ScalarType type = (ScalarType) stmt.getColumnDefs().get(1).getType();
+
+        Assertions.assertEquals(PrimitiveType.VARBINARY, type.getPrimitiveType());
+        Assertions.assertEquals(-1, type.getLength());
+        Assertions.assertEquals("varbinary", type.toSql());
     }
 
     @Test
@@ -469,6 +497,53 @@ public class AnalyzeCreateTableTest {
         analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table" 
                         + "(k1 int, k2 varchar(10)) partition by truncate(k2)",
                 "Function 'truncate' requires exactly 2 arguments: column and number, but got 1 argument(s)");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by bucket(4, k2)",
+                "No matching function with signature: bucket(tinyint(4), varchar(10))");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by truncate(4, k2)",
+                "No matching function with signature: truncate(tinyint(4), varchar(10))");
+        AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
+    }
+
+    @Test
+    public void testIcebergPartitionTransformOnDecimalsWithDifferentScales() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+
+        MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadata) {
+            {
+                metadata.getDb((ConnectContext) any, "iceberg_catalog", "iceberg_db");
+                result = new Database();
+                minTimes = 0;
+
+                metadata.tableExists((ConnectContext) any, "iceberg_catalog", "iceberg_db", anyString);
+                result = false;
+            }
+        };
+
+        AnalyzeTestUtil.getConnectContext().setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+        AnalyzeTestUtil.getConnectContext().setDatabase("test");
+
+        // Analyzing a transform on one decimal column must not prevent later analyses on
+        // decimal columns with a different scale in the same FE process: the resolved builtin
+        // is a shared singleton whose wildcard decimal signature has to stay intact.
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(18, 4)) partition by truncate(d1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(12, 2)) partition by truncate(d2, 3)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(12, 2)) partition by bucket(d1, 8)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(18, 4)) partition by bucket(d2, 8)");
+        // decimal128 goes through a separate builtin singleton
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d1 decimal(38, 6)) partition by truncate(d1, 5)");
+        analyzeSuccess("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                + "(k1 int, d2 decimal(30, 2)) partition by truncate(d2, 3)");
+
         AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 

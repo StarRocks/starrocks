@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CBO 統計を収集するための自動収集タスクをカスタマイズします。"
 ---
 
 # CREATE ANALYZE

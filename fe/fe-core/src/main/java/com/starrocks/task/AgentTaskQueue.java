@@ -40,7 +40,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Table;
+import com.starrocks.common.Status;
 import com.starrocks.memory.estimate.Estimator;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -74,6 +76,25 @@ public class AgentTaskQueue {
     }
 
     public static synchronized boolean addTask(AgentTask task) {
+        // Source guard for leader demotion: refuse to enqueue new agent tasks once this node is
+        // demoting OR has already finished demoting to a non-leader role. Together with
+        // abandonInFlightTasks() (which drains what is already queued) this closes both windows
+        // where a straggling leader-session thread (e.g. a user DDL that passed its admission
+        // checks before the demotion began) would otherwise enqueue after the drain, leaving a
+        // stale entry in a non-leader's queue that could shadow a same-signature task after
+        // re-election. Refuse by returning false (the duplicate-signature convention below), NOT
+        // by throwing: enqueues also happen inside WAL appliers (e.g. DROP TABLE ->
+        // OlapTable.onDrop -> sendDropAutoIncrementMapTaskBestEffort), where an exception after the journal
+        // committed would tear the apply in half, and on follower-resident schedulers started by
+        // image load / replay (e.g. CompactionControlScheduler), which run here on a timer.
+        // Callers uniformly treat false as "not enqueued, skip" and the AgentBatchTask.run()
+        // dispatch fence independently blocks the RPCs of anything already built.
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+            LOG.warn("node is demoting or not the leader ({}), refuse to enqueue agent task: {}",
+                    globalStateMgr.getFeType(), task);
+            return false;
+        }
         long backendId = task.getBackendId();
         TTaskType type = task.getTaskType();
 
@@ -112,6 +133,15 @@ public class AgentTaskQueue {
         signatureMap.remove(signature);
         LOG.debug("remove task: type[{}], backend[{}], signature[{}]", type, backendId, signature);
         --taskNum;
+    }
+
+    // Removes the task only if it is still the one queued under its signature, so that a task another job queued under
+    // the same signature in the meantime stays queued.
+    public static synchronized void removeTaskIfSame(AgentTask task) {
+        Map<Long, AgentTask> signatureMap = tasks.get(task.getBackendId(), task.getTaskType());
+        if (signatureMap != null && signatureMap.get(task.getSignature()) == task) {
+            removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
     }
 
     /*
@@ -259,6 +289,37 @@ public class AgentTaskQueue {
     public static synchronized void clearAllTasks() {
         tasks.clear();
         taskNum = 0;
+    }
+
+    /**
+     * Leader-demotion drain: abandon every in-flight agent task. First fail each task's completion
+     * latch (if any) so waiters (e.g. TabletTaskExecutor.waitForFinished on a create-tablet latch)
+     * unblock at once with {@code status} and release their locks instead of waiting out a timeout;
+     * then drop all tasks from the queue so they do not leak across a demote/re-elect cycle - a
+     * demoting/follower leader no longer processes the BE reports that would normally remove them.
+     * Snapshots under the queue lock and cancels outside it, so the global queue monitor is not held
+     * across N latch operations (which would stall concurrent BE-response processing). Clearing the
+     * whole queue is safe because addTask() rejects new tasks while demoting, so nothing live is
+     * discarded here.
+     */
+    public static void abandonInFlightTasks(Status status) {
+        List<AgentTask> snapshot = Lists.newArrayList();
+        synchronized (AgentTaskQueue.class) {
+            for (Map<Long, AgentTask> signatureMap : tasks.values()) {
+                snapshot.addAll(signatureMap.values());
+            }
+        }
+        for (AgentTask task : snapshot) {
+            try {
+                task.cancelPendingWaiter(status);
+            } catch (Throwable t) {
+                LOG.warn("failed to cancel pending waiter for agent task {}", task, t);
+            }
+        }
+        synchronized (AgentTaskQueue.class) {
+            tasks.clear();
+            taskNum = 0;
+        }
     }
 
     public static synchronized int getTaskNum() {

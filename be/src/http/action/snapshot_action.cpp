@@ -22,11 +22,11 @@
 #include <string>
 
 #include "common/logging.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/AgentService_types.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
-#include "runtime/exec_env.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 

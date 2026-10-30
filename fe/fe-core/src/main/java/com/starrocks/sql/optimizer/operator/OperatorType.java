@@ -25,6 +25,7 @@ public enum OperatorType {
      */
     LOGICAL,
     LOGICAL_PROJECT,
+    LOGICAL_AI_PROJECT,
     LOGICAL_OLAP_SCAN,
     LOGICAL_HIVE_SCAN,
     LOGICAL_FILE_SCAN,
@@ -36,17 +37,20 @@ public enum OperatorType {
     LOGICAL_ODPS_SCAN,
     LOGICAL_ICEBERG_METADATA_SCAN,
     LOGICAL_KUDU_SCAN,
+    LOGICAL_LANCE_SCAN,
+    LOGICAL_FLUSS_SCAN,
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
     LOGICAL_META_SCAN,
     LOGICAL_JDBC_SCAN,
-    LOGICAL_BINLOG_SCAN,
     LOGICAL_VIEW_SCAN,
     LOGICAL_TABLE_FUNCTION_TABLE_SCAN,
     LOGICAL_JOIN,
     LOGICAL_AGGR,
     LOGICAL_FILTER,
+    LOGICAL_DELTA,
+    LOGICAL_VERSION,
     LOGICAL_LIMIT,
     LOGICAL_TOPN,
     LOGICAL_APPLY,
@@ -64,6 +68,7 @@ public enum OperatorType {
     LOGICAL_CTE_CONSUME,
     LOGICAL_SPJG_PIECES,
     LOGICAL_BENCHMARK_SCAN,
+    LOGICAL_CACHE_STATS_SCAN,
 
     /**
      * Physical operator
@@ -84,17 +89,21 @@ public enum OperatorType {
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,
+    PHYSICAL_FLUSS_SCAN,
     PHYSICAL_ODPS_SCAN,
     PHYSICAL_ICEBERG_METADATA_SCAN,
     PHYSICAL_KUDU_SCAN,
+    PHYSICAL_LANCE_SCAN,
     PHYSICAL_SCHEMA_SCAN,
     PHYSICAL_MYSQL_SCAN,
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
     PHYSICAL_BENCHMARK_SCAN,
+    PHYSICAL_CACHE_STATS_SCAN,
 
     PHYSICAL_PROJECT,
+    PHYSICAL_AI_PROJECT,
     PHYSICAL_SORT,
     PHYSICAL_TOPN,
     PHYSICAL_UNION,
@@ -114,9 +123,6 @@ public enum OperatorType {
     PHYSICAL_CTE_CONSUME,
     PHYSICAL_NO_CTE,
 
-    PHYSICAL_STREAM_SCAN,
-    PHYSICAL_STREAM_JOIN,
-    PHYSICAL_STREAM_AGG,
     PHYSICAL_TABLE_FUNCTION_TABLE_SCAN,
     PHYSICAL_SPLIT_PRODUCE,
     PHYSICAL_SPLIT_CONSUME,
@@ -171,7 +177,6 @@ public enum OperatorType {
     private static final Set<OperatorType> PHYSICAL_SCANS =
             Arrays.stream(OperatorType.values())
                     .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
-                    .filter(x -> !x.equals(PHYSICAL_STREAM_SCAN))
                     .collect(Collectors.toUnmodifiableSet());
 
     public boolean isPhysicalScan() {

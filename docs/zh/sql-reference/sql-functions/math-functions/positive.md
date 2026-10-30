@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回表达式x的结果。"
 ---
 
 # positive

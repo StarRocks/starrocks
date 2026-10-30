@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.TableProcDir;
@@ -50,6 +51,7 @@ import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataDistributionStmt;
@@ -184,6 +186,16 @@ public class ShowStmtAnalyzer {
             if (node.getExpr() != null) {
                 ErrorReport.reportSemanticException(ERR_UNSUPPORTED_SQL_PATTERN);
             }
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateFunctionStatement(ShowCreateFunctionStmt node, ConnectContext context) {
+            String defaultDb = node.isGlobalFunction()
+                    ? FunctionRefAnalyzer.GLOBAL_UDF_DB
+                    : context.getDatabase();
+            FunctionRefAnalyzer.analyzeFunctionRef(node.getFunctionRef(), defaultDb);
+            FunctionRefAnalyzer.analyzeArgsDef(node.getArgsDef());
             return null;
         }
 
@@ -361,6 +373,11 @@ public class ShowStmtAnalyzer {
         }
 
         private void descTableFunctionTable(DescribeStmt node, ConnectContext context) {
+            Map<String, String> tfProps = node.getTableFunctionProperties();
+            if (tfProps.containsKey(TableFunctionTable.PROPERTY_SCHEMA)) {
+                throw new SemanticException(
+                        "'schema' is not supported in DESC FILES; remove it and rely on schema inference");
+            }
             Table table = null;
             try {
                 table = new TableFunctionTable(node.getTableFunctionProperties());
@@ -404,6 +421,9 @@ public class ShowStmtAnalyzer {
                                         .equalsIgnoreCase(node.getTableName())) {
                                     List<Column> columns = olapTable.getSchemaByIndexMetaId(mvMeta.getIndexMetaId());
                                     for (Column column : columns) {
+                                        if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                                            continue;
+                                        }
                                         // Extra string (aggregation and bloom filter)
                                         List<String> extras = Lists.newArrayList();
                                         if (column.getAggregationType() != null &&
@@ -443,7 +463,10 @@ public class ShowStmtAnalyzer {
                     // show base table schema only
                     String procString = "/dbs/" + db.getId() + "/" + table.getId() + "/" + TableProcDir.INDEX_SCHEMA
                             + "/";
-                    if (table.getType() == Table.TableType.OLAP) {
+                    // Cloud-native (lake) tables must also address the base index by its meta id:
+                    // IndexInfoProcDir.lookup() now resolves cloud-native tables per index meta id,
+                    // so passing table.getId() here would yield an empty schema for DESC <lake_table>.
+                    if (table.isOlapOrCloudNativeTable()) {
                         procString += ((OlapTable) table).getBaseIndexMetaId();
                     } else {
                         procString += table.getId();
@@ -474,7 +497,9 @@ public class ShowStmtAnalyzer {
                             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
                             for (int j = 0; j < columns.size(); ++j) {
                                 Column column = columns.get(j);
-
+                                if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                                    continue;
+                                }
                                 // Extra string (aggregation and bloom filter)
                                 List<String> extras = Lists.newArrayList();
                                 if (column.getAggregationType() != null &&

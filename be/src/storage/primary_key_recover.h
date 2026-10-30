@@ -19,8 +19,8 @@
 
 #include "column/schema.h"
 #include "common/status.h"
-#include "storage/chunk_iterator.h"
 #include "storage/primary_index.h"
+#include "storage_primitive/chunk_iterator.h"
 
 namespace starrocks {
 
@@ -39,6 +39,8 @@ class OlapReaderStatistics;
 */
 class PrimaryKeyRecover {
 public:
+    virtual ~PrimaryKeyRecover() = default;
+
     // Follow the steps below:
     // 1. reset_state
     // 2. recover

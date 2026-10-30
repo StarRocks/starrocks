@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "BINARY/VARBINARY 数据类型用于存储二进制数据，最大长度为 1048576 字节。"
 ---
 
 # BINARY/VARBINARY

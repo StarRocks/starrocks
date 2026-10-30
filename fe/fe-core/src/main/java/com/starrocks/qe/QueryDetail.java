@@ -85,6 +85,7 @@ public class QueryDetail implements Serializable {
     private String database;
     private String sql;
     private String user;
+    private String userIdentity;
     private String impersonatedUser;
     private String errorMessage;
     private String explain;
@@ -158,10 +159,14 @@ public class QueryDetail implements Serializable {
         queryDetail.startTime = this.startTime;
         queryDetail.endTime = this.endTime;
         queryDetail.latency = this.latency;
+        queryDetail.pendingTime = this.pendingTime;
+        queryDetail.netTime = this.netTime;
+        queryDetail.netComputeTime = this.netComputeTime;
         queryDetail.state = this.state;
         queryDetail.database = this.database;
         queryDetail.sql = this.sql;
         queryDetail.user = this.user;
+        queryDetail.userIdentity = this.userIdentity;
         queryDetail.impersonatedUser = this.impersonatedUser;
         queryDetail.errorMessage = this.errorMessage;
         queryDetail.explain = this.explain;
@@ -294,6 +299,14 @@ public class QueryDetail implements Serializable {
 
     public String getUser() {
         return user;
+    }
+
+    public void setUserIdentity(String userIdentity) {
+        this.userIdentity = userIdentity;
+    }
+
+    public String getUserIdentity() {
+        return userIdentity;
     }
 
     public void setImpersonatedUser(String impersonatedUser) {

@@ -8,27 +8,21 @@ PROPERTIES (
     "replication_num" = "1"
 );
 -- result:
-0
 -- !result
 insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
 -- result:
-0
 -- !result
 insert into __row_util_base select * from __row_util_base;
 -- result:
-0
 -- !result
 insert into __row_util_base select * from __row_util_base;
 -- result:
-0
 -- !result
 insert into __row_util_base select * from __row_util_base;
 -- result:
-0
 -- !result
 insert into __row_util_base select * from __row_util_base;
 -- result:
-0
 -- !result
 CREATE TABLE __row_util (
   idx bigint NULL
@@ -39,11 +33,9 @@ PROPERTIES (
     "replication_num" = "1"
 );
 -- result:
-0
 -- !result
 insert into __row_util select row_number() over() as idx from __row_util_base;
 -- result:
-0
 -- !result
 CREATE TABLE t1 (
     k1 bigint NULL,
@@ -72,7 +64,6 @@ CREATE TABLE t1 (
     c_struct STRUCT<k1 INT, k2 STRING> NULL
 ) DISTRIBUTED BY HASH(`k1`) BUCKETS 64 PROPERTIES ("replication_num" = "1");
 -- result:
-0
 -- !result
 insert into t1 SELECT 
     idx, idx % 2 = 0, cast(idx % 128 as tinyint), cast(idx % 32768 as smallint), cast(idx as int), cast(idx as bigint), cast(idx * 1000000000000 as largeint), 
@@ -84,11 +75,9 @@ insert into t1 SELECT
     [idx, idx + 1, idx + 2], [idx, idx + 1, idx + 2], 
     map{0: concat('str_', idx), 1: concat('str_', idx + 1)}, struct(idx, concat('str_', idx)) FROM __row_util;
 -- result:
-0
 -- !result
 insert into t1(k1) select idx + 1600000 from __row_util where idx <= 10000;
 -- result:
-0
 -- !result
 select * from t1 order by k1 limit 10;
 -- result:

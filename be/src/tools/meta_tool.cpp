@@ -32,10 +32,15 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include <aws/core/Aws.h>
 #include <fmt/format.h>
 #include <gflags/gflags.h>
+#include <thrift/protocol/TBinaryProtocol.h>
+#include <thrift/transport/TBufferTransports.h>
+#include <thrift/transport/TSocket.h>
 
+#include <charconv>
+#include <cinttypes>
+#include <fstream>
 #include <iostream>
 #include <set>
 #include <string>
@@ -43,41 +48,63 @@
 #include "base/coding.h"
 #include "base/hash/crc32c.h"
 #include "base/path/path_util.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
+#include "common/column_id.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/configbase.h"
+#include "common/glog_init.h"
+#include "common/metrics/process_metrics_registry.h"
 #include "common/status.h"
+#include "common/storage_define.h"
+#include "common/util/debug_util.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
 #include "fs/fs_s3.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "gen_cpp/types.pb.h"
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/split.h"
+#include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
 #include "json2pb/pb_to_json.h"
+#include "platform/aws/aws_sdk_guard.h"
+#include "platform/key_cache.h"
+#include "platform/store_path.h"
 #include "runtime/memory/mem_chunk_allocator.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
+#include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
-#include "storage/key_coder.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
-#include "storage/olap_common.h"
-#include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
-#include "storage/options.h"
 #include "storage/primary_key_dump.h"
+#include "storage/protobuf_file.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
+#include "storage/rowset/page_io.h"
+#include "storage/rowset/page_pointer.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/zone_map_index.h"
+#include "storage/sstable/block.h"
+#include "storage/sstable/comparator.h"
+#include "storage/sstable/format.h"
+#include "storage/sstable/options.h"
+#include "storage/sstable/table.h"
 #include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/zone_map_detail.h"
-#include "util/global_metrics_registry.h"
+#include "storage_primitive/key_coder.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/storage_stats.h"
+#include "storage_primitive/zone_map_detail.h"
+#include "types/olap_type_infra.h"
 
 using starrocks::DataDir;
 using starrocks::KVStore;
@@ -104,10 +131,12 @@ using starrocks::ColumnIndexTypePB;
 using starrocks::OrdinalIndexReader;
 
 DEFINE_string(root_path, "", "storage root path");
-DEFINE_string(operation, "",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
-              "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_bundle_metadata, print_lake_txn_log, print_lake_schema, dump_zonemap");
+DEFINE_string(
+        operation, "",
+        "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
+        "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
+        "print_lake_bundle_metadata, print_lake_txn_log, print_lake_combined_txn_log, print_lake_schema, dump_zonemap, "
+        "dump_lake_persistent_index_sst, dump_page_footer, print_delvec");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -118,6 +147,10 @@ DEFINE_string(pb_meta_path, "", "pb meta file path");
 DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
 DEFINE_int32(column_index, -1, "column index");
+DEFINE_int32(chunk_size, 4096, "rows read per chunk (for dump_segment_data, dump_column_size, calc_checksum)");
+DEFINE_string(rows, "",
+              "rows to dump: comma-separated row ids and inclusive ranges, e.g. \"7,100-200,40000-\" "
+              "(for dump_segment_data)");
 DEFINE_int32(key_column_count, 0, "key column count");
 DEFINE_int64(expired_sec, 86400, "expired seconds");
 DEFINE_string(conf_file, "", "conf file path");
@@ -125,6 +158,12 @@ DEFINE_string(audit_file, "", "audit file path");
 DEFINE_bool(do_delete, false, "do delete files");
 DEFINE_uint64(page_offset, -1, "page offset");
 DEFINE_uint32(page_size, -1, "page size");
+DEFINE_string(encryption_meta, "",
+              "hex-encoded encryption_meta from PersistentIndexSstablePB (for dump_lake_persistent_index_sst)");
+DEFINE_string(fe_host, "", "FE master hostname for TDE key refresh (for dump_lake_persistent_index_sst)");
+DEFINE_int32(fe_port, 9020, "FE master thrift port for TDE key refresh (for dump_lake_persistent_index_sst)");
+DEFINE_uint64(delvec_offset, 0, "byte offset of the delete vector inside the delvec file (for print_delvec)");
+DEFINE_uint64(delvec_size, 0, "byte size of the delete vector, 0 means to the end of the file (for print_delvec)");
 
 // flag defined in gflags library
 DECLARE_bool(help);
@@ -162,14 +201,21 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=show_meta --pb_meta_path=<path>
     dump_ordinal_index:
       {progname} --operation=dump_ordinal_index --file=</path/to/segment/file> --column_index=<column index>
+    dump_page_footer:
+      {progname} --operation=dump_page_footer --file=</path/to/segment/file> --column_index=<column index>
     verify_page_checksum:
       {progname} --operation=verify_page_checksum --file=</path/to/segment/file> --page_offset=<page offset> --page_size=<page size>
     show_segment_footer:
       {progname} --operation=show_segment_footer --file=</path/to/segment/file>
     dump_segment_data:
-      {progname} --operation=dump_segment_data --file=</path/to/segment/file>
+      {progname} --operation=dump_segment_data --file=</path/to/segment/file> [--column_index=<index>]
+               [--chunk_size=<rows>] [--rows=<row ids>]
+      (--rows takes a comma-separated list of row ids and inclusive ranges, where "7" is a single row,
+       "100-200" is 101 rows and "40000-" runs to row 40000 and every row after it. The list may be
+       unordered and may overlap, and spaces around its items are ignored. Every row is labelled with
+       its row id in the segment, so a full dump is labelled exactly as before.)
     dump_column_size:
-      {progname} --operation=dump_column_size --file=</path/to/segment/file>
+      {progname} --operation=dump_column_size --file=</path/to/segment/file> [--chunk_size=<rows>]
     print_pk_dump:
       {progname} --operation=print_pk_dump --file=</path/to/pk/dump/file>
     dump_short_key_index:
@@ -177,7 +223,8 @@ std::string get_usage(const std::string& progname) {
     dump_zonemap:
       {progname} --operation=dump_zonemap --file=</path/to/segment/file> [--column_index=<index>]
     calc_checksum:
-      {progname} --operation=calc_checksum [--column_index=<index>] --file=</path/to/segment/file>
+      {progname} --operation=calc_checksum [--column_index=<index>] [--chunk_size=<rows>]
+               --file=</path/to/segment/file>
     check_table_meta_consistency:
       {progname} --operation=check_table_meta_consistency --root_path=</path/to/storage/path> --table_id=<tableid>
     scan_dcgs:
@@ -188,10 +235,21 @@ std::string get_usage(const std::string& progname) {
       cat <tablet_meta_file.meta> | {progname} --operation=print_lake_bundle_metadata
     print_lake_txn_log:
       cat <tablet_transaction_log_file.log> | {progname} --operation=print_lake_txn_log
+    print_lake_combined_txn_log:
+      cat <combined_txn_log_file.log> | {progname} --operation=print_lake_combined_txn_log
     print_lake_schema:
       cat <tablet_schema_file> | {progname} --operation=print_lake_schema
     lake_datafile_gc:
       {progname} --operation=lake_datafile_gc --root_path=<path> --expired_sec=<86400> --conf_file=<path> --audit_file=<path> --do_delete=<true|false>
+    dump_lake_persistent_index_sst:
+      {progname} --operation=dump_lake_persistent_index_sst --file=</path/to/persistent_index.sst>
+               [--encryption_meta=<hex>] [--fe_host=<host>] [--fe_port=<port>]
+      (for encrypted SST files, provide --encryption_meta + --fe_host [+ --fe_port])
+    print_delvec:
+      {progname} --operation=print_delvec --file=</path/to/file.delvec>
+               [--delvec_offset=<offset>] [--delvec_size=<size>]
+      (offset/size come from the tablet metadata's delvec_meta, printed by print_lake_metadata;
+       omit them when the file holds a single delete vector)
     )";
     return fmt::format(usage_msg, fmt::arg("progname", progname));
 }
@@ -199,6 +257,246 @@ std::string get_usage(const std::string& progname) {
 static void show_usage() {
     FLAGS_helpshort = true;
     google::HandleCommandLineHelpFlags();
+}
+
+// Decode a hex string (lower- or uppercase) into its binary representation.
+// Returns false if |hex| has odd length or contains non-hex characters.
+static bool hex_to_bytes(const std::string& hex, std::string* out) {
+    if (hex.size() % 2 != 0) return false;
+    out->resize(hex.size() / 2);
+    for (size_t i = 0; i < hex.size(); i += 2) {
+        auto nibble = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            return -1;
+        };
+        int hi = nibble(hex[i]);
+        int lo = nibble(hex[i + 1]);
+        if (hi < 0 || lo < 0) return false;
+        (*out)[i / 2] = static_cast<char>((hi << 4) | lo);
+    }
+    return true;
+}
+
+// Dump space-usage statistics and all key-value entries from a PK-index SST file.
+//
+// SST file layout (from the beginning):
+//   [Data Blocks...]     - one block per ~4KB of key-value data
+//   [Filter Block]       - bloom filter for all keys (optional)
+//   [Metaindex Block]    - maps meta block names to their BlockHandles
+//   [Index Block]        - maps last-key-of-data-block to its BlockHandle
+//   [Footer (48 bytes)]  - holds handles for the metaindex and index blocks
+//
+// Each KV pair has value encoded as IndexValuesWithVerPB protobuf:
+//   { version, rssid, rowid }  (multiple versions supported per key)
+void dump_lake_persistent_index_sst(const std::string& file_name, const starrocks::FileEncryptionInfo& enc_info = {}) {
+    using namespace starrocks::sstable;
+
+    // Open the SST file, applying encryption options when the SST is TDE-protected.
+    starrocks::RandomAccessFileOptions file_opts;
+    file_opts.encryption_info = enc_info;
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_opts, file_name);
+    if (!res.ok()) {
+        std::cerr << "open file failed: " << res.status() << std::endl;
+        return;
+    }
+    auto file = std::move(res).value();
+
+    // Get file size.
+    auto size_res = file->get_size();
+    if (!size_res.ok()) {
+        std::cerr << "get file size failed: " << size_res.status() << std::endl;
+        return;
+    }
+    auto file_size = static_cast<uint64_t>(size_res.value());
+
+    if (file_size < Footer::kEncodedLength) {
+        std::cerr << "file is too short to be an sstable" << std::endl;
+        return;
+    }
+
+    // Read and decode the 48-byte footer at the end of the file.
+    char footer_buf[Footer::kEncodedLength];
+    auto st = file->read_at_fully(file_size - Footer::kEncodedLength, footer_buf, Footer::kEncodedLength);
+    if (!st.ok()) {
+        std::cerr << "read footer failed: " << st << std::endl;
+        return;
+    }
+    Slice footer_input(footer_buf, Footer::kEncodedLength);
+    Footer footer;
+    st = footer.DecodeFrom(&footer_input);
+    if (!st.ok()) {
+        std::cerr << "decode footer failed: " << st << std::endl;
+        return;
+    }
+
+    // Read the index block (each entry value is an encoded BlockHandle for a data block).
+    ReadOptions ropt;
+    BlockContents index_contents;
+    st = ReadBlock(file.get(), ropt, footer.index_handle(), &index_contents);
+    if (!st.ok()) {
+        std::cerr << "read index block failed: " << st << std::endl;
+        return;
+    }
+
+    // Read the metaindex block (maps meta-block names such as "filter.*" to their handles).
+    BlockContents metaindex_contents;
+    st = ReadBlock(file.get(), ropt, footer.metaindex_handle(), &metaindex_contents);
+    if (!st.ok()) {
+        std::cerr << "read metaindex block failed: " << st << std::endl;
+        return;
+    }
+
+    // Walk the index block to count data blocks and sum their on-disk sizes.
+    // Each entry's value is a varint-encoded BlockHandle {offset, size}.
+    // On-disk size = handle.size() (compressed payload) + kBlockTrailerSize (1-byte type + 4-byte CRC32).
+    Block index_block(index_contents);
+    auto* index_iter = index_block.NewIterator(BytewiseComparator());
+    uint64_t data_block_count = 0;
+    uint64_t data_block_total_size = 0;
+    index_iter->SeekToFirst();
+    while (index_iter->Valid()) {
+        BlockHandle h;
+        Slice handle_val = index_iter->value();
+        if (h.DecodeFrom(&handle_val).ok()) {
+            data_block_count++;
+            data_block_total_size += h.size() + kBlockTrailerSize;
+        }
+        index_iter->Next();
+    }
+    delete index_iter;
+
+    // Walk the metaindex block to locate the bloom filter block (key = "filter.<policy-name>").
+    Block metaindex_block(metaindex_contents);
+    auto* meta_iter = metaindex_block.NewIterator(BytewiseComparator());
+    uint64_t filter_block_size = 0;
+    std::string filter_policy_name;
+    meta_iter->SeekToFirst();
+    while (meta_iter->Valid()) {
+        std::string key = meta_iter->key().to_string();
+        constexpr std::string_view kFilterPrefix = "filter.";
+        if (key.rfind(kFilterPrefix, 0) == 0) {
+            BlockHandle h;
+            Slice val = meta_iter->value();
+            if (h.DecodeFrom(&val).ok()) {
+                filter_block_size = h.size() + kBlockTrailerSize;
+                filter_policy_name = key.substr(kFilterPrefix.size());
+            }
+        }
+        meta_iter->Next();
+    }
+    delete meta_iter;
+
+    // Derive sizes of the structural sections.
+    uint64_t index_block_size = footer.index_handle().size() + kBlockTrailerSize;
+    uint64_t metaindex_block_size = footer.metaindex_handle().size() + kBlockTrailerSize;
+    uint64_t footer_size = Footer::kEncodedLength;
+
+    // Print space statistics.
+    auto pct = [&](uint64_t sz) -> double { return file_size > 0 ? 100.0 * sz / file_size : 0.0; };
+    std::cout << "=== SST File Space Statistics ===\n";
+    std::cout << fmt::format("File:                {}\n", file_name);
+    std::cout << fmt::format("Total size:          {:>12} bytes (100.00%)\n", file_size);
+    std::cout << fmt::format("  Data blocks:       {:>12} bytes ({:.2f}%, {} blocks)\n", data_block_total_size,
+                             pct(data_block_total_size), data_block_count);
+    if (filter_block_size > 0) {
+        std::cout << fmt::format("  Filter block ({}): {:>12} bytes ({:.2f}%)\n", filter_policy_name, filter_block_size,
+                                 pct(filter_block_size));
+    }
+    std::cout << fmt::format("  Index block:       {:>12} bytes ({:.2f}%)\n", index_block_size, pct(index_block_size));
+    std::cout << fmt::format("  Metaindex block:   {:>12} bytes ({:.2f}%)\n", metaindex_block_size,
+                             pct(metaindex_block_size));
+    std::cout << fmt::format("  Footer:            {:>12} bytes ({:.2f}%)\n", footer_size, pct(footer_size));
+
+    // Open the table via the official API for full KV iteration.
+    Options tbl_opts;
+    std::unique_ptr<Table> table;
+    st = Table::Open(tbl_opts, file.get(), file_size, table);
+    if (!st.ok()) {
+        std::cerr << "open SST table for iteration failed: " << st << std::endl;
+        return;
+    }
+
+    ReadOptions iter_opts;
+    iter_opts.fill_cache = false;
+    auto* iter = table->NewIterator(iter_opts);
+    std::unique_ptr<Iterator> iter_guard(iter);
+
+    // Dump all key-value entries.
+    // Keys are order-preserving-encoded primary keys (binary); values are
+    // protobuf-serialized IndexValuesWithVerPB { repeated { version, rssid, rowid } }.
+    std::cout << "\n=== KV Dump ===\n";
+    uint64_t entry_count = 0;
+    iter->SeekToFirst();
+    while (iter->Valid()) {
+        Slice key = iter->key();
+        Slice val = iter->value();
+
+        starrocks::IndexValuesWithVerPB pb;
+        if (pb.ParseFromArray(val.get_data(), val.get_size())) {
+            for (int i = 0; i < pb.values_size(); ++i) {
+                const auto& v = pb.values(i);
+                std::cout << fmt::format("key={} version={} rssid={} rowid={}\n",
+                                         starrocks::hexdump(key.get_data(), key.get_size()), v.version(), v.rssid(),
+                                         v.rowid());
+            }
+        } else {
+            // Fallback: print raw hex value if protobuf parse fails.
+            std::cout << fmt::format("key={} value=<raw:{}>\n", starrocks::hexdump(key.get_data(), key.get_size()),
+                                     starrocks::hexdump(val.get_data(), val.get_size()));
+        }
+        entry_count++;
+        iter->Next();
+    }
+    if (!iter->status().ok()) {
+        std::cerr << "iterator error: " << iter->status() << std::endl;
+    }
+    std::cout << fmt::format("\nTotal entries: {}\n", entry_count);
+}
+
+// Decode one delete vector and print the rowids it marks as deleted.
+//
+// A delvec file is a plain concatenation of delete vectors; which slice belongs to which
+// segment is recorded outside the file, in the tablet metadata's `delvec_meta`
+// (segment id -> DelvecPagePB {version, offset, size}). So pass the offset/size read from
+// there to decode a single segment's delete vector; `size` == 0 means "to the end of file",
+// which is what a delvec file holding a single delete vector needs.
+//
+// Each delete vector is |1-byte format version (0x01)|serialized roaring bitmap|, and the
+// integers in the bitmap are the deleted rowids (0-based) within that segment.
+Status print_delvec(const std::string& file_name, uint64_t offset, uint64_t size) {
+    ASSIGN_OR_RETURN(auto file, starrocks::FileSystem::Default()->new_random_access_file(file_name));
+    ASSIGN_OR_RETURN(const uint64_t file_size, file->get_size());
+    if (offset >= file_size) {
+        return Status::InvalidArgument(
+                fmt::format("offset {} is beyond the end of file, file size: {}", offset, file_size));
+    }
+    if (size == 0) {
+        size = file_size - offset;
+    } else if (size > file_size - offset) {
+        return Status::InvalidArgument(
+                fmt::format("[{}, {}) is beyond the end of file, file size: {}", offset, offset + size, file_size));
+    }
+
+    std::string buff(size, '\0');
+    RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
+
+    starrocks::DelVector delvec;
+    // The version lives in the metadata, not in the delvec itself, so pass a placeholder
+    // and don't print it back. Roaring's deserialization throws on a malformed bitmap,
+    // which a mistyped offset/size easily produces, so turn that into a status instead of
+    // letting it abort the tool.
+    try {
+        RETURN_IF_ERROR(delvec.load(/*version=*/0, buff.data(), buff.size()));
+    } catch (const std::exception& e) {
+        return Status::Corruption(fmt::format("not a delete vector: {}", e.what()));
+    }
+    std::cout << fmt::format("File:        {}\n", file_name);
+    std::cout << fmt::format("Range:       [{}, {}) {} bytes\n", offset, offset + size, size);
+    std::cout << fmt::format("Cardinality: {}\n", delvec.cardinality());
+    std::cout << fmt::format("Deleted rowids: {}\n", delvec.empty() ? std::string("{}") : delvec.roaring()->toString());
+    return Status::OK();
 }
 
 void show_meta() {
@@ -382,9 +680,10 @@ void list_meta(DataDir* data_dir) {
            "pending_rowset_meta_bytes");
     for (auto& e : stats.tablets) {
         auto& st = e.second;
-        printf("%8ld %8ld %18zu %4zu %16zu %8zu %18zu %6zu %18lu %18lu %26lu\n", st.table_id, st.tablet_id,
-               st.tablet_meta_bytes, st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes,
-               st.rowset_count, st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
+        printf("%8" PRId64 " %8" PRId64 " %18zu %4zu %16zu %8zu %18zu %6zu %18zu %18zu %26zu\n",
+               static_cast<int64_t>(st.table_id), static_cast<int64_t>(st.tablet_id), st.tablet_meta_bytes,
+               st.log_count, st.log_meta_bytes, st.delvec_count, st.delvec_meta_bytes, st.rowset_count,
+               st.rowset_meta_bytes, st.pending_rowset_count, st.pending_rowset_meta_bytes);
     }
     printf("  Total KV: %zu Bytes: %zu Tablets: %zu (PK: %zu Other: %zu) Error: %zu\n", stats.total_count,
            stats.total_meta_bytes, stats.tablets.size(), stats.update_tablet_count, stats.tablet_count,
@@ -656,12 +955,123 @@ void dump_ordinal_index(const std::string& file_name, const int32_t column_index
         return;
     }
 
+    if (column_index < 0 || column_index >= footer.columns_size()) {
+        std::cout << "invalid column_index " << column_index << ", segment has " << footer.columns_size() << " columns"
+                  << std::endl;
+        return;
+    }
+
     ColumnMetaPB column_meta = footer.columns(column_index);
     dump_ordinal_index(column_meta, input_file.get());
 
     for (const ColumnMetaPB& child_col_meta : column_meta.children_columns()) {
         dump_ordinal_index(child_col_meta, input_file.get());
     }
+}
+
+void dump_page_footer_at(RandomAccessFile* input_file, const PagePointer& pp, const std::string& label,
+                         size_t* num_values, size_t* uncompressed_size) {
+    if (pp.size < 8) {
+        std::cout << label << ": page too small (" << pp.size << " bytes)" << std::endl;
+        return;
+    }
+    std::unique_ptr<char[]> buf(new char[pp.size]);
+    auto st = input_file->read_at_fully(pp.offset, buf.get(), pp.size);
+    if (!st.ok()) {
+        std::cout << label << ": read failed: " << st << std::endl;
+        return;
+    }
+    // Page layout: [body | PageFooterPB | footer_size(4 bytes) | checksum(4 bytes)]
+    uint32_t footer_size = starrocks::decode_fixed32_le((uint8_t*)buf.get() + pp.size - 8);
+    uint32_t footer_offset = pp.size - 8 - footer_size;
+    PageFooterPB footer;
+    if (!footer.ParseFromArray(buf.get() + footer_offset, footer_size)) {
+        std::cout << label << ": failed to parse PageFooterPB" << std::endl;
+        return;
+    }
+    if (num_values != nullptr) {
+        *num_values = footer.data_page_footer().num_values();
+    }
+    if (uncompressed_size != nullptr) {
+        *uncompressed_size = footer.uncompressed_size();
+    }
+    std::string json;
+    json2pb::Pb2JsonOptions json_options;
+    json_options.pretty_json = true;
+    json2pb::ProtoMessageToJson(footer, &json, json_options);
+    std::cout << label << ": offset=" << pp.offset << " size=" << pp.size << std::endl;
+    std::cout << json << std::endl;
+}
+
+void dump_page_footer(const std::string& file_name, int32_t column_index) {
+    auto res = starrocks::FileSystem::Default()->new_random_access_file(file_name);
+    if (!res.ok()) {
+        std::cout << "open file failed: " << res.status() << std::endl;
+        return;
+    }
+    auto input_file = std::move(res).value();
+    SegmentFooterPB footer;
+    auto status = get_segment_footer(input_file.get(), &footer);
+    if (!status.ok()) {
+        std::cout << "get footer failed: " << status.to_string() << std::endl;
+        return;
+    }
+
+    if (column_index < 0 || column_index >= footer.columns_size()) {
+        std::cout << "invalid column_index " << column_index << ", segment has " << footer.columns_size() << " columns"
+                  << std::endl;
+        return;
+    }
+
+    const ColumnMetaPB& column_meta = footer.columns(column_index);
+    std::cout << "Column " << column_index << ": type=" << column_meta.type()
+              << " encoding=" << EncodingTypePB_Name(column_meta.encoding())
+              << " compression=" << CompressionTypePB_Name(column_meta.compression())
+              << " num_rows=" << column_meta.num_rows() << std::endl;
+
+    // Dump dictionary page footer if present
+    if (column_meta.has_dict_page()) {
+        PagePointer dict_pp(column_meta.dict_page());
+        dump_page_footer_at(input_file.get(), dict_pp, "DICT_PAGE", nullptr, nullptr);
+    }
+
+    size_t page_total_bytes = 0;
+    size_t page_total_values = 0;
+    size_t page_total_uncompressed_size = 0;
+    // Load ordinal index and dump each data page footer
+    for (const auto& index_meta : column_meta.indexes()) {
+        if (index_meta.type() != ColumnIndexTypePB::ORDINAL_INDEX) {
+            continue;
+        }
+        const OrdinalIndexPB& ordinal_index_meta = index_meta.ordinal_index();
+        auto reader = std::make_unique<OrdinalIndexReader>();
+        starrocks::IndexReadOptions opts;
+        starrocks::OlapReaderStatistics stats;
+        opts.use_page_cache = false;
+        opts.read_file = input_file.get();
+        opts.stats = &stats;
+
+        auto load_st = reader->load(opts, ordinal_index_meta, column_meta.num_rows());
+        if (!load_st.ok()) {
+            std::cout << "load ordinal index failed: " << load_st.status() << std::endl;
+            return;
+        }
+
+        std::cout << "Total data pages: " << reader->num_data_pages() << std::endl;
+        auto iter = reader->begin();
+        while (iter.valid()) {
+            auto pp = iter.page();
+            size_t num_values = 0, uncompressed_size = 0;
+            std::string label = "DATA_PAGE(" + std::to_string(iter.page_index()) + ")";
+            dump_page_footer_at(input_file.get(), pp, label, &num_values, &uncompressed_size);
+            page_total_bytes += pp.size;
+            page_total_uncompressed_size += uncompressed_size;
+            page_total_values += num_values;
+            iter.next();
+        }
+    }
+    std::cout << "page_total_bytes=" << page_total_bytes << ", page_total_values=" << page_total_values
+              << ", page_total_uncompressed_size=" << page_total_uncompressed_size << std::endl;
 }
 
 // This function will check the consistency of tablet meta and segment_footer
@@ -762,7 +1172,11 @@ namespace starrocks {
 
 class SegmentDump {
 public:
-    SegmentDump(std::string path, int32_t column_index = -1) : _path(std::move(path)), _column_index(column_index) {}
+    SegmentDump(std::string path, int32_t column_index = -1, int32_t chunk_size = 4096, std::string row_spec = "")
+            : _path(std::move(path)),
+              _column_index(column_index),
+              _chunk_size(chunk_size),
+              _row_spec(std::move(row_spec)) {}
     ~SegmentDump() = default;
 
     Status dump_segment_data();
@@ -799,6 +1213,8 @@ private:
     const size_t _max_short_key_size = 36;
     const size_t _max_short_key_col_cnt = 3;
     int32_t _column_index = 0;
+    int32_t _chunk_size = 4096;
+    std::string _row_spec;
 };
 
 std::shared_ptr<Schema> SegmentDump::_init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema) {
@@ -921,7 +1337,7 @@ Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, s
 #define M(logical_type)                                                                                   \
     case logical_type: {                                                                                  \
         Datum data;                                                                                       \
-        data.set<TypeTraits<logical_type>::CppType>(*(TypeTraits<logical_type>::CppType*)(tmp_mem));      \
+        data.set<StorageCppType<logical_type>>(*(StorageCppType<logical_type>*)(tmp_mem));                \
         result->append(" key");                                                                           \
         result->append(std::to_string(idx));                                                              \
         result->append("(");                                                                              \
@@ -983,6 +1399,7 @@ Status SegmentDump::calc_checksum() {
     SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.use_page_cache = false;
+    seg_opts.chunk_size = _chunk_size;
     OlapReaderStatistics stats;
     seg_opts.stats = &stats;
     auto seg_res = _segment->new_iterator(schema, seg_opts);
@@ -994,7 +1411,7 @@ Status SegmentDump::calc_checksum() {
 
     int64_t checksum = 0;
 
-    auto chunk = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+    auto chunk = ChunkFactory::new_chunk(schema, _chunk_size);
     st = seg_iter->get_next(chunk.get());
     while (st.ok()) {
         size_t size = chunk->num_rows();
@@ -1054,6 +1471,61 @@ Status SegmentDump::dump_short_key_index(size_t key_column_count) {
     return Status::OK();
 }
 
+StatusOr<rowid_t> parse_row_id(std::string_view text, rowid_t num_rows) {
+    rowid_t row_id = 0;
+    const char* text_end = text.data() + text.size();
+    auto [stop, ec] = std::from_chars(text.data(), text_end, row_id);
+    if (ec != std::errc() || stop != text_end) {
+        return Status::InvalidArgument(fmt::format("'{}' is not a row id", text));
+    }
+    if (row_id >= num_rows) {
+        return Status::InvalidArgument(fmt::format("row id {} is out of range, segment has {} rows", row_id, num_rows));
+    }
+    return row_id;
+}
+
+// Parses --rows into the row ids to dump. SparseRange sorts and merges what it is given, so an
+// unordered or overlapping list needs no preprocessing here.
+StatusOr<SparseRangePtr> parse_row_ranges(const std::string& spec, rowid_t num_rows) {
+    auto row_ids = std::make_shared<SparseRange<>>();
+    for (auto item : strings::Split(spec, ",", strings::SkipWhitespace())) {
+        StripWhiteSpace(&item);
+        std::string_view range(item);
+        const size_t dash = range.find('-');
+        if (dash == std::string_view::npos) {
+            auto only = parse_row_id(range, num_rows);
+            if (!only.ok()) {
+                return only.status();
+            }
+            row_ids->add(Range<>(only.value(), only.value() + 1));
+            continue;
+        }
+
+        auto first = parse_row_id(range.substr(0, dash), num_rows);
+        if (!first.ok()) {
+            return first.status();
+        }
+        // An open end, as in "40000-", runs to the last row of the segment.
+        rowid_t last = num_rows - 1;
+        std::string_view last_text = range.substr(dash + 1);
+        if (!last_text.empty()) {
+            auto given_last = parse_row_id(last_text, num_rows);
+            if (!given_last.ok()) {
+                return given_last.status();
+            }
+            last = given_last.value();
+        }
+        if (first.value() > last) {
+            return Status::InvalidArgument(fmt::format("row range {} starts after it ends", range));
+        }
+        row_ids->add(Range<>(first.value(), last + 1));
+    }
+    if (row_ids->empty()) {
+        return Status::InvalidArgument("no row id given");
+    }
+    return row_ids;
+}
+
 Status SegmentDump::dump_segment_data() {
     Status st = _init();
     if (!st.ok()) {
@@ -1062,12 +1534,37 @@ Status SegmentDump::dump_segment_data() {
     }
 
     // convert schema
-    auto schema = _init_query_schema(_tablet_schema);
+    // The default column index of -1 dumps every column.
+    std::shared_ptr<Schema> schema;
+    if (_column_index == -1) {
+        schema = _init_query_schema(_tablet_schema);
+    } else if (_column_index < 0 || _column_index >= static_cast<int32_t>(_tablet_schema->num_columns())) {
+        return Status::InvalidArgument(fmt::format("invalid column_index {}, segment has {} columns", _column_index,
+                                                   _tablet_schema->num_columns()));
+    } else {
+        schema = _init_query_schema_by_column_id(_tablet_schema, _column_index);
+    }
     SegmentReadOptions seg_opts;
     seg_opts.fs = _fs;
     seg_opts.use_page_cache = false;
+    // The iterator caps each get_next() at this many rows, so it is what --chunk_size has to reach.
+    seg_opts.chunk_size = _chunk_size;
     OlapReaderStatistics stats;
     seg_opts.stats = &stats;
+    const auto num_rows = static_cast<rowid_t>(_segment->num_rows());
+    SparseRangePtr rows_to_dump;
+    if (_row_spec.empty()) {
+        rows_to_dump = std::make_shared<SparseRange<>>(0, num_rows);
+    } else {
+        auto res = parse_row_ranges(_row_spec, num_rows);
+        if (!res.ok()) {
+            return res.status();
+        }
+        rows_to_dump = std::move(res).value();
+        // Restricting the scan range makes the column readers seek over the pages outside it.
+        seg_opts.rowid_range_option = rows_to_dump;
+    }
+
     auto seg_res = _segment->new_iterator(*schema, seg_opts);
     if (!seg_res.ok()) {
         std::cout << "new segment iterator failed: " << seg_res.status() << std::endl;
@@ -1076,8 +1573,10 @@ Status SegmentDump::dump_segment_data() {
     auto seg_iter = std::move(seg_res.value());
 
     // iter chunk
-    size_t row = 0;
-    auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+    // The iterator returns the requested rows in ascending order, so walking the same ranges
+    // alongside it gives each row its row id in the segment.
+    SparseRangeIterator<> row_ids = rows_to_dump->new_iterator();
+    auto chunk = ChunkFactory::new_chunk(*schema, _chunk_size);
     do {
         st = seg_iter->get_next(chunk.get());
         if (!st.ok()) {
@@ -1088,9 +1587,18 @@ Status SegmentDump::dump_segment_data() {
             return st;
         }
 
-        for (size_t i = 0; i < chunk->num_rows(); i++) {
-            std::cout << "ROW: (" << row << "): " << chunk->debug_row(i) << std::endl;
-            row++;
+        size_t dumped = 0;
+        while (dumped < chunk->num_rows() && row_ids.has_more()) {
+            Range<> rows = row_ids.next(static_cast<rowid_t>(chunk->num_rows() - dumped));
+            for (rowid_t row_id = rows.begin(); row_id < rows.end(); row_id++) {
+                std::cout << "ROW: (" << row_id << "): " << chunk->debug_row(dumped) << std::endl;
+                dumped++;
+            }
+        }
+        if (dumped < chunk->num_rows()) {
+            std::cout << "the iterator returned " << chunk->num_rows() - dumped << " rows beyond the requested ones"
+                      << std::endl;
+            return Status::InternalError("more rows than requested");
         }
         chunk->reset();
     } while (true);
@@ -1116,6 +1624,7 @@ Status SegmentDump::dump_column_size() {
         SegmentReadOptions seg_opts;
         seg_opts.fs = _fs;
         seg_opts.use_page_cache = false;
+        seg_opts.chunk_size = _chunk_size;
         OlapReaderStatistics stats;
         seg_opts.stats = &stats;
 
@@ -1128,7 +1637,7 @@ Status SegmentDump::dump_column_size() {
             auto seg_iter = std::move(seg_res.value());
 
             // iter chunk
-            auto chunk = ChunkHelper::new_chunk(*schema, 4096);
+            auto chunk = ChunkFactory::new_chunk(*schema, _chunk_size);
             do {
                 st = seg_iter->get_next(chunk.get());
                 if (!st.ok()) {
@@ -1143,52 +1652,24 @@ Status SegmentDump::dump_column_size() {
             return Status::OK();
         };
 
-        if (tablet_column.subcolumn_count() == 0) {
-            // regular column
-            read_the_segment().ok();
+        // Scan the whole column once and report a single total. For complex types
+        // (ARRAY/MAP/STRUCT) this reads every underlying stream (elements, keys/values,
+        // null flags, offsets, dictionary pages) exactly once, so the reported size is
+        // correct and free of double-counting. Previously each sub-column was scanned
+        // separately and the per-sub-column sizes summed, which over-counted the
+        // structural streams (null/offset) shared across sub-columns. The full column
+        // structure is still printed via the recursive ColumnMetaPB DebugString below.
+        read_the_segment().ok();
 
-            auto compession_desc = CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
-            auto encoding_desc = EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
+        auto compession_desc = CompressionTypePB_descriptor()->FindValueByNumber(column_meta.compression());
+        auto encoding_desc = EncodingTypePB_descriptor()->FindValueByNumber(column_meta.encoding());
 
-            fmt::print(
-                    "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
-                    "bytes: {}, rows: {}, pages: {}]\n",
-                    id, column_name, compession_desc->name(), encoding_desc->name(),
-                    stats.compressed_bytes_read_request, column_meta.total_mem_footprint(), column_meta.num_rows(),
-                    stats.io_count_request);
-            fmt::print("{}\n", column_meta.DebugString());
-
-        } else {
-            // sub columns
-            for (size_t sub_id = 0; sub_id < tablet_column.subcolumn_count(); sub_id++) {
-                auto& sub_column = tablet_column.subcolumn(sub_id);
-                std::string sub_column_name = std::string(sub_column.name());
-
-                // reset the stats
-                OlapReaderStatistics stats;
-                seg_opts.stats = &stats;
-
-                // access path
-                std::vector<ColumnAccessPathPtr> access_paths;
-                seg_opts.column_access_paths = &access_paths;
-                auto maybe_path = ColumnAccessPath::create(TAccessPathType::FIELD, "", id);
-                RETURN_IF_ERROR(maybe_path);
-                ColumnAccessPath::insert_json_path(maybe_path.value().get(), sub_column.type(), sub_column_name);
-                access_paths.emplace_back(std::move(maybe_path.value()));
-
-                // read it
-                read_the_segment().ok();
-
-                const ColumnMetaPB& sub_column_meta = column_meta.children_columns(sub_id);
-
-                fmt::print(">>>>>>>>>>>>> sub column start >>>>>>>>>>>>>>>\n");
-                fmt::print("[ column id: {} subcolumn {} {} compressed bytes: {} pages: {}]\n", id, sub_id,
-                           sub_column_name, stats.compressed_bytes_read_request, stats.io_count_request);
-                std::string meta_string = sub_column_meta.DebugString();
-                fmt::print("{}\n", meta_string);
-                fmt::print(">>>>>>>>>>>>> sub column end >>>>>>>>>>>>>>>\n");
-            }
-        }
+        fmt::print(
+                "[ column id: {} name: {} compression: {} encoding: {} compressed bytes: {} uncompressed "
+                "bytes: {}, rows: {}, pages: {}]\n",
+                id, column_name, compession_desc->name(), encoding_desc->name(), stats.compressed_bytes_read_request,
+                column_meta.total_mem_footprint(), column_meta.num_rows(), stats.io_count_request);
+        fmt::print("{}\n", column_meta.DebugString());
     }
 
     return Status::OK();
@@ -1373,10 +1854,17 @@ int meta_tool_main(int argc, char** argv) {
     }
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
-    starrocks::register_mem_chunk_allocator_metrics(starrocks::GlobalMetricsRegistry::instance()->metrics());
+    // Metric singletons keep registry back-pointers, so the process registry must outlive shutdown.
+    static auto* process_metrics_registry = new starrocks::ProcessMetricsRegistry("starrocks_be");
+    starrocks::register_mem_chunk_allocator_metrics(process_metrics_registry->root_registry());
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();
+        return -1;
+    }
+
+    if (FLAGS_chunk_size <= 0) {
+        std::cout << "invalid chunk_size " << FLAGS_chunk_size << ", must be positive" << std::endl;
         return -1;
     }
 
@@ -1401,6 +1889,16 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         dump_ordinal_index(FLAGS_file, FLAGS_column_index);
+    } else if (FLAGS_operation == "dump_page_footer") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for dump page footer" << std::endl;
+            return -1;
+        }
+        if (FLAGS_column_index == -1) {
+            std::cout << "no column_index flag for dump page footer" << std::endl;
+            return -1;
+        }
+        dump_page_footer(FLAGS_file, FLAGS_column_index);
     } else if (FLAGS_operation == "verify_page_checksum") {
         if (FLAGS_file == "") {
             std::cout << "no file flag for verify page checksum" << std::endl;
@@ -1422,7 +1920,7 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "no file flag for dump segment file" << std::endl;
             return -1;
         }
-        starrocks::SegmentDump segment_dump(FLAGS_file);
+        starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index, FLAGS_chunk_size, FLAGS_rows);
         Status st = segment_dump.dump_segment_data();
         if (!st.ok()) {
             std::cout << "dump segment data failed: " << st << std::endl;
@@ -1433,7 +1931,7 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "no file flag for dump segment file" << std::endl;
             return -1;
         }
-        starrocks::SegmentDump segment_dump(FLAGS_file);
+        starrocks::SegmentDump segment_dump(FLAGS_file, /*column_index=*/-1, FLAGS_chunk_size);
         Status st = segment_dump.dump_column_size();
         if (!st.ok()) {
             std::cout << "dump column size failed: " << st << std::endl;
@@ -1490,7 +1988,7 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "no file flag for calc checksum" << std::endl;
             return -1;
         }
-        starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
+        starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index, FLAGS_chunk_size);
         Status st = segment_dump.calc_checksum();
         if (!st.ok()) {
             std::cout << "dump segment data failed: " << st.message() << std::endl;
@@ -1507,10 +2005,80 @@ int meta_tool_main(int argc, char** argv) {
             std::cerr << "dump zonemap failed: " << st.message() << std::endl;
             return -1;
         }
+    } else if (FLAGS_operation == "dump_lake_persistent_index_sst") {
+        if (FLAGS_file == "") {
+            std::cerr << "no --file specified for dump_lake_persistent_index_sst" << std::endl;
+            return -1;
+        }
+        starrocks::FileEncryptionInfo enc_info;
+        if (!FLAGS_encryption_meta.empty()) {
+            if (FLAGS_fe_host.empty()) {
+                std::cerr << "--fe_host is required when --encryption_meta is specified" << std::endl;
+                return -1;
+            }
+            // Decode the hex-encoded encryption_meta into raw bytes.
+            std::string enc_meta_bytes;
+            if (!hex_to_bytes(FLAGS_encryption_meta, &enc_meta_bytes)) {
+                std::cerr << "invalid hex in --encryption_meta" << std::endl;
+                return -1;
+            }
+            // Fetch KEK(s) from FE via a direct Thrift connection (no ExecEnv needed).
+            using apache::thrift::protocol::TBinaryProtocol;
+            using apache::thrift::transport::TBufferedTransport;
+            using apache::thrift::transport::TSocket;
+            auto socket = std::make_shared<TSocket>(FLAGS_fe_host, FLAGS_fe_port);
+            auto transport = std::make_shared<TBufferedTransport>(socket);
+            auto protocol = std::make_shared<TBinaryProtocol>(transport);
+            starrocks::FrontendServiceClient fe_client(protocol);
+            try {
+                transport->open();
+            } catch (const apache::thrift::TException& e) {
+                std::cerr << "failed to connect to FE " << FLAGS_fe_host << ":" << FLAGS_fe_port << ": " << e.what()
+                          << std::endl;
+                return -1;
+            }
+            starrocks::TGetKeysRequest keys_req;
+            starrocks::TGetKeysResponse keys_resp;
+            try {
+                fe_client.getKeys(keys_resp, keys_req);
+            } catch (const apache::thrift::TException& e) {
+                transport->close();
+                std::cerr << "getKeys RPC to FE failed: " << e.what() << std::endl;
+                return -1;
+            }
+            transport->close();
+            auto refresh_st = starrocks::KeyCache::instance().refresh_keys(keys_resp.key_metas);
+            if (!refresh_st.ok()) {
+                std::cerr << "failed to load keys from FE: " << refresh_st << std::endl;
+                return -1;
+            }
+            auto enc_info_res = starrocks::KeyCache::instance().unwrap_encryption_meta(enc_meta_bytes);
+            if (!enc_info_res.ok()) {
+                std::cerr << "failed to unwrap encryption_meta: " << enc_info_res.status() << std::endl;
+                return -1;
+            }
+            enc_info = std::move(enc_info_res).value();
+        }
+        dump_lake_persistent_index_sst(FLAGS_file, enc_info);
+    } else if (FLAGS_operation == "print_delvec") {
+        if (FLAGS_file == "") {
+            std::cerr << "no --file specified for print_delvec" << std::endl;
+            return -1;
+        }
+        Status st = print_delvec(FLAGS_file, FLAGS_delvec_offset, FLAGS_delvec_size);
+        if (!st.ok()) {
+            std::cerr << "print delvec failed: " << st << std::endl;
+            return -1;
+        }
     } else if (FLAGS_operation == "print_lake_metadata") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TabletMetadataPB metadata;
-        if (!metadata.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse tablet metadata\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&metadata, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse tablet metadata: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1591,9 +2159,14 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << json << '\n';
         }
     } else if (FLAGS_operation == "print_lake_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
         starrocks::TxnLogPB txn_log;
-        if (!txn_log.ParseFromIstream(&std::cin)) {
-            std::cerr << "Fail to parse txn log\n";
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse txn log: " << st << '\n';
             return -1;
         }
         json2pb::Pb2JsonOptions options;
@@ -1601,6 +2174,26 @@ int meta_tool_main(int argc, char** argv) {
         std::string json;
         std::string error;
         if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_combined_txn_log") {
+        std::string input_data((std::istreambuf_iterator<char>(std::cin)), std::istreambuf_iterator<char>());
+        starrocks::CombinedTxnLogPB combined_txn_log;
+        // Handles both the checksummed header format and legacy headerless protobuf.
+        auto st = starrocks::ProtobufFileWithHeader::load_from_buffer(&combined_txn_log, input_data,
+                                                                      starrocks::LAKE_META_HEADER_MAGIC_NUMBER,
+                                                                      /*allow_plain_protobuf_fallback=*/true);
+        if (!st.ok()) {
+            std::cerr << "Fail to parse combined txn log: " << st << '\n';
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(combined_txn_log, &json, options, &error)) {
             std::cerr << "Fail to convert protobuf to json: " << error << '\n';
             return -1;
         }
@@ -1633,15 +2226,13 @@ int meta_tool_main(int argc, char** argv) {
             std::cerr << "expired_sec is less than 10min" << std::endl;
             return -1;
         }
-        Aws::SDKOptions options;
-        Aws::InitAPI(options);
+        starrocks::AwsSdkGuard aws_sdk_guard(starrocks::AwsSdkGuard::CurlLifecycle::SDK_MANAGED);
         auto status =
                 starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
         if (!status.ok()) {
             std::cout << status << std::endl;
         }
         starrocks::close_s3_clients();
-        Aws::ShutdownAPI(options);
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",

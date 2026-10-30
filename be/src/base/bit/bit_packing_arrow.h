@@ -14,6 +14,11 @@
 
 #pragma once
 
+// STARROCKS_HAVE_ARROW_BITPACKING_HEADERS is defined by be/CMakeLists.txt when the thirdparty
+// Arrow ships the (Arrow-internal) bpacking headers. Do not probe with __has_include here: it also
+// searches the default system prefixes, so an unrelated Arrow installed under e.g. /usr/local would
+// enable this path even though the thirdparty libarrow.a we link defines no unpack32/unpack64.
+#ifdef STARROCKS_HAVE_ARROW_BITPACKING_HEADERS
 #include <arrow/util/bpacking.h>
 #ifdef __ARM_NEON
 #include <arrow/util/bpacking_neon.h>
@@ -21,11 +26,14 @@
 #ifdef __AVX2__
 #include <arrow/util/bpacking_avx2.h>
 #endif
+#endif
 
 #include "base/bit/bit_packing_default.h"
 #include "base/logging.h"
 
 namespace starrocks::util::bitpacking_arrow {
+
+#ifdef STARROCKS_HAVE_ARROW_BITPACKING_HEADERS
 
 template <typename OutType, int BIT_WIDTH>
 static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
@@ -108,5 +116,21 @@ static const uint8_t* UnpackValues(int bit_width, const uint8_t* __restrict__ in
     }
 #pragma pop_macro("UNPACK_ARROW_VALUES_CASE")
 }
+
+#else
+
+template <typename OutType, int BIT_WIDTH>
+static const uint8_t* UnpackValues(const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
+                                   OutType* __restrict__ out) {
+    return starrocks::util::bitpacking_default::UnpackValues<OutType, BIT_WIDTH>(in, in_bytes, num_values, out).first;
+}
+
+template <typename OutType>
+static const uint8_t* UnpackValues(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes, int64_t num_values,
+                                   OutType* __restrict__ out) {
+    return starrocks::util::bitpacking_default::UnpackValues(bit_width, in, in_bytes, num_values, out).first;
+}
+
+#endif
 
 } // namespace starrocks::util::bitpacking_arrow

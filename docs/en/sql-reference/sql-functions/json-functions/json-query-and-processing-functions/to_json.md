@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a Map or Struct value into a JSON string."
 ---
 
 # to_json

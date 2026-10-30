@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "Automate deployment and management of a StarRocks cluster on a Kubernetes cluster with the StarRocks Kubernetes Operator."
 ---
 
 # StarRocks Kubernetes Operator
@@ -32,11 +34,11 @@ You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kub
 
 - Create a GKE cluster
 
-  Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
+  Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
 
 - Create a self-managed Kubernetes cluster
 
-  Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) to create a self-managed Kubernetes cluster. You can use [Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) and [Docker Desktop](https://docs.docker.com/desktop/) to create a single-node private Kubernetes cluster with minimum steps.
+  Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs) to create a self-managed Kubernetes cluster. You can use Minikube and Docker Desktop to create a single-node private Kubernetes cluster with minimum steps.
 
 ### Deploy StarRocks Kubernetes Operator
 
@@ -119,6 +121,19 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 :::tip
 If some pods cannot start after a long period of time, you can use `kubectl logs -n starrocks <pod_name>` to view the log information or use `kubectl -n starrocks describe pod <pod_name>` to view the event information to locate the problem.
 :::
+
+### Configure BE and CN core dump collection and restart behavior
+
+The BE and CN container entrypoints can monitor, compress, and upload core dumps. They also support restarting the component for debugging. Configure the following environment variables on the BE or CN container:
+
+| Variable | Accepted values and default | Description |
+| -------- | --------------------------- | ----------- |
+| `COREDUMP_ENABLED` | Set to `true` to enable. Any other value, including an unset value, disables collection. | Starts the core dump uploader. After the component exits because of `SIGABRT` (exit status `134`) or `SIGSEGV` (exit status `139`), the entrypoint restarts it so the uploader remains alive. |
+| `DEBUG_MODE` | Set to `true` to enable. Any other value, including an unset value, disables debug restart behavior. | Restarts the component after every exit. Use this behavior for debugging only. |
+| `BE_RESTART_WAIT_SECONDS` | A positive integer. Default: `5`. | Number of seconds to wait before restarting the BE. Used when `COREDUMP_ENABLED=true` or `DEBUG_MODE=true`. |
+| `CN_RESTART_WAIT_SECONDS` | A positive integer. Default: `5`. | Number of seconds to wait before restarting the CN. Used when `COREDUMP_ENABLED=true` or `DEBUG_MODE=true`. |
+
+Core dump collection requires `inotifywait`, `pigz`, and `rclone` in the container image. The standard, non-minimal Ubuntu BE/CN image includes these commands. The minimal Ubuntu image and the UBI image do not include them. If collection is enabled and a required command is missing, the BE or CN refuses to start and reports the missing commands in the container log.
 
 ## Manage StarRocks Cluster
 
@@ -247,7 +262,7 @@ Run the command `kubectl -n starrocks edit src starrockscluster-sample` to confi
 If the automatic scaling policy for the CN cluster is configured, delete the `replicas` field from the `starRocksCnSpec` in the StarRocks cluster configuration file.
 :::
 
-Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
+Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/).
 
 The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml) provided by StarRocks to help you configure automatic scaling policies:
 
@@ -264,7 +279,7 @@ The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-
       maxReplicas: 10 # The maximum number of CNs is set to 10.
       minReplicas: 1 # The minimum number of CNs is set to 1.
       # operator creates an HPA resource based on the following field.
-      # see https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ for more information.
+      # see https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/ for more information.
       hpaPolicy:
         metrics: # Resource metrics
           - type: Resource

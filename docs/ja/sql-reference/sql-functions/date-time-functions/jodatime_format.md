@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された日付をJoda DateTimeFormatパターン形式の文字列に変換します。"
 ---
 
 # jodatime_format

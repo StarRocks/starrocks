@@ -1,0 +1,27 @@
+-- name: test_blake3_const
+-- Verify the BLAKE3 cryptographic hash function on constant inputs.
+-- Expected digests are the standard 256-bit BLAKE3 vectors rendered as continuous lowercase hex.
+select blake3('abc');
+select blake3('l');
+select blake3('StarRocks');
+-- empty input hashes the zero-length message
+select blake3('');
+-- NULL input returns NULL
+select blake3(cast(null as varchar));
+-- function name is case-insensitive
+select BLAKE3('hello');
+-- digest is always 64 lowercase hex characters (256 bits)
+select length(blake3('abc'));
+-- the hash is deterministic
+select blake3('abc') = blake3('abc');
+
+-- name: test_blake3_on_table
+-- Verify BLAKE3 over a table column (vectorized path) including empty and NULL rows.
+create database test_db_${uuid0};
+use test_db_${uuid0};
+create table t1 (id int, v varchar(64)) properties("replication_num" = "1");
+insert into t1 values (1, 'abc'), (2, 'l'), (3, ''), (4, NULL), (5, 'StarRocks'), (6, 'hello');
+select id, blake3(v) from t1 order by id;
+-- empty string (id=3) hashes the zero-length message; NULL (id=4) stays NULL
+select id, length(blake3(v)) from t1 where v is not null order by id;
+drop database test_db_${uuid0};

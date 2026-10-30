@@ -22,6 +22,8 @@ import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.AbortTxnResponse;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.BuildVectorIndexRequest;
+import com.starrocks.proto.BuildVectorIndexResponse;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.CompactResponse;
 import com.starrocks.proto.DeleteDataRequest;
@@ -32,6 +34,8 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.DropTabletCacheRequest;
+import com.starrocks.proto.DropTabletCacheResponse;
 import com.starrocks.proto.GetTabletMetadatasRequest;
 import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
@@ -64,6 +68,9 @@ import static org.joda.time.DateTimeConstants.MILLIS_PER_MINUTE;
 import static org.joda.time.DateTimeConstants.MILLIS_PER_SECOND;
 
 public interface LakeService {
+    // Default for the annotations below, which can only carry a compile-time constant. The publish
+    // paths override it per call from Config.lake_publish_version_timeout_ms, see
+    // com.starrocks.lake.Utils#publishVersionBatch.
     long TIMEOUT_PUBLISH_VERSION = MILLIS_PER_MINUTE;
     long TIMEOUT_GET_TABLET_STATS = 15 * MILLIS_PER_MINUTE;
     long TIMEOUT_COMPACT = MILLIS_PER_DAY;
@@ -77,6 +84,7 @@ public interface LakeService {
     long TIMEOUT_VACUUM = MILLIS_PER_HOUR;
     long TIMEOUT_VACUUM_FULL = MILLIS_PER_HOUR * 24;
     long TIMEOUT_REPAIR_METADATA = MILLIS_PER_HOUR;
+    long TIMEOUT_BUILD_VECTOR_INDEX = MILLIS_PER_DAY;
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_version", onceTalkTimeout = TIMEOUT_PUBLISH_VERSION)
     Future<PublishVersionResponse> publishVersion(PublishVersionRequest request);
@@ -104,6 +112,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "drop_table", onceTalkTimeout = TIMEOUT_DROP_TABLE)
     Future<DropTableResponse> dropTable(DropTableRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "drop_tablet_cache", onceTalkTimeout = TIMEOUT_DROP_TABLE)
+    Future<DropTabletCacheResponse> dropTabletCache(DropTabletCacheRequest request);
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "publish_log_version", onceTalkTimeout = TIMEOUT_PUBLISH_LOG_VERSION)
     Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request);
@@ -141,5 +152,9 @@ public interface LakeService {
 
     @ProtobufRPC(serviceName = "LakeService", methodName = "repair_tablet_metadata", onceTalkTimeout = TIMEOUT_REPAIR_METADATA)
     Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request);
+
+    @ProtobufRPC(serviceName = "LakeService", methodName = "build_vector_index",
+            onceTalkTimeout = TIMEOUT_BUILD_VECTOR_INDEX)
+    Future<BuildVectorIndexResponse> buildVectorIndex(BuildVectorIndexRequest request);
 }
 

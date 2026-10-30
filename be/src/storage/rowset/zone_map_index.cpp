@@ -37,26 +37,27 @@
 #include <bthread/sys_futex.h>
 
 #include "base/hash/unaligned_access.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
+#include "common/storage_define.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/olap_define.h"
-#include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "types/olap_type_infra.h"
+#include "types/storage_type_traits.h"
 #include "types/type_info.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 
 template <LogicalType type>
 struct ZoneMapDatumBase {
-    using CppType = typename TypeTraits<type>::CppType;
+    using CppType = StorageCppType<type>;
     CppType value;
 
     virtual ~ZoneMapDatumBase() = default;
@@ -178,7 +179,7 @@ struct ZoneMap {
 
 template <LogicalType type>
 class ZoneMapIndexWriterImpl final : public ZoneMapIndexWriter {
-    using CppType = typename TypeTraits<type>::CppType;
+    using CppType = StorageCppType<type>;
 
 public:
     // TypeInfo is used for all kinds of types. It is used to change the content of datum of the max/min value.
@@ -374,18 +375,18 @@ Status ZoneMapIndexWriterImpl<type>::finish(WritableFile* wfile, ColumnIndexMeta
 }
 
 ZoneMapIndexReader::ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(), sizeof(ZoneMapIndexReader));
 }
 
 ZoneMapIndexReader::~ZoneMapIndexReader() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(), mem_usage());
 }
 
 StatusOr<bool> ZoneMapIndexReader::load(const IndexReadOptions& opts, const ZoneMapIndexPB& meta) {
     return success_once(_load_once, [&]() {
         Status st = _do_load(opts, meta);
         if (st.ok()) {
-            MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+            MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
                                      mem_usage() - sizeof(ZoneMapIndexReader))
         } else {
             _reset();
@@ -402,7 +403,7 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
 
     _page_zone_maps.resize(reader.num_values());
 
-    MutableColumnPtr column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    MutableColumnPtr column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));
@@ -508,6 +509,7 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
     }
 
     std::vector<ZoneMapWrapper<type>> parsed_zonemap;
+    parsed_zonemap.reserve(_page_zone_maps.size());
     for (auto& zonemap : _page_zone_maps) {
         parsed_zonemap.emplace_back(zonemap);
     }

@@ -16,8 +16,8 @@
 
 #include <fmt/format.h>
 
-#include "common/config.h"
-#include "util/stack_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/stack_util.h"
 
 namespace starrocks {
 

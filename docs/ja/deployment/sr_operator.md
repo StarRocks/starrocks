@@ -1,5 +1,7 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
+description: "StarRocks Operator で Kubernetes クラスタ上の StarRocks クラスタをデプロイ・管理する方法。"
 ---
 
 # Operator を使用して StarRocks をデプロイする
@@ -32,11 +34,11 @@ Amazon Elastic Kubernetes Service (EKS) や Google Kubernetes Engine (GKE) ク�
 
 - GKE クラスターを作成する
 
-  GKE クラスターを作成する前に、すべての[前提条件](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin)を完了してください。その後、[Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) に記載された手順に従って GKE クラスターを作成します。
+  GKE クラスターを作成する前に、すべての[前提条件](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin)を完了してください。その後、[Create a GKE cluster](https://docs.cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) に記載された手順に従って GKE クラスターを作成します。
 
 - 自己管理の Kubernetes クラスターを作成する
 
-  [kubeadm を使用したクラスターのブートストラップ](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) に記載された手順に従って、自己管理の Kubernetes クラスターを作成します。[Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) と [Docker Desktop](https://docs.docker.com/desktop/) を使用して、最小限の手順でシングルノードのプライベート Kubernetes クラスターを作成できます。
+  [kubeadm を使用したクラスターのブートストラップ](https://kubernetes.io/docs) に記載された手順に従って、自己管理の Kubernetes クラスターを作成します。Minikube と Docker Desktop を使用して、最小限の手順でシングルノードのプライベート Kubernetes クラスターを作成できます。
 
 ### StarRocks Operator をデプロイする
 
@@ -119,6 +121,19 @@ starrockscluster-sample-fe-2          1/1     Running   0          22h
 > **Note**
 >
 > 長時間経過しても一部のポッドが起動しない場合は、`kubectl logs -n starrocks <pod_name>` を使用してログ情報を確認するか、`kubectl -n starrocks describe pod <pod_name>` を使用してイベント情報を確認し、問題を特定してください。
+
+### BE と CN のコアダンプ収集と再起動動作を設定する
+
+BE および CN コンテナのエントリポイントは、コアダンプを監視、圧縮、アップロードできます。また、デバッグのためにコンポーネントを再起動することもできます。BE または CN コンテナに次の環境変数を設定します。
+
+| 変数 | 設定可能な値とデフォルト | 説明 |
+| ---- | ------------------------ | ---- |
+| `COREDUMP_ENABLED` | 有効にするには `true` を設定します。未設定を含むその他の値では無効になります。 | コアダンプアップローダーを起動します。コンポーネントが `SIGABRT`（終了ステータス `134`）または `SIGSEGV`（終了ステータス `139`）で終了すると、アップローダーを動作させ続けるためにエントリポイントがコンポーネントを再起動します。 |
+| `DEBUG_MODE` | 有効にするには `true` を設定します。未設定を含むその他の値ではデバッグ再起動動作が無効になります。 | コンポーネントが終了するたびに再起動します。この動作はデバッグ専用です。 |
+| `BE_RESTART_WAIT_SECONDS` | 正の整数。デフォルト: `5`。 | BE を再起動するまで待機する秒数です。`COREDUMP_ENABLED=true` または `DEBUG_MODE=true` の場合に使用されます。 |
+| `CN_RESTART_WAIT_SECONDS` | 正の整数。デフォルト: `5`。 | CN を再起動するまで待機する秒数です。`COREDUMP_ENABLED=true` または `DEBUG_MODE=true` の場合に使用されます。 |
+
+コアダンプの収集には、コンテナイメージに `inotifywait`、`pigz`、`rclone` が必要です。標準の非 minimal Ubuntu BE/CN イメージにはこれらのコマンドが含まれます。minimal Ubuntu イメージと UBI イメージには含まれません。収集が有効で必要なコマンドがない場合、BE または CN は起動せず、不足しているコマンドをコンテナログに出力します。
 
 ## StarRocks クラスターを管理する
 
@@ -246,7 +261,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 >
 > CN クラスターの自動スケーリングポリシーが設定されている場合は、StarRocks クラスター設定ファイルの `starRocksCnSpec` から `replicas` フィールドを削除してください。
 
-Kubernetes はまた、`behavior` を使用してビジネスシナリオに応じたスケーリング動作をカスタマイズし、迅速または遅いスケーリングを実現したり、スケーリングを無効にしたりすることをサポートしています。自動スケーリングポリシーの詳細については、[Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/) を参照してください。
+Kubernetes はまた、`behavior` を使用してビジネスシナリオに応じたスケーリング動作をカスタマイズし、迅速または遅いスケーリングを実現したり、スケーリングを無効にしたりすることをサポートしています。自動スケーリングポリシーの詳細については、[Horizontal Pod Scaling](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/) を参照してください。
 
 以下は、StarRocks が提供する自動スケーリングポリシーを設定するための[テンプレート](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_cn.yaml)です。
 
@@ -263,7 +278,7 @@ Kubernetes はまた、`behavior` を使用してビジネスシナリオに応�
       maxReplicas: 10 # CN の最大数を 10 に設定。
       minReplicas: 1 # CN の最小数を 1 に設定。
       # 以下のフィールドに基づいて HPA リソースを作成します。
-      # 詳細は https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/ を参照してください。
+      # 詳細は https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/ を参照してください。
       hpaPolicy:
         metrics: # リソースメトリクス
           - type: Resource

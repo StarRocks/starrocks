@@ -1,8 +1,8 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 2
+sidebar_position: 60
 toc_max_heading_level: 2
-description: Kafka routine load with shared-data storage
+description: "Quick start guide for streaming data from Kafka into StarRocks using Routine Load with shared-data storage."
 ---
 
 # Kafka routine load StarRocks using shared-data storage
@@ -49,7 +49,7 @@ You can use the SQL client provided in the Docker environment, or use one on you
 
 ### curl
 
-`curl` is used to download the Compose file and the script to generate the data. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/dlwiz/?type=bin).
+`curl` is used to download the Compose file and the script to generate the data. Check to see if you have it installed by running `curl` or `curl.exe` at your OS prompt. If curl is not installed, [get curl here](https://curl.se/).
 
 ### Python
 
@@ -743,6 +743,6 @@ In this tutorial you:
 
 [StarRocks Architecture](../introduction/Architecture.md)
 
-The sample used for this lab is very simple. Routine Load has many more options and capabilities. [learn more](../loading/RoutineLoad.md).
+The sample used for this lab is very simple. Routine Load has many more options and capabilities. [learn more](../loading/kafka/RoutineLoad.md).
 
 [JSONPath](https://goessner.net/articles/JsonPath/)

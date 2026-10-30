@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -31,6 +32,7 @@ import com.starrocks.sql.ast.StatisticsType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -118,6 +120,15 @@ public class StatisticsCollectJobFactory {
                                                                  boolean isManualJob) {
         if (CollectionUtils.isEmpty(columnNames)) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
+
+            if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
+                columnNames = columnNames.stream()
+                        .filter(name -> {
+                            Column col = table.getColumn(name);
+                            return col != null && !StatisticUtils.isUnsupportedHistogramColumnType(col.getType());
+                        })
+                        .collect(Collectors.toList());
+            }
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
         // for compatibility, if columnTypes is null, we will get column types from table
@@ -271,7 +282,7 @@ public class StatisticsCollectJobFactory {
             allPartitionNames = allPartitionNames == null ? ConnectorPartitionTraits.build(table).getPartitionNames() :
                     allPartitionNames;
             return new ExternalSampleStatisticsCollectJob(catalogName, db, table, samplePartitionNames, columnNames,
-                    columnTypes, analyzeType, scheduleType, properties, allPartitionNames.size());
+                    columnTypes, analyzeType, scheduleType, properties, allPartitionNames);
         }
 
         return new ExternalFullStatisticsCollectJob(catalogName, db, table, partitionNames, columnNames, columnTypes,
@@ -286,8 +297,20 @@ public class StatisticsCollectJobFactory {
             if (basicStatsMeta == null || !basicStatsMeta.getColumnStatsMetaMap().containsKey(columnName)) {
                 needCollectStatsColumns.add(columnName);
             } else {
+                ColumnStatsMeta columnStatsMeta = basicStatsMeta.getColumnStatsMeta(columnName);
+                // A previous collection did not reach every partition it asked for, and neither the table
+                // being quiet nor the interval having just been reset makes that any less true. Left to
+                // the checks below, a table that stops changing keeps its incomplete statistics forever.
+                if (columnStatsMeta.isCoverageIncomplete()) {
+                    LOG.info("statistics job resumes an incomplete collection on table: {}, column: {}, " +
+                                    "collected {} of {} partitions", table.getName(), columnName,
+                            columnStatsMeta.getSampledPartitionsHashValue().size(),
+                            columnStatsMeta.getRequestedPartitionCount());
+                    needCollectStatsColumns.add(columnName);
+                    continue;
+                }
                 // check stats column last update time, if last collect time is after table update time, skip this column
-                LocalDateTime columnCollectStatsTime = basicStatsMeta.getColumnStatsMeta(columnName).getUpdateTime();
+                LocalDateTime columnCollectStatsTime = columnStatsMeta.getUpdateTime();
                 if (tableUpdateTime != null) {
                     if (columnCollectStatsTime.isAfter(tableUpdateTime)) {
                         LOG.info("statistics job doesn't work on non-update table: {}, " +
@@ -328,9 +351,33 @@ public class StatisticsCollectJobFactory {
         ExternalBasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalBasicStatsMetaMap()
                 .get(new AnalyzeMgr.StatsMetaKey(job.getCatalogName(), db.getFullName(), table.getName()));
 
+        boolean userSpecifiedColumns = CollectionUtils.isNotEmpty(columnNames);
         if (columnNames == null || columnNames.isEmpty()) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
         }
+
+        // Use predicate columns if suitable: only when the user didn't pin down columns explicitly
+        // and the table is wide enough that collecting everything is wasteful. Falls back to the
+        // full column list when no predicate columns are known yet (e.g. table never queried).
+        // Also gated on the collection toggle itself: once disabled, operators must be able to force
+        // full-column collection immediately rather than waiting for stale rows to age out via TTL.
+        if (Config.enable_external_predicate_columns_collection && !userSpecifiedColumns
+                && Config.statistic_auto_collect_predicate_columns_threshold > 0
+                && columnNames.size() > Config.statistic_auto_collect_predicate_columns_threshold) {
+            List<ExternalColumnUsage> predicateColumns =
+                    PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(table);
+            if (CollectionUtils.isNotEmpty(predicateColumns)) {
+                Set<String> predicateColumnNames = predicateColumns.stream()
+                        .map(ExternalColumnUsage::getColumnName)
+                        .collect(Collectors.toSet());
+                List<String> filtered =
+                        columnNames.stream().filter(predicateColumnNames::contains).collect(Collectors.toList());
+                if (!filtered.isEmpty()) {
+                    columnNames = filtered;
+                }
+            }
+        }
+
         List<String> needCollectStatsColumns;
         if (basicStatsMeta != null) {
             // check table row count
@@ -399,7 +446,7 @@ public class StatisticsCollectJobFactory {
                                                    List<Type> columnTypes) {
         // get updated partitions
         Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
-        LOG.info("create external full statistics job for table: {}, partitions: {}",
+        LOG.info("[ExternalStats] create full job | table={} partitions={}",
                 table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
@@ -411,7 +458,7 @@ public class StatisticsCollectJobFactory {
                                                      List<String> columnNames, List<Type> columnTypes) {
         // get updated partitions
         Set<String> updatedPartitions = StatisticUtils.getUpdatedPartitionNames(table, statisticsUpdateTime);
-        LOG.info("create external sa,ple statistics job for table: {}, partitions: {}",
+        LOG.info("[ExternalStats] create sample job | table={} partitions={}",
                 table.getName(), updatedPartitions);
         allTableJobMap.add(buildExternalStatisticsCollectJob(job.getCatalogName(), db, table,
                 null, columnNames, columnTypes, StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(),
@@ -459,6 +506,11 @@ public class StatisticsCollectJobFactory {
                 LOG.debug("statistics job exclude pattern {}, hit table: {}", regex, name);
                 return;
             }
+        }
+        if (job.isAnalyzeAllTable() && table instanceof OlapTable olapTable && !olapTable.enableStatisticAutoCollect()) {
+            LOG.debug("statistics job skips table with automatic collection disabled: {}.{}",
+                    db.getFullName(), table.getName());
+            return;
         }
         double healthy = 0;
         AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();

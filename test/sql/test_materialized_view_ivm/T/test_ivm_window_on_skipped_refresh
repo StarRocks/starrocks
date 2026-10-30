@@ -1,0 +1,73 @@
+-- name: test_ivm_window_on_skipped_refresh
+-- A refresh skipped because no base table changed must still record its source
+-- window: the range is a point (start == end), which is the evidence that the
+-- bookmark had caught up with the base table head.
+--
+-- The assertions compare start against end instead of pinning either value, so
+-- re-recording against another warehouse does not rot them.
+
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+
+create table t_skip (k int, v bigint);
+insert into t_skip values (1, 10), (2, 20);
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE MATERIALIZED VIEW mv_skip
+REFRESH DEFERRED MANUAL
+properties
+(
+    "refresh_mode" = "incremental",
+    "replication_num" = "1"
+)
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_skip;
+
+-- bootstraps through PCT, which records no IVM window
+REFRESH MATERIALIZED VIEW mv_skip WITH SYNC MODE;
+-- nothing changed since, so this one is skipped
+REFRESH MATERIALIZED VIEW mv_skip WITH SYNC MODE;
+
+select count(*) from mv_skip;
+
+-- exactly two jobs: the PCT bootstrap and the skipped one
+select REFRESH_STATE, count(*) as jobs
+from information_schema.materialized_view_refresh_jobs
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_skip'
+group by REFRESH_STATE order by REFRESH_STATE;
+
+-- the skipped job's window reaches the first-class columns of materialized_view_refresh_jobs.
+-- Picked by state rather than by SUBMIT_TIME: that column is second-granular, and both
+-- refreshes land in the same second.
+select regexp_extract(IMV_SOURCE_VERSION_RANGE, '"start": *"([0-9]+)"', 1) =
+           regexp_extract(IMV_SOURCE_VERSION_RANGE, '"end": *"([0-9]+)"', 1)
+       and regexp_extract(IMV_SOURCE_VERSION_RANGE, '"start": *"([0-9]+)"', 1) != '' as version_is_point_range,
+       regexp_extract(IMV_SOURCE_TIMESTAMP_RANGE, '"start": *"([0-9]+)"', 1) =
+           regexp_extract(IMV_SOURCE_TIMESTAMP_RANGE, '"end": *"([0-9]+)"', 1)
+       and regexp_extract(IMV_SOURCE_TIMESTAMP_RANGE, '"start": *"([0-9]+)"', 1) != '' as timestamp_is_point_range
+from information_schema.materialized_view_refresh_jobs
+where TABLE_SCHEMA = 'db_${uuid0}' and TABLE_NAME = 'mv_skip' and REFRESH_STATE = 'SKIPPED';
+
+-- and the task run itself carries it, reported as INCREMENTAL
+select get_json_string(EXTRA_MESSAGE, '$.refreshMode') as refresh_mode,
+       regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) =
+           regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"end": *"([0-9]+)"', 1)
+       and regexp_extract(get_json_string(EXTRA_MESSAGE, '$.imvSourceVersionRange'), '"start": *"([0-9]+)"', 1) != '' as version_is_point_range
+from information_schema.task_runs
+where `DATABASE` = 'db_${uuid0}' and STATE = 'SKIPPED';
+
+drop materialized view mv_skip;
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t_skip force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
+drop catalog mv_iceberg_${uuid0};

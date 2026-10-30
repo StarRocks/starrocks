@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "既存テーブルの名前変更、コメント修正、パーティション・タブレット修正を行います。"
 ---
 
 # ALTER TABLE
@@ -10,17 +11,18 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 ALTER TABLE は既存のテーブルを修正します。以下を含みます:
 
-- [テーブル、パーティション、ロールアップ、または列の名前変更](#rename)
-- [テーブルコメントの修正](#alter-table-comment-from-v31)
-- [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#modify-partition)
-- [バケッティング方法とバケット数の修正](#modify-the-bucketing-method-and-number-of-buckets-from-v32)
-- [列の変更（列の追加/削除、列順の変更、列コメントの変更）](#modify-columns-adddelete-columns-change-the-order-of-columns)
-- [ロールアップの作成/削除](#modify-rollup)
-- [インデックスの作成/削除](#modify-indexes)
-- [テーブルプロパティの修正](#modify-table-properties)
-- [アトミックスワップ](#swap)
-- [手動データバージョンコンパクション](#manual-compaction-from-31)
-- [主キー永続性インデックスの削除](#drop-primary-key-persistent-index-from-339)
+- [テーブル、パーティション、ロールアップ、または列の名前変更](#テーブルの名前を変更する)
+- [テーブルコメントの修正](#テーブルコメントの修正-v31-以降)
+- [パーティションの修正（パーティションの追加/削除とパーティション属性の修正）](#パーティションの変更)
+- [Tablet サイズの調整](#tablet-サイズの調整)
+- [バケッティング方法とバケット数の修正](#バケッティング方法とバケット数の修正-v32-以降)
+- [列の変更（列の追加/削除、列順の変更、列コメントの変更）](#列の変更列の追加削除列順の変更列コメントの変更)
+- [ロールアップの作成/削除](#ロールアップの作成)
+- [インデックスの作成/削除](#インデックスの作成)
+- [テーブルプロパティの修正](#テーブルプロパティの修正)
+- [アトミックスワップ](#一時パーティションを使用して現在のパーティションを置き換える)
+- [手動データバージョンコンパクション](#手動コンパクション-v31-以降)
+- [主キー永続性インデックスの削除](#主キー永続性インデックスの削除-v339-以降)
 
 :::tip
 この操作には、対象テーブルに対する ALTER 権限が必要です。
@@ -444,6 +446,72 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
+### Tablet サイズの調整
+
+StarRocks は v4.1 以降、Tablet の分割（SPLIT）および結合（MERGE）をサポートしており、Tablet サイズを動的に管理できます。これにより、データスキューに対処するための適応的な仕組みが提供されます。
+
+SPLIT の構文：
+
+```SQL
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
+    ｜
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+MERGE の構文：
+
+```SQL
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
+    [
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
+    ｜
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) ... }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+パラメータ：
+
+- `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：10 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
+
+  Tablet ID を指定しない手動 SPLIT では、目標サイズに正の値が必要です。FE 設定 `tablet_reshard_target_size` が `0` の場合は、`PROPERTIES` で正の値を指定してください。指定しないと、`Invalid tablet_reshard_target_size: 0` というエラーになります。以下の 1.5 倍の分割しきい値は、目標サイズが正の値の場合にのみ適用されます。
+
+  - SPLIT が実行される条件：
+    - Tablet のサイズが `tablet_reshard_target_size` の 1.5 倍（すなわち `ceil(1.5 × tablet_reshard_target_size)`）**以上**であること。デフォルトの 10 GB の場合、Tablet が 15 GB に達した時点で分割されます。このしきい値は、バックグラウンドの自動分割と手動で実行する `ALTER TABLE ... SPLIT` の両方に適用されます。自動分割では FE 設定 `tablet_reshard_target_size` を使用し、手動 SPLIT では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。Tablet ID を指定した場合も同様で、しきい値未満の Tablet は分割されません。条件を満たす Tablet が 1 つもない場合、ステートメントは `No tablets need to split in table ...` というエラーになります。
+    - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
+
+  - また、Tablet が属するマテリアライズドインデックスの Tablet 数が、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` により上限が課されるため、この設定を小さくするとより早く停止します）を下回っており、かつその Tablet のサイズがそのルールのターゲットサイズの 2 倍に達した場合は、上記のしきい値に達する前に分割されます。そのターゲットサイズとは、インデックスのデータ量を上記のスロット数で割ったサイズであり、`tablet_reshard_min_split_size` を下限とします。したがってデフォルトの 2 GB では、データ量がまだこの下限を超えていないインデックスは、Tablet が 4 GB に達した時点で分割されます。これにより、作成直後のパーティションがクラスター全体の書き込み並列度により早く到達できます。このルールは、バックグラウンドの自動分割と、Tablet ID も `tablet_reshard_target_size` も指定しない手動 SPLIT に適用されます。いずれかを指定するとこのルールは無効になり、上記のしきい値のみで判定されます。クラスター全体で無効にするには、`tablet_reshard_min_split_size` を `tablet_reshard_target_size` 以上に設定します。
+
+  - MERGE を実行するには、FE 設定 `tablet_reshard_enable_tablet_merge` を `true` に設定する必要があります（デフォルト：`false`）。無効の場合、Tablet は自動的にマージされず、`ALTER TABLE ... MERGE` も拒否されます。有効にした場合、MERGE は次のように動作します：
+    - 自動マージは、マテリアライズドインデックス内のいずれかの隣接する 2 つの Tablet の合計サイズが `tablet_reshard_target_size` の 80%（すなわち `ceil(0.8 × tablet_reshard_target_size)`）を**下回る**と実行されます。この判定には FE 設定 `tablet_reshard_target_size` を使用します。デフォルトの 10 GB の場合、隣接する 2 つの Tablet の合計が 8 GB 未満になった時点でマージされます。
+    - 自動マージと、Tablet ID を指定しない手動 MERGE は、同じ方法でマージ対象の Tablet を選択します。手動 MERGE では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。マージ対象となるのは `ceil(0.8 × tablet_reshard_target_size)` 未満の Tablet のみです。隣接するこれらの Tablet はレンジ順にグループ化され、各グループの合計サイズは `tablet_reshard_target_size` を超えません。間にこれより大きい Tablet がある場合、グループはそこで区切られます。マージによって、マテリアライズドインデックスの Tablet 数が並列度の下限を下回ることはありません。この下限は、ウェアハウスのコンピュートノード数（`tablet_reshard_max_split_count` を上限とし、2 以上）です。マージできる Tablet が 1 つもない場合、手動のステートメントは `No tablets need to merge in table ...` というエラーになります。
+    - Tablet ID を指定した手動 MERGE は、Tablet のサイズや並列度の下限を確認せず、指定したグループをそのままマージします。各グループは、同じパーティションかつ同じマテリアライズドインデックス内の、連続する 2 つ以上の Tablet で構成する必要があります。
+    - いずれの場合も、現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満である必要があります。
+
+:::note
+
+`ORDER BY` が主キーと異なるレンジ分散の主キーテーブルでは、**MERGE はサポートされません**。この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。`ALTER TABLE ... MERGE TABLETS` とサイズに基づく自動マージはいずれも拒否され、`Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key` というエラーになります。
+
+SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。
+
+:::
+
+共有データクラスターのレンジ分散テーブルでは、対象の物理パーティションが重ならなければ、同じテーブルの分割ジョブと結合ジョブを並行して実行できます。同じ物理パーティションを対象とするジョブは、異なるマテリアライズドインデックスを操作する場合でも競合します。異なるパーティションへの並行ロードで起動する事前分割ジョブにも、このルールが適用されます。
+
+ジョブが完了または中止されると、その対象の物理パーティションで新しい分割や結合を実行できます。実行中の分割ジョブまたは結合ジョブがある間、テーブルは `TABLET_RESHARD` 状態を維持し、スキーマ変更などの互換性のない ALTER 操作はブロックされます。実行中のすべての分割ジョブと結合ジョブが完了または中止されると、テーブルは `NORMAL` 状態に戻ります。
+
+処理に参加するすべての FE が、この並行実行ポリシーをサポートしている必要があります。古い FE バージョンへロールバックする前に、すべての分割ジョブと結合ジョブが完了または中止されるまで待ってください。
+
+詳しい例については、[Tablet の分割または結合](#tablet-の分割または結合)を参照してください。
+
 ### 列の変更（列の追加/削除、列順の変更、列コメントの変更）
 
 #### 指定されたインデックスの指定された位置に列を追加する
@@ -461,8 +529,9 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意:
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
-2. 重複キーテーブルのような非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. 重複キーテーブルのような非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列は曖昧であるため拒否されます。キー列を作成するとテーブルの集計キーが変わり、既存データが書き換えられるためです。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `true` に設定すると、以前のバージョンの動作に戻り、その列はキー列として作成されます。
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じてロールアップを再作成できます。）
+4. 共有データクラスタの Range 分散テーブルでは、Range ソートキーに加わるキー列の追加が、重複キー（Duplicate Key）テーブル、集計（Aggregate）テーブル、およびユニークキー（Unique Key）テーブルで v4.2 以降サポートされます。この操作はオンラインの書き換えをトリガーし、追加するキー列には定数の `DEFAULT` 値を指定する必要があります。主キー（Primary Key）テーブル、またはロールアップや同期マテリアライズドビューを持つテーブルではサポートされません。
 
 #### 指定されたインデックスに複数の列を追加する
 
@@ -492,9 +561,11 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 集計テーブルに値列を追加する場合、`agg_type` を指定する必要があります。
 
-2. 非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。
+2. 非集計テーブルにキー列を追加する場合、`KEY` キーワードを指定する必要があります。集計テーブルでは、`agg_type` も `KEY` も指定されていない列は曖昧であるため拒否されます。FE 設定項目 `allow_implicit_key_column_in_agg_add_column` を `true` に設定すると、以前のバージョンの動作に戻ります。
 
 3. 基本インデックスに既に存在する列をロールアップに追加することはできません。（必要に応じて別のロールアップを作成できます。）
+
+4. 共有データクラスタの Range 分散テーブルでは、Range ソートキーに加わるキー列の追加が、重複キー（Duplicate Key）テーブル、集計（Aggregate）テーブル、およびユニークキー（Unique Key）テーブルで v4.2 以降サポートされます。この操作はオンラインの書き換えをトリガーし、追加するキー列には定数の `DEFAULT` 値を指定する必要があります。主キー（Primary Key）テーブル、またはロールアップや同期マテリアライズドビューを持つテーブルではサポートされません。
 
 #### 生成列を追加する (v3.1 以降)
 
@@ -521,6 +592,7 @@ DROP COLUMN column_name
 
 1. パーティション列を削除することはできません。
 2. 列が基本インデックスから削除された場合、ロールアップに含まれている場合も削除されます。
+3. 共有データクラスタの Range 分散テーブルでは、キー列（Range ソートキー列）の削除が、重複キー（Duplicate Key）テーブルと集計（Aggregate）テーブル（集計テーブルは `REPLACE` または `REPLACE_IF_NOT_NULL` の値列が存在しない場合のみ）で v4.2 以降サポートされます。この操作はオンラインの書き換えをトリガーしてデータを再ソートし、集計テーブルでは縮小されたキーで再集計します。主キー（Primary Key）テーブルまたはユニークキー（Unique Key）テーブル、インデックスを持つ列（先にそのインデックスを削除してください）、またはロールアップや同期マテリアライズドビューを持つテーブルではサポートされません。
 
 #### 列の型、位置、コメント、その他のプロパティを変更する
 
@@ -540,9 +612,10 @@ MODIFY COLUMN <column_name>
 
 1. 集計モデルで値列を修正する場合、`agg_type` を指定する必要があります。
 2. 非集計モデルでキー列を修正する場合、`KEY` キーワードを指定する必要があります。
-3. 列のタイプのみを修正できます。列の他のプロパティは現在のままです。（つまり、他のプロパティは元のプロパティに従ってステートメントに明示的に記述する必要があります。例8を参照してください。）
-4. パーティション列は修正できません。
-5. 現在サポートされている変換の種類（精度の損失はユーザーが保証します）:
+3. データ型、デフォルト値、NULL 許容性、および位置を変更する場合は、ステートメント内でカラムの完全な定義を指定する必要があります。
+4. カラムのコメントのみを変更する場合は——`MODIFY COLUMN <column_name> COMMENT 「<new_column_comment>」` の構文でも、コメントのみが異なる完全な列定義でも——メタデータのみが変更され、スキーマ変更タスクは開始されません。これは主キー列、キー列、および通常の列に適用されます。完全な定義がカラムの他の属性も変更する場合は、通常通りスキーマ変更タスクが開始されます。
+5. パーティション列は修正できません。
+6. 現在サポートされている変換の種類（精度の損失はユーザーが保証します）:
 
    - TINYINT/SMALLINT/INT/BIGINT を TINYINT/SMALLINT/INT/BIGINT/DOUBLE に変換します。
    - TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL を VARCHAR に変換します。VARCHAR は最大長の修正をサポートします。
@@ -553,8 +626,8 @@ MODIFY COLUMN <column_name>
    - FLOAT を DOUBLE に変換します。
    - INT を DATE に変換します（INT データの変換に失敗した場合、元のデータはそのままです）。
 
-6. NULL から NOT NULL への変換はサポートされていません。
-7. 単一のMODIFY COLUMN句で複数のプロパティを変更できます。ただし、一部のプロパティの組み合わせはサポートされていません。
+7. NULL から NOT NULL への変換はサポートされていません。
+8. 単一のMODIFY COLUMN句で複数のプロパティを変更できます。ただし、一部のプロパティの組み合わせはサポートされていません。
 
 #### 指定されたインデックスの列を再配置する
 
@@ -689,17 +762,31 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES: タイムアウト時間を設定することをサポートしています。デフォルトのタイムアウト時間は1日です。
 
+`ORDER BY`: ベーステーブルのソートキーとは異なる、ロールアップ独自のソートキーを定義します。共有データクラスタの Range 分散テーブルでのみサポートされます（v4.2 以降）。ロールアップの先頭ソートキー列でフィルタまたは集計を行うクエリがロールアップで処理されるようになります。以下の制限があります。
+
+- テーブルは重複キー（Duplicate Key）テーブル、集計（Aggregate）テーブル、またはユニークキー（Unique Key）テーブルである必要があります。主キー（Primary Key）テーブルはサポートされません。
+- テーブルは Colocate テーブルであってはなりません。
+- この種のロールアップは複数追加できます。各 `ALTER TABLE` 文で 1 つのロールアップを追加します（複数追加するには文を分けて実行してください）。ロールアップは常にベースインデックスから作成され、`FROM <別のロールアップ>` はサポートされません。テーブルは同期マテリアライズドビューを持っていてはなりません。
+
 例:
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+例: 共有データクラスタの Range 分散テーブルに、独立したソートキーを持つロールアップを作成します。
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### バッチでロールアップを作成する
@@ -806,6 +893,7 @@ SET ("key" = "value")
 - `colocate_with`
 - `bucket_size` (v3.2 以降でサポート)
 - `base_compaction_forbidden_time_ranges` (v3.2.13 以降でサポート)
+- `enable_statistic_auto_collect`
 
 :::note
 
@@ -1028,7 +1116,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 
@@ -1053,7 +1141,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ```sql
     ALTER TABLE example_db.my_table
     ADD COLUMN col1 INT DEFAULT "1" AFTER `k1`,
-    ADD COLUMN col2 FLOAT SUM AFTER `v2`,
+    ADD COLUMN col2 FLOAT SUM AFTER `v2`
     TO example_rollup_index;
     ```
 
@@ -1350,6 +1438,53 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
+### Tablet の分割または結合
+
+- 表内にあるすべての条件を満たすタブレットを、10 GB (デフォルト) を目標サイズとして分割する。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- パーティション内にあるすべての条件を満たすタブレットを分割する。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+PARTITION (p1);
+```
+
+- ID ごとに特定のタブレットを分割する。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+(9588955, 9588956, 9588957);
+```
+
+- 表内にあるすべての条件を満たすタブレットを、2 GB を目標サイズとして結合する。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- パーティション内にあるすべての条件を満たすタブレットを結合する。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- ID ごとに特定のタブレットを結合する。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+(9588955, 9588956, 9588957)
+(9588958, 9588959);
+```
+
 ## 参考文献
 
 - [CREATE TABLE](CREATE_TABLE.md)
@@ -1357,4 +1492,3 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-```

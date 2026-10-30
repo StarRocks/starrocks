@@ -1,0 +1,114 @@
+-- name: test_query_cache_global_late_materialization
+CREATE TABLE gb (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE gw (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL,
+  s1 varchar(200),
+  s2 varchar(200)
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO gb
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+INSERT INTO gw
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1, repeat('a', 180), repeat('b', 100)
+FROM TABLE(generate_series(1, 200000));
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+set enable_global_late_materialization = true;
+-- result:
+-- !result
+set enable_global_late_materialization_cost_based = false;
+-- result:
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s1 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s1) = 180 group by gb.c1) x;
+-- result:
+6200
+-- !result
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s2 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s2) = 180 group by gb.c1) x;
+-- result:
+0
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s1 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s1) = 180 group by gb.c1) x;
+-- result:
+6200
+-- !result
+select ifnull(sum(s),0) from (select gb.c1, sum(gb.v1) s from gb
+  join (select c1 as k, s2 from gw order by ts limit 10) b
+  on gb.ts > b.k and length(b.s2) = 180 group by gb.c1) x;
+-- result:
+0
+-- !result
+CREATE TABLE gb2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO gb2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+select ifnull(sum(s),0) from (select gb2.c1, sum(gb2.v1) s from gb2
+  join (select c1 as k, s2 from gw order by ts limit 10) b
+  on gb2.ts > b.k and length(b.s2) = 180 group by gb2.c1) x;
+-- result:
+0
+-- !result
+select ifnull(sum(s),0) from (select gb2.c1, sum(gb2.v1) s from gb2
+  join (select c1 as k, s1 from gw order by ts limit 10) b
+  on gb2.ts > b.k and length(b.s1) = 180 group by gb2.c1) x;
+-- result:
+6200
+-- !result

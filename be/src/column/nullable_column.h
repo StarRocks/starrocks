@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <sstream>
+
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
@@ -94,6 +96,7 @@ public:
     bool is_nullable() const override { return true; }
     bool is_json() const override { return _data_column->is_json(); }
     bool is_variant() const override { return _data_column->is_variant(); }
+    bool is_file() const override { return _data_column->is_file(); }
     bool is_array() const override { return _data_column->is_array(); }
     bool is_array_view() const override { return _data_column->is_array_view(); }
 
@@ -101,10 +104,6 @@ public:
         DCHECK_EQ(_null_column->size(), _data_column->size());
         return _has_null && immutable_null_column_data()[index];
     }
-
-    const uint8_t* raw_data() const override { return _data_column->raw_data(); }
-
-    uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data_column->mutable_raw_data()); }
 
     size_t size() const override {
         DCHECK_EQ(_data_column->size(), _null_column->size());
@@ -156,12 +155,6 @@ public:
 
     bool append_nulls(size_t count) override;
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override { return _data_column->has_large_column(); }
-
     bool append_strings(const Slice* data, size_t size) override;
 
     bool append_strings_overflow(const Slice* data, size_t size, size_t max_length) override;
@@ -189,19 +182,39 @@ public:
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
 
+    uint32_t max_one_element_serialize_size_compact() const override {
+        return sizeof(bool) + _data_column->max_one_element_serialize_size_compact();
+    }
+
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
+
+    uint32_t serialize_compact(size_t idx, uint8_t* pos) const override;
 
     uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) const override;
 
+    void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const override;
+
+    // Without nulls every row is a flag byte plus the data element (see serialize_batch()).
+    uint32_t serialize_batch_fixed_row_size() const override {
+        if (_has_null) {
+            return 0;
+        }
+        const uint32_t data = _data_column->serialize_batch_fixed_row_size();
+        return data == 0 ? 0 : sizeof(bool) + data;
+    }
+
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+
+    const uint8_t* deserialize_compact_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
+    // Must match serialize(): the null mask only counts when _has_null is set (see is_null()).
     uint32_t serialize_size(size_t idx) const override {
-        if (immutable_null_column_data()[idx]) {
+        if (_has_null && immutable_null_column_data()[idx]) {
             return sizeof(uint8_t);
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);

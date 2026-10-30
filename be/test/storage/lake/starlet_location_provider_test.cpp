@@ -21,15 +21,14 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
-#include "fs/fs_starlet.h"
-#include "service/staros_worker.h"
+#include "common/config_staros_worker_fwd.h"
+#include "compute_env/staros/starlet_filesystem.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
-
-namespace starrocks {
-extern std::shared_ptr<StarOSWorker> g_worker;
-} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -44,12 +43,12 @@ public:
     StarletLocationProviderTest() = default;
     ~StarletLocationProviderTest() override = default;
     void SetUp() override {
-        g_worker = std::make_shared<StarOSWorker>();
+        set_staros_worker_for_test(std::make_shared<StarOSWorker>());
         _provider = new lake::StarletLocationProvider();
     }
     void TearDown() override {
         delete _provider;
-        g_worker.reset();
+        set_staros_worker_for_test(nullptr);
     }
 
     lake::StarletLocationProvider* _provider;
@@ -68,19 +67,21 @@ TEST_F(StarletLocationProviderTest, test_location) {
 }
 
 TEST_F(StarletLocationProviderTest, test_get_real_location) {
+    // Ask starmgr every time, so the re-mocked path below is the one resolved.
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
     auto tablet_id = next_id();
     auto shard_info = staros::starlet::ShardInfo{};
     auto root_path = std::string{"/root/path/for/test"};
     shard_info.id = tablet_id;
     shard_info.path_info.set_full_path(root_path);
 
-    // preserve original g_worker value, and reset it to our MockedWorker
-    auto backup_worker = g_worker;
-    auto defer = DeferOp([backup_worker] { g_worker = backup_worker; });
-    g_worker.reset(new MockStarOSWorker());
+    // Preserve original worker value, and reset it to our mocked worker.
+    auto backup_worker = get_staros_worker();
+    auto defer = DeferOp([backup_worker] { set_staros_worker_for_test(backup_worker); });
+    set_staros_worker_for_test(std::make_shared<MockStarOSWorker>());
 
     // set mock function excepted call
-    auto worker = dynamic_cast<MockStarOSWorker*>(g_worker.get());
+    auto worker = dynamic_cast<MockStarOSWorker*>(get_staros_worker().get());
     EXPECT_CALL(*worker, _fetch_shard_info_from_remote(tablet_id)).WillRepeatedly(::testing::Return(shard_info));
 
     // fire the testing
@@ -95,5 +96,18 @@ TEST_F(StarletLocationProviderTest, test_get_real_location) {
 
     EXPECT_EQ("/root/path/for/test/abc", _provider->real_location(fmt::format("staros://{}/abc", tablet_id)).value());
 }
+
+// `shutdown_staros_worker()` can retire the global worker while a lake operation is still
+// resolving a path. The lookup must report a status instead of dereferencing it. See issue #78883.
+TEST_F(StarletLocationProviderTest, test_real_location_after_worker_release) {
+    auto backup_worker = get_staros_worker();
+    auto defer = DeferOp([backup_worker] { set_staros_worker_for_test(backup_worker); });
+    set_staros_worker_for_test(nullptr);
+
+    auto real_or = _provider->real_location(build_starlet_uri(12345, "/abc"));
+    ASSERT_FALSE(real_or.ok());
+    EXPECT_TRUE(real_or.status().is_service_unavailable()) << real_or.status();
+}
+
 } // namespace starrocks::lake
 #endif // USE_STAROS

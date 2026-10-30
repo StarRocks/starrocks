@@ -26,11 +26,14 @@
 
 #include <future>
 #include <ostream>
+#include <sstream>
+#include <string>
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
 #include "column/column_helper.h"
 #include "common/http/content_type.h"
+#include "common/thread/priority_thread_pool.hpp"
 #include "common/util/debug_util.h"
 #include "formats/file_writer.h"
 #include "formats/parquet/arrow_memory_pool.h"
@@ -40,7 +43,6 @@
 #include "formats/utils.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 class Chunk;
@@ -70,8 +72,8 @@ Status ParquetFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ParquetFileWriter::close() {
-    CommitResult result{
+FileCommitResult ParquetFileWriter::close() {
+    FileCommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
         if (_writer != nullptr) {
@@ -160,9 +162,9 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
     }
 }
 
-FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id) {
+FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id) {
     DCHECK(meta_data != nullptr);
-    FileWriter::FileStatistics file_statistics;
+    FileStatistics file_statistics;
     file_statistics.record_count = meta_data->num_rows();
 
     if (!has_field_id) {
@@ -262,7 +264,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetFileWriter::
         fields.push_back(std::move(node));
     }
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
-            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, fields));
 }
 
 Status ParquetFileWriter::init() {
@@ -287,16 +289,26 @@ Status ParquetFileWriter::init() {
     }
 
     ASSIGN_OR_RETURN(auto compression, parquet::ParquetBuildHelper::convert_compression_type(_compression_type));
-    _properties = std::make_unique<::parquet::WriterProperties::Builder>()
-                          ->version(_writer_options->version)
-                          ->enable_write_page_index()
-                          ->data_pagesize(_writer_options->page_size)
-                          ->write_batch_size(_writer_options->write_batch_size)
-                          ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
-                          ->compression(compression)
-                          ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
-                          ->memory_pool(&_memory_pool)
-                          ->build();
+    ::parquet::WriterProperties::Builder builder;
+    builder.version(_writer_options->version)
+            ->enable_write_page_index()
+            ->data_pagesize(_writer_options->page_size)
+            ->write_batch_size(_writer_options->write_batch_size)
+            ->dictionary_pagesize_limit(_writer_options->dictionary_pagesize)
+            ->compression(compression)
+            ->created_by(fmt::format("{} starrocks-{}", CREATED_BY_VERSION, get_short_version()))
+            ->memory_pool(&_memory_pool);
+
+    // Apply column-level dictionary encoding configuration
+    for (const auto& [col_name, enabled] : _writer_options->column_dictionary_enabled) {
+        if (enabled) {
+            builder.enable_dictionary(col_name);
+        } else {
+            builder.disable_dictionary(col_name);
+        }
+    }
+
+    _properties = builder.build();
 
     _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
     return Status::OK();
@@ -347,6 +359,8 @@ Status ParquetFileWriterFactory::init() {
 #ifndef BE_TEST
     _parsed_options->time_zone = _runtime_state->timezone();
 #endif
+    // Apply column-level dictionary encoding configuration set via setter
+    _parsed_options->column_dictionary_enabled = std::move(_column_dictionary_enabled);
     return Status::OK();
 }
 
@@ -361,14 +375,14 @@ StatusOr<WriterAndStream> ParquetFileWriterFactory::create(const std::string& pa
     auto column_evaluators = ColumnEvaluator::clone(*_column_evaluators);
     auto types = ColumnEvaluator::types(*_column_evaluators);
     auto async_output_stream =
-            std::make_unique<io::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
+            std::make_unique<formats::AsyncFlushOutputStream>(std::move(file), _executors, _runtime_state);
     auto parquet_output_stream = std::make_shared<parquet::AsyncParquetOutputStream>(async_output_stream.get());
     auto writer = std::make_unique<ParquetFileWriter>(path, parquet_output_stream, _column_names, types,
                                                       std::move(column_evaluators), _compression_type, _parsed_options,
                                                       rollback_action, _nullable);
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 

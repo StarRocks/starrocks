@@ -31,10 +31,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.DictQueryOperator;
+import com.starrocks.sql.optimizer.operator.scalar.DictionaryGetOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LargeInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
@@ -89,6 +91,11 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                 .put(InPredicateOperator.class, (op, childOps) -> {
                     InPredicateOperator inPredicate = (InPredicateOperator) op;
                     return new InPredicateOperator(inPredicate.isNotIn(), childOps); })
+                .put(LargeInPredicateOperator.class, (op, childOps) -> {
+                    LargeInPredicateOperator largeIn = (LargeInPredicateOperator) op;
+                    return new LargeInPredicateOperator(
+                            largeIn.getRawText(), largeIn.getRawConstantList(), largeIn.getConstantCount(),
+                            largeIn.isNotIn(), largeIn.getConstantType(), childOps); })
                 .put(IsNullPredicateOperator.class, (op, childOps) -> {
                     IsNullPredicateOperator isNullPredicate = (IsNullPredicateOperator) op;
                     return new IsNullPredicateOperator(isNullPredicate.isNotNull(), childOps.get(0)); })
@@ -126,7 +133,36 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                     LambdaFunctionOperator lambda = (LambdaFunctionOperator) op;
                     return new LambdaFunctionOperator(lambda.getRefColumns(), childOps.get(0), lambda.getType()); })
                 .put(CloneOperator.class, (op, childOps) -> new CloneOperator(childOps.get(0)))
+                .put(DictQueryOperator.class, (op, childOps) -> {
+                    DictQueryOperator dictQuery = (DictQueryOperator) op;
+                    return new DictQueryOperator(childOps, dictQuery.getDictQueryExpr(), dictQuery.getFn(),
+                            dictQuery.getType()); })
+                .put(DictMappingOperator.class, (op, childOps) -> {
+                    DictMappingOperator dictMapping = (DictMappingOperator) op;
+                    return new DictMappingOperator(dictMapping.getType(), dictMapping.getDictColumn(),
+                            dictMapping.getOriginScalaOperator(), childOps.get(0)); })
+                .put(DictionaryGetOperator.class, (op, childOps) -> {
+                    DictionaryGetOperator dictGet = (DictionaryGetOperator) op;
+                    return new DictionaryGetOperator(childOps, dictGet.getType(), dictGet.getDictionaryId(),
+                            dictGet.getDictionaryTxnId(), dictGet.getKeySize(),
+                            getNullIfNotExistForClone(dictGet, childOps)); })
                 .build();
+    }
+
+    private static boolean getNullIfNotExistForClone(DictionaryGetOperator dictGet, List<ScalarOperator> childOps) {
+        // dictionary_get(dict_name, key1, ..., keyN [, null_if_not_exist])
+        // If null_if_not_exist child exists and is a non-null bool literal, keep field in sync with rewritten child.
+        int expectedArgsWithFlag = dictGet.getKeySize() + 2;
+        if (childOps.size() == expectedArgsWithFlag) {
+            ScalarOperator nullIfNotExist = childOps.get(childOps.size() - 1);
+            if (nullIfNotExist instanceof ConstantOperator) {
+                ConstantOperator constant = (ConstantOperator) nullIfNotExist;
+                if (constant.getType().isBoolean() && !constant.isNull()) {
+                    return constant.getBoolean();
+                }
+            }
+        }
+        return dictGet.getNullIfNotExist();
     }
 
     public ScalarOperator visit(ScalarOperator scalarOperator, Void context) {
@@ -267,6 +303,11 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitDictQueryOperator(DictQueryOperator operator, Void context) {
+        return shuttleIfUpdate(operator);
+    }
+
+    @Override
+    public ScalarOperator visitDictionaryGetOperator(DictionaryGetOperator operator, Void context) {
         return shuttleIfUpdate(operator);
     }
 

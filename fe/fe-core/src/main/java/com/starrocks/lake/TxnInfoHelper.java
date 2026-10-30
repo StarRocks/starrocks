@@ -33,10 +33,17 @@ public class TxnInfoHelper {
                 state.getTxnCommitAttachment() != null) {
             CompactionTxnCommitAttachment attachment = (CompactionTxnCommitAttachment) state.getTxnCommitAttachment();
             infoPB.forcePublish = attachment.getForceCommit();
+            infoPB.unshareCompaction = attachment.isUnshare();
         } else {
             infoPB.forcePublish = false;
+            infoPB.unshareCompaction = false;
         }
         infoPB.setGtid(state.getGlobalTransactionId());
+        // Admin-issued no-op publish flag. BE will bypass txn-log loading + apply
+        // for this txn when set, letting the publish loop advance the version
+        // without including this txn's data changes. Set by
+        // ADMIN SKIP COMMITTED TRANSACTION.
+        infoPB.noOpPublish = state.isNoOpPublish();
         // set load ids
         if (state.getLoadIds() != null && state.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING) {
             infoPB.setLoadIds(state.getLoadIds().stream()

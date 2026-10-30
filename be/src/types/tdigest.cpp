@@ -514,7 +514,7 @@ void TDigest::mergeProcessed(const std::vector<const TDigest*>& tdigests) {
         auto& sorted = td->_processed;
         auto size = sorted.size();
         if (size > 0) {
-            pq.push(CentroidList(sorted));
+            pq.emplace(sorted);
             total += size;
             _processed_weight += td->_processed_weight;
         }
@@ -522,7 +522,7 @@ void TDigest::mergeProcessed(const std::vector<const TDigest*>& tdigests) {
     if (total == 0) return;
 
     if (_processed.size() > 0) {
-        pq.push(CentroidList(_processed));
+        pq.emplace(_processed);
         total += _processed.size();
     }
 

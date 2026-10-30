@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a specified number of characters from the right side of a string."
 ---
 
 # right

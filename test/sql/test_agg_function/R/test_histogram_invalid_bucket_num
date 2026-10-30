@@ -1,0 +1,23 @@
+-- name: test_histogram_invalid_bucket_num @sequential
+CREATE TABLE t_hist (k INT, v INT)
+  DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+  PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_hist VALUES (1,10),(2,20),(3,30),(4,40);
+-- result:
+-- !result
+SELECT histogram(v, 2, 1.0) FROM t_hist;
+-- result:
+[["10","20","2","1"],["30","40","4","1"]]
+-- !result
+SELECT histogram(v, cast(2 as int), 1.0) FROM t_hist;
+-- result:
+[["10","20","2","1"],["30","40","4","1"]]
+-- !result
+[UC] SELECT histogram(v, 0, 1.0) FROM t_hist;
+[UC] SELECT histogram(v, -1, 1.0) FROM t_hist;
+SELECT count(*) FROM t_hist;
+-- result:
+4
+-- !result

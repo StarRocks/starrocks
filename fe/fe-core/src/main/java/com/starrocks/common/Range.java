@@ -347,6 +347,53 @@ public abstract class Range<T extends Comparable<T>> implements Comparable<Range
     }
 
     /**
+     * Checks if this range contains every value of another range.
+     *
+     * <p>Handles {@code -∞} / {@code +∞} bounds and inclusive/exclusive edges
+     * explicitly. Unlike {@link #compareTo(Range)}, which returns 0 for any
+     * overlapping pair, this returns true only when {@code other} is a subset
+     * of {@code this}.
+     *
+     * @param other the candidate sub-range, must not be null
+     * @return true if every value in {@code other} is also in this range
+     * @throws NullPointerException if other is null
+     */
+    public boolean contains(Range<T> other) {
+        Objects.requireNonNull(other, "Range must not be null");
+        return lowerBoundContainsLowerOf(other) && upperBoundContainsUpperOf(other);
+    }
+
+    private boolean lowerBoundContainsLowerOf(Range<T> other) {
+        if (isMinimum()) {
+            return true;
+        }
+        if (other.isMinimum()) {
+            return false;
+        }
+        int cmp = getLowerBound().compareTo(other.getLowerBound());
+        if (cmp != 0) {
+            return cmp < 0;
+        }
+        // Equal lower bound values: this range must include the bound, or
+        // other must also exclude it.
+        return isLowerBoundIncluded() || !other.isLowerBoundIncluded();
+    }
+
+    private boolean upperBoundContainsUpperOf(Range<T> other) {
+        if (isMaximum()) {
+            return true;
+        }
+        if (other.isMaximum()) {
+            return false;
+        }
+        int cmp = other.getUpperBound().compareTo(getUpperBound());
+        if (cmp != 0) {
+            return cmp < 0;
+        }
+        return isUpperBoundIncluded() || !other.isUpperBoundIncluded();
+    }
+
+    /**
      * Compares this range with another for ordering.
      *
      * <p>Note: This method may return 0 for overlapping ranges that are not equal.

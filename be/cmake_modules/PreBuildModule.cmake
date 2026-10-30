@@ -36,7 +36,6 @@ if ("${USE_STAROS}" STREQUAL "ON")
     set(PROTOBUF_FOUND TRUE)
     # starrocks project has its imported libprotobuf.a and libre2.a
     # add following ALIAS so grpc can find the correct dependent libraries
-    add_library(re2::re2 ALIAS re2)
     add_library(glog::glog ALIAS glog)
     add_library(gflags::gflags_static ALIAS gflags)
     add_library(hdfs::hdfs ALIAS hdfs)
@@ -46,6 +45,9 @@ if ("${USE_STAROS}" STREQUAL "ON")
     add_library(rocksdb::rocksdb ALIAS rocksdb)
     add_library(starcache::starcache ALIAS starcache)
     add_library(Snappy::snappy ALIAS snappy)
+    # starlet >= v4.2-rc5 exports zstd::zstd in its link interface (zstd-compressed
+    # worker heartbeat); reuse the libzstd.a already imported by ThirdParty.cmake
+    add_library(zstd::zstd ALIAS zstd)
     add_library(libxml2::libxml2 ALIAS libxml2)
     add_library(Azure::azure-core ALIAS azure-core)
     add_library(Azure::azure-identity ALIAS azure-identity)

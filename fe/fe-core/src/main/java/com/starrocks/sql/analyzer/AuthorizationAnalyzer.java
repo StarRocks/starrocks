@@ -245,7 +245,7 @@ public class AuthorizationAnalyzer {
                         FunctionRef functionRef = functionRefs.get(i);
                         FunctionRefAnalyzer.analyzeFunctionRef(functionRef, session.getDatabase());
                         FunctionArgsDef argsDef = functionArgs.get(i);
-                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef, false);
                         FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
                                 functionRef, argsDef, session.getDatabase());
 
@@ -266,7 +266,7 @@ public class AuthorizationAnalyzer {
                         FunctionRef functionRef = functionRefs.get(i);
                         FunctionRefAnalyzer.analyzeFunctionRef(functionRef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
                         FunctionArgsDef argsDef = functionArgs.get(i);
-                        FunctionRefAnalyzer.analyzeArgsDef(argsDef);
+                        FunctionRefAnalyzer.analyzeArgsDef(argsDef, false);
                         FunctionSearchDesc searchDesc = FunctionRefAnalyzer.buildFunctionSearchDesc(
                                 functionRef, argsDef, FunctionRefAnalyzer.GLOBAL_UDF_DB);
 
@@ -317,6 +317,8 @@ public class AuthorizationAnalyzer {
                         || ObjectType.CATALOG.equals(objectType)
                         || ObjectType.RESOURCE_GROUP.equals(objectType)
                         || ObjectType.STORAGE_VOLUME.equals(objectType)
+                        || ObjectType.AI_FUNCTION.equals(objectType)
+                        || ObjectType.AI_PROVIDER.equals(objectType)
                         || ObjectType.WAREHOUSE.equals(objectType)) {
                     if (tokens.size() != 1) {
                         throw new SemanticException(
@@ -392,6 +394,17 @@ public class AuthorizationAnalyzer {
                             throw new SemanticException(
                                     "Invalid grant statement with error privilege object " + tokens);
                         }
+                    }
+                } else if (ObjectType.AI_FUNCTION.equals(objectType) || ObjectType.AI_PROVIDER.equals(objectType)) {
+                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                        if (tokens.size() != 1) {
+                            throw new SemanticException("AI privilege objects require one unqualified name: " + tokens);
+                        }
+                        if ("*".equals(tokens.get(0))) {
+                            throw new SemanticException("AI privilege wildcards require ON ALL AI FUNCTIONS "
+                                    + "or ON ALL AI PROVIDERS");
+                        }
+                        objectTokenList.add(tokens);
                     }
                 } else if (ObjectType.RESOURCE.equals(objectType)
                         || ObjectType.CATALOG.equals(objectType)

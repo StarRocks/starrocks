@@ -1,14 +1,12 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "FAQ for common StarRocks SQL questions."
 ---
 
 # SQL query
 
 This topic provides answers to some frequently asked questions about SQL.
-
-## This error "fail to allocate memory." when I build a materialized view
-
-To solve this problem, increase the value of the `memory_limitation_per_thread_for_schema_change` parameter in the **be.conf** file. This parameter refers to the maximum storage that can be allocated for a single task to change the scheme. The default value of the maximum storage is 2 GB.
 
 ## Does StarRocks support caching query results?
 
@@ -83,7 +81,7 @@ To improve efficiency, add the `-A` parameter when you connect to MySQL's client
 
 ## How to reduce the disk space occupied by the BE log and the FE log?
 
-Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/management/BE_configuration.md).
+Adjust the log level and corresponding parameters. For more information, see [Parameter Configuration](../administration/configuration/BE_parameters/BE_parameters.md).
 
 ## This error "table *** is colocate table, cannot change replicationNum" occurs when I modify the replication number
 

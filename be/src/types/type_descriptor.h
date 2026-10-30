@@ -14,13 +14,17 @@
 
 #pragma once
 
+#include <optional>
+#include <ostream>
 #include <string>
 #include <vector>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h" // for TPrimitiveType
 #include "gen_cpp/types.pb.h"    // for PTypeDesc
 #include "thrift/protocol/TDebugProtocol.h"
 #include "types/constexpr.h"
+#include "types/geo_type_descriptor.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -42,6 +46,13 @@ struct TypeDescriptor {
     int precision{-1};
     int scale{-1};
 
+    /// Only meaningful for TYPE_DATETIME read from lake formats that distinguish
+    /// timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    /// as metadata and does NOT participate in type identity (operator==, hashing, etc.).
+    /// Default false means "shift a UTC instant into the session timezone" (Hive / Iceberg /
+    /// Paimon LTZ); true means the value is a naive wall clock that must NOT be shifted.
+    bool datetime_is_ntz{false};
+
     /// Must be kept in sync with FE's max precision/scale.
     static const int MAX_PRECISION = 76;
     static const int MAX_SCALE = MAX_PRECISION;
@@ -60,6 +71,10 @@ struct TypeDescriptor {
     std::vector<int32_t> field_ids;
     // Only set if type == TYPE_STRUCT. The field physical name of each child.
     std::vector<std::string> field_physical_names;
+
+    // Semantic metadata only, also used by GeoColumnDescriptor::type.
+    // Encoding, dimension and validation state belong to the column/transport layer.
+    std::optional<GeoTypeDescriptor> geo_type;
 
     TypeDescriptor() = default;
 
@@ -100,6 +115,13 @@ struct TypeDescriptor {
         return res;
     }
 
+    // FILE is an opaque scalar here; its fixed field layout lives in FileColumn, not in children.
+    static TypeDescriptor create_file_type() {
+        TypeDescriptor res;
+        res.type = TYPE_FILE;
+        return res;
+    }
+
     static TypeDescriptor create_array_type(const TypeDescriptor& children) {
         TypeDescriptor res;
         res.type = TYPE_ARRAY;
@@ -115,7 +137,7 @@ struct TypeDescriptor {
         return res;
     }
 
-    static TypeDescriptor create_struct_type(const std::vector<std::string> field_names,
+    static TypeDescriptor create_struct_type(const std::vector<std::string>& field_names,
                                              const std::vector<TypeDescriptor>& filed_types) {
         TypeDescriptor res;
         res.type = TYPE_STRUCT;
@@ -174,9 +196,15 @@ struct TypeDescriptor {
         return ret;
     }
 
-    static TypeDescriptor from_logical_type(LogicalType type,
-                                            [[maybe_unused]] int len = TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                            [[maybe_unused]] int precision = 27, [[maybe_unused]] int scale = 9) {
+    static TypeDescriptor create_geo_type(LogicalType type, GeoTypeDescriptor descriptor);
+
+    // Builds the descriptor of |type| when only the logical type is known. String types never take a length here:
+    // CHAR and VARCHAR get their maximum length (MAX_CHAR_LENGTH, MAX_VARCHAR_LENGTH), and VARBINARY falls through
+    // to TypeDescriptor(type) and keeps len = -1, which length checks treat as unbounded. Note that -1 differs from
+    // TYPE_VARBINARY_DESC (len = MAX_VARCHAR_LENGTH) under operator==. Use create_char_type(),
+    // create_varchar_type() or create_varbinary_type() when a specific length is needed. |precision| and |scale|
+    // apply to decimal types only.
+    static TypeDescriptor from_logical_type(LogicalType type, int precision = 27, int scale = 9) {
         switch (type) {
         case TYPE_CHAR:
             return TypeDescriptor::create_char_type(MAX_CHAR_LENGTH);
@@ -200,6 +228,8 @@ struct TypeDescriptor {
             return TypeDescriptor::create_json_type();
         case TYPE_VARIANT:
             return TypeDescriptor::create_variant_type();
+        case TYPE_FILE:
+            return TypeDescriptor::create_file_type();
         case TYPE_OBJECT:
             return TypeDescriptor::create_bitmap_type();
         default:
@@ -223,6 +253,7 @@ struct TypeDescriptor {
     }
 
     bool is_assignable(const TypeDescriptor& o) const {
+        if (is_geo_type() || o.is_geo_type()) return false; // SQL compatibility is not enabled yet.
         if (is_complex_type()) {
             if ((type != o.type) || (children.size() != o.children.size())) {
                 return false;
@@ -254,7 +285,7 @@ struct TypeDescriptor {
         if (is_decimal_type()) {
             return precision == o.precision && scale == o.scale;
         }
-        return true;
+        return geo_type == o.geo_type;
     }
 
     bool operator!=(const TypeDescriptor& other) const { return !(*this == other); }
@@ -286,11 +317,15 @@ struct TypeDescriptor {
         return (type == TYPE_DECIMAL || type == TYPE_DECIMALV2 || is_decimalv3_type());
     }
 
+    bool is_geo_type() const;
+
     inline bool is_unknown_type() const { return type == TYPE_UNKNOWN; }
 
     inline bool is_complex_type() const { return type == TYPE_STRUCT || type == TYPE_ARRAY || type == TYPE_MAP; }
 
     inline bool is_struct_type() const { return type == TYPE_STRUCT; }
+
+    inline bool is_file_type() const { return type == TYPE_FILE; }
 
     inline bool is_array_type() const { return type == TYPE_ARRAY; }
 
@@ -314,9 +349,10 @@ struct TypeDescriptor {
 
     // For some types with potential huge length, whose memory consumption is far more than normal types,
     // they need a different chunk_size setting
-    bool is_huge_type() const {
-        return type == TYPE_JSON || type == TYPE_OBJECT || type == TYPE_HLL || type == TYPE_VARIANT;
-    }
+    // Exactly the ObjectColumn-backed types: a single row can hold an arbitrarily large blob.
+    // TYPE_PERCENTILE used to be missing here, which was inconsistent with get_type_avg_size(),
+    // where it is budgeted at 1MB alongside TYPE_OBJECT.
+    bool is_huge_type() const { return is_object_type(type); }
 
     /// Returns the size of a slot for this type.
     int get_slot_size() const;
@@ -356,7 +392,6 @@ private:
     void to_protobuf(PTypeDesc* proto_type) const;
 };
 
-static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
 static const TypeDescriptor TYPE_BOOLEAN_DESC = TypeDescriptor{LogicalType::TYPE_BOOLEAN};
 static const TypeDescriptor TYPE_TINYINT_DESC = TypeDescriptor{LogicalType::TYPE_TINYINT};
 static const TypeDescriptor TYPE_SMALLINT_DESC = TypeDescriptor{LogicalType::TYPE_SMALLINT};
@@ -367,13 +402,9 @@ static const TypeDescriptor TYPE_DOUBLE_DESC = TypeDescriptor(LogicalType::TYPE_
 static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TIME);
 static const TypeDescriptor TYPE_DATE_DESC = TypeDescriptor(LogicalType::TYPE_DATE);
 static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);
-static const TypeDescriptor TYPE_CHAR_DESC = TypeDescriptor::create_char_type(TypeDescriptor::MAX_CHAR_LENGTH);
 static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 static const TypeDescriptor TYPE_VARBINARY_DESC =
         TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-static const TypeDescriptor TYPE_JSON_DESC = TypeDescriptor::create_json_type();
-
-static const TypeDescriptor TYPE_INT_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_INT_DESC);
 
 inline std::ostream& operator<<(std::ostream& os, const TypeDescriptor& type) {
     os << type.debug_string();

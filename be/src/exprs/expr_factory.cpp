@@ -16,11 +16,14 @@
 
 #include <thrift/protocol/TDebugProtocol.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "base/failpoint/fail_point.h"
+#include "base/format.h"
 #include "common/object_pool.h"
 #include "common/status.h"
+#include "exprs/ai/ai_function_call_expr.h"
 #include "exprs/arithmetic_expr.h"
 #include "exprs/array_element_expr.h"
 #include "exprs/array_expr.h"
@@ -34,9 +37,6 @@
 #include "exprs/column_ref.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/condition_expr.h"
-#include "exprs/dict_query_expr.h"
-#include "exprs/dictionary_get_expr.h"
-#include "exprs/dictmapping_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_call_expr.h"
@@ -44,6 +44,9 @@
 #include "exprs/info_func.h"
 #include "exprs/is_null_predicate.h"
 #include "exprs/java_function_call_expr.h"
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_pass.h"
+#endif
 #include "exprs/lambda_function.h"
 #include "exprs/literal.h"
 #include "exprs/map_apply_expr.h"
@@ -54,17 +57,43 @@
 #include "exprs/subfield_expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/runtime_state_helper.h"
-#ifdef STARROCKS_JIT_ENABLE
-#include "exprs/jit/expr_jit_pass.h"
-#endif
 
 namespace starrocks {
 
 namespace {
 
+ExprFactory::ExprCreateHook& non_core_create_post_hook() {
+    static ExprFactory::ExprCreateHook hook = nullptr;
+    return hook;
+}
+
+bool has_ai_function(const TExprNode& node) {
+    return node.__isset.fn && node.fn.binary_type == TFunctionBinaryType::AI;
+}
+
+bool contains_ai_function(const TExpr& expression) {
+    return std::any_of(expression.nodes.begin(), expression.nodes.end(), has_ai_function);
+}
+
+Status invalid_ai_expression() {
+    return Status::InvalidArgument("Invalid AI function expression");
+}
+
+Status try_non_core_create_post_hook(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, RuntimeState* state) {
+    auto hook = non_core_create_post_hook();
+    if (hook == nullptr) {
+        return Status::OK();
+    }
+    return hook(pool, texpr_node, expr, state);
+}
+
 Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
+    const bool is_function_call = texpr_node.node_type == TExprNodeType::FUNCTION_CALL ||
+                                  texpr_node.node_type == TExprNodeType::COMPUTE_FUNCTION_CALL;
+    if (has_ai_function(texpr_node) && !is_function_call) {
+        return invalid_ai_expression();
+    }
     switch (texpr_node.node_type) {
     case TExprNodeType::BOOL_LITERAL:
     case TExprNodeType::INT_LITERAL:
@@ -118,10 +147,29 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
     case TExprNodeType::COMPUTE_FUNCTION_CALL:
     case TExprNodeType::FUNCTION_CALL: {
         if (texpr_node.fn.binary_type == TFunctionBinaryType::SRJAR) {
-            *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
+            // Vectorized ("input"="arrow") Java UDFs share the Arrow call path; the boxed
+            // per-row path stays on JavaFunctionCallExpr.
+            if (texpr_node.fn.__isset.input_type && texpr_node.fn.input_type == "arrow") {
+                *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
+            } else {
+                *expr = pool->add(new JavaFunctionCallExpr(texpr_node));
+            }
         } else if (texpr_node.fn.binary_type == TFunctionBinaryType::PYTHON) {
             *expr = pool->add(new ArrowFunctionCallExpr(texpr_node));
-        } else if (texpr_node.fn.name.function_name == "if") {
+        } else if (texpr_node.fn.binary_type == TFunctionBinaryType::AI) {
+            auto ai_expr = AIFunctionCallExpr::create(pool, texpr_node);
+            if (!ai_expr.ok()) {
+                return ai_expr.status();
+            }
+            *expr = ai_expr.value();
+        }
+        if (*expr != nullptr) {
+            break;
+        }
+
+        // Preserve the historical FUNCTION_CALL dispatch order:
+        // 1) SRJAR/PYTHON calls, 2) core special exprs, 3) non-core post hook, 4) core fallback.
+        if (texpr_node.fn.name.function_name == "if") {
             *expr = pool->add(VectorizedConditionExprFactory::create_if_expr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "nullif") {
             *expr = pool->add(VectorizedConditionExprFactory::create_null_if_expr(texpr_node));
@@ -138,7 +186,12 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
             *expr = pool->add(new ArraySortLambdaExpr(texpr_node));
         } else if (texpr_node.fn.name.function_name == "map_apply") {
             *expr = pool->add(new MapApplyExpr(texpr_node));
-        } else {
+        }
+
+        if (*expr == nullptr) {
+            RETURN_IF_ERROR(try_non_core_create_post_hook(pool, texpr_node, expr, state));
+        }
+        if (*expr == nullptr) {
             *expr = pool->add(new VectorizedFunctionCallExpr(texpr_node));
         }
         break;
@@ -183,7 +236,7 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
         *expr = pool->add(new PlaceHolderRef(texpr_node));
         break;
     case TExprNodeType::DICT_EXPR:
-        *expr = pool->add(new DictMappingExpr(texpr_node));
+        RETURN_IF_ERROR(try_non_core_create_post_hook(pool, texpr_node, expr, state));
         break;
     case TExprNodeType::LAMBDA_FUNCTION_EXPR:
         *expr = pool->add(new LambdaFunction(texpr_node));
@@ -192,10 +245,8 @@ Status create_vectorized_expr(ObjectPool* pool, const TExprNode& texpr_node, Exp
         *expr = pool->add(new CloneExpr(texpr_node));
         break;
     case TExprNodeType::DICT_QUERY_EXPR:
-        *expr = pool->add(new DictQueryExpr(texpr_node));
-        break;
     case TExprNodeType::DICTIONARY_GET_EXPR:
-        *expr = pool->add(new DictionaryGetExpr(texpr_node));
+        RETURN_IF_ERROR(try_non_core_create_post_hook(pool, texpr_node, expr, state));
         break;
     case TExprNodeType::MATCH_EXPR:
         *expr = pool->add(new MatchExpr(texpr_node));
@@ -257,7 +308,8 @@ Status create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNode>& n
 Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, int* node_idx,
                                         Expr** root_expr, RuntimeState* state) {
     Status status = create_tree_from_thrift(pool, nodes, nullptr, node_idx, root_expr, state);
-    if (state == nullptr || !status.ok() || !RuntimeStateHelper::is_jit_enabled(state)) {
+    if (state == nullptr || !status.ok() || !state->query_options().__isset.jit_level ||
+        state->query_options().jit_level == 0) {
         return status;
     }
 
@@ -270,21 +322,32 @@ Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExp
 
 } // namespace
 
+void ExprFactory::set_non_core_create_post_hook(ExprCreateHook hook) {
+    non_core_create_post_hook() = hook;
+}
+
 Status ExprFactory::create_expr_tree(ObjectPool* pool, const TExpr& texpr, Expr** root_expr, RuntimeState* state,
                                      bool can_jit) {
     if (texpr.nodes.empty()) {
         *root_expr = nullptr;
         return Status::OK();
     }
+    const bool contains_ai = contains_ai_function(texpr);
     int node_idx = 0;
     Status status = create_expr_from_thrift_nodes(pool, texpr.nodes, &node_idx, root_expr, state, can_jit);
     if (status.ok() && node_idx + 1 != texpr.nodes.size()) {
         status = Status::InternalError("Expression tree only partially reconstructed. Not all thrift nodes were used.");
     }
     if (!status.ok()) {
-        LOG(ERROR) << "Could not construct expr tree.\n"
-                   << status.message() << "\n"
-                   << apache::thrift::ThriftDebugString(texpr);
+        if (contains_ai) {
+            *root_expr = nullptr;
+            LOG(ERROR) << "Could not construct AI expression tree";
+            status = invalid_ai_expression();
+        } else {
+            LOG(ERROR) << "Could not construct expr tree.\n"
+                       << status.message() << "\n"
+                       << apache::thrift::ThriftDebugString(texpr);
+        }
     }
     return status;
 }
@@ -311,6 +374,9 @@ Status ExprFactory::create_expr_from_thrift_nodes(ObjectPool* pool, const std::v
 
 Status ExprFactory::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext** ctx, RuntimeState* state,
                                      bool can_jit) {
+    if (contains_ai_function(texpr)) {
+        *ctx = nullptr;
+    }
     Expr* root_expr = nullptr;
     RETURN_IF_ERROR(create_expr_tree(pool, texpr, &root_expr, state, can_jit));
     *ctx = root_expr == nullptr ? nullptr : pool->add(new ExprContext(root_expr));

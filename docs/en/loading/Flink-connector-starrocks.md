@@ -1,8 +1,12 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
+description: "How to use the StarRocks Flink connector to continuously load data from Apache Flink into StarRocks, supporting DataStream API, Table API & SQL, and Python API."
 ---
 
 # Continuously load data from Apache Flink®
+
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
@@ -16,10 +20,11 @@ The Flink connector supports DataStream API, Table API & SQL, and Python API. It
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Obtain Flink connector
 
@@ -76,17 +81,21 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
       sh build.sh <flink_version>
       ```
 
-   For example, if the Flink version in your environment is 1.15, you need to execute the following command:
+   For example, if the Flink version in your environment is 1.16, you need to execute the following command:
 
       ```bash
-      sh build.sh 1.15
+      sh build.sh 1.16
       ```
 
-3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`, generated upon compilation.
+3. Go to the `target/` directory to find the Flink connector JAR file, such as `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`, generated upon compilation.
 
 > **NOTE**
 >
 > The name of Flink connector which is not formally released contains the `SNAPSHOT` suffix.
+
+## Connect to StarRocks
+
+<FlinkStarRocksConnection />
 
 ## Options
 
@@ -139,7 +148,7 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 - **Required**: No
 - **Default value**: AUTO
 - **Description**: The interface used to load data. This parameter is supported from Flink connector version 1.2.4 onwards. Valid Values:
-  - `V1`: Use [Stream Load](../loading/StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. 
+  - `V1`: Use [Stream Load](./StreamLoad.md) interface to load data. Connectors before 1.2.4 only support this mode. 
   - `V2`: Use [Stream Load transaction](./Stream_Load_transaction_interface.md) interface to load data. It requires StarRocks to be at least version 2.4. Recommends `V2` because it optimizes the memory usage and provides a more stable exactly-once implementation.
   - `AUTO`: If the version of StarRocks supports transaction Stream Load, will choose `V2` automatically, otherwise choose `V1`
 
@@ -178,8 +187,14 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 #### sink.max-retries
 
 - **Required**: No
-- **Default value**: 3
-- **Description**: The number of times that the system retries to perform the Stream Load job. This parameter is available only when you set `sink.version` to `V1`. Valid values: 0 to 10.
+- **Default value**: 3 (`0` when Merge Commit is enabled)
+- **Description**: The number of times that the system retries to perform the Stream Load job. This parameter takes effect when you set `sink.version` to `V1` or when Merge Commit is enabled. Valid values: 0 to 10. When Merge Commit is enabled, the connector does not retry failed load requests unless you explicitly set this parameter, for example, `'sink.max-retries' = '3'`. With retries enabled, the connector keeps the data of each load request in memory until the request succeeds, which increases memory usage. Because Merge Commit provides at-least-once semantics, a retried request may be loaded twice if the original request actually succeeded, for example, when its response is lost.
+
+#### sink.retry.interval-ms
+
+- **Required**: No
+- **Default value**: 10000
+- **Description**: The interval between two retries of a failed load request when Merge Commit is enabled. Unit: ms. This parameter takes effect only when `sink.max-retries` is greater than `0`. It does not take effect when `sink.version` is set to `V1`.
 
 #### sink.connect.timeout-ms
 
@@ -210,6 +225,12 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 - **Required**: No
 - **Default value**: true
 - **Description**: Supported since version 1.2.8. Whether to ignore `UPDATE_BEFORE` records from Flink when loading data to Primary Key tables. If this parameter is set to false, the record is treated as a delete operation to StarRocks table.
+
+#### sink.json.columns-from-flink-schema
+
+- **Required**: No
+- **Default value**: false
+- **Description**: Supported since 1.2.16. Whether the Stream Load `columns` header is derived from the Flink table schema when the format is `json`. By default no header is sent for `json`, so the server declares every table column and a column the payload does not carry is stored as NULL even when it has a DEFAULT. When `true`, the Flink table's columns are sent as the header, so a column the Flink schema does not declare is left off and the server applies its DEFAULT. Requires a Flink schema and `sink.properties.format=json`, and cannot be combined with `sink.properties.columns` or `sink.properties.jsonpaths`.
 
 #### sink.parallelism
 
@@ -346,9 +367,9 @@ The following Stream Load properties are used to control the Merge Commit behavi
 | DATE                              | DATE                  |
 | TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME              |
 | TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME              |
-| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;        |
-| MAP&lt;KT,VT&gt;                  | JSON STRING           |
-| ROW&lt;arg T...&gt;               | JSON STRING           |
+| ARRAY`<`T`>`                    | ARRAY`<`T`>`        |
+| MAP`<`KT,VT`>`                  | JSON STRING           |
+| ROW`<`arg T...`>`               | JSON STRING           |
 
 ## Usage notes
 
@@ -430,6 +451,10 @@ Below are some important notes when using Merge Commit:
 
   Merge Commit only guarantees at-least-once semantic. It does not support exactly-once semantic. Do not set `sink.semantic` to `exactly-once` when Merge Commit is enabled.
 
+- **Retries are disabled by default**
+
+  When Merge Commit is enabled, `sink.max-retries` defaults to `0`, so a load request that fails due to a transient error, such as a StarRocks node being scaled in, is not retried and the sink fails. To retry failed load requests, explicitly set `sink.max-retries`, for example, `'sink.max-retries' = '3'`. You can use `sink.retry.interval-ms` to control the interval between retries.
+
 - **Ordering for Primary Key tables**
 
   By default, `sink.merge-commit.max-concurrent-requests` is `Integer.MAX_VALUE`, which means a single sink subtask may send multiple Stream Load requests concurrently. This can cause out-of-order loading, which may be problematic for Primary Key tables. To ensure in-order loading, set `sink.merge-commit.max-concurrent-requests` to `0`, which, however, will reduce throughput. Alternatively, you can use Conditional Update to prevent newer data from being overwritten by older data. For configuration examples, see [In-order loading for Primary Key tables](#in-order-loading-for-primary-key-tables).
@@ -445,12 +470,27 @@ Below are some important notes when using Merge Commit:
 
   These two parameters control parallelism at different layers and should be tuned independently:
   - `sink.parallelism` controls the number of Flink sink subtasks. Each subtask buffers and sends data to StarRocks. Increase this value when Flink sink operators are CPU- or memory-bound — you can monitor Flink's per-operator CPU and memory usage to determine whether more subtasks are needed.
-  - `sink.properties.merge_commit_parallel` controls the degree of parallelism for the loading plan that StarRocks creates for each Merge Commit transaction. Increase this value when StarRocks becomes the bottleneck. You can monitor the StarRocks metrics [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total) (number of pending Merge Commit tasks) and [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes) (bytes held by pending tasks) to determine whether more parallelism is needed on the StarRocks side — sustained high values indicate that the loading plan cannot keep up with incoming data.
+  - `sink.properties.merge_commit_parallel` controls the degree of parallelism for the loading plan that StarRocks creates for each Merge Commit transaction. Increase this value when StarRocks becomes the bottleneck. You can monitor the StarRocks metrics [merge_commit_pending_total](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_total) (number of pending Merge Commit tasks) and [merge_commit_pending_bytes](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_bytes) (bytes held by pending tasks) to determine whether more parallelism is needed on the StarRocks side — sustained high values indicate that the loading plan cannot keep up with incoming data.
 
 - **Relationship between `sink.merge-commit.chunk.size` and `sink.buffer-flush.max-bytes`**:
   - `sink.merge-commit.chunk.size` controls the maximum data size per individual Stream Load request (per chunk). When data in a chunk reaches this size, it is flushed immediately.
   - `sink.buffer-flush.max-bytes` controls the total memory limit for all cached data across all tables. When the total cached data exceeds this limit, the connector will evict chunks early to free memory.
   - Therefore, `sink.buffer-flush.max-bytes` should be set larger than `sink.merge-commit.chunk.size` to allow at least one full chunk to be accumulated. In general, `sink.buffer-flush.max-bytes` should be several times larger than `sink.merge-commit.chunk.size`, especially when there are multiple tables or high concurrency.
+
+### Let server-side DEFAULT values apply with the JSON format
+
+With the `json` format, the connector does not send a `columns` header by default. The server therefore includes all table columns in the load. If a column is missing from the JSON payload, the server treats it as an explicit `NULL`, which overrides any `DEFAULT` value defined for that column. For example, if a table contains `ingest_ts DATETIME DEFAULT CURRENT_TIMESTAMP`, the column is loaded as `NULL` unless every row provides a value for `ingest_ts`.
+
+To allow server-side `DEFAULT` values to take effect, set `sink.json.columns-from-flink-schema=true`. The connector then uses the Flink table schema to generate the `columns` header, similar to how it handles `csv` when the Flink and StarRocks schemas differ.
+
+A StarRocks column that is not defined in the Flink table schema is omitted from the `columns` header, allowing the server to apply its `DEFAULT` value. Therefore, the Flink table definition determines which columns are included in the load:
+
+- **Column omitted from the Flink schema:** The connector does not send the column, so StarRocks applies its `DEFAULT` value.
+- **Column defined in the Flink schema:** The connector sends the value from the row, including `NULL` if the value is null.
+
+This option requires a Flink table schema and therefore applies to Flink SQL and sinks created with a schema. For `sink.version=V1`, you must also set `sink.properties.strip_outer_array=true`. The V1 sink sends each batch as a JSON array and does not set this property automatically, unlike V2.
+
+The raw `String` DataStream sink does not have a schema and therefore rejects `sink.json.columns-from-flink-schema=true` at startup. For this sink, set `sink.properties.columns` explicitly instead.
 
 ### Monitoring load metrics
 
@@ -502,7 +542,7 @@ DISTRIBUTED BY HASH(`id`);
 
 #### Network configuration
 
-Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port) (default: `8030`) and [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) (default: `8040`).
 
 ### Run with Flink SQL
 
@@ -697,7 +737,7 @@ Since v1.2.9, the Flink connector for StarRocks is integrated into this framewor
 - Schema change synchronization
 - Full and incremental data synchronization
 
-For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks).
+For quick start, see [Streaming ELT from MySQL to StarRocks using Flink CDC 3.0 with StarRocks Pipeline Connector](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/).
 
 It is advised to use StarRocks v3.2.1 and later versions to enable [fast_schema_evolution](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution). It will improve the speed of adding or dropping columns and reduce resource usage.
 
@@ -818,7 +858,7 @@ takes effect only when the new value for `score` is has a greater or equal to th
     - Define the DDL including all of columns.
     - Set the option `sink.properties.merge_condition` to `score` to tell the connector to use the column `score`
     as the condition.
-    - Set the option `sink.version` to `V1` which tells the connector to use Stream Load.
+    - Set the option `sink.version` to `V1` or `V2`. Both support conditional update.
 
     ```SQL
     CREATE TABLE `score_board` (

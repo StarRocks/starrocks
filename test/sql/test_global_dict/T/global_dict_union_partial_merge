@@ -1,0 +1,30 @@
+-- name: test_global_dict_union_partial_merge
+CREATE TABLE lc_union_partial (
+    id INT,
+    `s1` VARCHAR(50),
+    `s2` VARCHAR(50)
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES('replication_num' = '1');
+
+INSERT INTO lc_union_partial VALUES (0, 'a', 'x');
+INSERT INTO lc_union_partial VALUES (1, 'b', 'y');
+
+[UC]analyze full table lc_union_partial;
+
+function: wait_global_dict_ready('`s1`', 'lc_union_partial')
+function: wait_global_dict_ready('`s2`', 'lc_union_partial')
+
+-- test_same_child_column_in_partially_mergeable_positions
+-- s1 feeds BOTH union output positions. Position 0 (s1 / s2) can merge its dictionaries,
+-- position 1 (s1 / CAST(id AS VARCHAR(50))) cannot because the cast has no dictionary.
+-- The failed position retroactively removes s1 from the encoded input set, but output
+-- position 0 stays marked as dictionary encoded, so the left branch feeds a VARCHAR into
+-- an INT dict-code slot. Every column type is identical on both sides on purpose: any type
+-- mismatch makes the planner wrap the children in casts, which gives each position its own
+-- column ref and hides the bug.
+SELECT * FROM (
+  SELECT s1 AS a, s1 AS b FROM lc_union_partial
+  UNION ALL
+  SELECT s2, CAST(id AS VARCHAR(50)) FROM lc_union_partial
+) t ORDER BY 1, 2;

@@ -20,60 +20,97 @@
 #include <boost/locale/encoding_utf.hpp>
 
 #include "column/array_column.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "column/const_column.h"
+#include "exprs/function_context.h"
 #include "types/datum.h"
 
 namespace starrocks {
 
-Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
-        return Status::OK();
-    }
-
-    auto column = context->get_constant_column(0);
-    RETURN_IF(column == nullptr, Status::InvalidArgument("Tokenize function requires constant parameter"));
-    auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
-
-    lucene::analysis::Analyzer* analyzer;
-
+namespace {
+// Build a CLucene analyzer for the given tokenize method, or nullptr if the method is unknown.
+lucene::analysis::Analyzer* make_tokenize_analyzer(const Slice& method) {
     if (method == "english") {
-        analyzer = _CLNEW lucene::analysis::SimpleAnalyzer();
+        return _CLNEW lucene::analysis::SimpleAnalyzer();
     } else if (method == "standard") {
-        analyzer = _CLNEW lucene::analysis::standard::StandardAnalyzer();
+        return _CLNEW lucene::analysis::standard::StandardAnalyzer();
     } else if (method == "chinese") {
         auto* canalyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
         canalyzer->setLanguage(L"cjk");
         canalyzer->setStem(false);
-        analyzer = canalyzer;
-    } else {
+        return canalyzer;
+    }
+    return nullptr;
+}
+
+// A CLucene Analyzer is not thread-safe (it reuses a per-instance token stream), so each worker
+// thread gets its own via FunctionContext::get_or_create_thread_state instead of a per-thread
+// FunctionContext clone.
+struct GinTokenizeThreadState : FunctionThreadState {
+    lucene::analysis::Analyzer* analyzer = nullptr;
+    ~GinTokenizeThreadState() override { delete analyzer; }
+};
+} // namespace
+
+Status GinFunctions::tokenize_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    // Validate the (constant) method once, so an unknown method fails at prepare time. The
+    // per-thread analyzer itself is created lazily during evaluation (see tokenize()).
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    // Defence in depth: the FE analyzer already requires a string literal here. get_const_value()
+    // casts the constant's data column straight to a BinaryColumn, so a non-constant or NULL
+    // argument would be a wild read rather than an error.
+    RETURN_IF(!context->is_notnull_constant_column(0),
+              Status::InvalidArgument("Tokenize function requires a non-null constant string parameter"));
+    auto column = context->get_constant_column(0);
+    auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    if (method != "english" && method != "standard" && method != "chinese") {
         return Status::NotSupported("Unknown method '" + method.to_string() +
                                     "'. Supported methods are: 'english', 'standard', 'chinese'.");
     }
-
-    context->set_function_state(scope, analyzer);
 
     return Status::OK();
 }
 
 Status GinFunctions::tokenize_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* analyzer = reinterpret_cast<lucene::analysis::Analyzer*>(
-                context->get_function_state(FunctionContext::THREAD_LOCAL));
-        delete analyzer;
-    }
+    // Per-thread analyzers live in the FunctionContext's thread-state registry and are freed
+    // when the FunctionContext is destroyed; nothing to free here.
     return Status::OK();
 }
 
 StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starrocks::Columns& columns) {
-    auto* analyzer =
-            reinterpret_cast<lucene::analysis::Analyzer*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-
     if (columns.size() != 2) {
         return Status::InvalidArgument("Tokenize function only call by tokenize('<index_type>', str_column)");
     }
 
+    RETURN_IF(!context->is_notnull_constant_column(0),
+              Status::InvalidArgument("Tokenize function requires a non-null constant string parameter"));
+    auto method_column = context->get_constant_column(0);
+    auto method = ColumnHelper::get_const_value<TYPE_VARCHAR>(method_column);
+
+    auto* ts = context->get_or_create_thread_state<GinTokenizeThreadState>([&]() {
+        auto s = std::make_unique<GinTokenizeThreadState>();
+        s->analyzer = make_tokenize_analyzer(method);
+        return s;
+    });
+    if (ts->analyzer == nullptr) {
+        return Status::NotSupported("Unknown method '" + method.to_string() +
+                                    "'. Supported methods are: 'english', 'standard', 'chinese'.");
+    }
+    auto* analyzer = ts->analyzer;
+
     ColumnViewer<TYPE_VARCHAR> value_viewer(columns[1]);
-    size_t num_rows = value_viewer.size();
+    // ColumnViewer unwraps a constant column, so its size() is the length of the underlying data
+    // column -- always 1 for a constant -- and not the number of rows being evaluated. Tokenizing
+    // that many rows and returning an ordinary column produced a column shorter than the chunk it
+    // was appended to. Tokenize the single value and return a constant column instead, which is the
+    // contract every other function here follows through ColumnBuilder::build(is_const).
+    const bool value_is_constant = columns[1]->is_constant();
+    const size_t num_input_rows = columns[1]->size();
+    const size_t num_rows = value_is_constant ? std::min<size_t>(num_input_rows, 1) : num_input_rows;
 
     // Array Offset
     int offset = 0;
@@ -85,7 +122,7 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
 
     NullColumn::MutablePtr null_array = NullColumn::create();
 
-    for (int row = 0; row < num_rows; ++row) {
+    for (size_t row = 0; row < num_rows; ++row) {
         array_offsets->append(offset);
 
         if (value_viewer.is_null(row) || value_viewer.value(row).empty()) {
@@ -103,7 +140,7 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
                     offset++;
                     std::string str =
                             boost::locale::conv::utf_to_utf<char>(std::wstring(token.termBuffer(), token.termLength()));
-                    array_binary_column->append(Slice(std::move(str)));
+                    array_binary_column->append(Slice(str));
                 }
             }
         }
@@ -111,7 +148,14 @@ StatusOr<ColumnPtr> GinFunctions::tokenize(FunctionContext* context, const starr
     array_offsets->append(offset);
     auto result_array = ArrayColumn::create(NullableColumn::create(array_binary_column, NullColumn::create(offset, 0)),
                                             array_offsets);
-    return NullableColumn::create(result_array, null_array);
+    if (value_is_constant) {
+        // A constant column carries its value unwrapped, so a null one has to be built as such.
+        if (num_rows == 0 || null_array->get_data()[0] != 0) {
+            return ColumnHelper::create_const_null_column(num_input_rows);
+        }
+        return ConstColumn::create(std::move(result_array), num_input_rows);
+    }
+    return NullableColumn::create(std::move(result_array), std::move(null_array));
 }
 
 } // namespace starrocks

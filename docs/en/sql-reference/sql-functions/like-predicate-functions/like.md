@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Checks whether a given expression fuzzy matches the specified pattern."
 ---
 
 # like

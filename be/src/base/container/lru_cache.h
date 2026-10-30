@@ -115,6 +115,8 @@ enum class CachePriority { NORMAL = 0, DURABLE = 1 };
 class Cache {
 public:
     Cache() = default;
+    Cache(const Cache&) = delete;
+    const Cache& operator=(const Cache&) = delete;
 
     // Destroys all existing entries by calling the "deleter"
     // function that was passed to the constructor.
@@ -136,6 +138,43 @@ public:
                            void (*deleter)(const CacheKey& key, void* value),
                            CachePriority priority = CachePriority::NORMAL) = 0;
 
+    // Insert a mapping from key->value into the cache, but only if the cache does
+    // not already contain an entry for "key". The lookup and the insert happen
+    // atomically with respect to other operations on the same key, so callers do
+    // not need an external lock to get compare-and-insert semantics.
+    //
+    // If "key" is already present, returns a handle to the existing entry and sets
+    // *inserted to false; "value" is NOT adopted and the caller stays responsible
+    // for destroying it. Otherwise "value" is inserted, ownership moves to the
+    // cache and *inserted is set to true.
+    //
+    // Either way the caller must call this->release() on the returned handle.
+    virtual Handle* insert_if_absent(const CacheKey& key, void* value, size_t value_size,
+                                     void (*deleter)(const CacheKey& key, void* value), bool* inserted,
+                                     CachePriority priority = CachePriority::NORMAL) = 0;
+
+    // Atomically replace an existing entry only when pred(old_value, ctx) is true
+    // (or pred is null). Returns false without changing the cache if the key is
+    // absent, the predicate rejects it, or this optional operation is unsupported.
+    // The default implementation is unsupported. Only a true return transfers
+    // ownership of value to the cache; on false the caller must destroy it.
+    // Existing handles keep the old value alive until released. All deleters run
+    // outside the shard lock. pred must be O(1) and must not re-enter the cache.
+    virtual bool replace_if(const CacheKey& key, void* value, size_t value_size,
+                            void (*deleter)(const CacheKey& key, void* value),
+                            bool (*pred)(void* old_value, const void* ctx), const void* ctx,
+                            CachePriority priority = CachePriority::NORMAL);
+
+    // Change the charge of the entry for "key" in place instead of rebuilding it,
+    // and refresh it to the most recently used position. Entries are evicted if the
+    // cache ends up over capacity. Returns false, changing nothing, if "key" is
+    // absent or if "pred" is non-null and pred(value, ctx) returns false.
+    //
+    // "pred" is invoked while the shard lock is held: it must be O(1) and must not
+    // allocate, block, or re-enter the cache.
+    virtual bool update_charge_if(const CacheKey& key, size_t new_value_size,
+                                  bool (*pred)(void* value, const void* ctx), const void* ctx) = 0;
+
     // If the cache has no mapping for "key", returns NULL.
     //
     // Else return a handle that corresponds to the mapping.  The caller
@@ -147,6 +186,11 @@ public:
     // REQUIRES: handle must not have been released yet.
     // REQUIRES: handle must have been returned by a method on *this.
     virtual void release(Handle* handle) = 0;
+
+    // Refresh the recency of an existing cache entry without taking or
+    // releasing a handle, so callers can update LRU order without triggering
+    // deleter side effects.
+    virtual void touch(const CacheKey& key) = 0;
 
     // Return the value encapsulated in a handle returned by a
     // successful lookup().
@@ -189,10 +233,6 @@ public:
 
     //  Decrease or increase cache capacity.
     virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
-
-private:
-    Cache(const Cache&) = delete;
-    const Cache& operator=(const Cache&) = delete;
 };
 
 // An entry is a variable length heap-allocated structure.  Entries
@@ -274,8 +314,21 @@ public:
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                           void (*deleter)(const CacheKey& key, void* value),
                           CachePriority priority = CachePriority::NORMAL);
+    // Like insert(), but never evicts: returns nullptr, leaving `value` owned by the caller,
+    // when the entry does not fit in the remaining capacity.
+    Cache::Handle* insert_no_evict(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                   void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
+    Cache::Handle* insert_if_absent(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                    void (*deleter)(const CacheKey& key, void* value), bool* inserted,
+                                    CachePriority priority = CachePriority::NORMAL);
+    bool replace_if(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                    void (*deleter)(const CacheKey& key, void* value), bool (*pred)(void* old_value, const void* ctx),
+                    const void* ctx, CachePriority priority = CachePriority::NORMAL);
+    bool update_charge_if(const CacheKey& key, uint32_t hash, size_t new_value_size,
+                          bool (*pred)(void* value, const void* ctx), const void* ctx);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
     void release(Cache::Handle* handle);
+    void touch(const CacheKey& key, uint32_t hash);
     void erase(const CacheKey& key, uint32_t hash);
     int prune();
 
@@ -294,6 +347,19 @@ private:
     bool _unref(LRUHandle* e);
     void _evict_from_lru(size_t charge, std::vector<LRUHandle*>* deleted);
     void _evict_one_entry(LRUHandle* e);
+
+    // Build a detached handle for `key`. Done outside _mutex so that neither insert
+    // path allocates while holding the shard lock.
+    static LRUHandle* _alloc_handle(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                    void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
+
+    // Shared by insert() and insert_if_absent(). Entries displaced or evicted are
+    // appended to `deleted` and must be freed by the caller after _mutex is released.
+    void _insert_no_lock(LRUHandle* e, std::vector<LRUHandle*>* deleted);
+
+    // NOTE: `e` may itself end up in `deleted` (only if `e` alone exceeds the shard
+    // capacity), so callers must not dereference `e` after this returns.
+    void _update_charge_no_lock(LRUHandle* e, size_t new_value_size, std::vector<LRUHandle*>* deleted);
 
     // Initialized before use.
     size_t _capacity{0};
@@ -326,8 +392,20 @@ public:
     Handle* insert(const CacheKey& key, void* value, size_t value_size,
                    void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
+    // See LRUCache::insert_no_evict(). Capacity is checked against the key's shard.
+    Handle* insert_no_evict(const CacheKey& key, void* value, size_t value_size,
+                            void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
+    Handle* insert_if_absent(const CacheKey& key, void* value, size_t value_size,
+                             void (*deleter)(const CacheKey& key, void* value), bool* inserted,
+                             CachePriority priority = CachePriority::NORMAL) override;
+    bool replace_if(const CacheKey& key, void* value, size_t value_size,
+                    void (*deleter)(const CacheKey& key, void* value), bool (*pred)(void* old_value, const void* ctx),
+                    const void* ctx, CachePriority priority = CachePriority::NORMAL) override;
+    bool update_charge_if(const CacheKey& key, size_t new_value_size, bool (*pred)(void* value, const void* ctx),
+                          const void* ctx) override;
     Handle* lookup(const CacheKey& key) override;
     void release(Handle* handle) override;
+    void touch(const CacheKey& key) override;
     void erase(const CacheKey& key) override;
     void* value(Handle* handle) override;
     Slice value_slice(Handle* handle) override;
@@ -352,7 +430,7 @@ private:
 
     LRUCache _shards[kNumShards];
     mutable std::mutex _mutex;
-    uint64_t _last_id;
+    uint64_t _last_id{0};
     size_t _capacity;
 };
 

@@ -43,6 +43,9 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class DeleteStmt extends DmlStmt {
+    // the Iceberg branch to read and write, or null for the main branch
+    private final String targetBranch;
+
     private TableRef tableRef;
     private final PartitionRef partitionRef;
     private final List<Relation> usingRelations;
@@ -59,6 +62,11 @@ public class DeleteStmt extends DmlStmt {
     // The JobID is generated here for easy correlation when cancel Delete
     private long jobId = -1;
 
+    // Optional MySQL OK-packet info string attached at analyze time, surfaced to the
+    // client after DeleteMgr.process() succeeds. Used to warn about merge-on-read cost
+    // on non-Primary-Key tables and recommend TRUNCATE PARTITION for bulk removal.
+    private String okInfoMessage;
+
     public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, Expr wherePredicate) {
         this(tableRef, partitionNames, null, wherePredicate, null, NodePosition.ZERO);
     }
@@ -70,12 +78,19 @@ public class DeleteStmt extends DmlStmt {
 
     public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, List<Relation> usingRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions, NodePosition pos) {
+        this(tableRef, partitionNames, usingRelations, wherePredicate, commonTableExpressions, null, pos);
+    }
+
+    public DeleteStmt(TableRef tableRef, PartitionRef partitionNames, List<Relation> usingRelations,
+                      Expr wherePredicate, List<CTERelation> commonTableExpressions, String targetBranch,
+                      NodePosition pos) {
         super(pos);
         this.tableRef = tableRef;
         this.partitionRef = partitionNames;
         this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
+        this.targetBranch = targetBranch;
     }
 
     public long getJobId() {
@@ -145,7 +160,19 @@ public class DeleteStmt extends DmlStmt {
         return queryStatement;
     }
 
+    public String getOkInfoMessage() {
+        return okInfoMessage;
+    }
+
+    public void setOkInfoMessage(String okInfoMessage) {
+        this.okInfoMessage = okInfoMessage;
+    }
+
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return ((AstVisitorExtendInterface<R, C>) visitor).visitDeleteStatement(this, context);
+    }
+
+    public String getTargetBranch() {
+        return targetBranch;
     }
 }

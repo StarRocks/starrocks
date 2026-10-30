@@ -52,7 +52,6 @@
 #include "base/phmap/phmap.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/string/slice.h"
-#include "common/config.h"
 #include "common/logging.h"
 #include "types/bitmap_value_detail.h"
 
@@ -270,9 +269,12 @@ public:
     uint64_t offset() { return _offset; }
     void set_offset(uint64_t offset) { _offset = offset; }
 
-private:
-    uint64_t _remain_rows() const { return _cardinality - _offset; }
+    // How many values of the bitmap this iterator has not returned yet. Public so that a caller
+    // slicing one bitmap across several batches can close the row out as soon as it is exhausted,
+    // instead of having to call next_batch() one more time and get zero back.
+    uint64_t remain_rows() const { return _cardinality - _offset; }
 
+private:
     const BitmapValue* _bitmap = nullptr;
     uint64_t _offset = 0;
     uint64_t _cardinality = 0;

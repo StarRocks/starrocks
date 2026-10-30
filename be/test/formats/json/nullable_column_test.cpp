@@ -227,7 +227,7 @@ TEST_F(AddNullableColumnTest, test_add_invalid) {
 }
 
 TEST_F(AddNullableColumnTest, add_null_numeric_array) {
-    auto desc = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_INT));
+    auto desc = TypeDescriptor::create_array_type(TYPE_INT_DESC);
     auto column = ColumnHelper::create_column(desc, true);
 
     simdjson::ondemand::parser parser;
@@ -241,7 +241,7 @@ TEST_F(AddNullableColumnTest, add_null_numeric_array) {
 }
 
 TEST_F(AddNullableColumnTest, add_boolean_array) {
-    auto desc = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_BOOLEAN));
+    auto desc = TypeDescriptor::create_array_type(TYPE_BOOLEAN_DESC);
     auto column = ColumnHelper::create_column(desc, true);
 
     simdjson::ondemand::parser parser;
@@ -255,8 +255,8 @@ TEST_F(AddNullableColumnTest, add_boolean_array) {
 }
 
 TEST_F(AddNullableColumnTest, test_add_struct) {
-    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    TypeDescriptor type_desc =
+            TypeDescriptor::create_struct_type({"key1", "key2"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, true);
 
     simdjson::ondemand::parser parser;
@@ -270,8 +270,8 @@ TEST_F(AddNullableColumnTest, test_add_struct) {
 }
 
 TEST_F(AddNullableColumnTest, test_add_struct_null) {
-    TypeDescriptor type_desc = TypeDescriptor::create_struct_type(
-            {"key1", "key2"}, {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(10)});
+    TypeDescriptor type_desc =
+            TypeDescriptor::create_struct_type({"key1", "key2"}, {TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC});
     auto column = ColumnHelper::create_column(type_desc, true);
 
     simdjson::ondemand::parser parser;
@@ -285,8 +285,7 @@ TEST_F(AddNullableColumnTest, test_add_struct_null) {
 }
 
 TEST_F(AddNullableColumnTest, test_add_map) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
-                                                               TypeDescriptor::create_varchar_type(10));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, true);
 
@@ -300,9 +299,41 @@ TEST_F(AddNullableColumnTest, test_add_map) {
     ASSERT_EQ("[{'key1':'foo','key2':'bar','key3':'baz'}]", column->debug_string());
 }
 
+TEST_F(AddNullableColumnTest, test_add_map_partial_append_rolled_back) {
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
+
+    auto column = ColumnHelper::create_column(type_desc, true);
+
+    simdjson::ondemand::parser parser;
+    {
+        auto json = R"(  { "root": {"a": "1", "b": "2"} }  )"_padded;
+        auto doc = parser.iterate(json);
+        simdjson::ondemand::value val = doc.find_field_unordered("root");
+        ASSERT_OK(add_nullable_column(column.get(), type_desc, "root", &val, true));
+    }
+    {
+        // Missing comma between "1" and "b" -> simdjson throws mid-iteration in
+        // add_map_column after keys/values were each appended once.
+        auto json = R"(  { "root": {"a": "1" "b": "2"} }  )"_padded;
+        auto doc = parser.iterate(json);
+        simdjson::ondemand::value val = doc.find_field_unordered("root");
+        ASSERT_ERROR(add_nullable_column(column.get(), type_desc, "root", &val, true));
+    }
+    {
+        auto json = R"(  { "root": {"x": "1", "y": "2"} }  )"_padded;
+        auto doc = parser.iterate(json);
+        simdjson::ondemand::value val = doc.find_field_unordered("root");
+        ASSERT_OK(add_nullable_column(column.get(), type_desc, "root", &val, true));
+    }
+
+    column->check_or_die();
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ("{'a':'1','b':'2'}", column->debug_item(0));
+    ASSERT_EQ("{'x':'1','y':'2'}", column->debug_item(1));
+}
+
 TEST_F(AddNullableColumnTest, test_add_map_null) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
-                                                               TypeDescriptor::create_varchar_type(10));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, true);
 

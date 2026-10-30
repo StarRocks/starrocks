@@ -1,0 +1,2132 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include <gtest/gtest.h>
+#include <thrift/protocol/TBinaryProtocol.h>
+#include <thrift/transport/TBufferTransports.h>
+
+#include <algorithm>
+#include <cstdlib>
+#include <deque>
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "column/array_column.h"
+#include "column/binary_column.h"
+#include "column/chunk.h"
+#include "column/column_builder.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/file_column.h"
+#include "column/json_column.h"
+#include "column/nullable_column.h"
+#include "common/config_exec_fwd.h"
+#include "compute_env/workgroup/pipeline_executor_set.h"
+#include "compute_env/workgroup/work_group.h"
+#include "exec/ai_project_node.h"
+#include "exec/pipeline/ai/ai_chunk_buffer.h"
+#include "exec/pipeline/ai/ai_project_factory.h"
+#include "exec/pipeline/ai/ai_project_operator.h"
+#include "exec/pipeline/ai/ai_project_runtime.h"
+#include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/project_operator.h"
+#include "exec/pipeline_node.h"
+#include "exec/runtime/fragment_context.h"
+#include "exec/runtime/pipeline.h"
+#include "exec/runtime/pipeline_builder_context.h"
+#include "exec/runtime/query_context.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/source_operator.h"
+#include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_factory.h"
+#include "exprs/literal.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "platform/llm/ai_admission_controller.h"
+#include "platform/llm/ai_http_client.h"
+#include "platform/llm/ai_metrics.h"
+#include "platform/llm/ai_runtime.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
+#include "testutil/type_test_helper.h"
+#include "types/type_descriptor.h"
+
+namespace starrocks {
+
+class AIHttpResponseBodyTestPeer {
+public:
+    static AIHttpResponseBody create(std::string data, AIMemoryContext memory, size_t reserved_bytes) {
+        return AIHttpResponseBody(std::move(data), std::move(memory), reserved_bytes);
+    }
+};
+
+namespace pipeline {
+namespace {
+
+constexpr int64_t kAICompletePromptFid = 200000;
+constexpr TSlotId kPromptSlotId = 1;
+constexpr TSlotId kCommonSlotId = 2;
+constexpr TSlotId kAnswerSlotId = 3;
+constexpr TSlotId kFileSlotId = 6;
+constexpr int64_t kLimit = 5;
+constexpr size_t kUpstreamDop = 6;
+constexpr size_t kBuilderDop = 9;
+constexpr std::string_view kDefaultChatConfigId = "provider:default_chat";
+constexpr std::string_view kEndpointSentinel = "https://127.0.0.1/v1/chat/completions";
+constexpr std::string_view kModelSentinel = "unit-test-model";
+constexpr std::string_view kSecretSentinel = "unit-test-secret-must-not-leak";
+constexpr size_t kMiB = 1024UL * 1024;
+
+AIProjectModelConfigs provider_model_configs(std::string model = std::string(kModelSentinel),
+                                             std::string endpoint = std::string(kEndpointSentinel)) {
+    return {{std::string(kDefaultChatConfigId), AIProjectModelConfig{.endpoint = std::move(endpoint),
+                                                                     .model = std::move(model),
+                                                                     .api_key = std::string(kSecretSentinel)}}};
+}
+
+TypeDescriptor varchar_type() {
+    return TYPE_VARCHAR_DESC;
+}
+
+TExpr make_slot_ref(TTupleId tuple_id, TSlotId slot_id) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::SLOT_REF);
+    node.__set_num_children(0);
+    node.__set_type(varchar_type().to_thrift());
+    node.__set_is_nullable(true);
+
+    TSlotRef slot;
+    slot.__set_tuple_id(tuple_id);
+    slot.__set_slot_id(slot_id);
+    node.__set_slot_ref(slot);
+
+    TExpr expression;
+    expression.nodes.emplace_back(std::move(node));
+    return expression;
+}
+
+TExprNode make_selector(std::string value) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::STRING_LITERAL);
+    node.__set_num_children(0);
+    node.__set_type(varchar_type().to_thrift());
+    node.__set_is_nullable(false);
+    TStringLiteral literal;
+    literal.__set_value(std::move(value));
+    node.__set_string_literal(std::move(literal));
+    return node;
+}
+
+TExpr make_ai_complete(TTupleId tuple_id, TSlotId prompt_slot) {
+    TFunctionName name;
+    name.__set_function_name("ai_complete");
+
+    TFunction function;
+    function.__set_name(name);
+    function.__set_binary_type(TFunctionBinaryType::AI);
+    function.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(),
+                              TypeDescriptor(TYPE_JSON).to_thrift()});
+    function.__set_ret_type(varchar_type().to_thrift());
+    function.__set_has_var_args(false);
+    function.__set_fid(kAICompletePromptFid);
+
+    TExprNode call;
+    call.__set_node_type(TExprNodeType::FUNCTION_CALL);
+    call.__set_num_children(4);
+    call.__set_type(varchar_type().to_thrift());
+    call.__set_is_nullable(true);
+    call.__set_fn(function);
+    call.__set_ai_provider_id(std::string(kDefaultChatConfigId));
+
+    TExpr expression;
+    expression.nodes.emplace_back(std::move(call));
+    expression.nodes.emplace_back(make_slot_ref(tuple_id, prompt_slot).nodes.front());
+    expression.nodes.emplace_back(make_selector(""));
+    expression.nodes.emplace_back(make_selector(""));
+    TExprNode options;
+    options.__set_node_type(TExprNodeType::NULL_LITERAL);
+    options.__set_num_children(0);
+    options.__set_type(TypeDescriptor(TYPE_JSON).to_thrift());
+    options.__set_is_nullable(true);
+    expression.nodes.emplace_back(std::move(options));
+    return expression;
+}
+
+TExpr make_ai_complete_with_explicit_model(TTupleId tuple_id, TSlotId prompt_slot) {
+    auto expression = make_ai_complete(tuple_id, prompt_slot);
+    expression.nodes[3] = make_selector("explicit-model");
+    return expression;
+}
+
+TExpr make_ai_file_call(TTupleId tuple_id, bool embedding) {
+    auto expression = make_ai_complete(tuple_id, kPromptSlotId);
+    const auto file_type = TypeDescriptor(TYPE_FILE).to_thrift();
+    auto file = make_slot_ref(tuple_id, kFileSlotId).nodes.front();
+    file.__set_type(file_type);
+    auto& call = expression.nodes.front();
+    if (embedding) {
+        const auto result_type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
+        call.fn.name.__set_function_name("ai_embed");
+        call.fn.__set_fid(200003);
+        call.fn.__set_arg_types({file_type, varchar_type().to_thrift(), varchar_type().to_thrift(),
+                                 TypeDescriptor(TYPE_JSON).to_thrift()});
+        call.fn.__set_ret_type(result_type);
+        call.__set_type(result_type);
+        call.__set_ai_provider_id("provider:default_embedding");
+        expression.nodes[1] = std::move(file);
+    } else {
+        call.fn.__set_fid(200001);
+        call.fn.__set_arg_types({varchar_type().to_thrift(), file_type, varchar_type().to_thrift(),
+                                 varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
+        call.__set_num_children(5);
+        expression.nodes.insert(expression.nodes.begin() + 2, std::move(file));
+    }
+    return expression;
+}
+
+TPlanNode make_ai_node(TTupleId tuple_id) {
+    TAIProvider model;
+    model.__set_id(std::string(kDefaultChatConfigId));
+    model.__set_type(TAIProviderType::CHAT);
+    model.__set_protocol(TAIProviderProtocol::OPENAI);
+    model.__set_params({{"endpoint", std::string(kEndpointSentinel)}, {"model", std::string(kModelSentinel)}});
+
+    TAIProjectNode project;
+    project.__set_slot_map({
+            {kPromptSlotId, make_slot_ref(tuple_id, kPromptSlotId)},
+            {kAnswerSlotId, make_ai_complete(tuple_id, kCommonSlotId)},
+    });
+    project.__set_common_slot_map({
+            {kCommonSlotId, make_slot_ref(tuple_id, kPromptSlotId)},
+    });
+    project.__set_ai_provider_mapping({
+            {std::string(kDefaultChatConfigId), std::move(model)},
+    });
+
+    TPlanNode node;
+    node.__set_node_id(10);
+    node.__set_node_type(TPlanNodeType::AI_PROJECT_NODE);
+    node.__set_num_children(1);
+    node.__set_limit(kLimit);
+    node.row_tuples.emplace_back(tuple_id);
+    node.__set_ai_project_node(std::move(project));
+    return node;
+}
+
+TPlanNode make_child_node(TTupleId tuple_id) {
+    TPlanNode node;
+    node.__set_node_id(11);
+    node.__set_node_type(TPlanNodeType::EMPTY_SET_NODE);
+    node.__set_num_children(0);
+    node.__set_limit(-1);
+    node.row_tuples.emplace_back(tuple_id);
+    return node;
+}
+
+class NeverYieldWorkGroupSchedulePolicy final : public workgroup::WorkGroupSchedulePolicy {
+public:
+    bool should_yield(const workgroup::WorkGroup*) const override { return false; }
+    size_t num_workgroups() const override { return 1; }
+};
+
+class ScopedWorkGroupExecutors {
+public:
+    ScopedWorkGroupExecutors(workgroup::WorkGroupPtr workgroup, workgroup::PipelineExecutorSet* executors)
+            : _workgroup(std::move(workgroup)) {
+        _workgroup->set_shared_executors(executors);
+    }
+
+    ~ScopedWorkGroupExecutors() { _workgroup->set_shared_executors(nullptr); }
+
+private:
+    workgroup::WorkGroupPtr _workgroup;
+};
+
+class TestSourceOperator final : public SourceOperator {
+public:
+    TestSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence)
+            : SourceOperator(factory, id, "test_source", plan_node_id, false, driver_sequence) {}
+
+    bool has_output() const override { return false; }
+    bool is_finished() const override { return false; }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
+};
+
+class TestSourceOperatorFactory final : public SourceOperatorFactory {
+public:
+    TestSourceOperatorFactory(int32_t id, int32_t plan_node_id)
+            : SourceOperatorFactory(id, "test_source", plan_node_id) {
+        set_degree_of_parallelism(kUpstreamDop);
+        set_could_local_shuffle(false);
+        set_partition_type(TPartitionType::RANDOM);
+        set_skewed(true);
+
+        TBucketProperty bucket;
+        bucket.__set_bucket_func(TBucketFunction::MURMUR3_X86_32);
+        bucket.__set_bucket_num(17);
+        _bucket_properties.emplace_back(std::move(bucket));
+    }
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<TestSourceOperator>(this, id(), plan_node_id(), driver_sequence);
+    }
+};
+
+class TestSourceNode final : public PipelineNode {
+public:
+    TestSourceNode(ObjectPool* pool, const TPlanNode& node, const DescriptorTbl& descriptors)
+            : PipelineNode(pool, node, descriptors) {}
+
+    StatusOr<OpFactories> decompose_to_pipeline(PipelineBuilderContext* context) override {
+        return OpFactories{
+                std::make_shared<TestSourceOperatorFactory>(context->next_operator_id(), id()),
+        };
+    }
+};
+
+class FixedClock final : public AIClock {
+public:
+    int64_t monotonic_now_ns() const noexcept override { return _monotonic_ns; }
+    int64_t unix_now_seconds() const noexcept override { return _unix_seconds; }
+
+    void set_monotonic_now_ns(int64_t value) { _monotonic_ns = value; }
+
+private:
+    int64_t _monotonic_ns = 100'000'000'000;
+    int64_t _unix_seconds = 1'700'000'000;
+};
+
+class DrainableControlScheduler final : public AIControlScheduler {
+public:
+    explicit DrainableControlScheduler(const AIClock* clock) : _clock(clock) {}
+
+    Status post(Task task) override {
+        _ready.emplace_back(std::move(task));
+        return Status::OK();
+    }
+
+    StatusOr<TaskId> schedule_at(int64_t monotonic_time_ns, Task task) override {
+        const TaskId id = ++_next_id;
+        _timers.emplace_back(Timer{id, monotonic_time_ns, std::move(task), false});
+        return id;
+    }
+
+    void cancel(TaskId id) override {
+        for (Timer& timer : _timers) {
+            if (timer.id == id) {
+                timer.cancelled = true;
+            }
+        }
+    }
+
+    void shutdown_and_drain() override {
+        _timers.clear();
+        run_until_idle();
+    }
+
+    void run_until_idle() {
+        for (;;) {
+            std::stable_sort(_timers.begin(), _timers.end(), [](const Timer& lhs, const Timer& rhs) {
+                return std::pair(lhs.deadline_ns, lhs.id) < std::pair(rhs.deadline_ns, rhs.id);
+            });
+            while (!_timers.empty() && _timers.front().deadline_ns <= _clock->monotonic_now_ns()) {
+                Timer timer = std::move(_timers.front());
+                _timers.erase(_timers.begin());
+                if (!timer.cancelled) {
+                    _ready.emplace_back(std::move(timer.task));
+                }
+            }
+            if (_ready.empty()) {
+                return;
+            }
+            Task task = std::move(_ready.front());
+            _ready.pop_front();
+            task();
+        }
+    }
+
+private:
+    struct Timer {
+        TaskId id;
+        int64_t deadline_ns;
+        Task task;
+        bool cancelled;
+    };
+
+    const AIClock* _clock;
+    TaskId _next_id = 0;
+    std::deque<Task> _ready;
+    std::vector<Timer> _timers;
+};
+
+class QueuedCompletionExecutor final : public AICompletionExecutor {
+public:
+    ~QueuedCompletionExecutor() override {
+        while (!_work.empty()) {
+            AICompletionWork work = std::move(_work.front());
+            _work.pop_front();
+            work.cancel();
+        }
+    }
+
+    Status try_submit(AICompletionWork work) override {
+        _work.emplace_back(std::move(work));
+        return Status::OK();
+    }
+
+    void run_until_idle() {
+        while (!_work.empty()) {
+            AICompletionWork work = std::move(_work.front());
+            _work.pop_front();
+            work.run();
+        }
+    }
+
+private:
+    std::deque<AICompletionWork> _work;
+};
+
+class CapturingHttpClient final : public AIHttpClient {
+public:
+    Status submit(AIHttpRequest request, AIHttpCallback callback) override {
+        _pending.emplace_back(Pending{std::move(request), std::move(callback)});
+        return Status::OK();
+    }
+
+    void shutdown() override {
+        while (!_pending.empty()) {
+            complete_next(AIHttpNoResponseCode::SHUTDOWN);
+        }
+    }
+
+    size_t pending_count() const { return _pending.size(); }
+    const AIHttpRequest& request(size_t index = 0) const { return _pending.at(index).request; }
+
+    void complete_next(AIHttpNoResponseCode code) {
+        ASSERT_FALSE(_pending.empty());
+        Pending pending = std::move(_pending.front());
+        _pending.pop_front();
+        pending.callback(AIHttpNoResponse{.code = code});
+    }
+
+    void complete_next(std::string body) {
+        ASSERT_FALSE(_pending.empty());
+        Pending pending = std::move(_pending.front());
+        _pending.pop_front();
+        AIHttpResponse response;
+        response.status_code = 200;
+        response.body = AIHttpResponseBodyTestPeer::create(std::move(body), {}, 0);
+        pending.callback(std::move(response));
+    }
+
+private:
+    struct Pending {
+        AIHttpRequest request;
+        AIHttpCallback callback;
+    };
+
+    std::deque<Pending> _pending;
+};
+
+class ZeroRandom final : public AIRandom {
+protected:
+    uint32_t uniform_unlocked(uint32_t exclusive_upper) override { return 0; }
+};
+
+class TestTaskHandle final : public AIProjectTaskHandle {
+public:
+    void cancel() noexcept override {}
+};
+
+class ManualTaskSubmitter final : public AIProjectTaskSubmitter {
+public:
+    struct Pending {
+        std::string prompt;
+        AITaskCallback callback;
+    };
+
+    StatusOr<std::unique_ptr<AIProjectTaskHandle>> submit(AIProjectTaskRequest request,
+                                                          AITaskCallback&& callback) override {
+        _pending.emplace_back(Pending{.prompt = std::string(request.prompt), .callback = std::move(callback)});
+        std::unique_ptr<AIProjectTaskHandle> handle = std::make_unique<TestTaskHandle>();
+        return handle;
+    }
+
+    size_t pending_count() const { return _pending.size(); }
+
+    void succeed(std::string_view prompt) {
+        auto iterator = std::find_if(_pending.begin(), _pending.end(),
+                                     [&](const Pending& task) { return task.prompt == prompt; });
+        ASSERT_NE(_pending.end(), iterator);
+        Pending task = std::move(*iterator);
+        _pending.erase(iterator);
+
+        auto success = AITaskSuccess::create("result-" + task.prompt, {});
+        ASSERT_TRUE(success.ok()) << success.status();
+        task.callback(std::move(success).value(), {.task_count = 1, .request_count = 1});
+    }
+
+private:
+    std::vector<Pending> _pending;
+};
+
+class RecordingTaskSubmitter final : public AIProjectTaskSubmitter {
+public:
+    explicit RecordingTaskSubmitter(std::shared_ptr<AIProjectTaskSubmitter> delegate)
+            : _delegate(std::move(delegate)) {}
+
+    StatusOr<std::unique_ptr<AIProjectTaskHandle>> submit(AIProjectTaskRequest request,
+                                                          AITaskCallback&& callback) override {
+        return _delegate->submit(
+                std::move(request), [this, callback = std::move(callback)](
+                                            AITaskResult result, const AIExecutionStatistics& statistics) mutable {
+                    if (const auto* cancelled = std::get_if<AILifecycleCancelled>(&result); cancelled != nullptr) {
+                        lifecycle_reasons.emplace_back(cancelled->reason);
+                    } else if (std::holds_alternative<AISanitizedRowFailure>(result)) {
+                        ++sanitized_failures;
+                    }
+                    callback(std::move(result), statistics);
+                });
+    }
+
+    std::vector<AILifecycleReason> lifecycle_reasons;
+    size_t sanitized_failures = 0;
+
+private:
+    std::shared_ptr<AIProjectTaskSubmitter> _delegate;
+};
+
+class RecordingLifecycleProjection final : public AIProjectProjection {
+public:
+    Status prepare(RuntimeState* state, int32_t dop) override {
+        ++prepare_calls;
+        prepared_states.emplace_back(state);
+        prepared_dops.emplace_back(dop);
+        return Status::OK();
+    }
+
+    void close(RuntimeState* state) override {
+        ++close_calls;
+        closed_states.emplace_back(state);
+    }
+
+    StatusOr<AIProjectPreparedSubchunk> prepare_subchunk(RuntimeState*, int32_t, const ChunkPtr&) override {
+        return Status::InternalError("lifecycle-only projection must not evaluate");
+    }
+
+    size_t prepare_calls = 0;
+    size_t close_calls = 0;
+    std::vector<RuntimeState*> prepared_states;
+    std::vector<RuntimeState*> closed_states;
+    std::vector<int32_t> prepared_dops;
+};
+
+ChunkPtr make_prompt_chunk(size_t begin, size_t rows, std::optional<size_t> null_row = std::nullopt) {
+    auto data = BinaryColumn::create();
+    auto nulls = NullColumn::create();
+    for (size_t offset = 0; offset < rows; ++offset) {
+        if (null_row.has_value() && *null_row == offset) {
+            data->append_default();
+            nulls->append(1);
+        } else {
+            data->append("prompt-" + std::to_string(begin + offset));
+            nulls->append(0);
+        }
+    }
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(NullableColumn::create(std::move(data), std::move(nulls)), kPromptSlotId);
+    return chunk;
+}
+
+ChunkPtr make_file_chunk(std::string_view bytes, size_t rows = 1, std::optional<size_t> null_row = std::nullopt) {
+    auto chunk = make_prompt_chunk(0, rows, null_row);
+    auto files = FileColumn::create();
+    auto nulls = NullColumn::create();
+    for (size_t row = 0; row < rows; ++row) {
+        if (null_row.has_value() && *null_row == row) {
+            files->append_default();
+            nulls->append(1);
+        } else {
+            files->append_datum(
+                    FileDatumBuilder::make({}, {}, {}, Slice("image/png"), {}, Slice(bytes.data(), bytes.size())));
+            nulls->append(0);
+        }
+    }
+    chunk->append_column(NullableColumn::create(std::move(files), std::move(nulls)), kFileSlotId);
+    return chunk;
+}
+
+std::optional<std::string> nullable_string(const ChunkPtr& chunk, SlotId slot_id, size_t row) {
+    const auto& nullable = down_cast<const NullableColumn&>(*chunk->get_column_by_slot_id(slot_id));
+    if (nullable.is_null(row)) {
+        return std::nullopt;
+    }
+    const auto& data = down_cast<const BinaryColumn&>(*nullable.data_column());
+    return data.get_slice(row).to_string();
+}
+
+class AIProjectPipelineTest : public ::testing::Test {
+protected:
+    AIProjectPipelineTest() : _control(&_clock) {}
+
+    void SetUp() override {
+        TDescriptorTableBuilder table;
+        TTupleDescriptorBuilder tuple;
+        tuple.add_slot(TSlotDescriptorBuilder()
+                               .id(kPromptSlotId)
+                               .type(varchar_type())
+                               .nullable(true)
+                               .column_name("prompt")
+                               .build());
+        tuple.add_slot(TSlotDescriptorBuilder()
+                               .id(kAnswerSlotId)
+                               .type(varchar_type())
+                               .nullable(true)
+                               .column_name("answer")
+                               .build());
+        tuple.add_slot(TSlotDescriptorBuilder()
+                               .id(kFileSlotId)
+                               .type(TypeDescriptor(TYPE_FILE))
+                               .nullable(true)
+                               .column_name("file")
+                               .build());
+        tuple.build(&table);
+
+        auto config = AIRuntimeConfigSource::create();
+        ASSERT_TRUE(config.ok()) << config.status();
+        _config_source = std::move(config).value();
+        _admission = std::make_unique<AIAdmissionController>(&_clock, &_control, _config_source.get(), 32);
+
+        _ai_services.config_source = _config_source.get();
+        _ai_services.admission_controller = _admission.get();
+        _ai_services.http_client = &_http;
+        _ai_services.completion_executor = &_completion;
+        _ai_services.clock = &_clock;
+        _ai_services.random = &_random;
+        _ai_services.metrics = AIMetrics::instance();
+        _query_services.ai = &_ai_services;
+
+        _runtime_state = std::make_shared<RuntimeState>(TQueryGlobals{});
+        _runtime_state->set_query_execution_services(&_query_services);
+        ASSERT_OK(DescriptorTbl::create(_runtime_state.get(), &_descriptor_pool, table.desc_tbl(), &_descriptors,
+                                        config::vector_chunk_size));
+        _runtime_state->set_desc_tbl(_descriptors);
+
+        std::vector<TupleDescriptor*> tuple_descriptors;
+        _descriptors->get_tuple_descs(&tuple_descriptors);
+        ASSERT_EQ(1, tuple_descriptors.size());
+        _tuple_id = tuple_descriptors.front()->id();
+
+        _process_tracker = std::make_shared<MemTracker>(MemTrackerType::PROCESS, -1, "process");
+        _query_pool_tracker =
+                std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, -1, "query_pool", _process_tracker.get());
+        _workgroup = std::make_shared<workgroup::WorkGroup>("wg", 7, 3, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL,
+                                                            "ai_test_pool");
+        _workgroup->_shared_mem_tracker = _query_pool_tracker;
+        _workgroup->_mem_tracker =
+                std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP, -1, "wg", _query_pool_tracker.get());
+        _query_tracker =
+                std::make_shared<MemTracker>(MemTrackerType::QUERY, -1, "query", _workgroup->_mem_tracker.get());
+        _runtime_state->set_query_mem_tracker(_query_tracker);
+
+        _query_context = QueryContext::create();
+        _query_context->attach_to_runtime_state(_runtime_state.get());
+        _fragment_context.set_workgroup(_workgroup);
+        _fragment_context.attach_to_runtime_state(_runtime_state.get());
+        _fragment_context.set_runtime_state(std::shared_ptr<RuntimeState>(_runtime_state));
+    }
+
+    void TearDown() override {
+        _admission->shutdown();
+        _control.run_until_idle();
+        _http.shutdown();
+        _completion.run_until_idle();
+        _control.run_until_idle();
+    }
+
+    StatusOr<ExprContext*> create_expr_context(TExpr expression) {
+        ExprContext* context = nullptr;
+        RETURN_IF_ERROR(ExprFactory::create_expr_tree(_runtime_state->obj_pool(), expression, &context,
+                                                      _runtime_state.get(), true));
+        if (context == nullptr) {
+            return Status::InternalError("test expression factory returned a null context");
+        }
+        return context;
+    }
+
+    StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_expression_projection(
+            bool explicit_model = false, std::string default_model = std::string(kModelSentinel)) {
+        ASSIGN_OR_RETURN(ExprContext * identity, create_expr_context(make_slot_ref(_tuple_id, kPromptSlotId)));
+        ASSIGN_OR_RETURN(ExprContext * common, create_expr_context(make_slot_ref(_tuple_id, kPromptSlotId)));
+        ASSIGN_OR_RETURN(
+                ExprContext * ai,
+                create_expr_context(explicit_model ? make_ai_complete_with_explicit_model(_tuple_id, kCommonSlotId)
+                                                   : make_ai_complete(_tuple_id, kCommonSlotId)));
+
+        AIProjectProjectionSpec spec(_runtime_state.get(),
+                                     {
+                                             AIProjectOutputSpec{
+                                                     .slot_id = kPromptSlotId,
+                                                     .expr_ctx = identity,
+                                                     .nullable = true,
+                                                     .kind = AIProjectOutputKind::PASSTHROUGH,
+                                             },
+                                             AIProjectOutputSpec{
+                                                     .slot_id = kAnswerSlotId,
+                                                     .expr_ctx = ai,
+                                                     // Deliberately false: AI result nullability is
+                                                     // intrinsic and must not trust this metadata.
+                                                     .nullable = false,
+                                                     .kind = AIProjectOutputKind::AI,
+                                             },
+                                     },
+                                     {AIProjectCommonSpec{.slot_id = kCommonSlotId, .expr_ctx = common}},
+                                     provider_model_configs(std::move(default_model)));
+        return AIProjectExpressionProjection::create(std::move(spec));
+    }
+
+    StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_embedding_projection(
+            const AIProjectModelConfigs& configs, const std::vector<std::string>& options) {
+        auto* pool = _runtime_state->obj_pool();
+        std::vector<AIProjectOutputSpec> outputs;
+        for (size_t index = 0; index < options.size(); ++index) {
+            auto call = make_ai_complete(_tuple_id, kPromptSlotId).nodes.front();
+            const auto result_type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
+            call.__set_num_children(4);
+            call.__set_type(result_type);
+            call.__set_ai_provider_id("provider:embedding");
+            call.fn.name.__set_function_name("ai_embed");
+            call.fn.__set_fid(200002);
+            call.fn.__set_arg_types({varchar_type().to_thrift(), varchar_type().to_thrift(), varchar_type().to_thrift(),
+                                     TypeDescriptor(TYPE_JSON).to_thrift()});
+            call.fn.__set_ret_type(result_type);
+            ASSIGN_OR_RETURN(auto* expression, AIFunctionCallExpr::create(pool, call));
+            expression->add_child(pool->add(new ColumnRef(make_slot_ref(_tuple_id, kPromptSlotId).nodes.front())));
+            for (int selector = 0; selector < 2; ++selector) {
+                expression->add_child(pool->add(
+                        new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1), varchar_type())));
+            }
+            auto json = JsonColumn::create();
+            ASSIGN_OR_RETURN(auto value, JsonValue::parse(options[index]));
+            json->append(value);
+            expression->add_child(pool->add(
+                    new VectorizedLiteral(ConstColumn::create(std::move(json), 1), TypeDescriptor(TYPE_JSON))));
+            outputs.emplace_back(AIProjectOutputSpec{.slot_id = static_cast<SlotId>(kAnswerSlotId + index),
+                                                     .expr_ctx = pool->add(new ExprContext(expression)),
+                                                     .nullable = true,
+                                                     .kind = AIProjectOutputKind::AI});
+        }
+        AIProjectProjectionSpec spec(_runtime_state.get(), std::move(outputs), {}, configs);
+        return AIProjectExpressionProjection::create(std::move(spec));
+    }
+
+    StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_classify_projection(std::string categories) {
+        const auto array_type = TypeDescriptor::create_array_type(varchar_type()).to_thrift();
+        const auto result_type = TypeDescriptor(TYPE_JSON).to_thrift();
+        auto expression = make_ai_complete(_tuple_id, kPromptSlotId);
+        auto& call = expression.nodes.front();
+        call.__set_num_children(4);
+        call.__set_type(result_type);
+        call.fn.name.__set_function_name("ai_classify");
+        call.fn.__set_fid(200005);
+        call.fn.__set_arg_types(
+                {varchar_type().to_thrift(), array_type, varchar_type().to_thrift(), varchar_type().to_thrift()});
+        call.fn.__set_ret_type(result_type);
+
+        TExprNode cast;
+        cast.__set_node_type(TExprNodeType::CAST_EXPR);
+        cast.__set_num_children(1);
+        cast.__set_type(array_type);
+        cast.__set_child_type(TPrimitiveType::VARCHAR);
+        cast.__set_is_nullable(true);
+        expression.nodes.resize(2);
+        expression.nodes.emplace_back(std::move(cast));
+
+        TExprNode literal;
+        literal.__set_node_type(TExprNodeType::STRING_LITERAL);
+        literal.__set_num_children(0);
+        literal.__set_type(varchar_type().to_thrift());
+        literal.__set_is_nullable(false);
+        TStringLiteral value;
+        value.__set_value(std::move(categories));
+        literal.__set_string_literal(std::move(value));
+        expression.nodes.emplace_back(std::move(literal));
+        expression.nodes.emplace_back(make_selector(""));
+        expression.nodes.emplace_back(make_selector(""));
+
+        ASSIGN_OR_RETURN(ExprContext * ai, create_expr_context(std::move(expression)));
+        AIProjectProjectionSpec spec(
+                _runtime_state.get(),
+                {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
+                provider_model_configs());
+        return AIProjectExpressionProjection::create(std::move(spec));
+    }
+
+    StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_file_projection(size_t max_input_file_bytes) {
+        ASSIGN_OR_RETURN(ExprContext * ai, create_expr_context(make_ai_file_call(_tuple_id, false)));
+        AIProjectProjectionSpec spec(
+                _runtime_state.get(),
+                {{.slot_id = kAnswerSlotId, .expr_ctx = ai, .nullable = true, .kind = AIProjectOutputKind::AI}}, {},
+                provider_model_configs());
+        return AIProjectExpressionProjection::create(std::move(spec), max_input_file_bytes);
+    }
+
+    void set_query_deadline_ns(int64_t deadline_ns) {
+        ASSERT_GT(deadline_ns, 0);
+        ASSERT_EQ(0, deadline_ns % 1'000'000);
+        _query_context->query_runtime_state()._query_deadline_ms.store(deadline_ns / 1'000'000 - 1);
+        ASSERT_EQ(deadline_ns, _query_context->query_runtime_state().query_deadline_ns());
+    }
+
+    ObjectPool _descriptor_pool;
+    DescriptorTbl* _descriptors = nullptr;
+    TTupleId _tuple_id = 0;
+
+    FixedClock _clock;
+    DrainableControlScheduler _control;
+    QueuedCompletionExecutor _completion;
+    CapturingHttpClient _http;
+    ZeroRandom _random;
+    std::unique_ptr<AIRuntimeConfigSource> _config_source;
+    std::unique_ptr<AIAdmissionController> _admission;
+    AIServices _ai_services;
+    QueryExecutionServices _query_services;
+
+    std::shared_ptr<MemTracker> _process_tracker;
+    std::shared_ptr<MemTracker> _query_pool_tracker;
+    workgroup::WorkGroupPtr _workgroup;
+    std::shared_ptr<MemTracker> _query_tracker;
+    std::shared_ptr<RuntimeState> _runtime_state;
+    QueryContextPtr _query_context;
+    FragmentContext _fragment_context;
+};
+
+class AIProjectNodeProviderRoutesTest : public ::testing::Test {
+protected:
+    static constexpr TSlotId kDefaultEmbeddingSlotId = 4;
+    static constexpr TSlotId kProviderChatSlotId = 5;
+    static constexpr TSlotId kProviderEmbeddingSlotId = 6;
+
+    void SetUp() override {
+        TDescriptorTableBuilder table;
+        TTupleDescriptorBuilder tuple;
+        for (const auto slot_id :
+             {kPromptSlotId, kAnswerSlotId, kDefaultEmbeddingSlotId, kProviderChatSlotId, kProviderEmbeddingSlotId}) {
+            const bool embedding = slot_id == kDefaultEmbeddingSlotId || slot_id == kProviderEmbeddingSlotId;
+            tuple.add_slot(TSlotDescriptorBuilder()
+                                   .id(slot_id)
+                                   .type(embedding ? TYPE_ARRAY_FLOAT_DESC : varchar_type())
+                                   .nullable(true)
+                                   .build());
+        }
+        tuple.build(&table);
+        ASSERT_OK(DescriptorTbl::create(&_state, &_descriptor_pool, table.desc_tbl(), &_descriptors,
+                                        config::vector_chunk_size));
+        _state.set_desc_tbl(_descriptors);
+        std::vector<TupleDescriptor*> tuples;
+        _descriptors->get_tuple_descs(&tuples);
+        ASSERT_EQ(1, tuples.size());
+        _tuple_id = tuples.front()->id();
+    }
+
+    TExpr make_model_call(bool embedding, std::string provider_name = {}) const {
+        const bool provider = !provider_name.empty();
+        auto expression = provider ? make_ai_complete_with_explicit_model(_tuple_id, kCommonSlotId)
+                                   : make_ai_complete(_tuple_id, kCommonSlotId);
+        auto& call = expression.nodes.front();
+        if (provider) {
+            call.fn.__set_fid(embedding ? 200002 : 200000);
+            call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
+            call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
+            expression.nodes[2].string_literal.__set_value(std::move(provider_name));
+        } else if (embedding) {
+            call.fn.__set_fid(200002);
+            call.fn.name.__set_function_name("ai_embed");
+            call.__set_ai_provider_id("provider:default_embedding");
+        }
+        if (embedding) {
+            const auto type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
+            call.__set_type(type);
+            call.fn.__set_ret_type(type);
+        }
+        return expression;
+    }
+
+    TPlanNode make_mixed_route_node() const {
+        auto node = make_ai_node(_tuple_id);
+        auto& project = node.ai_project_node;
+        project.slot_map.emplace(kDefaultEmbeddingSlotId, make_model_call(true));
+        project.slot_map.emplace(kProviderChatSlotId, make_model_call(false, "chat"));
+        project.slot_map.emplace(kProviderEmbeddingSlotId, make_model_call(true, "embed"));
+
+        auto provider = project.ai_provider_mapping.at(std::string(kDefaultChatConfigId));
+        provider.__set_type(TAIProviderType::EMBEDDING);
+        provider.__set_id("provider:default_embedding");
+        project.ai_provider_mapping.emplace(provider.id, provider);
+        provider.__set_type(TAIProviderType::CHAT);
+        provider.__set_id("provider:chat");
+        provider.params["api_key"] = "chat-provider-secret";
+        project.ai_provider_mapping.emplace(provider.id, provider);
+        provider.__set_type(TAIProviderType::EMBEDDING);
+        provider.__set_id("provider:embedding");
+        provider.params["api_key"] = "embed-provider-secret";
+        project.ai_provider_mapping.emplace(provider.id, provider);
+        return node;
+    }
+
+    Status initialize_after_wire_round_trip(const TPlanNode& node) {
+        auto buffer = std::make_shared<apache::thrift::transport::TMemoryBuffer>();
+        apache::thrift::protocol::TBinaryProtocol protocol(buffer);
+        node.write(&protocol);
+        TPlanNode decoded;
+        decoded.read(&protocol);
+
+        ObjectPool node_pool;
+        const auto child_thrift = make_child_node(_tuple_id);
+        auto* child = node_pool.add(new TestSourceNode(&node_pool, child_thrift, *_descriptors));
+        AIProjectNode project(&node_pool, decoded, *_descriptors);
+        project.add_child(child);
+        const auto status = project.init(decoded, &_state);
+        project.close(&_state);
+        return status;
+    }
+
+    RuntimeState _state{TQueryGlobals{}};
+    ObjectPool _descriptor_pool;
+    DescriptorTbl* _descriptors = nullptr;
+    TTupleId _tuple_id = 0;
+};
+
+TEST_F(AIProjectNodeProviderRoutesTest, AcceptsDefaultAndExplicitProviderRoutesWithMatchingOutputDescriptors) {
+    ASSERT_OK(initialize_after_wire_round_trip(make_mixed_route_node()));
+}
+
+TEST_F(AIProjectNodeProviderRoutesTest, RejectsUnsupportedProtocolsAlongsideProviderRoutes) {
+    auto node = make_mixed_route_node();
+    auto& configs = node.ai_project_node.ai_provider_mapping;
+    configs.at("provider:default_chat").__set_protocol(TAIProviderProtocol::ANTHROPIC);
+    configs.at("provider:default_embedding").__set_protocol(TAIProviderProtocol::COHERE);
+    EXPECT_TRUE(initialize_after_wire_round_trip(node).is_invalid_argument());
+}
+
+TEST_F(AIProjectNodeProviderRoutesTest, AcceptsImplicitProviderAICompleteWireContract) {
+    ASSERT_OK(initialize_after_wire_round_trip(make_ai_node(_tuple_id)));
+}
+
+TEST_F(AIProjectNodeProviderRoutesTest, CorrelationKeysAreOpaque) {
+    auto node = make_mixed_route_node();
+    auto& project = node.ai_project_node;
+    auto config = project.ai_provider_mapping.extract("provider:chat");
+    config.key() = "opaque-correlation-key";
+    config.mapped().__set_id("opaque-correlation-key");
+    project.ai_provider_mapping.insert(std::move(config));
+    project.slot_map.at(kProviderChatSlotId).nodes.front().__set_ai_provider_id("opaque-correlation-key");
+    ASSERT_OK(initialize_after_wire_round_trip(node));
+}
+
+TEST_F(AIProjectNodeProviderRoutesTest, RejectsInvalidModelRouteWireContracts) {
+    struct Case {
+        const char* name;
+        std::function<void(TAIProjectNode&)> mutate;
+    };
+    const std::vector<Case> cases = {
+            {"unknown provider",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:chat")
+                         .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
+             }},
+            {"unknown default provider protocol",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:default_chat")
+                         .__set_protocol(static_cast<TAIProviderProtocol::type>(99));
+             }},
+            {"default chat protocol capability mismatch",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:default_chat").__set_protocol(TAIProviderProtocol::COHERE);
+             }},
+            {"default embedding protocol capability mismatch",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:default_embedding")
+                         .__set_protocol(TAIProviderProtocol::ANTHROPIC);
+             }},
+            {"named provider chat protocol remains openai compatible",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:chat").__set_protocol(TAIProviderProtocol::ANTHROPIC);
+             }},
+            {"named provider embedding protocol remains openai compatible",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:embedding").__set_protocol(TAIProviderProtocol::COHERE);
+             }},
+            {"blank provider model",
+             [](auto& project) { project.ai_provider_mapping.at("provider:chat").params["model"] = " \t"; }},
+            {"api key with newline",
+             [](auto& project) { project.ai_provider_mapping.at("provider:chat").params["api_key"] = "key\n"; }},
+            {"api key with NUL",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:chat").params["api_key"] = std::string("key\0tail", 8);
+             }},
+            {"missing referenced route",
+             [](auto& project) { project.ai_provider_mapping.erase("provider:embedding"); }},
+            {"capability mismatch",
+             [](auto& project) {
+                 auto& config = project.ai_provider_mapping.at("provider:embedding");
+                 config.__set_type(TAIProviderType::CHAT);
+             }},
+            {"missing capability",
+             [](auto& project) {
+                 auto& config = project.ai_provider_mapping.at("provider:embedding");
+                 config.__isset.type = false;
+             }},
+            {"unused route",
+             [](auto& project) {
+                 auto unused = project.ai_provider_mapping.at("provider:chat");
+                 unused.__set_id("provider:unused");
+                 project.ai_provider_mapping.emplace(unused.id, std::move(unused));
+             }},
+            {"output descriptor type mismatch",
+             [](auto& project) {
+                 std::swap(project.slot_map.at(kAnswerSlotId), project.slot_map.at(kDefaultEmbeddingSlotId));
+             }},
+            {"nonpositive provider timeout",
+             [](auto& project) { project.ai_provider_mapping.at("provider:chat").params["timeout_ms"] = "0"; }},
+            {"nonpositive embedding dimensions",
+             [](auto& project) { project.ai_provider_mapping.at("provider:embedding").params["dimensions"] = "0"; }},
+            {"invalid default timeout",
+             [](auto& project) { project.ai_provider_mapping.at("provider:default_chat").params["timeout_ms"] = "0"; }},
+            {"invalid default api key",
+             [](auto& project) {
+                 project.ai_provider_mapping.at("provider:default_embedding").params["api_key"] = "key\n";
+             }},
+    };
+    for (const auto& test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        auto node = make_mixed_route_node();
+        test_case.mutate(node.ai_project_node);
+        const auto status = initialize_after_wire_round_trip(node);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_EQ(std::string::npos, status.to_string().find(kEndpointSentinel));
+        EXPECT_EQ(std::string::npos, status.to_string().find(kModelSentinel));
+    }
+}
+
+TEST_F(AIProjectPipelineTest, SplitsPipelinesAndPreservesDopSkewBucketAndLimitOrder) {
+    ObjectPool node_pool;
+    TPlanNode child_thrift = make_child_node(_tuple_id);
+    auto* child = node_pool.add(new TestSourceNode(&node_pool, child_thrift, *_descriptors));
+
+    TPlanNode ai_thrift = make_ai_node(_tuple_id);
+    AIProjectNode node(&node_pool, ai_thrift, *_descriptors);
+    node.add_child(child);
+    ASSERT_OK(node.init(ai_thrift, _runtime_state.get()));
+
+    PipelineBuilderContext context(&_fragment_context, kBuilderDop, 1);
+    auto downstream_or = node.decompose_to_pipeline(&context);
+    ASSERT_TRUE(downstream_or.ok()) << downstream_or.status();
+    OpFactories downstream = std::move(downstream_or).value();
+
+    const Pipeline* upstream_pipeline = context.last_pipeline();
+    ASSERT_NE(nullptr, upstream_pipeline);
+    ASSERT_EQ(2, upstream_pipeline->_op_factories.size());
+    auto* upstream_source = dynamic_cast<TestSourceOperatorFactory*>(upstream_pipeline->_op_factories.front().get());
+    auto* ai_sink = dynamic_cast<AISinkOperatorFactory*>(upstream_pipeline->_op_factories.back().get());
+    ASSERT_NE(nullptr, upstream_source);
+    ASSERT_NE(nullptr, ai_sink);
+
+    ASSERT_EQ(2, downstream.size());
+    auto* ai_source = dynamic_cast<AISourceOperatorFactory*>(downstream.front().get());
+    auto* limit = dynamic_cast<LimitOperatorFactory*>(downstream.back().get());
+    ASSERT_NE(nullptr, ai_source);
+    ASSERT_NE(nullptr, limit);
+    EXPECT_EQ(kLimit, limit->limit());
+
+    EXPECT_EQ(kUpstreamDop, upstream_pipeline->degree_of_parallelism());
+    EXPECT_EQ(kUpstreamDop, ai_source->degree_of_parallelism());
+    EXPECT_NE(kBuilderDop, ai_source->degree_of_parallelism());
+    EXPECT_FALSE(ai_source->could_local_shuffle());
+    EXPECT_EQ(TPartitionType::RANDOM, ai_source->partition_type());
+    EXPECT_TRUE(ai_source->is_skewed());
+    EXPECT_EQ(upstream_source->get_bucket_properties(), ai_source->get_bucket_properties());
+    EXPECT_FALSE(ai_source->with_morsels());
+
+    EXPECT_EQ(ai_sink->_processor, ai_source->_processor);
+    EXPECT_EQ(ai_sink->_processor->input_buffer(), ai_source->_processor->input_buffer());
+
+    for (const OperatorFactoryPtr& factory : upstream_pipeline->_op_factories) {
+        EXPECT_EQ(nullptr, dynamic_cast<ProjectOperatorFactory*>(factory.get()));
+    }
+    for (const OperatorFactoryPtr& factory : downstream) {
+        EXPECT_EQ(nullptr, dynamic_cast<ProjectOperatorFactory*>(factory.get()));
+    }
+}
+
+TEST_F(AIProjectPipelineTest, FactoryFailureClosesPairedProjectionContextsWithoutPublishingFactories) {
+    auto identity_or = create_expr_context(make_slot_ref(_tuple_id, kPromptSlotId));
+    ASSERT_TRUE(identity_or.ok()) << identity_or.status();
+    ExprContext* identity = std::move(identity_or).value();
+    auto common_or = create_expr_context(make_slot_ref(_tuple_id, kPromptSlotId));
+    ASSERT_TRUE(common_or.ok()) << common_or.status();
+    ExprContext* common = std::move(common_or).value();
+    auto ai_or = create_expr_context(make_ai_complete(_tuple_id, kCommonSlotId));
+    ASSERT_TRUE(ai_or.ok()) << ai_or.status();
+    ExprContext* ai = std::move(ai_or).value();
+    ASSERT_OK(identity->prepare(_runtime_state.get()));
+    ASSERT_OK(common->prepare(_runtime_state.get()));
+    ASSERT_OK(ai->prepare(_runtime_state.get()));
+    auto configs = provider_model_configs();
+    configs.begin()->second.api_key = "invalid\ncredential";
+    AIProjectProjectionSpec spec(_runtime_state.get(),
+                                 {
+                                         AIProjectOutputSpec{.slot_id = kPromptSlotId,
+                                                             .expr_ctx = identity,
+                                                             .nullable = true,
+                                                             .kind = AIProjectOutputKind::PASSTHROUGH},
+                                         AIProjectOutputSpec{.slot_id = kAnswerSlotId,
+                                                             .expr_ctx = ai,
+                                                             .nullable = true,
+                                                             .kind = AIProjectOutputKind::AI},
+                                 },
+                                 {AIProjectCommonSpec{.slot_id = kCommonSlotId, .expr_ctx = common}},
+                                 std::move(configs));
+
+    PipelineBuilderContext context(&_fragment_context, kBuilderDop, 1);
+    auto factories = AIProjectFactory::create(&context, 10, kUpstreamDop, std::move(spec));
+
+    ASSERT_FALSE(factories.ok());
+    EXPECT_TRUE(factories.status().is_invalid_argument()) << factories.status();
+    EXPECT_TRUE(identity->closed());
+    EXPECT_TRUE(common->closed());
+    EXPECT_TRUE(ai->closed());
+    EXPECT_TRUE(context._pipelines.empty());
+}
+
+TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {
+    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
+                                                                 .endpoint = "https://127.0.0.1/v1/embeddings",
+                                                                 .model = "embedding-model",
+                                                                 .api_key = "provider-only-secret",
+                                                                 .capability = AICapability::EMBEDDING,
+                                                                 .timeout_ms = 75,
+                                                                 .dimensions = 3,
+                                                         }}};
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    const auto& route = submitter.value()->_routes.at("provider:embedding");
+    EXPECT_EQ("provider-only-secret", route.api_key);
+    EXPECT_EQ(75, route.attempt_timeout_ms);
+    EXPECT_EQ(AICapability::EMBEDDING, route.capability);
+
+    auto opaque_configs = configs;
+    auto opaque_config = opaque_configs.extract("provider:embedding");
+    opaque_config.key() = "opaque-correlation-key";
+    opaque_configs.insert(std::move(opaque_config));
+    EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), opaque_configs, _config_source->snapshot())
+                        .ok());
+    for (const std::string key : {"", " ", "key\n"}) {
+        AIProjectModelConfigs invalid_configs{{key, configs.at("provider:embedding")}};
+        auto invalid =
+                AIProjectDispatcherSubmitter::create(_runtime_state.get(), invalid_configs, _config_source->snapshot());
+        ASSERT_FALSE(invalid.ok());
+        EXPECT_EQ(std::string::npos, invalid.status().to_string().find("provider-only-secret"));
+    }
+    for (const std::string model : {"", " ", "model\n"}) {
+        configs.at("provider:embedding").model = model;
+        EXPECT_FALSE(
+                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
+    }
+    configs.at("provider:embedding").model = "embedding-model";
+    configs.at("provider:embedding").capability = static_cast<AICapability>(99);
+    EXPECT_FALSE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
+    configs.at("provider:embedding").capability = AICapability::EMBEDDING;
+    for (auto protocol : {AIProviderProtocol::DASHSCOPE_MULTIMODAL, static_cast<AIProviderProtocol>(99)}) {
+        configs.at("provider:embedding").protocol = protocol;
+        EXPECT_FALSE(
+                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
+    }
+    configs.at("provider:embedding").protocol = AIProviderProtocol::OPENAI;
+
+    configs.at("provider:embedding").api_key.clear();
+    configs.at("provider:embedding").endpoint = "http://127.0.0.1/v1/embeddings";
+    auto keyless = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
+    ASSERT_TRUE(keyless.ok()) << keyless.status();
+    EXPECT_TRUE(keyless.value()->_routes.at("provider:embedding").api_key.empty());
+    EXPECT_EQ("http://127.0.0.1/v1/embeddings", keyless.value()->_routes.at("provider:embedding").endpoint);
+
+    configs.at("provider:embedding").api_key = "provider-only-secret";
+    EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
+    configs.at("provider:embedding").endpoint = "https://127.0.0.1/v1/embeddings";
+    for (const std::string key : {"bad\nkey", "bad\rkey"}) {
+        configs.at("provider:embedding").api_key = key;
+        EXPECT_FALSE(
+                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
+    }
+    configs.at("provider:embedding").api_key.clear();
+    auto duplicate = configs;
+    duplicate.emplace("second-route", configs.at("provider:embedding"));
+    EXPECT_TRUE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), duplicate, _config_source->snapshot()).ok());
+    for (const int64_t timeout : {-1, 0}) {
+        configs.at("provider:embedding").timeout_ms = timeout;
+        EXPECT_FALSE(
+                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
+    }
+    configs.at("provider:embedding").timeout_ms = 75;
+    configs.at("provider:embedding").dimensions = 0;
+    EXPECT_FALSE(AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot()).ok());
+    EXPECT_EQ(0, _http.pending_count());
+}
+
+TEST_F(AIProjectPipelineTest, HttpAndHttpsCarryOptionalCredentialsAndExplicitModel) {
+    set_query_deadline_ns(120'000'000'000);
+    for (const std::string scheme : {"http", "https"}) {
+        for (const bool with_key : {false, true}) {
+            SCOPED_TRACE(scheme + (with_key ? " authenticated" : " keyless"));
+            auto configs = provider_model_configs();
+            auto& config = configs.begin()->second;
+            config.endpoint = scheme + "://127.0.0.1/v1/chat/completions";
+            config.api_key = with_key ? "request-test-key" : "";
+            auto submitter =
+                    AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
+            ASSERT_TRUE(submitter.ok()) << submitter.status();
+            auto handle = submitter.value()->submit(
+                    AIProjectTaskRequest{
+                            .task_id = 1, .model = "row-model", .prompt = "hello", .provider_id = kDefaultChatConfigId},
+                    [](AITaskResult, const AIExecutionStatistics&) {});
+            ASSERT_TRUE(handle.ok()) << handle.status();
+            _control.run_until_idle();
+            ASSERT_EQ(1, _http.pending_count());
+            const auto& request = _http.request();
+            EXPECT_EQ(config.endpoint, request.url);
+            EXPECT_NE(std::string::npos, request.body.find("\"model\":\"row-model\""));
+            auto authorization = std::find_if(request.headers.begin(), request.headers.end(),
+                                              [](const auto& header) { return header.name == "Authorization"; });
+            EXPECT_EQ(with_key, authorization != request.headers.end());
+            if (with_key && authorization != request.headers.end()) {
+                EXPECT_EQ("Bearer request-test-key", authorization->value);
+            }
+            _http.complete_next(R"({"choices":[{"message":{"content":"answer"}}]})");
+            _completion.run_until_idle();
+            _control.run_until_idle();
+        }
+    }
+}
+
+TEST_F(AIProjectPipelineTest, ProviderDimensionsArePreparedOncePerExpressionBatch) {
+    set_query_deadline_ns(120'000'000'000);
+    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
+                                                                 .endpoint = "http://127.0.0.1/v1/embeddings",
+                                                                 .model = "embedding-model",
+                                                                 .capability = AICapability::EMBEDDING,
+                                                                 .timeout_ms = 75,
+                                                                 .dimensions = 3,
+                                                         }}};
+    const std::vector<std::string> options = {"{}", R"({"user":"user-a"})", R"({"dimensions":2})",
+                                              R"({"dimensions":null})"};
+    for (bool has_default : {true, false}) {
+        if (!has_default) configs.at("provider:embedding").dimensions.reset();
+        auto projection = create_embedding_projection(configs, options);
+        ASSERT_TRUE(projection.ok()) << projection.status();
+        ASSERT_OK(projection.value()->prepare(_runtime_state.get(), 1));
+        auto submitter =
+                AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, _config_source->snapshot());
+        ASSERT_TRUE(submitter.ok()) << submitter.status();
+        std::vector<std::shared_ptr<const AIProviderOptions>> previous_options;
+        for (size_t batch_index = 0; batch_index < 2; ++batch_index) {
+            auto prepared = projection.value()->prepare_subchunk(_runtime_state.get(), 0,
+                                                                 make_prompt_chunk(batch_index * 2, 2));
+            ASSERT_TRUE(prepared.ok()) << prepared.status();
+            ASSERT_EQ(options.size(), prepared->ai_outputs.size());
+            for (size_t index = 0; index < options.size(); ++index) {
+                const auto& output = prepared->ai_outputs[index];
+                const auto& batch = output.input;
+                ASSERT_EQ(2, batch.rows.size());
+                ASSERT_NE(nullptr, batch.options);
+                const auto& members = batch.options->members();
+                const auto dimension = std::find_if(members.begin(), members.end(),
+                                                    [](const auto& member) { return member.key == "dimensions"; });
+                const bool expect_dimension = has_default || index >= 2;
+                const char* expected_value = index == 3 ? "null" : index == 2 ? "2" : "3";
+                if (expect_dimension) {
+                    ASSERT_NE(members.end(), dimension);
+                    EXPECT_EQ(expected_value, dimension->serialized_json);
+                } else {
+                    EXPECT_EQ(members.end(), dimension);
+                }
+                // Keep the first batch alive to verify the next batch has independent state.
+                if (batch_index == 0) {
+                    previous_options.emplace_back(batch.options);
+                } else {
+                    EXPECT_NE(previous_options[index].get(), batch.options.get());
+                }
+                const auto* shared_options = batch.options.get();
+                for (size_t row_index = 0; row_index < batch.rows.size(); ++row_index) {
+                    const auto& row = batch.rows[row_index];
+                    ASSERT_EQ(AIFunctionRowAction::DISPATCH, row.action);
+                    auto handle = submitter.value()->submit(
+                            AIProjectTaskRequest{.task_id = 1 + batch_index * 8 + index * 2 + row_index,
+                                                 .model = row.model,
+                                                 .prompt = row.prompt,
+                                                 .options = shared_options,
+                                                 .provider_id = output.provider_id,
+                                                 .capability = output.capability},
+                            [](AITaskResult, const AIExecutionStatistics&) {});
+                    ASSERT_TRUE(handle.ok()) << handle.status();
+                    _control.run_until_idle();
+                    ASSERT_EQ(1, _http.pending_count());
+                    const auto& request = _http.request();
+                    EXPECT_EQ(75, request.attempt_timeout_ms);
+                    if (expect_dimension) {
+                        EXPECT_NE(std::string::npos,
+                                  request.body.find(std::string("\"dimensions\":") + expected_value));
+                    } else {
+                        EXPECT_EQ(std::string::npos, request.body.find("\"dimensions\":"));
+                    }
+                    if (index == 1) {
+                        EXPECT_NE(std::string::npos, request.body.find(R"("user":"user-a")"));
+                    }
+                    EXPECT_TRUE(std::none_of(request.headers.begin(), request.headers.end(),
+                                             [](const auto& header) { return header.name == "Authorization"; }));
+                    _http.complete_next(AIHttpNoResponseCode::SHUTDOWN);
+                    _completion.run_until_idle();
+                    _control.run_until_idle();
+                }
+            }
+        }
+        projection.value()->close(_runtime_state.get());
+    }
+}
+
+TEST_F(AIProjectPipelineTest, ProviderDefaultsAreNotMergedForEmptyOrNullBatches) {
+    AIProjectModelConfigs configs{{"provider:embedding", AIProjectModelConfig{
+                                                                 .endpoint = "http://127.0.0.1/v1/embeddings",
+                                                                 .model = "embedding-model",
+                                                                 .capability = AICapability::EMBEDDING,
+                                                                 .dimensions = 3,
+                                                         }}};
+    auto projection = create_embedding_projection(configs, {"{}"});
+    ASSERT_TRUE(projection.ok()) << projection.status();
+    ASSERT_OK(projection.value()->prepare(_runtime_state.get(), 1));
+    auto empty = projection.value()->prepare_subchunk(_runtime_state.get(), 0, make_prompt_chunk(0, 0));
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    ASSERT_EQ(1, empty->ai_outputs.size());
+    EXPECT_TRUE(empty->ai_outputs.front().input.rows.empty());
+    EXPECT_EQ(nullptr, empty->ai_outputs.front().input.options);
+
+    auto nulls = projection.value()->prepare_subchunk(_runtime_state.get(), 0, make_prompt_chunk(0, 1, 0));
+    ASSERT_TRUE(nulls.ok()) << nulls.status();
+    ASSERT_EQ(1, nulls->ai_outputs.size());
+    const auto& batch = nulls->ai_outputs.front().input;
+    ASSERT_EQ(1, batch.rows.size());
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch.rows.front().action);
+    ASSERT_NE(nullptr, batch.options);
+    EXPECT_TRUE(batch.options->members().empty());
+    EXPECT_EQ(0, _http.pending_count());
+    projection.value()->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, CredentialBindingRejectsLinkLocalResolvedEndpoint) {
+    const std::string link_local_endpoint = "https://169.254.169.254/v1/chat/completions";
+
+    auto submitter = AIProjectDispatcherSubmitter::create(
+            _runtime_state.get(), provider_model_configs(std::string(kModelSentinel), link_local_endpoint),
+            _config_source->snapshot());
+
+    ASSERT_FALSE(submitter.ok());
+    EXPECT_TRUE(submitter.status().is_invalid_argument()) << submitter.status();
+    EXPECT_EQ(std::string::npos, submitter.status().to_string().find(link_local_endpoint));
+    EXPECT_EQ(std::string::npos, submitter.status().to_string().find(kSecretSentinel));
+}
+
+TEST_F(AIProjectPipelineTest, ProductionProjectionEvaluatesCommonBeforeAiAndPreservesIdentityNullabilityAndOwner) {
+    auto projection_or = create_expression_projection();
+    ASSERT_TRUE(projection_or.ok()) << projection_or.status();
+    auto projection = std::move(projection_or).value();
+    ASSERT_OK(projection->prepare(_runtime_state.get(), 1));
+
+    ChunkPtr input = make_prompt_chunk(0, 3, 1);
+    input->owner_info().set_owner_id(71, true);
+    input->owner_info().set_passthrough(true);
+
+    auto prepared_or = projection->prepare_subchunk(_runtime_state.get(), 0, input);
+    ASSERT_TRUE(prepared_or.ok()) << prepared_or.status();
+    AIProjectPreparedSubchunk prepared = std::move(prepared_or).value();
+
+    ASSERT_TRUE(input->is_slot_exist(kCommonSlotId));
+    EXPECT_EQ(nullable_string(input, kPromptSlotId, 0), nullable_string(input, kCommonSlotId, 0));
+    EXPECT_EQ(nullable_string(input, kPromptSlotId, 1), nullable_string(input, kCommonSlotId, 1));
+    EXPECT_EQ(nullable_string(input, kPromptSlotId, 2), nullable_string(input, kCommonSlotId, 2));
+
+    ASSERT_NE(nullptr, prepared.output_chunk);
+    ASSERT_EQ(3, prepared.output_chunk->num_rows());
+    ASSERT_TRUE(prepared.output_chunk->is_slot_exist(kPromptSlotId));
+    ASSERT_TRUE(prepared.output_chunk->is_slot_exist(kAnswerSlotId));
+    EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kPromptSlotId)->is_nullable());
+    EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kAnswerSlotId)->is_nullable());
+    for (size_t row = 0; row < 3; ++row) {
+        EXPECT_EQ(nullable_string(input, kPromptSlotId, row),
+                  nullable_string(prepared.output_chunk, kPromptSlotId, row));
+        EXPECT_TRUE(nullable_string(prepared.output_chunk, kAnswerSlotId, row) == std::nullopt);
+    }
+
+    ASSERT_EQ(1, prepared.ai_outputs.size());
+    EXPECT_EQ(kAnswerSlotId, prepared.ai_outputs.front().slot_id);
+    EXPECT_TRUE(prepared.ai_outputs.front().replace_existing);
+    ASSERT_EQ(3, prepared.ai_outputs.front().input.rows.size());
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, prepared.ai_outputs.front().input.rows[0].action);
+    EXPECT_EQ("prompt-0", prepared.ai_outputs.front().input.rows[0].prompt);
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, prepared.ai_outputs.front().input.rows[1].action);
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, prepared.ai_outputs.front().input.rows[2].action);
+    EXPECT_EQ("prompt-2", prepared.ai_outputs.front().input.rows[2].prompt);
+
+    EXPECT_EQ(71, prepared.output_chunk->owner_info().owner_id());
+    EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
+    EXPECT_TRUE(prepared.output_chunk->owner_info().is_passthrough());
+
+    projection->close(_runtime_state.get());
+    projection->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, ExplicitModelProjectionRejectsBlankProviderDefaultModel) {
+    auto projection = create_expression_projection(true, "");
+    ASSERT_FALSE(projection.ok()) << projection.status();
+}
+
+TEST_F(AIProjectPipelineTest, ZeroRowLastChunkSkipsExpressionEvaluationAndProducesNullableOutputSchema) {
+    auto projection_or = create_expression_projection();
+    ASSERT_TRUE(projection_or.ok()) << projection_or.status();
+    auto projection = std::move(projection_or).value();
+    ASSERT_OK(projection->prepare(_runtime_state.get(), 1));
+
+    auto input = std::make_shared<Chunk>();
+    input->owner_info().set_owner_id(79, true);
+    input->owner_info().set_passthrough(true);
+    auto prepared_or = projection->prepare_subchunk(_runtime_state.get(), 0, input);
+    ASSERT_TRUE(prepared_or.ok()) << prepared_or.status();
+    AIProjectPreparedSubchunk prepared = std::move(prepared_or).value();
+
+    ASSERT_NE(nullptr, prepared.output_chunk);
+    EXPECT_EQ(0, prepared.output_chunk->num_rows());
+    EXPECT_TRUE(prepared.output_chunk->is_slot_exist(kPromptSlotId));
+    EXPECT_TRUE(prepared.output_chunk->is_slot_exist(kAnswerSlotId));
+    EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kPromptSlotId)->is_nullable());
+    EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kAnswerSlotId)->is_nullable());
+    ASSERT_EQ(1, prepared.ai_outputs.size());
+    EXPECT_TRUE(prepared.ai_outputs.front().replace_existing);
+    EXPECT_TRUE(prepared.ai_outputs.front().input.rows.empty());
+    EXPECT_EQ(79, prepared.output_chunk->owner_info().owner_id());
+    EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
+    EXPECT_TRUE(prepared.output_chunk->owner_info().is_passthrough());
+
+    projection->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, InvalidConstantArrayFailsPreparationBeforeAnyInput) {
+    for (const char* categories : {"[]", "['  ']", "not-an-array"}) {
+        SCOPED_TRACE(categories);
+        auto projection_or = create_classify_projection(categories);
+        ASSERT_TRUE(projection_or.ok()) << projection_or.status();
+        auto projection = std::move(projection_or).value();
+        const Status status = projection->prepare(_runtime_state.get(), 4);
+        EXPECT_TRUE(status.is_invalid_argument()) << status;
+        EXPECT_EQ(status.to_string(), projection->prepare(_runtime_state.get(), 4).to_string());
+        EXPECT_EQ(0, _http.pending_count());
+        projection->close(_runtime_state.get());
+        projection->close(_runtime_state.get());
+    }
+}
+
+TEST_F(AIProjectPipelineTest, ValidConstantArrayPreservesZeroRowOutputAcrossDrivers) {
+    auto projection_or = create_classify_projection("[support, sales]");
+    ASSERT_TRUE(projection_or.ok()) << projection_or.status();
+    auto projection = std::move(projection_or).value();
+    ASSERT_OK(projection->prepare(_runtime_state.get(), 4));
+
+    for (int32_t driver = 0; driver < 4; ++driver) {
+        auto input = std::make_shared<Chunk>();
+        input->owner_info().set_owner_id(79, true);
+        input->owner_info().set_passthrough(true);
+        auto prepared_or = projection->prepare_subchunk(_runtime_state.get(), driver, input);
+        ASSERT_TRUE(prepared_or.ok()) << prepared_or.status();
+        const auto& prepared = prepared_or.value();
+        ASSERT_NE(nullptr, prepared.output_chunk);
+        EXPECT_EQ(0, prepared.output_chunk->num_rows());
+        ASSERT_TRUE(prepared.output_chunk->is_slot_exist(kAnswerSlotId));
+        EXPECT_TRUE(prepared.output_chunk->get_column_by_slot_id(kAnswerSlotId)->is_nullable());
+        ASSERT_EQ(1, prepared.ai_outputs.size());
+        EXPECT_EQ(TYPE_JSON, prepared.ai_outputs.front().result_type.type);
+        EXPECT_TRUE(prepared.ai_outputs.front().input.rows.empty());
+        EXPECT_EQ(79, prepared.output_chunk->owner_info().owner_id());
+        EXPECT_TRUE(prepared.output_chunk->owner_info().is_last_chunk());
+        EXPECT_TRUE(prepared.output_chunk->owner_info().is_passthrough());
+    }
+    EXPECT_EQ(0, _http.pending_count());
+    projection->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, ProductionProjectionAndProcessorKeepStableRowsAcross64And1Slices) {
+    auto projection_or = create_expression_projection();
+    ASSERT_TRUE(projection_or.ok()) << projection_or.status();
+    auto projection = std::move(projection_or).value();
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto buffer_or = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(buffer_or.ok()) << buffer_or.status();
+    auto buffer = std::move(buffer_or).value();
+
+    AIRuntimeConfig config;
+    config.sub_chunk_size = 64;
+    config.on_error = "ignore";
+    auto processor_or = AIProjectProcessor::create(buffer, projection, submitter, config);
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+
+    ChunkPtr input = make_prompt_chunk(0, 65);
+    input->owner_info().set_owner_id(83, true);
+    input->owner_info().set_passthrough(true);
+    auto admitted = buffer->try_put(0, input);
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(buffer->set_sink_eos(0));
+
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    ASSERT_EQ(64, submitter->pending_count());
+    for (size_t row = 64; row > 0; --row) {
+        submitter->succeed("prompt-" + std::to_string(row - 1));
+    }
+    ASSERT_TRUE(processor->has_output(0));
+
+    auto first_or = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_TRUE(first_or.ok()) << first_or.status();
+    ChunkPtr first = std::move(first_or).value();
+    ASSERT_NE(nullptr, first);
+    ASSERT_EQ(64, first->num_rows());
+    EXPECT_EQ(83, first->owner_info().owner_id());
+    EXPECT_FALSE(first->owner_info().is_last_chunk());
+    EXPECT_TRUE(first->owner_info().is_passthrough());
+    for (size_t row = 0; row < 64; ++row) {
+        EXPECT_EQ("prompt-" + std::to_string(row), nullable_string(first, kPromptSlotId, row));
+        EXPECT_EQ("result-prompt-" + std::to_string(row), nullable_string(first, kAnswerSlotId, row));
+    }
+
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    ASSERT_EQ(1, submitter->pending_count());
+    submitter->succeed("prompt-64");
+
+    auto second_or = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_TRUE(second_or.ok()) << second_or.status();
+    ChunkPtr second = std::move(second_or).value();
+    ASSERT_NE(nullptr, second);
+    ASSERT_EQ(1, second->num_rows());
+    EXPECT_EQ("prompt-64", nullable_string(second, kPromptSlotId, 0));
+    EXPECT_EQ("result-prompt-64", nullable_string(second, kAnswerSlotId, 0));
+    EXPECT_EQ(83, second->owner_info().owner_id());
+    EXPECT_TRUE(second->owner_info().is_last_chunk());
+    EXPECT_TRUE(second->owner_info().is_passthrough());
+
+    processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, TypedResponseFailuresPreserveTaskUsageAndReachProfileAndQueryStatistics) {
+    set_query_deadline_ns(120'000'000'000);
+    int64_t completed_tasks = 0;
+    for (const std::string on_error : {"ignore", "fail"}) {
+        SCOPED_TRACE(on_error);
+        auto projection = create_classify_projection("['positive', 'negative']");
+        ASSERT_TRUE(projection.ok()) << projection.status();
+        auto config = _config_source->snapshot();
+        config.on_error = on_error;
+        auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+        ASSERT_TRUE(submitter.ok()) << submitter.status();
+        auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
+        ASSERT_TRUE(buffer.ok()) << buffer.status();
+        auto processor = AIProjectProcessor::create(buffer.value(), projection.value(), submitter.value(), config);
+        ASSERT_TRUE(processor.ok()) << processor.status();
+        AISourceOperatorFactory source_factory(1, 10, processor.value());
+        ASSERT_OK(source_factory.prepare(_runtime_state.get()));
+        auto source = source_factory.create(1, 0);
+        ASSERT_OK(source->prepare(_runtime_state.get()));
+        DeferOp cleanup([&] {
+            EXPECT_OK(source->set_finished(_runtime_state.get()));
+            source->close(_runtime_state.get());
+            source_factory.close(_runtime_state.get());
+        });
+        auto admitted = buffer.value()->try_put(0, make_prompt_chunk(0, 1));
+        ASSERT_TRUE(admitted.ok()) << admitted.status();
+        ASSERT_TRUE(admitted.value());
+        ASSERT_OK(buffer.value()->set_sink_eos(0));
+        ASSERT_OK(processor.value()->try_process(_runtime_state.get(), 0));
+        _control.run_until_idle();
+        ASSERT_EQ(1, _http.pending_count());
+        _http.complete_next(R"({"choices":[{"message":{"content":"not json"}}],)"
+                            R"("usage":{"prompt_tokens":7,"completion_tokens":3,"total_tokens":10}})");
+        _completion.run_until_idle();
+        _control.run_until_idle();
+        auto& query_state = _query_context->query_runtime_state();
+        EXPECT_EQ(0, processor.value()->statistics(0).error_count);
+        const auto task_delta = query_state.consume_delta_ai_statistics();
+        EXPECT_EQ(1, task_delta.task_count);
+        EXPECT_EQ(1, task_delta.request_count);
+        EXPECT_EQ(0, task_delta.error_count);
+        EXPECT_EQ(10, task_delta.total_tokens);
+
+        auto output = source->pull_chunk(_runtime_state.get());
+        if (on_error == "ignore") {
+            ASSERT_TRUE(output.ok()) << output.status();
+            ASSERT_NE(nullptr, output.value());
+            EXPECT_TRUE(output.value()->get_column_by_slot_id(kAnswerSlotId)->is_null(0));
+        } else {
+            ASSERT_FALSE(output.ok());
+        }
+        ++completed_tasks;
+        auto error_delta = query_state.consume_delta_ai_statistics();
+        EXPECT_EQ(1, error_delta.error_count);
+        error_delta.error_count = 0;
+        EXPECT_TRUE(error_delta.empty());
+        const auto total = query_state.ai_statistics();
+        EXPECT_EQ(completed_tasks, total.task_count);
+        EXPECT_EQ(completed_tasks, total.request_count);
+        EXPECT_EQ(completed_tasks, total.error_count);
+        EXPECT_EQ(7 * completed_tasks, total.prompt_tokens);
+        EXPECT_EQ(3 * completed_tasks, total.completion_tokens);
+        EXPECT_EQ(10 * completed_tasks, total.total_tokens);
+        EXPECT_EQ(completed_tasks, total.total_usage_count);
+        source->update_metrics(_runtime_state.get());
+        EXPECT_EQ(1, source->unique_metrics()->get_counter("AIErrorCount")->value());
+        EXPECT_EQ(1, source->unique_metrics()->get_counter("AITaskCount")->value());
+        EXPECT_EQ(1, source->unique_metrics()->get_counter("AIRequestCount")->value());
+        EXPECT_EQ(10, source->unique_metrics()->get_counter("AITotalTokens")->value());
+        auto repeated = source->pull_chunk(_runtime_state.get());
+        EXPECT_EQ(on_error == "ignore", repeated.ok());
+        EXPECT_TRUE(query_state.consume_delta_ai_statistics().empty());
+    }
+}
+
+TEST_F(AIProjectPipelineTest, MixedDefaultAndExplicitProviderRoutesKeepCredentialsAndTypedResultsSeparate) {
+    set_query_deadline_ns(120'000'000'000);
+    const std::string chat_endpoint = "https://127.0.0.1/provider/chat";
+    const std::string embed_endpoint = "https://127.0.0.1/provider/embeddings";
+
+    auto configs = provider_model_configs();
+    configs.emplace("provider:chat", AIProjectModelConfig{.endpoint = chat_endpoint,
+                                                          .model = "provider-chat-model",
+                                                          .api_key = "chat-provider-secret"});
+    configs.emplace("provider:embedding", AIProjectModelConfig{.endpoint = embed_endpoint,
+                                                               .model = "provider-embed-model",
+                                                               .api_key = "embed-provider-secret",
+                                                               .capability = AICapability::EMBEDDING});
+    auto make_provider_call = [&](bool embedding) {
+        auto expression = make_ai_complete_with_explicit_model(_tuple_id, kPromptSlotId);
+        auto& call = expression.nodes.front();
+        call.fn.__set_fid(embedding ? 200002 : 200000);
+        call.fn.name.__set_function_name(embedding ? "ai_embed" : "ai_complete");
+        call.__set_ai_provider_id(embedding ? "provider:embedding" : "provider:chat");
+        expression.nodes[2].string_literal.__set_value(embedding ? "embed" : "chat");
+        expression.nodes[3].string_literal.__set_value(embedding ? "explicit-embed-model" : "explicit-chat-model");
+        if (embedding) {
+            const auto type = TYPE_ARRAY_FLOAT_DESC.to_thrift();
+            call.__set_type(type);
+            call.fn.__set_ret_type(type);
+        }
+        return expression;
+    };
+    auto default_expr = create_expr_context(make_ai_complete(_tuple_id, kPromptSlotId));
+    auto chat_expr = create_expr_context(make_provider_call(false));
+    auto embed_expr = create_expr_context(make_provider_call(true));
+    ASSERT_TRUE(default_expr.ok()) << default_expr.status();
+    ASSERT_TRUE(chat_expr.ok()) << chat_expr.status();
+    ASSERT_TRUE(embed_expr.ok()) << embed_expr.status();
+    AIProjectProjectionSpec spec(
+            _runtime_state.get(),
+            {{.slot_id = 3, .expr_ctx = default_expr.value(), .nullable = true, .kind = AIProjectOutputKind::AI},
+             {.slot_id = 4, .expr_ctx = chat_expr.value(), .nullable = true, .kind = AIProjectOutputKind::AI},
+             {.slot_id = 5, .expr_ctx = embed_expr.value(), .nullable = true, .kind = AIProjectOutputKind::AI}},
+            {}, configs);
+    auto projection = AIProjectExpressionProjection::create(std::move(spec));
+    ASSERT_TRUE(projection.ok()) << projection.status();
+    auto config = _config_source->snapshot();
+    config.on_error = "fail";
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config);
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(buffer.ok()) << buffer.status();
+    auto processor_or = AIProjectProcessor::create(buffer.value(), projection.value(), submitter.value(), config);
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+    auto admitted = buffer.value()->try_put(0, make_prompt_chunk(0, 2, 1));
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(buffer.value()->set_sink_eos(0));
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    _control.run_until_idle();
+    ASSERT_EQ(3, _http.pending_count());
+
+    // Assert every request before completing any: the three routes must coexist safely.
+    for (size_t index = 0; index < 3; ++index) {
+        const auto& request = _http.request(index);
+        const bool embedding = request.url == embed_endpoint;
+        const bool explicit_chat = request.url == chat_endpoint;
+        EXPECT_TRUE(embedding || explicit_chat || request.url == kEndpointSentinel);
+        const std::string key = embedding ? "embed-provider-secret"
+                                          : explicit_chat ? "chat-provider-secret" : std::string(kSecretSentinel);
+        EXPECT_NE(request.headers.end(),
+                  std::find_if(request.headers.begin(), request.headers.end(), [&](const AIHttpHeader& header) {
+                      return header.name == "Authorization" && header.value == "Bearer " + key;
+                  }));
+        EXPECT_NE(std::string::npos,
+                  request.body.find(embedding ? "explicit-embed-model"
+                                              : explicit_chat ? "explicit-chat-model" : kModelSentinel));
+        EXPECT_NE(std::string::npos, request.body.find(embedding ? "\"input\"" : "\"messages\""));
+    }
+    while (_http.pending_count() != 0) {
+        const auto& url = _http.request().url;
+        _http.complete_next(url == embed_endpoint
+                                    ? R"({"data":[{"index":0,"embedding":[0.25,-0.5]}]})"
+                                    : url == chat_endpoint
+                                              ? R"({"choices":[{"message":{"content":"provider answer"}}]})"
+                                              : R"({"choices":[{"message":{"content":"system answer"}}]})");
+        _completion.run_until_idle();
+        _control.run_until_idle();
+    }
+    ASSERT_TRUE(processor->has_output(0));
+    auto output = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_NE(nullptr, output.value());
+    ASSERT_EQ(2, output.value()->num_rows());
+    EXPECT_EQ("system answer", nullable_string(output.value(), 3, 0));
+    EXPECT_EQ("provider answer", nullable_string(output.value(), 4, 0));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 3, 1));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 4, 1));
+    const auto& embedding = down_cast<const NullableColumn&>(*output.value()->get_column_by_slot_id(5));
+    EXPECT_FALSE(embedding.is_null(0));
+    EXPECT_TRUE(embedding.is_null(1));
+    const auto& array = down_cast<const ArrayColumn&>(*embedding.data_column());
+    EXPECT_EQ(2, array.offsets().get_data()[1]);
+    ASSERT_EQ(2, array.elements_column()->size());
+    EXPECT_FLOAT_EQ(0.25f, array.elements_column()->get(0).get_float());
+    EXPECT_FLOAT_EQ(-0.5f, array.elements_column()->get(1).get_float());
+    processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, OpenAITextAndImageRoutesPreserveRequestsAndNulls) {
+    set_query_deadline_ns(120'000'000'000);
+    auto configs = provider_model_configs();
+    auto text = create_expr_context(make_ai_complete(_tuple_id, kPromptSlotId));
+    auto image = create_expr_context(make_ai_file_call(_tuple_id, false));
+    ASSERT_TRUE(text.ok()) << text.status();
+    ASSERT_TRUE(image.ok()) << image.status();
+    AIProjectProjectionSpec spec(
+            _runtime_state.get(),
+            {{.slot_id = 3, .expr_ctx = text.value(), .nullable = true, .kind = AIProjectOutputKind::AI},
+             {.slot_id = 4, .expr_ctx = image.value(), .nullable = true, .kind = AIProjectOutputKind::AI}},
+            {}, configs);
+    auto config = _config_source->snapshot();
+    config.on_error = "fail";
+    auto projection = AIProjectExpressionProjection::create(std::move(spec), config.max_input_file_bytes);
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config);
+    auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(projection.ok()) << projection.status();
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    ASSERT_TRUE(buffer.ok()) << buffer.status();
+    auto processor_or = AIProjectProcessor::create(buffer.value(), projection.value(), submitter.value(), config);
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    ASSERT_OK(processor->prepare(_runtime_state.get(), 1));
+    const std::string png("\x89PNG\r\n\x1a\n", 8);
+    auto input = make_file_chunk(png, 2, 1);
+    auto admitted = buffer.value()->try_put(0, input);
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(buffer.value()->set_sink_eos(0));
+    ASSERT_OK(processor->try_process(_runtime_state.get(), 0));
+    input.reset();
+    _control.run_until_idle();
+    ASSERT_EQ(2, _http.pending_count());
+    size_t image_requests = 0;
+    size_t text_requests = 0;
+    while (_http.pending_count() != 0) {
+        const auto& request = _http.request();
+        if (request.body.find("\"image_url\"") != std::string::npos) {
+            ++image_requests;
+            EXPECT_EQ(kEndpointSentinel, request.url);
+            EXPECT_NE(std::string::npos, request.body.find("data:image/png;base64,iVBORw0KGgo="));
+            EXPECT_NE(std::string::npos, request.body.find("prompt-0"));
+            _http.complete_next(R"({"choices":[{"message":{"content":"image answer"}}]})");
+        } else {
+            ++text_requests;
+            EXPECT_EQ(kEndpointSentinel, request.url);
+            EXPECT_NE(std::string::npos, request.body.find("\"content\":\"prompt-0\""));
+            _http.complete_next(R"({"choices":[{"message":{"content":"text answer"}}]})");
+        }
+        _completion.run_until_idle();
+        _control.run_until_idle();
+    }
+    EXPECT_EQ(1, image_requests);
+    EXPECT_EQ(1, text_requests);
+    auto output = processor->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_NE(nullptr, output.value());
+    ASSERT_EQ(2, output.value()->num_rows());
+    EXPECT_EQ("text answer", nullable_string(output.value(), 3, 0));
+    EXPECT_EQ("image answer", nullable_string(output.value(), 4, 0));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 3, 1));
+    EXPECT_EQ(std::nullopt, nullable_string(output.value(), 4, 1));
+    EXPECT_EQ(2, processor->statistics(0).task_count);
+    EXPECT_EQ(2, processor->statistics(0).request_count);
+    processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, FileProjectionKeepsCapturedInputLimitAcrossRuntimeUpdate) {
+    const std::string png("\x89PNG\r\n\x1a\n", 8);
+    auto config = _config_source->snapshot();
+    config.max_input_file_bytes = png.size();
+    ASSERT_OK(_config_source->update(config));
+    auto original = create_file_projection(_config_source->snapshot().max_input_file_bytes);
+    ASSERT_TRUE(original.ok()) << original.status();
+    config.max_input_file_bytes = png.size() - 1;
+    ASSERT_OK(_config_source->update(config));
+    auto updated = create_file_projection(_config_source->snapshot().max_input_file_bytes);
+    ASSERT_TRUE(updated.ok()) << updated.status();
+    ASSERT_OK(original.value()->prepare(_runtime_state.get(), 1));
+    ASSERT_OK(updated.value()->prepare(_runtime_state.get(), 1));
+    auto input = make_file_chunk(png);
+    auto accepted = original.value()->prepare_subchunk(_runtime_state.get(), 0, input);
+    auto rejected = updated.value()->prepare_subchunk(_runtime_state.get(), 0, input);
+    ASSERT_TRUE(accepted.ok()) << accepted.status();
+    ASSERT_TRUE(rejected.ok()) << rejected.status();
+    ASSERT_EQ(1, accepted->ai_outputs.size());
+    ASSERT_EQ(1, rejected->ai_outputs.size());
+    const auto& accepted_row = accepted->ai_outputs.front().input.rows.front();
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, accepted_row.action);
+    ASSERT_TRUE(accepted_row.media.has_value());
+    input.reset();
+    EXPECT_EQ(png, accepted_row.media->bytes);
+    const auto& rejected_row = rejected->ai_outputs.front().input.rows.front();
+    EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, rejected_row.action);
+    EXPECT_FALSE(rejected_row.media.has_value());
+    original.value()->close(_runtime_state.get());
+    updated.value()->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, OperatorCreateIsAllocationOnlyAndPrepareConfiguresFinalDopOnce) {
+    auto projection = std::make_shared<RecordingLifecycleProjection>();
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto buffer_or = AIChunkBuffer::create(8, 32 * kMiB);
+    ASSERT_TRUE(buffer_or.ok()) << buffer_or.status();
+
+    AIRuntimeConfig config;
+    config.on_error = "ignore";
+    auto processor_or =
+            AIProjectProcessor::create(std::move(buffer_or).value(), projection, submitter, std::move(config));
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    AISinkOperatorFactory sink_factory(0, 10, processor);
+    AISourceOperatorFactory source_factory(1, 10, processor);
+
+    ASSERT_OK(source_factory.prepare(_runtime_state.get()));
+    EXPECT_EQ(0, projection->prepare_calls);
+    EXPECT_EQ(0, processor->_configured_dop);
+
+    constexpr int32_t kFinalDop = 4;
+    OperatorPtr sink0 = sink_factory.create(kFinalDop, 0);
+    OperatorPtr source0 = source_factory.create(kFinalDop, 0);
+    OperatorPtr source1 = source_factory.create(kFinalDop, 1);
+    ASSERT_EQ(0, processor->_configured_dop);
+    EXPECT_EQ(0, projection->prepare_calls);
+
+    ASSERT_OK(sink0->prepare(_runtime_state.get()));
+    ASSERT_EQ(kFinalDop, processor->_configured_dop);
+    EXPECT_EQ(0, projection->prepare_calls);
+    ASSERT_OK(source0->prepare(_runtime_state.get()));
+    ASSERT_EQ(kFinalDop, processor->_configured_dop);
+    ASSERT_OK(source1->prepare(_runtime_state.get()));
+    ASSERT_EQ(1, projection->prepare_calls);
+    ASSERT_EQ((std::vector<int32_t>{kFinalDop}), projection->prepared_dops);
+    ASSERT_EQ((std::vector<RuntimeState*>{_runtime_state.get()}), projection->prepared_states);
+
+    sink0->close(_runtime_state.get());
+    source0->close(_runtime_state.get());
+    source1->close(_runtime_state.get());
+    source_factory.close(_runtime_state.get());
+    EXPECT_EQ(1, projection->close_calls);
+    source_factory.close(_runtime_state.get());
+    EXPECT_EQ(1, projection->close_calls);
+}
+
+TEST_F(AIProjectPipelineTest, SinkPreparePropagatesFinalDopMismatch) {
+    auto projection = std::make_shared<RecordingLifecycleProjection>();
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto buffer_or = AIChunkBuffer::create(8, 32 * kMiB);
+    ASSERT_TRUE(buffer_or.ok()) << buffer_or.status();
+
+    AIRuntimeConfig config;
+    config.on_error = "ignore";
+    auto processor_or =
+            AIProjectProcessor::create(std::move(buffer_or).value(), projection, submitter, std::move(config));
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+    AISinkOperatorFactory sink_factory(0, 10, processor);
+
+    OperatorPtr first = sink_factory.create(4, 0);
+    OperatorPtr mismatched = sink_factory.create(3, 1);
+    ASSERT_OK(first->prepare(_runtime_state.get()));
+    const Status status = mismatched->prepare(_runtime_state.get());
+    EXPECT_TRUE(status.is_internal_error()) << status;
+    EXPECT_EQ(0, projection->prepare_calls);
+
+    first->close(_runtime_state.get());
+    mismatched->close(_runtime_state.get());
+    processor->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, ProcessorCloseReleasesUnpreparedProjectionExactlyOnce) {
+    auto projection = std::make_shared<RecordingLifecycleProjection>();
+    auto submitter = std::make_shared<ManualTaskSubmitter>();
+    auto buffer_or = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(buffer_or.ok()) << buffer_or.status();
+
+    AIRuntimeConfig config;
+    config.on_error = "ignore";
+    auto processor_or =
+            AIProjectProcessor::create(std::move(buffer_or).value(), projection, submitter, std::move(config));
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+
+    processor->close(_runtime_state.get());
+    processor->close(_runtime_state.get());
+    EXPECT_EQ(0, projection->prepare_calls);
+    EXPECT_EQ(1, projection->close_calls);
+    ASSERT_EQ((std::vector<RuntimeState*>{_runtime_state.get()}), projection->closed_states);
+}
+
+TEST_F(AIProjectPipelineTest, DispatcherSnapshotsConfigAndSeparatesLiveQueryFromImmutableRequestDeadline) {
+    const AIRuntimeConfig baseline = _config_source->snapshot();
+    struct Case {
+        const char* name;
+        int64_t query_deadline_ns;
+        int64_t request_timeout_ms;
+        int64_t expected_request_deadline_ns;
+        int64_t expected_effective_deadline_ns;
+    };
+    const std::vector<Case> cases{
+            {"request timeout first", 120'000'000'000, 5'000, 105'000'000'000, 105'000'000'000},
+            {"query timeout first", 103'000'000'000, 5'000, 105'000'000'000, 103'000'000'000},
+            {"zero request timeout uses query", 120'000'000'000, 0, 0, 120'000'000'000},
+    };
+
+    for (const Case& test_case : cases) {
+        SCOPED_TRACE(test_case.name);
+        set_query_deadline_ns(test_case.query_deadline_ns);
+        AIRuntimeConfig snapshot = baseline;
+        snapshot.request_timeout_ms = test_case.request_timeout_ms;
+        snapshot.connect_timeout_ms = 0;
+        snapshot.max_response_bytes = 12'345;
+
+        auto submitter_or =
+                AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), snapshot);
+        ASSERT_TRUE(submitter_or.ok()) << submitter_or.status();
+        auto submitter = std::move(submitter_or).value();
+
+        // A live config-source hot update after fragment construction must not
+        // alter that fragment's immutable execution snapshot.
+        AIRuntimeConfig changed = baseline;
+        changed.request_timeout_ms = 1;
+        changed.connect_timeout_ms = 37;
+        changed.max_response_bytes = 54'321;
+        ASSERT_OK(_config_source->update(std::move(changed)));
+
+        std::vector<AITaskResult> results;
+        auto handle_or = submitter->submit(
+                AIProjectTaskRequest{
+                        .task_id = 11,
+                        .model = kModelSentinel,
+                        .prompt = "deadline-prompt",
+                        .provider_id = kDefaultChatConfigId,
+                },
+                [&](AITaskResult result, const AIExecutionStatistics&) { results.emplace_back(std::move(result)); });
+        ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+        auto handle = std::move(handle_or).value();
+
+        _control.run_until_idle();
+        ASSERT_EQ(1, _http.pending_count());
+        const AIHttpRequest& request = _http.request();
+        EXPECT_EQ(test_case.expected_request_deadline_ns, request.request_deadline_ns);
+        ASSERT_TRUE(request.lifecycle);
+        const AILifecycleObservation before_extension =
+                observe_ai_lifecycle(request.lifecycle, request.request_deadline_ns, _clock.monotonic_now_ns());
+        EXPECT_EQ(AILifecycleState::ACTIVE, before_extension.state);
+        EXPECT_EQ(test_case.expected_effective_deadline_ns, before_extension.effective_deadline_ns);
+        EXPECT_EQ(12'345, request.max_response_bytes);
+        ASSERT_NE(nullptr, request.resolved_endpoint);
+        EXPECT_EQ("127.0.0.1", request.resolved_endpoint->host);
+        EXPECT_EQ(443, request.resolved_endpoint->port);
+        const int64_t remaining_ns = test_case.expected_request_deadline_ns - _clock.monotonic_now_ns();
+        const int64_t expected_connect_ms =
+                test_case.expected_request_deadline_ns == 0
+                        ? 0
+                        : remaining_ns / 1'000'000 + (remaining_ns % 1'000'000 != 0 ? 1 : 0);
+        EXPECT_EQ(expected_connect_ms, request.connect_timeout_ms);
+
+        set_query_deadline_ns(130'000'000'000);
+        const AILifecycleObservation after_extension =
+                observe_ai_lifecycle(request.lifecycle, request.request_deadline_ns, _clock.monotonic_now_ns());
+        EXPECT_EQ(AILifecycleState::ACTIVE, after_extension.state);
+        EXPECT_EQ(
+                test_case.expected_request_deadline_ns == 0 ? 130'000'000'000 : test_case.expected_request_deadline_ns,
+                after_extension.effective_deadline_ns);
+
+        _http.complete_next(AIHttpNoResponseCode::SHUTDOWN);
+        _completion.run_until_idle();
+        _control.run_until_idle();
+        ASSERT_EQ(1, results.size());
+        ASSERT_TRUE(std::holds_alternative<AILifecycleCancelled>(results.front()));
+        EXPECT_EQ(AILifecycleReason::SHUTDOWN, std::get<AILifecycleCancelled>(results.front()).reason);
+        handle->cancel();
+        ASSERT_OK(_config_source->update(baseline));
+    }
+}
+
+TEST_F(AIProjectPipelineTest, QueryCancellationRemainsLifecycleCancelledAndDoesNotBecomeIgnoredNull) {
+    set_query_deadline_ns(120'000'000'000);
+    AIRuntimeConfig config = _config_source->snapshot();
+    config.request_timeout_ms = 5'000;
+    config.connect_timeout_ms = 0;
+    config.on_error = "ignore";
+    auto submitter_or = AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+    ASSERT_TRUE(submitter_or.ok()) << submitter_or.status();
+    auto submitter = std::move(submitter_or).value();
+
+    std::vector<AITaskResult> results;
+    auto handle_or = submitter->submit(
+            AIProjectTaskRequest{
+                    .task_id = 17,
+                    .model = kModelSentinel,
+                    .prompt = "cancel-prompt",
+                    .provider_id = kDefaultChatConfigId,
+            },
+            [&](AITaskResult result, const AIExecutionStatistics& statistics) {
+                const auto query_statistics = _query_context->query_runtime_state().ai_statistics();
+                EXPECT_EQ(1, statistics.task_count);
+                EXPECT_EQ(1, statistics.request_count);
+                EXPECT_EQ(statistics.task_count, query_statistics.task_count);
+                EXPECT_EQ(statistics.request_count, query_statistics.request_count)
+                        << "query statistics must be visible before the downstream callback can publish output";
+                EXPECT_EQ(0, query_statistics.error_count);
+                results.emplace_back(std::move(result));
+            });
+    ASSERT_TRUE(handle_or.ok()) << handle_or.status();
+    auto handle = std::move(handle_or).value();
+    _control.run_until_idle();
+    ASSERT_EQ(1, _http.pending_count());
+    EXPECT_TRUE(_query_context->query_runtime_state().ai_statistics().empty())
+            << "in-flight tasks only update process-wide metrics";
+
+    _query_context->cancel(Status::Cancelled("test query cancellation"), true);
+    EXPECT_EQ(AILifecycleState::CANCELLED,
+              observe_ai_lifecycle(_http.request().lifecycle, _http.request().request_deadline_ns,
+                                   _clock.monotonic_now_ns())
+                      .state);
+    _http.complete_next(AIHttpNoResponseCode::CANCELLATION);
+    _completion.run_until_idle();
+    _control.run_until_idle();
+
+    ASSERT_EQ(1, results.size());
+    ASSERT_TRUE(std::holds_alternative<AILifecycleCancelled>(results.front()));
+    EXPECT_EQ(AILifecycleReason::CANCELLED, std::get<AILifecycleCancelled>(results.front()).reason);
+    EXPECT_FALSE(std::holds_alternative<AISanitizedRowFailure>(results.front()));
+    handle->cancel();
+}
+
+TEST_F(AIProjectPipelineTest, FragmentCancellationCancelsSourceRequestAndDrainsPendingFinish) {
+    set_query_deadline_ns(120'000'000'000);
+    AIRuntimeConfig config = _config_source->snapshot();
+    config.request_timeout_ms = 5'000;
+    config.connect_timeout_ms = 0;
+    config.on_error = "ignore";
+
+    auto projection_or = create_expression_projection();
+    ASSERT_TRUE(projection_or.ok()) << projection_or.status();
+    auto production_submitter_or =
+            AIProjectDispatcherSubmitter::create(_runtime_state.get(), provider_model_configs(), config);
+    ASSERT_TRUE(production_submitter_or.ok()) << production_submitter_or.status();
+    auto submitter = std::make_shared<RecordingTaskSubmitter>(std::move(production_submitter_or).value());
+    auto buffer_or = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(buffer_or.ok()) << buffer_or.status();
+    auto buffer = std::move(buffer_or).value();
+    auto processor_or =
+            AIProjectProcessor::create(buffer, std::move(projection_or).value(), submitter, std::move(config));
+    ASSERT_TRUE(processor_or.ok()) << processor_or.status();
+    auto processor = std::move(processor_or).value();
+
+    AISourceOperatorFactory source_factory(1, 10, processor);
+    ASSERT_OK(source_factory.prepare(_runtime_state.get()));
+    OperatorPtr source = source_factory.create(1, 0);
+    ASSERT_OK(source->prepare(_runtime_state.get()));
+
+    auto admitted = buffer->try_put(0, make_prompt_chunk(0, 1));
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    ASSERT_TRUE(admitted.value());
+    ASSERT_OK(buffer->set_sink_eos(0));
+    auto output_or = source->pull_chunk(_runtime_state.get());
+    ASSERT_TRUE(output_or.ok()) << output_or.status();
+    EXPECT_EQ(nullptr, output_or.value());
+    _control.run_until_idle();
+    ASSERT_EQ(1, _http.pending_count());
+
+    workgroup::PipelineExecutorSetConfig executor_config{1, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    NeverYieldWorkGroupSchedulePolicy schedule_policy;
+    workgroup::PipelineExecutorSet executors(executor_config, "ai_project_test", CpuUtil::CpuIds{}, {},
+                                             schedule_policy);
+    ScopedWorkGroupExecutors scoped_executors(_workgroup, &executors);
+    // LimitReach is a normal fragment-cancellation reason, so main skips
+    // failure-audit reporting while still running the driver cancellation path.
+    _fragment_context.cancel(Status::Cancelled("LimitReach"));
+    ASSERT_TRUE(_runtime_state->is_cancelled());
+    ASSERT_OK(source->set_cancelled(_runtime_state.get()));
+    EXPECT_EQ(AILifecycleState::CANCELLED,
+              observe_ai_lifecycle(_http.request().lifecycle, _http.request().request_deadline_ns,
+                                   _clock.monotonic_now_ns())
+                      .state);
+    EXPECT_TRUE(source->pending_finish());
+
+    _http.complete_next(AIHttpNoResponseCode::CANCELLATION);
+    _completion.run_until_idle();
+    _control.run_until_idle();
+
+    ASSERT_EQ((std::vector<AILifecycleReason>{AILifecycleReason::CANCELLED}), submitter->lifecycle_reasons);
+    EXPECT_EQ(0, submitter->sanitized_failures)
+            << "lifecycle cancellation must not be converted to an ignored row failure";
+    EXPECT_FALSE(source->pending_finish());
+    EXPECT_FALSE(source->has_output());
+
+    source->close(_runtime_state.get());
+    source_factory.close(_runtime_state.get());
+}
+
+} // namespace
+} // namespace pipeline
+} // namespace starrocks

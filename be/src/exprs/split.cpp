@@ -43,7 +43,10 @@ struct SplitState {
 static inline std::vector<std::string> split_utf8_characters(const Slice& str) {
     std::vector<std::string> chars;
     for (int i = 0; i < str.size;) {
-        auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])];
+        // A truncated/invalid UTF-8 lead byte at the tail can claim more bytes than remain;
+        // clamp to the rest of the string to avoid an out-of-bounds read of adjacent memory.
+        size_t char_size =
+                std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[i])], str.size - i);
         chars.emplace_back(str.data + i, char_size);
         i += char_size;
     }
@@ -126,7 +129,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
         array_offsets->append(offset);
 
         return ArrayColumn::create(
-                NullableColumn::create(std::move(array_binary_column), NullColumn::create(std::move(offset), 0)),
+                NullableColumn::create(std::move(array_binary_column), NullColumn::create(offset, 0)),
                 std::move(array_offsets));
     } else if (columns[1]->is_constant()) {
         Slice delimiter = state->delimiter;
@@ -141,7 +144,9 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
                 Slice haystack = string_viewer.value(row);
 
                 for (int h = 0; h < haystack.size;) {
-                    auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[h])];
+                    // Clamp to the remaining bytes: a tail lead byte may claim more than is left.
+                    size_t char_size = std::min<size_t>(
+                            UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[h])], haystack.size - h);
                     v.emplace_back(haystack.data + h, char_size);
                     h += char_size;
                     ++offset;
@@ -183,13 +188,13 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
         }
         if (!columns[0]->has_null()) {
             return ArrayColumn::create(
-                    NullableColumn::create(std::move(array_binary_column), NullColumn::create(std::move(offset), 0)),
+                    NullableColumn::create(std::move(array_binary_column), NullColumn::create(offset, 0)),
                     std::move(array_offsets));
         } else {
             return NullableColumn::create(
-                    ArrayColumn::create(NullableColumn::create(std::move(array_binary_column),
-                                                               NullColumn::create(std::move(offset), 0)),
-                                        std::move(array_offsets)),
+                    ArrayColumn::create(
+                            NullableColumn::create(std::move(array_binary_column), NullColumn::create(offset, 0)),
+                            std::move(array_offsets)),
                     NullColumn::static_pointer_cast(
                             ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()->clone()));
         }
@@ -212,7 +217,9 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
             Slice delimiter = delimiter_viewer.value(row);
             if (delimiter.size == 0) { // split each character
                 for (auto h = 0; h < str.size;) {
-                    auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[h])];
+                    // Clamp to the remaining bytes: a tail lead byte may claim more than is left.
+                    size_t char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(str.data[h])],
+                                                        str.size - h);
                     array_binary_column->append(Slice(str.data + h, char_size));
                     h += char_size;
                     ++offset;
@@ -229,7 +236,7 @@ StatusOr<ColumnPtr> StringFunctions::split(FunctionContext* context, const starr
         }
         array_offsets->append(offset);
         result_array = ArrayColumn::create(
-                NullableColumn::create(std::move(array_binary_column), NullColumn::create(std::move(offset), 0)),
+                NullableColumn::create(std::move(array_binary_column), NullColumn::create(offset, 0)),
                 std::move(array_offsets));
         return NullableColumn::create(std::move(result_array), std::move(null_array));
     }

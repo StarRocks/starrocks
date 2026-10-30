@@ -14,7 +14,9 @@
 
 package com.starrocks.http.rest;
 
-import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jwt.JWTClaimsSet;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.OAuth2AuthenticationProvider;
@@ -43,10 +45,38 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * The redirect target of the MySQL OAuth2 browser flow, i.e. the IdP's callback endpoint ({@code
+ * /api/oauth2}). It is not an entry point clients call directly.
+ *
+ * <p>The sequence it completes: a MySQL client connects, the connection has no token yet, so every
+ * statement on it fails with an authorization URL. The user opens that URL, authenticates at the
+ * IdP, and the IdP redirects the browser here with an authorization code. This action exchanges the
+ * code for an id-token, verifies it, and deposits it on the pending connection - which it finds
+ * through the {@code state} parameter, carrying the connection id. From then on statements on that
+ * connection run.
+ *
+ * <p>It has nothing to do with HTTP Bearer authentication. That is client-driven: the client
+ * already holds an IdP token and presents it on each request, so no callback is involved.
+ */
 public class OAuth2Action extends RestBaseAction {
+    private static final int CONNECT_TIMEOUT_SECOND = 5;
+    private static final int REQUEST_TIMEOUT_SECOND = 10;
+
+    // Reuse a single HttpClient instance across all OAuth2 token exchanges.
+    // java.net.http.HttpClient is thread-safe and designed to be used as a singleton.
+    // Creating a new instance per request leaks FDs (selector epoll/eventfd/pipe + idle
+    // sockets) because the JDK 17 HttpClient has no close() method and relies on GC,
+    // which fails to keep up under sustained load.
+    private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(CONNECT_TIMEOUT_SECOND))
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
     public OAuth2Action(ActionController controller) {
         super(controller);
     }
@@ -55,8 +85,14 @@ public class OAuth2Action extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/oauth2", new OAuth2Action(controller));
     }
 
+    // OAuth2 callback endpoint is itself the auth handshake; cannot require Basic.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return false;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String authorizationCode = getSingleParameter(request, "code", r -> r);
         String connectionIdStr = getSingleParameter(request, "state", r -> r);
         long connectionId = Long.parseLong(connectionIdStr);
@@ -94,18 +130,23 @@ public class OAuth2Action extends RestBaseAction {
             OAuth2Context oAuth2Context = ((OAuth2AuthenticationProvider) authenticationProvider).getoAuth2Context();
 
             String oidcToken = getToken(authorizationCode, oAuth2Context, connectionId);
-            JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(oAuth2Context.jwksUrl());
+            // Same cached source the Bearer and MySQL JWT paths use, so this callback also benefits
+            // from key rotation and outage tolerance instead of fetching the JWKS on every login.
+            JWKSource<SecurityContext> jwkSource =
+                    GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSource(oAuth2Context.jwksUrl());
 
             JSONObject authResponse = new JSONObject(oidcToken);
-            String accessToken = authResponse.getString("access_token");
             String idToken = authResponse.getString("id_token");
 
-            OpenIdConnectVerifier.verify(idToken, context.getQualifiedUser(), jwkSet,
+            JWTClaimsSet claims = OpenIdConnectVerifier.verify(idToken, context.getQualifiedUser(), jwkSource,
                     oAuth2Context.principalFiled(),
                     oAuth2Context.requiredIssuer(),
                     oAuth2Context.requiredAudience());
 
-            context.setAuthToken(idToken);
+            // Not context.setAuthToken: the provider reads the groups out of the verified token
+            // first, so the connection sees them as soon as it sees the token.
+            ((OAuth2AuthenticationProvider) authenticationProvider)
+                    .acceptVerifiedToken(context.getAccessControlContext(), idToken, claims);
 
             response.appendContent(OAuth2ResultMessage.generateLoginSuccessPage(
                     "Successful",
@@ -137,14 +178,14 @@ public class OAuth2Action extends RestBaseAction {
                             URLEncoder.encode(entry.getValue().toString(), StandardCharsets.UTF_8))
                     .collect(Collectors.joining("&"));
 
-            HttpClient client = HttpClient.newHttpClient();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(oAuth2Context.tokenServerUrl()))
+                    .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECOND))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                     .build();
 
-            response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() == 200) {
                 return response.body();
             } else {

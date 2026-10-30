@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.base.RangeDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -53,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
@@ -229,7 +231,7 @@ public class OptExpressionDuplicator {
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
-            // process HashDistributionSpec
+            // process HashDistributionSpec / RangeDistributionSpec
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) scanOperator;
                 LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
@@ -237,6 +239,10 @@ public class OptExpressionDuplicator {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec());
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
+                } else if (olapScan.getDistributionSpec() instanceof RangeDistributionSpec) {
+                    RangeDistributionSpec newRangeSpec =
+                            processRangeDistributionSpec((RangeDistributionSpec) olapScan.getDistributionSpec());
+                    olapScanBuilder.setDistributionSpec(newRangeSpec);
                 }
 
                 if (isResetSelectedPartitions) {
@@ -524,6 +530,10 @@ public class OptExpressionDuplicator {
             }
             opBuilder.setWindowCall(newWindowCalls);
 
+            if (windowOperator.getSkewColumn() != null) {
+                opBuilder.setSkewColumn(getNewScalarOp(windowOperator.getSkewColumn()));
+            }
+
             processCommon(opBuilder);
 
             return OptExpression.create(opBuilder.build(), inputs);
@@ -563,10 +573,14 @@ public class OptExpressionDuplicator {
         @Override
         public OptExpression visitLogicalLimit(OptExpression optExpression, Void context) {
             List<OptExpression> inputs = processChildren(optExpression);
-            LogicalSetOperator setOperator = (LogicalSetOperator) optExpression.getOp();
-            LogicalSetOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
-            opBuilder.withOperator(setOperator);
-            processSetOperator(setOperator, opBuilder);
+            // A limit carries only its offset and row count -- it has no output column list to
+            // remap, so copying the operator and letting processCommon rewrite the projection
+            // and predicate is the whole job. This body used to be a copy of visitLogicalUnion,
+            // which cast the operator to LogicalSetOperator and could therefore never succeed:
+            // any limit reaching the duplicator threw ClassCastException.
+            LogicalLimitOperator limitOperator = (LogicalLimitOperator) optExpression.getOp();
+            LogicalLimitOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
+            opBuilder.withOperator(limitOperator);
             processCommon(opBuilder);
             return OptExpression.create(opBuilder.build(), inputs);
         }
@@ -688,12 +702,22 @@ public class OptExpressionDuplicator {
             LogicalCTEConsumeOperator cteConsumeOperator = (LogicalCTEConsumeOperator) optExpression.getOp();
             LogicalCTEConsumeOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
             opBuilder.withOperator(cteConsumeOperator);
-            opBuilder.setCteId(getOrCreateCteId(cteConsumeOperator.getCteId()));
+
+            // If the CTE anchor/produce for this consumer was also duplicated, remap the CTE ID
+            // and both sides of the output column map. Otherwise, keep the original CTE ID and
+            // only remap the consumer-side columns, preserving the producer-side
+            // column refs so the consumer still references the original producer.
+            boolean hasMatchingProducer = cteIdMapping.containsKey(cteConsumeOperator.getCteId());
+            if (hasMatchingProducer) {
+                opBuilder.setCteId(getOrCreateCteId(cteConsumeOperator.getCteId()));
+            }
 
             // cteOutputColumnRefMap
             Map<ColumnRefOperator, ColumnRefOperator> newCteOutputColumnRefMap = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ColumnRefOperator> e : cteConsumeOperator.getCteOutputColumnRefMap().entrySet()) {
-                newCteOutputColumnRefMap.put(getOrCreateColRef(e.getKey()), getOrCreateColRef(e.getValue()));
+                ColumnRefOperator newKey = getOrCreateColRef(e.getKey());
+                ColumnRefOperator newValue = hasMatchingProducer ? getOrCreateColRef(e.getValue()) : e.getValue();
+                newCteOutputColumnRefMap.put(newKey, newValue);
             }
             opBuilder.setCteOutputColumnRefMap(newCteOutputColumnRefMap);
 
@@ -726,6 +750,26 @@ public class OptExpressionDuplicator {
             updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
             updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
             return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
+        }
+
+        // Rewrite colocate columns and the EquivalentDescriptor inside a
+        // RangeDistributionSpec, mirroring processHashDistributionSpec above.
+        // Column ids change when the scan is duplicated for MV rewrite.
+        private RangeDistributionSpec processRangeDistributionSpec(RangeDistributionSpec originSpec) {
+            final List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol col : originSpec.getColocateColumns()) {
+                final ColumnRefOperator newRefOperator = getNewDistributionColRef(col);
+                Preconditions.checkNotNull(newRefOperator);
+                newColumns.add(new DistributionCol(newRefOperator.getId(), col.isNullStrict()));
+            }
+            Preconditions.checkState(newColumns.size() == originSpec.getColocateColumns().size());
+
+            final EquivalentDescriptor equivDesc = originSpec.getEquivalentDescriptor();
+            final EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(),
+                    equivDesc.getPartitionIds());
+            updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
+            updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
+            return new RangeDistributionSpec(newColumns, newEquivDesc);
         }
 
         private void updateDistributionUnionFind(UnionFind<DistributionCol> newUnionFind,

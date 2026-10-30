@@ -19,6 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.Partition;
@@ -229,6 +230,9 @@ public class RemoteFileOperations {
             Path writePath,
             Path targetPath,
             List<String> fileNames) {
+        // Resolving the file system is itself a request on a cache miss, and it happens on this thread;
+        // the renames below are handed to another one, where no lock is held.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         FileSystem fileSystem;
         try {
             fileSystem = FileSystem.get(writePath.toUri(), conf);
@@ -276,6 +280,7 @@ public class RemoteFileOperations {
 
         runWhenPathNotExist.run();
 
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             if (!FileSystem.get(source.toUri(), conf).rename(source, target)) {
                 throw new StarRocksConnectorException("Failed to rename %s to %s: rename returned false", source, target);
@@ -286,6 +291,9 @@ public class RemoteFileOperations {
     }
 
     public void removeNotCurrentQueryFiles(Path partitionPath, String queryId) {
+        // The listing; each delete under it reports separately through HiveUtils.checkedDelete, because
+        // each one is its own request.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(partitionPath.toUri(), conf);
             RemoteIterator<LocatedFileStatus> iterator = fileSystem.listFiles(partitionPath, false);
@@ -304,6 +312,16 @@ public class RemoteFileOperations {
 
     public boolean pathExists(Path path) {
         return HiveUtils.pathExists(path, conf);
+    }
+
+    /**
+     * Creates {@code path} as an empty directory (including parents) when it does not exist.
+     * Used when HMS lists a partition but the warehouse path is missing on the filesystem.
+     */
+    public void ensureDirectoryExists(Path path) {
+        if (!pathExists(path)) {
+            createDirectory(path, conf);
+        }
     }
 
     public boolean deleteIfExists(Path path, boolean recursive) {
@@ -328,6 +346,7 @@ public class RemoteFileOperations {
     }
 
     public FileStatus[] listStatus(Path path) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             return fileSystem.listStatus(path);
@@ -344,33 +363,5 @@ public class RemoteFileOperations {
             LOG.error("Failed to get file status for paths: {}", paths, e);
             throw new StarRocksConnectorException("Failed to get file status for paths: %s. msg: %s", paths, e.getMessage());
         }
-    }
-
-    public List<PartitionInfo> getRemotePartitions(List<Partition> partitions) {
-        List<Path> paths = Lists.newArrayList();
-        for (Partition partition : partitions) {
-            Path partitionPath = new Path(partition.getFullPath());
-            paths.add(partitionPath);
-        }
-        FileStatus[] fileStatuses = getFileStatus(paths.toArray(new Path[0]));
-        List<PartitionInfo> result = Lists.newArrayList();
-        for (int i = 0; i < partitions.size(); i++) {
-            Partition partition = partitions.get(i);
-            FileStatus fileStatus = fileStatuses[i];
-            final String fullPath = partition.getFullPath();
-            final long time = fileStatus.getModificationTime();
-            result.add(new PartitionInfo() {
-                @Override
-                public long getModifiedTime() {
-                    return time;
-                }
-
-                @Override
-                public String getFullPath() {
-                    return fullPath;
-                }
-            });
-        }
-        return result;
     }
 }

@@ -43,6 +43,7 @@
 #include <memory>
 #include <ostream>
 
+#include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
@@ -57,7 +58,7 @@
 #include "storage/rowset/page_decoder.h"
 #include "storage/types.h"
 #include "types/date_value.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -100,7 +101,7 @@ std::string bitshuffle_error_msg(int64_t err);
 //
 template <LogicalType Type>
 class BitshufflePageBuilder final : public PageBuilder {
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
 
 public:
     explicit BitshufflePageBuilder(const PageBuilderOptions& options)
@@ -227,7 +228,7 @@ private:
         return &_compressed_data;
     }
 
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     uint8_t _reserved_head_size{0};
     uint32_t _max_count;
     uint32_t _count{0};
@@ -240,7 +241,7 @@ private:
 
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
 
 public:
     BitShufflePageDecoder(Slice data) : _data(data) {}
@@ -257,7 +258,10 @@ public:
         _num_elements = decode_fixed32_le((const uint8_t*)&_data[0]);
         _compressed_size = decode_fixed32_le((const uint8_t*)&_data[4]);
         _num_element_after_padding = decode_fixed32_le((const uint8_t*)&_data[8]);
-        if (_num_element_after_padding != ALIGN_UP(_num_elements, 8U)) {
+        // Not ALIGN_UP(): its mask is 32-bit, so ALIGN_UP(0xffffffff, 8U) wraps
+        // to 0 and would accept a corrupted page whose padded count is 0.
+        // RoundUpToPowerOf2() rounds at full 64-bit width instead.
+        if (_num_element_after_padding != static_cast<size_t>(BitUtil::RoundUpToPowerOf2(_num_elements, 8))) {
             std::stringstream ss;
             ss << "num of element information corrupted,"
                << " _num_element_after_padding:" << _num_element_after_padding << ", _num_elements:" << _num_elements;
@@ -376,7 +380,7 @@ private:
         memcpy(data, get_data(_cur_index * SIZE_OF_TYPE), n * SIZE_OF_TYPE);
     }
 
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     uint32_t _num_elements{0};

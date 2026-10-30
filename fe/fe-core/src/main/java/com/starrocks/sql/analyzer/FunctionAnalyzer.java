@@ -39,8 +39,10 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -65,8 +67,11 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -76,6 +81,8 @@ import com.starrocks.type.VarcharType;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -159,16 +166,48 @@ public class FunctionAnalyzer {
 
         if (FunctionSet.INDEX_ONLY_FUNCTIONS.contains(fnName)) {
             if (!functionCallExpr.getChild(0).getType().isStringType() ||
-                    !functionCallExpr.getChild(0).getType().isStringType()) {
+                    !functionCallExpr.getChild(1).getType().isStringType()) {
                 throw new SemanticException(
                         fnName + " function 's first parameter and second parameter must be string type",
                         functionCallExpr.getPos());
             }
 
-            if (!functionCallExpr.getChild(1).isConstant() || !functionCallExpr.getChild(2).isConstant()) {
+            // gram_num is read on the BE as a raw non-nullable INT constant column, with no type or
+            // null check. It is read twice: by ngram_search itself, and -- more dangerously -- by
+            // VectorizedFunctionCallExpr::split_normal_string_to_ngram() while evaluating an NGRAMBF
+            // index in the storage layer, which is reached before ordinary expression evaluation.
+            // "constant" alone is not enough there: a constant of another type (e.g. a JSON
+            // expression) or a constant NULL is a ConstColumn over something that is not an
+            // Int32Column, and reading it crashes the BE. Require a positive integer constant.
+            Expr gramNumExpr = functionCallExpr.getChild(2);
+            Optional<Long> gramNum = extractIntegerValue(gramNumExpr);
+            if (!gramNum.isPresent() || gramNum.get() <= 0 || gramNum.get() > Integer.MAX_VALUE) {
                 throw new SemanticException(
-                        fnName + " function 's second parameter and third parameter must be constant",
-                        functionCallExpr.getPos());
+                        fnName + " function 's third parameter must be a constant positive integer",
+                        gramNumExpr.getPos());
+            }
+        }
+
+        // tokenize(tokenizer_name, content): the tokenizer name is read on the BE at prepare time as
+        // a raw non-nullable VARCHAR constant column, with no type or null check. A constant of
+        // another type -- e.g. cast('english' as time), which the FE cannot fold and so cannot see
+        // is NULL -- reaches the BE as a constant of the wrong shape and crashes it. Require a
+        // string literal naming one of the tokenizers the BE implements. A NULL constant stays
+        // legal: FoldConstantsRule rewrites the whole call to NULL, so it never reaches the BE.
+        if (fnName.equals(FunctionSet.TOKENIZE) && functionCallExpr.hasChild(0)) {
+            Expr tokenizerExpr = functionCallExpr.getChild(0);
+            Expr unwrapped = unwrapConstantString(tokenizerExpr);
+            if (unwrapped instanceof StringLiteral) {
+                String tokenizer = ((StringLiteral) unwrapped).getValue();
+                if (!FunctionSet.SUPPORTED_TOKENIZERS.contains(tokenizer)) {
+                    throw new SemanticException(
+                            "Unknown tokenizer '" + tokenizer + "'. Supported tokenizers are: " +
+                                    String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
+                }
+            } else if (!(unwrapped instanceof NullLiteral)) {
+                throw new SemanticException(
+                        "tokenize function 's first parameter (tokenizer_name) must be a constant string, one of: " +
+                                String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
             }
         }
         Function fn = functionCallExpr.getFn();
@@ -248,6 +287,10 @@ public class FunctionAnalyzer {
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
         }
+
+        if (fn != null && fn.isAI()) {
+            AIFunctionAnalyzer.analyze(functionCallExpr);
+        }
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
@@ -262,6 +305,24 @@ public class FunctionAnalyzer {
         if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
+        }
+
+        // DISTINCT aggregation over a PERCENTILE value has no meaning and no rewrite: unlike
+        // count(distinct bitmap) / count(distinct hll) -- which the optimizer rewrites to
+        // bitmap_union_count / hll cardinality -- a PERCENTILE cannot be de-duplicated, so the
+        // call reaches the BE as a raw distinct aggregate. There it is dispatched to the
+        // string/binary distinct path and down_casts the PercentileColumn to a BinaryColumn it is
+        // not, which aborts a debug build (casts.h down_cast on BinaryColumnBase) and dereferences
+        // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
+        if (fnParams.isDistinct()) {
+            for (Expr child : functionCallExpr.getChildren()) {
+                if (child.getType().isPercentile()) {
+                    throw new SemanticException(
+                            "DISTINCT aggregation is not supported for PERCENTILE type: " +
+                                    ExprToSql.toSql(functionCallExpr),
+                            functionCallExpr.getPos());
+                }
+            }
         }
 
         if (fnName.equals(FunctionSet.COUNT)) {
@@ -558,9 +619,22 @@ public class FunctionAnalyzer {
                                     ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
                 if (n.get() > Config.minmax_n_max_size) {
-                    throw new SemanticException("The second parameter of " + fnName + 
+                    throw new SemanticException("The second parameter of " + fnName +
                             " cannot exceed " + Config.minmax_n_max_size + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
+            }
+        }
+
+        // histogram(expr, bucket_num, sample_ratio[, ...]): bucket_num is a constant INT used as a
+        // divisor / bucket-size base in the BE finalize step. A non-positive value divided by zero
+        // (SIGFPE crash) or mis-bucketed every row; reject it here at analysis instead.
+        if (fnName.equals(FunctionSet.HISTOGRAM) && functionCallExpr.hasChild(1)) {
+            Expr bucketNumExpr = functionCallExpr.getChild(1);
+            Optional<Long> bucketNum = extractIntegerValue(bucketNumExpr);
+            if (!bucketNum.isPresent() || bucketNum.get() <= 0) {
+                throw new SemanticException(
+                        "The second parameter (bucket_num) of histogram must be a constant positive integer: " +
+                                ExprToSql.toSql(functionCallExpr), bucketNumExpr.getPos());
             }
         }
 
@@ -673,7 +747,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(fnName + " function 's args must be constant");
+                throw new SemanticException(fnName + " function 's args must not be constant");
             }
         }
 
@@ -710,11 +784,36 @@ public class FunctionAnalyzer {
             expr = ((UserVariableExpr) expr).getValue();
         }
 
+        // Unwrap a cast over a constant integer, e.g. cast(64 as int). Auto-generated statistics
+        // collection SQL wraps the bucket_num literal in such a cast, so fold it to the inner value.
+        if (expr instanceof CastExpr && expr.getType().isFixedPointType()) {
+            return extractIntegerValue(expr.getChild(0));
+        }
+
         if (expr instanceof LiteralExpr && expr.getType().isFixedPointType()) {
             return Optional.of(((LiteralExpr) expr).getLongValue());
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Peel user variables and casts to a string type off an expression, so that a constant string
+     * argument can be recognised through e.g. cast('english' as varchar). A cast to a non-string
+     * type is deliberately not peeled: cast('english' as time) is not a constant string, even
+     * though the FE will later wrap it in an implicit cast back to VARCHAR -- its value is whatever
+     * the inner cast produces, which the FE cannot fold and which is NULL at runtime.
+     */
+    private static Expr unwrapConstantString(Expr expr) {
+        if (expr instanceof UserVariableExpr) {
+            return unwrapConstantString(((UserVariableExpr) expr).getValue());
+        }
+
+        if (expr instanceof CastExpr && expr.getType().isStringType()) {
+            return unwrapConstantString(expr.getChild(0));
+        }
+
+        return expr;
     }
 
     /**
@@ -807,7 +906,19 @@ public class FunctionAnalyzer {
         }
 
         // validate argument types
-        for (int i = 0; i < fn.getNumArgs(); i++) {
+        // First check argument count - if mismatched, return null to allow fallback
+        // to named arguments handling in ExpressionAnalyzer
+        if (argumentTypes.length < fn.getNumArgs() && !fn.hasVarArgs()) {
+            // If function supports named args, let ExpressionAnalyzer handle it
+            if (fn.hasNamedArg()) {
+                return null;
+            }
+            // For non-varargs, non-named-args functions, argument count must match exactly
+            // Return null to trigger "No matching function" error
+            return null;
+        }
+        int numArgsToValidate = Math.min(argumentTypes.length, fn.getNumArgs());
+        for (int i = 0; i < numArgsToValidate; i++) {
             if (!argumentTypes[i].matchesType(fn.getArgs()[i]) &&
                     !TypeManager.canCastTo(argumentTypes[i], fn.getArgs()[i])) {
                 String msg = String.format("No matching function with signature: %s(%s)", fnName,
@@ -857,6 +968,8 @@ public class FunctionAnalyzer {
         } catch (Exception e) {
             throw new SemanticException("Failed to parse view definition: " + fn.getSql());
         }
+        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expr, AIFunctionUsageAnalyzer.PlacementContext.SQL_UDF_BODY);
         SqlFunction v = (SqlFunction) fn.copy();
         v.setAnalyzeExpr(expr);
         v.setRetType(expr.getType());
@@ -929,7 +1042,6 @@ public class FunctionAnalyzer {
                                                         List<Type> newArgumentTypes) {
         Function fn = null;
         String fnName = node.getFunctionName();
-        // throw exception direct
         if (fnName.equalsIgnoreCase("typeof") && argumentTypes.length == 1) {
             // For the typeof function, the parameter type of the function is the result of this function.
             // At this time, the parameter type has been obtained. You can directly replace the current
@@ -943,6 +1055,135 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
+        } else if (FunctionSet.ST_COVERAGE_SIMPLIFY.equalsIgnoreCase(fnName)) {
+            if (argumentTypes.length != 2 && argumentTypes.length != 3) {
+                throw new SemanticException("ST_CoverageSimplify requires two or three arguments");
+            }
+            if (argumentTypes[0].getPrimitiveType() != PrimitiveType.GEOMETRY ||
+                    ((ScalarType) argumentTypes[0]).getGeoDescriptor() == null) {
+                throw new SemanticException("ST_CoverageSimplify requires a native GEOMETRY CRS descriptor");
+            }
+            if (!argumentTypes[1].isNumericType() && !argumentTypes[1].isNull()) {
+                throw new SemanticException("ST_CoverageSimplify tolerance must be numeric");
+            }
+            if (argumentTypes.length == 3 && !argumentTypes[2].isBoolean() && !argumentTypes[2].isNull()) {
+                throw new SemanticException("ST_CoverageSimplify boundary must be BOOLEAN");
+            }
+            Expr[] folded = new Expr[argumentTypes.length];
+            for (int i = 1; i < argumentTypes.length; ++i) {
+                if (!node.getChild(i).isConstant()) {
+                    throw new SemanticException("ST_CoverageSimplify tolerance and boundary must be plan-constant");
+                }
+                folded[i] = ExprUtils.analyzeAndCastFold(node.getChild(i).clone());
+                if (!(folded[i] instanceof LiteralExpr)) {
+                    throw new SemanticException("ST_CoverageSimplify parameters must fold to constants");
+                }
+            }
+            boolean nullParameter = folded[1] instanceof NullLiteral ||
+                    (argumentTypes.length == 3 && folded[2] instanceof NullLiteral);
+            if (!nullParameter) {
+                double value = ((LiteralExpr) folded[1]).getDoubleValue();
+                if (!Double.isFinite(value) || value < 0 || !Double.isFinite(value * value)) {
+                    throw new SemanticException("ST_CoverageSimplify requires finite nonnegative tolerance " +
+                            "and representable tolerance squared");
+                }
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(argumentTypes[0]);
+            }
+        } else if ((FunctionSet.ST_BUFFER.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_SIMPLIFY_PRESERVE_TOPOLOGY.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
+                argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY) {
+            GeoTypeDescriptor descriptor = ((ScalarType) argumentTypes[0]).getGeoDescriptor();
+            if (descriptor == null) {
+                throw new SemanticException("%s requires a GEOMETRY CRS descriptor", fnName);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(argumentTypes[0]);
+            }
+        } else if ((FunctionSet.ST_INTERSECTION.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_UNION.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_DIFFERENCE.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_SYMDIFFERENCE.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
+                ((argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY &&
+                        (argumentTypes[1].isNull() || argumentTypes[1].getPrimitiveType() == PrimitiveType.GEOMETRY)) ||
+                        (argumentTypes[0].isNull() && argumentTypes[1].getPrimitiveType() == PrimitiveType.GEOMETRY))) {
+            Type resultType = argumentTypes[0].isNull() ? argumentTypes[1] : argumentTypes[0];
+            GeoTypeDescriptor left = ((ScalarType) resultType).getGeoDescriptor();
+            GeoTypeDescriptor right = argumentTypes[1].isNull() ? left :
+                    ((ScalarType) argumentTypes[1]).getGeoDescriptor();
+            if (left == null || right == null || !left.isSemanticallyCompatible(right)) {
+                throw new SemanticException("%s requires compatible GEOMETRY CRS descriptors", fnName);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(resultType);
+            }
+        } else if ((FunctionSet.ST_SETSRID.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_TRANSFORM.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
+                argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY) {
+            Expr sridExpr = node.getChild(1);
+            if (!sridExpr.isConstant()) {
+                throw new SemanticException("%s requires a foldable constant target SRID", fnName);
+            }
+            Expr folded = ExprUtils.analyzeAndCastFold(sridExpr.clone());
+            // Check the original folded integer before narrowing LARGEINT to an INT SRID.
+            BigInteger value = toBigInteger(folded);
+            if (value == null || value.signum() <= 0 || value.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                throw new SemanticException("%s requires a positive INT target SRID", fnName);
+            }
+            int targetSrid = value.intValueExact();
+            if (targetSrid != 4326 && targetSrid != 3857) {
+                throw new SemanticException("%s supports only EPSG:4326 and EPSG:3857", fnName);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                IntLiteral target = new IntLiteral(targetSrid, IntegerType.INT);
+                node.getParams().exprs().set(1, target);
+                node.setChild(1, target);
+                fn = fn.copy();
+                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
+                        GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
+            }
+        } else if ("st_geogfromtext".equalsIgnoreCase(fnName) || "st_geogfromwkb".equalsIgnoreCase(fnName) ||
+                FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName)) {
+            // These producers have a fixed CRS84 result, which must be concrete before planning.
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                        new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                                GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)));
+            }
+        } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
+                (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
+                        argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY)) {
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(argumentTypes[0]);
+            }
+        } else if ((FunctionSet.ST_GEOMFROMTEXT.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_GEOMFROMWKB.equalsIgnoreCase(fnName)) && argumentTypes.length == 2) {
+            if (!(node.getChild(1) instanceof StringLiteral)) {
+                throw new SemanticException("%s requires CRS to be a non-empty string literal", fnName);
+            }
+            String crs = ((StringLiteral) node.getChild(1)).getStringValue();
+            if (crs.isEmpty()) {
+                throw new SemanticException("%s requires CRS to be a non-empty string literal", fnName);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry(crs)));
+            }
         } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
                 child.getType().isArrayType())) {
             List<Type> arrayTypes = Arrays.stream(argumentTypes).map(argumentType -> {
@@ -1086,6 +1327,15 @@ public class FunctionAnalyzer {
             }
             Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
             fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s)",
+                        fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, ""),
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
+            // the resolved builtin is a shared singleton: mutate a copy, or the wildcard decimal
+            // signature gets stamped with a concrete (precision, scale) and later lookups with a
+            // different scale fail until the FE restarts
+            fn = fn.copy();
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }
@@ -1339,6 +1589,11 @@ public class FunctionAnalyzer {
         } else if (FunctionSet.PERCENTILE_DISC.equals(fnName) || FunctionSet.LC_PERCENTILE_DISC.equals(fnName)) {
             argumentTypes[1] = FloatType.DOUBLE;
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s)",
+                        fnName,
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
             // correct decimal's precision and scale
             if (fn.getArgs()[0].isDecimalV3()) {
                 List<Type> argTypes = Arrays.asList(argumentTypes[0], fn.getArgs()[1]);
@@ -1422,5 +1677,385 @@ public class FunctionAnalyzer {
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         }
         return fn;
+    }
+
+    // ==================== Named Arguments Support ====================
+
+    /**
+     * Get function for named arguments call.
+     *
+     * @param session       current connect context
+     * @param node          function call expression
+     * @param argumentTypes argument types
+     * @param exprsNames    list of parameter names provided by user
+     * @return function if found, otherwise null
+     */
+    public static Function getAnalyzedFunctionForNamedArgs(ConnectContext session,
+                                                           FunctionCallExpr node,
+                                                           Type[] argumentTypes,
+                                                           List<String> exprsNames) {
+        String fnName = node.getFunctionName();
+        // Find function using named arguments directly
+        // Validation is done separately in validateNamedArguments()
+        String[] argNames = exprsNames.toArray(new String[0]);
+        return ExprUtils.getBuiltinFunction(fnName, argumentTypes, argNames,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+    }
+
+    /**
+     * Validate named arguments for any function that supports them.
+     * This is the main validation entry point that delegates to specialized methods.
+     *
+     * IMPORTANT: This method should be called AFTER reordering when node is provided,
+     * because NULL constraints validation relies on parameter positions matching
+     * the function definition order (node.getChild(i) corresponds to fn.getArgNames()[i]).
+     *
+     * This method performs validation in two stages:
+     * 1. Structure validation (duplicates, unknown params, missing required)
+     * 2. NULL constraints validation (only if node is provided)
+     *
+     * @param fnName      function name for error messages
+     * @param fn          the function definition
+     * @param paramNames  list of parameter names provided by user
+     * @param node        function call expression to check argument values (null to skip NULL validation)
+     * @throws SemanticException if validation fails
+     */
+    public static void validateNamedArguments(String fnName, Function fn, List<String> paramNames,
+                                              FunctionCallExpr node) {
+        // Validate structure first
+        validateNamedArgumentsStructure(fnName, fn, paramNames);
+
+        // Validate NULL constraints only if node is provided
+        // Note: This assumes arguments are already reordered to match function definition order
+        if (node != null) {
+            validateNullConstraints(fnName, fn, node);
+        }
+    }
+
+    /**
+     * Validate named arguments structure before reordering.
+     * This method checks the logical correctness of parameter names without depending on their order.
+     *
+     * IMPORTANT: This must be called BEFORE reordering to catch duplicate parameters early,
+     * preventing confusing IllegalStateException in reorderNamedArgAndAppendDefaults().
+     *
+     * Checks:
+     * - Function supports named arguments
+     * - No duplicate parameter names
+     * - All parameter names are valid (known to the function)
+     * - All required parameters (without defaults) are provided
+     *
+     * @param fnName      function name for error messages
+     * @param fn          the function definition
+     * @param paramNames  list of parameter names provided by user
+     * @throws SemanticException if validation fails
+     */
+    public static void validateNamedArgumentsStructure(String fnName, Function fn, List<String> paramNames) {
+        // hasNamedArg() checks: argNames != null && argNames.length > 0
+        // So if we pass this check, getArgNames() is guaranteed to not return null
+        if (fn == null || !fn.hasNamedArg()) {
+            throw new SemanticException(fnName + "() does not support named parameters");
+        }
+
+        // Safe to call: hasNamedArg() above guarantees argNames is not null
+        String[] validParamNames = fn.getArgNames();
+        Set<String> validParams = new HashSet<>(Arrays.asList(validParamNames));
+        Set<String> providedParams = new HashSet<>();
+
+        // Check for duplicates and unknown parameter names
+        for (String paramName : paramNames) {
+            if (!providedParams.add(paramName)) {
+                throw new SemanticException(String.format(
+                        "%s() duplicate parameter '%s'", fnName, paramName));
+            }
+            if (!validParams.contains(paramName)) {
+                // Check for case-insensitive match and provide hint
+                String suggestion = findSimilarParam(paramName, validParamNames);
+                if (suggestion != null) {
+                    throw new SemanticException(String.format(
+                            "%s() unknown parameter '%s'. Did you mean '%s'?", fnName, paramName, suggestion));
+                }
+                throw new SemanticException(String.format(
+                        "%s() does not support parameter '%s'", fnName, paramName));
+            }
+        }
+
+        // Check all required parameters are provided
+        // A parameter is required if it has no default value (getDefaultNamedExpr returns null)
+        // This approach does not rely on positional ordering assumption
+        for (String paramName : validParamNames) {
+            if (fn.getDefaultNamedExpr(paramName) == null) {
+                // No default value - this is a required parameter
+                if (!providedParams.contains(paramName)) {
+                    throw new SemanticException(String.format(
+                            "%s() required parameter '%s' is missing", fnName, paramName));
+                }
+            }
+        }
+    }
+
+    /**
+     * Validate NULL constraints after reordering.
+     * This method checks that required parameters are not NULL.
+     *
+     * IMPORTANT: This must be called AFTER reordering because it relies on parameter
+     * positions matching the function definition order (node.getChild(i) corresponds to fn.getArgNames()[i]).
+     *
+     * @param fnName function name for error messages
+     * @param fn     the function definition
+     * @param node   function call expression to check argument values
+     * @throws SemanticException if any required parameter is NULL
+     */
+    public static void validateNullConstraints(String fnName, Function fn, FunctionCallExpr node) {
+        if (node == null || fn == null) {
+            return;
+        }
+
+        String[] validParamNames = fn.getArgNames();
+        if (validParamNames == null || validParamNames.length == 0) {
+            return;  // Function doesn't support named arguments
+        }
+
+        // Check required parameters (without defaults) cannot be NULL
+        // A parameter is required if it has no default value (getDefaultNamedExpr returns null)
+        // This approach does not rely on positional ordering assumption
+        for (int i = 0; i < validParamNames.length && i < node.getChildren().size(); i++) {
+            if (fn.getDefaultNamedExpr(validParamNames[i]) == null) {
+                // No default value - this is a required parameter
+                com.starrocks.sql.ast.expression.Expr argExpr = node.getChild(i);
+                if (argExpr instanceof com.starrocks.sql.ast.expression.NullLiteral) {
+                    throw new SemanticException(String.format(
+                            "%s() required parameter '%s' cannot be NULL", fnName, validParamNames[i]));
+                }
+            }
+        }
+    }
+
+    /**
+     * Reorder named arguments and append defaults according to function definition.
+     * This method modifies the FunctionParams to match the function's parameter order.
+     *
+     * IMPORTANT: validateNamedArgumentsStructure() should be called BEFORE this method
+     * to ensure no duplicate parameters exist. This method uses HashMap which would silently
+     * overwrite duplicates, but duplicates should already be caught by validation.
+     *
+     * @param params FunctionParams containing the named arguments
+     * @param fn     Function definition with named arguments
+     */
+    public static void reorderNamedArgAndAppendDefaults(com.starrocks.sql.ast.expression.FunctionParams params, Function fn) {
+        String[] names = fn.getArgNames();
+        List<String> exprsNames = params.getExprsNames();
+        List<com.starrocks.sql.ast.expression.Expr> exprs = params.exprs();
+
+        Preconditions.checkState(names != null && names.length >= exprsNames.size(),
+                "Function parameter count mismatch");
+
+        // Use HashMap for O(1) lookup instead of O(n²) nested loops
+        // Note: If duplicates exist, this will keep the last value, but validateNamedArgumentsStructure
+        // should have already caught duplicates before this method is called
+        Map<String, com.starrocks.sql.ast.expression.Expr> nameToExpr = new HashMap<>();
+        for (int i = 0; i < exprsNames.size(); i++) {
+            nameToExpr.put(exprsNames.get(i), exprs.get(i));
+        }
+
+        com.starrocks.sql.ast.expression.Expr[] newExprs = new com.starrocks.sql.ast.expression.Expr[names.length];
+        String[] newNames = new String[names.length];
+        int defaultNum = 0;
+
+        for (int j = 0; j < names.length; j++) {
+            com.starrocks.sql.ast.expression.Expr expr = nameToExpr.get(names[j]);
+            if (expr != null) {
+                newExprs[j] = expr;
+                newNames[j] = names[j];
+            } else {
+                // Parameter not provided - use default value
+                Expr defaultExpr = fn.getDefaultNamedExpr(names[j]);
+                newExprs[j] = defaultExpr == null ? null : defaultExpr.clone();
+                newNames[j] = names[j];
+                Preconditions.checkState(newExprs[j] != null,
+                        "Missing default value for parameter: " + names[j]);
+                defaultNum++;
+            }
+        }
+
+        Preconditions.checkState(defaultNum + exprsNames.size() == names.length,
+                "Parameter count mismatch after reordering: defaultNum=%s, providedNum=%s, totalNum=%s",
+                defaultNum, exprsNames.size(), names.length);
+
+        params.setExprs(Arrays.asList(newExprs));
+        params.setExprsNames(Arrays.asList(newNames));
+    }
+
+    /**
+     * Append default values for positional arguments.
+     * This method is used when calling a function that has named arguments support
+     * using positional arguments syntax.
+     *
+     * @param params FunctionParams containing positional arguments
+     * @param fn     Function definition with named arguments
+     */
+    public static void appendDefaultsForPositionalArgs(com.starrocks.sql.ast.expression.FunctionParams params, Function fn) {
+        String[] names = fn.getArgNames();
+        List<com.starrocks.sql.ast.expression.Expr> exprs = params.exprs();
+
+        Preconditions.checkState(names != null && names.length >= exprs.size());
+        int providedCount = exprs.size();
+        // Create a new mutable list
+        List<com.starrocks.sql.ast.expression.Expr> newExprs = new java.util.ArrayList<>(exprs);
+        // Append default values for remaining parameters
+        for (int i = providedCount; i < names.length; i++) {
+            com.starrocks.sql.ast.expression.Expr defaultExpr = fn.getDefaultNamedExpr(names[i]);
+            Preconditions.checkState(defaultExpr != null,
+                    "Missing default value for parameter: " + names[i]);
+            newExprs.add(defaultExpr.clone());
+        }
+        params.setExprs(newExprs);
+    }
+
+    /**
+     * Get string representation of named arguments for error messages.
+     *
+     * @param params FunctionParams with named arguments
+     * @return String representation like "param1=>value1,param2=>value2"
+     */
+    public static String getNamedArgStr(com.starrocks.sql.ast.expression.FunctionParams params) {
+        List<com.starrocks.sql.ast.expression.Expr> exprs = params.exprs();
+        List<String> exprsNames = params.getExprsNames();
+
+        Preconditions.checkState(exprs.size() == exprsNames.size());
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < exprs.size(); i++) {
+            if (i != 0) {
+                result.append(",");
+            }
+            result.append(exprsNames.get(i)).append("=>")
+                  .append(com.starrocks.sql.ast.expression.ExprToSql.toSql(exprs.get(i)));
+        }
+        return result.toString();
+    }
+
+    /**
+     * Find a similar parameter name (case-insensitive match).
+     */
+    private static String findSimilarParam(String input, String[] validParams) {
+        for (String valid : validParams) {
+            if (valid.equalsIgnoreCase(input)) {
+                return valid;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Throw a user-friendly error when named arguments function lookup fails.
+     * This is called when getAnalyzedFunctionForNamedArgs returns null.
+     */
+    public static void throwFriendlyNamedArgError(String fnName, Type[] argumentTypes, List<String> paramNames) {
+        // Try to find function ignoring argument names to get better error messages
+        Function fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+        if (fn != null) {
+            if (fn.hasNamedArg()) {
+                // Function exists and supports named args - validate structure to get specific error
+                // Note: Use validateNamedArgumentsStructure (not validateNamedArguments) because
+                // this is called BEFORE reordering, and NULL validation requires reordered arguments
+                validateNamedArgumentsStructure(fnName, fn, paramNames);
+            } else {
+                // Function exists but does not support named arguments
+                throw new SemanticException(fnName + "() does not support named arguments");
+            }
+        }
+        // If we reach here (fn == null), throw generic error (will be handled by caller)
+    }
+
+    /**
+     * Get function with named arguments support for positional call.
+     * This method is called when regular function lookup fails, to check if
+     * the function supports named arguments and can be called with fewer positional arguments.
+     *
+     * @param session       current connect context
+     * @param fnName        function name
+     * @param argumentTypes argument types provided by the caller
+     * @return function if found and it supports named arguments with defaults, otherwise null
+     */
+    public static Function getAnalyzedFunctionForPositionalCallWithNamedArgs(
+            ConnectContext session, String fnName, Type[] argumentTypes) {
+        // Try to find a function with named arguments by searching with full argument types
+        Function fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        if (fn == null || !fn.hasNamedArg()) {
+            return null;
+        }
+
+        int providedArgCount = argumentTypes.length;
+        int requiredArgCount = fn.getRequiredArgNum();
+        int totalArgCount = fn.getNumArgs();
+
+        // Check if provided arguments count is within valid range
+        if (providedArgCount < requiredArgCount || providedArgCount > totalArgCount) {
+            return null;
+        }
+
+        // Verify that provided argument types match the function's expected types
+        Type[] fnArgTypes = fn.getArgs();
+        for (int i = 0; i < providedArgCount; i++) {
+            if (!argumentTypes[i].matchesType(fnArgTypes[i]) &&
+                    !TypeManager.canCastTo(argumentTypes[i], fnArgTypes[i])) {
+                return null;
+            }
+        }
+
+        return fn;
+    }
+
+    /**
+     * Throw a user-friendly error for positional function calls that failed.
+     * This checks if the function supports named arguments and provides helpful error messages
+     * about missing required parameters.
+     *
+     * @param fnName        function name
+     * @param argumentTypes argument types provided by the caller
+     */
+    public static void throwFriendlyPositionalArgError(String fnName, Type[] argumentTypes) {
+        Function fn = null;
+
+        // Try to find a function with named arguments support
+        if (argumentTypes.length > 0) {
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        }
+
+        // If no arguments provided or function not found, try to find by name from FunctionSet
+        if (fn == null) {
+            List<Function> functions = GlobalStateMgr.getCurrentState().getBuiltinFunctions().stream()
+                    .filter(f -> f.functionName().equalsIgnoreCase(fnName) && f.hasNamedArg())
+                    .collect(Collectors.toList());
+            if (!functions.isEmpty()) {
+                fn = functions.get(0);
+            }
+        }
+
+        if (fn == null || !fn.hasNamedArg()) {
+            return; // Let caller handle with generic error
+        }
+
+        int providedArgCount = argumentTypes.length;
+        int requiredArgCount = fn.getRequiredArgNum();
+
+        // Check if not enough arguments provided
+        if (providedArgCount < requiredArgCount) {
+            String[] argNames = fn.getArgNames();
+            StringBuilder missingParams = new StringBuilder();
+            for (int i = providedArgCount; i < requiredArgCount; i++) {
+                if (missingParams.length() > 0) {
+                    missingParams.append(", ");
+                }
+                missingParams.append("'").append(argNames[i]).append("'");
+            }
+            throw new SemanticException(String.format(
+                    "%s() requires at least %d argument(s), but got %d. Missing required parameter(s): %s",
+                    fnName, requiredArgCount, providedArgCount, missingParams));
+        }
     }
 }

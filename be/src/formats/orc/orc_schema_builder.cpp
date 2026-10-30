@@ -14,7 +14,9 @@
 
 #include "orc_schema_builder.h"
 
-#include "fmt/format.h"
+#include <fmt/format.h>
+
+#include "base/format.h"
 
 namespace starrocks {
 

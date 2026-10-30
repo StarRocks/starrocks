@@ -22,6 +22,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants.DefaultViewSqlSecurity;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
@@ -56,9 +57,15 @@ public class ViewAnalyzer {
             stmt.setTableRef(tableRef);
 
             final String catalog = tableRef.getCatalogName();
-            final String db = tableRef.getDbName();
             final String tableName = tableRef.getTableName();
             FeNameFormat.checkTableName(tableName);
+
+            // When the statement omits the SECURITY clause, fall back to the session-level default characteristic.
+            // An explicit SECURITY NONE / SECURITY INVOKER clause is preserved as parsed.
+            if (!stmt.isSecurityExplicit()) {
+                DefaultViewSqlSecurity defaultSecurity = context.getSessionVariable().getDefaultViewSqlSecurity();
+                stmt.setSecurity(defaultSecurity == DefaultViewSqlSecurity.INVOKER);
+            }
 
             // Only allow setting properties for Iceberg views
             if (!MapUtils.isEmpty(stmt.getProperties())) {
@@ -74,6 +81,7 @@ public class ViewAnalyzer {
             }
 
             Analyzer.analyze(stmt.getQueryStatement(), context);
+            AnalyzerUtils.prohibitTimeTravelQuery(stmt.getQueryStatement(), "create view");
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(stmt.getQueryStatement());
             if (hasTemporaryTable) {
                 throw new SemanticException("View can't base on temporary table");
@@ -126,6 +134,7 @@ public class ViewAnalyzer {
             AlterViewClause alterViewClause = (AlterViewClause) alterClause;
 
             Analyzer.analyze(alterViewClause.getQueryStatement(), context);
+            AnalyzerUtils.prohibitTimeTravelQuery(alterViewClause.getQueryStatement(), "alter view");
             boolean hasTemporaryTable = AnalyzerUtils.hasTemporaryTables(((AlterViewClause) alterClause).getQueryStatement());
             if (hasTemporaryTable) {
                 throw new SemanticException("View can't base on temporary table");

@@ -14,11 +14,21 @@
 
 #pragma once
 
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
+#include "base/status.h"
+#include "column/binary_column.h"
 #include "column/column.h"
 #include "column/object_column.h"
+#include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
+#include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "types/variant_value.h"
 
 namespace starrocks {
@@ -26,20 +36,46 @@ namespace starrocks {
 class VariantColumn final
         : public CowFactory<ColumnFactory<ObjectColumn<VariantRowValue>, VariantColumn>, VariantColumn, Column> {
 public:
+    enum class EncodedVariantState : uint8_t {
+        kNull,
+        kValue,
+    };
+
+    struct EncodedVariantResult {
+        EncodedVariantState state = EncodedVariantState::kNull;
+        VariantRowValue value;
+    };
+
     using ValueType = VariantRowValue;
     using SuperClass = CowFactory<ColumnFactory<ObjectColumn<VariantRowValue>, VariantColumn>, VariantColumn, Column>;
     using BaseClass = VariantColumnBase;
-    using ImmContainer = ObjectDataProxyContainer;
 
-    VariantColumn() = default;
-    explicit VariantColumn(size_t size) : SuperClass(size) {}
+    VariantColumn();
+    explicit VariantColumn(size_t size);
     DISALLOW_COPY(VariantColumn);
 
-    VariantColumn(VariantColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {}
+    VariantColumn(VariantColumn&& rhs) noexcept
+            : SuperClass(std::move(rhs)),
+              _shredded_paths(std::move(rhs._shredded_paths)),
+              _parsed_shredded_paths(std::move(rhs._parsed_shredded_paths)),
+              _path_index(std::move(rhs._path_index)),
+              _shredded_types(std::move(rhs._shredded_types)),
+              _typed_columns(std::move(rhs._typed_columns)),
+              _fallback_columns(std::move(rhs._fallback_columns)),
+              _metadata_column(std::move(rhs._metadata_column)),
+              _remain_value_column(std::move(rhs._remain_value_column)) {}
 
-    MutableColumnPtr clone() const override { return BaseClass::clone(); }
+    MutableColumnPtr clone() const override;
     MutableColumnPtr clone_empty() const override { return this->create(); }
 
+    // Row-level serde used by generic Column key paths (e.g. multi-column GROUP BY / hash keys).
+    // Use VariantRowValue wire format so each row is self-describing and does not depend on
+    // receiver-side shredded schema.
+    // Different from ColumnArraySerde:
+    // - here: row-wise key serialization for execution engine internal hash paths.
+    // - ColumnArraySerde: full-column serialization, including shredded schema metadata.
+    // Tradeoff: this path may materialize typed overlays into row values and can be slower than
+    // schema-aware shredded row encoding, but it is robust for schema-less key restoration.
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
     uint32_t serialize_size(size_t idx) const override;
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
@@ -47,24 +83,194 @@ public:
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     void append_datum(const Datum& datum) override;
+    void append(const Column& src) override { append(src, 0, src.size()); }
     void append(const Column& src, size_t offset, size_t count) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const void* value, size_t count) override;
+    void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
+    bool append_strings(const Slice* data, size_t size) override;
 
-    // Add a forwarding function to expose the base class append function
-    void append(const Column& src) { append(src, 0, src.size()); }
     void append(const VariantRowValue* object);
-    void append(VariantRowValue&& object);
     void append(const VariantRowValue& object);
+    void append(const VariantRowRef& object);
+    void append_shredded(Slice metadata, Slice remain_value);
+    void append_shredded_null();
     bool append_nulls(size_t count) override;
+    void append_default() override;
+    void append_default(size_t count) override;
+    void fill_default(const Filter& filter) override;
+    void update_rows(const Column& src, const uint32_t* indexes) override;
+
+    size_t size() const override;
+    size_t capacity() const override;
+    size_t container_memory_usage() const override;
+    size_t reference_memory_usage() const override;
+    size_t reference_memory_usage(size_t from, size_t size) const override;
+    size_t byte_size(size_t from, size_t size) const override;
+    Datum get(size_t n) const override;
+    void reserve(size_t n) override;
+    void resize(size_t n) override;
+    void assign(size_t n, size_t idx) override;
+    void remove_first_n_values(size_t count) override;
+    size_t filter_range(const Filter& filter, size_t from, size_t to) override;
+    int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
+    int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
+    void swap_column(Column& rhs) override;
+    void reset_column() override;
+    Status capacity_limit_reached() const override;
+    void check_or_die() const override;
 
     bool is_variant() const override { return true; }
+    // A VariantColumn is considered shredded if it has typed columns,
+    // or has both metadata/remain columns.
+    bool is_shredded_variant() const;
+    // Typed-only shredded shape:
+    // - typed columns exist
+    // - metadata/remain are absent
+    bool is_typed_only_variant() const;
+    bool try_get_row_ref(size_t idx, VariantRowRef* out) const;
+    const VariantRowValue* get_row_value(size_t idx, VariantRowValue* output) const;
+    bool try_materialize_row(size_t idx, VariantRowValue* output) const;
 
     std::string get_name() const override { return "variant"; }
+
+    void set_shredded_columns(std::vector<std::string> paths, std::vector<TypeDescriptor> type_descs,
+                              MutableColumns columns, BinaryColumn::MutablePtr metadata_column,
+                              BinaryColumn::MutablePtr remain_value_column);
+    // Same as above, plus one fallback column per typed path (see _fallback_columns). `fallback_columns` is either
+    // empty (no fallback values) or has one entry per path, where a nullptr entry means "no fallback values".
+    void set_shredded_columns(std::vector<std::string> paths, std::vector<TypeDescriptor> type_descs,
+                              MutableColumns columns, MutableColumns fallback_columns,
+                              BinaryColumn::MutablePtr metadata_column, BinaryColumn::MutablePtr remain_value_column);
+    static Status validate_shredded_schema(const std::vector<std::string>& paths,
+                                           const std::vector<TypeDescriptor>& type_descs, const MutableColumns& columns,
+                                           const BinaryColumn::MutablePtr& metadata_column,
+                                           const BinaryColumn::MutablePtr& remain_value_column);
+
+    void clear_shredded_columns();
+
+    const std::vector<std::string>& shredded_paths() const { return _shredded_paths; }
+
+    // Cached parsed form of _shredded_paths. Populated by set_shredded_columns(),
+    // kept in sync with _shredded_paths. Avoids per-row re-parsing in hot paths.
+    const std::vector<VariantPath>& parsed_shredded_paths() const { return _parsed_shredded_paths; }
+
+    const std::vector<TypeDescriptor>& shredded_types() const { return _shredded_types; }
+
+    std::vector<TypeDescriptor>& mutable_shredded_types() { return _shredded_types; }
+
+    const MutableColumns& typed_columns() const { return _typed_columns; }
+
+    MutableColumns& mutable_typed_columns() { return _typed_columns; }
+    int find_shredded_path(std::string_view path) const;
+    const Column* typed_column_by_index(size_t idx) const;
+
+    // Fallback values of typed path `idx`: a nullable binary column of Variant value bytes (decoded with the row's
+    // metadata) for rows whose value at that path does not fit the typed column type. nullptr means the path has no
+    // fallback values. See _fallback_columns.
+    const Column* fallback_column_by_index(size_t idx) const;
+    const MutableColumns& fallback_columns() const { return _fallback_columns; }
+    MutableColumns& mutable_fallback_columns() { return _fallback_columns; }
+    // True when typed path `idx` has a fallback value at `row`.
+    bool has_fallback_value(size_t idx, size_t row) const;
+    // True when typed path `idx` has a fallback value in any row.
+    bool has_any_fallback_value(size_t idx) const;
+    // Fallback value of typed path `idx` at `row`, decoded with the row's metadata. Requires has_fallback_value().
+    StatusOr<VariantRowValue> fallback_value(size_t idx, size_t row) const;
+    // Creates an all-null fallback column for typed path `idx` if it has none yet, and returns it.
+    Column* ensure_fallback_column(size_t idx);
+    // Creates an empty fallback column, the type every fallback column has.
+    static MutableColumnPtr create_fallback_column();
+
+    const BinaryColumn::MutablePtr& metadata_column() const { return _metadata_column; }
+
+    const BinaryColumn::MutablePtr& remain_value_column() const { return _remain_value_column; }
+
+    bool has_metadata_column() const { return _metadata_column != nullptr; }
+
+    bool has_remain_value() const { return _remain_value_column != nullptr; }
+
+    bool is_equal_schema(const VariantColumn* other) const;
+
+    void mutate_each_subcolumn() override {
+        for (auto& column : _typed_columns) {
+            column = (std::move(*column)).mutate();
+        }
+        for (auto& column : _fallback_columns) {
+            if (column != nullptr) {
+                column = (std::move(*column)).mutate();
+            }
+        }
+        if (_metadata_column != nullptr) {
+            _metadata_column = BinaryColumn::static_pointer_cast((std::move(*_metadata_column)).mutate());
+        }
+        if (_remain_value_column != nullptr) {
+            _remain_value_column = BinaryColumn::static_pointer_cast((std::move(*_remain_value_column)).mutate());
+        }
+    }
+
+    // Encode one typed cell into a row-level Variant value. Complex values containing
+    // nested Variant children are traversed column-wise to avoid the legacy Datum path.
+    static StatusOr<EncodedVariantResult> encode_typed_row_as_variant(const Column* typed_column, size_t typed_row,
+                                                                      const TypeDescriptor& type_desc);
+
+    // Deep-copy a shredded VariantColumn, duplicating typed columns, metadata, and remain.
+    // Caller must ensure src.is_shredded_variant().
+    static MutableColumnPtr deep_copy_shredded(const VariantColumn& src);
+
+    // Ensure base metadata/remain columns exist.
+    // For typed-only schema, this attaches null base payload rows while preserving typed ownership.
+    Status ensure_base_variant_column();
+
+    // Align destination schema from `src` before append/merge.
+    // Empty destination is initialized directly from `src`; otherwise schema
+    // is aligned via path union and compatibility checks.
+    bool align_schema_from(const VariantColumn& src);
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
 
     std::string debug_item(size_t idx) const override;
 
     std::string debug_string() const override;
+
+private:
+    void _init_schema_from(const VariantColumn& other);
+
+    // Template implementation for container row append methods
+    template <typename AppendFunc>
+    void _append_container_rows_impl(const VariantColumn& src, size_t count, AppendFunc&& append_func);
+
+    const VariantColumn* _prepare_append_source(const VariantColumn& src, MutableColumnPtr* src_working_copy);
+
+    bool _is_shredded_schema_valid() const;
+
+    bool _is_shredded_row_aligned() const;
+
+    size_t _shredded_num_rows() const;
+
+    // Helper to create metadata/remain columns with pre-allocated capacity
+    std::pair<BinaryColumn::MutablePtr, BinaryColumn::MutablePtr> _create_metadata_remain_columns(size_t rows);
+
+    // Rebuild _path_index from _shredded_paths. Call whenever _shredded_paths changes.
+    void _rebuild_path_index();
+
+private:
+    std::vector<std::string> _shredded_paths;
+    // Cached parsed shredded paths (parallel to _shredded_paths).
+    std::vector<VariantPath> _parsed_shredded_paths;
+    // O(1) index into _shredded_paths for find_shredded_path. Kept in sync with _shredded_paths.
+    std::unordered_map<std::string, int> _path_index;
+    std::vector<TypeDescriptor> _shredded_types;
+    MutableColumns _typed_columns;
+    // Parallel to _typed_columns (Parquet shredding `value` next to `typed_value`). For a row, the value at a typed
+    // path lives in exactly one place: the typed cell (non-null), the fallback cell (non-null, a value whose type does
+    // not fit the typed column), or nowhere (both null: the path is missing in that row). It is never also in remain.
+    // A nullptr entry means the path has no fallback values; fallback values require the metadata column.
+    MutableColumns _fallback_columns;
+    // base variant column. Always BinaryColumn: nulls are encoded as binary sentinel payloads,
+    // not as NullableColumn null flags.
+    BinaryColumn::MutablePtr _metadata_column;
+    BinaryColumn::MutablePtr _remain_value_column;
 };
 
 } // namespace starrocks

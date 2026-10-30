@@ -17,6 +17,7 @@
 #include <chrono>
 
 #include "base/uid_util.h"
+#include "common/system/backend_options.h"
 #include "common/thread/thread.h"
 #include "gutil/strings/substitute.h"
 
@@ -133,10 +134,20 @@ Status RuntimeFilterCache::init() {
     }
 }
 void RuntimeFilterCache::_clean_thread_func(RuntimeFilterCache* cache) {
+#ifdef BE_TEST
+    // Same shape as QueryContextManager::_clean_func: the stop flag is only re-checked between sleeps
+    // and ~RuntimeFilterCache joins this thread, so shutdown blocks for the remainder of the current
+    // interval. Both pollers start during env init and share the 100ms period, so they run in phase --
+    // shortening only one of them just relocates the wait to the other and saves nothing. Shrink this
+    // one too so the pair together cost ~10ms instead of ~100ms per test process.
+    constexpr int64_t kCleanIntervalMs = 10;
+#else
+    constexpr int64_t kCleanIntervalMs = 100;
+#endif
     while (!cache->is_stopped()) {
         cache->_clean_filters();
         cache->_clean_events(false);
-        std::this_thread::sleep_for(milliseconds(100));
+        std::this_thread::sleep_for(milliseconds(kCleanIntervalMs));
     }
 }
 void RuntimeFilterCache::_clean_events(bool force) {
@@ -196,6 +207,12 @@ RuntimeFilterPtr RuntimeFilterCache::get(const TUniqueId& query_id, int filter_i
         _use_times.fetch_add(filter != nullptr);
         return filter;
     }
+}
+
+void RuntimeFilterCache::add_rf_event(const RfTracePoint& pt) {
+    std::string msg =
+            strings::Substitute("$0($1)", pt.msg, pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
+    add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
 }
 
 void RuntimeFilterCache::add_rf_event(const TUniqueId& query_id, int filter_id, std::string&& msg) {

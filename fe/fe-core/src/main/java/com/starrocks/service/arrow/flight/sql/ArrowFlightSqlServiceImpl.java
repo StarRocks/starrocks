@@ -27,16 +27,20 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TUniqueId;
+import org.apache.arrow.flight.Action;
 import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.CloseSessionRequest;
 import org.apache.arrow.flight.CloseSessionResult;
@@ -58,6 +62,7 @@ import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.flight.auth2.BearerCredentialWriter;
 import org.apache.arrow.flight.grpc.CredentialCallOption;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
+import org.apache.arrow.flight.sql.FlightSqlUtils;
 import org.apache.arrow.flight.sql.SqlInfoBuilder;
 import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.memory.BufferAllocator;
@@ -186,7 +191,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
                 // When proxy is enabled and token is from another FE, forward the request
                 if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
-                    forwardActionToRemoteFE(token, request, listener);
+                    forwardActionToRemoteFE(token, FlightSqlUtils.FLIGHT_SQL_CREATE_PREPARED_STATEMENT.getType(),
+                            request, listener);
                     return;
                 }
 
@@ -194,19 +200,19 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
                 String preparedStmtId = ctx.addPreparedStatement(request.getQuery());
 
-                // To prevent the client from mistakenly interpreting an empty Schema as an update statement (instead of a query statement),
-                // we need to ensure that the Schema returned by createPreparedStatement includes the query metadata.
-                // This means we need to correctly set the DatasetSchema and ParameterSchema in ActionCreatePreparedStatementResult.
-                // We generate a minimal Schema. This minimal Schema can include an integer column to ensure the Schema is not empty.
-                try (VectorSchemaRoot schemaRoot = ArrowUtil.createSingleSchemaRoot("r", "0")) {
-                    Schema schema = schemaRoot.getSchema();
-                    FlightSql.ActionCreatePreparedStatementResult result =
-                            FlightSql.ActionCreatePreparedStatementResult.newBuilder()
-                                    .setPreparedStatementHandle(ByteString.copyFromUtf8(preparedStmtId))
-                                    .setDatasetSchema(ByteString.copyFrom(serializeMetadata(schema)))
-                                    .setParameterSchema(ByteString.copyFrom(serializeMetadata(schema))).build();
-                    listener.onNext(new Result(Any.pack(result).toByteArray()));
-                }
+                // Try to plan the query to get the real schema for the prepared statement.
+                // This is important because clients (JDBC, ADBC) use the schema returned here
+                // to determine column names and types. Without this, a placeholder schema with
+                // a single column named "r" would be returned, which is incorrect.
+                Schema schema = buildSchemaFromQuery(ctx, request.getQuery());
+
+                FlightSql.ActionCreatePreparedStatementResult result =
+                        FlightSql.ActionCreatePreparedStatementResult.newBuilder()
+                                .setPreparedStatementHandle(ByteString.copyFromUtf8(preparedStmtId))
+                                .setDatasetSchema(ByteString.copyFrom(serializeMetadata(schema)))
+                                .setParameterSchema(ByteString.copyFrom(serializeMetadata(new Schema(Collections.emptyList()))))
+                                .build();
+                listener.onNext(new Result(Any.pack(result).toByteArray()));
                 listener.onCompleted();
             } catch (Exception e) {
                 listener.onError(
@@ -229,7 +235,8 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         // When proxy is enabled and token is from another FE, forward the request
         if (isProxyEnabled() && !sessionManager.isLocalToken(token)) {
             EXECUTOR.submit(() -> {
-                forwardActionToRemoteFE(token, request, listener);
+                forwardActionToRemoteFE(token, FlightSqlUtils.FLIGHT_SQL_CLOSE_PREPARED_STATEMENT.getType(),
+                        request, listener);
             });
             return;
         }
@@ -715,11 +722,17 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
     /**
      * Forward an action to the FE that issued the token.
      *
+     * <p>The {@code actionType} is the Flight SQL action-type string that the remote FE's {@code doAction} dispatcher
+     * matches on (e.g. {@code "CreatePreparedStatement"}), NOT the protobuf message name. It is supplied by the caller,
+     * which statically knows which action it is issuing.
+     *
      * @param token The bearer token containing the FE host
+     * @param actionType The Flight SQL action-type string (see {@link FlightSqlUtils})
      * @param request The protobuf action request to forward
      * @param listener The listener to receive results
      */
-    private void forwardActionToRemoteFE(String token, Message request, StreamListener<Result> listener) {
+    private void forwardActionToRemoteFE(String token, String actionType, Message request,
+                                         StreamListener<Result> listener) {
         String feHost = ArrowFlightSqlSessionManager.extractFeHost(token);
         if (feHost == null) {
             listener.onError(CallStatus.INVALID_ARGUMENT
@@ -735,9 +748,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             FlightClient client = getOrCreateClient(nodeKey, feHost, fePort);
             CredentialCallOption authOption = new CredentialCallOption(new BearerCredentialWriter(token));
 
-            org.apache.arrow.flight.Action action = new org.apache.arrow.flight.Action(
-                    request.getDescriptorForType().getFullName(),
-                    Any.pack(request).toByteArray());
+            Action action = new Action(actionType, Any.pack(request).toByteArray());
 
             Iterator<Result> results = client.doAction(action, authOption);
             while (results.hasNext()) {
@@ -745,8 +756,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
             }
             listener.onCompleted();
 
-            LOG.info("[ARROW] Forwarded action {} to remote FE {}:{}",
-                    request.getDescriptorForType().getName(), feHost, fePort);
+            LOG.info("[ARROW] Forwarded action {} to remote FE {}:{}", actionType, feHost, fePort);
 
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to forward action to remote FE {}:{}", feHost, fePort, e);
@@ -898,6 +908,52 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         final Ticket ticket = new Ticket(Any.pack(request).toByteArray());
         final List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, endpoint));
         return new FlightInfo(schema, descriptor, endpoints, -1, -1);
+    }
+
+    /**
+     * Analyze the query to obtain the real output schema (column names and types).
+     * Only performs semantic analysis (not full planning) to avoid side effects that
+     * could interfere with the subsequent query execution in getFlightInfoPreparedStatement.
+     * For non-query statements or if analysis fails, a placeholder schema is returned.
+     */
+    private Schema buildSchemaFromQuery(ArrowFlightSqlConnectContext ctx, String query) {
+        try {
+            try (var scope = ctx.bindScope()) {
+                List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(query, ctx.getSessionVariable());
+                if (stmts.isEmpty()) {
+                    return buildPlaceholderSchema();
+                }
+                StatementBase stmt = stmts.get(0);
+                if (!(stmt instanceof QueryStatement)) {
+                    return buildPlaceholderSchema();
+                }
+                stmt.setOrigStmt(new OriginStatement(query));
+
+                Analyzer.analyze(stmt, ctx);
+
+                QueryStatement queryStmt = (QueryStatement) stmt;
+                List<String> colNames = queryStmt.getQueryRelation().getColumnOutputNames();
+                List<Expr> outputExprs = queryStmt.getQueryRelation().getOutputExpression();
+
+                List<Field> arrowFields = Lists.newArrayList();
+                for (int i = 0; i < colNames.size(); i++) {
+                    Expr expr = outputExprs.get(i);
+                    Field arrowField = ArrowUtils.convertToArrowType(
+                            expr.getOriginType(), colNames.get(i), expr.isNullable());
+                    arrowFields.add(arrowField);
+                }
+                return new Schema(arrowFields);
+            }
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Failed to analyze query for schema in createPreparedStatement, " +
+                    "falling back to placeholder schema. query={}", query, e);
+            return buildPlaceholderSchema();
+        }
+    }
+
+    private static Schema buildPlaceholderSchema() {
+        return new Schema(Lists.newArrayList(
+                ArrowUtils.convertToArrowType(com.starrocks.type.IntegerType.INT, "result", true)));
     }
 
     public static Schema buildSchema(ExecPlan execPlan) {

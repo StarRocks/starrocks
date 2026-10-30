@@ -1,0 +1,282 @@
+---
+displayed_sidebar: docs
+hide_table_of_contents: true
+description: "Alphabetical t - z"
+---
+
+# Metrics t through z
+
+## `tablet_base_max_compaction_score`
+
+- Unit: -
+- Description: Highest base compaction score of tablets in this BE.
+
+## `tablet_cumulative_max_compaction_score`
+
+- Unit: -
+- Description: Highest cumulative compaction score of tablets in this BE.
+
+## `tablet_metadata_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by tablet metadata.
+
+## `tablet_pre_split_data_tier_file_selection`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `mode` — `subset` (the sample scanned a subset of the files, sized by `tablet_pre_split_data_tier_scan_byte_limit`), `under_limit` (the input was within the limit, so every file was scanned), `disabled` (the limit is `0`, so every file was scanned), `all_selected` (the input exceeded the limit, but taking whole files, at least one per partition and at least `tablet_pre_split_data_tier_min_scan_files` in all, still selected every file), `partition_from_file_data` (the input exceeded the limit, but a partition column is read from the file data rather than from the path, or path and literal partition columns are mixed, so every file was scanned: a subset could miss whole partitions), `path_not_expressible` (`INSERT INTO ... SELECT FROM FILES()` only: a selected file's path contains a character FILES cannot take as an exact path — `,`, `*`, `?`, `[`, `{`, `\`, a `:` in the path after the host, or leading or trailing whitespace — so the sample scanned every file through the statement's own `path`).
+- Description: Total data-tier samples of Broker Load and `INSERT INTO ... SELECT FROM FILES()` loads, by how the scanned files were chosen.
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- Unit: -
+- Type: Histogram
+- Description: Share of the input bytes that each data-tier sample of a Broker Load or `INSERT INTO ... SELECT FROM FILES()` load scanned, as a percentage rounded down to an integer, so `100` means every file was scanned.
+
+## `tablet_reshard_merge_candidate_blocked`
+
+- Unit: Count
+- Description: Cumulative count of tablet-exclusion events during merge planning, not a live count of currently blocked tablets: it increases every planning pass that skips an otherwise-eligible tablet, and never decreases except across an FE restart. Watch its rate of increase, not its raw value. A tablet is skipped either because it still holds merge-blocking shared data files left over from a tablet split, or because it has not yet been proven free of them -- which usually means compaction has not caught up yet, but can also mean the tablet is on a BE that predates this check, or has simply not been observed yet. Clearing the shared files a split leaves behind takes a compaction that rewrites them: on a non-primary-key table `ALTER TABLE ... COMPACT` forces that on demand. On a primary-key table the same statement forces base compaction only for a tablet that carries outstanding deletes; a delete-free tablet, which is the usual shape right after a split, is unaffected by it and waits for ordinary compaction to reach those rowsets. Only the Leader FE increments this counter.
+
+## `tablet_reshard_merge_rejected_total`
+
+- Unit: Count
+- Description: Cumulative number of tablet merges this BE refused before writing anything, because the tablets to merge did not meet what a merge requires. Typical causes: a tablet still holds data files it shares with another tablet since a split, two of the tablets declare the same file, or the tablets disagree on a table-level setting. The refused publish fails with an error message that starts with `MERGE_REJECTED`, and the BE logs a WARNING that names the source and target tablets.
+
+## `tablet_schema_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by tablet schema.
+
+## `tablet_update_max_compaction_score`
+
+- Unit: -
+- Description: Highest compaction score of tablets in Primary Key tables in the current BE.
+
+## `threadpool_task_exception_total`
+
+- Unit: Count
+- Description: Cumulative number of task exceptions caught and swallowed by ThreadPool worker threads across the BE process. Increments only when [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) is `true`. When that item is `false` (default), this metric stays unchanged because there is no enclosing catch clause. Use it to alert on swallowed failures while catch mode is enabled; pool name and exception detail remain in the BE ERROR logs.
+
+## `thrift_client_retries_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of retries that FE Thrift RPC calls made after their connection broke. Before each retry, the FE waits a random interval with exponential backoff (100 to 200 ms before the first retry, with both bounds doubling for each further retry until the wait reaches 500 to 1000 ms), then reopens the connection and resends the request. Calls that time out are not retried and are not counted. The number of retries per call is bounded by `thrift_rpc_retry_times`. A rising value means the FE keeps losing its Thrift connections to other nodes, for example because the Thrift worker pool of the Leader FE is saturated and closing new connections; read it together with `thrift_server_rejected_connections_total` on that node.
+
+## `thrift_connections_total`
+
+- Unit: Count
+- Description: Total number of thrift connections (including finished connections).
+
+## `thrift_current_connections (Deprecated)`
+
+## `thrift_opened_clients`
+
+- Unit: Count
+- Description: Number of currently opened thrift clients.
+
+## `thrift_server_acceptor_stall_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Milliseconds since the FE Thrift accept loop last returned a connection. A wedged acceptor makes this climb, but so does an FE with no Thrift traffic, so read it together with the connection arrival rate rather than alerting on it alone. `0` also covers the case where no acceptor is running at all, before the Thrift server starts and after it stops, so a threshold alert on this metric cannot tell a dead Thrift service from a healthy one.
+
+## `thrift_server_expired_connections_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of connections that the FE Thrift server closed without serving because they had waited in the pending queue longer than `thrift_server_queue_timeout_ms`. That check is disabled by default, so this counter stays at 0 until an operator arms the timeout. A rising value means the FE was working through a backlog of connections whose callers had almost certainly given up already; read it together with `thrift_server_queue_wait_ms` to see how far behind the queue had fallen.
+
+## `thrift_server_queue_wait_ms`
+
+- Unit: ms
+- Type: Instantaneous
+- Description: Quantiles of how long connections waited in the FE Thrift server pending queue before a worker thread picked them up. Sampled for every dequeued connection, including the ones then dropped as expired, so the distribution is not truncated at `thrift_server_queue_timeout_ms`. This is the leading indicator of Thrift saturation: it climbs while the worker pool is still keeping up, well before `thrift_server_rejected_connections_total` starts to move.
+
+## `thrift_server_rejected_connections_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of connections the FE Thrift server closed immediately because its worker pool was saturated. Every rejection is counted, including those whose log warning was suppressed by rate limiting. A rising value means clients are being turned away; read it with the `thread_pool` metrics for `thrift-server-pool`, where the rate of increase indicates how far worker capacity is short.
+
+## `thrift_used_clients`
+
+- Unit: Count
+- Description: Number of thrift clients in use currently.
+
+## `total_column_pool_bytes (Deprecated)`
+
+## `transaction_streaming_load_bytes`
+
+- Unit: Bytes
+- Description: Total loading bytes of transaction load.
+
+## `transaction_streaming_load_current_processing`
+
+- Unit: Count
+- Description: Number of currently running transactional Stream Load tasks.
+
+## `transaction_streaming_load_duration_ms`
+
+- Unit: ms
+- Description: Total time spent on Stream Load transaction Interface.
+
+## `transaction_streaming_load_requests_total`
+
+- Unit: Count
+- Description: Total number of transaction load requests.
+
+## `txn_request`
+
+- Unit: -
+- Description: Transaction requests of BEGIN, COMMIT, ROLLBACK, and EXEC.
+
+## `uint8_column_pool_bytes`
+
+- Unit: Bytes
+- Description: Bytes used by the UINT8 column pool.
+
+## `unused_rowsets_count`
+
+- Unit: Count
+- Description: Total number of unused rowsets. Please note that these rowsets will be reclaimed later.
+
+## `update_apply_queue_count`
+
+- Unit: Count
+- Description: Queued task count in the Primary Key table transaction APPLY thread pool.
+
+## `update_compaction_duration_us`
+
+- Unit: us
+- Description: Total time spent on Primary Key table compactions.
+
+## `update_compaction_outputs_bytes_total`
+
+- Unit: Bytes
+- Description: Total bytes written by Primary Key table compactions.
+
+## `update_compaction_outputs_total`
+
+- Unit: Count
+- Description: Total number of Primary Key table compactions.
+
+## `update_compaction_task_byte_per_second`
+
+- Unit: Bytes/s
+- Description: Estimated rate of Primary Key table compactions.
+
+## `update_compaction_task_cost_time_ns`
+
+- Unit: ns
+- Description: Total time spent on the Primary Key table compactions.
+
+## `update_del_vector_bytes_total`
+
+- Unit: Bytes
+- Description: Total memory used for caching DELETE vectors in Primary Key tables.
+
+## `update_del_vector_deletes_new`
+
+- Unit: Count
+- Description: Total number of newly generated DELETE vectors used in Primary Key tables.
+
+## `update_del_vector_deletes_total (Deprecated)`
+
+## `update_del_vector_dels_num (Deprecated)`
+
+## `update_del_vector_num`
+
+- Unit: Count
+- Description: Number of the DELETE vector cache items in Primary Key tables.
+
+## `update_mem_bytes`
+
+- Unit: Bytes
+- Description: Memory used by Primary Key table APPLY tasks and Primary Key index.
+
+## `update_primary_index_bytes_total`
+
+- Unit: Bytes
+- Description: Total memory cost of the Primary Key index.
+
+## `update_primary_index_num`
+
+- Unit: Count
+- Description: Number of Primary Key indexes cached in memory.
+
+## `update_rowset_commit_apply_duration_us`
+
+- Unit: us
+- Description: Total time spent on Primary Key table APPLY tasks.
+
+## `update_rowset_commit_apply_total`
+
+- Unit: Count
+- Description: Total number of COMMIT and APPLY for Primary Key tables.
+
+## `update_rowset_commit_request_failed`
+
+- Unit: Count
+- Description: Total number of failed rowset COMMIT requests in Primary Key tables.
+
+## `update_rowset_commit_request_total`
+
+- Unit: Count
+- Description: Total number of rowset COMMIT requests in Primary Key tables.
+
+## `vector_index_cache_async_load_failure`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load tasks that started but failed during loading or cache publication. Tasks canceled before execution are not included.
+
+## `vector_index_cache_async_load_inflight`
+
+- Type: Gauge
+- Unit: Count
+- Description: Current number of vector index cache-load tasks running in background workers.
+
+## `vector_index_cache_async_load_ns`
+
+- Type: Counter
+- Unit: Nanoseconds
+- Description: Cumulative execution time of background vector index cache-load tasks that started, including successful and failed tasks. Queue wait time and rejected tasks are not included.
+
+## `vector_index_cache_async_load_queued`
+
+- Type: Gauge
+- Unit: Count
+- Description: Current number of vector index cache-load tasks accepted by the background pool but not yet running.
+
+## `vector_index_cache_async_load_rejected`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load requests rejected before execution, for example because the cache has zero capacity, the pool is stopped, or its queue cannot accept the task.
+
+## `vector_index_cache_async_load_success`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of background vector index cache-load tasks that successfully loaded and published an index. Capacity eviction can remove a successfully published entry immediately when the cache cannot retain it.
+
+## `vector_index_cache_loading_wait_timeout`
+
+- Type: Counter
+- Unit: Count
+- Description: Cumulative number of synchronous cache callers whose wait for an in-progress vector index load reached `vector_index_cache_loading_wait_timeout_ms`. This metric counts callers rather than unique indexes; the existing loader continues after a timeout.
+
+## `wait_base_compaction_task_num`
+
+- Unit: Count
+- Description: Number of base compaction tasks waiting for execution.
+
+## `wait_cumulative_compaction_task_num`
+
+- Unit: Count
+- Description: Number of cumulative compaction tasks waiting for execution.
+
+## `writable_blocks_total (Deprecated)`

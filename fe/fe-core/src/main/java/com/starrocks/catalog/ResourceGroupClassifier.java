@@ -30,7 +30,6 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ResourceGroupClassifier {
-    public static final Pattern USER_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$");
     public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
             ImmutableSet.of(QueryType.SELECT.name(), QueryType.INSERT.name());
@@ -128,8 +127,12 @@ public class ResourceGroupClassifier {
         return planMemCostRange;
     }
 
-    public boolean isSatisfied(String user, List<String> activeRoles, QueryType queryType, String sourceIp,
-                               Set<Long> dbIds, double planCpuCost, double planMemCost) {
+    public boolean isSatisfied(Set<Long> candidateResourceGroupIds, String user, List<String> activeRoles,
+                               QueryType queryType, String sourceIp, Set<Long> dbIds, double planCpuCost,
+                               double planMemCost) {
+        if (candidateResourceGroupIds != null && !candidateResourceGroupIds.contains(resourceGroupId)) {
+            return false;
+        }
         if (!isVisible(user, activeRoles, sourceIp)) {
             return false;
         }

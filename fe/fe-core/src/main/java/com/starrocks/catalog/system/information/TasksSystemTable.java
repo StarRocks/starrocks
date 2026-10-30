@@ -18,10 +18,8 @@ import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.qe.ConnectContext;
@@ -70,9 +68,9 @@ public class TasksSystemTable {
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<Task> taskList = taskManager.filterTasks(params);
         List<TTaskInfo> result = Lists.newArrayList();
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.current_user_ident);
         }
 
         for (Task task : taskList) {
@@ -82,9 +80,6 @@ public class TasksSystemTable {
             }
 
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         task.getDbName());
             } catch (AccessDeniedException e) {
@@ -103,7 +98,7 @@ public class TasksSystemTable {
             }
             info.setSchedule(scheduleStr);
             info.setCatalog(task.getCatalogName());
-            info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
+            info.setDatabase(task.getDbName());
             if (Config.enable_task_info_mask_credential) {
                 info.setDefinition(SqlCredentialRedactor.redact(task.getDefinition()));
             } else {

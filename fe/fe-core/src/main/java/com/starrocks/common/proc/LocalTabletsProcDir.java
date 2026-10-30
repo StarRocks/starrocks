@@ -86,13 +86,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
     }
 
     public static int analyzeColumn(String columnName) throws AnalysisException {
-        for (String title : TITLE_NAMES) {
-            if (title.equalsIgnoreCase(columnName)) {
-                return TITLE_NAMES.indexOf(title);
-            }
-        }
-
-        throw new AnalysisException("Title name[" + columnName + "] does not exist");
+        return ProcUtils.analyzeColumn(TITLE_NAMES, columnName);
     }
 
     public List<List<Comparable>> fetchComparableResult(long version, long backendId, Replica.ReplicaState state,
@@ -104,7 +98,8 @@ public class LocalTabletsProcDir implements ProcDirInterface {
 
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             // get infos
             for (Tablet tablet : index.getTablets()) {
@@ -170,7 +165,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
         return tabletInfos;
     }

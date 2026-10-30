@@ -36,7 +36,7 @@ static inline bool checked_cast(const FromType& from, ToType* to) {
 
 template <typename T>
 static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const TypeDescriptor& type_desc,
-                                            const std::string& name, const avro_value_t& value) {
+                                            std::string_view name, const avro_value_t& value) {
     switch (avro_value_get_type(&value)) {
     case AVRO_INT32: {
         int in;
@@ -133,7 +133,7 @@ static Status add_column_with_numeric_value(FixedLengthColumn<T>* column, const 
 
 template <typename T>
 static Status add_column_with_string_value_numeric(FixedLengthColumn<T>* column, const TypeDescriptor& type_desc,
-                                                   const std::string& name, const avro_value_t& value) {
+                                                   std::string_view name, const avro_value_t& value) {
     const char* in;
     size_t size;
     if (avro_value_get_string(&value, &in, &size) != 0) {
@@ -178,7 +178,7 @@ static Status add_column_with_string_value_numeric(FixedLengthColumn<T>* column,
 }
 
 template <typename T>
-Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                           const avro_value_t& value) {
     auto numeric_column = down_cast<FixedLengthColumn<T>*>(column);
     avro_type_t type = avro_value_get_type(&value);
@@ -203,25 +203,25 @@ Status add_numeric_column(Column* column, const TypeDescriptor& type_desc, const
     return Status::OK();
 }
 
-template Status add_numeric_column<int64_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int64_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                             const avro_value_t& value);
-template Status add_numeric_column<int32_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int32_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                             const avro_value_t& value);
-template Status add_numeric_column<int16_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int16_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                             const avro_value_t& value);
-template Status add_numeric_column<int8_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<int8_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                            const avro_value_t& value);
-template Status add_numeric_column<uint8_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<uint8_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                             const avro_value_t& value);
-template Status add_numeric_column<uint16_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<uint16_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                              const avro_value_t& value);
-template Status add_numeric_column<uint32_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<uint32_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                              const avro_value_t& value);
-template Status add_numeric_column<uint64_t>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<uint64_t>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                              const avro_value_t& value);
-template Status add_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<double>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                            const avro_value_t& value);
-template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+template Status add_numeric_column<float>(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                           const avro_value_t& value);
 
 } // namespace starrocks

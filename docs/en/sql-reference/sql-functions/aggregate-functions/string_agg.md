@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Concatenates non-null values from a group into a single string."
 ---
 
 # string_agg

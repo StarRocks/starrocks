@@ -18,6 +18,18 @@
 #include <numeric>
 #include <utility>
 
+// Architecture-specific intrinsic headers must be included at file scope
+// (outside any namespace) so their declarations land in the global namespace
+// where the standard expects them; including them under `namespace starrocks`
+// is undefined behaviour across compilers.
+#if defined(__AVX2__)
+#include <immintrin.h>
+#elif defined(__SSE2__)
+#include <emmintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/concurrency/stopwatch.hpp"
@@ -29,24 +41,31 @@
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_compression_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/util/debug_util.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
-#include "storage/persistent_index_parallel_publish_context.h"
+#include "storage/parallel_upsert_context.h"
 #include "storage/persistent_index_tablet_loader.h"
 #include "storage/primary_key_dump.h"
-#include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/update_manager.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -243,12 +262,14 @@ Status ImmutableIndexShard::compress_and_write(const CompressionTypePB& compress
         RETURN_IF_ERROR(get_block_compression_codec(compression_type, &codec));
         int32_t offset = 0;
         faststring compressed_body;
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
         for (int32_t i = 0; i < npage(); i++) {
             compressed_body.resize(codec->max_compressed_len(_page_size));
             Slice input((uint8_t*)_pages.data() + i * _page_size, _page_size);
             *uncompressed_size += input.get_size();
             Slice compressed_slice(compressed_body);
-            RETURN_IF_ERROR(codec->compress(input, &compressed_slice));
+            RETURN_IF_ERROR(codec->compress(input, &compressed_slice, compression_options));
             RETURN_IF_ERROR(wb.append(compressed_slice));
             compressed_pages_off[i] = offset;
             offset += compressed_slice.get_size();
@@ -618,7 +639,7 @@ Status ImmutableIndexWriter::init(const string& idx_file_path, const EditVersion
     _version = version;
     _idx_file_path = idx_file_path;
     _idx_file_path_tmp = _idx_file_path + ".tmp";
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_idx_file_path_tmp));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_idx_file_path_tmp));
     WritableFileOptions wblock_opts{.sync_on_close = sync_on_close, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_idx_wb, _fs->new_writable_file(wblock_opts, _idx_file_path_tmp));
 
@@ -1880,8 +1901,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
     return Status::OK();
 }
 
-Status ShardByLengthMutableIndex::insert(size_t n, const Slice* keys, const IndexValue* values,
-                                         std::set<size_t>& check_l1_key_sizes) {
+Status ShardByLengthMutableIndex::insert(size_t n, const Slice* keys, const IndexValue* values) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
@@ -1889,7 +1909,6 @@ Status ShardByLengthMutableIndex::insert(size_t n, const Slice* keys, const Inde
         for (size_t i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(_shards[shard_offset + i]->insert(keys, values, idxes_by_shard[i]));
         }
-        check_l1_key_sizes.insert(shard_offset);
     } else {
         DCHECK(_fixed_key_size == 0);
         const auto* fkeys = reinterpret_cast<const Slice*>(keys);
@@ -2129,7 +2148,7 @@ static Status checksum_of_file(RandomAccessFile* file, uint64_t offset, uint32_t
 
 Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVersion& version, const CommitType& type) {
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_path));
     switch (type) {
     case kFlush: {
         // create a new empty _l0 file because all data in _l0 has write into _l1 files
@@ -2252,7 +2271,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
     }
     std::string index_file_name = get_l0_index_file_name(_path, start_version);
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(_path));
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     phmap::BinaryInputArchive ar(index_file_name.data());
     if (snapshot_size > 0) {
@@ -2385,15 +2404,41 @@ Status ShardByLengthMutableIndex::create_index_file(std::string& path) {
         std::string msg = strings::Substitute("l0 index file already exist: $0", _index_file->filename());
         return Status::InternalError(msg);
     }
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     WritableFileOptions wblock_opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(_index_file, _fs->new_writable_file(wblock_opts, path));
     return Status::OK();
 }
 
-#ifdef __SSE2__
+#ifdef __AVX2__
 
-#include <emmintrin.h>
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    auto tests = _mm256_set1_epi8(tag);
+    size_t i = 0;
+
+    // Process 32 bytes at a time with AVX2
+    for (; i + 32 <= ntag; i += 32) {
+        auto tags32 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(tags + i));
+        auto eqs = _mm256_cmpeq_epi8(tags32, tests);
+        auto mask = static_cast<uint32_t>(_mm256_movemask_epi8(eqs));
+        while (mask != 0) {
+            uint32_t match_pos = __builtin_ctz(mask);
+            matched_idxes[nmatched++] = i + match_pos;
+            mask &= (mask - 1);
+        }
+    }
+
+    // Process remaining bytes with scalar
+    for (; i < ntag; i++) {
+        if (tags[i] == tag) {
+            matched_idxes[nmatched++] = i;
+        }
+    }
+    return nmatched;
+}
+
+#elif defined(__SSE2__)
 
 size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
     size_t nmatched = 0;
@@ -2408,6 +2453,46 @@ size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint
                 matched_idxes[nmatched++] = i + match_pos;
             }
             mask &= (mask - 1);
+        }
+    }
+    return nmatched;
+}
+
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+
+size_t get_matched_tag_idxes(const uint8_t* tags, size_t ntag, uint8_t tag, uint8_t* matched_idxes) {
+    size_t nmatched = 0;
+    uint8x16_t tests = vdupq_n_u8(tag);
+    size_t i = 0;
+
+    // Process 16 bytes at a time with NEON
+    for (; i + 16 <= ntag; i += 16) {
+        uint8x16_t tags16 = vld1q_u8(tags + i);
+        uint8x16_t eqs = vceqq_u8(tags16, tests);
+
+        // Check low and high 8-byte halves separately
+        uint64_t lo = vgetq_lane_u64(vreinterpretq_u64_u8(eqs), 0);
+        uint64_t hi = vgetq_lane_u64(vreinterpretq_u64_u8(eqs), 1);
+
+        // Process low half (bytes 0-7)
+        while (lo != 0) {
+            int bit_pos = __builtin_ctzll(lo);
+            matched_idxes[nmatched++] = i + (bit_pos >> 3);
+            lo &= ~(0xFFULL << bit_pos);
+        }
+
+        // Process high half (bytes 8-15)
+        while (hi != 0) {
+            int bit_pos = __builtin_ctzll(hi);
+            matched_idxes[nmatched++] = i + 8 + (bit_pos >> 3);
+            hi &= ~(0xFFULL << bit_pos);
+        }
+    }
+
+    // Process remaining bytes with scalar
+    for (; i < ntag; i++) {
+        if (tags[i] == tag) {
+            matched_idxes[nmatched++] = i;
         }
     }
     return nmatched;
@@ -2855,88 +2940,6 @@ Status ImmutableIndex::_get_in_shard(size_t shard_idx, size_t n, const Slice* ke
     }
 }
 
-Status ImmutableIndex::_check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys,
-                                                        const KeysInfo& keys_info,
-                                                        std::unique_ptr<ImmutableIndexShard>* shard) const {
-    const auto& shard_info = _shards[shard_idx];
-    uint8_t candidate_idxes[kBucketSizeMax];
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        IndexHash h(keys_info.key_infos[i].second);
-        auto pageid = h.page() % shard_info.npage;
-        auto bucketid = h.bucket() % shard_info.nbucket;
-        auto& bucket_info = (*shard)->bucket(pageid, bucketid);
-        uint8_t* bucket_pos = (*shard)->pack_in_page(bucket_info.pageid, bucket_info.packid);
-        auto nele = bucket_info.size;
-        auto key_idx = keys_info.key_infos[i].first;
-        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
-        auto kv_pos = bucket_pos + pad(nele, kPackSize);
-        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
-            auto idx = candidate_idxes[candidate_idx];
-            auto candidate_kv = kv_pos + (shard_info.key_size + shard_info.value_size) * idx;
-            if (strings::memeq(candidate_kv, fixed_key_probe, shard_info.key_size)) {
-                return Status::AlreadyExist("key already exists in immutable index");
-            }
-        }
-    }
-    return Status::OK();
-}
-
-Status ImmutableIndex::_check_not_exist_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys,
-                                                        const KeysInfo& keys_info,
-                                                        std::unique_ptr<ImmutableIndexShard>* shard) const {
-    const auto& shard_info = _shards[shard_idx];
-    DCHECK(shard_info.key_size == 0);
-    uint8_t candidate_idxes[kBucketSizeMax];
-    for (size_t i = 0; i < keys_info.size(); i++) {
-        IndexHash h(keys_info.key_infos[i].second);
-        auto pageid = h.page() % shard_info.npage;
-        auto bucketid = h.bucket() % shard_info.nbucket;
-        auto& bucket_info = (*shard)->bucket(pageid, bucketid);
-        uint8_t* bucket_pos = (*shard)->pack_in_page(bucket_info.pageid, bucket_info.packid);
-        auto nele = bucket_info.size;
-        auto key_idx = keys_info.key_infos[i].first;
-        auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
-        auto offset_pos = bucket_pos + pad(nele, kPackSize);
-        for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
-            auto idx = candidate_idxes[candidate_idx];
-            auto kv_offset = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * idx);
-            auto kv_size = UNALIGNED_LOAD16(offset_pos + sizeof(uint16_t) * (idx + 1)) - kv_offset;
-            auto candidate_kv = bucket_pos + kv_offset;
-            if (keys[key_idx].size == kv_size - shard_info.value_size &&
-                strings::memeq(candidate_kv, key_probe, kv_size - shard_info.value_size)) {
-                return Status::AlreadyExist("key already exists in immutable index");
-            }
-        }
-    }
-    return Status::OK();
-}
-
-Status ImmutableIndex::_check_not_exist_in_shard(size_t shard_idx, size_t n, const Slice* keys,
-                                                 const KeysInfo& keys_info) const {
-    const auto& shard_info = _shards[shard_idx];
-    if (shard_info.size == 0 || keys_info.size() == 0) {
-        return Status::OK();
-    }
-    std::unique_ptr<ImmutableIndexShard> shard =
-            std::make_unique<ImmutableIndexShard>(shard_info.npage, shard_info.page_size);
-    if (shard_info.uncompressed_size == 0) {
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.bytes, "illegal shard size");
-    } else {
-        RETURN_ERROR_IF_FALSE(shard->npage() * shard_info.page_size == shard_info.uncompressed_size,
-                              "illegal shard size");
-    }
-    RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, shard->data(), shard_info.bytes));
-    RETURN_IF_ERROR(shard->decompress_pages(_compression_type, shard_info.npage, shard_info.uncompressed_size,
-                                            shard_info.bytes, shard_info.page_off));
-    if (shard_info.key_size != 0) {
-        return _check_not_exist_in_fixlen_shard(shard_idx, n, keys, keys_info, &shard);
-    } else {
-        return _check_not_exist_in_varlen_shard(shard_idx, n, keys, keys_info, &shard);
-    }
-}
-
 static void split_keys_info_by_shard(std::vector<KeyInfo>& keys_info, std::vector<KeysInfo>& keys_info_by_shards) {
     uint32_t shard_bits = log2(keys_info_by_shards.size());
     for (const auto& key_info : keys_info) {
@@ -3076,21 +3079,27 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
     return Status::OK();
 }
 
-Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys, size_t key_size) {
-    auto iter = _shard_info_by_length.find(key_size);
-    if (iter == _shard_info_by_length.end()) {
-        return Status::OK();
-    }
-    const auto [shard_off, nshard] = iter->second;
-    uint32_t shard_bits = log2(nshard);
-    std::vector<KeysInfo> keys_info_by_shard(nshard);
-    for (size_t i = 0; i < n; i++) {
-        IndexHash h(key_index_hash(keys[i].data, keys[i].size));
-        auto shard = h.shard(shard_bits);
-        keys_info_by_shard[shard].key_infos.emplace_back(i, h.hash);
-    }
-    for (size_t i = 0; i < nshard; i++) {
-        RETURN_IF_ERROR(_check_not_exist_in_shard(shard_off + i, n, keys, keys_info_by_shard[i]));
+Status ImmutableIndex::check_not_exist(size_t n, const Slice* keys) {
+    std::vector<IndexValue> values(n);
+    for (const auto& [key_size, _] : _shard_info_by_length) {
+        KeysInfo keys_info;
+        for (size_t i = 0; i < n; i++) {
+            // Fixed-size shards compare exactly |key_size| bytes. Only probe matching lengths
+            // there; the variable-length shard checks the full key length itself.
+            if (key_size != 0 && keys[i].size != key_size) {
+                continue;
+            }
+            keys_info.key_infos.emplace_back(i, key_index_hash(keys[i].data, keys[i].size));
+        }
+        if (keys_info.key_infos.empty()) {
+            continue;
+        }
+        KeysInfo found_keys_info;
+        RETURN_IF_ERROR(get(n, keys, keys_info, values.data(), &found_keys_info, key_size));
+        // A tombstone is still an existing key, even though its value is NullIndexValue.
+        if (!found_keys_info.key_infos.empty()) {
+            return Status::AlreadyExist("key already exists in immutable index");
+        }
     }
     return Status::OK();
 }
@@ -3213,6 +3222,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
     size_t nshard_bf = meta.shard_bf_off_size();
     DCHECK(nshard_bf == 0 || nshard_bf == nshard + 1);
     std::vector<size_t> bf_off;
+    bf_off.reserve(nshard_bf);
     for (size_t i = 0; i < nshard_bf; i++) {
         bf_off.emplace_back(meta.shard_bf_off(i));
     }
@@ -3295,7 +3305,7 @@ Status PersistentIndex::create(size_t key_size, const EditVersion& version) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     return Status::OK();
 }
 
@@ -3308,7 +3318,7 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_load(index_meta));
     // delete expired _l0 file and _l1 file
     const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
@@ -3484,7 +3494,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
     std::vector<uint32_t> rowids;
     TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
     ChunkUniquePtr chunk_shared_ptr;
-    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096));
+    TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
     RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
                                                              uint32_t rowset_id) {
@@ -3521,17 +3531,21 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                         values.emplace_back(base + rowids[i]);
                     }
                     Status st;
+                    // TODO: Refactor the code to remove tmp slice array.
+                    Buffer<Slice> keys;
+                    TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
                     if (pkc->is_binary()) {
-                        st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(), false);
+                        ColumnHelper::build_slices(pkc, keys);
+                        st = insert(pkc->size(), keys.data(), values.data(), false);
                     } else {
-                        std::vector<Slice> keys;
-                        TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
-                        const auto* fkeys = pkc->continuous_data();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
+                        RawBytesVisitor visitor;
+                        RETURN_IF_ERROR(pkc->accept(&visitor));
+                        const auto* fkeys = visitor.result();
+                        for (size_t j = 0; j < pkc->size(); ++j) {
                             keys.emplace_back(fkeys, _key_size);
                             fkeys += _key_size;
                         }
-                        st = insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(), false);
+                        st = insert(pkc->size(), keys.data(), values.data(), false);
                     }
                     if (!st.ok()) {
                         LOG(ERROR) << "load index failed: tablet=" << loader->tablet_id() << " rowset:" << rowset_id
@@ -3808,7 +3822,7 @@ private:
     std::map<size_t, KeysInfo>* _keys_info_by_key_size;
     KeysInfo* _found_keys_info;
     PersistentIndex* _index;
-    IOStatEntry* _io_stat_entry;
+    [[maybe_unused]] IOStatEntry* _io_stat_entry;
 };
 
 Status PersistentIndex::get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys,
@@ -3955,8 +3969,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         } else {
-            iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[_key_size].first);
-            iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[_key_size].second);
+            iter->second.first = std::max<int64_t>(0, iter->second.first + add_usage_and_size[_key_size].first);
+            iter->second.second = std::max<int64_t>(0, iter->second.second + add_usage_and_size[_key_size].second);
         }
     } else {
         for (int key_size = 1; key_size <= kSliceMaxFixLength; key_size++) {
@@ -3967,8 +3981,8 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
                 LOG(WARNING) << msg;
                 return Status::InternalError(msg);
             } else {
-                iter->second.first = std::max(0L, iter->second.first + add_usage_and_size[key_size].first);
-                iter->second.second = std::max(0L, iter->second.second + add_usage_and_size[key_size].second);
+                iter->second.first = std::max<int64_t>(0, iter->second.first + add_usage_and_size[key_size].first);
+                iter->second.second = std::max<int64_t>(0, iter->second.second + add_usage_and_size[key_size].second);
             }
         }
 
@@ -3986,14 +4000,14 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
             LOG(WARNING) << msg;
             return Status::InternalError(msg);
         }
-        iter->second.first = std::max(0L, iter->second.first + slice_usage);
-        iter->second.second = std::max(0L, iter->second.second + slice_size);
+        iter->second.first = std::max<int64_t>(0, iter->second.first + slice_usage);
+        iter->second.second = std::max<int64_t>(0, iter->second.second + slice_size);
     }
     return Status::OK();
 }
 
 Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                               IOStat* stat, ParallelPublishContext* ctx) {
+                               IOStat* stat, ParallelUpsertContext* ctx) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     MonotonicStopWatch watch;
@@ -4029,28 +4043,29 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     if (stat != nullptr) {
         stat->flush_or_wal_cost += watch.elapsed_time();
     }
+    if (ctx != nullptr) {
+        // old_values is complete by now -- this implementation never defers the lookup -- so the
+        // context is appended to here. See ParallelUpsertContext for why this is the only place that
+        // may do it.
+        ctx->add_replaced(old_values, n);
+    }
     return st;
 }
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
-    std::set<size_t> check_l1_l2_key_sizes;
-    RETURN_IF_ERROR(_l0->insert(n, keys, values, check_l1_l2_key_sizes));
-    if (!_l1_vec.empty()) {
-        int end_idx = _has_l1 ? 1 : 0;
-        for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
-            for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
-                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys, check_l1_l2_key_size));
+    RETURN_IF_ERROR(_l0->insert(n, keys, values));
+    if (!config::skip_pindex_l1_l2_check_in_insert) {
+        if (!_l1_vec.empty()) {
+            int end_idx = _has_l1 ? 1 : 0;
+            for (int i = _l1_vec.size() - 1; i >= end_idx; i--) {
+                RETURN_IF_ERROR(_l1_vec[i]->check_not_exist(n, keys));
             }
         }
-    }
-    if (_has_l1 && check_l1) {
-        for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
-            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys, check_l1_l2_key_size));
+        if (_has_l1 && check_l1) {
+            RETURN_IF_ERROR(_l1_vec[0]->check_not_exist(n, keys));
         }
-    }
-    for (int i = _l2_vec.size() - 1; i >= 0; i--) {
-        for (const auto check_l1_l2_key_size : check_l1_l2_key_sizes) {
-            RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys, check_l1_l2_key_size));
+        for (int i = _l2_vec.size() - 1; i >= 0; i--) {
+            RETURN_IF_ERROR(_l2_vec[i]->check_not_exist(n, keys));
         }
     }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kFixedMaxKeySize + 1,
@@ -5104,7 +5119,7 @@ Status PersistentIndex::major_compaction(DataDir* data_dir, int64_t tablet_id, s
         return Status::OK();
     }
     // 1. load current l2 vec
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_path));
     std::vector<EditVersion> l2_versions;
     std::vector<std::unique_ptr<ImmutableIndex>> l2_vec;
     DCHECK(prev_index_meta.l2_versions_size() == prev_index_meta.l2_version_merged_size());
@@ -5359,7 +5374,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
         return st.status();
     }
     _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_path));
     // set _dump_snapshot to true
     // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
     _dump_snapshot = true;

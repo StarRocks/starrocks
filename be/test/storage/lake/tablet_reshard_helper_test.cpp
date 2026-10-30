@@ -1,0 +1,1268 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/tablet_reshard_helper.h"
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include <limits>
+#include <numeric>
+#include <optional>
+#include <random>
+
+#include "base/testutil/assert.h"
+#include "storage/datum_variant.h"
+#include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/types.h"
+#include "storage/variant_tuple.h"
+
+namespace starrocks::lake {
+
+using namespace tablet_reshard_helper;
+
+class TabletReshardHelperTest : public ::testing::Test {};
+
+namespace {
+
+int64_t sum_of(const std::vector<int64_t>& v) {
+    return std::accumulate(v.begin(), v.end(), int64_t{0});
+}
+
+} // namespace
+
+// -----------------------------------------------------------------------------
+// Proportional anchor helpers. allocate_proportionally and
+// cap_and_redistribute_dels back the per-rowset anchor pass in
+// tablet_splitter (split_tablet → get_tablet_split_ranges → apply_rowset_anchor)
+// so re-splits preserve `Σ children == parent` exactly. End-to-end conservation
+// under split is covered by LakeTabletReshardTest in tablet_reshard_test.cpp.
+// -----------------------------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_basic_conservation) {
+    std::vector<int64_t> out(3, 0);
+    allocate_proportionally(/*total=*/12, /*weights=*/{1, 2, 3}, &out);
+    EXPECT_EQ(12, sum_of(out));
+    EXPECT_EQ((std::vector<int64_t>{2, 4, 6}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_largest_remainder) {
+    // total=10, weights=[1,1,1] → base=3 each, leftover=1 → first index gets +1.
+    std::vector<int64_t> out(3, 0);
+    allocate_proportionally(/*total=*/10, /*weights=*/{1, 1, 1}, &out);
+    EXPECT_EQ(10, sum_of(out));
+    EXPECT_EQ((std::vector<int64_t>{4, 3, 3}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_tiebreak_deterministic) {
+    // Equal weights and tied remainders fall to the lowest indices. Run twice
+    // and compare to confirm reproducibility.
+    std::vector<int64_t> a(5, 0), b(5, 0);
+    allocate_proportionally(7, {1, 1, 1, 1, 1}, &a);
+    allocate_proportionally(7, {1, 1, 1, 1, 1}, &b);
+    EXPECT_EQ(7, sum_of(a));
+    EXPECT_EQ((std::vector<int64_t>{2, 2, 1, 1, 1}), a);
+    EXPECT_EQ(a, b);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_zero_total) {
+    std::vector<int64_t> out(4, 99);
+    allocate_proportionally(0, {3, 5, 7, 9}, &out);
+    EXPECT_EQ((std::vector<int64_t>{0, 0, 0, 0}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_zero_weights_uniform_fallback) {
+    std::vector<int64_t> out(3, 0);
+    allocate_proportionally(10, {0, 0, 0}, &out);
+    EXPECT_EQ(10, sum_of(out));
+    // floor(10/3)=3 each, remainder 1 → first index gets +1.
+    EXPECT_EQ((std::vector<int64_t>{4, 3, 3}), out);
+}
+
+TEST_F(TabletReshardHelperTest, allocate_proportionally_overflow_safe_at_extreme_scale) {
+    // total * weight overflows int64 without __int128 (1e10 * 1e10 = 1e20).
+    constexpr int64_t kTotal = 10'000'000'000LL;
+    std::vector<int64_t> weights{kTotal, kTotal};
+    std::vector<int64_t> out(2, 0);
+    allocate_proportionally(kTotal, weights, &out);
+    EXPECT_EQ(kTotal, sum_of(out));
+    EXPECT_EQ(kTotal / 2, out[0]);
+    EXPECT_EQ(kTotal / 2, out[1]);
+}
+
+// Regression: when Σ weights overflows int64_t (each weight ≈ INT64_MAX/2 + 1,
+// sum > INT64_MAX), the largest-remainder routine must keep remainders in
+// __int128 — truncating to int64_t there would corrupt the tie-break order.
+// Hare-Niemeyer for two equal weights and an even total still gives an even
+// split; the test asserts both Σ conservation and the deterministic
+// per-bucket value.
+TEST_F(TabletReshardHelperTest, allocate_proportionally_handles_sum_weights_above_int64_max) {
+    constexpr int64_t kHalfPlus = (std::numeric_limits<int64_t>::max() / 2) + 1;
+    // 2 * kHalfPlus exceeds INT64_MAX (overflows in int64), but sum_w stays
+    // safe in __int128.
+    std::vector<int64_t> weights{kHalfPlus, kHalfPlus};
+    std::vector<int64_t> out(2, 0);
+    allocate_proportionally(/*total=*/100, weights, &out);
+    EXPECT_EQ(100, sum_of(out));
+    EXPECT_EQ(50, out[0]);
+    EXPECT_EQ(50, out[1]);
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_no_overflow_is_no_op) {
+    std::vector<int64_t> dels{2, 3, 1};
+    cap_and_redistribute_dels(/*rows=*/{10, 10, 10}, &dels);
+    EXPECT_EQ((std::vector<int64_t>{2, 3, 1}), dels);
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_basic_overflow) {
+    // dels[0] over-allocated by 5; redistribute to bucket 2 which has the
+    // largest headroom. Σ preserved at 20.
+    std::vector<int64_t> dels{15, 5, 0};
+    cap_and_redistribute_dels(/*rows=*/{10, 10, 10}, &dels);
+    EXPECT_EQ(20, sum_of(dels));
+    EXPECT_EQ(10, dels[0]);
+    // Bucket 1 has headroom 5, bucket 2 has 10 — headroom desc puts 2 ahead of 1
+    // (10 > 5). So overflow=5 goes to bucket 2 first.
+    EXPECT_EQ(5, dels[1]);
+    EXPECT_EQ(5, dels[2]);
+    for (size_t i = 0; i < dels.size(); ++i) {
+        EXPECT_LE(dels[i], 10);
+    }
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_skewed_headrooms_break_by_index) {
+    // Σ pre-cap dels = 20, Σ rows = 25 (feasible). After cap dels[0] from 10
+    // to 5, overflow=5; headroom=[0,5,5] → buckets 1 and 2 tie, index-asc
+    // tie-break sends overflow to bucket 1 first.
+    std::vector<int64_t> dels{10, 5, 5}; // pre-cap, Σ=20
+    cap_and_redistribute_dels(/*rows=*/{5, 10, 10}, &dels);
+    EXPECT_EQ(20, sum_of(dels));
+    EXPECT_EQ(5, dels[0]);
+    EXPECT_EQ(10, dels[1]); // takes the full overflow=5 (tie-break by index)
+    EXPECT_EQ(5, dels[2]);
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_invalid_parent_input_capped_to_rows_sum) {
+    // Σ pre-cap dels (30) > Σ rows (15). Best-effort contract: per-bucket cap
+    // honored, Σ dels post equals Σ rows (= 15).
+    std::vector<int64_t> dels{20, 5, 5};
+    cap_and_redistribute_dels(/*rows=*/{5, 5, 5}, &dels);
+    EXPECT_EQ(15, sum_of(dels));
+    for (size_t i = 0; i < 3; ++i) {
+        EXPECT_LE(dels[i], 5);
+    }
+}
+
+TEST_F(TabletReshardHelperTest, cap_and_redistribute_dels_fuzz_conservation_and_cap) {
+    // 1000 random trials with feasible inputs (Σ dels ≤ Σ rows). Helper must
+    // preserve Σ exactly and respect per-bucket cap.
+    std::mt19937_64 rng(42);
+    for (int trial = 0; trial < 1000; ++trial) {
+        const int n = 1 + (rng() % 8);
+        std::vector<int64_t> rows(n, 0);
+        std::vector<int64_t> dels(n, 0);
+        int64_t total_rows = 0;
+        for (int i = 0; i < n; ++i) {
+            rows[i] = static_cast<int64_t>(rng() % 1'000'000);
+            total_rows += rows[i];
+        }
+        // Pick parent.dels in [0, total_rows]; distribute it arbitrarily across
+        // buckets (may individually exceed rows[i]).
+        const int64_t parent_dels = total_rows == 0 ? 0 : static_cast<int64_t>(rng() % (total_rows + 1));
+        int64_t remaining = parent_dels;
+        for (int i = 0; i < n - 1 && remaining > 0; ++i) {
+            const int64_t take = static_cast<int64_t>(rng() % (remaining + 1));
+            dels[i] = take;
+            remaining -= take;
+        }
+        if (n > 0) dels[n - 1] = remaining;
+
+        cap_and_redistribute_dels(rows, &dels);
+        EXPECT_EQ(parent_dels, sum_of(dels)) << "trial=" << trial;
+        for (int i = 0; i < n; ++i) {
+            EXPECT_LE(dels[i], rows[i]) << "trial=" << trial << " bucket=" << i;
+            EXPECT_GE(dels[i], 0) << "trial=" << trial << " bucket=" << i;
+        }
+    }
+}
+
+// Verify that set_all_data_files_shared(TxnLogPB*) marks all SST-related fields
+// as shared=true, including the ssts fields in OpWrite and OpCompaction that were
+// previously missed.
+TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
+    TxnLogPB txn_log;
+
+    // Setup OpWrite with rowset, del_files, and ssts (all shared=false initially)
+    {
+        auto* op_write = txn_log.mutable_op_write();
+        auto* rowset = op_write->mutable_rowset();
+        rowset->add_segment_metas()->set_filename("seg1.dat");
+        rowset->add_segment_metas()->set_filename("seg2.dat");
+        auto* del = rowset->add_del_files();
+        del->set_name("del1.dat");
+
+        auto* sst1 = op_write->add_ssts();
+        sst1->set_name("write_sst1.sst");
+        sst1->set_shared(false);
+        auto* sst2 = op_write->add_ssts();
+        sst2->set_name("write_sst2.sst");
+        sst2->set_shared(false);
+    }
+
+    // Setup OpCompaction with output_rowset, output_sstable, output_sstables, and ssts
+    {
+        auto* op_compaction = txn_log.mutable_op_compaction();
+        auto* output_rowset = op_compaction->mutable_output_rowset();
+        output_rowset->add_segment_metas()->set_filename("compact_seg.dat");
+
+        op_compaction->mutable_output_sstable()->set_filename("output.sst");
+        op_compaction->mutable_output_sstable()->set_shared(false);
+
+        auto* out_sst = op_compaction->add_output_sstables();
+        out_sst->set_filename("output2.sst");
+        out_sst->set_shared(false);
+
+        auto* sst1 = op_compaction->add_ssts();
+        sst1->set_name("compact_sst1.sst");
+        sst1->set_shared(false);
+        auto* sst2 = op_compaction->add_ssts();
+        sst2->set_name("compact_sst2.sst");
+        sst2->set_shared(false);
+    }
+
+    // Setup OpSchemaChange with rowsets and delvec_meta
+    {
+        auto* op_schema_change = txn_log.mutable_op_schema_change();
+        auto* rowset = op_schema_change->add_rowsets();
+        rowset->add_segment_metas()->set_filename("sc_seg.dat");
+        auto* del = rowset->add_del_files();
+        del->set_name("sc_del.dat");
+        auto& delvec_file = (*op_schema_change->mutable_delvec_meta()->mutable_version_to_file())[1];
+        delvec_file.set_name("delvec1.dat");
+        delvec_file.set_shared(false);
+    }
+
+    // Call the function under test
+    set_all_data_files_shared(&txn_log);
+
+    // Verify OpWrite
+    {
+        const auto& op_write = txn_log.op_write();
+        // Rowset shared_segments
+        ASSERT_EQ(op_write.rowset().segment_metas_size(), 2);
+        EXPECT_TRUE(op_write.rowset().segment_metas(0).shared());
+        EXPECT_TRUE(op_write.rowset().segment_metas(1).shared());
+        // Del files
+        EXPECT_TRUE(op_write.rowset().del_files(0).shared());
+        // SSTs in OpWrite
+        ASSERT_EQ(op_write.ssts_size(), 2);
+        EXPECT_TRUE(op_write.ssts(0).shared());
+        EXPECT_TRUE(op_write.ssts(1).shared());
+    }
+
+    // Verify OpCompaction
+    {
+        const auto& op_compaction = txn_log.op_compaction();
+        // Output rowset shared_segments
+        ASSERT_EQ(op_compaction.output_rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(op_compaction.output_rowset().segment_metas(0).shared());
+        // Output sstable
+        EXPECT_TRUE(op_compaction.output_sstable().shared());
+        // Output sstables (repeated)
+        ASSERT_EQ(op_compaction.output_sstables_size(), 1);
+        EXPECT_TRUE(op_compaction.output_sstables(0).shared());
+        // SSTs in OpCompaction
+        ASSERT_EQ(op_compaction.ssts_size(), 2);
+        EXPECT_TRUE(op_compaction.ssts(0).shared());
+        EXPECT_TRUE(op_compaction.ssts(1).shared());
+    }
+
+    // Verify OpSchemaChange
+    {
+        const auto& op_schema_change = txn_log.op_schema_change();
+        ASSERT_EQ(op_schema_change.rowsets(0).segment_metas_size(), 1);
+        EXPECT_TRUE(op_schema_change.rowsets(0).segment_metas(0).shared());
+        EXPECT_TRUE(op_schema_change.rowsets(0).del_files(0).shared());
+        const auto& vtf = op_schema_change.delvec_meta().version_to_file();
+        auto it = vtf.find(1);
+        ASSERT_NE(it, vtf.end());
+        EXPECT_TRUE(it->second.shared());
+    }
+}
+
+// Verify that set_all_data_files_shared marks every op_write.dels_meta[].shared so that
+// new del files produced by an in-flight write that is cross-published during tablet
+// split are persisted with shared=true in the child tablets' rowset.del_files.
+TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_marks_dels_meta_shared) {
+    TxnLogPB txn_log;
+    auto* op_write = txn_log.mutable_op_write();
+    op_write->add_dels_meta()->set_name("del1.del");
+    op_write->add_dels_meta()->set_name("del2.del");
+    op_write->add_dels_meta()->set_name("del3.del");
+    // Start with each del's shared flag unset (pre-split state).
+    ASSERT_FALSE(op_write->dels_meta(0).shared());
+
+    set_all_data_files_shared(&txn_log);
+
+    ASSERT_EQ(txn_log.op_write().dels_meta_size(), 3);
+    EXPECT_TRUE(txn_log.op_write().dels_meta(0).shared());
+    EXPECT_TRUE(txn_log.op_write().dels_meta(1).shared());
+    EXPECT_TRUE(txn_log.op_write().dels_meta(2).shared());
+}
+
+// Verify that set_all_data_files_shared marks every SST-related field inside each
+// op_parallel_compaction.subtask_compactions entry. Each subtask is a full OpCompaction
+// republished via publish_primary_compaction and whose ssts get merged back into parent
+// compactions (see tablet_parallel_compaction_manager.cpp), so missing any field would
+// leak a non-shared flag into later metadata.
+TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_parallel_compaction_subtasks) {
+    TxnLogPB txn_log;
+    auto* op_parallel = txn_log.mutable_op_parallel_compaction();
+
+    // Two subtasks, each a full OpCompaction with output_rowset, output_sstable(s), and ssts
+    for (int i = 0; i < 2; ++i) {
+        auto* subtask = op_parallel->add_subtask_compactions();
+
+        auto* output_rowset = subtask->mutable_output_rowset();
+        output_rowset->add_segment_metas()->set_filename("sub_seg.dat");
+        auto* del = output_rowset->add_del_files();
+        del->set_name("sub_del.dat");
+
+        subtask->mutable_output_sstable()->set_filename("sub_output.sst");
+        subtask->mutable_output_sstable()->set_shared(false);
+
+        auto* out_sst = subtask->add_output_sstables();
+        out_sst->set_filename("sub_output_multi.sst");
+        out_sst->set_shared(false);
+
+        auto* sst = subtask->add_ssts();
+        sst->set_name("sub_ingested.sst");
+        sst->set_shared(false);
+    }
+
+    // Top-level parallel compaction output fields
+    op_parallel->mutable_output_sstable()->set_filename("parallel_output.sst");
+    op_parallel->mutable_output_sstable()->set_shared(false);
+    auto* top_out_sst = op_parallel->add_output_sstables();
+    top_out_sst->set_filename("parallel_output_multi.sst");
+    top_out_sst->set_shared(false);
+
+    set_all_data_files_shared(&txn_log);
+
+    ASSERT_EQ(txn_log.op_parallel_compaction().subtask_compactions_size(), 2);
+    for (const auto& subtask : txn_log.op_parallel_compaction().subtask_compactions()) {
+        // Nested rowset data files
+        ASSERT_EQ(subtask.output_rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(subtask.output_rowset().segment_metas(0).shared());
+        EXPECT_TRUE(subtask.output_rowset().del_files(0).shared());
+        // Nested SST fields
+        EXPECT_TRUE(subtask.output_sstable().shared());
+        ASSERT_EQ(subtask.output_sstables_size(), 1);
+        EXPECT_TRUE(subtask.output_sstables(0).shared());
+        ASSERT_EQ(subtask.ssts_size(), 1);
+        EXPECT_TRUE(subtask.ssts(0).shared()) << "subtask.ssts must be marked shared";
+    }
+
+    // Top-level parallel compaction fields still covered
+    EXPECT_TRUE(txn_log.op_parallel_compaction().output_sstable().shared());
+    ASSERT_EQ(txn_log.op_parallel_compaction().output_sstables_size(), 1);
+    EXPECT_TRUE(txn_log.op_parallel_compaction().output_sstables(0).shared());
+}
+
+// Verify that set_all_data_files_shared treats every op_replication.op_writes[i]
+// identically to a top-level op_write: populating shared_dels parallel to dels,
+// marking ssts shared, and marking rowset.shared_segments / del_files.shared. PK
+// incremental replication publishes each op_write through the same apply_opwrite
+// path (see txn_log_applier.cpp apply_write_log), so dropping any of these fields
+// here would re-open the same cross-publish leaks fixed for the top-level op_write.
+TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_op_replication) {
+    TxnLogPB txn_log;
+    auto* op_replication = txn_log.mutable_op_replication();
+
+    // Two replication op_writes with dels, rowset segments, and ssts.
+    for (int i = 0; i < 2; ++i) {
+        auto* op_write = op_replication->add_op_writes();
+
+        auto* rowset = op_write->mutable_rowset();
+        rowset->add_segment_metas()->set_filename("rep_seg.dat");
+        auto* del = rowset->add_del_files();
+        del->set_name("rep_existing.del");
+
+        op_write->add_dels_meta()->set_name("rep_new1.del");
+        op_write->add_dels_meta()->set_name("rep_new2.del");
+        // shared_dels starts empty — must be populated by set_all_data_files_shared.
+        ASSERT_FALSE(op_write->dels_meta(0).shared());
+
+        auto* sst = op_write->add_ssts();
+        sst->set_name("rep_sst.sst");
+        sst->set_shared(false);
+    }
+
+    set_all_data_files_shared(&txn_log);
+
+    ASSERT_EQ(txn_log.op_replication().op_writes_size(), 2);
+    for (const auto& op_write : txn_log.op_replication().op_writes()) {
+        // Rowset segment & existing del_file shared flags
+        ASSERT_EQ(op_write.rowset().segment_metas_size(), 1);
+        EXPECT_TRUE(op_write.rowset().segment_metas(0).shared());
+        EXPECT_TRUE(op_write.rowset().del_files(0).shared());
+        // New-del shared_dels parallel to dels
+        ASSERT_EQ(op_write.dels_meta_size(), 2);
+        EXPECT_TRUE(op_write.dels_meta(0).shared());
+        EXPECT_TRUE(op_write.dels_meta(1).shared());
+        // ssts shared flag
+        ASSERT_EQ(op_write.ssts_size(), 1);
+        EXPECT_TRUE(op_write.ssts(0).shared());
+    }
+}
+
+// Verify update_rowset_data_stats scales num_dels alongside num_rows / data_size so that
+// children of a split tablet do not inherit the parent's full delete cardinality. Without
+// this, get_tablet_stats subtracts the full D from each child's partial num_rows and the
+// partition row count collapses to 0.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_scales_num_dels) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+    rowset.set_num_dels(7);
+
+    // Split into 3 children: num_dels = 7/3 + remainder -> children get 3, 2, 2.
+    std::vector<int64_t> child_num_dels;
+    int64_t total_num_dels = 0;
+    for (int i = 0; i < 3; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/3, /*split_index=*/i);
+        child_num_dels.push_back(child.num_dels());
+        total_num_dels += child.num_dels();
+        EXPECT_LE(child.num_dels(), child.num_rows()) << "child " << i;
+    }
+    EXPECT_EQ(7, total_num_dels);
+    EXPECT_THAT(child_num_dels, ::testing::ElementsAre(3, 2, 2));
+}
+
+// When num_dels/split_count would exceed num_rows (extreme case, e.g. parent with almost
+// all rows deleted and uneven row split), the child must clamp num_dels to its share of
+// rows so that live_rows = num_rows - num_dels stays >= 0 downstream.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to_num_rows) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(3);
+    rowset.set_data_size(300);
+    rowset.set_num_dels(9); // pathologically large
+
+    RowsetMetadataPB child = rowset;
+    update_rowset_data_stats(&child, /*split_count=*/3, /*split_index=*/0);
+    EXPECT_EQ(1, child.num_rows());
+    // 9/3 = 3, clamped to num_rows=1.
+    EXPECT_EQ(1, child.num_dels());
+}
+
+// An interior sibling retains the legacy singleton virtual-share allocation. The appliers key a
+// rowset's presence off its segments, so a sibling that may own rows is not harmed by drawing a zero
+// share of a counter. This used to round up to 1 to keep the rowset alive, which over-counted by up
+// to split_count - 1 rows.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_interior_rowset_apportions_plainly) {
+    // 1 row split 4 ways: index 0 gets the row, indexes 1..3 get zero, and the sum stays exact.
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(1);
+    rowset.set_data_size(512);
+
+    std::vector<int64_t> rows;
+    int64_t total_rows = 0;
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i);
+        rows.push_back(child.num_rows());
+        total_rows += child.num_rows();
+    }
+    EXPECT_THAT(rows, ::testing::ElementsAre(1, 0, 0, 0));
+    EXPECT_EQ(1, total_rows) << "the siblings' shares must still sum to the source";
+}
+
+// Interior apportionment conserves exactly: the siblings' shares sum to the source.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_when_rows_exceed_split_count) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+
+    int64_t total_rows = 0;
+    int64_t total_size = 0;
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i);
+        total_rows += child.num_rows();
+        total_size += child.data_size();
+    }
+    EXPECT_EQ(10, total_rows);
+    EXPECT_EQ(1000, total_size);
+}
+
+// Verify update_txn_log_data_stats scales num_dels across every op_* branch that already
+// scales num_rows / data_size (op_write / op_compaction / op_schema_change / op_replication /
+// op_parallel_compaction). Parallel tests pin down the set of branches that produce output
+// rowsets during split's cross-publish, so dropping any branch here would resurrect the
+// original bug for that flow.
+TEST_F(TabletReshardHelperTest, test_update_txn_log_data_stats_scales_num_dels_all_branches) {
+    auto make_rowset = [](RowsetMetadataPB* r) {
+        r->set_num_rows(8);
+        r->set_data_size(800);
+        r->set_num_dels(4);
+    };
+
+    TxnLogPB txn_log;
+    make_rowset(txn_log.mutable_op_write()->mutable_rowset());
+    make_rowset(txn_log.mutable_op_compaction()->mutable_output_rowset());
+    make_rowset(txn_log.mutable_op_schema_change()->add_rowsets());
+    make_rowset(txn_log.mutable_op_replication()->add_op_writes()->mutable_rowset());
+    make_rowset(txn_log.mutable_op_parallel_compaction()->add_subtask_compactions()->mutable_output_rowset());
+
+    // split_count=2 split_index=0 -> num_dels should halve to 2 everywhere.
+    update_txn_log_data_stats(&txn_log, /*split_count=*/2, /*split_index=*/0);
+
+    EXPECT_EQ(2, txn_log.op_write().rowset().num_dels());
+    EXPECT_EQ(2, txn_log.op_compaction().output_rowset().num_dels());
+    EXPECT_EQ(2, txn_log.op_schema_change().rowsets(0).num_dels());
+    EXPECT_EQ(2, txn_log.op_replication().op_writes(0).rowset().num_dels());
+    EXPECT_EQ(2, txn_log.op_parallel_compaction().subtask_compactions(0).output_rowset().num_dels());
+}
+
+// Rowsets that predate the num_dels field (has_num_dels() == false) must not be written
+// at split time; otherwise the new child would record "0 deletes" and permanently lose
+// the parent's accurate-mode fallback, masking a pre-existing replication / recover bug
+// whose fix is tracked separately.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_skips_when_num_dels_absent) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+    // num_dels intentionally unset.
+
+    update_rowset_data_stats(&rowset, /*split_count=*/2, /*split_index=*/0);
+    EXPECT_FALSE(rowset.has_num_dels());
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_basic) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    // Split into 3, index 0: gets remainder
+    update_rowset_data_stats(&rowset, 3, 0);
+    EXPECT_EQ(34, rowset.num_rows());   // 100/3=33, 100%3=1, index 0 < 1 => +1
+    EXPECT_EQ(334, rowset.data_size()); // 1000/3=333, 1000%3=1, index 0 < 1 => +1
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_remainder_distribution) {
+    // Verify that splitting 10 rows into 3 tablets gives 4+3+3 = 10
+    int64_t total_rows = 0;
+    int64_t total_size = 0;
+    for (int32_t i = 0; i < 3; i++) {
+        RowsetMetadataPB rowset;
+        rowset.set_num_rows(10);
+        rowset.set_data_size(100);
+        update_rowset_data_stats(&rowset, 3, i);
+        total_rows += rowset.num_rows();
+        total_size += rowset.data_size();
+    }
+    EXPECT_EQ(10, total_rows);
+    EXPECT_EQ(100, total_size);
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_exact_division) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(9);
+    rowset.set_data_size(300);
+
+    update_rowset_data_stats(&rowset, 3, 0);
+    EXPECT_EQ(3, rowset.num_rows());
+    EXPECT_EQ(100, rowset.data_size());
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_split_count_one) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    update_rowset_data_stats(&rowset, 1, 0);
+    EXPECT_EQ(100, rowset.num_rows());
+    EXPECT_EQ(1000, rowset.data_size());
+}
+
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_split_count_zero) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    update_rowset_data_stats(&rowset, 0, 0);
+    EXPECT_EQ(100, rowset.num_rows());
+    EXPECT_EQ(1000, rowset.data_size());
+}
+
+TEST_F(TabletReshardHelperTest, test_update_txn_log_data_stats_all_op_types) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(1);
+    txn_log.set_txn_id(1000);
+
+    // op_write
+    auto* op_write_rowset = txn_log.mutable_op_write()->mutable_rowset();
+    op_write_rowset->set_num_rows(10);
+    op_write_rowset->set_data_size(100);
+
+    // op_compaction
+    auto* op_compaction_rowset = txn_log.mutable_op_compaction()->mutable_output_rowset();
+    op_compaction_rowset->set_num_rows(20);
+    op_compaction_rowset->set_data_size(200);
+
+    // op_schema_change
+    auto* schema_change_rowset = txn_log.mutable_op_schema_change()->add_rowsets();
+    schema_change_rowset->set_num_rows(30);
+    schema_change_rowset->set_data_size(300);
+
+    // op_replication
+    auto* repl_rowset = txn_log.mutable_op_replication()->add_op_writes()->mutable_rowset();
+    repl_rowset->set_num_rows(40);
+    repl_rowset->set_data_size(400);
+
+    // op_parallel_compaction
+    auto* parallel_rowset =
+            txn_log.mutable_op_parallel_compaction()->add_subtask_compactions()->mutable_output_rowset();
+    parallel_rowset->set_num_rows(50);
+    parallel_rowset->set_data_size(500);
+
+    // split_count=3, split_index=0 (gets extra remainder)
+    update_txn_log_data_stats(&txn_log, 3, 0);
+
+    EXPECT_EQ(4, txn_log.op_write().rowset().num_rows());               // 10/3=3 + (0<1?1:0) = 4
+    EXPECT_EQ(34, txn_log.op_write().rowset().data_size());             // 100/3=33 + (0<1?1:0) = 34
+    EXPECT_EQ(7, txn_log.op_compaction().output_rowset().num_rows());   // 20/3=6 + (0<2?1:0) = 7
+    EXPECT_EQ(67, txn_log.op_compaction().output_rowset().data_size()); // 200/3=66 + (0<2?1:0) = 67
+    EXPECT_EQ(10, txn_log.op_schema_change().rowsets(0).num_rows());
+    EXPECT_EQ(100, txn_log.op_schema_change().rowsets(0).data_size());
+    EXPECT_EQ(14, txn_log.op_replication().op_writes(0).rowset().num_rows());   // 40/3=13 + (0<1?1:0) = 14
+    EXPECT_EQ(134, txn_log.op_replication().op_writes(0).rowset().data_size()); // 400/3=133 + (0<1?1:0) = 134
+    EXPECT_EQ(17, txn_log.op_parallel_compaction()
+                          .subtask_compactions(0)
+                          .output_rowset()
+                          .num_rows()); // 50/3=16 + (0<2?1:0) = 17
+    EXPECT_EQ(167, txn_log.op_parallel_compaction()
+                           .subtask_compactions(0)
+                           .output_rowset()
+                           .data_size()); // 500/3=166 + (0<2?1:0) = 167
+}
+
+// ---------------------------------------------------------------------------
+// Range-helper tests (PR-1).
+// ---------------------------------------------------------------------------
+
+// Build a TabletRangePB from optional int32 lower/upper bounds. nullopt means
+// unbounded on that side. Callers pass int values for the sort-key value
+// component; this matches the existing generate_sort_key style in
+// tablet_reshard_test.cpp without pulling in the heavy fixture.
+namespace {
+
+TabletRangePB make_range(std::optional<int> lower, bool lower_included, std::optional<int> upper, bool upper_included) {
+    TabletRangePB pb;
+    auto write_int = [](TuplePB* tuple_pb, int v) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(v));
+        VariantTuple t;
+        t.append(variant);
+        t.to_proto(tuple_pb);
+    };
+    if (lower) {
+        write_int(pb.mutable_lower_bound(), *lower);
+        pb.set_lower_bound_included(lower_included);
+    }
+    if (upper) {
+        write_int(pb.mutable_upper_bound(), *upper);
+        pb.set_upper_bound_included(upper_included);
+    }
+    return pb;
+}
+
+// Convenience: closed-open [lower, upper).
+TabletRangePB co_range(std::optional<int> lower, std::optional<int> upper) {
+    return make_range(lower, /*lower_included=*/true, upper, /*upper_included=*/false);
+}
+
+bool ranges_pb_equal(const TabletRangePB& a, const TabletRangePB& b) {
+    if (a.has_lower_bound() != b.has_lower_bound()) return false;
+    if (a.has_upper_bound() != b.has_upper_bound()) return false;
+    if (a.has_lower_bound() && a.lower_bound().DebugString() != b.lower_bound().DebugString()) return false;
+    if (a.has_upper_bound() && a.upper_bound().DebugString() != b.upper_bound().DebugString()) return false;
+    if (a.lower_bound_included() != b.lower_bound_included()) return false;
+    if (a.upper_bound_included() != b.upper_bound_included()) return false;
+    return true;
+}
+
+} // namespace
+
+// compute_disjoint_gaps_within --------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_full_coverage) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(0, 30)});
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value().empty());
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_internal_gap) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(0, 10), co_range(20, 30)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(10, 20), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_left_edge) {
+    // bound=[0,30), children=[10,30). Gap = [0,10).
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(10, 30)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_right_edge) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(0, 20)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(20, 30), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_outside_clipped) {
+    // bound=[0,30), children include a slice extending below bound → clip.
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {co_range(-5, 10), co_range(10, 30)});
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value().empty()); // children fully cover bound after clipping.
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_disjoint_gaps_within_no_children) {
+    auto result = compute_disjoint_gaps_within(co_range(0, 30), {});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 30), result.value()[0]));
+}
+
+// compute_non_contributed_ranges (unbounded universe) --------------------------
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_full_coverage) {
+    // Children = (-∞, +∞). Result empty.
+    auto result = compute_non_contributed_ranges({make_range(std::nullopt, false, std::nullopt, false)});
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value().empty());
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_internal_gap) {
+    auto result = compute_non_contributed_ranges({co_range(0, 10), co_range(20, 30)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(3u, result.value().size());
+    // (-∞, 0)
+    EXPECT_FALSE(result.value()[0].has_lower_bound());
+    EXPECT_TRUE(ranges_pb_equal(co_range(std::nullopt, 0), result.value()[0]));
+    // [10, 20)
+    EXPECT_TRUE(ranges_pb_equal(co_range(10, 20), result.value()[1]));
+    // [30, +∞)
+    EXPECT_TRUE(ranges_pb_equal(make_range(30, true, std::nullopt, false), result.value()[2]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_left_edge_only) {
+    // First-child-compaction case: children = [K1, +∞). Result = (-∞, K1).
+    auto result = compute_non_contributed_ranges({make_range(10, true, std::nullopt, false)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(std::nullopt, 10), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_right_edge_only) {
+    // Last-child-compaction case: children = (-∞, K2). Result = [K2, +∞).
+    auto result = compute_non_contributed_ranges({co_range(std::nullopt, 20)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(make_range(20, true, std::nullopt, false), result.value()[0]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_both_edges) {
+    auto result = compute_non_contributed_ranges({co_range(10, 20)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(2u, result.value().size());
+    EXPECT_TRUE(ranges_pb_equal(co_range(std::nullopt, 10), result.value()[0]));
+    EXPECT_TRUE(ranges_pb_equal(make_range(20, true, std::nullopt, false), result.value()[1]));
+}
+
+TEST_F(TabletReshardHelperTest, test_compute_non_contributed_ranges_empty_children) {
+    auto result = compute_non_contributed_ranges({});
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(1u, result.value().size());
+    // (-∞, +∞)
+    EXPECT_FALSE(result.value()[0].has_lower_bound());
+    EXPECT_FALSE(result.value()[0].has_upper_bound());
+}
+
+// effective_old_tablet_local_range --------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_rowset_present) {
+    RowsetMetadataPB rowset;
+    *rowset.mutable_range() = co_range(0, 10);
+    TabletMetadataPB ctx;
+    *ctx.mutable_range() = co_range(0, 30);
+
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 10), result));
+}
+
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_rowset_absent_ctx_present) {
+    RowsetMetadataPB rowset; // no range
+    TabletMetadataPB ctx;
+    *ctx.mutable_range() = co_range(0, 30);
+
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
+    EXPECT_TRUE(ranges_pb_equal(co_range(0, 30), result));
+}
+
+TEST_F(TabletReshardHelperTest, test_effective_old_tablet_local_range_both_absent) {
+    RowsetMetadataPB rowset;
+    TabletMetadataPB ctx;
+
+    const auto& result = effective_old_tablet_local_range(rowset, ctx);
+    EXPECT_FALSE(result.has_lower_bound());
+    EXPECT_FALSE(result.has_upper_bound());
+}
+
+// union_range -----------------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, test_union_range_equal_bound_included_excluded) {
+    const auto a = make_range(10, /*lower_included=*/true, 20, /*upper_included=*/false);
+    const auto b = make_range(10, /*lower_included=*/false, 20, /*upper_included=*/true);
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    // Lower: equal values, included = true || false = true
+    EXPECT_TRUE(result.lower_bound_included());
+    // Upper: equal values, included = false || true = true
+    EXPECT_TRUE(result.upper_bound_included());
+}
+
+TEST_F(TabletReshardHelperTest, test_union_range_one_side_unbounded) {
+    // a has no lower_bound (unbounded)
+    const auto a = make_range(std::nullopt, /*lower_included=*/false, 20, /*upper_included=*/false);
+    const auto b = make_range(10, /*lower_included=*/true, 30, /*upper_included=*/true);
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    // Lower: a is unbounded -> result lower is unbounded
+    EXPECT_FALSE(result.has_lower_bound());
+    // Upper: a=20 exclusive, b=30 inclusive -> take larger = 30 inclusive
+    ASSERT_TRUE(result.has_upper_bound());
+    EXPECT_TRUE(result.upper_bound_included());
+}
+
+TEST_F(TabletReshardHelperTest, test_union_range_both_unbounded) {
+    TabletRangePB a; // fully unbounded
+    TabletRangePB b; // fully unbounded
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    EXPECT_FALSE(result.has_lower_bound());
+    EXPECT_FALSE(result.has_upper_bound());
+}
+
+TEST_F(TabletReshardHelperTest, test_union_range_unequal_bounds) {
+    const auto a = make_range(5, /*lower_included=*/true, 15, /*upper_included=*/false);
+    const auto b = make_range(10, /*lower_included=*/true, 25, /*upper_included=*/true);
+
+    ASSIGN_OR_ABORT(auto result, union_range(a, b));
+    // Lower: take smaller = 5, included from a = true
+    ASSERT_TRUE(result.has_lower_bound());
+    EXPECT_TRUE(result.lower_bound_included());
+    // Upper: take larger = 25, included from b = true
+    ASSERT_TRUE(result.has_upper_bound());
+    EXPECT_TRUE(result.upper_bound_included());
+
+    // Verify the values
+    VariantTuple lower;
+    ASSERT_OK(lower.from_proto(result.lower_bound()));
+    VariantTuple expected_lower;
+    ASSERT_OK(expected_lower.from_proto(a.lower_bound()));
+    EXPECT_EQ(0, lower.compare(expected_lower));
+
+    VariantTuple upper;
+    ASSERT_OK(upper.from_proto(result.upper_bound()));
+    VariantTuple expected_upper;
+    ASSERT_OK(expected_upper.from_proto(b.upper_bound()));
+    EXPECT_EQ(0, upper.compare(expected_upper));
+}
+
+// -----------------------------------------------------------------------------
+// Per-segment shared refactor: set_non_segment_files_shared / rowset uid helpers /
+// the segment+non-segment wrapper.
+// -----------------------------------------------------------------------------
+
+TEST_F(TabletReshardHelperTest, SetNonSegmentFilesShared_leaves_segments_untouched) {
+    TabletMetadataPB md;
+    auto* rs = md.add_rowsets();
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg0");
+        sm->set_shared(false);
+    }
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg1");
+        sm->set_shared(false);
+    }
+    auto& dv = (*md.mutable_delvec_meta()->mutable_version_to_file())[1];
+    dv.set_name("dv1");
+    dv.set_shared(false);
+
+    set_non_segment_files_shared(&md);
+
+    // shared_segments left untouched (caller handles per-segment).
+    EXPECT_FALSE(rs->segment_metas(0).shared());
+    EXPECT_FALSE(rs->segment_metas(1).shared());
+    // non-segment file (delvec) flipped to shared.
+    EXPECT_TRUE(md.delvec_meta().version_to_file().at(1).shared());
+}
+
+TEST_F(TabletReshardHelperTest, SetAllDataFilesShared_TabletMetadata_shares_segments_and_non_segment) {
+    TabletMetadataPB md;
+    auto* rs = md.add_rowsets();
+    {
+        auto* sm = rs->add_segment_metas();
+        sm->set_filename("seg0");
+        sm->set_shared(false);
+    }
+    auto* del = rs->add_del_files();
+    del->set_name("del0");
+    del->set_shared(false);
+    auto& dv = (*md.mutable_delvec_meta()->mutable_version_to_file())[1];
+    dv.set_shared(false);
+
+    set_all_data_files_shared(&md);
+
+    EXPECT_TRUE(rs->segment_metas(0).shared());
+    EXPECT_TRUE(rs->del_files(0).shared());
+    EXPECT_TRUE(md.delvec_meta().version_to_file().at(1).shared());
+}
+
+TEST_F(TabletReshardHelperTest, MakeRowsetUid_is_fresh_and_nonzero) {
+    auto a = make_rowset_uid();
+    auto b = make_rowset_uid();
+    EXPECT_TRUE(a.hi() != 0 || a.lo() != 0);
+    EXPECT_TRUE(b.hi() != 0 || b.lo() != 0);
+    // Two independent mints must differ.
+    EXPECT_FALSE(a.hi() == b.hi() && a.lo() == b.lo());
+}
+
+TEST_F(TabletReshardHelperTest, SetRowsetUid_set_if_absent) {
+    RowsetMetadataPB rs;
+    EXPECT_FALSE(has_valid_uid(rs));
+
+    ensure_rowset_uid(&rs);
+    ASSERT_TRUE(has_valid_uid(rs));
+    auto minted = rs.uid();
+
+    // Idempotent: a second call preserves the existing uid (inherited via CopyFrom
+    // across split / cross-publish must not be overwritten).
+    ensure_rowset_uid(&rs);
+    EXPECT_EQ(minted.hi(), rs.uid().hi());
+    EXPECT_EQ(minted.lo(), rs.uid().lo());
+}
+
+TEST_F(TabletReshardHelperTest, HasValidUid_rejects_absent_and_zero) {
+    RowsetMetadataPB rs;
+    EXPECT_FALSE(has_valid_uid(rs)); // absent
+    rs.mutable_uid()->set_hi(0);
+    rs.mutable_uid()->set_lo(0);
+    EXPECT_FALSE(has_valid_uid(rs)); // present but zero
+    rs.mutable_uid()->set_lo(1);
+    EXPECT_TRUE(has_valid_uid(rs));
+}
+
+TEST_F(TabletReshardHelperTest, set_idg_shared_toggles_all_entries) {
+    IndexDeltaGroupVerPB idg;
+    auto* e0 = idg.add_entries();
+    e0->set_index_file("a.idx");
+    e0->set_shared_file(false);
+    auto* e1 = idg.add_entries();
+    e1->set_index_file("b.idx");
+    e1->set_shared_file(false);
+
+    set_idg_shared(&idg, true);
+    for (const auto& e : idg.entries()) EXPECT_TRUE(e.shared_file());
+
+    set_idg_shared(&idg, false);
+    for (const auto& e : idg.entries()) EXPECT_FALSE(e.shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, set_non_segment_files_shared_marks_idg) {
+    TabletMetadataPB meta;
+    auto& idgs = *meta.mutable_idg_meta()->mutable_idgs();
+    IndexDeltaGroupVerPB idg;
+    idg.add_entries()->set_index_file("c.idx"); // shared_file defaults false
+    idgs[7] = idg;
+
+    set_non_segment_files_shared(&meta);
+    ASSERT_TRUE(meta.idg_meta().idgs().contains(7));
+    for (const auto& e : meta.idg_meta().idgs().at(7).entries()) EXPECT_TRUE(e.shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, set_all_data_files_shared_covers_op_add_index) {
+    // A cross-published OpAddIndex on a split must have its .idx marked shared so a sibling
+    // cannot later reclaim a file the other child still references.
+    TxnLogPB txn_log;
+    auto* se = txn_log.mutable_op_add_index()->add_segment_entries();
+    se->set_segment_id(3);
+    auto* entry = se->mutable_entry();
+    entry->set_index_file("x.idx");
+    entry->set_shared_file(false);
+
+    set_all_data_files_shared(&txn_log);
+    ASSERT_EQ(1, txn_log.op_add_index().segment_entries_size());
+    EXPECT_TRUE(txn_log.op_add_index().segment_entries(0).entry().shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_all_private) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("seg0.dat");
+    segment->set_shared(false);
+    auto* del = rowset->add_del_files();
+    del->set_name("del0.del");
+    del->set_shared(false);
+    auto* sstable = metadata.mutable_sstable_meta()->add_sstables();
+    sstable->set_filename("index0.sst");
+    sstable->set_shared(false);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_segment) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_segment_metas()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_del_file) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_del_files()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_sstable) {
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.mutable_sstable_meta()->add_sstables()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_shared_delvec) {
+    // A merge rewrites delvec pages into a new file, so a shared source delvec never blocks it.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& version_to_file = *metadata.mutable_delvec_meta()->mutable_version_to_file();
+    version_to_file[3].set_name("v3.delvec");
+    version_to_file[3].set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_dcg) {
+    // A shared .cols is checked directly, independent of its segment's own shared flag.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& dcgs = *metadata.mutable_dcg_meta()->mutable_dcgs();
+    auto* dcg = &dcgs[0];
+    dcg->add_column_files("c0.cols");
+    dcg->add_shared_files(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_idg) {
+    // A cross-published OpAddIndex can mark an IDG entry shared without touching its segment's own
+    // shared flag, so the segment here stays private while the IDG entry alone must block the merge.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& idgs = *metadata.mutable_idg_meta()->mutable_idgs();
+    idgs[0].add_entries()->set_shared_file(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_garbage_records) {
+    // compaction_inputs is itself a repeated RowsetMetadataPB, so an implementation that walked every
+    // RowsetMetadataPB in the message instead of the live rowsets would wrongly block here.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.add_compaction_inputs()->add_segment_metas()->set_shared(true);
+    metadata.add_orphan_files()->set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_empty_metadata) {
+    TabletMetadataPB metadata;
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+// -----------------------------------------------------------------------------
+// collect_compaction_output_files: the compaction outputs a cross-publish drops.
+// -----------------------------------------------------------------------------
+
+// Regression: op_parallel_compaction subtasks synthesized by
+// tablet_parallel_compaction_manager do not set new_segment_count — their
+// output_rowset carries only newly written segments, so the helper should
+// treat all of them as new rather than silently skipping them (which would
+// leak segment files).
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_parallel_without_new_segment_count) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+    auto* op_parallel_compaction = log.mutable_op_parallel_compaction();
+    auto* subtask = op_parallel_compaction->add_subtask_compactions();
+    auto* output_rowset = subtask->mutable_output_rowset();
+    output_rowset->add_segment_metas()->set_filename("parallel_new_0.dat");
+    output_rowset->add_segment_metas()->set_filename("parallel_new_1.dat");
+    // Intentionally NOT setting new_segment_offset/new_segment_count to
+    // reproduce the shape produced by the parallel-compaction manager.
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    EXPECT_THAT(paths,
+                ::testing::UnorderedElementsAre(tablet_manager.segment_location(tablet_id, "parallel_new_0.dat"),
+                                                tablet_manager.segment_location(tablet_id, "parallel_new_1.dat")));
+}
+
+// Regression: partial compaction's output_rowset.segment_metas() concatenates
+// reused input segments with newly written ones; only the new window
+// (new_segment_offset / new_segment_count) should be queued for deletion.
+// Deleting reused segments would corrupt the merged tablet because those
+// segments are still live as input rowsets absorbed by the merge.
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_partial_compaction) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+    auto* op_compaction = log.mutable_op_compaction();
+    auto* output_rowset = op_compaction->mutable_output_rowset();
+    // [reused_0, reused_1, new_0, new_1] — only new_0/new_1 are newly written.
+    output_rowset->add_segment_metas()->set_filename("reused_0.dat");
+    output_rowset->add_segment_metas()->set_filename("reused_1.dat");
+    output_rowset->add_segment_metas()->set_filename("new_0.dat");
+    output_rowset->add_segment_metas()->set_filename("new_1.dat");
+    op_compaction->set_new_segment_offset(2);
+    op_compaction->set_new_segment_count(2);
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(tablet_manager.segment_location(tablet_id, "new_0.dat"),
+                                                       tablet_manager.segment_location(tablet_id, "new_1.dat")));
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(tablet_manager.segment_location(tablet_id, "reused_0.dat"))));
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(tablet_manager.segment_location(tablet_id, "reused_1.dat"))));
+}
+
+// Verifies that collect_compaction_output_files() collects files of every
+// kind — segments (via output_rowset), ssts (compaction-ingested), output_sstable,
+// output_sstables, lcrm_file, plus op_parallel_compaction.output_sstable /
+// output_sstables / orphan_lcrm_files — so regressions don't silently reintroduce
+// leaks by dropping any one category.
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_covers_all_kinds) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+
+    // Top-level op_compaction with every output-file kind populated.
+    auto* op_compaction = log.mutable_op_compaction();
+    op_compaction->mutable_output_rowset()->add_segment_metas()->set_filename("out_seg.dat");
+    op_compaction->set_new_segment_offset(0);
+    op_compaction->set_new_segment_count(1);
+    op_compaction->add_ssts()->set_name("compact_ingest.sst");
+    op_compaction->mutable_output_sstable()->set_filename("compact_out.sst");
+    op_compaction->add_output_sstables()->set_filename("compact_out_multi.sst");
+    op_compaction->mutable_lcrm_file()->set_name("compact.crm");
+
+    // op_parallel_compaction top-level output sstables and orphan lcrms.
+    auto* op_parallel = log.mutable_op_parallel_compaction();
+    op_parallel->mutable_output_sstable()->set_filename("parallel_out.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_out_multi.sst");
+    op_parallel->add_orphan_lcrm_files()->set_name("parallel_orphan.crm");
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(tablet_manager.segment_location(tablet_id, "out_seg.dat"),
+                                                       tablet_manager.sst_location(tablet_id, "compact_ingest.sst"),
+                                                       tablet_manager.sst_location(tablet_id, "compact_out.sst"),
+                                                       tablet_manager.sst_location(tablet_id, "compact_out_multi.sst"),
+                                                       tablet_manager.lcrm_location(tablet_id, "compact.crm"),
+                                                       tablet_manager.sst_location(tablet_id, "parallel_out.sst"),
+                                                       tablet_manager.sst_location(tablet_id, "parallel_out_multi.sst"),
+                                                       tablet_manager.lcrm_location(tablet_id, "parallel_orphan.crm")));
+}
+
+// Regression: the persistent-index compaction "full contain / only do move"
+// optimization re-emits an input sstable as its own output verbatim (same
+// filename, only the fileset_id changes). Such a file is still referenced by the
+// base metadata and every sibling tablet, so when a pending compaction is dropped
+// during a split/merge cross-publish it must NOT be queued for deletion. Deleting
+// it removed shared PK-index sstables in production and stalled publishes with
+// "load primary index failed: ... .sst does not exist".
+//
+// Covers both message shapes (op_compaction and op_parallel_compaction) and both
+// output fields. Production emits reused files into the plural output_sstables,
+// so each op reuses via output_sstables; the singular output_sstable is exercised
+// too (reused on op_compaction, genuinely new on op_parallel_compaction).
+TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_skips_passthrough_reused_sstables) {
+    const int64_t tablet_id = 10001;
+    TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
+                                 /*cache_capacity=*/1024);
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+
+    // op_compaction: "reused.sst" (plural) and "reused_single.sst" (singular) are
+    // pass-through outputs that alias inputs; "compact_new.sst" is genuinely new.
+    auto* op_compaction = log.mutable_op_compaction();
+    op_compaction->add_input_sstables()->set_filename("reused.sst");
+    op_compaction->add_input_sstables()->set_filename("reused_single.sst");
+    op_compaction->mutable_output_sstable()->set_filename("reused_single.sst");
+    op_compaction->add_output_sstables()->set_filename("reused.sst");
+    op_compaction->add_output_sstables()->set_filename("compact_new.sst");
+
+    // op_parallel_compaction: "parallel_reused.sst" is reused via the plural
+    // output_sstables (the shape production actually emits); the singular
+    // output_sstable and the other plural entry are genuinely new.
+    auto* op_parallel = log.mutable_op_parallel_compaction();
+    op_parallel->add_input_sstables()->set_filename("parallel_reused.sst");
+    op_parallel->mutable_output_sstable()->set_filename("parallel_single_new.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_reused.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_new.sst");
+
+    auto paths = collect_compaction_output_files(log, &tablet_manager);
+    // Only the genuinely new outputs are collected for deletion.
+    EXPECT_THAT(paths,
+                ::testing::UnorderedElementsAre(tablet_manager.sst_location(tablet_id, "compact_new.sst"),
+                                                tablet_manager.sst_location(tablet_id, "parallel_single_new.sst"),
+                                                tablet_manager.sst_location(tablet_id, "parallel_new.sst")));
+    // The pass-through reused (still-live) sstables are never queued for deletion,
+    // whether they came through the singular output_sstable or the plural list.
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(tablet_manager.sst_location(tablet_id, "reused.sst"))));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(tablet_manager.sst_location(tablet_id, "reused_single.sst"))));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(tablet_manager.sst_location(tablet_id, "parallel_reused.sst"))));
+}
+
+} // namespace starrocks::lake

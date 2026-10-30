@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Formats a numeric value as a currency string with two decimal places and thousands separators."
 ---
 
 # money_format

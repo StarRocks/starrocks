@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "値をhll型に変換します。"
 ---
 
 # hll_hash

@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.DEFAULT_CREATE_TABLE_TEMPLATE;
+import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.connectContext;
 
 public class TablePruningTest extends TablePruningTestBase {
     @BeforeAll
@@ -859,14 +860,20 @@ public class TablePruningTest extends TablePruningTestBase {
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 10  PROPERTIES (\"replication_num\" = \"1\");";
         starRocksAssert.withTable(tabAA);
         starRocksAssert.withTable(tabBB);
-        starRocksAssert.alterTableProperties(
-                "alter table AA set(\"foreign_key_constraints\" = \"(b_id) REFERENCES BB(id)\");");
-        String sql = "select AA.b_id, BB.id from AA inner join BB on AA.b_id = BB.id";
-        ctx.getSessionVariable().setEnableCboTablePrune(true);
-        String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-        Assertions.assertTrue(plan.contains("CLONE"), plan);
-        starRocksAssert.dropTable("AA");
-        starRocksAssert.dropTable("BB");
+        final boolean prev = ctx.getSessionVariable().isEnableGlobalLateMaterialization();
+        try {
+            starRocksAssert.alterTableProperties(
+                    "alter table AA set(\"foreign_key_constraints\" = \"(b_id) REFERENCES BB(id)\");");
+            String sql = "select AA.b_id, BB.id from AA inner join BB on AA.b_id = BB.id";
+            ctx.getSessionVariable().setEnableCboTablePrune(true);
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
+            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            Assertions.assertTrue(plan.contains("CLONE"), plan);
+        } finally {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(prev);
+            starRocksAssert.dropTable("AA");
+            starRocksAssert.dropTable("BB");
+        }
     }
 
     @Test
@@ -890,15 +897,22 @@ public class TablePruningTest extends TablePruningTestBase {
                 "DISTRIBUTED BY HASH(`id`) BUCKETS 10  PROPERTIES (\"replication_num\" = \"1\");";
         starRocksAssert.withTable(tabAA);
         starRocksAssert.withTable(tabBB);
-        starRocksAssert.alterTableProperties(
-                "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id)\");");
-        final String sql = "select AA.id2, BB.id from AA inner join BB on AA.id2 = BB.id";
-        final String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+        final boolean prev = ctx.getSessionVariable().isEnableGlobalLateMaterialization();
+        try {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
+            starRocksAssert.alterTableProperties(
+                    "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id)\");");
+            final String sql = "select AA.id2, BB.id from AA inner join BB on AA.id2 = BB.id";
+            final String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
 
-        PlanTestBase.assertNotContains(plan, "BB");
-        PlanTestBase.assertContains(plan, "CLONE");
-        starRocksAssert.dropTable("AA");
-        starRocksAssert.dropTable("BB");
+            PlanTestBase.assertNotContains(plan, "BB");
+            PlanTestBase.assertContains(plan, "CLONE");
+        } finally {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(prev);
+            starRocksAssert.dropTable("AA");
+            starRocksAssert.dropTable("BB");
+        }
     }
 
     @Test
@@ -936,23 +950,31 @@ public class TablePruningTest extends TablePruningTestBase {
         // add non primary key foreign key constraints should be ok
         starRocksAssert.alterTableProperties(
                 "alter table AA set(\"foreign_key_constraints\" = \"AA(id2) REFERENCES BB(id2)\");");
-        // test table prune with non-primary keys
-        {
-            final String sql = "select AA.id2, BB.id2 from AA inner join BB on AA.id2 = BB.id2";
-            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-            PlanTestBase.assertNotContains(plan, "BB");
-            PlanTestBase.assertContains(plan, "CLONE");
+        final boolean prev = ctx.getSessionVariable().isEnableGlobalLateMaterialization();
+
+        try {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(false);
+            // test table prune with non-primary keys
+            {
+                final String sql = "select AA.id2, BB.id2 from AA inner join BB on AA.id2 = BB.id2";
+                String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+                PlanTestBase.assertNotContains(plan, "BB");
+                PlanTestBase.assertContains(plan, "CLONE");
+            }
+
+            // test not table prune with non-fks
+            {
+                String sql = "select AA.id, BB.id from AA inner join BB on AA.id = BB.id";
+                String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+                PlanTestBase.assertContains(plan, "BB");
+                PlanTestBase.assertNotContains(plan, "CLONE");
+            }
+        } finally {
+            ctx.getSessionVariable().setEnableGlobalLateMaterialization(prev);
+            starRocksAssert.dropTable("AA");
+            starRocksAssert.dropTable("BB");
         }
 
-        // test not table prune with non-fks
-        {
-            String sql = "select AA.id, BB.id from AA inner join BB on AA.id = BB.id";
-            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
-            PlanTestBase.assertContains(plan, "BB");
-            PlanTestBase.assertNotContains(plan, "CLONE");
-        }
-        starRocksAssert.dropTable("AA");
-        starRocksAssert.dropTable("BB");
     }
 
     @Test

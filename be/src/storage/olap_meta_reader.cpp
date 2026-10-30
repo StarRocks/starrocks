@@ -20,8 +20,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "column/global_dict/config.h"
 #include "common/status.h"
-#include "runtime/global_dict/config.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
@@ -145,6 +145,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
             options.is_primary_keys = tablet->keys_type() == KeysType::PRIMARY_KEYS;
             options.tablet_id = tablet->tablet_id();
             options.segment_id = seg_id;
+            options.rss_id = rowset->rowset_meta()->get_rowset_seg_id() + seg_id;
             options.version = version.second;
             if (options.is_primary_keys) {
                 options.pk_rowsetid = rowset->rowset_meta()->get_rowset_seg_id();

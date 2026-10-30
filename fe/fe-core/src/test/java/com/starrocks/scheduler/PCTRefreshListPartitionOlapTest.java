@@ -22,16 +22,24 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.catalog.Table;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -173,7 +181,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
     private ExecPlan getExecPlan(TaskRun taskRun) {
         try {
-            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             return execPlan;
@@ -184,7 +192,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         }
     }
 
-    private MVPCTBasedRefreshProcessor getProcessor(TaskRun taskRun) {
+    private MVPCTRefreshProcessor getProcessor(TaskRun taskRun) {
         try {
             initAndExecuteTaskRun(taskRun);
             return getPartitionBasedRefreshProcessor(taskRun);
@@ -205,6 +213,19 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         ExecPlan execPlan = getExecPlan(taskRun);
         Assertions.assertTrue(execPlan != null);
         return execPlan;
+    }
+
+    private void assertRefreshScopeMatchesExtraMessage(MvTaskRunContext mvTaskRunContext, MVTaskRunExtraMessage message) {
+        PCTRefreshScope refreshScope = mvTaskRunContext.getRefreshScope();
+        Assertions.assertNotNull(refreshScope);
+        Assertions.assertEquals(message.getMvPartitionsToRefresh(),
+                refreshScope.getMvPartitionsToRefresh().getPartitionNames());
+        Assertions.assertEquals(message.getRefBasePartitionsToRefreshMap(),
+                refreshScope.getRefTablePartitionNames().getRefTablePartitionNames());
+
+        Map<String, Set<String>> refreshScopeRefPartitions = refreshScope.getRefTableRefreshPartitions().entrySet().stream()
+                .collect(Collectors.toMap(entry -> entry.getKey().getName(), entry -> entry.getValue().getPartitionNames()));
+        Assertions.assertEquals(message.getRefBasePartitionsToRefreshMap(), refreshScopeRefPartitions);
     }
 
     @Test
@@ -258,6 +279,49 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 Assertions.assertEquals(1, partitions.size());
                             }
                         });
+        });
+    }
+
+    /**
+     * Collecting the base tables' partition cells reaches the connector for an external base table, so it must
+     * not run inside the mv's read lock -- that lock is taken on the mv alone and only protects the mv's own
+     * partition cells. Pinned on the property (never collected while any FE metadata lock is held) rather than
+     * on where the call sits in the source, so it keeps holding if the code moves. An OLAP base table is enough
+     * to pin it: the lock never covered the base tables either way.
+     */
+    @Test
+    public void testBaseTablePartitionsAreCollectedBeforeTakingTheLock() {
+        LockProbe probe = LockProbe.onAnyThread();
+        new MockUp<ListPartitionDiffer>() {
+            @Mock
+            public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos(Invocation invocation) {
+                probe.record("syncBaseTablePartitionInfos");
+                return invocation.proceed();
+            }
+        };
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withTable(T2, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                            "partition by province \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "as select dt, province, sum(age) from t2 group by dt, province;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView materializedView =
+                                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), mvName));
+                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+                        String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                        Assertions.assertNotNull(getExecPlanAfterInsert(taskRun, insertSql));
+
+                        probe.assertReachedOutsideTheLock("syncBaseTablePartitionInfos",
+                                "collecting base table partitions goes through the connector for an external base " +
+                                        "table and must not run under the mv's lock");
+                    });
         });
     }
 
@@ -1079,11 +1143,13 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assertions.assertEquals("p2", message.getMvPartitionsToRefreshString());
+                        Assertions.assertEquals(Map.of("test.s2", "p2"), message.getPlanBuilderMessage());
+                        assertRefreshScopeMatchesExtraMessage(mvTaskRunContext, message);
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
                         Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -1125,7 +1191,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
@@ -1170,7 +1236,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         TaskRun taskRun = TaskRunBuilder.newBuilder(task)
                                 .properties(props)
                                 .build();
-                        MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+                        MVPCTRefreshProcessor processor = getProcessor(taskRun);
                         MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
@@ -1245,7 +1311,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             executeInsertSql("INSERT INTO t1 VALUES \n" +
                     "    (\"2020-07-01\", \"beijing\",  1), (\"2020-07-01\", \"chengdu\",  2),\n" +
                     "    (\"2020-07-02\", \"beijing\",  3), (\"2020-07-02\", \"hangzhou\", 4);\n");
-            MVPCTBasedRefreshProcessor processor = getProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getProcessor(taskRun);
             MvTaskRunContext mvTaskRunContext = processor.getMvContext();
             Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
             MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
@@ -1322,6 +1388,30 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             addListPartition(tableName, "p4", "guangdong", "2024-01-02");
         }
     }
+    /**
+     * Add the two partitions the retention tests expect to stay inside a one-month window: one for
+     * today, one for the oldest retained day.
+     *
+     * <p>The window boundary is {@code current_date() - interval 1 month}, which the planner
+     * re-evaluates on every statement, while these partitions keep whatever date they were created
+     * with. Anchoring the older partition exactly on today's boundary therefore breaks whenever the
+     * calendar day rolls over between creating it and planning the final query: it drops out of the
+     * window, the MV no longer covers the query, and the plan grows a UNION against the base table.
+     *
+     * <p>So anchor it on <em>tomorrow's</em> boundary instead, which is still inside today's. Add
+     * the day <em>before</em> subtracting the month, not after: month arithmetic clamps to the end
+     * of the shorter month, so the two orders disagree on every month end that is followed by a
+     * longer month. On 2026-09-30, {@code minusMonths(1).plusDays(1)} gives 2026-08-31 while the
+     * post-rollover boundary is 2026-09-01 -- still outside, and still flaky.
+     */
+    private void addRetainedPartitions(String tableName) {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        addListPartition(tableName, "p5", "guangdong", now.format(formatter), true);
+        addListPartition(tableName, "p6", "guangdong",
+                now.plusDays(1).minusMonths(1).format(formatter), true);
+    }
+
     private void testMVRefreshWithTTLCondition(String tableName) {
         withTablePartitions(tableName);
         String mvCreateDdl = String.format("create materialized view test_mv1\n" +
@@ -1337,7 +1427,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                         Assertions.assertEquals(0, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
@@ -1350,11 +1440,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     {
                         // add new partitions
-                        LocalDateTime now = LocalDateTime.now();
-                        addListPartition(tableName, "p5", "guangdong",
-                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        addListPartition(tableName, "p6", "guangdong",
-                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
+                        addRetainedPartitions(tableName);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1439,7 +1525,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     String query = String.format("select * from %s ", tableName);
                     {
                         // all partitions are expired, no need to create partitions for mv
-                        MVPCTBasedRefreshProcessor processor = refreshMV("test", mv);
+                        MVPCTRefreshProcessor processor = refreshMV("test", mv);
                         Assertions.assertEquals(2, mv.getVisiblePartitions().size());
                         Assertions.assertTrue(processor.getNextTaskRun() == null);
                         String plan = getFragmentPlan(query);
@@ -1456,11 +1542,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     {
                         // add new partitions
-                        LocalDateTime now = LocalDateTime.now();
-                        addListPartition(tableName, "p5", "guangdong",
-                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        addListPartition(tableName, "p6", "guangdong",
-                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
+                        addRetainedPartitions(tableName);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
@@ -1689,7 +1771,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         // refresh with force
         Map<String, String> props = taskRun.getProperties();
         props.put(TaskRun.FORCE, "true");
-        String result = "";
         // explain with refresh
         {
             ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
@@ -1707,7 +1788,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=2/2");
@@ -1717,7 +1798,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=2/2");
@@ -1769,7 +1850,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             Assertions.assertTrue(plan.contains("PLAN NOT AVAILABLE"));
         }
 
-        String result = "";
         // explain with partial refresh
         {
             ExecuteOption executeOption = new ExecuteOption(taskRun.getTask());
@@ -1789,7 +1869,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/2");
@@ -1799,11 +1879,47 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
             // after refresh, still can refresh with force
             execPlan = getMVRefreshExecPlan(taskRun, true);
-            result = execPlan.getExplainString(TExplainLevel.NORMAL);
+            execPlan.getExplainString(TExplainLevel.NORMAL);
             PlanTestBase.assertContains(plan, "     TABLE: list_t1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=1/2");
             Assertions.assertNotNull(execPlan);
         }
+    }
+
+    /**
+     * A list-partitioned mv maps 1:1 onto its base partitions, so a dropped base partition takes the mv partition
+     * that held its rows with it and leaves nothing to recompute.
+     */
+    @Test
+    public void testDropBaseListPartitionDropsMvPartitionWithoutRefresh() {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withTable(T2, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                            "partition by province \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "as select dt, province, sum(age) from t2 group by dt, province;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView materializedView =
+                                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), mvName));
+                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+                        getExecPlanAfterInsert(taskRun,
+                                "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');");
+                        getExecPlanAfterInsert(taskRun,
+                                "insert into t2 partition(p2) values(2, 2, '2021-12-01', 'guangdong');");
+                        Assertions.assertEquals(2, materializedView.getVisiblePartitionNames().size());
+
+                        sql("ALTER TABLE t2 DROP PARTITION p1");
+                        ExecPlan execPlan = getExecPlan(taskRun);
+
+                        Assertions.assertEquals(1, materializedView.getVisiblePartitionNames().size());
+                        Assertions.assertNull(execPlan);
+                    });
+        });
     }
 }

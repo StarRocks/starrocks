@@ -1549,4 +1549,60 @@ INSTANTIATE_TEST_SUITE_P(
                 // clang-format: on
                 ));
 
+// A value that runs out before the format does must be rejected, not read past its end.
+// The literal-character, am and pm parsers used to dereference the read cursor without
+// consulting val_end, so an empty value crashed the backend on the very first token.
+TEST_F(DateTimeValueTest, teradata_parse_truncated_value) {
+    auto parse = [](std::string_view format, std::string_view value) {
+        TeradataFormat tera;
+        EXPECT_TRUE(tera.prepare(format)) << "format=" << format;
+        DateTimeValue datetime;
+        return tera.parse(value, &datetime);
+    };
+
+    // Empty value, format starting with a punctuation literal.
+    EXPECT_FALSE(parse(";yyyy", ""));
+    EXPECT_FALSE(parse("-yyyy", ""));
+    EXPECT_FALSE(parse(" yyyy", ""));
+    // An empty string_view built from a null pointer takes the same path.
+    EXPECT_FALSE(parse(";yyyy", std::string_view()));
+
+    // Value exhausted midway through the format.
+    EXPECT_FALSE(parse("yyyy/mm/dd", "1988"));
+    EXPECT_FALSE(parse("yyyy/mm/dd", "1988/04/"));
+    EXPECT_FALSE(parse(";yyyy", ";"));
+
+    // am/pm with the value ending inside the marker.
+    EXPECT_FALSE(parse("yyyy/mm/dd hh am", "1988/04/08 02 "));
+    EXPECT_FALSE(parse("yyyy/mm/dd hh am", "1988/04/08 02 a"));
+    EXPECT_FALSE(parse("yyyy/mm/dd hh pm", "1988/04/08 02 p"));
+
+    // Complete values still parse.
+    EXPECT_TRUE(parse(";yyyy", ";1988"));
+    EXPECT_TRUE(parse("yyyy/mm/dd", "1988/04/08"));
+    EXPECT_TRUE(parse("yyyy/mm/dd hh am", "1988/04/08 02 am"));
+    EXPECT_TRUE(parse("yyyy/mm/dd hh pm", "1988/04/08 02 pm"));
+}
+
+TEST_F(DateTimeValueTest, joda_parse_truncated_value) {
+    auto parse = [](std::string_view format, std::string_view value) {
+        joda::JodaFormat joda;
+        EXPECT_TRUE(joda.prepare(format)) << "format=" << format;
+        DateTimeValue datetime;
+        return joda.parse(value, &datetime);
+    };
+
+    EXPECT_FALSE(parse(";yyyy", ""));
+    EXPECT_FALSE(parse("-yyyy", ""));
+    EXPECT_FALSE(parse(";yyyy", std::string_view()));
+
+    EXPECT_FALSE(parse("yyyy-MM-dd", "2024"));
+    EXPECT_FALSE(parse("yyyy-MM-dd", "2024-04-"));
+    EXPECT_FALSE(parse("yyyy-MM-dd HH:mm:ss", "2024-04-01"));
+
+    EXPECT_TRUE(parse(";yyyy", ";2024"));
+    EXPECT_TRUE(parse("yyyy-MM-dd", "2024-04-01"));
+    EXPECT_TRUE(parse("yyyy-MM-dd HH:mm:ss", "2024-04-01 01:02:03"));
+}
+
 } // namespace starrocks

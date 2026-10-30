@@ -51,16 +51,6 @@ public:
 
     bool is_array_view() const override { return true; }
 
-    const uint8_t* raw_data() const override {
-        DCHECK(false) << "ArrayViewColumn::raw_data() is not supported";
-        throw std::runtime_error("ArrayViewColumn::raw_data() is not supported");
-    }
-
-    uint8_t* mutable_raw_data() override {
-        DCHECK(false) << "ArrayViewColumn::mutable_raw_data() is not supported";
-        throw std::runtime_error("ArrayViewColumn::mutable_raw_data() is not supported");
-    }
-
     size_t size() const override { return _offsets->size(); }
     size_t capacity() const override { return _offsets->capacity() + _lengths->capacity(); }
 
@@ -200,12 +190,6 @@ public:
         RETURN_IF_ERROR(_elements->capacity_limit_reached());
         return _offsets->capacity_limit_reached();
     }
-
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override { return nullptr; }
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
-    bool has_large_column() const override { return _elements->has_large_column(); }
 
     void check_or_die() const override;
 

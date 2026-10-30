@@ -150,7 +150,6 @@ import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -180,17 +179,23 @@ public class LeaderImpl {
     public TMasterResult finishTask(TFinishTaskRequest request) {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status;
-            if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                status = new TStatus(TStatusCode.LEADER_TRANSFERRED);
-            } else {
-                status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            }
-            status.setError_msgs(Lists.newArrayList("current fe is not master"));
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        TTaskType taskType = request.getTask_type();
+        long signature = request.getSignature();
+        boolean isLeader = globalStateMgr.isLeader();
+        boolean isLeaderDemoting = isLeader && globalStateMgr.isLeaderDemoting();
+        boolean leaderWorkAdmissionOpen = isLeader && globalStateMgr.isLeaderWorkAdmissionOpen();
+        if (!isLeader || isLeaderDemoting || !leaderWorkAdmissionOpen) {
+            TStatusCode statusCode = taskType == TTaskType.CREATE
+                    ? TStatusCode.LEADER_TRANSFERRED : TStatusCode.INTERNAL_ERROR;
+            String errMsg = isLeader ? "leader is transferring, finish task should retry on new leader"
+                    : "current fe is not master";
+            TStatus status = new TStatus(statusCode);
+            status.setError_msgs(Lists.newArrayList(errMsg));
             result.setStatus(status);
-            LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
-                    request.getTask_type(), request.getSignature());
+            LOG.warn("current node is not active leader, finish task failed, task type: {}. task signature: {}, " +
+                            "isLeader: {}, isLeaderDemoting: {}, leaderWorkAdmissionOpen: {}",
+                    taskType, signature, isLeader, isLeaderDemoting, leaderWorkAdmissionOpen);
             return result;
         }
         TStatus tStatus = new TStatus(TStatusCode.OK);
@@ -228,8 +233,6 @@ public class LeaderImpl {
         }
         backendId = cn.getId();
 
-        TTaskType taskType = request.getTask_type();
-        long signature = request.getSignature();
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
         if (task == null) {
             if (taskType != TTaskType.DROP && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
@@ -244,6 +247,19 @@ public class LeaderImpl {
             }
             return result;
         } else {
+            if (taskType == TTaskType.ALTER && request.isSetAlter_job_id()
+                    && request.getAlter_job_id() != ((AlterReplicaTask) task).getJobId()) {
+                // The report of a copy left in the backend queue by another job that used the same signature. Leave
+                // the queued task alone: if the backend skipped it in favour of that copy, the next task report
+                // resends it.
+                String errMsg = "ignore finish report of alter job " + request.getAlter_job_id()
+                        + ", the queued task belongs to alter job " + ((AlterReplicaTask) task).getJobId()
+                        + ", backendId: " + backendId + ", signature: " + signature;
+                LOG.warn(errMsg);
+                tStatus.setStatus_code(TStatusCode.CANCELLED);
+                tStatus.setError_msgs(Lists.newArrayList(errMsg));
+                return result;
+            }
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
                 String taskErrMsg = taskStatus.getError_msgs() != null ? Joiner.on(",").join(taskStatus.getError_msgs()) : "";
@@ -417,6 +433,7 @@ public class LeaderImpl {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                         .updateBackendReportVersion(task.getBackendId(), request.getReport_version(), task.getDbId());
 
+                createReplicaTask.markSendSucceeded();
                 createReplicaTask.countDownLatch(task.getBackendId(), task.getSignature());
                 LOG.debug("finish create replica. tablet id: {}, be: {}, report version: {}, tablet type: {}",
                         tabletId, task.getBackendId(), request.getReport_version(), createReplicaTask.getTabletType());
@@ -484,8 +501,11 @@ public class LeaderImpl {
             long backendId = task.getBackendId();
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
+                // Only this single known table's indexMeta is touched, so take a table-scoped
+                // intensive READ lock instead of a full DB lock. This matches the send path
+                // (ReportHandler) and lets DDL/ALTER on unrelated tables in the same DB proceed.
                 Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
+                locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 try {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
@@ -496,7 +516,7 @@ public class LeaderImpl {
                         }
                     }
                 } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
                 }
             }
         } finally {
@@ -700,32 +720,19 @@ public class LeaderImpl {
                         publishVersionTask.getDbId(), publishVersionTask.getTransactionId(), publishVersionTask.getBackendId());
             }
         }
-        publishVersionTask.setIsFinished(true);
+        // Park the reported stats on the task rather than writing them into the transaction's
+        // PartitionCommitInfos: this runs on a thrift handler thread holding no transaction lock,
+        // while the publish daemon may be snapshotting that very state. The daemon merges them in
+        // when it finishes the transaction. Record them before marking the task finished, since
+        // "all publish tasks finished" is the daemon's signal to finish the transaction.
+        if (request.isSetFinish_tablet_infos()) {
+            publishVersionTask.collectFirstLoadTabletStats(request.getFinish_tablet_infos());
+        }
         TransactionState txnState = publishVersionTask.getTxnState();
         if (txnState != null) {
             txnState.updatePublishTaskFinishTime();
-
-            // Used to collect statistics when the partition is first imported
-            // TODO(stephen): support insert into multiple tables in a transaction
-            if (txnState.getSourceType() == LoadJobSourceType.INSERT_STREAMING &&
-                    txnState.getIdToTableCommitInfos().size() == 1 &&
-                    request.isSetFinish_tablet_infos() &&
-                    !request.getFinish_tablet_infos().isEmpty()) {
-                Map<Long, PartitionCommitInfo> idToPartitionCommitInfo = txnState.getIdToTableCommitInfos().values()
-                        .iterator().next().getIdToPartitionCommitInfo();
-                List<TTabletInfo> tabletInfos = request.getFinish_tablet_infos();
-                for (TTabletInfo tabletInfo : tabletInfos) {
-                    long partitionId = tabletInfo.getPartition_id();
-                    PartitionCommitInfo commitInfo = idToPartitionCommitInfo.get(partitionId);
-                    if (commitInfo != null && commitInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
-                        long rowCount = tabletInfo.getRow_count();
-                        long tabletId = tabletInfo.getTablet_id();
-                        Map<Long, Long> tableIdToRowCount = commitInfo.getTabletIdToRowCountForPartitionFirstLoad();
-                        tableIdToRowCount.put(tabletId, rowCount);
-                    }
-                }
-            }
         }
+        publishVersionTask.setIsFinished(true);
 
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
             // not remove the task from queue and be will retry
@@ -781,8 +788,11 @@ public class LeaderImpl {
                 return;
             }
 
+            // Setting a single replica's path hash is table-local; scope the WRITE to that table
+            // instead of taking a full DB WRITE that would block every other table in the DB.
+            long tableId = tabletMeta.getTableId();
             Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             try {
                 // local migration just set path hash
                 Replica replica =
@@ -790,7 +800,7 @@ public class LeaderImpl {
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.WRITE);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.WRITE);
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());
@@ -869,7 +879,18 @@ public class LeaderImpl {
             result.setStatus(status);
             return result;
         }
-        return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        try {
+            return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        } catch (IllegalStateException e) {
+            // Leader-lease fence fired inside ReportHandler: demotion raced the isLeader() check
+            // above. Translate to the same non-master status so the BE re-resolves the current
+            // leader rather than retrying on this FE.
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master: " +
+                    (Strings.isNullOrEmpty(e.getMessage()) ? "leader lease invalidated" : e.getMessage())));
+            result.setStatus(status);
+            return result;
+        }
     }
 
     private void finishAlterTask(AgentTask task) {
@@ -879,7 +900,7 @@ public class LeaderImpl {
         } else if (alterTask.getJobType() == JobType.SCHEMA_CHANGE) {
             GlobalStateMgr.getCurrentState().getSchemaChangeHandler().handleFinishAlterTask(alterTask);
         }
-        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.ALTER, task.getSignature());
+        AgentTaskQueue.removeTaskIfSame(task);
     }
 
     public TGetTableMetaResponse getTableMeta(TGetTableMetaRequest request) {

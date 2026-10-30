@@ -74,7 +74,7 @@ public class HiveMetastore implements IHiveMetastore {
     @Override
     public void createDb(String dbName, Map<String, String> properties) {
         String location = properties.getOrDefault(LOCATION_PROPERTY, "");
-        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt();
+        long dbId = ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong();
         Database database = new Database(dbId, dbName, location);
         client.createDatabase(HiveMetastoreApiConverter.toMetastoreApiDatabase(database));
     }
@@ -128,6 +128,10 @@ public class HiveMetastore implements IHiveMetastore {
             if (AcidUtils.isFullAcidTable(table)) {
                 throw new StarRocksConnectorException(String.format(
                         "%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName, tableName));
+            }
+            if (table.getParameters() != null && AcidUtils.isInsertOnlyTable(table.getParameters())) {
+                throw new StarRocksConnectorException(String.format(
+                        "%s.%s is a hive transactional table(insert only), sr didn't support it yet", dbName, tableName));
             }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
@@ -207,6 +211,11 @@ public class HiveMetastore implements IHiveMetastore {
         ImmutableMap.Builder<String, Partition> resultBuilder = ImmutableMap.builder();
         for (Map.Entry<String, List<String>> entry : partitionNameToPartitionValues.entrySet()) {
             Partition partition = partitionValuesToPartition.get(entry.getValue());
+            if (partition == null) {
+                throw new StarRocksConnectorException(
+                        "Hive metastore did not return partition [%s] for table %s.%s (requested %s partitions, got %s)",
+                        entry.getKey(), dbName, tblName, partitionNames.size(), partitions.size());
+            }
             resultBuilder.put(entry.getKey(), partition);
         }
         return resultBuilder.build();
@@ -237,7 +246,13 @@ public class HiveMetastore implements IHiveMetastore {
         List<String> dataColumns = table.getSd().getCols().stream()
                 .map(FieldSchema::getName)
                 .collect(toImmutableList());
-        List<ColumnStatisticsObj> statisticsObjs = client.getTableColumnStats(dbName, tblName, dataColumns);
+        List<ColumnStatisticsObj> statisticsObjs;
+        try {
+            statisticsObjs = client.getTableColumnStats(dbName, tblName, dataColumns);
+        } catch (Exception e) {
+            LOG.warn("Failed to get table column statistics on [{}.{}], degrade to empty statistics", dbName, tblName, e);
+            statisticsObjs = ImmutableList.of();
+        }
         if (statisticsObjs.isEmpty() && Config.enable_reuse_spark_column_statistics) {
             // Try to use spark unpartitioned table column stats
             try {
@@ -310,8 +325,13 @@ public class HiveMetastore implements IHiveMetastore {
                 .collect(toImmutableMap(Map.Entry::getKey, entry -> entry.getValue().getRowNums()));
 
         ImmutableMap.Builder<String, HivePartitionStats> resultBuilder = ImmutableMap.builder();
-        Map<String, List<ColumnStatisticsObj>> partitionNameToColumnStatsObj =
-                client.getPartitionColumnStats(dbName, tblName, partitionNames, dataColumns);
+        Map<String, List<ColumnStatisticsObj>> partitionNameToColumnStatsObj;
+        try {
+            partitionNameToColumnStatsObj = client.getPartitionColumnStats(dbName, tblName, partitionNames, dataColumns);
+        } catch (Exception e) {
+            LOG.warn("Failed to get partition column statistics on [{}.{}], degrade to empty statistics", dbName, tblName, e);
+            partitionNameToColumnStatsObj = ImmutableMap.of();
+        }
 
         Map<String, Map<String, HiveColumnStats>> partitionColumnStats = HiveMetastoreApiConverter
                 .toPartitionColumnStatistics(partitionNameToColumnStatsObj, partitionRowNums);

@@ -16,7 +16,9 @@
 
 #include <algorithm>
 
+#include "base/uid_util.h"
 #include "common/status.h"
+#include "compute_env/spill/mem_tracker_guard.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 
 namespace starrocks::pipeline {
@@ -31,12 +33,17 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
     AggregateBlockingSourceOperator::close(state);
     _stream_aggregator->close(state);
-    DCHECK(is_finished());
-    DCHECK(!has_output());
+    // On cancellation the operator is closed without having finished; only assert the
+    // normal-completion invariants when the query is still running.
+    DCHECK(state->is_cancelled() || is_finished());
+    DCHECK(state->is_cancelled() || !has_output());
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (_is_finished) {
+        return false;
+    }
+    if (_aggregator->spiller() == nullptr) {
         return false;
     }
     bool has_spilled = _aggregator->spiller()->spilled();
@@ -67,6 +74,15 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     if (_is_finished) {
         return true;
     }
+    // Defensive: the aggregator's spiller is set when the sink operator is created and only released in
+    // Aggregator::close(). A production crash (SIGSEGV in this function, null spiller) shows a polled
+    // driver can still observe it released; there is nothing left to restore then, so report finished
+    // instead of dereferencing a null shared_ptr.
+    if (_aggregator->spiller() == nullptr) {
+        LOG(WARNING) << "spillable aggregate source sees a released spiller, treat it as finished. query_id="
+                     << print_id(get_factory()->runtime_state()->query_id());
+        return true;
+    }
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
     }
@@ -80,7 +96,7 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSourceOperator::set_finishing(RuntimeState* state) {
-    if (state->is_cancelled()) {
+    if (state->is_cancelled() && _aggregator->spiller() != nullptr) {
         _aggregator->spiller()->cancel();
     }
     return Status::OK();
@@ -135,14 +151,14 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
 
     } else if (_has_last_chunk) {
         DCHECK(_accumulator.need_input());
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {
-            _accumulator.push(std::move(res));
+            _accumulator.push(res);
         }
         _accumulator.finalize();
     }

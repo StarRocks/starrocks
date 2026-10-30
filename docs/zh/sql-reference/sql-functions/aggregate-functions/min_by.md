@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "min_by 返回与 y 的最小值关联的 x 值。"
 ---
 
 # min_by

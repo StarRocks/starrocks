@@ -16,6 +16,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
@@ -49,6 +50,7 @@ public class IcebergTableSink extends DataSink {
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStaticPartitionSink,
                             SessionVariable sessionVariable, String targetBranch) {
         Table nativeTable = icebergTable.getNativeTable();
+        IcebergApiConverter.checkPartitionTransformsWritable(nativeTable.spec());
         this.desc = desc;
         this.tableLocation = nativeTable.location();
         this.dataLocation = IcebergUtil.tableDataLocation(nativeTable);
@@ -59,8 +61,7 @@ public class IcebergTableSink extends DataSink {
                 .toLowerCase();
         this.compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION,
                 sessionVariable.getConnectorSinkCompressionCodec());
-        this.targetMaxFileSize = sessionVariable.getConnectorSinkTargetMaxFileSize() > 0 ?
-            sessionVariable.getConnectorSinkTargetMaxFileSize() : 1024L * 1024 * 1024;
+        this.targetMaxFileSize = IcebergUtil.resolveTargetMaxFileSize(nativeTable, sessionVariable);
         this.targetBranch = targetBranch;
 
         String catalogName = icebergTable.getCatalogName();

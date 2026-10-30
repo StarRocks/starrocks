@@ -104,14 +104,15 @@ public class BrpcProxy {
         ProtobufRpcProxy<PBackendService> proxy = new ProtobufRpcProxy<>(rpcClient, PBackendService.class);
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
-        return new PBackendServiceWithMetrics(proxy.proxy());
+        return new PBackendServiceWithMetrics(
+                LegacyTimeoutFuture.wrapService(proxy.proxy(), PBackendService.class));
     }
 
     private LakeService createLakeService(TNetworkAddress address) {
         ProtobufRpcProxy<LakeService> proxy = new ProtobufRpcProxy<>(rpcClient, LakeService.class);
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
-        return new LakeServiceWithMetrics(proxy.proxy());
+        return new LakeServiceWithMetrics(LegacyTimeoutFuture.wrapService(proxy.proxy(), LakeService.class));
     }
 
     private static class SingletonHolder {

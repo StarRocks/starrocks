@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Sets the specified system variables or user-defined variables for StarRocks."
 ---
 
 # SET

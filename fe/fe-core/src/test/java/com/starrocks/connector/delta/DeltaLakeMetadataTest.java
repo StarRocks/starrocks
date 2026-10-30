@@ -16,9 +16,12 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.common.util.LogUtil;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
@@ -61,6 +64,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class DeltaLakeMetadataTest {
     private HiveMetaClient client;
@@ -141,8 +146,8 @@ public class DeltaLakeMetadataTest {
         );
         // addFile schema, here we only care about the partitionValues, so not use all fields
         StructType addFileSchema = new StructType(Lists.newArrayList(
-                new StructField("path", BasePrimitiveType.createPrimitive("string"), true, null),
-                new StructField("partitionValues", mapType, true, null)));
+                new StructField("path", BasePrimitiveType.createPrimitive("string"), true),
+                new StructField("partitionValues", mapType, true)));
         DefaultStructVector addFile = new DefaultStructVector(3, addFileSchema, Optional.empty(), addFileCols);
         // construct a columnar batch which only contains addFile
         ColumnarBatch columnarBatch = new DefaultColumnarBatch(3,
@@ -171,7 +176,7 @@ public class DeltaLakeMetadataTest {
 
         new Expectations() {
             {
-                snapshot.getScanBuilder((Engine) any);
+                snapshot.getScanBuilder();
                 result = scanBuilder;
                 minTimes = 0;
 
@@ -185,7 +190,7 @@ public class DeltaLakeMetadataTest {
             }
         };
         List<String> partitionNames =
-                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadatRequestContext.DEFAULT);
+                deltaLakeMetadata.listPartitionNames("db1", "table1", ConnectorMetadataRequestContext.DEFAULT);
         Assertions.assertEquals(3, partitionNames.size());
         Assertions.assertEquals("ts=1999", partitionNames.get(0));
         Assertions.assertEquals("ts=2000", partitionNames.get(1));
@@ -213,8 +218,7 @@ public class DeltaLakeMetadataTest {
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
                         Lists.newArrayList("col1"), null, null,
-                        new MetastoreTable("db1", "table1", "path/to/table",
-                        123));
+                        new MetastoreTable("db1", "table1", "path/to/table", 123));
             }
         };
         DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");
@@ -239,7 +243,7 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_sem", "tbl_sem"));
-        Assertions.assertTrue(ex.getMessage().contains("semantic detail message"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("semantic detail message"));
     }
 
     @Test
@@ -257,8 +261,65 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_io", "tbl_io"));
-        String expectedPrefix = "Failed to get deltalake table delta0.db_io.tbl_io";
+        String expectedPrefix = "Failed to get Delta Lake table delta0.db_io.tbl_io";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
+    }
+
+    @Test
+    public void testIdentityStringPartitionColumns() {
+        // Only string-typed partition columns are identity string partition columns: a non-string partition column
+        // and a string non-partition column are both excluded. (Delta partitioning is always identity.)
+        List<Column> schema = Lists.newArrayList(
+                new Column("c1", com.starrocks.type.IntegerType.INT, true),      // non-partition int
+                new Column("c2", com.starrocks.type.StringType.STRING, true),    // partition string -> kept
+                new Column("c3", com.starrocks.type.IntegerType.INT, true),      // partition int -> excluded
+                new Column("c4", com.starrocks.type.StringType.STRING, true));   // non-partition string -> excluded
+        DeltaLakeTable table = new DeltaLakeTable(1, "delta0", "db1", "table1", schema,
+                Lists.newArrayList("c2", "c3"), null, null,
+                new MetastoreTable("db1", "table1", "path/to/table", 123));
+
+        Assertions.assertEquals(Sets.newHashSet("c2"),
+                DeltaLakeMetadata.identityStringPartitionColumns(table, Sets.newHashSet("c2", "c3")));
+    }
+
+    @Test
+    public void testInvalidateTableForReadDoesNoRemoteLoad() {
+        AtomicInteger snapshotLoads = new AtomicInteger();
+        new MockUp<DeltaLakeMetastore>() {
+            @Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                snapshotLoads.incrementAndGet();
+                return new DeltaLakeSnapshot(dbName, tableName, null, null,
+                        new MetastoreTable(dbName, tableName, "s3://bucket/path/to/table", 123));
+            }
+        };
+        new MockUp<DeltaUtils>() {
+            @Mock
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+                return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(), Lists.newArrayList(),
+                        null, null, new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
+            }
+        };
+        HMSBackedDeltaMetastore hmsBackedDeltaMetastore = new HMSBackedDeltaMetastore("delta0",
+                new HiveMetastore(client, "delta0", MetastoreType.HMS), new Configuration(),
+                new DeltaLakeCatalogProperties(Maps.newHashMap()));
+        CachingDeltaLakeMetastore catalogLevel = CachingDeltaLakeMetastore.createCatalogLevelInstance(
+                hmsBackedDeltaMetastore, Executors.newSingleThreadExecutor(), 3600, -1, 100);
+        DeltaMetastoreOperations deltaOps = new DeltaMetastoreOperations(
+                CachingDeltaLakeMetastore.createQueryLevelInstance(catalogLevel, 100), true, MetastoreType.HMS);
+        DeltaLakeMetadata metadata = new DeltaLakeMetadata(new HdfsEnvironment(Maps.newHashMap()), "delta0",
+                deltaOps, new DeltaLakeCacheUpdateProcessor(catalogLevel), new ConnectorProperties(ConnectorType.DELTALAKE));
+
+        Table table = metadata.getTable(new ConnectContext(), "db1", "table1");
+        Assertions.assertEquals(1, snapshotLoads.get());
+
+        // Invalidating for a read only drops the cached snapshot, at both cache levels; it does not read the log.
+        metadata.invalidateTableForRead("db1", table);
+        Assertions.assertEquals(1, snapshotLoads.get());
+
+        // The next read loads the latest snapshot, past the query-level cache too.
+        metadata.getTable(new ConnectContext(), "db1", "table1");
+        Assertions.assertEquals(2, snapshotLoads.get());
     }
 }

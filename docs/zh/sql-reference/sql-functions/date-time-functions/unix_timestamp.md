@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将DATE或DATETIME类型的值转换为UNIX时间戳。"
 ---
 
 # unix_timestamp

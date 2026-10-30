@@ -55,9 +55,12 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Deque;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -205,23 +208,14 @@ public class JsonPathRewriteRule extends TransformationRule {
         }
 
         private Column createExtendedColumn(Table table, String path, ColumnAccessPath jsonPath) {
-            if (!table.containColumn(path)) {
-                Preconditions.checkState(table instanceof OlapTable, "Only support OlapTable");
-                // NOTE: The safety of adding a column dynamically is ensured by the fact that
-                // this rule is only applied during query planning, thus the Table here is already copied for the
-                // query. So this change would not affect the original table schema.
-                Column extendedColumn = new Column(path, jsonPath.getValueType(), true);
-
-                // Allocate the unique id for extended column
-                OlapTable olapTable = (OlapTable) table;
-                int nextUniqueId = olapTable.incAndGetMaxColUniqueId();
-                extendedColumn.setUniqueId(nextUniqueId);
-
-                table.addColumn(extendedColumn);
-                return extendedColumn;
-            } else {
-                return table.getColumn(path);
-            }
+            Preconditions.checkState(table instanceof OlapTable, "Only support OlapTable");
+            // The extended column is a per-query artifact: it only ever travels through the scan operator's
+            // colRefToColumnMetaMap and the ColumnAccessPath list, both of which are rebuilt for every scan.
+            // It must NOT be registered on the Table object. Doing so mutates the shared catalog instance for
+            // any statement whose source table is not copied (INSERT ... SELECT and MV refresh both reuse the
+            // live OlapTable), which leaks the column into InsertPlanner's sink schema and pins the path to
+            // whichever type happened to be resolved first.
+            return new Column(path, jsonPath.getValueType(), true);
         }
 
         public static ColumnAccessPath pathFromColumn(Column column) {
@@ -267,6 +261,13 @@ public class JsonPathRewriteRule extends TransformationRule {
         private OptExpression rewriteMetaScan(OptExpression optExpr, Void v) {
             LogicalProjectOperator project = (LogicalProjectOperator) optExpr.getOp();
             LogicalMetaScanOperator metaScan = (LogicalMetaScanOperator) optExpr.inputAt(0).getOp();
+
+            // Skip the JSON-path pushdown when two subfields of the same JSON column collide
+            // case-insensitively (e.g. 'Campaign' vs 'campaign'); see hasCaseCollidingJsonSubfields.
+            if (hasCaseCollidingJsonSubfields(new ArrayList<>(project.getColumnRefMap().values()), columnRefFactory)) {
+                return optExpr;
+            }
+
             LogicalMetaScanOperator.Builder scanBuilder =
                     LogicalMetaScanOperator.builder().withOperator(metaScan);
 
@@ -327,6 +328,20 @@ public class JsonPathRewriteRule extends TransformationRule {
 
         private OptExpression rewriteLogicalScan(OptExpression optExpr, Void v) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) optExpr.getOp();
+
+            // Skip the JSON-path pushdown when two subfields of the same JSON column collide
+            // case-insensitively (e.g. 'Campaign' vs 'campaign'); see hasCaseCollidingJsonSubfields.
+            List<ScalarOperator> jsonRoots = new ArrayList<>();
+            if (scanOperator.getPredicate() != null) {
+                jsonRoots.add(scanOperator.getPredicate());
+            }
+            if (scanOperator.getProjection() != null) {
+                jsonRoots.addAll(scanOperator.getProjection().getColumnRefMap().values());
+            }
+            if (hasCaseCollidingJsonSubfields(jsonRoots, columnRefFactory)) {
+                return optExpr;
+            }
+
             LogicalScanOperator.Builder builder =
                     (LogicalScanOperator.Builder) OperatorBuilderFactory.build(scanOperator)
                             .withOperator(scanOperator);
@@ -393,6 +408,77 @@ public class JsonPathRewriteRule extends TransformationRule {
             Operator newOp = builder.build();
             return OptExpression.builder().with(optExpr).setOp(newOp).build();
         }
+    }
+
+    /**
+     * Returns true if any JSON column referenced by {@code roots} has two subfields whose access
+     * paths differ only by case, e.g. {@code get_json_string(c,'Campaign')} and
+     * {@code get_json_string(c,'campaign')}.
+     *
+     * <p>JSON object keys are case-sensitive, so these are two distinct fields with distinct values.
+     * The pushdown, however, materializes each as an extended {@link Column} whose name is the
+     * subfield path; those names collide in every downstream name-keyed lookup (global-dict, min/max
+     * statistics). The result is a scan chunk with mismatched column row counts (BE crash) or a wrong
+     * global-dict mapping ("Dict Decode failed"). When such a collision is present we skip the rewrite
+     * for that scan entirely and let
+     * the query read the JSON column whole (identical to running with cbo_json_v2_rewrite=false),
+     * which is correct — only the (rare) colliding query loses the subfield-pushdown optimization.
+     *
+     * <p>This is a side-effect-free pre-pass: it must run before any extended column is created,
+     * because a partially-applied rewrite leaves dangling column refs that break later stages.
+     */
+    private static boolean hasCaseCollidingJsonSubfields(List<ScalarOperator> roots, ColumnRefFactory factory) {
+        // key: case-folded extended-column name -> the actual (case-sensitive) name that first claimed it.
+        Map<String, String> claimed = Maps.newHashMap();
+        Deque<ScalarOperator> stack = new ArrayDeque<>();
+        for (ScalarOperator root : roots) {
+            if (root != null) {
+                stack.push(root);
+            }
+        }
+        while (!stack.isEmpty()) {
+            ScalarOperator op = stack.pop();
+            for (ScalarOperator child : op.getChildren()) {
+                stack.push(child);
+            }
+            if (!(op instanceof CallOperator call)) {
+                continue;
+            }
+            if (!SUPPORTED_JSON_FUNCTIONS.contains(call.getFnName())
+                    || call.getArguments().size() != 2
+                    || !call.getChild(0).getType().equals(JsonType.JSON)) {
+                continue;
+            }
+            ScalarOperator jsonColumn = call.getArguments().get(0);
+            ScalarOperator pathArg = call.getArguments().get(1);
+            if (!(pathArg instanceof ConstantOperator) || !(jsonColumn instanceof ColumnRefOperator jsonColumnRef)) {
+                continue;
+            }
+            Pair<Table, Column> tableAndColumn = factory.getTableAndColumn(jsonColumnRef);
+            if (tableAndColumn == null) {
+                continue;
+            }
+            List<String> fields = JsonPathExpressionRewriter.parseJsonPath(((ConstantOperator) pathArg).getVarchar());
+            if (fields == null || !JsonPathExpressionRewriter.isValidJsonPath(fields)) {
+                continue;
+            }
+            // The extended column name is the linear path columnId.field1.field2...; build it exactly as
+            // createColumnAccessExpression()/createExtendedColumn() do, so it matches what gets stored.
+            List<String> fullPath = Lists.newArrayList();
+            fullPath.add(tableAndColumn.second.getColumnId().getId());
+            fullPath.addAll(fields);
+            String name = ColumnAccessPath.createLinearPath(fullPath, call.getType()).getLinearPath();
+
+            // Collision within this scan: two subfields whose extended-column names differ only by case.
+            // The cross-scan branch that used to live here is gone together with createExtendedColumn()'s
+            // table-backed reuse: extended columns are no longer registered on the shared table, so aliases
+            // of the same table can no longer pick up each other's case-differing column.
+            String prior = claimed.putIfAbsent(name.toLowerCase(Locale.ROOT), name);
+            if (prior != null && !prior.equals(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ScalarOperator rewriteScalar(ScalarOperator scalar,

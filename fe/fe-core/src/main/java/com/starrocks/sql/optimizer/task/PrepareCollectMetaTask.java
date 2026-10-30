@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.task;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.MetaPreparationItem;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -27,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -60,24 +62,44 @@ public class PrepareCollectMetaTask extends OptimizerTask {
         }
 
         int threadPoolSize = context.getOptimizerContext().getSessionVariable().getPrepareMetadataPoolSize();
-        String queryId = context.getOptimizerContext().getQueryId().toString();
+        // The optimizer is not always driven by a real query: background callers such as the mv plan cache
+        // builder (CachingMvPlanContextBuilder) and schema change threads run it on a synthetic ConnectContext
+        // that never gets a query id. Fall back to a freshly generated one so that the query-level connector
+        // metadata cache still gets a private key instead of throwing a NPE here.
+        UUID contextQueryId = context.getOptimizerContext().getQueryId();
+        String queryId = (contextQueryId != null ? contextQueryId : UUIDUtil.genUUID()).toString();
         ExecutorService executorService = Executors.newFixedThreadPool(threadPoolSize,
                 new ThreadFactoryBuilder().setNameFormat(String.format("prepare-metadata-%s", queryId)).build());
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Tracers tracers = Tracers.get();
+        Tracers ownerTracers = Tracers.get();
         ConnectContext connectContext = ConnectContext.get();
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_prepare_metadata")) {
-            CompletableFuture<Void> allFutures = CompletableFuture.allOf(scanOperators.stream()
-                    .map(op -> CompletableFuture.supplyAsync(() ->
+        try {
+            try (Timer ignored = Tracers.watchScope(EXTERNAL, "EXTERNAL.parallel_prepare_metadata")) {
+                // Fork tracers for each parallel task on the owner thread
+                int numTasks = scanOperators.size();
+                List<Tracers> forks = new ArrayList<>(numTasks);
+                CompletableFuture<?>[] futures = new CompletableFuture[numTasks];
+                for (int i = 0; i < numTasks; i++) {
+                    LogicalScanOperator op = scanOperators.get(i);
+                    Tracers forked = ownerTracers.fork(true);
+                    forks.add(forked);
+                    futures[i] = CompletableFuture.supplyAsync(() ->
                                     metadataMgr.prepareMetadata(queryId, op.getTable().getCatalogName(),
                                             new MetaPreparationItem(op.getTable(), op.getPredicate(),
                                                     op.getLimit(), op.getTvrVersionRange()),
-                                            tracers, connectContext),
-                            executorService)).toArray(CompletableFuture[]::new));
-            allFutures.join();
+                                            forked, connectContext),
+                            executorService);
+                }
+                CompletableFuture.allOf(futures).join();
+                // Merge all forks back on the owner thread (single-threaded, no race)
+                for (Tracers f : forks) {
+                    ownerTracers.mergeFrom(f);
+                }
+            }
+        } finally {
+            executorService.shutdown();
         }
-        executorService.shutdown();
     }
 
     private List<LogicalScanOperator> collectScanOperators(OptExpression tree) {

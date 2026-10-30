@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load 可以持续从 Apache Kafka® 消费消息并导入数据到 StarRocks。"
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -15,7 +16,7 @@ Routine Load 可以持续从 Apache Kafka® 消费消息并将数据导入到 St
 本主题介绍 CREATE ROUTINE LOAD 语句的语法、参数和示例。
 
 :::note
-- 有关 Routine Load 的应用场景、原理和基本操作的信息，请参见 [使用 Routine Load 导入数据](../../../../loading/Loading_intro.md)。
+- 有关 Routine Load 的应用场景、原理和基本操作的信息，请参见 [使用 Routine Load 导入数据](../../../../loading/loading_introduction/loading_introduction.mdx)。
 - 只有具有 StarRocks 表 INSERT 权限的用户才能将数据导入到 StarRocks 表中。如果您没有 INSERT 权限，请按照 [GRANT](../../account-management/GRANT.md) 中提供的说明授予您用于连接 StarRocks 集群的用户 INSERT 权限。
 :::
 
@@ -111,7 +112,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `desired_concurrent_number`
 
 **必需**：否\
-**描述**：单个 Routine Load 作业的期望任务并行度。默认值：`3`。实际任务并行度由多个参数的最小值决定：`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul><li>`alive_be_number`：存活的 BE 节点数。</li><li>`partition_number`：要消费的分区数。</li><li>`desired_concurrent_number`：单个 Routine Load 作业的期望任务并行度。默认值：`3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 作业的默认最大任务并行度，为 `5`。请参见 [FE 动态参数](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)。</li></ul>最大实际任务并行度由存活的 BE 节点数或要消费的分区数决定。<br/>
+**描述**：单个 Routine Load 作业的期望任务并行度。默认值：`3`。实际任务并行度由多个参数的最小值决定：`min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`。<ul><li>`alive_be_number`：存活的 BE 节点数。</li><li>`partition_number`：要消费的分区数。</li><li>`desired_concurrent_number`：单个 Routine Load 作业的期望任务并行度。默认值：`3`。</li><li>`max_routine_load_task_concurrent_num`：Routine Load 作业的默认最大任务并行度，为 `5`。请参见 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)。</li></ul>最大实际任务并行度由存活的 BE 节点数或要消费的分区数决定。<br/>
 
 #### `max_batch_interval`
 
@@ -136,7 +137,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `strict_mode`      
 
 **必需**：否\
-**描述**：指定是否启用 [strict mode](../../../../loading/load_concept/strict_mode.md)。有效值：`true` 和 `false`。默认值：`false`。当启用严格模式时，如果导入数据中某列的值为 `NULL`，但目标表不允许该列的 `NULL` 值，则该数据行将被过滤掉。
+**描述**：指定是否启用 [strict mode](../../../../loading/strict_mode.md)。有效值：`true` 和 `false`。默认值：`false`。当启用严格模式时，如果导入数据中某列的值为 `NULL`，但目标表不允许该列的 `NULL` 值，则该数据行将被过滤掉。
 
 #### `log_rejected_record_num`
 
@@ -166,7 +167,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **必需**：否\
-**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（<code class="language-text">&#124;</code>）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：<code class="language-text">&#124; "Love StarRocks" &#124;</code>。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 <code class="language-text">&#124;"Love StarRocks"&#124;</code>。
+**描述**：指定在数据文件为 CSV 格式时，是否删除数据文件中列分隔符前后的空格。类型：BOOLEAN。默认值：`false`。<br />对于某些数据库，当您将数据导出为 CSV 格式的数据文件时，会在列分隔符中添加空格。根据空格的位置，这些空格被称为前导空格或尾随空格。通过设置 `trim_space` 参数，您可以启用 StarRocks 在数据导入期间删除这些不必要的空格。<br />请注意，StarRocks 不会删除字段中用一对 `enclose` 指定的字符包裹的空格（包括前导空格和尾随空格）。例如，以下字段值使用管道符号（`|`）作为列分隔符，双引号（`"`）作为 `enclose` 指定的字符：`| "Love StarRocks" |`。如果您将 `trim_space` 设置为 `true`，StarRocks 将处理上述字段值为 `|"Love StarRocks"|`。
 
 #### `enclose`     
 
@@ -193,15 +194,20 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **必需**：否\
 **描述**：要加载的 JSON 格式数据的根元素。StarRocks 通过 `json_root` 提取根节点的元素进行解析。默认情况下，此参数的值为空，表示将加载所有 JSON 格式数据。有关更多信息，请参见本主题中的 [指定要加载的 JSON 格式数据的根元素](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded)。
 
+#### `envelope`
+
+**必需**：否\
+**描述**：指定 JSON 格式数据的 CDC Envelope 格式。有效值：`debezium`。默认不设置（无 Envelope 包装）。设置为 `debezium` 时，StarRocks 将每条 Kafka 消息解析为 Debezium CDC 事件，消息中须包含 `op` 字段（`c`=insert、`u`=update、`d`=delete、`r`=快照读取）以及 `after` 字段（c/u/r 操作）或 `before` 字段（d 操作），用于承载实际行数据。`payload` 为 `null` 的 tombstone 消息将被跳过。只能在 `format` 为 `json` 时指定，不能与 `json_root` 或 `strip_outer_array` 同时使用。
+
 #### `task_consume_second`
 
 **必需**：否\
-**描述**：指定 Routine Load 作业中每个 Routine Load 任务的最大数据消费时间。单位：秒。与 [FE 动态参数](../../../../administration/management/FE_configuration.md) `routine_load_task_consume_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。<ul> <li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。</li> <li>仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。</li> <li>仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。</li> </ul>
+**描述**：指定 Routine Load 作业中每个 Routine Load 任务的最大数据消费时间。单位：秒。与 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。<ul> <li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。</li> <li>仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。</li> <li>仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。</li> </ul>
 
 #### `task_timeout_second`
 
 **必需**：否\
-**描述**：指定 Routine Load 作业中每个 Routine Load 任务的超时时间。单位：秒。与 [FE 动态参数](../../../../administration/management/FE_configuration.md) `routine_load_task_timeout_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。<ul> <li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。</li> <li>仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。</li> <li>仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。</li> </ul>
+**描述**：指定 Routine Load 作业中每个 Routine Load 任务的超时时间。单位：秒。与 [FE 动态参数](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second`（适用于集群中的所有 Routine Load 作业）不同，此参数特定于单个 Routine Load 作业，更加灵活。此参数自 v3.1.0 起支持。<ul> <li>当未配置 `task_consume_second` 和 `task_timeout_second` 时，StarRocks 使用 FE 动态参数 `routine_load_task_consume_second` 和 `routine_load_task_timeout_second` 控制导入行为。</li> <li>仅配置 `task_timeout_second` 时，`task_consume_second` 的默认值计算为 `task_timeout_second`/4。</li> <li>仅配置 `task_consume_second` 时，`task_timeout_second` 的默认值计算为 `task_consume_second` * 4。</li> </ul>
 
 #### `pause_on_fatal_parse_error`
 
@@ -248,7 +254,12 @@ FROM <data_source>
 #### `property.kafka_default_offsets`
 
 **必需**：否\
-**描述**：所有消费者分区的默认起始偏移量。此属性支持的值与 `kafka_offsets` 属性的值相同。
+**描述**：所有消费者分区的默认起始偏移量。此属性支持的值与 `kafka_offsets` 属性的值相同。对于作业已有消费进度后才被发现的分区（例如后续新增到 Kafka 主题的分区），将从此偏移量开始消费；如果未指定此属性，则从 `OFFSET_BEGINNING` 开始消费。
+
+#### `property.kafka_partition_discovery`
+
+**必需**：否\
+**描述**：指定了 `kafka_partitions` 时，Routine Load 作业是否继续自动发现新增的 Kafka 分区。有效值：`true` 和 `false`（默认值）。默认情况下，指定 `kafka_partitions` 后作业只消费列出的分区，主题后续新增的分区不会被消费。如果此属性设置为 `true`，`kafka_partitions` 和 `kafka_offsets` 仅用于指定所列分区的起始偏移量，作业会消费主题的所有分区，包括后续新增的分区。未在 `kafka_partitions` 中列出的分区从 `property.kafka_default_offsets` 指定的偏移量开始消费；如果未指定 `property.kafka_default_offsets`，则从 `OFFSET_BEGINNING` 开始消费。如果希望未列出的分区从最新的偏移量开始消费，请显式设置 `property.kafka_default_offsets` 为 `OFFSET_END`。此属性只能与 `kafka_partitions` 一起使用。
 
 #### `confluent.schema.registry.url`
 
@@ -336,7 +347,7 @@ FROM <data_source>
 
 ### FE 和 BE 配置项
 
-有关与 Routine Load 相关的 FE 和 BE 配置项，请参见 [配置项](../../../../administration/management/FE_configuration.md)。
+有关与 Routine Load 相关的 FE 和 BE 配置项，请参见 [配置项](../../../../administration/configuration/FE_parameters/FE_parameters.md)。
 
 ## 列映射
 
@@ -813,8 +824,8 @@ CREATE TABLE example_db.example_tbl3 (
     country varchar(26) NULL, 
     pay_time bigint(20) NULL, 
     price double SUM NULL) 
-AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 ENGINE=OLAP
+AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 DISTRIBUTED BY HASH(commodity_id); 
 ```
 
@@ -959,7 +970,7 @@ CREATE TABLE sensor.sensor_log2 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
@@ -1039,7 +1050,7 @@ CREATE TABLE sensor.sensor_log3 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 

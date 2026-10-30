@@ -24,11 +24,17 @@
 namespace starrocks {
 class TxnLogPB;
 class TabletMetadataPB;
+class RowsetMetadataPB;
 } // namespace starrocks
 
 namespace starrocks::lake {
 
 class Tablet;
+
+// Does this rowset hold any rows? Neither the rowset-level count nor the segment count alone can
+// answer it -- see the definition for why. Callers use it to decide whether an op_write carries
+// anything at all.
+bool rowset_holds_rows(const RowsetMetadataPB& rowset);
 
 class TxnLogApplier {
 public:
@@ -42,10 +48,19 @@ public:
 
     virtual Status finish() = 0;
 
-    void observe_empty_compaction() { _has_empty_compaction = true; }
+    // Mark this publish iteration as carrying a "no-op apply" — i.e. a txn that
+    // produces no rowset changes against the metadata. Used by:
+    //   (1) compaction whose txnlog is missing + force_publish=true (legacy
+    //       "empty compaction" path), and
+    //   (2) admin-issued no-op publish (ADMIN SKIP COMMITTED TRANSACTION,
+    //       TxnInfoPB.no_op_publish=true).
+    // The flag drives downstream PK persistent-index handling in finish() to
+    // still load the primary index even when no rowsets changed, so a later
+    // real compaction does not skip due to a stale in-memory index.
+    void observe_no_op_apply() { _has_no_op_apply = true; }
 
 protected:
-    bool _has_empty_compaction = false;
+    bool _has_no_op_apply = false;
     bool _skip_write_tablet_metadata = false;
 };
 

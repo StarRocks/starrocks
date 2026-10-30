@@ -84,9 +84,13 @@ public class RankingWindowUtils {
             }
         }
 
-        // same partition and without order by, so they are in same sort group and partition group, which means share the same sort Node and exchange Node
-        Preconditions.checkState(operator.getEnforceSortColumns().equals(rankRelatedOperator.getEnforceSortColumns()));
-        return true;
+        // The pre-Agg rewrite requires both operators to share the same sort Node and exchange Node,
+        // i.e. to belong to the same sort group. Having the same partition expressions is not enough:
+        // WindowTransformer groups window operators by an ORDERED prefix of their enforce-sort columns
+        // (isPrefixHyperSortSet), while the check above compares partition expressions as a SET, and a
+        // hash-partitioned window is never placed in a sort group at all. So two operators may reach
+        // this point with different enforce-sort columns, in which case the optimization must be skipped.
+        return operator.getEnforceSortColumns().equals(rankRelatedOperator.getEnforceSortColumns());
     }
 
     // This is similar to Splitting Aggregation into two phase Aggregation

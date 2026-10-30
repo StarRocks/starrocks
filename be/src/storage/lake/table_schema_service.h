@@ -96,6 +96,20 @@ public:
                                                   const TUniqueId& query_id, const TNetworkAddress& coordinator_fe,
                                                   const TabletMetadataPtr& tablet_meta = nullptr);
 
+    /**
+     * @brief Fetch tablet initial metadata from FE Leader for cn-free tablet creation.
+     *
+     * When cn_free_tablet_creation is enabled, DDL skips writing version 1 metadata to
+     * object storage. This method fetches the initial configuration (schema + table-level
+     * properties + tablet ranges) from FE so that the caller can construct version 1
+     * TabletMetadataPB on demand.
+     *
+     * Uses (table_id, index_id) as SingleFlight key so that concurrent requests for
+     * different tablets under the same index share one RPC.
+     */
+    StatusOr<TGetTabletMetadataResponse> get_tablet_initial_metadata(int64_t tablet_id, int64_t table_id,
+                                                                     int64_t partition_id, int64_t index_id);
+
 private:
     /**
      * @brief Context of the actual RPC executed by the SingleFlight leader.
@@ -206,8 +220,24 @@ private:
         return _single_flight_groups[h & (kSingleFlightGroupShards - 1)];
     }
 
+    // Initial metadata fetch for cn-free tablet creation
+    struct InitialMetadataSFResult {
+        StatusOr<TGetTabletMetadataResponse> result;
+    };
+    using InitialMetadataSFResultPtr = std::shared_ptr<const InitialMetadataSFResult>;
+    using InitialMetadataSFGroup = bthreads::singleflight::Group<std::string, InitialMetadataSFResultPtr>;
+
+    InitialMetadataSFResultPtr _fetch_initial_metadata_via_rpc(int64_t tablet_id, int64_t table_id,
+                                                               int64_t partition_id, int64_t index_id);
+
+    InitialMetadataSFGroup& _select_initial_metadata_sf_group(const std::string& key) {
+        const size_t h = std::hash<std::string>{}(key);
+        return _initial_metadata_sf_groups[h & (kSingleFlightGroupShards - 1)];
+    }
+
     TabletManager* _tablet_mgr;
     std::array<SingleFlightGroup, kSingleFlightGroupShards> _single_flight_groups;
+    std::array<InitialMetadataSFGroup, kSingleFlightGroupShards> _initial_metadata_sf_groups;
 };
 
 } // namespace starrocks::lake

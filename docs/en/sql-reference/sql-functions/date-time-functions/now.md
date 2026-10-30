@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the current date and time."
 ---
 
 # now, current_timestamp, localtime, localtimestamp

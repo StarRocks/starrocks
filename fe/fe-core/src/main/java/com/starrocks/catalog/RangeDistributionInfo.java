@@ -31,12 +31,9 @@ public class RangeDistributionInfo extends DistributionInfo {
         super(DistributionInfoType.RANGE);
     }
 
-    /*
-     * Will be changed to true later once colocate is supported.
-     */
     @Override
     public boolean supportColocate() {
-        return false;
+        return true;
     }
 
     /*

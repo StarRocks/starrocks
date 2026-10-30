@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用指定分隔符将多个字符串连接成一个新字符串。"
 ---
 
 # concat_ws

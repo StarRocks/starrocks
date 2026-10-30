@@ -32,8 +32,25 @@ public class GCPCloudConfigurationProvider implements CloudConfigurationProvider
     public static final String GCS_ACCESS_TOKEN_EXPIRES_AT = "gcs.oauth2.token-expires-at";
     public static final String ACCESS_TOKEN_KEY = "fs.gs.temporary.access.token";
     public static final String TOKEN_EXPIRATION_KEY = "fs.gs.temporary.token.expiration";
+    // gcs-connector 3.x auth keys; 3.x ignores the legacy 2.x ".impl" key
+    public static final String AUTH_TYPE_KEY = "fs.gs.auth.type";
+    public static final String AUTH_TYPE_ACCESS_TOKEN_PROVIDER = "ACCESS_TOKEN_PROVIDER";
+    public static final String ACCESS_TOKEN_PROVIDER_KEY = "fs.gs.auth.access.token.provider";
+    public static final String LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY = "fs.gs.auth.access.token.provider.impl";
+    // Hadoop's FileSystem cache ignores Configuration; disable it so rotating vended tokens take effect
+    public static final String DISABLE_FS_CACHE_KEY = "fs.gs.impl.disable.cache";
+    public static final String IMPERSONATION_SERVICE_ACCOUNT_KEY = "fs.gs.auth.impersonation.service.account";
     public static final String ACCESS_TOKEN_PROVIDER_IMPL =
             "com.starrocks.connector.gcp.TemporaryGCPAccessTokenProvider";
+    public static final String AUTH_TYPE_COMPUTE_ENGINE = "COMPUTE_ENGINE";
+    // gcs-connector 3.x dropped inline service-account credentials (2.x read these keys directly) and its
+    // SERVICE_ACCOUNT_JSON_KEYFILE mode only accepts a local keyfile path. StarRocks keeps accepting the
+    // inline key through this provider, which reads the same keys and mints access tokens itself.
+    public static final String SERVICE_ACCOUNT_ACCESS_TOKEN_PROVIDER_IMPL =
+            "com.starrocks.connector.gcp.ServiceAccountGCPAccessTokenProvider";
+    public static final String SERVICE_ACCOUNT_EMAIL_KEY = "fs.gs.auth.service.account.email";
+    public static final String SERVICE_ACCOUNT_PRIVATE_KEY_ID_KEY = "fs.gs.auth.service.account.private.key.id";
+    public static final String SERVICE_ACCOUNT_PRIVATE_KEY_KEY = "fs.gs.auth.service.account.private.key";
 
     @Override
     public CloudConfiguration build(Map<String, String> properties) {

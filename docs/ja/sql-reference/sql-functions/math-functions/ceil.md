@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力を等しいかそれ以上の最も近い整数に丸めた値を返します。"
 ---
 
 # ceil, dceil

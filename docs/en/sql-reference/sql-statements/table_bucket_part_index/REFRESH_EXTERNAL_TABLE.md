@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "REFRESH EXTERNAL TABLE metadata cached in StarRocks."
 ---
 
 # REFRESH EXTERNAL TABLE

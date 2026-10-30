@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据分隔符拆分字符串，返回指定位置的部分。"
 ---
 
 # split_part

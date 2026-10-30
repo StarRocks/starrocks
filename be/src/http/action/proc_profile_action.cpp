@@ -18,15 +18,15 @@
 #include <string>
 #include <vector>
 
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/profile_utils.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_method.h"
-#include "http/http_request.h"
-#include "http/http_status.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_method.h"
+#include "platform/http/http_request.h"
+#include "platform/http/http_status.h"
 #include "rapidjson/document.h"
 #include "rapidjson/prettywriter.h"
 #include "rapidjson/stringbuffer.h"

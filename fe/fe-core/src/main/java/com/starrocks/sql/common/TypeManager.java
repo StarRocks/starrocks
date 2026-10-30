@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariableConstants;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
@@ -119,19 +120,37 @@ public class TypeManager {
         return new MapType(keyCommon, valueCommon);
     }
 
+    private static boolean isCastStructByName() {
+        final ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return false;
+        }
+        long sqlMode = ctx.getSessionVariable().getSqlMode();
+        return SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_STRUCT_CAST_BY_NAME);
+    }
+
     private static Type getCommonStructType(StructType t1, StructType t2) {
         if (t1.getFields().size() != t2.getFields().size()) {
             return InvalidType.INVALID;
         }
+        boolean castByName = isCastStructByName();
         ArrayList<StructField> fields = Lists.newArrayList();
         for (int i = 0; i < t1.getFields().size(); ++i) {
-            Type fieldCommon = getCommonSuperType(t1.getField(i).getType(), t2.getField(i).getType());
+            StructField field1 = t1.getField(i);
+            StructField field2 = null;
+            if (castByName) {
+                field2 = t2.getField(field1.getName());
+            } else {
+                field2 = t2.getField(i);
+            }
+            if (field2 == null) {
+                return InvalidType.INVALID;
+            }
+            Type fieldCommon = getCommonSuperType(field1.getType(), field2.getType());
             if (!fieldCommon.isValid()) {
                 return InvalidType.INVALID;
             }
-
-            // default t1's field name
-            fields.add(new StructField(t1.getField(i).getName(), fieldCommon));
+            fields.add(new StructField(field1.getName(), fieldCommon));
         }
         return new StructType(fields);
     }
@@ -185,6 +204,9 @@ public class TypeManager {
             if (t1.isStringType() && t2.isExactNumericType() || t1.isExactNumericType() && t2.isStringType()) {
                 return getEquivalenceBaseType(t1, t2);
             }
+        }
+        if (t1.isFileType() || t2.isFileType() || t1.isGeoType() || t2.isGeoType()) {
+            return InvalidType.INVALID;
         }
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {
             return t2;
@@ -268,8 +290,9 @@ public class TypeManager {
         if (type1.isArrayType() || type2.isArrayType()) {
             return TypeManager.getCommonSuperType(type1, type2);
         }
-        if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType()) {
-            // We don't support complex type (map/struct) for GT/LT predicate.
+        if (type1.isComplexType() || type2.isComplexType() || type1.isOnlyMetricType() || type2.isOnlyMetricType() ||
+                type1.isFileType() || type2.isFileType() || type1.isGeoType() || type2.isGeoType()) {
+            // We don't support complex type (map/struct) for GT/LT predicate, and FILE/geo types are never comparable.
             return InvalidType.INVALID;
         }
 
@@ -352,6 +375,10 @@ public class TypeManager {
                 }
             }
         }
+        // BE does not support geo values in CASE results or comparisons.
+        if (compatibleType.isGeoType()) {
+            return InvalidType.INVALID;
+        }
         if (compatibleType.isStringType()) {
             ScalarType resultType = (ScalarType) compatibleType;
             // If result type is varchar with length, it may cause the case when result type is not compatible.
@@ -385,8 +412,19 @@ public class TypeManager {
             if (fromStruct.getFields().size() != toStruct.getFields().size()) {
                 return false;
             }
-            for (int i = 0; i < fromStruct.getFields().size(); ++i) {
-                if (!canCastTo(fromStruct.getField(i).getType(), toStruct.getField(i).getType())) {
+            boolean isCastByName = isCastStructByName();
+            for (int i = 0; i < toStruct.getFields().size(); ++i) {
+                StructField fromField = fromStruct.getField(i);
+                StructField toField = null;
+                if (isCastByName) {
+                    toField = toStruct.getField(fromField.getName());
+                } else {
+                    toField = toStruct.getField(i);
+                }
+                if (toField == null) {
+                    return false;
+                }
+                if (!canCastTo(fromField.getType(), toField.getType())) {
                     return false;
                 }
             }
@@ -624,6 +662,15 @@ public class TypeManager {
         }
         if (t2.isNull()) {
             return t1;
+        }
+
+        // Unequal geo types have no implicit common type; preserve the identity/null shortcuts above.
+        if (t1.isGeoType() || t2.isGeoType()) {
+            return InvalidType.INVALID;
+        }
+        // FILE is an opaque scalar with no casts in either direction; only FILE/FILE (handled above) is compatible.
+        if (t1.isFileType() || t2.isFileType()) {
+            return InvalidType.INVALID;
         }
 
         boolean t1IsHLL = t1.getType() == PrimitiveType.HLL;

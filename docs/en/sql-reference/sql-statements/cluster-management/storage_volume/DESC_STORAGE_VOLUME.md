@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DESC STORAGE VOLUME describes a storage volume."
 ---
 
 # DESC STORAGE VOLUME

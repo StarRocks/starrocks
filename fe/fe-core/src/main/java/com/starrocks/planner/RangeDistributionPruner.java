@@ -24,6 +24,8 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.NullLiteral;
+import com.starrocks.type.Type;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -35,8 +37,14 @@ import java.util.Set;
 import java.util.TreeMap;
 
 public class RangeDistributionPruner implements DistributionPruner {
-    // tablets in range order
+    // tablets in range order; unused (empty) when degradeToFullScan is true
     private final TreeMap<Range<Tuple>, Long> tabletInOrder;
+    // all tablet ids captured from the input, in input order; used as the full-scan fallback result
+    private final List<Long> allTabletIds;
+    // true when a captured tablet range's arity doesn't match rangeDistributionColumns; a concurrent
+    // metadata-only flip can transiently mix old-arity and new-arity tablet ranges, so we fall back to
+    // scanning every tablet instead of asserting or silently dropping tablets
+    private final boolean degradeToFullScan;
     // range distribution columns
     private final List<Column> rangeDistributionColumns;
     // distribution column filters
@@ -45,30 +53,54 @@ public class RangeDistributionPruner implements DistributionPruner {
     public RangeDistributionPruner(List<Tablet> tabletsInOrder,
                                    List<Column> rangeDistributionColumns,
                                    Map<String, PartitionColumnFilter> distributionColumnFilters) {
-        this.tabletInOrder = new TreeMap<>();
+        this.rangeDistributionColumns = rangeDistributionColumns;
+        this.distributionColumnFilters = distributionColumnFilters;
+
+        // Single pass: capture each tablet's id and range (never call Tablet#getRange() twice) and check
+        // its arity in the same iteration, adding the id BEFORE the arity check and never breaking on a
+        // mismatch (only flag `degrade`). So a concurrent flip can't swap the range reference between
+        // capture and use, and a mismatch found partway through never truncates the id list already
+        // captured. The TreeMap is built only after the loop completes.
+        List<Long> ids = new ArrayList<>(tabletsInOrder.size());
+        List<Range<Tuple>> ranges = new ArrayList<>(tabletsInOrder.size());
+        boolean degrade = false;
         for (Tablet tablet : tabletsInOrder) {
             TabletRange tabletRange = tablet.getRange();
             Preconditions.checkState(tabletRange != null && tabletRange.getRange() != null, "Tablet range is null");
             Range<Tuple> range = tabletRange.getRange();
-            this.tabletInOrder.put(range, tablet.getId());
-            
-            int rangeColumnCount = 0;
-            if (!range.isMinimum()) {
-                rangeColumnCount = range.getLowerBound().getValues().size();
-            } else if (!range.isMaximum()) {
-                rangeColumnCount = range.getUpperBound().getValues().size();
-            }
+            ids.add(tablet.getId());
+            ranges.add(range);
 
             if (!range.isAll()) {
-                Preconditions.checkState(rangeColumnCount == rangeDistributionColumns.size(), "Range column count mismatch");
+                int rangeColumnCount = 0;
+                if (!range.isMinimum()) {
+                    rangeColumnCount = range.getLowerBound().getValues().size();
+                } else if (!range.isMaximum()) {
+                    rangeColumnCount = range.getUpperBound().getValues().size();
+                }
+                if (rangeColumnCount != rangeDistributionColumns.size()) {
+                    degrade = true;
+                }
             }
         }
-        this.rangeDistributionColumns = rangeDistributionColumns;
-        this.distributionColumnFilters = distributionColumnFilters;
+
+        this.allTabletIds = ids;
+        this.degradeToFullScan = degrade;
+        TreeMap<Range<Tuple>, Long> tree = new TreeMap<>();
+        if (!degrade) {
+            for (int i = 0; i < ids.size(); i++) {
+                tree.put(ranges.get(i), ids.get(i));
+            }
+        }
+        this.tabletInOrder = tree;
     }
 
     @Override
     public Collection<Long> prune() {
+        if (degradeToFullScan) {
+            return new ArrayList<>(allTabletIds);
+        }
+
         if (distributionColumnFilters == null || distributionColumnFilters.isEmpty() ||
             (tabletInOrder.size() == 1 && tabletInOrder.firstEntry().getKey().isAll())) {
             return new ArrayList<>(tabletInOrder.values());
@@ -97,6 +129,12 @@ public class RangeDistributionPruner implements DistributionPruner {
             List<LiteralExpr> inPredicateLiterals = filter.getInPredicateLiterals();
             if (inPredicateLiterals != null && !inPredicateLiterals.isEmpty()) {
                 for (LiteralExpr expr : inPredicateLiterals) {
+                    // A NULL entry in an IN list never matches any row (SQL three-valued logic), so
+                    // it selects no tablets -- skip it. This also avoids parsing the literal "NULL"
+                    // as the column type.
+                    if (expr instanceof NullLiteral) {
+                        continue;
+                    }
                     Variant v = Variant.of(column.getType(), expr.getStringValue());
                     lowerValues.add(v);
                     upperValues.add(v);
@@ -110,12 +148,12 @@ public class RangeDistributionPruner implements DistributionPruner {
             Variant colMax = null;
             LiteralExpr lowerBound = filter.getLowerBound();
             if (lowerBound != null) {
-                colMin = Variant.of(column.getType(), lowerBound.getStringValue());
+                colMin = toVariant(column.getType(), lowerBound);
             }
 
             LiteralExpr upperBound = filter.getUpperBound();
             if (upperBound != null) {
-                colMax = Variant.of(column.getType(), upperBound.getStringValue());
+                colMax = toVariant(column.getType(), upperBound);
             }
 
             // 3. Fill unbounded sides with type-wide min/max
@@ -245,5 +283,15 @@ public class RangeDistributionPruner implements DistributionPruner {
             }
         }
         return resultSet;
+    }
+
+    // Convert a range-bound literal to a Variant. An IS NULL predicate reaches the pruner as a
+    // NullLiteral bound whose getStringValue() is the string "NULL". A NULL sort-key value is encoded
+    // as NullVariant, which sorts as the smallest real value (matching the BE null-first key
+    // encoding), so a NULL bound must compare as NullVariant -- passing "NULL" to Variant.of() would
+    // parse it as the column type and throw for numeric/date types.
+    private static Variant toVariant(Type type, LiteralExpr literal) {
+        return literal instanceof NullLiteral ? Variant.nullVariant(type)
+                : Variant.of(type, literal.getStringValue());
     }
 }

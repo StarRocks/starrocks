@@ -35,7 +35,6 @@
 package com.starrocks.rpc;
 
 import com.baidu.jprotobuf.pbrpc.utils.TalkTimeoutController;
-import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -49,7 +48,6 @@ import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
@@ -62,7 +60,6 @@ import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
-import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -74,6 +71,38 @@ import java.util.concurrent.Future;
 
 public class BackendServiceClient {
     private static final Logger LOG = LogManager.getLogger(BackendServiceClient.class);
+
+    // Check if the exception is a connection pool exception (NoSuchElementException),
+    // either thrown directly or wrapped in a RuntimeException.
+    //
+    // Call chain: BackendServiceClient → service.execPlanFragmentAsync(pRequest)
+    //   → ProtobufRpcProxy.invoke()          // JDK dynamic proxy (InvocationHandler)
+    //     → RpcChannel.getConnection()        // RpcChannel.java line 76
+    //       → ChannelPool.getChannel()        // ChannelPool.java line 76
+    //         → GenericObjectPool.borrowObject()  // throws NoSuchElementException
+    //
+    // ChannelPool.getChannel() catches all Exceptions and re-throws as RuntimeException:
+    //   } catch (Exception e) {
+    //       LOGGER.log(Level.SEVERE, e.getMessage(), e);
+    //       throw new RuntimeException(e.getMessage(), e);  // wraps NoSuchElementException
+    //   }
+    //
+    // ProtobufRpcProxy.invoke() does NOT catch or re-wrap this RuntimeException,
+    // so it propagates directly to BackendServiceClient.
+    //
+    // Source: https://github.com/StarRocks/Jprotobuf-rpc-socket (com.starrocks:jprotobuf-rpc-core:1.0.0)
+    //   - ChannelPool.java: com.baidu.jprotobuf.pbrpc.transport.ChannelPool.getChannel()
+    //   - RpcChannel.java: com.baidu.jprotobuf.pbrpc.transport.RpcChannel.getConnection()
+    //   - ProtobufRpcProxy.java: com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy.invoke()
+    static boolean isConnectionPoolException(Throwable e) {
+        if (e instanceof NoSuchElementException) {
+            return true;
+        }
+        if (e instanceof RuntimeException && e.getCause() instanceof NoSuchElementException) {
+            return true;
+        }
+        return false;
+    }
 
     private BackendServiceClient() {
     }
@@ -91,22 +120,24 @@ public class BackendServiceClient {
             final PBackendService service = BrpcProxy.getBackendService(address);
             TalkTimeoutController.setTalkTimeout(Config.brpc_send_plan_fragment_timeout_ms);
             return serviceCall.apply(service);
-        } catch (NoSuchElementException e) {
-            try {
-                // retry
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    // do nothing
-                }
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                return serviceCall.apply(service);
-            } catch (NoSuchElementException noSuchElementException) {
-                LOG.warn("Execute plan fragment retry failed, address={}:{}",
-                        address.getHostname(), address.getPort(), noSuchElementException);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
         } catch (Throwable e) {
+            if (isConnectionPoolException(e)) {
+                // retry once for transient connection pool failures
+                try {
+                    Thread.sleep(Math.max(0, Config.brpc_connection_pool_retry_wait_time_ms));
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                try {
+                    final PBackendService service = BrpcProxy.getBackendService(address);
+                    return serviceCall.apply(service);
+                } catch (Throwable retryException) {
+                    LOG.warn("Execute plan fragment retry failed, address={}:{}",
+                            address.getHostname(), address.getPort(), retryException);
+                    throw new RpcException(retryException.getMessage() + ", host: " + address.hostname,
+                            retryException);
+                }
+            }
             LOG.warn("Execute plan fragment catch a exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
@@ -116,9 +147,9 @@ public class BackendServiceClient {
     private Future<PExecPlanFragmentResult> sendPlanFragmentAsync(TNetworkAddress address,
                                                                   PExecPlanFragmentRequest pRequest)
             throws RpcException {
-        return sendRequestAsync(address,
+        return GuardedFuture.guard(sendRequestAsync(address,
                 service -> service.execPlanFragmentAsync(pRequest),
-                pRequest.serializedRequest.length);
+                pRequest.serializedRequest.length), "be-exec-plan-fragment");
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
@@ -132,9 +163,9 @@ public class BackendServiceClient {
 
     private Future<PExecBatchPlanFragmentsResult> sendBatchPlanFragmentsAsync(
             TNetworkAddress address, PExecBatchPlanFragmentsRequest pRequest) throws RpcException {
-        return sendRequestAsync(address,
+        return GuardedFuture.guard(sendRequestAsync(address,
                 service -> service.execBatchPlanFragmentsAsync(pRequest),
-                pRequest.serializedRequest.length);
+                pRequest.serializedRequest.length), "be-exec-batch-plan-fragments");
     }
 
     public Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(
@@ -175,23 +206,25 @@ public class BackendServiceClient {
         }
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.cancelPlanFragmentAsync(pRequest);
-        } catch (NoSuchElementException e) {
-            // retry
-            try {
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    // do nothing
-                }
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                return service.cancelPlanFragmentAsync(pRequest);
-            } catch (NoSuchElementException noSuchElementException) {
-                LOG.warn("Cancel plan fragment retry failed, address={}:{}",
-                        address.getHostname(), address.getPort(), noSuchElementException);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
+            return GuardedFuture.guard(service.cancelPlanFragmentAsync(pRequest), "be-cancel-plan-fragment");
         } catch (Throwable e) {
+            if (isConnectionPoolException(e)) {
+                // retry once for transient connection pool failures
+                try {
+                    Thread.sleep(Math.max(0, Config.brpc_connection_pool_retry_wait_time_ms));
+                } catch (InterruptedException interruptedException) {
+                    Thread.currentThread().interrupt();
+                }
+                try {
+                    final PBackendService service = BrpcProxy.getBackendService(address);
+                    return GuardedFuture.guard(service.cancelPlanFragmentAsync(pRequest), "be-cancel-plan-fragment");
+                } catch (Throwable retryException) {
+                    LOG.warn("Cancel plan fragment retry failed, address={}:{}",
+                            address.getHostname(), address.getPort(), retryException);
+                    throw new RpcException(retryException.getMessage() + ", host: " + address.hostname,
+                            retryException);
+                }
+            }
             LOG.warn("Cancel plan fragment catch a exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
@@ -201,7 +234,7 @@ public class BackendServiceClient {
     public Future<PFetchDataResult> fetchDataAsync(TNetworkAddress address, PFetchDataRequest request) throws RpcException {
         try {
             PBackendService service = BrpcProxy.getBackendService(address);
-            return service.fetchDataAsync(request);
+            return GuardedFuture.guard(service.fetchDataAsync(request), "be-fetch-data");
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
@@ -213,7 +246,7 @@ public class BackendServiceClient {
             TNetworkAddress address, PTriggerProfileReportRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.triggerProfileReport(request);
+            return GuardedFuture.guard(service.triggerProfileReport(request), "be-trigger-profile-report");
         } catch (Throwable e) {
             LOG.warn("fetch data catch a exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
@@ -225,7 +258,7 @@ public class BackendServiceClient {
             TNetworkAddress address, PCollectQueryStatisticsRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.collectQueryStatistics(request);
+            return GuardedFuture.guard(service.collectQueryStatistics(request), "be-collect-query-statistics");
         } catch (Throwable e) {
             LOG.warn("collect query statistics catch an exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
@@ -236,7 +269,7 @@ public class BackendServiceClient {
     public Future<PProxyResult> getInfo(TNetworkAddress address, PProxyRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.getInfo(request);
+            return GuardedFuture.guard(service.getInfo(request), "be-get-info");
         } catch (Throwable e) {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
@@ -247,7 +280,7 @@ public class BackendServiceClient {
             TNetworkAddress address, PPulsarProxyRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.getPulsarInfo(request);
+            return GuardedFuture.guard(service.getPulsarInfo(request), "be-get-pulsar-info");
         } catch (Throwable e) {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
@@ -258,52 +291,18 @@ public class BackendServiceClient {
             TNetworkAddress address, PGetFileSchemaRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.getFileSchema(request);
+            return GuardedFuture.guard(service.getFileSchema(request), "be-get-file-schema");
         } catch (Throwable e) {
             LOG.warn("failed to get file schema, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
     }
 
-    public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(
-            TNetworkAddress address, TMVMaintenanceTasks tRequest)
-            throws TException, RpcException {
-        PMVMaintenanceTaskRequest pRequest = new PMVMaintenanceTaskRequest();
-        pRequest.setRequest(tRequest);
-
-        Future<PMVMaintenanceTaskResult> resultFuture = null;
-        for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
-            try {
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                resultFuture = service.submitMVMaintenanceTaskAsync(pRequest);
-            } catch (NoSuchElementException e) {
-                // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
-                if (i >= Config.max_query_retry_time) {
-                    LOG.warn("Submit MV Maintenance Task failed, address={}:{}",
-                            address.getHostname(), address.getPort(), e);
-                    throw new RpcException(address.hostname, e.getMessage());
-                }
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    Thread.currentThread().interrupt();
-                }
-            } catch (Throwable e) {
-                LOG.warn("Submit MV Maintenance Task got an exception, address={}:{}",
-                        address.getHostname(), address.getPort(), e);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
-        }
-
-        Preconditions.checkState(resultFuture != null);
-        return resultFuture;
-    }
-
     public Future<ExecuteCommandResultPB> executeCommand(TNetworkAddress address, ExecuteCommandRequestPB request)
             throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.executeCommandAsync(request);
+            return GuardedFuture.guard(service.executeCommandAsync(request), "be-execute-command");
         } catch (Throwable e) {
             LOG.warn("execute command exception, address={}:{} command:{}",
                     address.getHostname(), address.getPort(), request.command, e);
@@ -315,7 +314,7 @@ public class BackendServiceClient {
             TNetworkAddress address, PUpdateFailPointStatusRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.updateFailPointStatusAsync(request);
+            return GuardedFuture.guard(service.updateFailPointStatusAsync(request), "be-update-fail-point-status");
         } catch (Throwable e) {
             LOG.warn("update failpoint status exception, address={}:{}",
                     address.getHostname(), address.getPort(), e);
@@ -327,7 +326,7 @@ public class BackendServiceClient {
             TNetworkAddress address, PListFailPointRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.listFailPointAsync(request);
+            return GuardedFuture.guard(service.listFailPointAsync(request), "be-list-fail-point");
         } catch (Throwable e) {
             LOG.warn("list failpoint exception, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
@@ -338,7 +337,7 @@ public class BackendServiceClient {
             TNetworkAddress address, PProcessDictionaryCacheRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.processDictionaryCache(request);
+            return GuardedFuture.guard(service.processDictionaryCache(request), "be-process-dictionary-cache");
         } catch (Throwable e) {
             LOG.warn("failed to execute processDictionaryCache, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());

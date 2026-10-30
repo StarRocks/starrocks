@@ -24,8 +24,6 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.HintNode;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -60,12 +58,12 @@ import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /***
@@ -92,7 +90,6 @@ import java.util.stream.Collectors;
  */
 
 public class SkewJoinOptimizeRule extends TransformationRule {
-    private static final Logger LOG = LogManager.getLogger(SkewJoinOptimizeRule.class);
 
     private static final String RAND_COL = "rand_col";
 
@@ -105,6 +102,32 @@ public class SkewJoinOptimizeRule extends TransformationRule {
     public List<Rule> successorRules() {
         // skew join generate new join and on predicate, need to push down join on expression to child project again
         return Lists.newArrayList(new PushDownJoinOnExpressionToChildProject());
+    }
+
+    /**
+     * For a given equality predicate (e.g., a.x = b.x), resolves the left-side column
+     * (the one belonging to leftOutputColumns).
+     */
+    private static Optional<ColumnRefOperator> getLeftSideColumn(BinaryPredicateOperator equalConj,
+            ColumnRefSet leftOutputColumns) {
+        if (!equalConj.getChild(0).isColumnRef() || !equalConj.getChild(1).isColumnRef()) {
+            return Optional.empty();
+        }
+        final var leftCol = (ColumnRefOperator) equalConj.getChild(0);
+        return Optional.of(leftOutputColumns.contains(leftCol.getId())
+                ? leftCol : (ColumnRefOperator) equalConj.getChild(1));
+    }
+
+    /**
+     * For a given equality predicate (e.g., a.x = b.x), resolves the left-side column and
+     * computes its skew info.
+     */
+    private static Optional<DataSkew.SkewInfo> getSkewInfoForPredicate(BinaryPredicateOperator equalConj,
+            ColumnRefSet leftOutputColumns, Statistics leftChildStats, DataSkew.Thresholds skewThresholds) {
+        return getLeftSideColumn(equalConj, leftOutputColumns)
+                .filter(col -> leftChildStats.getColumnStatistics().containsKey(col))
+                .map(leftChildStats::getColumnStatistic)
+                .map(colStats -> DataSkew.getColumnSkewInfo(leftChildStats, colStats, skewThresholds));
     }
 
     @Override
@@ -138,56 +161,80 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         if (leftChildStats == null) {
             return false;
         }
+        final var mcvLimit = context.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
+        final var rowPercentageThreshold = context.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final var skewThresholds = new DataSkew.Thresholds(mcvLimit, rowPercentageThreshold);
+
+        // If any predicate is not skewed, the composite hash key already distributes data well,
+        // and we do not need to add salting.
+        // Idea: the most frequent composite tuple (k_1, k_2, ..., k_n) is bounded by the most
+        // frequent value of each individual key. If any key k_i is not skewed (no value exceeds
+        // the threshold), then no composite tuple can exceed it either, so no partition is skewed.
+        record PredicateSkewInfo(ColumnRefOperator column, ColumnRefOperator otherColumn, DataSkew.SkewInfo skewInfo) {
+        }
+
+        List<PredicateSkewInfo> skewedPredicates = new ArrayList<>();
         for (BinaryPredicateOperator equalConj : equalConjs) {
-            if (!equalConj.getChild(0).isColumnRef() || !equalConj.getChild(1).isColumnRef()) {
-                // only support column equal column
+            var columnOpt = getLeftSideColumn(equalConj, leftOutputColumns);
+            var skewInfoOpt = getSkewInfoForPredicate(equalConj, leftOutputColumns, leftChildStats, skewThresholds);
+            if (columnOpt.isEmpty() || skewInfoOpt.isEmpty()) {
                 continue;
             }
-            ColumnRefOperator leftColumn = (ColumnRefOperator) equalConj.getChild(0);
-            ColumnRefOperator rightColumn = (ColumnRefOperator) equalConj.getChild(1);
-            ColumnRefOperator skewJoinColumn;
-            // choose the skew join column, it could be left or right column of the predicate
-            if (leftOutputColumns.contains(leftColumn.getId())) {
-                skewJoinColumn = leftColumn;
-            } else {
-                skewJoinColumn = rightColumn;
+            if (!skewInfoOpt.get().isSkewed()) {
+                return false;
             }
-            if (!leftChildStats.getColumnStatistics().containsKey(skewJoinColumn)) {
+            final var leftCol = (ColumnRefOperator) equalConj.getChild(0);
+            final var rightCol = (ColumnRefOperator) equalConj.getChild(1);
+            final var otherColumn = columnOpt.get().equals(leftCol) ? rightCol : leftCol;
+            skewedPredicates.add(new PredicateSkewInfo(columnOpt.get(), otherColumn, skewInfoOpt.get()));
+        }
+
+        for (final var skewPredicate : skewedPredicates) {
+            final var skewJoinColumn = skewPredicate.column();
+            final var skewInfo = skewPredicate.skewInfo();
+
+            List<ScalarOperator> skewValues = Lists.newArrayList();
+            if (skewInfo.hasNullSkew()) {
+                // Add a special skew value for NULLs
+                skewValues.add(ConstantOperator.createNull(skewJoinColumn.getType()));
+            }
+            // Add MCV-based skew values, if any
+            skewInfo.maybeMcvs().stream()
+                    .flatMap(Collection::stream)
+                    .map(mcv -> ConstantOperator.createVarchar(mcv.first) //
+                            .castTo(skewJoinColumn.getType())) //
+                    .filter(Optional::isPresent) //
+                    .map(Optional::get) //
+                    .forEach(skewValues::add);
+            if (skewValues.isEmpty()) {
                 continue;
             }
-            final var skewColumnStats = leftChildStats.getColumnStatistic(skewJoinColumn);
 
-            if (skewColumnStats == null) {
-                // Only support column with some stats
-                continue;
-            }
-
-            final var mcvLimit = context.getSessionVariable().getSkewJoinOptimizeUseMCVCount();
-            final var rowPercentageThreshold = context.getSessionVariable().getSkewJoinDataSkewThreshold();
-            final var skewInfo = DataSkew.getColumnSkewInfo(leftChildStats, skewColumnStats,
-                    new DataSkew.Thresholds(mcvLimit, rowPercentageThreshold));
-
-            if (skewInfo.isSkewed()) {
-                joinOperator.setSkewColumn(skewJoinColumn);
-
-                // Handle NULL-only skew case: when MCV is empty but NULL fraction indicates skew
-                List<ScalarOperator> skewValues;
-                if (skewInfo.type() == DataSkew.SkewType.SKEWED_NULL) {
-                    // Create a special NULL skew value for NULL-only skew cases
-                    skewValues = Lists.newArrayList(ConstantOperator.createNull(skewJoinColumn.getType()));
-                } else if (skewInfo.type() == DataSkew.SkewType.SKEWED_MCV) {
-                    // Use MCV-based skew values
-                    skewValues = skewInfo.maybeMcvs().get()
-                            .stream() //
-                            .map(pair -> ConstantOperator.createVarchar(pair.first)) //
-                            .collect(Collectors.toList());
-                } else {
-                    throw new StarRocksPlannerException("Did not handle skew type in SkewOptimizeRule", ErrorType.INTERNAL_ERROR);
+            // Check how many rows on the other side would be affected by salting, as this can lead to a
+            // cardinality blow up. We only check for MCVs since for NULLs this is not an issue as NULL does not join.
+            final var skewInfoMcvs = skewInfo.getMcvs();
+            if (skewInfo.hasMcvSkew()) {
+                final var rightChildStats = input.inputAt(1).getStatistics();
+                if (rightChildStats != null && rightChildStats.getColumnStatistics().containsKey(skewPredicate.otherColumn)) {
+                    final var otherColumnStats = rightChildStats.getColumnStatistic(skewPredicate.otherColumn);
+                    if (otherColumnStats != null && otherColumnStats.getHistogram() != null) {
+                        final var maxOverlapRowCount = context.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+                        final var overlapRows = DataSkew.getOverlappingMcvRowCount(otherColumnStats.getHistogram().getMCV(),
+                                skewInfoMcvs.get());
+                        if (overlapRows > maxOverlapRowCount) {
+                            if (skewInfo.hasNullSkew()) {
+                                skewValues = Lists.newArrayList(ConstantOperator.createNull(skewJoinColumn.getType()));
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
                 }
-
-                joinOperator.setSkewValues(skewValues);
-                return true;
             }
+
+            joinOperator.setSkewColumn(skewJoinColumn);
+            joinOperator.setSkewValues(skewValues);
+            return true;
         }
         return false;
     }
@@ -252,7 +299,18 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         // 1. add salt for skew child and other child
         OptExpression newLeftChild;
         OptExpression newRightChild;
-        if (leftOutputColumns.containsAll(skewColumn.getUsedColumns())) {
+        boolean skewSideIsLeft = leftOutputColumns.containsAll(skewColumn.getUsedColumns());
+        // addSaltForOtherChild replicates the non-skewed child once per salt value. For the
+        // null-supplying side of an outer join that is harmless: a copy that matches nothing simply
+        // drops out. For the PRESERVED side it is not -- each copy that matches nothing emits its own
+        // null-padded row, so one input row comes back up to skew_join_rand_range + 1 times and the
+        // count moves with rand() from run to run. Only a hint can ask for this orientation; the
+        // stats-driven path always derives the skew column from the left child, which is the
+        // preserved side, so it never lands here.
+        if (!skewSideIsLeft && oldJoinOperator.getJoinType() == JoinOperator.LEFT_OUTER_JOIN) {
+            return Lists.newArrayList();
+        }
+        if (skewSideIsLeft) {
             newLeftChild = addSaltForSkewChild(input.inputAt(0), skewColumn,
                     oldJoinOperator.getSkewValues(), context);
             newRightChild = addSaltForOtherChild(oldJoinOperator, input.inputAt(1), otherSideSkewColumn, context);
@@ -402,11 +460,23 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                         java.util.function.Function.identity()));
         int skewRandRange = context.getSessionVariable().getSkewJoinRandRange();
 
+        // These two pairs are the argument list of `generate_series(start, stop)`, which takes its
+        // arguments positionally. Collecting them out of a HashMap handed the BE (stop, start) instead:
+        // `generate_series(skewRandRange, 0)` walks upwards from a start that is already past its stop and
+        // emits nothing, so the salt table comes out empty. Every row on this side then keeps the default
+        // salt of 0 while the other side still salts the skewed keys at random, no skewed key finds a
+        // match, and its rows are dropped from the result without any error.
+        ColumnRefOperator seriesStart = columnRefFactory.create("0", IntegerType.BIGINT, false);
+        ColumnRefOperator seriesStop =
+                columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false);
+        List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList(
+                Pair.create(seriesStart, (ScalarOperator) ConstantOperator.createBigint(0)),
+                Pair.create(seriesStop, (ScalarOperator) ConstantOperator.createBigint(skewRandRange)));
+
         Map<ColumnRefOperator, ScalarOperator> generateSeriesChildProjectMap = Maps.newHashMap();
-        generateSeriesChildProjectMap.put(columnRefFactory.create("0", IntegerType.BIGINT, false),
-                ConstantOperator.createBigint(0));
-        generateSeriesChildProjectMap.put(columnRefFactory.create(String.valueOf(skewRandRange), IntegerType.BIGINT, false),
-                ConstantOperator.createBigint(skewRandRange));
+        for (Pair<ColumnRefOperator, ScalarOperator> pair : generateSeriesChildProjectPairs) {
+            generateSeriesChildProjectMap.put(pair.first, pair.second);
+        }
         unnestProjectMap.putAll(generateSeriesChildProjectMap);
         OptExpression unnestProjectOpt = OptExpression.create(new LogicalProjectOperator(unnestProjectMap),
                 unnestOpt);
@@ -416,10 +486,6 @@ public class SkewJoinOptimizeRule extends TransformationRule {
                 new Type[] {IntegerType.BIGINT, IntegerType.BIGINT}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         List<ColumnRefOperator> generateSeriesOutputColumns = Lists.newArrayList();
         generateSeriesOutputColumns.add(columnRefFactory.create("generate_serials", IntegerType.BIGINT, true));
-        List<Pair<ColumnRefOperator, ScalarOperator>> generateSeriesChildProjectPairs = Lists.newArrayList();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : generateSeriesChildProjectMap.entrySet()) {
-            generateSeriesChildProjectPairs.add(Pair.create(entry.getKey(), entry.getValue()));
-        }
         List<ColumnRefOperator> generateSeriesOuterColRefs = Lists.newArrayList();
         generateSeriesOuterColRefs.add(unnestColumnOperator);
 

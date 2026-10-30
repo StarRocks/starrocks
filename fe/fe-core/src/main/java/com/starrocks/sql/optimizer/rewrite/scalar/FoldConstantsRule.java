@@ -46,7 +46,6 @@ import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,6 +55,8 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.BinaryOperator;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -317,7 +318,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         if (handlers.containsKey(call.getFnName())) {
             Optional<ScalarOperator> optResult = handlers.get(call.getFnName()).apply(call);
             if (optResult.isPresent()) {
-                CastOperator castOp = new CastOperator(call.getType(), optResult.get());
+                CastOperator castOp = new CastOperator(call.getType(), optResult.get(), true);
                 ScalarOperator op =
                         new ScalarOperatorRewriter().rewrite(castOp, Lists.newArrayList(new ReduceCastRule()));
                 return Optional.of(op);
@@ -443,8 +444,9 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
             }
             Type arrayElemType = ((ArrayType) operator.getType()).getItemType();
             ScalarOperatorRewriteContext subContext = new ScalarOperatorRewriteContext();
+            // Element adaptation is not an explicit scalar CHAR cast; preserve the BE array-cast semantics.
             List<ScalarOperator> newArguments = arg0.getChildren().stream()
-                    .map(arg -> visitCastOperator(new CastOperator(arrayElemType, arg), subContext))
+                    .map(arg -> visitCastOperator(new CastOperator(arrayElemType, arg, true), subContext))
                     .collect(Collectors.toList());
             if (newArguments.stream().allMatch(arg -> arg != null && arg.isConstantRef())) {
                 return new ArrayOperator(operator.getType(), operator.isNullable(), newArguments);
@@ -458,7 +460,8 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
 
         ConstantOperator child = (ConstantOperator) operator.getChild(0);
 
-        Optional<ConstantOperator> result = child.castTo(operator.getType());
+        Optional<ConstantOperator> result = operator.isImplicit()
+                ? child.castTo(operator.getType()) : child.castToExplicitly(operator.getType());
         if (!result.isPresent()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Fold cast constant error: " + operator + ", " + child.toString());
@@ -543,21 +546,45 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         String text = ((ConstantOperator) predicate.getChild(0)).getVarchar();
         String pattern = ((ConstantOperator) predicate.getChild(1)).getVarchar();
 
-        if (pattern.matches("^[^_%]+$")) {
-            return ConstantOperator.createBoolean(text.equals(pattern));
+        // Group 1 captures the literal body; %-wildcards are matched outside the group so an
+        // escaped \% inside the body is never mistaken for a trailing/leading wildcard.
+        Matcher equals = LIKE_EQUALS.matcher(pattern);
+        if (equals.matches()) {
+            return ConstantOperator.createBoolean(text.equals(removeLikeEscape(equals.group(1))));
         }
-        if (pattern.matches("^%+[^_%]+$")) {
-            pattern = StringUtils.stripStart(pattern, "%");
-            return ConstantOperator.createBoolean(text.endsWith(pattern));
-        } else if (pattern.matches("^[^_%]+%+$")) {
-            pattern = StringUtils.stripEnd(pattern, "%");
-            return ConstantOperator.createBoolean(text.startsWith(pattern));
-        } else if (pattern.matches("^%+[^_%]+%+$")) {
-            pattern = StringUtils.stripStart(pattern, "%");
-            pattern = StringUtils.stripEnd(pattern, "%");
-            return ConstantOperator.createBoolean(text.contains(pattern));
+        Matcher endsWith = LIKE_ENDS_WITH.matcher(pattern);
+        if (endsWith.matches()) {
+            return ConstantOperator.createBoolean(text.endsWith(removeLikeEscape(endsWith.group(1))));
+        }
+        Matcher startsWith = LIKE_STARTS_WITH.matcher(pattern);
+        if (startsWith.matches()) {
+            return ConstantOperator.createBoolean(text.startsWith(removeLikeEscape(startsWith.group(1))));
+        }
+        Matcher substring = LIKE_SUBSTRING.matcher(pattern);
+        if (substring.matches()) {
+            return ConstantOperator.createBoolean(text.contains(removeLikeEscape(substring.group(1))));
         }
         return predicate;
+    }
+
+    // LIKE body token = an escaped sequence \x (atomic) or a plain char that is not %, _ or \
+    private static final String LIKE_BODY = "((?:\\\\.|[^%_\\\\])+)";
+    private static final Pattern LIKE_EQUALS = Pattern.compile("^" + LIKE_BODY + "$");
+    private static final Pattern LIKE_ENDS_WITH = Pattern.compile("^%+" + LIKE_BODY + "$");
+    private static final Pattern LIKE_STARTS_WITH = Pattern.compile("^" + LIKE_BODY + "%+$");
+    private static final Pattern LIKE_SUBSTRING = Pattern.compile("^%+" + LIKE_BODY + "%+$");
+
+    // Strips LIKE-layer escape sequences: \\ -> \, \% -> %, \_ -> _, \x -> x
+    private static String removeLikeEscape(String s) {
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) == '\\' && i + 1 < s.length()) {
+                sb.append(s.charAt(++i));
+            } else {
+                sb.append(s.charAt(i));
+            }
+        }
+        return sb.toString();
     }
 
     private boolean notAllConstant(List<ScalarOperator> operators) {

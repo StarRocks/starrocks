@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算以10为底的数值对数。"
 ---
 
 # log10, dlog10

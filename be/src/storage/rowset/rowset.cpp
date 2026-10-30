@@ -37,22 +37,24 @@
 #include <memory>
 #include <set>
 
+#include "base/testutil/sync_point.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fmt/format.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_env.h"
 #include "runtime/runtime_state.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
-#include "storage/empty_iterator.h"
 #include "storage/index/index_descriptor.h"
-#include "storage/merge_iterator.h"
-#include "storage/projection_iterator.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/rowset/metadata_cache.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -60,9 +62,14 @@
 #include "storage/tablet_index.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
-#include "storage/union_iterator.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
+#include "storage_primitive/chunk_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/projection_iterator.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 
 namespace starrocks {
 
@@ -75,7 +82,7 @@ Rowset::Rowset(const TabletSchemaCSPtr& schema, std::string rowset_path, RowsetM
           _refs_by_reader(0) {
     _schema = _rowset_meta->tablet_schema() ? _rowset_meta->tablet_schema() : schema;
     _keys_type = _schema->keys_type();
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
 Rowset::~Rowset() {
@@ -86,7 +93,7 @@ Rowset::~Rowset() {
         MetadataCache::instance()->evict_rowset(this);
     }
 #endif
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
 }
 
 Status Rowset::load() {
@@ -213,7 +220,7 @@ StatusOr<std::shared_ptr<Segment>> Rowset::_load_segment(int32_t idx, const Tabl
 // use partial_rowset_footer to indicate the segment footer position and size
 // if partial_rowset_footer is nullptr, the segment_footer is at the end of the segment_file
 Status Rowset::do_load() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
@@ -244,10 +251,24 @@ void Rowset::warmup_lrucache() {
 #endif
 }
 
+void Rowset::_update_metadata_cache_charge(size_t charge) {
+    if (config::metadata_cache_memory_limit_percent > 0 && _keys_type != PRIMARY_KEYS) {
+#ifdef BE_TEST
+        TEST_SYNC_POINT_CALLBACK("Rowset::_update_metadata_cache_charge", &charge);
+        // Most unit tests do not create the global metadata cache. Tests that
+        // install one exercise the same charge update as production.
+        if (MetadataCache::instance() == nullptr) {
+            return;
+        }
+#endif
+        MetadataCache::instance()->update_rowset_charge(this, charge);
+    }
+}
+
 // this function is only used for partial update so far
 // make sure segment_footer is in the end of segment_file before call this function
 Status Rowset::reload() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     _segments.clear();
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
@@ -267,7 +288,7 @@ Status Rowset::reload_segment(int32_t segment_id) {
         LOG(WARNING) << "Error segment id: " << segment_id;
         return Status::InternalError("Error segment id");
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     size_t footer_size_hint = 16 * 1024;
     auto res = _load_segment(segment_id, _schema, fs, nullptr, &footer_size_hint);
     if (!res.ok()) {
@@ -283,7 +304,7 @@ Status Rowset::reload_segment_with_schema(int32_t segment_id, TabletSchemaCSPtr&
         LOG(WARNING) << "Error segment id: " << segment_id;
         return Status::InternalError("Error segment id");
     }
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     size_t footer_size_hint = 16 * 1024;
     auto res = _load_segment(segment_id, schema, fs, nullptr, &footer_size_hint);
     if (!res.ok()) {
@@ -348,7 +369,7 @@ Status Rowset::remove() {
     VLOG(2) << "Removing files in rowset id=" << unique_id() << " version=" << start_version() << "-" << end_version()
             << " tablet_id=" << _rowset_meta->tablet_id();
     Status result;
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     auto merge_status = [&](const Status& st) {
         if (result.ok() && !st.ok() && !st.is_not_found()) result = st;
     };
@@ -362,10 +383,14 @@ Status Rowset::remove() {
         // delete index
         for (const auto& index : *(_schema->indexes())) {
             if (index.index_type() == IndexType::GIN) {
+                if (is_builtin_inverted_index(index)) {
+                    continue;
+                }
                 std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
                         _rowset_path, rowset_id().to_string(), i, index.index_id());
                 auto ist = fs->delete_dir_recursive(inverted_index_path);
-                LOG_IF(WARNING, !ist.ok()) << "Fail to delete vector_index_path " << inverted_index_path << ": " << ist;
+                LOG_IF(WARNING, !ist.ok())
+                        << "Fail to delete inverted_index_path " << inverted_index_path << ": " << ist;
                 merge_status(ist);
             } else if (index.index_type() == IndexType::VECTOR) {
                 std::string vector_index_path = IndexDescriptor::vector_index_file_path(
@@ -396,7 +421,7 @@ Status Rowset::remove() {
 // KVStore for this rowset's tablet, avoiding metadata corruption when the same
 // tablet exists on multiple disks.
 Status Rowset::remove_delta_column_group() {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     return _remove_delta_column_group_files(fs);
 }
 
@@ -457,6 +482,9 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int
             const auto& indexes = *_schema->indexes();
             for (const auto& index : indexes) {
                 if (index.index_type() == GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
@@ -480,6 +508,18 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id, int
                             dir, new_rowset_id.to_string(), segment_n, index.index_id());
                     std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
                             _rowset_path, rowset_id().to_string(), segment_n, index.index_id());
+                    // .vi may be absent when the writer skipped the build below
+                    // threshold; the segment footer is then set to NONE and
+                    // the read path skips this index without ever opening it.
+                    // Tolerate ENOENT only — fail on real IO errors so we
+                    // don't silently produce a cloned rowset that's missing a
+                    // file the segment metadata still expects.
+                    auto st = FileSystem::Default()->path_exists(src_index_file_path);
+                    if (st.is_not_found()) {
+                        VLOG(2) << "skip linking non-existent vector index file " << src_index_file_path;
+                        continue;
+                    }
+                    if (!st.ok()) return st;
                     if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
                         PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
                         return Status::RuntimeError("Fail to link index data file");
@@ -574,11 +614,14 @@ StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
         if (!indexes.empty()) {
             for (const auto& index : indexes) {
                 if (index.index_type() == IndexType::GIN) {
+                    if (is_builtin_inverted_index(index)) {
+                        continue;
+                    }
                     std::string dst_index_path = IndexDescriptor::inverted_index_file_path(dir, rowset_id().to_string(),
                                                                                            i, index.index_id());
                     if (fs::path_exist(dst_index_path)) {
-                        LOG(WARNING) << "Index path already exist: " << dst_path;
-                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_path));
+                        LOG(WARNING) << "Index path already exist: " << dst_index_path;
+                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_index_path));
                     }
 
                     std::string src_index_path = IndexDescriptor::inverted_index_file_path(
@@ -602,6 +645,36 @@ StatusOr<int64_t> Rowset::copy_files_to(const std::string& dir) {
                             ncopy += copy_st.value();
                         }
                     }
+                } else if (index.index_type() == IndexType::VECTOR) {
+                    std::string src_index_path = IndexDescriptor::vector_index_file_path(
+                            _rowset_path, rowset_id().to_string(), i, index.index_id());
+                    // As in link_files_to(), an index build below the threshold may leave no .vi file.
+                    auto st = FileSystem::Default()->path_exists(src_index_path);
+                    if (st.is_not_found()) {
+                        VLOG(2) << "skip copying non-existent vector index file " << src_index_path;
+                        continue;
+                    }
+                    RETURN_IF_ERROR(st);
+
+                    std::string dst_index_path =
+                            IndexDescriptor::vector_index_file_path(dir, rowset_id().to_string(), i, index.index_id());
+                    st = FileSystem::Default()->path_exists(dst_index_path);
+                    if (st.ok()) {
+                        LOG(WARNING) << "Index path already exist: " << dst_index_path;
+                        return Status::AlreadyExist(fmt::format("Index path already exist: {}", dst_index_path));
+                    }
+                    if (!st.is_not_found()) {
+                        return st;
+                    }
+
+                    copy_st = fs::copy_file(src_index_path, dst_index_path);
+                    if (!copy_st.ok()) {
+                        LOG(WARNING) << "Error to copy vector index. src:" << src_index_path
+                                     << ", dst:" << dst_index_path << ", error:" << copy_st.status();
+                        return copy_st.status().clone_and_append(
+                                fmt::format("Fail to copy vector index from {} to {}", src_index_path, dst_index_path));
+                    }
+                    ncopy += copy_st.value();
                 }
             }
         }
@@ -703,6 +776,7 @@ void Rowset::do_close() {
 }
 
 size_t Rowset::segment_memory_usage() {
+    TEST_SYNC_POINT("Rowset::segment_memory_usage");
     size_t total = 0;
     for (const auto& segment : _segments) {
         total += segment->mem_usage();
@@ -757,7 +831,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = options.stats;
     seg_options.ranges = options.ranges;
     seg_options.pred_tree = options.pred_tree;
@@ -777,13 +851,15 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.sample_options = options.sample_options;
     seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    seg_options.has_predicate_above_iterator = options.has_predicate_above_iterator;
 
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }
+    seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
+    seg_options.dynamic_rss_id_base = options.dynamic_rss_id_base;
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
-        seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
         seg_options.version = options.version;
         // Use _kvstore to ensure we access the correct metadata store for this rowset
         if (_kvstore == nullptr) {
@@ -794,6 +870,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     seg_options.rowset_path = _rowset_path;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowsetid = rowset_meta()->rowset_id();
+
     // Use _kvstore to ensure we access the correct metadata store for this rowset
     seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(_kvstore);
     if (options.short_key_ranges_option != nullptr) { // logical split.
@@ -814,7 +891,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
     for (ColumnId cid : delete_columns) {
         const TabletColumn& col = options.tablet_schema->column(cid);
         if (segment_schema.get_field_by_name(std::string(col.name())) == nullptr) {
-            auto f = ChunkHelper::convert_field(cid, col);
+            auto f = StorageSchemaHelper::convert_field(cid, col);
             segment_schema.append(std::make_shared<Field>(std::move(f)));
         }
     }
@@ -887,7 +964,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     RETURN_IF_ERROR(load());
 
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.is_primary_keys = schema.keys_type() == KeysType::PRIMARY_KEYS;
     seg_options.tablet_id = rowset_meta()->tablet_id();
@@ -935,7 +1012,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const Schema& schema,
                                                                           OlapReaderStatistics* stats) {
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
@@ -969,7 +1046,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_update_file_iterators(const 
 StatusOr<ChunkIteratorPtr> Rowset::get_update_file_iterator(const Schema& schema, uint32_t update_file_id,
                                                             OlapReaderStatistics* stats) {
     SegmentReadOptions seg_options;
-    ASSIGN_OR_RETURN(seg_options.fs, FileSystem::CreateSharedFromString(_rowset_path));
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(_rowset_path));
     seg_options.stats = stats;
     seg_options.tablet_id = rowset_meta()->tablet_id();
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
@@ -1026,8 +1103,8 @@ static Status report_unordered(const Chunk& chunk0, size_t idx0, int64_t row_id0
 
 static Status is_ordered(ChunkIteratorPtr& iter, bool unique) {
     ChunkUniquePtr chunks[2];
-    chunks[0] = ChunkHelper::new_chunk(iter->schema(), iter->chunk_size());
-    chunks[1] = ChunkHelper::new_chunk(iter->schema(), iter->chunk_size());
+    chunks[0] = ChunkFactory::new_chunk(iter->schema(), iter->chunk_size());
+    chunks[1] = ChunkFactory::new_chunk(iter->schema(), iter->chunk_size());
     size_t chunk_idx = 0;
     int64_t row_idx = 0;
     while (true) {
@@ -1072,6 +1149,7 @@ Status Rowset::verify() {
     vector<ColumnId> key_columns;
     vector<ColumnId> order_columns;
     bool is_pk_ordered = false;
+    key_columns.reserve(_schema->num_key_columns());
     for (int i = 0; i < _schema->num_key_columns(); i++) {
         key_columns.push_back(i);
     }

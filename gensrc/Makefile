@@ -15,21 +15,24 @@
 # specific language governing permissions and limitations
 # under the License.
 
-# This file is to make all generated file needed by fe and be.
+# This file is to make generated helper sources shared by FE and BE.
 
 BUILD_DIR = ${CURDIR}/build/
 
-all: subdirs
+all: script
 .PHONY: all
 
-# build all subdir
-SUBDIR = script proto thrift
-subdirs: ${SUBDIR}
-.PHONY: subdirs ${SUBDIR}
-${SUBDIR}:
+script:
 	$(MAKE) -C $@
-# script will product new thrift file.
-thrift: script
+.PHONY: script
+
+proto:
+	$(MAKE) -C $@
+.PHONY: proto
+
+thrift:
+	$(MAKE) -C $@
+.PHONY: thrift
 
 clean:
 	rm -rf ${BUILD_DIR}

@@ -5,6 +5,8 @@
 #pragma once
 
 #include <cstdint>
+#include <ostream>
+#include <sstream>
 #include <string>
 #include <string_view>
 
@@ -148,6 +150,7 @@ public:
     DEFINE_STATUS(NotAuthorized, NOT_AUTHORIZED);
     DEFINE_STATUS(TableNotExist, TABLE_NOT_EXIST);
     DEFINE_STATUS(QueryNotExist, QUERY_NOT_EXIST);
+    DEFINE_STATUS(LakeMetaVersionNotFound, LAKE_META_VERSION_NOT_FOUND);
 
     bool ok() const { return _state == nullptr; }
 
@@ -168,6 +171,8 @@ public:
     bool is_ok_or_eof() const { return ok() || is_end_of_file(); }
 
     bool is_not_found() const { return code() == TStatusCode::NOT_FOUND; }
+
+    bool is_lake_meta_version_not_found() const { return code() == TStatusCode::LAKE_META_VERSION_NOT_FOUND; }
 
     bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
 
@@ -430,6 +435,17 @@ struct StatusInstance {
     } while (false)
 
 #define SET_STATUE_AND_RETURN_IF_ERROR(err_status, stmt) SET_STATUE_AND_RETURN_IF_ERROR_INTERNAL(err_status, stmt)
+
+#define SET_AND_RETURN_STATUS_IF_ERROR_INTERNAL(err_status, stmt)                                           \
+    do {                                                                                                    \
+        auto&& status__ = (stmt);                                                                           \
+        if (UNLIKELY(!status__.ok())) {                                                                     \
+            err_status = to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+            return err_status;                                                                              \
+        }                                                                                                   \
+    } while (false)
+
+#define SET_AND_RETURN_STATUS_IF_ERROR(err_status, stmt) SET_AND_RETURN_STATUS_IF_ERROR_INTERNAL(err_status, stmt)
 
 #define EXIT_IF_ERROR(stmt)                   \
     do {                                      \

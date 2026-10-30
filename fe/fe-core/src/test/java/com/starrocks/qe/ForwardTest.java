@@ -121,6 +121,49 @@ public class ForwardTest extends SchedulerTestBase {
     }
 
     @Test
+    public void testForwardRemoveConnectContextAfterSuccess() throws Exception {
+        final FrontendServiceImpl service = new FrontendServiceImpl(ExecuteEnv.getInstance());
+        final TMasterOpRequest request = makeRequest();
+
+        try {
+            new MockUp<ConnectProcessor>() {
+                @Mock
+                public TMasterOpResult proxyExecute(TMasterOpRequest request, Frontend requestFE) {
+                    new ConnectContext().setThreadLocalInfo();
+                    return new TMasterOpResult();
+                }
+            };
+
+            service.forward(request);
+            Assertions.assertNull(ConnectContext.get());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testForwardRemoveConnectContextAfterException() throws Exception {
+        final FrontendServiceImpl service = new FrontendServiceImpl(ExecuteEnv.getInstance());
+        final TMasterOpRequest request = makeRequest();
+
+        try {
+            new MockUp<ConnectProcessor>() {
+                @Mock
+                public TMasterOpResult proxyExecute(TMasterOpRequest request, Frontend requestFE) {
+                    new ConnectContext().setThreadLocalInfo();
+                    throw new RuntimeException("unknown exception");
+                }
+            };
+
+            final TMasterOpResult result = service.forward(request);
+            Assertions.assertEquals("unknown exception", result.errorMsg);
+            Assertions.assertNull(ConnectContext.get());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
     public void testArrowFlightSQL() throws Exception {
         PQueryStatistics statistics = new PQueryStatistics();
         statistics.scanBytes = 1L;

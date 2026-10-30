@@ -1,0 +1,165 @@
+-- name: testIcebergV3DefaultValueSupportedTypesOnCreate
+-- Cover supported Iceberg default value types when creating table.
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_supported_types/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_all_types${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_supported_types/${uuid0}"
+);
+
+create database ice_def_all_types${uuid0}.ice_def_db${uuid0};
+
+create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test (
+    id int,
+    bool_col boolean default "1",
+    tinyint_col tinyint default "8",
+    smallint_col smallint default "16",
+    int_col int default "42",
+    bigint_col bigint default "42000000000",
+    float_col float default "3.5",
+    double_col double default "6.25",
+    decimal_col decimal(18, 4) default "1234.5678",
+    char_col char(5) default "abcde",
+    varchar_col varchar(20) default "sr_varchar",
+    string_col string default "sr_string",
+    date_col date default "2024-01-02",
+    datetime_col datetime default "2024-01-02 03:04:05"
+) properties (
+    "format-version" = "3"
+);
+
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`bool_col` boolean DEFAULT "1"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`tinyint_col` int(11) DEFAULT "8"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`smallint_col` int(11) DEFAULT "16"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`int_col` int(11) DEFAULT "42"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`bigint_col` bigint(20) DEFAULT "42000000000"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`float_col` float DEFAULT "3.5"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`double_col` double DEFAULT "6.25"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`decimal_col` decimal(18, 4) DEFAULT "1234.5678"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`char_col` varchar(1073741824) DEFAULT "abcde"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`varchar_col` varchar(1073741824) DEFAULT "sr_varchar"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`string_col` varchar(1073741824) DEFAULT "sr_string"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`date_col` date DEFAULT "2024-01-02"')
+function: assert_query_contains("show create table ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test", '`datetime_col` datetime DEFAULT "2024-01-02 03:04:05"')
+
+insert into ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test (id) values (1);
+
+select
+    id,
+    bool_col,
+    tinyint_col,
+    smallint_col,
+    int_col,
+    bigint_col,
+    float_col,
+    double_col,
+    decimal_col,
+    char_col,
+    varchar_col,
+    string_col,
+    date_col,
+    datetime_col
+from ice_def_all_types${uuid0}.ice_def_db${uuid0}.all_types_test
+order by id;
+
+drop catalog ice_def_all_types${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_supported_types/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: testIcebergV3DefaultValueSupportedTypesOnAlter
+-- Cover supported Iceberg default value types when adding columns.
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_v3_default_value_supported_types_alter/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+create external catalog `ice_def_all_types_alter${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_iceberg_v3_default_value_supported_types_alter/${uuid0}"
+);
+
+create database ice_def_all_types_alter${uuid0}.ice_def_db${uuid0};
+
+create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test (
+    id int,
+    name string
+) properties (
+    "format-version" = "3"
+);
+
+insert into ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test values (1, 'old_row');
+
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column bool_col boolean default "0";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column tinyint_col tinyint default "9";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column smallint_col smallint default "19";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column int_col int default "7";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column bigint_col bigint default "77";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column float_col float default "7.7";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column double_col double default "77.77";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column decimal_col decimal(18, 4) default "77.7700";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column char_col char(5) default "xyzzz";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column varchar_col varchar(20) default "evolve_varchar";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column string_col string default "evolve_string";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column date_col date default "2024-02-03";
+alter table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test add column datetime_col datetime default "2024-02-03 09:08:07";
+
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`bool_col` boolean DEFAULT "0"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`tinyint_col` int(11) DEFAULT "9"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`smallint_col` int(11) DEFAULT "19"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`int_col` int(11) DEFAULT "7"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`bigint_col` bigint(20) DEFAULT "77"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`float_col` float DEFAULT "7.7"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`double_col` double DEFAULT "77.77"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`decimal_col` decimal(18, 4) DEFAULT "77.7700"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`char_col` varchar(1073741824) DEFAULT "xyzzz"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`varchar_col` varchar(1073741824) DEFAULT "evolve_varchar"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`string_col` varchar(1073741824) DEFAULT "evolve_string"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`date_col` date DEFAULT "2024-02-03"')
+function: assert_query_contains("show create table ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test", '`datetime_col` datetime DEFAULT "2024-02-03 09:08:07"')
+
+select
+    id,
+    name,
+    bool_col,
+    tinyint_col,
+    smallint_col,
+    int_col,
+    bigint_col,
+    float_col,
+    double_col,
+    decimal_col,
+    char_col,
+    varchar_col,
+    string_col,
+    date_col,
+    datetime_col
+from ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test
+order by id;
+
+insert into ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test (id, name) values (2, 'new_row');
+
+select
+    id,
+    name,
+    bool_col,
+    tinyint_col,
+    smallint_col,
+    int_col,
+    bigint_col,
+    float_col,
+    double_col,
+    decimal_col,
+    char_col,
+    varchar_col,
+    string_col,
+    date_col,
+    datetime_col
+from ice_def_all_types_alter${uuid0}.ice_def_db${uuid0}.all_types_alter_test
+order by id;
+
+drop catalog ice_def_all_types_alter${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_v3_default_value_supported_types_alter/${uuid0} >/dev/null || echo "exit 0" >/dev/null

@@ -41,6 +41,8 @@ public class Constants {
 
     // TaskSource is used to distinguish special Processors for processing tasks from different sources.
     public enum TaskSource {
+        // Sentinel for task runs persisted before the source field existed; never set on new runs.
+        UNKNOWN,
         CTAS,
         MV,
         INSERT,

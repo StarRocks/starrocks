@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a DATE or DATETIME value into a UNIX timestamp."
 ---
 
 # unix_timestamp

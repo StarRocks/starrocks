@@ -51,6 +51,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -879,8 +881,16 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
         assertEquals("NORMAL", info.getPriority());
         assertNotNull(info.getCreate_time());
         assertNotNull(info.getRuntime_details());
-        assertNotNull(info.getProgress());
-        assertTrue(info.getProgress().startsWith("Merge Window"));
+        // Merge window progress is a rough estimate, so only its guarantees are asserted: a load that completed
+        // reports the window as fully advanced, and every other load reports a percentage within 0 to 100 - the
+        // pattern below carries the lower bound, since it does not admit a leading minus sign.
+        if (taskState == MergeCommitTask.TaskState.FINISHED) {
+            assertEquals("Merge Window 100.00%", info.getProgress());
+        } else {
+            Matcher progressMatcher = Pattern.compile("^Merge Window (\\d+\\.\\d{2})%$").matcher(info.getProgress());
+            assertTrue(progressMatcher.matches(), info.getProgress());
+            assertTrue(Double.parseDouble(progressMatcher.group(1)) <= 100.0, info.getProgress());
+        }
         String expectedState = convertTaskStateToLoadState(taskState);
         assertEquals(expectedState, info.getState());
         assertNotNull(info.getWarehouse());
@@ -898,6 +908,14 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertNull(info.getTracking_sql());
             assertNull(info.getRejected_record_path());
             assertNotNull(info.getCreate_time());
+            // PENDING has the createTimeMs set at construction but no later
+            // timestamps yet. New BE uses these ms fields for materialization
+            // so any drop in setters would silently regress non-Asia/Shanghai
+            // sessions to the legacy UTC+8 string.
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertFalse(info.isSetLoad_start_time_ms());
+            assertFalse(info.isSetLoad_commit_time_ms());
+            assertFalse(info.isSetLoad_finish_time_ms());
         } else if (taskState == MergeCommitTask.TaskState.FINISHED) {
             assertTrue(info.getTxn_id() > 0);
             assertTrue(task.endTimeMs() > 0);
@@ -907,6 +925,10 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertFalse(info.getLoad_commit_time().isEmpty());
             assertNotNull(info.getLoad_finish_time());
             assertFalse(info.getLoad_finish_time().isEmpty());
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertTrue(info.getLoad_start_time_ms() > 0);
+            assertTrue(info.getLoad_commit_time_ms() > 0);
+            assertTrue(info.getLoad_finish_time_ms() > 0);
             assertTrue(info.getNum_scan_rows() > 0);
             assertTrue(info.getNum_scan_bytes() > 0);
             assertTrue(info.getNum_sink_rows() > 0);
@@ -922,6 +944,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertTrue(info.getTxn_id() > 0);
             assertTrue(task.endTimeMs() > 0);
             assertNotNull(info.getLoad_finish_time());
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertTrue(info.getLoad_finish_time_ms() > 0);
             assertNotNull(info.getError_msg());
             assertFalse(info.getError_msg().isEmpty());
             
@@ -942,6 +966,8 @@ public class MergeCommitTaskTest extends BatchWriteTestBase {
             assertEquals(-1, info.getTxn_id());
             assertTrue(task.endTimeMs() > 0);
             assertNotNull(info.getLoad_finish_time());
+            assertTrue(info.getCreate_time_ms() > 0);
+            assertTrue(info.getLoad_finish_time_ms() > 0);
             assertNotNull(info.getError_msg());
             assertEquals("test cancellation", info.getError_msg());
             assertEquals(0, info.getNum_scan_rows());

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "检查字符串是否模糊匹配给定的模式。"
 ---
 
 # like

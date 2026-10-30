@@ -93,7 +93,8 @@ public class IcebergMetadataScanNode extends ScanNode {
             return;
         }
 
-        if (metadataTableType == MetadataTableType.FILES) {
+        if (metadataTableType == MetadataTableType.FILES || metadataTableType == MetadataTableType.ALL_DATA_FILES
+                || metadataTableType == MetadataTableType.ALL_DELETE_FILES) {
             for (SlotDescriptor slot : desc.getSlots()) {
                 if (STATS_COLUMNS.contains(slot.getColumn().getName())) {
                     serializedMetaSpec.setLoadColumnStats(true);
@@ -146,6 +147,8 @@ public class IcebergMetadataScanNode extends ScanNode {
         tHdfsScanNode.setMetadata_table_type(metadataTableType.name());
 
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

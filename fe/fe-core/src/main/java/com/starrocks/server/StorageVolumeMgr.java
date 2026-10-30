@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.MetaNotFoundException;
@@ -120,9 +121,28 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     public String createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
             Optional<Boolean> enabled, String comment)
             throws DdlException, AlreadyExistsException {
+        // Stateless validation up front. validateParams/validateLocations only inspect their arguments
+        // and the static PARAM_NAMES set, so they don't need a lock.
+        validateParams(svType, params);
+        validateLocations(svType, locations);
+
+        // Step 1: cheap existence pre-check under a read lock. This preserves
+        // `CREATE STORAGE VOLUME IF NOT EXISTS` semantics — DDLStmtExecutor only suppresses
+        // AlreadyExistsException, so we must throw it before any remote I/O. It also avoids
+        // wasted access probes for duplicate-create requests.
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            if (exists(name)) {
+                throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
+            }
+        }
+
+        // Step 2: run the (potentially slow) access check OUTSIDE any lock so a slow or
+        // unreachable endpoint does not block concurrent SV operations.
+        checkStorageVolumeAccessIfNeeded(name, svType, locations, params);
+
+        // Step 3: re-acquire the write lock, re-check existence in case of a concurrent create,
+        // then persist.
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            validateParams(svType, params);
-            validateLocations(svType, locations);
             if (exists(name)) {
                 throw new AlreadyExistsException(String.format("Storage volume '%s' already exists", name));
             }
@@ -173,6 +193,13 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
 
     public void updateStorageVolume(String name, String svType, List<String> locations,
             Map<String, String> params, Optional<Boolean> enabled, String comment) throws DdlException, MetaNotFoundException {
+        if (!Strings.isNullOrEmpty(svType)) {
+            throw new DdlException("Storage volume type cannot be changed after creation");
+        }
+        if (locations != null) {
+            throw new DdlException("Storage volume locations cannot be changed after creation");
+        }
+
         List<String> immutableProperties = Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
                 CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
         for (String param : immutableProperties) {
@@ -180,40 +207,80 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 throw new DdlException(String.format("Storage volume property '%s' is immutable!", param));
             }
         }
+
+        // Only check storage volume accessibility when connectivity-affecting properties are changed
+        // (cloud credentials). Skip the check for metadata-only changes (enabled, comment) so that
+        // operators can still disable a volume when storage is unreachable.
+        boolean connectivityChanged = !params.isEmpty();
+        boolean shouldCheckAccess = connectivityChanged
+                && RunMode.isSharedDataMode() && Config.enable_storage_volume_access_check;
+
+        // Step 1: snapshot the current SV state under a read lock.
+        StorageVolume svSnapshot;
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            svSnapshot = getStorageVolumeByName(name);
+            if (svSnapshot == null) {
+                throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
+            }
+        }
+
+        // Step 2: build a tentative copy and run the access check OUTSIDE any lock so that a slow
+        // or unreachable endpoint does not block concurrent storage-volume operations.
+        if (shouldCheckAccess) {
+            StorageVolume candidate = new StorageVolume(svSnapshot);
+            validateParams(candidate.getType(), params);
+            applyChangesToVolume(candidate, svSnapshot.getId(), svType, locations, comment, params, enabled);
+            checkStorageVolumeAccessIfNeeded(candidate.getName(), candidate.getType(),
+                    candidate.getLocations(), candidate.getProperties());
+        }
+
+        // Step 3: re-acquire the write lock, re-fetch the SV (to pick up any concurrent changes),
+        // apply the same mutations, and persist.
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
             if (sv == null) {
                 throw new MetaNotFoundException(String.format("Storage volume '%s' does not exist", name));
             }
             StorageVolume copied = new StorageVolume(sv);
-            validateParams(copied.getType(), params);
-
-            if (enabled.isPresent()) {
-                boolean enabledValue = enabled.get();
-                if (!enabledValue) {
-                    Preconditions.checkState(!copied.getId().equals(defaultStorageVolumeId),
-                            "Default volume can not be disabled");
-                }
-                copied.setEnabled(enabledValue);
+            if (!shouldCheckAccess) {
+                validateParams(copied.getType(), params);
             }
-
-            if (!Strings.isNullOrEmpty(svType)) {
-                copied.setType(svType);
-            }
-
-            if (locations != null) {
-                copied.setLocations(locations);
-            }
-
-            if (!Strings.isNullOrEmpty(comment)) {
-                copied.setComment(comment);
-            }
-
-            if (!params.isEmpty()) {
-                copied.setCloudConfiguration(params);
-            }
-
+            applyChangesToVolume(copied, sv.getId(), svType, locations, comment, params, enabled);
             updateInternalNoLock(copied);
+        }
+    }
+
+    /**
+     * Apply ALTER STORAGE VOLUME field updates (svType, locations, comment, params, enabled) to
+     * {@code target} in place. Used by both the pre-check candidate and the final locked copy to
+     * ensure the two see identical mutations.
+     */
+    private void applyChangesToVolume(StorageVolume target, String currentId,
+            String svType, List<String> locations, String comment,
+            Map<String, String> params, Optional<Boolean> enabled) {
+        if (enabled.isPresent()) {
+            boolean enabledValue = enabled.get();
+            if (!enabledValue) {
+                Preconditions.checkState(!currentId.equals(defaultStorageVolumeId),
+                        "Default volume can not be disabled");
+            }
+            target.setEnabled(enabledValue);
+        }
+
+        if (!Strings.isNullOrEmpty(svType)) {
+            target.setType(svType);
+        }
+
+        if (locations != null) {
+            target.setLocations(locations);
+        }
+
+        if (!Strings.isNullOrEmpty(comment)) {
+            target.setComment(comment);
+        }
+
+        if (!params.isEmpty()) {
+            target.setCloudConfiguration(params);
         }
     }
 
@@ -458,6 +525,13 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
             } catch (URISyntaxException e) {
                 throw new DdlException(String.format("Invalid location %s, error: %s", location, e.getMessage()));
             }
+        }
+    }
+
+    private void checkStorageVolumeAccessIfNeeded(String name, String svType, List<String> locations, Map<String, String> params)
+            throws DdlException {
+        if (RunMode.isSharedDataMode() && Config.enable_storage_volume_access_check) {
+            StorageVolumeAccessChecker.check(name, svType, locations, params);
         }
     }
 

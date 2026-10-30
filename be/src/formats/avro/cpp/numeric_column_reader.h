@@ -23,7 +23,7 @@ namespace starrocks::avrocpp {
 template <typename T>
 class NumericColumnReader final : public ColumnReader {
 public:
-    explicit NumericColumnReader(const std::string& col_name, const TypeDescriptor& type_desc)
+    explicit NumericColumnReader(std::string_view col_name, const TypeDescriptor& type_desc)
             : ColumnReader(col_name, type_desc) {}
     ~NumericColumnReader() override = default;
 
@@ -36,7 +36,7 @@ private:
 
 class BooleanColumnReader final : public ColumnReader {
 public:
-    explicit BooleanColumnReader(const std::string& col_name, const TypeDescriptor& type_desc)
+    explicit BooleanColumnReader(std::string_view col_name, const TypeDescriptor& type_desc)
             : ColumnReader(col_name, type_desc) {}
     ~BooleanColumnReader() override = default;
 
@@ -53,7 +53,7 @@ private:
 template <typename T>
 class DecimalColumnReader final : public ColumnReader {
 public:
-    explicit DecimalColumnReader(const std::string& col_name, const TypeDescriptor& type_desc)
+    explicit DecimalColumnReader(std::string_view col_name, const TypeDescriptor& type_desc)
             : ColumnReader(col_name, type_desc), _precision(type_desc.precision), _scale(type_desc.scale) {}
     ~DecimalColumnReader() override = default;
 

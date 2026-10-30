@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "修改现有表，包括重命名、修改分区、修改分桶、调整 Tablet 大小和修改列。"
 ---
 
 # ALTER TABLE
@@ -10,16 +11,17 @@ import Beta from '../../../_assets/commonMarkdown/_beta.mdx'
 
 修改现有表，包括：
 
-- [修改表名、分区名、索引名、列名](#rename-对名称进行修改)
-- [修改表注释](#修改表的注释31-版本起)
-- [修改分区（增删分区和修改分区属性）](#操作-partition-相关语法)
-- [修改分桶方式和分桶数量](#修改分桶方式和分桶数量自-32-版本起)
+- [修改表名、分区名、索引名、列名](#重命名表)
+- [修改表注释](#修改表注释从v31起)
+- [修改分区（增删分区和修改分区属性）](#添加分区)
+- [修改分桶方式和分桶数量](#修改分桶方法和桶的数量从v32起)
+- [调整 Tablet 大小](#调整-tablet-大小)
 - [修改列（增删列和修改列顺序和注释）](#修改列添加删除列改变列的顺序或注释)
-- [创建或删除 rollup index](#操作-rollup-index-语法)
-- [修改 bitmap index](#bitmap-index-修改)
-- [修改表的属性](#修改表的属性)
-- [对表进行原子替换](#swap-将两个表原子替换)
-- [手动执行 Compaction 合并表数据](#手动-compaction31-版本起)
+- [创建或删除 rollup index](#创建-rollup)
+- [修改索引](#修改索引)
+- [修改表的属性](#修改表属性)
+- [对表进行原子替换](#使用临时分区替换当前分区)
+- [手动执行 Compaction 合并表数据](#手动-compaction从31起)
 - [删除主键索引](#删除主键索引-339-版本起)
 
 :::tip
@@ -443,6 +445,72 @@ INSERT INTO details (event_time, event_type, user_id, device_code, channel) VALU
   ALTER TABLE details DISTRIBUTED BY HASH(user_id, event_time) BUCKETS 10;
   ```
 
+### 调整 Tablet 大小
+
+从 v4.1 起，StarRocks 支持对 Tablet 进行拆分（SPLIT）和合并（MERGE），从而实现对 Tablet 大小的动态管理，并提供一种自适应的数据倾斜处理机制。
+
+SPLIT 语法：
+
+```SQL
+ALTER TABLE <table_name> SPLIT { TABLET | TABLETS }
+    [ 
+        { PARTITION (<partition_name>) |  PARTITIONS (<partition_name1>, <partition_name2>, ...) } 
+    ｜
+        { (<tablet_id>) | (<tablet_id1>, <tablet_id2>, <tablet_id3>, ...) }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+MERGE 语法：
+
+```SQL
+ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
+    [
+        { PARTITION (<partition_name>) | PARTITIONS (<partition_name1>, <partition_name2>, ...) }
+    ｜
+        { (<tablet_id1>, <tablet_id2>, ...) | (<tablet_id1>, <tablet_id2>, ...) (<tablet_id3>, <tablet_id4>, ...) ... }
+    ]
+[PROPERTIES (
+    "tablet_reshard_target_size"="<target_size>")
+]
+```
+
+参数说明：
+
+- `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：10 GB。如果已明确指定了 Tablet ID，则无需指定此参数。
+
+  手动 SPLIT 未指定 Tablet ID 时，目标大小必须为正数。如果 FE 配置项 `tablet_reshard_target_size` 为 `0`，须在 `PROPERTIES` 中指定正数值；否则语句会报错 `Invalid tablet_reshard_target_size: 0`。下文所述的 1.5 倍拆分阈值仅适用于正数目标大小。
+
+  - 触发拆分（SPLIT）的条件：
+    - Tablet 的大小**大于或等于** `tablet_reshard_target_size` 的 1.5 倍（即 `ceil(1.5 × tablet_reshard_target_size)`）。以默认值 10 GB 为例，Tablet 达到 15 GB 才会拆分。后台自动拆分和手动执行的 `ALTER TABLE ... SPLIT` 均按此阈值判断：自动拆分使用 FE 配置项 `tablet_reshard_target_size`；手动 SPLIT 使用 `PROPERTIES` 中指定的值，未指定时同样使用该 FE 配置项。指定 Tablet ID 时也不例外：小于该阈值的 Tablet 不会被拆分；如果没有任何 Tablet 满足条件，语句会报错 `No tablets need to split in table ...`。
+    - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
+
+  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。如需在整个集群范围内禁用，可将 `tablet_reshard_min_split_size` 设置为大于或等于 `tablet_reshard_target_size`。
+
+  - 合并（MERGE）需要将 FE 配置项 `tablet_reshard_enable_tablet_merge` 设置为 `true`（默认值：`false`），否则系统不会自动合并 Tablet，`ALTER TABLE ... MERGE` 也会被拒绝。开启后，合并规则如下：
+    - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用 FE 配置项 `tablet_reshard_target_size`。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
+    - 自动合并与未指定 Tablet ID 的手动 MERGE 按相同方式选取要合并的 Tablet。手动 MERGE 使用 `PROPERTIES` 中指定的值，未指定时同样使用该 FE 配置项。只有小于 `ceil(0.8 × tablet_reshard_target_size)` 的 Tablet 才会参与合并：相邻的此类 Tablet 按 Range 顺序分组，每组大小总和不超过 `tablet_reshard_target_size`，中间遇到更大的 Tablet 时分组随之断开。合并不会使物化索引的 Tablet 数量低于其并行度下限，即所属仓库的计算节点数（受 `tablet_reshard_max_split_count` 上限约束，且不小于 2）。如果没有可合并的 Tablet，手动执行的语句会报错 `No tablets need to merge in table ...`。
+    - 指定 Tablet ID 的手动 MERGE 直接按指定的分组合并，不检查 Tablet 大小，也不受并行度下限约束。每组须由同一分区、同一物化索引内至少两个连续的 Tablet 组成。
+    - 无论哪种方式，当前正在执行 SPLIT 或 MERGE 的 Tablet 数量都须小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
+
+:::note
+
+**排序键与主键不同**的范围分布主键表**不支持 MERGE**。这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。`ALTER TABLE ... MERGE TABLETS` 与基于大小的自动合并都会被拒绝，报错 `Merge tablet is not supported on a range-distributed primary key table whose ORDER BY differs from the primary key`。
+
+SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。
+
+:::
+
+对于存算分离集群中的范围分布表，同一张表上的拆分、合并任务可以并发执行，前提是目标物理分区不重叠。涉及同一物理分区的任务会相互冲突，即使它们操作的是不同的物化索引。并发导入不同分区时触发的预拆分任务也遵循此规则。
+
+一个任务完成或中止后，其目标物理分区即可接受新的拆分、合并任务。只要表上仍有拆分、合并任务在执行，表就保持 `TABLET_RESHARD` 状态，Schema Change 等不兼容的 ALTER 操作仍会被阻止。所有进行中的拆分、合并任务完成或中止后，表才恢复为 `NORMAL` 状态。
+
+参与处理的所有 FE 都必须支持此并发策略。回退到较旧的 FE 版本前，应等待所有拆分、合并任务完成或中止。
+
+详细示例，参考[拆分或合并 Tablet](#拆分或合并-tablet)。
+
 ### 修改列（添加/删除列，改变列的顺序或注释）
 
 #### 在指定索引的指定位置添加列
@@ -460,8 +528,9 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 注意：
 
 1. 如果向聚合表中添加值列，需要指定agg_type。
-2. 如果向非聚合表（如明细表）中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表（如明细表）中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列存在歧义，会被拒绝，因为创建键列会改变表的聚合键并重写已有数据。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `true` 可恢复早期版本将该列作为键列创建的行为。
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以重新创建 Rollup。）
+4. 在存算分离集群的 Range 分布表上，明细表（Duplicate Key）、聚合表（Aggregate）和更新表（Unique Key）自 v4.2 起支持添加键列（该列将加入 Range 排序键）。该操作会触发在线重写，新增的键列必须指定常量 `DEFAULT` 值。不支持主键表（Primary Key），以及存在 Rollup 或同步物化视图的表。
 
 #### 向指定索引添加多个列
 
@@ -491,9 +560,11 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 1. 如果向聚合表中添加值列，需要指定`agg_type`。
 
-2. 如果向非聚合表中添加键列，需要指定KEY关键字。
+2. 如果向非聚合表中添加键列，需要指定 KEY 关键字。在聚合表中，既未指定 `agg_type` 也未指定 `KEY` 的列存在歧义，会被拒绝。将 FE 配置项 `allow_implicit_key_column_in_agg_add_column` 设置为 `true` 可恢复早期版本的行为。
 
 3. 不能将已经存在于基础索引中的列添加到 Rollup 中。（如有需要，可以创建另一个 Rollup。）
+
+4. 在存算分离集群的 Range 分布表上，明细表（Duplicate Key）、聚合表（Aggregate）和更新表（Unique Key）自 v4.2 起支持添加键列（该列将加入 Range 排序键）。该操作会触发在线重写，新增的键列必须指定常量 `DEFAULT` 值。不支持主键表（Primary Key），以及存在 Rollup 或同步物化视图的表。
 
 #### 添加生成列（从v3.1起）
 
@@ -520,6 +591,7 @@ DROP COLUMN column_name
 
 1. 不能删除分区列。
 2. 如果从基础索引中删除列，并且该列包含在 Rollup 中，也会被删除。
+3. 在存算分离集群的 Range 分布表上，明细表（Duplicate Key）和聚合表（Aggregate，仅当没有使用 `REPLACE` 或 `REPLACE_IF_NOT_NULL` 聚合类型的值列时）自 v4.2 起支持删除键列（Range 排序键列）。该操作会触发在线重写，对数据重新排序，并针对聚合表按缩减后的键重新聚合数据。不支持主键表（Primary Key）或更新表（Unique Key），不支持存在索引的列（需先删除该索引），也不支持存在 Rollup 或同步物化视图的表。
 
 #### 修改列类型、位置、注释和其他属性
 
@@ -539,9 +611,10 @@ MODIFY COLUMN <column_name>
 
 1. 如果修改聚合模型中的值列，需要指定agg_type。
 2. 如果修改非聚合模型中的键列，需要指定KEY关键字。
-3. 只能修改列的类型。列的其他属性保持不变。（即其他属性需要在语句中根据原属性显式写出，参见[列](#column)部分的示例8）。
-4. 不能修改分区列。
-5. 目前支持以下类型的转换（精度损失由用户保证）。
+3. 在修改类型、默认值、Null 属性及位置时，必须在语句中指定该列的完整定义。
+4. 仅修改列注释时——无论是通过 `MODIFY COLUMN <column_name> COMMENT “<new_column_comment>”` 语法，还是通过完整列定义但仅注释发生变化——均只更改元数据，不会触发 Schema Change 任务。此规则适用于主键列、键列和普通列。若完整定义同时修改了列的其他属性，则该语句将照常触发 Schema Change 任务。
+5. 不能修改分区列。
+6. 目前支持以下类型的转换（精度损失由用户保证）。
 
    - 将TINYINT/SMALLINT/INT/BIGINT转换为TINYINT/SMALLINT/INT/BIGINT/DOUBLE。
    - 将TINYINT/SMALLINT/INT/BIGINT/LARGEINT/FLOAT/DOUBLE/DECIMAL转换为VARCHAR。VARCHAR支持修改最大长度。
@@ -552,8 +625,8 @@ MODIFY COLUMN <column_name>
    - 将FLOAT转换为DOUBLE
    - 将INT转换为DATE（如果INT数据转换失败，原始数据保持不变）
 
-6. 不支持从NULL转换为NOT NULL。
-7. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
+7. 不支持从NULL转换为NOT NULL。
+8. 您可以在单个 MODIFY COLUMN 子句中修改多个属性。但某些属性的组合不支持。
 
 #### 重新排序指定索引的列
 
@@ -688,17 +761,31 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP rollup_name (column_name1, column_name2, ...)
+[ORDER BY (column_name1, column_name2, ...)]
 [FROM from_index_name]
 [PROPERTIES ("key"="value", ...)]
 ```
 
 PROPERTIES：支持设置超时时间，默认超时时间为一天。
 
+`ORDER BY`：为 Rollup 定义独立于基表的排序键（可与基表排序键不同）。仅支持存算分离集群中的 Range 分布表（自 v4.2 起），可使按 Rollup 排序键前缀列进行过滤或聚合的查询命中该 Rollup。有以下限制：
+
+- 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
+- 表不能为 Colocate 表。
+- 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
+
 示例：
 
 ```SQL
 ALTER TABLE [<db_name>.]<tbl_name> 
 ADD ROLLUP r1(col1,col2) from r0;
+```
+
+示例：在存算分离集群的 Range 分布表上创建一个具有独立排序键的 Rollup。
+
+```SQL
+ALTER TABLE example_db.my_table
+ADD ROLLUP r_reorder (k1, k2, v1) ORDER BY (k2, k1);
 ```
 
 #### 批量创建 Rollup
@@ -805,6 +892,7 @@ SET ("key" = "value")
 - `colocate_with`
 - `bucket_size`（从3.2起支持）
 - `base_compaction_forbidden_time_ranges`（从v3.2.13起支持）
+- `enable_statistic_auto_collect`
 
 :::note
 
@@ -1028,7 +1116,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
 
     ```sql
     ALTER TABLE example_db.my_table
-    ADD COLUMN new_col INT DEFAULT "0" AFTER col1
+    ADD COLUMN new_col INT KEY DEFAULT "0" AFTER col1
     TO example_rollup_index;
     ```
 
@@ -1053,7 +1141,7 @@ DROP PERSISTENT INDEX ON TABLETS(<tablet_id>[, <tablet_id>, ...]);
     ```sql
     ALTER TABLE example_db.my_table
     ADD COLUMN col1 INT DEFAULT "1" AFTER `k1`,
-    ADD COLUMN col2 FLOAT SUM AFTER `v2`,
+    ADD COLUMN col2 FLOAT SUM AFTER `v2`
     TO example_rollup_index;
     ```
 
@@ -1350,6 +1438,53 @@ ALTER TABLE compaction_test BASE COMPACT (p202302,p203303);
 ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 ```
 
+### 拆分或合并 Tablet
+
+- 将表中所有符合条件的 Tablet 拆分，目标大小为 10 GB（默认值）。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS;
+```
+
+- 将指定分区中所有满足条件的 Tablet 拆分。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+PARTITION (p1);
+```
+
+- 按 ID 拆分特定 Tablet。
+
+```SQL
+ALTER TABLE table1 SPLIT TABLETS
+(9588955, 9588956, 9588957);
+```
+
+- 将表中所有符合条件的 Tablet 合并，目标大小为 2 GB（默认值）。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- 将指定分区中所有满足条件的 Tablet 合并。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+PARTITIONS (p1, p2, p3)
+PROPERTIES (
+    "tablet_reshard_target_size"="2147483648");
+```
+
+- 按 ID 合并特定 Tablet。
+
+```SQL
+ALTER TABLE table1 MERGE TABLETS
+(9588955, 9588956, 9588957)
+(9588958, 9588959);
+```
+
 ## 相关参考
 
 - [CREATE TABLE](CREATE_TABLE.md)
@@ -1357,4 +1492,3 @@ ALTER TABLE db1.test_tbl DROP PERSISTENT INDEX ON TABLETS (100, 101);
 - [SHOW TABLES](SHOW_TABLES.md)
 - [SHOW ALTER TABLE](SHOW_ALTER.md)
 - [DROP TABLE](DROP_TABLE.md)
-```

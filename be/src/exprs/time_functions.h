@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "base/time/tz_offset_cache.h"
 #include "column/column_builder.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/builtin_functions.h"
@@ -872,6 +873,10 @@ public:
     DEFINE_VECTORIZED_FN(iceberg_days_since_epoch_date);
     DEFINE_VECTORIZED_FN(iceberg_days_since_epoch_datetime);
     DEFINE_VECTORIZED_FN(iceberg_hours_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_years_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_months_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_days_since_epoch_datetime);
+    DEFINE_VECTORIZED_FN(iceberg_timestamptz_hours_since_epoch_datetime);
 
 private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
@@ -885,8 +890,9 @@ private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime_with_format);
 
     // internal approach to process string content, based on any string format.
-    static void str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
-                                     ColumnBuilder<TYPE_DATETIME>* result);
+    // When allow_throw_exception is set and parsing fails, returns Status::InvalidArgument("Fail to parse date").
+    static Status str_to_date_internal(FunctionContext* context, TimestampValue* ts, const Slice& fmt, const Slice& str,
+                                       ColumnBuilder<TYPE_DATETIME>* result);
 
     static std::string convert_format(const Slice& format);
 
@@ -968,6 +974,16 @@ private:
         cctz::time_zone from_tz;
         cctz::time_zone to_tz;
     };
+
+    // Per-execution-thread holder for the TzOffsetCache of convert_tz_const and of the from_unixtime family (see
+    // base/time/tz_offset_cache.h for why this needs to be per-thread rather than shared).
+    struct ConvertTzThreadState : FunctionThreadState {
+        TzOffsetCache cache;
+    };
+
+    // This thread's TzOffsetCache of the function, bound to `tz`; it lives as long as the FunctionContext, so its
+    // table of offset changes is built once, not per chunk.
+    static TzOffsetCache& _thread_offset_cache(FunctionContext* context, const cctz::time_zone& tz);
 
     // fmt for string format like "%Y-%m-%d" and "%Y-%m-%d %H:%i:%s"
     struct StrToDateCtx {

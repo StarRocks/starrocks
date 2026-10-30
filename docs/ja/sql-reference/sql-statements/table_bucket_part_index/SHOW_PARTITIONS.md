@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PARTITIONS displays partition information including common and temporary partitions."
 ---
 
 # SHOW PARTITIONS
@@ -44,7 +45,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | PartitionKey             | 1つ以上のパーティション列からなるパーティションキーです。     |
 | Range                    | パーティションの範囲で、右半開区間です。                      |
 | DistributionKey          | ハッシュバケッティングのバケットキーです。                    |
-| Buckets                  | パーティションのバケット数です。                              |
+| Buckets                  | パーティションのバケット数です。Range 分散を使用するテーブルでは、この値はパーティションのベースインデックスにおける実際のタブレット数であり、タブレットの分割およびマージに応じて変化します。同じパーティション内のロールアップインデックスは異なるタブレット数を持つことがあります。 |
 | ReplicationNum           | パーティション内の各タブレットのレプリカ数です。              |
 | StorageMedium            | パーティション内のデータを保存する記憶媒体です。値 `HHD` はハードディスクドライブを示し、値 `SSD` はソリッドステートドライブを示します。 |
 | CooldownTime             | パーティション内のデータのクールダウン時間です。初期記憶媒体が SSD の場合、このパラメータで指定された時間後に記憶媒体は SSD から HDD に切り替わります。フォーマット: "yyyy-MM-dd HH:mm:ss"。 |
@@ -61,6 +62,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataVersion              | ロードトランザクションのバージョン番号。Compaction 操作は含まれない。 |
 | VersionEpoch             | パーティションのエポック。システムはパーティションが作成されたときにバージョンエポックを割り当て、パーティションがスワップされたときに変更します。 |
 | VersionTxnType           | 現在のデータバージョンを生成するトランザクションのタイプ。有効な値：`NORMAL` （通常のトランザクション）と `REPLICATION` （データ複製）。 |
+| LastUpdateTime           | パーティションが最後にユーザー書き込み（ロード / INSERT / DELETE / UPDATE）で変更された時刻。 |
+| LastAccessTime           | パーティションが最後にユーザーステートメント（クエリ、`INSERT ... SELECT`、`INSERT OVERWRITE`、CTAS、主キーテーブルの `UPDATE`/`DELETE`、マテリアライズドビューのリフレッシュ、`EXPORT`）で読み取られた時刻。内部の統計情報収集による読み取りは除外されます。現在は FE メモリのみに保持され（永続化されない）、クエリ時に FE 間で集約されます。 |
 
 ## 例
 
@@ -86,6 +89,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
                     DataSize:  4KB   
                 IsInMemory: false
                     RowCount: 3 
+            LastUpdateTime: 2023-08-08 15:45:13
+            LastAccessTime: 2023-08-09 10:00:00
     1 row in set (0.00 sec)
     ```
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Shows the execution status of ongoing ALTER TABLE operations including column changes, schema optimization, and rollup index changes."
 ---
 
 # SHOW ALTER TABLE
@@ -9,6 +10,7 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
 - Modify columns.
 - Optimize table schema (from v3.2), including modifying the bucketing method and the number of buckets.
 - Create and delete the rollup index.
+- Modify metadata-only properties of cloud-native (shared-data) tables, such as `file_bundling`, `enable_persistent_index`, `persistent_index_type`, and `compaction_strategy`. These changes run asynchronously and are shown under `COLUMN`.
 
 ## Syntax
 
@@ -21,18 +23,20 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
 - Show the execution of operations of adding or deleting the rollup index.
 
     ```sql
-    SHOW ALTER TABLE ROLLUP [FROM db_name]
+    SHOW ALTER TABLE ROLLUP [FROM db_name] [WHERE TableName|CreateTime|FinishedTime|State] [ORDER BY] [LIMIT]
     ```
 
 ## Parameters
 
 - `{COLUMN ｜ OPTIMIZE | ROLLUP}`:
 
-  - If `COLUMN` is specified, this statement shows operations of modifying columns.
+  - If `COLUMN` is specified, this statement shows operations of modifying columns. For cloud-native (shared-data) tables, it also shows asynchronous metadata-only changes triggered by `ALTER TABLE ... SET (...)`, such as modifying `file_bundling`, `enable_persistent_index`, `persistent_index_type`, or `compaction_strategy`.
   - If `OPTIMIZE` is specified, this statement shows operations of optimizing table structure.
   - If `ROLLUP` is specified, this statement shows operations of adding or deleting the rollup index.
 
 - `db_name`: optional. If `db_name` is not specified, the current database is used by default.
+
+- `WHERE`, `ORDER BY` and `LIMIT`: optional, and supported for every alter type. The columns they accept are `TableName`, `CreateTime`, the finish time, and `State`. The finish time is returned as `FinishTime` by `COLUMN` and `OPTIMIZE`, and as `FinishedTime` by `ROLLUP`; `ROLLUP` accepts either spelling.
 
 ## Examples
 
@@ -52,11 +56,12 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ```
 
-3. Show the execution of the most recent operation of modifying columns or optimizing table schema in a specified table.
+3. Show the execution of the most recent operation of modifying columns, optimizing table schema, or adding a rollup index in a specified table.
 
     ```sql
     SHOW ALTER TABLE COLUMN WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     SHOW ALTER TABLE OPTIMIZE WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1; 
+    SHOW ALTER TABLE ROLLUP WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     ```
 
 ## References

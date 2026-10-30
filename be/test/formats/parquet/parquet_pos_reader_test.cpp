@@ -21,8 +21,8 @@
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
-#include "storage/predicate_tree/predicate_tree_fwd.h"
-#include "storage/range.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::parquet {
 
@@ -44,7 +44,7 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithoutFilter) {
     Range<uint64_t> range(100, 105);
 
     // Create a column to store the results
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     // Read the range
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
@@ -73,7 +73,7 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithFilter) {
     Filter filter = {false, true, false, true, false}; // Size 5, positions 1 and 3 (0-indexed)
 
     // Create a column to store the results
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     // Read the range with filter
     ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
@@ -98,7 +98,7 @@ TEST_F(ParquetPosReaderTest, TestReadLargeRange) {
     Range<uint64_t> range(1000, 1010);
 
     // Create a column to store the results
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     // Read the range
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
@@ -124,7 +124,7 @@ TEST_F(ParquetPosReaderTest, TestReadEmptyRange) {
     Range<uint64_t> range(500, 500);
 
     // Create a column to store the results
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     // Read the range
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
@@ -148,7 +148,7 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithNoSelectedRows) {
     Filter filter = {false, false, false}; // Size 3, no selected rows
 
     // Create a column to store the results
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     // Read the range with filter
     ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
@@ -172,7 +172,7 @@ TEST_F(ParquetPosReaderTest, TestReadRangeWithAllRowsSelected) {
     Filter filter = {true, true, true, true}; // Size 4, all selected
 
     // Create a column to store the results
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
+    ColumnPtr column = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     // Read the range with filter
     ASSERT_TRUE(reader.read_range(range, &filter, column).ok());
@@ -228,7 +228,7 @@ TEST_F(ParquetPosReaderTest, TestCollectColumnIoRange) {
     ParquetPosReader reader;
 
     // Call collect_column_io_range (should not crash)
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    std::vector<SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     reader.collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
     reader.collect_column_io_range(nullptr, nullptr, ColumnIOType::PAGES, false);

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP ROLE drops a role."
 ---
 
 # DROP ROLE

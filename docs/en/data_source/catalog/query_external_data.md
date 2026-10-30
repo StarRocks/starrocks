@@ -1,5 +1,7 @@
 ---
+sidebar_position: 160
 displayed_sidebar: docs
+description: "How to query data from external sources in StarRocks using external catalogs."
 ---
 
 # Query external data
@@ -8,7 +10,7 @@ This topic guides you through querying data from external data sources by using 
 
 ## Prerequisites
 
- External catalogs are created based on external data sources. For information about supported types of external catalogs, see [Catalog](../catalog/catalog_overview.md#catalog).
+ External catalogs are created based on external data sources. For information about supported types of external catalogs, see [Catalog](./catalog_overview.md#catalog).
 
 ## Procedure
 
@@ -34,7 +36,7 @@ This topic guides you through querying data from external data sources by using 
       USE catalog_name.db_name;
       ```
 
-5. Query external data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md).
+5. Query external data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md).
 
       ```SQL
       SELECT * FROM table_name;
@@ -63,4 +65,4 @@ SELECT * FROM hive1.hive_db.hive_table limit 1;
 
 ## References
 
-To query data from your StarRocks cluster, see [Default catalog](../catalog/default_catalog.md).
+To query data from your StarRocks cluster, see [Default catalog](./default_catalog.md).

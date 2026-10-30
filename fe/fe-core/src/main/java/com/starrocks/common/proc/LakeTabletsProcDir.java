@@ -59,13 +59,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
     }
 
     public static int analyzeColumn(String columnName) throws AnalysisException {
-        for (String title : TITLE_NAMES) {
-            if (title.equalsIgnoreCase(columnName)) {
-                return TITLE_NAMES.indexOf(title);
-            }
-        }
-
-        throw new AnalysisException("Title name[" + columnName + "] does not exist");
+        return ProcUtils.analyzeColumn(TITLE_NAMES, columnName);
     }
 
     public List<List<Comparable>> fetchComparableResult() {
@@ -76,7 +70,8 @@ public class LakeTabletsProcDir implements ProcDirInterface {
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
 
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             for (Tablet tablet : index.getTablets()) {
                 List<Comparable> tabletInfo = Lists.newArrayList();
@@ -90,7 +85,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfos.add(tabletInfo);
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
         return tabletInfos;
     }
@@ -136,8 +131,13 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid tablet id format: " + tabletIdStr);
         }
 
+        // Take per-table READ: index.getTablet reads MaterializedIndex.idToTablets,
+        // which is a plain HashMap. A concurrent schema change or rebalance
+        // (IX + table WRITE) can race with this get, so the lock pins the table while
+        // we resolve the tablet reference.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long lockTableId = table.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), lockTableId, LockType.READ);
         try {
             Tablet tablet = index.getTablet(tabletId);
             if (tablet == null) {
@@ -146,7 +146,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
             Preconditions.checkState(tablet instanceof LakeTablet);
             return new LakeTabletProcNode((LakeTablet) tablet);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), lockTableId, LockType.READ);
         }
     }
 

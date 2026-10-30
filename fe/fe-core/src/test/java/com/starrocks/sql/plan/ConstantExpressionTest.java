@@ -191,6 +191,32 @@ public class ConstantExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testCastBinaryToString() throws Exception {
+        // Folding used to produce the java default byte[] toString(), i.e. "[B@<identityHashCode>", which is
+        // both wrong and different on every run, while the non-folded BE path returns the bytes.
+        testFragmentPlanContainsConstExpr(
+                "select cast(cast('zz' as varbinary) as varchar);",
+                "'zz'");
+
+        testFragmentPlanContainsConstExpr(
+                "select cast(cast('zz' as varbinary) as char(10));",
+                "'zz'");
+
+        // The bogus value poisoned every function reading it, which is how the bug surfaced:
+        // "ERROR 1064: [B@3461c8cb not supported in next_day dow_string".
+        testFragmentPlanContainsConstExpr(
+                "select next_day(cast('2023-04-05' as datetime), cast(cast('Sunday' as varbinary) as varchar));",
+                "'2023-04-09'");
+
+        // A sized binary target does not change the value either. ReduceCastRule drops the intermediate cast
+        // here because matchesType() ignores the length of a varbinary, so this only guards that it stays a
+        // no-op; the binary -> binary folding itself is covered by ConstantOperatorTest.
+        testFragmentPlanContainsConstExpr(
+                "select cast(cast(cast('zz' as varbinary) as varbinary(10)) as varchar);",
+                "'zz'");
+    }
+
+    @Test
     public void testCastToDecimalLiteral() throws Exception {
         testFragmentPlanContainsConstExpr(
                 "select cast(151971657 as decimal32);",
@@ -582,5 +608,125 @@ public class ConstantExpressionTest extends PlanTestBase {
             assertContains(plan, "<slot 2> : NULL");
         }
 
+    }
+
+    @Test
+    public void testRegexpReplace() throws Exception {
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('abcd', '.*', 'xx')");
+            assertContains(plan, "<slot 2> : 'xx'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('a b c', '(b)', '<\\\\1>')");
+            assertContains(plan, "<slot 2> : 'a <b> c'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('ab\\ncd', 'a.*d', 'xx')");
+            assertContains(plan, "<slot 2> : 'xx'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('xxxx', 'xx', '-')");
+            assertContains(plan, "<slot 2> : '--'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('xxxx', 'not', 'xxxxxxxx')");
+            assertContains(plan, "<slot 2> : 'xxxx'");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace(NULL, 'abc', 'xx')");
+            assertContains(plan, "<slot 2> : NULL");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('', '', 'xx')");
+            assertContains(plan, "regexp_replace('', '', 'xx')");
+        }
+
+        {
+            String plan = getFragmentPlan("SELECT regexp_replace('abcd', '(unclosed', 'xx')");
+            assertContains(plan, "regexp_replace('abcd', '(unclosed', 'xx')");
+        }
+
+        {
+            String plan = getFragmentPlan("select column_value " +
+                    "from (values ('root'), ('other')) as t(column_value) " +
+                    "where column_value = replace(" +
+                    "regexp_replace(" +
+                    "regexp_replace(" +
+                    "regexp_replace(current_user(), '\\'@.*$', ''), '^\\'', ''), " +
+                    "'^(.*)_dot_(.*)_(tl|bi|dh)_user$', '\\\\1.\\\\2'), '__', '-')");
+            assertContains(plan, "predicates: 1: column_value = 'root'");
+        }
+    }
+
+    @Test
+    public void testDivisionByZeroWithSqlMode() throws Exception {
+        long savedSqlMode = connectContext.getSessionVariable().getSqlMode();
+
+        try {
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() | SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO);
+
+            // Case 1: When ERROR_FOR_DIVISION_BY_ZERO is ON, division by zero (non-null dividend) should throw
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT 1.0/0.0"));
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT 1%0"));
+
+            // Case 2: When dividend is NULL, NULL/0 should return NULL (not throw), consistent with FE semantics
+            String planNullDivZero = getFragmentPlan("SELECT NULL/0");
+            assertContains(planNullDivZero, "NULL");
+
+            // When ERROR_FOR_DIVISION_BY_ZERO is OFF, division by zero should return NULL
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() & ~SqlModeHelper.MODE_ERROR_FOR_DIVISION_BY_ZERO);
+            String plan = getFragmentPlan("SELECT 1/0");
+            assertContains(plan, "NULL");
+            plan = getFragmentPlan("SELECT 1%0");
+            assertContains(plan, "NULL");
+
+            // When dividend is NULL, always return NULL
+            plan = getFragmentPlan("SELECT NULL/1");
+            assertContains(plan, "NULL");
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(savedSqlMode);
+        }
+    }
+
+    @Test
+    public void testStrToDateWithAllowThrowException() throws Exception {
+        long savedSqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() | SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+
+            // Case 1: When ALLOW_THROW_EXCEPTION is ON, invalid parse should throw
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT str_to_date('invalid', '%Y-%m-%d')"));
+            assertThrows(Exception.class, () -> getFragmentPlan("SELECT str2date('invalid', '%Y-%m-%d')"));
+
+            // Case 2: When first argument is NULL, should return NULL (not throw), consistent with FE semantics
+            String planNullInput = getFragmentPlan("SELECT str_to_date(NULL, '%Y-%m-%d')");
+            assertContains(planNullInput, "NULL");
+            planNullInput = getFragmentPlan("SELECT str2date(NULL, '%Y-%m-%d')");
+            assertContains(planNullInput, "NULL");
+
+            // When ALLOW_THROW_EXCEPTION is OFF, invalid parse should return NULL
+            connectContext.getSessionVariable().setSqlMode(
+                    connectContext.getSessionVariable().getSqlMode() & ~SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+            String plan = getFragmentPlan("SELECT str_to_date('invalid', '%Y-%m-%d')");
+            assertContains(plan, "NULL");
+            plan = getFragmentPlan("SELECT str2date('invalid', '%Y-%m-%d')");
+            assertContains(plan, "NULL");
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(savedSqlMode);
+        }
+    }
+
+    @Test
+    void testConstantDoubleAdd() throws Exception {
+        assertCContains(getFragmentPlan("SELECT -1.5e308-3e307"), "NULL");
     }
 }

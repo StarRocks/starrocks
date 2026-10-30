@@ -21,23 +21,31 @@
 #include <random>
 #include <utility>
 
-#include "common/config.h"
+#include "base/compression/block_compression.h"
+#include "base/compression/compression_utils.h"
+#include "column/column_helper.h"
+#include "column/json_column.h"
+#include "common/brpc/brpc_stub_cache.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
+#include "common/config_compression_fwd.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/system/backend_options.h"
+#include "compute_env/data_stream/data_stream_mgr.h"
+#include "compute_env/data_stream/local_pass_through_buffer.h"
+#include "exec/exec_env.h"
+#include "exec/pipeline/exchange/exchange_compression_strategy.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/bucket_aware_partition.h"
-#include "runtime/data_stream_mgr.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
-#include "runtime/local_pass_through_buffer.h"
 #include "runtime/runtime_state.h"
-#include "serde/compress_strategy.h"
-#include "serde/protobuf_serde.h"
-#include "util/brpc_stub_cache.h"
-#include "util/compression/block_compression.h"
-#include "util/compression/compression_utils.h"
-#include "util/internal_service_recoverable_stub.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 
 namespace starrocks::pipeline {
 
@@ -57,7 +65,9 @@ public:
               _enable_exchange_pass_through(enable_exchange_pass_through),
               _enable_exchange_perf(enable_exchange_perf),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
-              _chunks(num_shuffles) {}
+              _chunks(num_shuffles),
+              _chunk_container_usages(num_shuffles, 0),
+              _chunk_reference_usages(num_shuffles, 0) {}
 
     // Initialize channel.
     // Returns OK if successful, error indication otherwise.
@@ -85,6 +95,16 @@ public:
     Status add_rows_selective(Chunk* chunk, int32_t driver_sequence, const uint32_t* row_indexes, uint32_t from,
                               uint32_t size, RuntimeState* state);
 
+    // Send every non-empty partial chunk and clear it (set_num_rows(0), which frees the referenced objects
+    // but keeps the containers' capacity), adding the number of rows sent to *num_rows.
+    Status flush_buffered_chunks(RuntimeState* state, size_t* num_rows);
+
+    // Free the (cleared) partial chunks in order, capacity included, until the bytes retained by the
+    // parent's partial chunks drop to `low_watermark`; a freed chunk is re-created on the next rows for it.
+    void release_buffered_chunks(int64_t low_watermark, int64_t* num_released);
+
+    size_t num_buffered_rows() const;
+
     // Flush buffered rows and close channel. This function don't wait the response
     // of close operation, client should call close_wait() to finish channel's close.
     // We split one close operation into two phases in order to make multiple channels
@@ -106,7 +126,15 @@ private:
     Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
 
     bool _check_use_pass_through();
-    void _prepare_pass_through();
+    void _prepare_pass_through(RuntimeState* state);
+    // Account the memory retained by _chunks[driver_sequence] into the parent's profile counter.
+    // Container (capacity) usage is re-read each time, which is O(#columns); memory referenced by
+    // out-of-line objects (JSON, bitmap, HLL, ...) is only measured for the rows just appended and
+    // accumulated, so the cost stays proportional to the rows copied instead of O(rows) per append.
+    void _on_chunk_buffer_appended(int32_t driver_sequence, size_t from, size_t size, bool recount_reference);
+    void _on_chunk_buffer_reset(int32_t driver_sequence);
+    void _on_chunk_buffer_released(int32_t driver_sequence);
+    void _account_chunk_buffer(int64_t delta);
 
     ExchangeSinkOperator* _parent;
 
@@ -128,6 +156,10 @@ private:
     // If pipeline level shuffle is disable, the size of _chunks
     // always be 1
     std::vector<ChunkUniquePtr> _chunks;
+    // Last accounted container_memory_usage() and the accumulated reference_memory_usage() of the rows
+    // buffered in each entry of _chunks, so only the delta is applied to the counter.
+    std::vector<size_t> _chunk_container_usages;
+    std::vector<size_t> _chunk_reference_usages;
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;
 
@@ -154,7 +186,7 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
     return is_local();
 }
 
-void ExchangeSinkOperator::Channel::_prepare_pass_through() {
+void ExchangeSinkOperator::Channel::_prepare_pass_through(RuntimeState* state) {
     _pass_through_context.init();
     _use_pass_through = _check_use_pass_through();
 }
@@ -176,7 +208,8 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         _is_inited = true;
         return Status::OK();
     }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    auto* query_execution_services = state->query_execution_services();
+    _brpc_stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_brpc_dest_addr);
 
     if (_brpc_stub == nullptr) {
         auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
@@ -184,30 +217,133 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         return Status::InternalError(msg);
     }
 
-    _prepare_pass_through();
+    _prepare_pass_through(state);
     _ignore_local_data = _enable_exchange_perf && is_local();
 
     _is_inited = true;
     return Status::OK();
 }
 
+// Number of JSON columns of the chunk that are in the flat representation.
+static size_t num_flat_json_columns(const Chunk& chunk) {
+    size_t num = 0;
+    for (const auto& column : chunk.columns()) {
+        const Column* data_column = ColumnHelper::get_data_column(column.get());
+        if (data_column->is_json() && down_cast<const JsonColumn*>(data_column)->is_flat_json()) {
+            ++num;
+        }
+    }
+    return num;
+}
+
+void ExchangeSinkOperator::Channel::_on_chunk_buffer_appended(int32_t driver_sequence, size_t from, size_t size,
+                                                              bool recount_reference) {
+    const Chunk& chunk = *_chunks[driver_sequence];
+    const size_t container = chunk.container_memory_usage();
+    // The append rewrote the rows already buffered (e.g. flat JSON degraded to plain JSON), so their
+    // referenced memory changed too: recount it for the whole chunk instead of adding the appended rows'.
+    const size_t reference =
+            recount_reference ? chunk.reference_memory_usage()
+                              : _chunk_reference_usages[driver_sequence] + chunk.reference_memory_usage(from, size);
+    const int64_t delta =
+            static_cast<int64_t>(container) - static_cast<int64_t>(_chunk_container_usages[driver_sequence]) +
+            static_cast<int64_t>(reference) - static_cast<int64_t>(_chunk_reference_usages[driver_sequence]);
+    _chunk_container_usages[driver_sequence] = container;
+    _chunk_reference_usages[driver_sequence] = reference;
+    _account_chunk_buffer(delta);
+}
+
+void ExchangeSinkOperator::Channel::_on_chunk_buffer_reset(int32_t driver_sequence) {
+    // set_num_rows(0) destroys the referenced objects but keeps the containers' capacity.
+    const size_t container = _chunks[driver_sequence]->container_memory_usage();
+    const int64_t delta = static_cast<int64_t>(container) -
+                          static_cast<int64_t>(_chunk_container_usages[driver_sequence]) -
+                          static_cast<int64_t>(_chunk_reference_usages[driver_sequence]);
+    _chunk_container_usages[driver_sequence] = container;
+    _chunk_reference_usages[driver_sequence] = 0;
+    _account_chunk_buffer(delta);
+}
+
+void ExchangeSinkOperator::Channel::_on_chunk_buffer_released(int32_t driver_sequence) {
+    const int64_t delta = -static_cast<int64_t>(_chunk_container_usages[driver_sequence]) -
+                          static_cast<int64_t>(_chunk_reference_usages[driver_sequence]);
+    _chunk_container_usages[driver_sequence] = 0;
+    _chunk_reference_usages[driver_sequence] = 0;
+    _account_chunk_buffer(delta);
+}
+
+void ExchangeSinkOperator::Channel::_account_chunk_buffer(int64_t delta) {
+    if (delta == 0) {
+        return;
+    }
+    COUNTER_ADD(_parent->_shuffle_chunk_buffer_peak_mem_usage, delta);
+    _parent->_shuffle_buffered_bytes += delta;
+}
+
+Status ExchangeSinkOperator::Channel::flush_buffered_chunks(RuntimeState* state, size_t* num_rows) {
+    for (int32_t driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
+        auto& chunk = _chunks[driver_sequence];
+        if (chunk == nullptr || chunk->num_rows() == 0) {
+            continue;
+        }
+        *num_rows += chunk->num_rows();
+        RETURN_IF_ERROR(send_one_chunk(state, chunk.get(), driver_sequence, false));
+        chunk->set_num_rows(0);
+        _on_chunk_buffer_reset(driver_sequence);
+    }
+    return Status::OK();
+}
+
+void ExchangeSinkOperator::Channel::release_buffered_chunks(int64_t low_watermark, int64_t* num_released) {
+    for (int32_t driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
+        if (_parent->_shuffle_buffered_bytes <= low_watermark) {
+            return;
+        }
+        auto& chunk = _chunks[driver_sequence];
+        if (chunk == nullptr) {
+            continue;
+        }
+        DCHECK_EQ(chunk->num_rows(), 0);
+        _on_chunk_buffer_released(driver_sequence);
+        chunk.reset();
+        ++*num_released;
+    }
+}
+
+size_t ExchangeSinkOperator::Channel::num_buffered_rows() const {
+    size_t num_rows = 0;
+    for (const auto& chunk : _chunks) {
+        if (chunk != nullptr) {
+            num_rows += chunk->num_rows();
+        }
+    }
+    return num_rows;
+}
+
 Status ExchangeSinkOperator::Channel::add_rows_selective(Chunk* chunk, int32_t driver_sequence, const uint32_t* indexes,
                                                          uint32_t from, uint32_t size, RuntimeState* state) {
     if (UNLIKELY(_chunks[driver_sequence] == nullptr)) {
         _chunks[driver_sequence] = chunk->clone_empty_with_slot(size);
+        COUNTER_UPDATE(_parent->_shuffle_chunk_buffer_num_counter, 1);
     }
 
     if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
         RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
         // we only clear column data, because we need to reuse column schema
         _chunks[driver_sequence]->set_num_rows(0);
+        _on_chunk_buffer_reset(driver_sequence);
     }
 
+    const size_t num_buffered_rows = _chunks[driver_sequence]->num_rows();
+    const size_t num_flat_json = num_buffered_rows > 0 ? num_flat_json_columns(*_chunks[driver_sequence]) : 0;
     {
         SCOPED_TIMER(_parent->_shuffle_chunk_append_timer);
         _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
         COUNTER_UPDATE(_parent->_shuffle_chunk_append_counter, 1);
     }
+    const bool recount_reference =
+            num_flat_json > 0 && num_flat_json_columns(*_chunks[driver_sequence]) < num_flat_json;
+    _on_chunk_buffer_appended(driver_sequence, num_buffered_rows, size, recount_reference);
     return Status::OK();
 }
 
@@ -305,7 +441,7 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
         }
     });
 
-    if (!fragment_ctx->is_canceled()) {
+    if (!fragment_ctx->runtime_state()->is_cancelled()) {
         for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
             if (_chunks[driver_sequence] != nullptr) {
                 RETURN_IF_ERROR(res = send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
@@ -345,7 +481,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
     RuntimeState* state = fragment_ctx->runtime_state();
 
     PassThroughChunkBuffer* pass_through_chunk_buffer =
-            state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
+            state->query_execution_services()->runtime->stream_mgr->get_pass_through_chunk_buffer(state->query_id());
 
     _channels.reserve(destinations.size());
     std::vector<int> driver_sequence_per_channel(destinations.size(), 0);
@@ -386,9 +522,9 @@ ExchangeSinkOperator::ExchangeSinkOperator(
 
     _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
 
-    _shuffler = std::make_unique<Shuffler>(runtime_state()->func_version() <= 3, !_is_channel_bound_driver_sequence,
-                                           _part_type, _channels.size(), _num_shuffles_per_channel,
-                                           !bucket_properties.empty());
+    _shuffler = std::make_unique<Shuffler>(get_factory()->runtime_state()->func_version() <= 3,
+                                           !_is_channel_bound_driver_sequence, _part_type, _channels.size(),
+                                           _num_shuffles_per_channel, !bucket_properties.empty());
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {
@@ -403,6 +539,9 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare_local_state(state));
 
     _be_number = state->be_number();
+    if (state->query_options().__isset.enable_exchange_sink_buffer_flush) {
+        _enable_shuffle_buffer_flush = state->query_options().enable_exchange_sink_buffer_flush;
+    }
     if (state->query_options().__isset.transmission_encode_level) {
         _encode_level = state->query_options().transmission_encode_level;
     }
@@ -415,7 +554,7 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
         TCompressionType::type type = state->query_options().transmission_compression_type;
         if (type == TCompressionType::AUTO) {
             _compress_type = CompressionTypePB::LZ4;
-            _compress_strategy = std::make_shared<serde::CompressStrategy>();
+            _compress_strategy = std::make_shared<ExchangeCompressionStrategy>();
         } else {
             _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
         }
@@ -460,6 +599,7 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _raw_input_bytes_counter = ADD_COUNTER(_unique_metrics, "RawInputBytes", TUnit::BYTES);
     _serialized_bytes_counter = ADD_COUNTER(_unique_metrics, "SerializedBytes", TUnit::BYTES);
+    _compressed_input_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedInputBytes", TUnit::BYTES);
     _compressed_bytes_counter = ADD_COUNTER(_unique_metrics, "CompressedBytes", TUnit::BYTES);
 
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
@@ -470,6 +610,15 @@ Status ExchangeSinkOperator::prepare_local_state(RuntimeState* state) {
     _pass_through_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
             "PassThroughBufferPeakMemoryUsage", TUnit::BYTES,
             RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+    _shuffle_chunk_buffer_peak_mem_usage = _unique_metrics->AddHighWaterMarkCounter(
+            "ShuffleChunkBufferPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    _shuffle_chunk_buffer_num_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkBufferNum", TUnit::UNIT);
+    _peak_serialized_chunk_bytes = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakSerializedChunkBytes", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+    _shuffle_buffer_flush_counter = ADD_COUNTER(_unique_metrics, "ShuffleBufferFlushCount", TUnit::UNIT);
+    _shuffle_buffer_flush_rows_counter = ADD_COUNTER(_unique_metrics, "ShuffleBufferFlushRows", TUnit::UNIT);
+    _shuffle_buffer_release_counter = ADD_COUNTER(_unique_metrics, "ShuffleBufferReleasedChunks", TUnit::UNIT);
 
     for (auto& [_, channel] : _instance_id2channel) {
         RETURN_IF_ERROR(channel->init(state));
@@ -657,12 +806,53 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
                                                                           _row_indexes.data(), from, size, state));
             }
         }
+
+        const int64_t buffer_mem_limit = config::exchange_sink_buffer_flush_threshold_bytes;
+        if (_enable_shuffle_buffer_flush && buffer_mem_limit > 0 && _shuffle_buffered_bytes > buffer_mem_limit) {
+            RETURN_IF_ERROR(_flush_shuffle_buffers(state, buffer_mem_limit));
+        }
     }
     return Status::OK();
 }
 
+Status ExchangeSinkOperator::_flush_shuffle_buffers(RuntimeState* state, int64_t buffer_mem_limit) {
+    size_t num_rows = 0;
+    // Iterate the channels themselves rather than _channels: with bucket shuffle several destinations
+    // share one channel and it must be flushed once.
+    for (auto& [_, channel] : _instance_id2channel) {
+        RETURN_IF_ERROR(channel->flush_buffered_chunks(state, &num_rows));
+    }
+    COUNTER_UPDATE(_shuffle_buffer_flush_counter, 1);
+    COUNTER_UPDATE(_shuffle_buffer_flush_rows_counter, num_rows);
+
+    // Clearing the chunks only frees the memory referenced by their rows; their capacity is kept so the
+    // next rows do not reallocate. That is enough when out-of-line objects dominate. Only if the retained
+    // capacity is still above the low watermark, release chunks in order until it is not.
+    const int64_t low_watermark = buffer_mem_limit / 2;
+    int64_t num_released = 0;
+    for (auto& [_, channel] : _instance_id2channel) {
+        if (_shuffle_buffered_bytes <= low_watermark) {
+            break;
+        }
+        channel->release_buffered_chunks(low_watermark, &num_released);
+    }
+    COUNTER_UPDATE(_shuffle_buffer_release_counter, num_released);
+    return Status::OK();
+}
+
+#ifdef BE_TEST
+size_t ExchangeSinkOperator::num_buffered_shuffle_rows_for_testing() const {
+    size_t num_rows = 0;
+    for (const auto& [_, channel] : _instance_id2channel) {
+        num_rows += channel->num_buffered_rows();
+    }
+    return num_rows;
+}
+#endif
+
 void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
     std::vector<const Column*> partitions_columns;
+    partitions_columns.reserve(_partitions_columns.size());
     for (size_t i = 0; i < _partitions_columns.size(); i++) {
         partitions_columns.emplace_back(_partitions_columns[i].get());
     }
@@ -742,25 +932,34 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
     const size_t serialized_size = dst->uncompressed_size();
     COUNTER_UPDATE(_serialized_bytes_counter, serialized_size * num_receivers);
+    COUNTER_SET(_peak_serialized_chunk_bytes, static_cast<int64_t>(serialized_size));
 
-    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
-        return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
-                                                         _compress_codec->max_input_size()));
-    }
-
-    // try compress the ChunkPB data
     bool use_compression = true;
-    if (_compress_strategy) {
+    // TODO: Better split the large chunk to smaller size and then compress.
+    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
+        if (config::enable_rpc_compress_overflow_skip) {
+            LOG(WARNING) << "Serialized size " << serialized_size << " exceeds compression codec max input size "
+                         << _compress_codec->max_input_size() << ", skipping compression";
+            use_compression = false;
+        } else {
+            return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
+                                                             _compress_codec->max_input_size()));
+        }
+    } else if (_compress_strategy) {
+        // try compress the ChunkPB data
         use_compression = _compress_strategy->decide();
     }
-    if (_compress_codec != nullptr && serialized_size > 0 && use_compression) {
+
+    if (use_compression && _compress_codec != nullptr && serialized_size > 0) {
         ScopedTimer<MonotonicStopWatch> _timer(_compress_timer);
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, serialized_size, nullptr,
-                                                      &_compression_scratch));
+                                                      &_compression_scratch, compression_options));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(serialized_size);
 
@@ -771,7 +970,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, compression_options));
             _compression_scratch.resize(compressed_slice.size);
         }
         if (_compress_strategy) {
@@ -780,6 +979,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
                                          compression_time_ns);
         }
 
+        COUNTER_UPDATE(_compressed_input_bytes_counter, serialized_size * num_receivers);
         COUNTER_UPDATE(_compressed_bytes_counter, _compression_scratch.size() * num_receivers);
         double compress_ratio = (static_cast<double>(serialized_size)) / _compression_scratch.size();
         VLOG_ROW << "chunk compression: uncompressed size: " << serialized_size

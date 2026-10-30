@@ -46,6 +46,9 @@ public class PruneShuffleDistributionNodeRule implements TreeRewriteRule {
                 !GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().isSingleBackendAndComputeNode()) {
             return root;
         }
+        if (sv.isEnableQueryCache()) {
+            return root;
+        }
 
         return root.getOp().accept(VISITOR, root, null);
     }
@@ -111,7 +114,7 @@ public class PruneShuffleDistributionNodeRule implements TreeRewriteRule {
                 childOperator = childOptExpression.getOp();
             }
 
-            return childOperator instanceof PhysicalOlapScanOperator;
+            return childOperator instanceof PhysicalOlapScanOperator scan && !scan.isParallelRangeScan();
         }
 
     }

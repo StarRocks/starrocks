@@ -42,6 +42,8 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
@@ -49,9 +51,12 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.ReleaseAlterJobHistorySchemaLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -61,13 +66,15 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -122,9 +129,23 @@ public abstract class AlterJobV2 implements Writable {
     @SerializedName(value = "computeResource")
     protected ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
 
+    // Set to true when the job was force-cancelled by CANCEL ALTER TABLE ...
+    // FORCE while sitting in FINISHED_REWRITING with a publish-stuck commit.
+    // Persisted for post-mortem audit; pure marker, does not affect the
+    // cancel path itself.
+    @SerializedName(value = "forceSkippedAtCommitted")
+    protected boolean forceSkippedAtCommitted = false;
+
+    public boolean isForceSkippedAtCommitted() {
+        return forceSkippedAtCommitted;
+    }
+
     protected Span span;
 
     protected Future<Boolean> publishVersionFuture = null;
+
+    // Whether pruneMeta() has run on this in-memory job since it reached its final state. Not persisted.
+    private transient volatile boolean metaPruned;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -159,6 +180,14 @@ public abstract class AlterJobV2 implements Writable {
         this.timeoutMs = job.timeoutMs;
         this.warehouseId = job.warehouseId;
         this.computeResource = job.computeResource;
+        // FORCE-cancel audit marker. Must be persisted via copyForPersist so a
+        // replay can tell whether to apply the no-op publish version bump,
+        // otherwise FE recovering from a pre-cancel image leaves its
+        // VisibleVersion at commitVersion-1 while BE already has tablet_metadata
+        // at commitVersion (written by lakePublishVersionWithSkip), and
+        // subsequent loads' publish would re-apply the cancelled alter's
+        // txn_log on top of the wrong base.
+        this.forceSkippedAtCommitted = job.forceSkippedAtCommitted;
     }
 
     public long getJobId() {
@@ -201,6 +230,90 @@ public abstract class AlterJobV2 implements Writable {
         return isDone() && (System.currentTimeMillis() - finishedTimeMs) / 1000 > Config.history_job_keep_max_second;
     }
 
+    /**
+     * The pre-alter schemas this job retired from the catalog, kept resolvable so that a load which
+     * was already bound to one of them when the alter finished can still resolve it at publish time
+     * (see {@code TableSchemaService}). Empty for jobs that retire no schema.
+     */
+    public Optional<OlapTableHistorySchema> getHistorySchema() {
+        return Optional.empty();
+    }
+
+    /**
+     * Snapshot the current schemas of {@code indexMetaIds} as a history schema, tagged with a freshly
+     * allocated transaction id as its threshold.
+     * <p>
+     * The caller must already hold the table WRITE lock it is about to flip the catalog under, and must
+     * call this BEFORE {@code persistStateChange} so {@code copyForPersist} journals the result: a load
+     * can only be bound to a retired schema if it finished planning its sink (under the table READ lock)
+     * before that WRITE lock was taken, so every such transaction id is below the threshold.
+     */
+    protected static OlapTableHistorySchema buildHistorySchema(OlapTable table, Collection<Long> indexMetaIds) {
+        OlapTableHistorySchema.Builder builder = OlapTableHistorySchema.newBuilder();
+        for (long indexMetaId : indexMetaIds) {
+            MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(indexMetaId);
+            if (indexMeta == null) {
+                continue;
+            }
+            builder.addIndexSchema(new IndexSchemaInfo(indexMetaId, table.getIndexNameByMetaId(indexMetaId),
+                    SchemaInfo.fromMaterializedIndex(table, indexMetaId, indexMeta)));
+        }
+        builder.setHistoryTxnIdThreshold(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId());
+        return builder.build();
+    }
+
+    /**
+     * Shared expiry rule for {@link #getHistorySchema()}: the retired schemas must stay resolvable until
+     * every transaction that can still be bound to them has reached a terminal state, and are released
+     * (payload dropped) as soon as that holds and the job is done. The release is journaled, so it runs on
+     * the leader only and throws if the journal write fails. Returns whether the history schema holds
+     * nothing anymore, which is one of the two conditions for cleaning the job up.
+     */
+    protected boolean expireHistorySchema(OlapTableHistorySchema historySchema) {
+        if (historySchema == null || historySchema.isExpired()) {
+            return true;
+        }
+        // A job that holds a history schema but is not done has not durably finished: its FINISHED record is
+        // in flight or failed, and a CANCELLED record journaled after the release could still carry the payload
+        // and bring it back on followers. A done job is never journaled again.
+        if (!isDone()) {
+            return false;
+        }
+        boolean expired = true;
+        try {
+            GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            // isPreviousTransactionsFinished scans only DatabaseTransactionMgr.idToRunningTransactionState.
+            // A multi-statement Stream Load is missing from it while its first sub-task runs, yet that
+            // sub-task's sink is already bound to a schema id -- releasing the payload here would strand its
+            // publish exactly like StarRocksTest#12167. Hold the snapshot until it is registered too.
+            expired = txnMgr.isPreviousTransactionsFinished(historySchema.getHistoryTxnIdThreshold(), dbId,
+                            Lists.newArrayList(tableId))
+                    && !txnMgr.hasRunningExplicitTransactionBefore(historySchema.getHistoryTxnIdThreshold(), dbId);
+        } catch (Exception e) {
+            // As isPreviousTransactionsFinished said, exception happens only when db does not exist,
+            // so could clean the history schema safely
+        }
+        if (expired) {
+            // Journaled so that followers and checkpoint images drop the payload too.
+            ReleaseAlterJobHistorySchemaLog log = new ReleaseAlterJobHistorySchemaLog(jobId, dbId, tableId);
+            GlobalStateMgr.getCurrentState().getEditLog().logReleaseAlterJobHistorySchema(log,
+                    wal -> historySchema.setExpire());
+            LOG.info("Expire the history schema, jobId: {}, tableName: {}, expireTxnIdThreshold: {}",
+                    jobId, tableName, historySchema.getHistoryTxnIdThreshold());
+        }
+        return expired;
+    }
+
+    /**
+     * Whether this job's history schema holds nothing anymore: true when the job has no history schema,
+     * or when the job is done and no transaction that can still be bound to it is running. Idempotent, and
+     * releases the payload exactly like {@link #isExpire()} does, but without the age condition.
+     */
+    public boolean isHistorySchemaReleased() {
+        return expireHistorySchema(getHistorySchema().orElse(null));
+    }
+
     public boolean isDone() {
         return jobState.isFinalState();
     }
@@ -212,6 +325,46 @@ public abstract class AlterJobV2 implements Writable {
     public void setFinishedTimeMs(long finishedTimeMs) {
         this.finishedTimeMs = finishedTimeMs;
     }
+
+    /**
+     * Reset this job's in-memory state to its last durable (journaled) equivalent. Historically
+     * "FE restart or master changed" reloaded jobs from the image/journal, which implicitly
+     * discarded in-memory-only progress (the deliberately unlogged WAITING_TXN -&gt; RUNNING
+     * transitions) and leader-session transients (batch tasks, latches, futures). An in-place
+     * leader demote / re-elect cycle keeps the very same objects alive, so this hook performs
+     * that normalization explicitly. Invoked from AlterHandler.onStopped() during demotion
+     * (start() deliberately does not reset: the re-activation cleanliness gate guarantees the
+     * previous session's worker already ran onStopped before start() can run). Idempotent.
+     *
+     * Synchronized on the job: run() uses the same monitor, so a scheduling cycle cannot
+     * interleave with the reset. cancel()'s isCancelling flag and latch countDown are
+     * deliberately OUTSIDE the monitor, so a reset may clear a not-yet-processed user cancel;
+     * that matches a genuine restart (the flags are not persisted) and the user simply retries
+     * the CANCEL. Final states are left untouched. Must NOT write to the journal - it is
+     * already sealed when this runs.
+     */
+    public synchronized void resetToLastDurableState() {
+        if (jobState.isFinalState()) {
+            return;
+        }
+        if (publishVersionFuture != null) {
+            publishVersionFuture.cancel(false);
+            publishVersionFuture = null;
+        }
+        resetTransientState();
+    }
+
+    /**
+     * Subclass hook for {@link #resetToLastDurableState()}: map in-memory-only job states back
+     * to their last durable predecessor and recreate/clear leader-session transients (batch
+     * tasks, latches, flags, futures). Runs under the job monitor with the journal sealed.
+     *
+     * Abstract on purpose - an empty default let subclasses miss the hook silently (a job family
+     * whose rewrite re-runs after a leader handoff can DUPLICATE user data, see
+     * OnlineOptimizeJobV2). Every concrete job must state its reset explicitly; an intentionally
+     * empty implementation must say why in a comment.
+     */
+    protected abstract void resetTransientState();
 
     public void setComputeResource(ComputeResource computeResource) {
         this.computeResource = computeResource;
@@ -233,6 +386,17 @@ public abstract class AlterJobV2 implements Writable {
         return warehouseId;
     }
 
+    /**
+     * Whether this job tolerates partitions being created on the target table while
+     * the job is running. A job may return true only when it (a) never iterates the
+     * table's live partition list after its initial snapshot, (b) registers no
+     * table-level shadow meta before FINISHED, and (c) cancels without per-partition
+     * cleanup. Default false.
+     */
+    public boolean allowConcurrentPartitionCreation() {
+        return false;
+    }
+
     public abstract AlterJobV2 copyForPersist();
 
     protected void copyBaseFields(AlterJobV2 copy) {
@@ -248,6 +412,10 @@ public abstract class AlterJobV2 implements Writable {
         copy.timeoutMs = this.timeoutMs;
         copy.warehouseId = this.warehouseId;
         copy.computeResource = this.computeResource;
+        copy.forceSkippedAtCommitted = this.forceSkippedAtCommitted;
+        // NOTE: lake subclasses do NOT call this. Their copyForPersist() uses
+        // subclass copy constructors that chain through AlterJobV2(AlterJobV2)
+        // above. Keep these two in sync if you add new base fields.
     }
 
     public static void persistStateChange(AlterJobV2 job, JobState newState) {
@@ -290,45 +458,60 @@ public abstract class AlterJobV2 implements Writable {
             }
         }
 
-        // create connectcontext
-        createConnectContextIfNeeded();
-        // check & acquire resource
-        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         try {
-            this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
-        } catch (Exception e) {
-            LOG.warn("failed to acquire cn resource for job {}", jobId, e);
-            return;
-        }
-
-        try {
-            while (true) {
-                JobState prevState = jobState;
-                switch (prevState) {
-                    case PENDING:
-                        runPendingJob();
-                        break;
-                    case WAITING_TXN:
-                        runWaitingTxnJob();
-                        break;
-                    case RUNNING:
-                        runRunningJob();
-                        break;
-                    case FINISHED_REWRITING:
-                        runFinishedRewritingJob();
-                        finishHook();
-                        break;
-                    default:
-                        break;
-                }
-                if (jobState == prevState) {
-                    break;
-                } // else: handle the new state
+            // create connectcontext
+            createConnectContextIfNeeded();
+            // check & acquire resource
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+            try {
+                this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+            } catch (Exception e) {
+                LOG.warn("failed to acquire cn resource for job {}", jobId, e);
+                onComputeResourceUnavailable();
+                return;
             }
-        } catch (AlterCancelException e) {
-            cancelInternal(e.getMessage());
+
+            try {
+                while (true) {
+                    JobState prevState = jobState;
+                    switch (prevState) {
+                        case PENDING:
+                            runPendingJob();
+                            break;
+                        case WAITING_TXN:
+                            runWaitingTxnJob();
+                            break;
+                        case RUNNING:
+                            runRunningJob();
+                            break;
+                        case FINISHED_REWRITING:
+                            runFinishedRewritingJob();
+                            finishHook();
+                            break;
+                        default:
+                            break;
+                    }
+                    if (jobState == prevState) {
+                        break;
+                    } // else: handle the new state
+                }
+            } catch (AlterCancelException e) {
+                cancelInternal(e.getMessage());
+            }
+        } finally {
+            pruneIfDone();
         }
+    }
+
+    /**
+     * Hook for the round that {@link #run()} is about to skip because no compute resource could be
+     * acquired. No resource means no new work can be dispatched, but a phase that is merely waiting
+     * on work it already dispatched still owns a deadline, and enforcing that deadline must not
+     * depend on the warehouse being usable - otherwise the only remaining bound is the day-long
+     * alter_table_timeout_second. Default: nothing to do.
+     */
+    protected void onComputeResourceUnavailable() {
     }
 
     protected boolean cancelInternal(String errMsg) {
@@ -338,8 +521,73 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public boolean cancel(String errMsg) {
+        return cancel(errMsg, false);
+    }
+
+    /**
+     * Force-cancel entry point used by ADMIN SKIP COMMITTED TRANSACTION
+     * (phase 2). When {@code force=true}, subclasses that normally refuse
+     * to cancel in FINISHED_REWRITING (lake alter jobs whose publish is
+     * stuck) MUST bypass that guard and cancel anyway — that is the whole
+     * point of the operator-only escape hatch.
+     *
+     * <p>{@code cancel(String)} is now an alias for {@code cancel(errMsg, false)};
+     * subclasses that need pre-monitor work (release latches, signal cancelling)
+     * should override this two-arg form so both call sites share that work.
+     */
+    public boolean cancel(String errMsg, boolean force) {
         synchronized (this) {
-            return cancelInternal(errMsg);
+            // NOTE: do NOT set forceSkippedAtCommitted here. The marker drives
+            // the replay-time VisibleVersion bump, so it must be set ONLY when
+            // an actual no-op publish advanced the partition version on BE —
+            // which the lake subclasses do exclusively from the
+            // FINISHED_REWRITING force path inside cancelImpl(force=true),
+            // right before persistStateChange snapshots the job via
+            // copyForPersist. Setting it optimistically here would mark a
+            // force-cancelled PENDING/RUNNING job (no version reserved, no BE
+            // metadata written) and replay would then advance VisibleVersion
+            // to a version that was never published.
+            boolean cancelled = cancelImpl(errMsg, force);
+            cancelHook(cancelled);
+            return cancelled;
+        }
+    }
+
+    /**
+     * Shared FORCE-cancel version bump for all lake alter job types
+     * (heavy schema change, metadata alter, async fast schema change).
+     *
+     * <p>When a lake alter is force-cancelled out of {@code FINISHED_REWRITING},
+     * the no-op publish has already written tablet metadata at {@code commitVersion}
+     * on BE. FE must advance each affected partition's visible version to match so
+     * subsequent loads compute their publish base correctly. This single helper is
+     * used by BOTH the live cancel path and the replay CANCELLED branch of every
+     * subclass, so a leader FE and a replayed/restarted FE stay byte-for-byte
+     * identical (the whole point of the {@code forceSkippedAtCommitted} marker).
+     *
+     * <p>It bumps the visible version ONLY — it does not touch
+     * {@code metadataSwitchVersion} (a force-cancel discards the alter, so no
+     * format switch happened at {@code commitVersion}) — and uses a soft guard
+     * instead of a hard precondition, because it runs inside the edit-log applier
+     * after the CANCELLED entry is already journaled.
+     *
+     * @param commitVersionMap per-partition commit version reserved by the alter;
+     *                         passed in because each subclass owns its own field.
+     */
+    protected void advanceVisibleVersionForForceSkip(OlapTable table, Map<Long, Long> commitVersionMap) {
+        if (table == null || commitVersionMap == null) {
+            return;
+        }
+        for (Map.Entry<Long, Long> entry : commitVersionMap.entrySet()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(entry.getKey());
+            if (physicalPartition == null) {
+                continue;
+            }
+            long commitVersion = entry.getValue();
+            // Idempotent: a later load may already have advanced past commitVersion.
+            if (physicalPartition.getVisibleVersion() == commitVersion - 1) {
+                physicalPartition.setVisibleVersion(commitVersion, finishedTimeMs);
+            }
         }
     }
 
@@ -399,6 +647,16 @@ public abstract class AlterJobV2 implements Writable {
 
     protected abstract boolean cancelImpl(String errMsg);
 
+    /**
+     * Force-aware cancel hook. Subclasses with a FINISHED_REWRITING guard
+     * (lake alter jobs) override this to honor {@code force=true} and bypass
+     * the guard. Default behaviour matches the original {@link #cancelImpl(String)},
+     * so subclasses that don't need the escape hatch don't need any change.
+     */
+    protected boolean cancelImpl(String errMsg, boolean force) {
+        return cancelImpl(errMsg);
+    }
+
     protected abstract void getInfo(List<List<Comparable>> infos);
 
     public abstract void replay(AlterJobV2 replayedJob);
@@ -409,17 +667,25 @@ public abstract class AlterJobV2 implements Writable {
 
     protected boolean publishVersion() {
         if (publishVersionFuture == null) {
-            Callable<Boolean> task = () -> {
-                return lakePublishVersion();
-            };
-            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            ThreadPoolExecutor executor = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor();
+            try {
+                publishVersionFuture = executor.submit(this::lakePublishVersion);
+            } catch (RejectedExecutionException e) {
+                LOG.warn("failed to submit publish task for job: {}: activeCount={}, poolSize={}, maximumPoolSize={}",
+                        jobId, executor.getActiveCount(), executor.getPoolSize(), executor.getMaximumPoolSize(), e);
+                return false;
+            }
             LOG.info("submit publish task for job: {}", jobId);
             return false;
         } else {
             if (publishVersionFuture.isDone()) {
                 try {
                     return publishVersionFuture.get();
-                } catch (InterruptedException | ExecutionException e) {
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                } catch (ExecutionException e) {
+                    LOG.warn("failed to publish version for job: {}", jobId, e.getCause());
                     return false;
                 } finally {
                     publishVersionFuture = null;
@@ -439,6 +705,7 @@ public abstract class AlterJobV2 implements Writable {
         if (cancelled) {
             WarehouseIdleChecker.updateJobLastFinishTime(warehouseId,
                     "AlterJob: jobId[" + jobId + "], jobType[" + type + "]");
+            pruneIfDone();
         }
     }
 
@@ -456,6 +723,19 @@ public abstract class AlterJobV2 implements Writable {
         indexMeta.setViewDefineSql(orgIndexMeta.getViewDefineSql());
         indexMeta.setColocateMVIndex(orgIndexMeta.isColocateMVIndex());
         indexMeta.setDefineStmt(orgIndexMeta.getDefineStmt());
+        indexMeta.setDbId(orgIndexMeta.getDbId());
+        indexMeta.setSyncMvRequiredTxnId(orgIndexMeta.getSyncMvRequiredTxnId());
+        if (orgIndexMeta.getSyncMvDefinition() != null) {
+            indexMeta.setSyncMvDefinition(orgIndexMeta.getSyncMvDefinition().withSchema(indexMeta.getSchema()));
+            // New definitions must fail closed; legacy recovery below remains best effort.
+            try {
+                indexMeta.gsonPostProcess();
+            } catch (IOException e) {
+                throw new SemanticException("Failed to rebuild synchronous MV definition for index " +
+                        indexMeta.getIndexMetaId(), e);
+            }
+            return;
+        }
         if (indexMeta.getDefineStmt() != null) {
             try {
                 indexMeta.gsonPostProcess();
@@ -477,5 +757,32 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     public void pruneMeta() {
+    }
+
+    /**
+     * Calls {@link #pruneMeta()} once the job is done: a done job stays in memory only for SHOW ALTER until it
+     * expires. Skipped while the lake publish task may still read the pruned data; the alter handler retries
+     * on every scheduling round.
+     */
+    public void pruneIfDone() {
+        if (metaPruned) {
+            return;
+        }
+        synchronized (this) {
+            if (!metaPruned && jobState.isFinalState()
+                    && (publishVersionFuture == null || publishVersionFuture.isDone())) {
+                pruneMeta();
+                metaPruned = true;
+            }
+        }
+    }
+
+    /**
+     * Like {@link #pruneIfDone()}, but prunes again even if the job was pruned before: replaying a journal
+     * entry may copy the entry's data back into this job.
+     */
+    public synchronized void pruneAfterReplay() {
+        metaPruned = false;
+        pruneIfDone();
     }
 }

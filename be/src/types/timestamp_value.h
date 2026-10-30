@@ -18,6 +18,7 @@
 #include <cctz/time_zone.h>
 
 #include <chrono>
+#include <ostream>
 #include <string>
 
 #include "types/date_value.h"
@@ -130,6 +131,9 @@ public:
     bool from_unixtime(int64_t second, const std::string& timezone);
     void from_unixtime(int64_t second, const cctz::time_zone& ctz);
     void from_unixtime(int64_t second, int64_t microsecond, const cctz::time_zone& ctz);
+    // from_unixtime with the zone's offset at `second` already known (e.g. from a TzOffsetCache): the same value
+    // without a cctz conversion per call.
+    void from_unixtime_with_offset(int64_t second, int64_t microsecond, int64_t offset);
 
     void from_unix_second(int64_t second, int64_t microsecond = 0);
 

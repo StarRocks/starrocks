@@ -148,6 +148,9 @@ public class SPMAstCheckVisitor implements AstVisitorExtendInterface<Boolean, Pa
     @Override
     public Boolean visitCTE(CTERelation stmt, ParseNode context) {
         CTERelation other = cast(context);
+        if (stmt.getMaterializationHint() != other.getMaterializationHint()) {
+            return false;
+        }
         return check(stmt.getCteQueryStatement(), other.getCteQueryStatement());
     }
 

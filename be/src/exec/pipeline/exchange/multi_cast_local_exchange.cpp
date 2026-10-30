@@ -16,8 +16,9 @@
 
 #include <glog/logging.h>
 
+#include "base/logging.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
-#include "util/logging.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

@@ -74,15 +74,9 @@ public class ConnectorMgr {
     }
 
     public void removeConnector(String catalogName) {
-        readLock();
-        try {
-            Preconditions.checkState(connectors.containsKey(catalogName), "Connector of catalog '%s' doesn't exist", catalogName);
-        } finally {
-            readUnlock();
-        }
-
         writeLock();
         try {
+            Preconditions.checkState(connectors.containsKey(catalogName), "Connector of catalog '%s' doesn't exist", catalogName);
             CatalogConnector catalogConnector = connectors.remove(catalogName);
             catalogConnector.shutdown();
         } finally {

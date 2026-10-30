@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "テーブルのデータを指定された場所にエクスポートします。"
 ---
 
 # EXPORT

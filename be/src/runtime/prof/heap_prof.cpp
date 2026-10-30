@@ -21,52 +21,42 @@
 #include <mutex>
 
 #include "base/process/lite_exec.h"
-#include "common/config.h"
+#include "common/config_path_fwd.h"
 #include "fmt/format.h"
 #include "jemalloc/jemalloc.h"
 
 namespace starrocks {
 // detail implements for allocator
+#ifndef __APPLE__
 static int set_jemalloc_profiling(bool enable) {
-    int ret =
-#ifdef __APPLE__
-            mallctl
-#else
-            je_mallctl
-#endif
-            ("prof.active", nullptr, nullptr, &enable, 1);
-    ret |=
-#ifdef __APPLE__
-            mallctl
-#else
-            je_mallctl
-#endif
-            ("prof.thread_active_init", nullptr, nullptr, &enable, 1);
-    return ret;
+    // Only prof.active, which is also what `prof_active` in JEMALLOC_CONF maps to.
+    //
+    // prof.thread_active_init is deliberately left alone. It is not a second switch but the
+    // value copied into thread.prof.active when a thread is created, and it already defaults
+    // to true, so raising it here would change nothing -- except when an operator started the
+    // process with `prof_thread_active_init:false` to sample selected threads only, and
+    // overriding that is not ours to do. Lowering it is worse: a thread may only change its
+    // own thread.prof.active, so every thread created while the flag was down stays unsampled
+    // for the rest of its life, and re-enabling cannot repair it.
+    return je_mallctl("prof.active", nullptr, nullptr, &enable, sizeof(enable));
 }
 
-static int has_enable_heap_profile() {
-    int value = 0;
+static bool has_enable_heap_profile() {
+    // `prof.active` is a bool node, and je_mallctl() rejects a read whose length does not match
+    // the node's type: the ctl layer copies min(sizeof(bool), *oldlenp) bytes and returns EINVAL
+    // rather than filling the buffer. Reading it into an int with sizeof(int) therefore only
+    // happened to work because the int was zero initialized and the caller never looked at the
+    // return code -- checking the code without fixing the type would have made this always
+    // report false.
+    bool value = false;
     size_t size = sizeof(value);
-
-#ifdef __APPLE__
-    mallctl
-#else
-    je_mallctl
-#endif
-            ("prof.active", &value, &size, nullptr, 0);
-    return value;
+    return je_mallctl("prof.active", &value, &size, nullptr, 0) == 0 && value;
 }
+#endif
 
 bool dump_snapshot(const std::string& filename) {
     const char* fname = filename.c_str();
-    return (
-#ifdef __APPLE__
-                   mallctl
-#else
-                   je_mallctl
-#endif
-                   ("prof.dump", nullptr, nullptr, &fname, sizeof(const char*))) == 0;
+    return je_mallctl("prof.dump", nullptr, nullptr, &fname, sizeof(const char*)) == 0;
 }
 
 void HeapProf::enable_prof() {

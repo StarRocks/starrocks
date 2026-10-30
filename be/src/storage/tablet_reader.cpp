@@ -16,24 +16,27 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "column/chunk_factory.h"
 #include "column/column_access_path.h"
 #include "column/datum_convert.h"
+#include "column/flat_json/json_flat_path.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
-#include "primary_key_encoder.h"
-#include "storage/aggregate_iterator.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
 #include "storage/column_predicate_rewriter.h"
-#include "storage/conjunctive_predicates.h"
+#include "storage/delete_handler.h"
 #include "storage/delete_predicates.h"
-#include "storage/empty_iterator.h"
-#include "storage/merge_iterator.h"
+#include "storage/flat_json_metrics.h"
+#include "storage/json_path_deriver.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
 #include "storage/rowset/column_reader.h"
@@ -42,9 +45,15 @@
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
 #include "storage/types.h"
-#include "storage/union_iterator.h"
+#include "storage_primitive/aggregate_iterator.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/conjunctive_predicates.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/schema_helper.h"
+#include "storage_primitive/union_iterator.h"
 #include "types/logical_type.h"
-#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -146,13 +155,12 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
         return Status::OK();
     }
 
-    if (!read_params.column_access_paths->empty()) {
-        VLOG(3) << "Compaction flat json paths exists: " << read_params.column_access_paths->size();
-        return Status::OK();
+    // A vertical compaction reads its column groups in turn and keeps the paths derived by earlier groups in this
+    // list: derive the JSON columns of this read that have none yet, rather than only the first group's.
+    std::unordered_set<uint32_t> columns_with_path;
+    for (const auto& path : *read_params.column_access_paths) {
+        columns_with_path.insert(path->index());
     }
-
-    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
-           read_params.column_access_paths->empty());
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
         auto segments = rowset->segments();
@@ -160,14 +168,22 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
                       [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
     }
 
+    auto flat_json_config = _tablet->flat_json_config();
+    // Only a table that flattens JSON writes the output flat; otherwise inputs read flat are merged back.
+    const bool mixed_inputs =
+            config::enable_compaction_flat_json_mixed_inputs &&
+            (flat_json_config != nullptr ? flat_json_config->is_flat_json_enabled() : config::enable_json_flat);
+
     std::vector<const ColumnReader*> readers;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
         auto col_name = std::string(col.name());
-        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON ||
+            columns_with_path.contains(i)) {
             continue;
         }
         readers.clear();
+        int num_plain = 0;
         for (const auto& rowset : _rowsets) {
             for (const auto& segment : rowset->segments()) {
                 if (segment->num_rows() == 0) {
@@ -177,17 +193,26 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
                 if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
                     nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
                     readers.emplace_back(reader);
+                } else if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON) {
+                    num_plain++;
                 }
             }
         }
-        if (readers.size() == num_readers) {
-            // must all be flat json type
+        // Some inputs flat, the others whole JSON: a segment without the column reads as defaults that are
+        // never flat, so it is left to the whole-JSON path.
+        const bool mixed = !readers.empty() && readers.size() + num_plain == num_readers && num_plain > 0;
+        if (readers.size() == num_readers || (mixed && mixed_inputs)) {
             JsonPathDeriver deriver;
-            auto flat_json_config = _tablet->flat_json_config();
             deriver.init_flat_json_config(flat_json_config.get());
             deriver.derived(readers);
             auto paths = deriver.flat_paths();
             auto types = deriver.flat_types();
+            if (mixed && !paths.empty()) {
+                // A whole-JSON input may hold any value at any path; JSON keeps each as it is, and the value
+                // stats of the JSON sub-columns written let a later compaction type the paths by their values.
+                types.assign(types.size(), LogicalType::TYPE_JSON);
+                FlatJsonMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
+            }
 
             VLOG(3) << "Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
             ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, col_name, i));
@@ -206,11 +231,12 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     // get pk eq predicates, and convert these predicates to encoded pk column
     const auto& tablet_schema = _tablet_schema;
     vector<ColumnId> pk_column_ids;
+    pk_column_ids.reserve(tablet_schema->num_key_columns());
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.emplace_back(i);
     }
     auto pk_schema = ChunkHelper::convert_schema(tablet_schema, pk_column_ids);
-    auto keys = ChunkHelper::new_chunk(pk_schema, 1);
+    auto keys = ChunkFactory::new_chunk(pk_schema, 1);
     size_t num_pk_eq_predicates = 0;
 
     PredicateAndNode pushdown_pred_root;
@@ -371,6 +397,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.sample_options = params.sample_options;
     rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
     rs_opts.enable_predicate_col_late_materialize = params.enable_predicate_col_late_materialize;
+    rs_opts.has_predicate_above_iterator = params.has_predicate_above_iterator;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -395,6 +422,11 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
+        }
+
+        auto rowset_id = rowset->rowset_meta()->rowset_id();
+        if (params.rowset_id_to_drssid != nullptr && params.rowset_id_to_drssid->contains(rowset_id)) {
+            rs_opts.dynamic_rss_id_base = params.rowset_id_to_drssid->at(rowset_id);
         }
 
         RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, iters));
@@ -588,8 +620,7 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
                 LOG(WARNING) << "invalid delete condition: " << pred_pb.sub_predicates(i) << "]";
                 return Status::InternalError("invalid delete condition string");
             }
-            if (_tablet_schema->field_index(cond.column_name) >= _tablet_schema->num_key_columns() &&
-                _tablet_schema->keys_type() != DUP_KEYS) {
+            if (!DeleteHandler::is_delete_condition_evaluated(*_tablet_schema, cond.column_name)) {
                 LOG(WARNING) << "ignore delete condition of non-key column: " << pred_pb.sub_predicates(i);
                 continue;
             }
@@ -630,6 +661,13 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
 // convert an OlapTuple to SeekTuple.
 Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                     MemPool* mempool) {
+    const TypeInfoAllocator* allocator = nullptr;
+    TypeInfoAllocator type_info_allocator;
+    if (mempool != nullptr) {
+        type_info_allocator = make_type_info_allocator(mempool);
+        allocator = &type_info_allocator;
+    }
+
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
@@ -643,7 +681,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
     }
     for (size_t i = 0; i < input.size(); i++) {
         int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
+        auto f = std::make_shared<Field>(StorageSchemaHelper::convert_field(idx, tablet_schema->column(idx)));
         schema.append(f);
         values.emplace_back();
         if (input.is_null(i)) {
@@ -653,10 +691,10 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == TYPE_CHAR) {
-            RETURN_IF_ERROR(
-                    datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(get_type_info(TYPE_VARCHAR).get(), &values.back(), input.get_value(i),
+                                              allocator));
         } else {
-            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));
+            RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), allocator));
         }
     }
     *tuple = SeekTuple(std::move(schema), std::move(values));

@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 1
+sidebar_position: 20
 description: "存算一体"
 ---
 import DDL from '../_assets/quick-start/_DDL.mdx'

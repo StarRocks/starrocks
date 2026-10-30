@@ -21,6 +21,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
@@ -130,8 +131,7 @@ public class ScalarOperatorToExpr {
         private final Map<ColumnRefOperator, ScalarOperator> projectOperatorMap;
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef) {
-            this.colRefToExpr = variableToSlotRef;
-            this.projectOperatorMap = new HashMap<>();
+            this(variableToSlotRef, new HashMap<>());
         }
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef,
@@ -162,6 +162,26 @@ public class ScalarOperatorToExpr {
             }
         }
 
+        private static void syncVarcharExprType(Type rewrittenType, Expr expr) {
+            expr.setType(rewrittenType);
+            expr.setOriginType(rewrittenType.clone());
+            if (expr instanceof SlotRef) {
+                SlotDescriptor desc = ((SlotRef) expr).getSlotDescriptorWithoutCheck();
+                if (desc != null) {
+                    desc.setOriginType(rewrittenType.clone());
+                }
+            }
+        }
+
+        private static boolean needSyncVarcharExprType(ColumnRefOperator node, Expr expr) {
+            if (!node.getType().isVarchar() || !expr.getType().isVarchar()) {
+                return false;
+            }
+            if (node.getType().toSql().equalsIgnoreCase(expr.getType().toSql())) {
+                return false;
+            }
+            return GlobalVariable.isEnableReduceCastVarcharExprSyncType();
+        }
         @Override
         public Expr visit(ScalarOperator scalarOperator, FormatterContext context) {
             throw new UnsupportedOperationException(
@@ -187,6 +207,9 @@ public class ScalarOperatorToExpr {
                         "please check the input expression: " + node);
             }
 
+            if (needSyncVarcharExprType(node, expr)) {
+                syncVarcharExprType(node.getType().clone(), expr);
+            }
             hackTypeNull(expr);
             return expr;
         }
@@ -530,7 +553,17 @@ public class ScalarOperatorToExpr {
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;
                 default:
-                    List<Expr> arg = call.getChildren().stream()
+                    Preconditions.checkNotNull(call.getFunction());
+                    List<ScalarOperator> semanticChildren = call.getChildren();
+                    if (call.getFunction().isAI()) {
+                        Preconditions.checkState(!call.getFunction().hasVarArgs(),
+                                "AI functions must have fixed semantic arity");
+                        int semanticArity = call.getFunction().getNumArgs();
+                        Preconditions.checkState(call.getChildren().size() == semanticArity + 1,
+                                "AI call must contain exactly one optimizer-only occurrence child");
+                        semanticChildren = call.getChildren().subList(0, semanticArity);
+                    }
+                    List<Expr> arg = semanticChildren.stream()
                             .map(expr -> buildExpr.build(expr, context))
                             .collect(Collectors.toList());
                     if (call.isCountStar()) {
@@ -538,7 +571,6 @@ public class ScalarOperatorToExpr {
                     } else {
                         callExpr = new FunctionCallExpr(call.getFnName(), new FunctionParams(call.isDistinct(), arg));
                     }
-                    Preconditions.checkNotNull(call.getFunction());
                     ((FunctionCallExpr) callExpr).setFn(call.getFunction());
                     callExpr.setIgnoreNulls(call.getIgnoreNulls());
                     break;

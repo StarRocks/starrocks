@@ -1,0 +1,80 @@
+-- name: test_lake_add_index_interleaved @cloud
+create database lake_idx_iv_${uuid0};
+-- result:
+-- !result
+use lake_idx_iv_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 int,
+    v1 int,
+    v2 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+-- result:
+-- !result
+insert into t1 values (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry'),
+                     (4, 10, 'apple'), (5, 20, 'banana');
+-- result:
+-- !result
+ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t1 where v1 = 10;
+-- result:
+2
+-- !result
+select count(*) from t1 where v1 = 20;
+-- result:
+2
+-- !result
+ALTER TABLE t1 ADD INDEX idx_v2(v2) USING BITMAP;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t1 where v2 = 'apple';
+-- result:
+2
+-- !result
+select count(*) from t1 where v2 = 'banana';
+-- result:
+2
+-- !result
+select * from t1 where v1 = 10 and v2 = 'apple' order by k1;
+-- result:
+1	10	apple
+4	10	apple
+-- !result
+drop index idx_v1 on t1;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select count(*) from t1 where v1 = 10;
+-- result:
+2
+-- !result
+select count(*) from t1 where v2 = 'apple';
+-- result:
+2
+-- !result
+select * from t1 order by k1;
+-- result:
+1	10	apple
+2	20	banana
+3	30	cherry
+4	10	apple
+5	20	banana
+-- !result
+drop database lake_idx_iv_${uuid0};
+-- result:
+-- !result

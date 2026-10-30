@@ -145,7 +145,8 @@ bool TimestampValue::from_date_format_str(const char* value, int value_len, cons
     uint8_t month = month1 * 10 + month2;
     uint8_t day = day1 * 10 + day2;
 
-    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year)))) {
+    if (month == 0 || day == 0 || month > 12 ||
+        (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year)))) {
         return false;
     }
 
@@ -193,8 +194,9 @@ bool TimestampValue::from_datetime_format_str(const char* value, int value_len, 
     uint8_t minute = minute1 * 10 + minute2;
     uint8_t second = second1 * 10 + second2;
 
-    if (month > 12 || (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year))) ||
-        hour > 23 || minute > 59 || second > 59) {
+    if (month == 0 || day == 0 || month > 12 ||
+        (day > s_days_in_month[month] && (month != 2 || day != 29 || !date::is_leap(year))) || hour > 23 ||
+        minute > 59 || second > 59) {
         return false;
     }
 
@@ -402,7 +404,7 @@ bool TimestampValue::from_uncommon_format_str(const char* format, int format_len
     bool result = from_uncommon_format_str(format, format_len, value, value_len, &content, nullptr);
     if (result) {
         _timestamp = timestamp::from_datetime(content._year, content._month, content._day, content._hour,
-                                              content._minute, content._second, 0);
+                                              content._minute, content._second, content._microsecond);
     }
     return result;
 }
@@ -882,6 +884,17 @@ void TimestampValue::from_unixtime(int64_t second, int64_t microsecond, const cc
     from_unixtime(second, ctz);
     _timestamp += microsecond;
     return;
+}
+
+void TimestampValue::from_unixtime_with_offset(int64_t second, int64_t microsecond, int64_t offset) {
+    // Near or outside years 1..9999 (time zone offsets stay within a day), keep cctz's calendar as from_unixtime does.
+    if (UNLIKELY(second < timestamp::MIN_CIVIL_UNIX_SECOND + 2 * SECS_PER_DAY ||
+                 second > timestamp::MAX_CIVIL_UNIX_SECOND - 2 * SECS_PER_DAY)) {
+        from_unixtime(second, microsecond, cctz::fixed_time_zone(cctz::seconds(offset)));
+        return;
+    }
+    from_unix_second(second + offset);
+    _timestamp += microsecond;
 }
 
 void TimestampValue::from_unix_second(int64_t second, int64_t microsecond) {

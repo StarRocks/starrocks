@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the average value of selected fields."
 ---
 
 # avg

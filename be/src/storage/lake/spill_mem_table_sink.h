@@ -15,7 +15,9 @@
 #pragma once
 
 #include "common/runtime_profile.h"
-#include "storage/load_chunk_spiller.h"
+#include "compute_env/load_spill/load_chunk_spiller.h"
+#include "runtime/mem_tracker.h"
+#include "storage/lake/load_spill_pipeline_merge_context.h"
 #include "storage/memtable_sink.h"
 
 namespace starrocks {
@@ -23,8 +25,6 @@ namespace starrocks {
 class RuntimeState;
 class LoadSpillBlockManager;
 class ThreadPoolToken;
-class LoadSpillPipelineMergeContext;
-
 namespace lake {
 
 class TabletWriter;
@@ -34,7 +34,11 @@ class TabletWriter;
 // The slot_idx parameter is used to track the original flush order for correct merging.
 class SpillMemTableSink : public MemTableSink {
 public:
-    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
+    // @param keep_op_column: the EFFECTIVE preserve-order snapshot (pk_preserve_txn_delete_order_enabled)
+    // taken once by the DeltaWriter for the whole load, so the __op-keeping decision cannot change
+    // mid-load (see keep_op_column()).
+    SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile,
+                      bool keep_op_column);
     ~SpillMemTableSink() override;
 
     // Spill chunk to temporary storage or write directly if eos and no prior spills
@@ -48,6 +52,21 @@ public:
                                     starrocks::SegmentPB* segment = nullptr, bool eos = false,
                                     int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
 
+    // Whether the spill sink keeps the __op column (drives the op-aware merge that resolves upsert/delete
+    // order by slot). Returns the EFFECTIVE preserve-order snapshot (_keep_op_column): the config, OR the
+    // separate-sort-key load-spill path, which MUST use the op-aware path -- its unsort SST writer
+    // resolves a delete-then-reinsert of the same key by flush order, whereas the legacy
+    // _split_upserts_deletes path would drop the re-inserted row. When false (the common sort-key==PK
+    // path with preserve off), the memtable takes the legacy path (deletes split into a del file applied
+    // after all segments), keeping behavior/del-file layout/merge-condition rejection identical to before
+    // this feature. The snapshot is taken once by the DeltaWriter so the decision is stable for the whole
+    // load even if the mutable configs are flipped mid-load.
+    bool keep_op_column() const override;
+
+    // Spill a chunk that still carries the trailing __op column (see keep_op_column()).
+    Status flush_chunk_with_op(const Chunk& chunk_with_op, starrocks::SegmentPB* segment = nullptr, bool eos = false,
+                               int64_t* flush_data_size = nullptr, int64_t slot_idx = -1) override;
+
     Status merge_blocks_to_segments();
 
     spill::Spiller* get_spiller() { return _load_chunk_spiller->spiller().get(); }
@@ -56,7 +75,20 @@ public:
     int64_t tablet_id() override;
 
 private:
+    // Spill a chunk and, if the spill threshold is reached, kick off an eager merge task. Shared by
+    // flush_chunk() (after the single-flush shortcut) and flush_chunk_with_op().
+    Status _spill_and_maybe_eager_merge(const Chunk& chunk, int64_t slot_idx, int64_t* flush_data_size);
+
     TabletWriter* _writer;
+
+    // Per-load snapshot of the effective preserve-order decision (see keep_op_column()).
+    const bool _keep_op_column;
+
+    // Set once when flush_chunk_with_op() is first called, i.e. the memtable actually kept a hidden __op
+    // column (PK load with an op slot + _keep_op_column). This is the authoritative op-aware signal
+    // forwarded to the merge tasks -- distinct from _keep_op_column, which is true for any load while the
+    // config is on (including non-PK loads that never produce a hidden __op).
+    bool _op_aware = false;
 
     // Memory tracker for merge operations, parent is compaction tracker.
     // RATIONALE: Merge phase uses separate memory budget from normal load operations

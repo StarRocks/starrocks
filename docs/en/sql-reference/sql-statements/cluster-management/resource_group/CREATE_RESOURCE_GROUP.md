@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE RESOURCE GROUP creates a resource group."
 ---
 
 # CREATE RESOURCE GROUP

@@ -60,6 +60,8 @@ public enum ErrorCode {
             "Illegal column/field reference '%s' of semi-/anti-join"),
     ERR_BAD_FUNC_ERROR(1055, new byte[] {'4', '2', '0', '0', '0'}, "Unknown function '%s'"),
     ERR_WRONG_VALUE_COUNT(1058, new byte[] {'2', '1', 'S', '0', '1'}, "Column count doesn't match value count"),
+    ERR_TOO_LONG_IDENT(1059, new byte[] {'4', '2', '0', '0', '0'},
+            "Identifier name '%s' is too long, the maximum length is %s"),
     ERR_DUP_FIELDNAME(1060, new byte[] {'4', '2', 'S', '2', '1'}, "Duplicate column name '%s'"),
     ERR_NONUNIQ_TABLE(1066, new byte[] {'4', '2', '0', '0', '0'}, "Not unique table/alias: '%s'"),
     ERR_NO_SUCH_THREAD(1094, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown thread id: %d"),
@@ -172,6 +174,9 @@ public enum ErrorCode {
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate tables distribution columns must have the same data type with group %s," +
                     " current col: %s, should be: %s, current info %s"),
+    ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
+            "Colocate tables must have the same distribution type with group %s," +
+                    " expected: %s, actual: %s"),
     ERR_COLOCATE_NOT_COLOCATE_TABLE(5064, new byte[] {'4', '2', '0', '0', '0'},
             "Table %s is not a colocated table"),
     ERROR_DYNAMIC_PARTITION_TIME_UNIT(5065, new byte[] {'4', '2', '0', '0', '0'},
@@ -258,11 +263,15 @@ public enum ErrorCode {
     ERR_SECURE_TRANSPORT_REQUIRED(5205, new byte[] {'H', 'Y', '0', '0', '0'},
             "Connections using insecure transport are prohibited"),
     ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
+            "Access denied; User %s's group[%s] does not overlap with permitted_groups[%s]"),
     ERR_OAUTH2_NOT_AUTHENTICATED(5207, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; Need to access the URL [%s] to complete the OAuth2 authentication operation"),
     ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN(5208, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; No authentication was successful in the authentication chain : [%s]"),
+    ERR_AMBIGUOUS_LDAP_USER(5209, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; User %s matches more than one LDAP user when ignoring case. " +
+                    "The conflicting user names are in the FE log; an administrator must remove all " +
+                    "but one of them, or set authentication_ldap_case_insensitive = false"),
 
     /**
      * 5300 - 5399: Lock and Transaction
@@ -275,11 +284,13 @@ public enum ErrorCode {
     ERR_TXN_FORBID_CROSS_DB(5304, new byte[] {'2', '5', 'P', '0', '1'},
             "Cannot execute cross-database transactions. All DML target tables must belong to the same db"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT(5305, new byte[] {'2', '5', 'P', '0', '1'},
-            "Explicit transaction only support begin/commit/rollback/insert/update/delete/set/select statements"),
+            "Explicit transaction only support begin/commit/rollback/insert/update/delete/set/select/show statements"),
     ERR_EXPLICIT_TXN_NOT_SUPPORT_STMT_ORDER(5306, new byte[] {'2', '5', 'P', '0', '1'},
             "Explicit transaction only support single update/delete before insert statement"),
     ERR_EXPLICIT_TXN_SELECT_ON_MODIFIED_TABLE(5307, new byte[] {'2', '5', 'P', '0', '1'},
             "SELECT cannot read table '%s' modified earlier in the same transaction"),
+    ERR_EXPLICIT_TXN_PARTIAL_UPDATE_ON_MODIFIED_TABLE(5308, new byte[] {'2', '5', 'P', '0', '1'},
+            "Partial update cannot be applied to table '%s' modified earlier in the same transaction"),
 
     /**
      * 5400 - 5499: Internal error
@@ -367,6 +378,9 @@ public enum ErrorCode {
 
     ERR_MULTI_PARTITION_STEP_LQ_ZERO(5703, new byte[] {'4', '2', '0', '0', '0'},
             "The interval of the Multi-Range Partition must be greater than 0"),
+
+    ERR_GET_PARTITION_ACCESS_TIME(5704, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Failed to get partition access time: %s"),
 
     /**
      * 5800 - 5899: Pipe

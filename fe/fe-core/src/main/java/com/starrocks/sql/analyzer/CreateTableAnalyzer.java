@@ -105,15 +105,21 @@ public class CreateTableAnalyzer {
         final String tableName = tableRef.getTableName();
         FeNameFormat.checkTableName(tableName);
 
-        Database dbObj = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
+        // A CTAS into an external catalog had both answers fetched before the meta lock; see
+        // QueryAnalyzer#analyzeExternalTablesOnly. Anything else, or a miss, asks the catalog here.
+        PreResolvedState.CreateTarget preResolved = context.getPreResolvedState().take(
+                PreResolvedState.CREATE_TARGET, com.starrocks.catalog.TableName.fromTableRef(tableRef));
+        Database dbObj = preResolved != null ? preResolved.db()
+                : GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, db);
         if (dbObj == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, db);
         }
         if (statement instanceof CreateTemporaryTableStmt) {
             analyzeTemporaryTable(statement, context, catalogName, dbObj, tableName);
         } else {
-            if (GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .tableExists(context, catalogName, db, tableName) && !statement.isSetIfNotExists()) {
+            boolean tableExists = preResolved != null ? preResolved.tableExists()
+                    : GlobalStateMgr.getCurrentState().getMetadataMgr().tableExists(context, catalogName, db, tableName);
+            if (tableExists && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
@@ -494,12 +500,23 @@ public class CreateTableAnalyzer {
                 }
 
                 if (keysType == KeysType.PRIMARY_KEYS && !keyColIdxes.equals(sortKeyIdxes)) {
-                    throw new SemanticException("The sort columns must be same with primary key columns " +
-                                                "and the order must be consistent");
+                    Map<String, String> properties = stmt.getProperties();
+                    boolean fileBundling = properties == null ? Config.enable_file_bundling
+                            : Boolean.parseBoolean(properties.getOrDefault(
+                                    PropertyAnalyzer.PROPERTIES_FILE_BUNDLING,
+                                    Boolean.toString(Config.enable_file_bundling)));
+                    if (!fileBundling) {
+                        throw new SemanticException("Range-distributed primary key tables with ORDER BY different "
+                                + "from the primary key require file_bundling=true");
+                    }
                 } else if (keysType != KeysType.PRIMARY_KEYS &&
                                 !new HashSet<>(keyColIdxes).equals(new HashSet<>(sortKeyIdxes))) {
                     throw new SemanticException("The sort columns must be same with key columns");
                 }
+            } else {
+                // A range-distributed duplicate key table's sort key defines the tablet range
+                // boundaries; every sort key column type must be encodable as a key on the BE.
+                checkSortKeyTypesEncodable(orderByElements, columnDefs, columnNames);
             }
         } else {
             // we should check sort key column type if table is primary key table
@@ -523,7 +540,9 @@ public class CreateTableAnalyzer {
                     }
                 }
             } else if (keysType == KeysType.DUP_KEYS) {
-                // sort key column of duplicate table has no limitation
+                // A duplicate key table's sort key columns are encoded on the BE (short-key index)
+                // regardless of distribution, so their types must be BE-encodable here too.
+                checkSortKeyTypesEncodable(orderByElements, columnDefs, columnNames);
             } else if (keysType == KeysType.AGG_KEYS || keysType == KeysType.UNIQUE_KEYS) {
                 List<Integer> sortKeyIdxes = Lists.newArrayList();
                 for (OrderByElement orderByElement : orderByElements) {
@@ -558,6 +577,39 @@ public class CreateTableAnalyzer {
                 }
             } else {
                 throw new SemanticException("Table type:" + keysType.toSql() + " does not support sort key column");
+            }
+        }
+    }
+
+    // Reject sort key (ORDER BY) columns whose type the BE cannot encode as a key. Sort key columns
+    // are written into the short-key index via an order-preserving KeyCoder; a type without a key
+    // coder (JSON, complex, floating-point, metric, variant, and TIME) would crash the BE encoder,
+    // so fail cleanly at CREATE TABLE instead. Column resolution is case-insensitive to match
+    // OlapTableFactory.
+    private static void checkSortKeyTypesEncodable(List<OrderByElement> orderByElements,
+                                                   List<ColumnDef> columnDefs, List<String> columnNames) {
+        for (OrderByElement orderByElement : orderByElements) {
+            Expr expr = orderByElement.getExpr();
+            String column = expr instanceof SlotRef ? ((SlotRef) expr).getColumnName() : null;
+            if (column == null) {
+                throw new SemanticException("Unknown column '%s' in order by clause",
+                        ExprToSql.toSql(orderByElement.getExpr()));
+            }
+            int idx = -1;
+            for (int i = 0; i < columnNames.size(); i++) {
+                if (columnNames.get(i).equalsIgnoreCase(column)) {
+                    idx = i;
+                    break;
+                }
+            }
+            if (idx == -1) {
+                throw new SemanticException("Column '%s' does not exist", column);
+            }
+            ColumnDef cd = columnDefs.get(idx);
+            Type t = cd.getType();
+            if (!t.canDistributedBy()) {
+                throw new SemanticException(
+                        "Sort key column[" + cd.getName() + "] type not supported: " + t.toSql());
             }
         }
     }
@@ -644,7 +696,8 @@ public class CreateTableAnalyzer {
                         partitionDesc instanceof SingleItemListPartitionDesc ||
                         partitionDesc instanceof SingleRangePartitionDesc) {
                     try {
-                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties());
+                        PartitionDescAnalyzer.analyze(partitionDesc, stmt.getColumnDefs(), stmt.getProperties(),
+                                stmt.getKeysDesc().getKeysType());
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
@@ -693,10 +746,7 @@ public class CreateTableAnalyzer {
             Map<String, String> properties = stmt.getProperties();
             KeysDesc keysDesc = Preconditions.checkNotNull(stmt.getKeysDesc());
 
-            boolean enableRangeDistribution = Config.enable_range_distribution;
-            if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableRangeDistribution()) {
-                enableRangeDistribution = true;
-            }
+            boolean enableRangeDistribution = AnalyzerUtils.isEnableRangeDistribution(ConnectContext.get());
 
             if (enableRangeDistribution) {
                 if (distributionDesc == null) {
@@ -851,6 +901,8 @@ public class CreateTableAnalyzer {
                         new RelationFields(columns.stream().map(col -> new Field(
                                         col.getName(), col.getType(), tableNameObject, null))
                                 .collect(Collectors.toList()))), context);
+                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                        expr, AIFunctionUsageAnalyzer.PlacementContext.GENERATED_COLUMN_EXPRESSION);
 
                 // check if contain aggregation
                 List<FunctionCallExpr> funcs = Lists.newArrayList();

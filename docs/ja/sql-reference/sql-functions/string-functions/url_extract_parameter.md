@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "URLのクエリ文字列から指定パラメータの値を抽出します。"
 ---
 
 # url_extract_parameter

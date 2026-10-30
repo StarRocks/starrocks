@@ -16,7 +16,7 @@
 
 #include "base/concurrency/await.h"
 #include "cache/datacache_utils.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
 #include "common/statusor.h"
 #include "common/thread/thread.h"
 
@@ -272,7 +272,7 @@ void DiskSpaceMonitor::start() {
     }
     _stopped.store(false, std::memory_order_release);
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
-    Thread::set_thread_name(_adjust_datacache_thread, "adjust_disk_cache");
+    Thread::set_thread_name(_adjust_datacache_thread, "adj_disk_cache");
 }
 
 void DiskSpaceMonitor::stop() {

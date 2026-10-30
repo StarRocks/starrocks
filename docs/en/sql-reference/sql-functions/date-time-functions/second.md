@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the second part for a given date."
 ---
 
 # second

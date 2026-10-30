@@ -1,0 +1,63 @@
+-- name: test_range_orderby_split @cloud @sequential
+-- SQL integration: splitting a range-distributed PRIMARY KEY table whose ORDER BY differs
+-- from the primary key. Such a split cannot range-filter the parent's shared segments, so
+-- every child is rewritten wholesale by an UNSHARE compaction while reads keep being served
+-- from the parent. Data must be intact throughout, and writes must land on the children
+-- afterwards.
+--
+-- [UC] on the split statement only avoids asserting on its uuid-bearing message; that the
+-- fan-out really happened is asserted separately, on the partition's bucket count.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(256) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+
+-- v1 descends as the primary key ascends, so the sort order is the reverse of the routing
+-- order -- exactly the layout a split has to keep straight. The md5 padding resists
+-- compression, so the tablet really does reach the split threshold.
+insert into t
+select x, x % 7, 100000 - x, repeat(md5(cast(x as varchar)), 6)
+from table(generate_series(1, 20000)) as g(x);
+
+select count(*), sum(v1), min(v1), max(v1) from t;
+
+[UC]alter table t split tablet properties('tablet_reshard_target_size' = '1024');
+
+-- Wait out the split job -- including the UNSHARE rewrite it schedules -- so the reads below
+-- land on the children rather than the parent.
+shell: n=1; for i in $(seq 1 55); do n=$(${mysql_cmd} -Ne "select count(1) from information_schema.tablet_reshard_jobs where db_name='db_${uuid0}' and job_state not in ('FINISHED','ABORTED')" 2>/dev/null); [ "$n" = "0" ] && break; sleep 2; done; echo "pending=$n"
+
+-- The parent tablet was over the 1KB target, so the split really did fan out (the fan-out
+-- itself is clamped by tablet_reshard_orderby_max_split_count, so only "more than one" is
+-- asserted here).
+select buckets > 1 as did_split from information_schema.partitions_meta
+    where db_name = 'db_${uuid0}' and table_name = 't';
+
+select count(*), sum(v1), min(v1), max(v1) from t;
+
+-- Primary key point lookup, and a predicate on the sort key.
+select k1, k2, v1 from t where k1 = 12345 and k2 = 12345 % 7;
+select count(*) from t where v1 > 99000;
+select count(*) from t where v1 between 90000 and 90009;
+
+-- Writes after the split: a new row, an upsert of an existing primary key, and a delete.
+insert into t values (999999, 1, 1, 'tail');
+select count(*) from t;
+select k1, k2, v1, v2 from t where k1 = 999999;
+insert into t values (12345, 12345 % 7, 42, 'moved');
+select k1, k2, v1, v2 from t where k1 = 12345;
+delete from t where k1 = 999999;
+select count(*) from t;
+select count(*) from t where v1 = 42;
+
+drop database db_${uuid0} force;

@@ -17,7 +17,7 @@ package com.starrocks.healthchecker;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class SafeModeChecker extends FrontendDaemon {
+public class SafeModeChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(SafeModeChecker.class);
 
     public SafeModeChecker() {
@@ -33,7 +33,7 @@ public class SafeModeChecker extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() {
         // update interval
         if (getInterval() != Config.safe_mode_checker_interval_sec * 1000) {
             setInterval(Config.safe_mode_checker_interval_sec * 1000);

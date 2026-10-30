@@ -1,0 +1,5 @@
+extends: script
+message: "Frontmatter is missing a required 'description' field. Add a one-sentence plain-text summary: description: \"Brief summary under 160 characters.\""
+level: error
+scope: raw
+script: FrontmatterDescription.tengo

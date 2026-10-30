@@ -19,6 +19,7 @@
 #include <libdivide.h>
 
 #include <algorithm>
+#include <memory>
 #include <string_view>
 #include <unordered_map>
 
@@ -178,6 +179,101 @@ Status TimeFunctions::convert_tz_close(FunctionContext* context, FunctionContext
     return Status::OK();
 }
 
+namespace {
+
+cctz::time_zone get_iceberg_timestamptz_session_timezone(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        return context->state()->timezone_obj();
+    }
+    return cctz::utc_time_zone();
+}
+
+bool should_use_iceberg_timestamptz_utc_fast_path(const cctz::time_zone& timezone) {
+    return timezone == cctz::utc_time_zone();
+}
+
+bool normalize_iceberg_timestamptz_to_utc(FunctionContext* context, const TimestampValue& timestamp,
+                                          TimestampValue* normalized_timestamp) {
+    int year, month, day, hour, minute, second, usec;
+    timestamp.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+    DateTimeValue datetime(TIME_DATETIME, year, month, day, hour, minute, second, usec);
+
+    int64_t unix_second;
+    if (!datetime.unix_timestamp(&unix_second, get_iceberg_timestamptz_session_timezone(context))) {
+        return false;
+    }
+
+    normalized_timestamp->from_unixtime(unix_second, usec, cctz::utc_time_zone());
+    return true;
+}
+
+int64_t floor_div_microseconds(int64_t micros, int64_t unit_micros) {
+    int64_t quotient = micros / unit_micros;
+    int64_t remainder = micros % unit_micros;
+    if (remainder != 0 && ((remainder < 0) != (unit_micros < 0))) {
+        --quotient;
+    }
+    return quotient;
+}
+
+int64_t iceberg_microseconds_since_epoch(const TimestampValue& timestamp) {
+    return timestamp.diff_microsecond(TimeFunctions::unix_epoch);
+}
+
+int64_t iceberg_days_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_DAY);
+}
+
+int64_t iceberg_hours_since_epoch(const TimestampValue& timestamp) {
+    return floor_div_microseconds(iceberg_microseconds_since_epoch(timestamp), USECS_PER_HOUR);
+}
+
+template <typename TransformFn>
+StatusOr<ColumnPtr> evaluate_iceberg_timestamptz_transform(FunctionContext* context, const Columns& columns,
+                                                           TransformFn transform_fn) {
+    DCHECK_EQ(columns.size(), 1);
+
+    auto datetime_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_BIGINT> result(size);
+    bool use_utc_fast_path =
+            should_use_iceberg_timestamptz_utc_fast_path(get_iceberg_timestamptz_session_timezone(context));
+
+    for (int row = 0; row < size; ++row) {
+        if (datetime_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        if (use_utc_fast_path) {
+            result.append(transform_fn(datetime_viewer.value(row)));
+            continue;
+        }
+
+        TimestampValue normalized_timestamp;
+        if (!normalize_iceberg_timestamptz_to_utc(context, datetime_viewer.value(row), &normalized_timestamp)) {
+            result.append_null();
+            continue;
+        }
+
+        result.append(transform_fn(normalized_timestamp));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// A conversion near the DATETIME bounds can leave the 0000..9999 range, e.g.
+// convert_tz('9999-12-31 23:00:00', '-05:00', 'UTC'); return NULL instead of an invalid DATETIME.
+void append_valid_or_null(ColumnBuilder<TYPE_DATETIME>& result, const TimestampValue& ts) {
+    if (ts.is_valid()) {
+        result.append(ts);
+    } else {
+        result.append_null();
+    }
+}
+
+} // namespace
+
 StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, const Columns& columns) {
     auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
     auto from_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -207,7 +303,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         if (TimezoneUtils::timezone_offsets(from_format, to_format, &offset)) {
             TimestampValue ts = TimestampValue::create(year, month, day, hour, minute, second, usec);
             ts.from_unix_second(ts.to_unix_second() + offset, usec);
-            result.append(ts);
+            append_valid_or_null(result, ts);
             continue;
         }
 
@@ -226,7 +322,7 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_general(FunctionContext* context, 
         TimestampValue ts;
         ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
                           ts_value2.second(), ts_value2.microsecond());
-        result.append(ts);
+        append_valid_or_null(result, ts);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -238,6 +334,16 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_DATETIME> result(size);
+
+    // Thread-private (no shared/atomic state, so no cross-core contention under a high degree
+    // of parallelism) cache of the currently-valid DST offset window for `from`/`to`. Real-world
+    // timestamp columns are almost always time-clustered within a scanned chunk, so most
+    // consecutive rows land in the same window and skip cctz's transition search entirely. See
+    // base/time/tz_offset_cache.h.
+    auto* thread_state = context->get_or_create_thread_state<ConvertTzThreadState>(
+            [] { return std::make_unique<ConvertTzThreadState>(); });
+    TzOffsetCache& cache = thread_state->cache;
+
     for (int row = 0; row < size; ++row) {
         if (time_viewer.is_null(row)) {
             result.append_null();
@@ -245,27 +351,21 @@ StatusOr<ColumnPtr> TimeFunctions::convert_tz_const(FunctionContext* context, co
         }
 
         auto datetime_value = time_viewer.value(row);
-
         int year, month, day, hour, minute, second, usec;
         datetime_value.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
-        DateTimeValue ts_value(TIME_DATETIME, year, month, day, hour, minute, second, usec);
 
-        int64_t timestamp;
-        // TODO find a better approach to replace datetime_value.unix_timestamp
-        if (!ts_value.unix_timestamp(&timestamp, from)) {
-            result.append_null();
-            continue;
-        }
-        DateTimeValue ts_value2;
-        // TODO find a better approach to replace datetime_value.from_unixtime
-        if (!ts_value2.from_unixtime(timestamp, ts_value.microsecond(), to)) {
-            result.append_null();
-            continue;
-        }
+        // civil_as_utc_sec is StarRocks' own (non-cctz) calendar arithmetic reinterpreting these
+        // wall-clock fields as literal UTC seconds -- computed once here and handed to the cache
+        // so its hot/common path never has to build or do arithmetic on a cctz::civil_second
+        // (cctz's civil_second operators normalize through cctz::detail::impl::n_min, which
+        // dwarfs everything else in this loop once cache misses become rare).
+        int64_t civil_as_utc_sec = datetime_value.to_unix_second();
+        int64_t unix_sec = cache.unix_for_civil(civil_as_utc_sec, year, month, day, hour, minute, second, from);
+        int64_t offset = cache.offset_for_unix(unix_sec, to);
+
         TimestampValue ts;
-        ts.from_timestamp(ts_value2.year(), ts_value2.month(), ts_value2.day(), ts_value2.hour(), ts_value2.minute(),
-                          ts_value2.second(), ts_value2.microsecond());
-        result.append(ts);
+        ts.from_unix_second(unix_sec + offset, usec);
+        append_valid_or_null(result, ts);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -651,7 +751,8 @@ long TimeFunctions::compute_daynr(uint year, uint month, uint day) {
         delsum -= static_cast<long>(static_cast<int>(month) * 4 + 23) / 10;
     }
     temp = ((y / 100 + 1) * 3) / 4;
-    DCHECK(delsum + static_cast<int>(y) / 4 - temp >= 0);
+    // The result is negative for a year before 0000 (an out-of-range datetime leaked by e.g. convert_tz or
+    // str_to_date); callers only use it for week arithmetic, so let it through instead of aborting the BE.
     return (delsum + static_cast<int>(y) / 4 - temp);
 }
 
@@ -1137,10 +1238,10 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(years_diffImpl, l, r) {
                minute * 100'000'000LL + second * 1'000'000LL + usec;
     };
 
-    if (year >= 0) {
+    if (year > 0) {
         year -= (func(month1, day1, hour1, minute1, second1, usec1) <
                  func(month2, day2, hour2, minute2, second2, usec2));
-    } else {
+    } else if (year < 0) {
         year += (func(month1, day1, hour1, minute1, second1, usec1) >
                  func(month2, day2, hour2, minute2, second2, usec2));
     }
@@ -1218,9 +1319,9 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(months_diffImpl, l, r) {
                second * 1'000'000LL + usec;
     };
 
-    if (month >= 0) {
+    if (month > 0) {
         month -= (func(day1, hour1, minute1, second1, usec1) < func(day2, hour2, minute2, second2, usec2));
-    } else {
+    } else if (month < 0) {
         month += (func(day1, hour1, minute1, second1, usec1) > func(day2, hour2, minute2, second2, usec2));
     }
 
@@ -1511,6 +1612,14 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, 
 /*
  * definition for from_unix operators
  */
+TzOffsetCache& TimeFunctions::_thread_offset_cache(FunctionContext* context, const cctz::time_zone& tz) {
+    TzOffsetCache& cache = context->get_or_create_thread_state<ConvertTzThreadState>(
+                                          [] { return std::make_unique<ConvertTzThreadState>(); })
+                                   ->cache;
+    cache.bind(tz);
+    return cache;
+}
+
 template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
@@ -1520,6 +1629,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1533,10 +1643,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
         char buf[64];
         dtv.to_string(buf);
         result.append(Slice(buf));
@@ -1555,6 +1662,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row)) {
             result.append_null();
@@ -1568,10 +1676,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* 
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
         char buf[64];
         dtv.to_string(buf);
         result.append(Slice(buf));
@@ -1615,10 +1720,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
     DCHECK_EQ(columns.size(), 1);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    static const auto epoch =
-            std::chrono::time_point_cast<cctz::sys_seconds>(std::chrono::system_clock::from_time_t(0));
-
-    auto ctz = context->state()->timezone_obj();
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     auto size = columns[0]->size();
     ColumnViewer<TYPE_BIGINT> data_column(columns[0]);
     ColumnBuilder<TYPE_TINYINT> result(size);
@@ -1634,9 +1736,7 @@ StatusOr<ColumnPtr> TimeFunctions::hour_from_unixtime(FunctionContext* context, 
             continue;
         }
 
-        cctz::time_point<cctz::sys_seconds> t = epoch + cctz::seconds(date);
-        int offset = ctz.lookup(t).offset;
-        int hour = impl_hour_from_unixtime(date + offset);
+        int hour = impl_hour_from_unixtime(date + offset_cache.offset_in_bound_zone(date));
         result.append(hour);
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -1752,6 +1852,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionCont
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_column.is_null(row)) {
             result.append_null();
@@ -1766,10 +1867,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionCont
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
         // use lambda to avoid adding method for TimeFunctions.
         if (format.size > DEFAULT_DATE_FORMAT_LIMIT) {
             result.append_null();
@@ -1800,6 +1898,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, context->state()->timezone_obj());
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_content.empty()) {
             result.append_null();
@@ -1813,10 +1912,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& f
         }
 
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
 
         char buf[128];
         if (!dtv.to_format_string((const char*)format_content.c_str(), format_content.size(), buf)) {
@@ -1895,6 +1991,9 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_timezone_const(const
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    cctz::time_zone timezone_obj;
+    TimezoneUtils::find_cctz_time_zone(timezone_content, timezone_obj);
+    TzOffsetCache& offset_cache = _thread_offset_cache(context, timezone_obj);
     for (int row = 0; row < size; ++row) {
         if (data_column.is_null(row) || format_content.empty() || timezone_content.empty()) {
             result.append_null();
@@ -1907,14 +2006,8 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_timezone_const(const
             continue;
         }
 
-        cctz::time_zone timezone_obj;
-        TimezoneUtils::find_cctz_time_zone(timezone_content, timezone_obj);
-
         DateTimeValue dtv;
-        if (!dtv.from_unixtime(date, timezone_obj)) {
-            result.append_null();
-            continue;
-        }
+        dtv.from_unixtime_with_offset(date, 0, offset_cache.offset_in_bound_zone(date));
 
         char buf[128];
         if (!dtv.to_format_string((const char*)format_content.c_str(), format_content.size(), buf)) {
@@ -2136,6 +2229,8 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
     ColumnViewer<TIMESTAMP_TYPE> timestamp_viewer(columns[0]);
     ColumnBuilder<TYPE_DATETIME> result(size);
+    TzOffsetCache* offset_cache =
+            conv_ctx->timezone_aware ? &_thread_offset_cache(context, conv_ctx->session_timezone) : nullptr;
 
     if (conv_ctx->scale_is_const) {
         auto conversion_func = conv_ctx->active_conversion_func;
@@ -2150,7 +2245,8 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
             TimestampValue result_timestamp;
             if (conv_ctx->timezone_aware) {
-                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+                result_timestamp.from_unixtime_with_offset(seconds, microseconds,
+                                                           offset_cache->offset_in_bound_zone(seconds));
             } else {
                 result_timestamp.from_unix_second(seconds, microseconds);
             }
@@ -2193,7 +2289,8 @@ StatusOr<ColumnPtr> TimeFunctions::_unixtime_to_datetime(FunctionContext* contex
 
             TimestampValue result_timestamp;
             if (conv_ctx->timezone_aware) {
-                result_timestamp.from_unixtime(seconds, microseconds, conv_ctx->session_timezone);
+                result_timestamp.from_unixtime_with_offset(seconds, microseconds,
+                                                           offset_cache->offset_in_bound_zone(seconds));
             } else {
                 result_timestamp.from_unix_second(seconds, microseconds);
             }
@@ -2359,7 +2456,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
                 result.append(ts);
             } else {
                 const Slice& fmt = fmt_viewer.value(i);
-                str_to_date_internal(&ts, fmt, str, &result);
+                RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
             }
         }
     }
@@ -2367,14 +2464,18 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
 }
 
 // uncommon approach to process string content, based on uncommon string format.
-void TimeFunctions::str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
-                                         ColumnBuilder<TYPE_DATETIME>* result) {
+Status TimeFunctions::str_to_date_internal(FunctionContext* context, TimestampValue* ts, const Slice& fmt,
+                                           const Slice& str, ColumnBuilder<TYPE_DATETIME>* result) {
     bool r = ts->from_uncommon_format_str(fmt.get_data(), fmt.get_size(), str.get_data(), str.get_size());
     if (r) {
         result->append(*ts);
-    } else {
-        result->append_null();
+        return Status::OK();
     }
+    if (context != nullptr && context->allow_throw_exception()) {
+        return Status::InvalidArgument("Fail to parse date");
+    }
+    result->append_null();
+    return Status::OK();
 }
 
 // Try to process string content, based on uncommon string format
@@ -2393,7 +2494,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context
             const Slice& str = str_viewer.value(i);
             const Slice& fmt = fmt_viewer.value(i);
             TimestampValue ts;
-            str_to_date_internal(&ts, fmt, str, &result);
+            RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
         }
     }
 
@@ -2713,8 +2814,11 @@ StatusOr<ColumnPtr> standard_format(const std::string& fmt, int len, const starr
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2763,8 +2867,11 @@ void common_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TYPE_VA
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = standard_format_one_row(ts, buf, viewer_format->value(i).to_string());
-        builder->append(Slice(std::string(buf)), !b);
+        if (!standard_format_one_row(ts, buf, viewer_format->value(i).to_string())) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 
@@ -2906,8 +3013,11 @@ StatusOr<ColumnPtr> joda_standard_format(const std::string& fmt, int len, const 
             result.append_null();
         } else {
             auto ts = (TimestampValue)ts_viewer.value(i);
-            bool b = joda_standard_format_one_row(ts, buf, fmt);
-            result.append(Slice(std::string(buf)), !b);
+            if (!joda_standard_format_one_row(ts, buf, fmt)) {
+                result.append_null();
+            } else {
+                result.append(Slice(buf));
+            }
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -2956,8 +3066,11 @@ void common_joda_format_process(ColumnViewer<Type>* viewer_date, ColumnViewer<TY
     } else {
         char buf[128];
         auto ts = (TimestampValue)viewer_date->value(i);
-        bool b = joda_standard_format_one_row(ts, buf, format);
-        builder->append(Slice(std::string(buf)), !b);
+        if (!joda_standard_format_one_row(ts, buf, format)) {
+            builder->append_null();
+        } else {
+            builder->append(Slice(buf));
+        }
     }
 }
 
@@ -3270,6 +3383,13 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_years_since_epoch_datetime(FunctionCo
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime(FunctionContext* context,
+                                                                                  const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
+        return years_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+    });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_months_since_epoch_dateImpl, v) {
     int y, m, d;
     ((DateValue)v).to_date(&y, &m, &d);
@@ -3293,15 +3413,22 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_months_since_epoch_datetime(FunctionC
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime(FunctionContext* context,
+                                                                                   const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(context, columns, [](const TimestampValue& timestamp) {
+        return months_diff_v2Impl::apply<TimestampValue, TimestampValue, int64_t>(timestamp, TimeFunctions::unix_epoch);
+    });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_dateImpl, v) {
     int y, m, d;
     ((DateValue)v).to_date(&y, &m, &d);
     auto ts = TimestampValue::create(y, m, d, 0, 0, 0, 0);
-    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(ts, TimeFunctions::unix_epoch);
+    return iceberg_days_since_epoch(ts);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_days_since_epoch_datetimeImpl, v) {
-    return days_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_days_since_epoch(v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_date(FunctionContext* context,
@@ -3316,14 +3443,26 @@ StatusOr<ColumnPtr> TimeFunctions::iceberg_days_since_epoch_datetime(FunctionCon
             VECTORIZED_FN_ARGS(0));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_days_since_epoch_datetime(FunctionContext* context,
+                                                                                 const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(
+            context, columns, [](const TimestampValue& timestamp) { return iceberg_days_since_epoch(timestamp); });
+}
+
 DEFINE_UNARY_FN_WITH_IMPL(iceberg_hours_since_epoch_datetimeImpl, v) {
-    return hours_diffImpl::apply<TimestampValue, TimestampValue, int64_t>(v, TimeFunctions::unix_epoch);
+    return iceberg_hours_since_epoch(v);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::iceberg_hours_since_epoch_datetime(FunctionContext* context,
                                                                       const starrocks::Columns& columns) {
     return VectorizedStrictUnaryFunction<iceberg_hours_since_epoch_datetimeImpl>::evaluate<TYPE_DATETIME, TYPE_BIGINT>(
             VECTORIZED_FN_ARGS(0));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetime(FunctionContext* context,
+                                                                                  const starrocks::Columns& columns) {
+    return evaluate_iceberg_timestamptz_transform(
+            context, columns, [](const TimestampValue& timestamp) { return iceberg_hours_since_epoch(timestamp); });
 }
 
 // used as start point of time_slice.

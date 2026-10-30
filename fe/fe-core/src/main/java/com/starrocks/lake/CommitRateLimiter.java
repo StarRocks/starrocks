@@ -84,17 +84,38 @@ public class CommitRateLimiter {
     }
 
     /**
+     * Whether a commit into a partition with this compaction score is delayed or rejected right now, i.e. whether
+     * loads already feel the score. Mirrors the commit path: the limiter only runs when lake_enable_ingest_slowdown
+     * is on (LakeTableTxnStateListener.preCommit), a commit is delayed only above the slowdown threshold with a
+     * positive slowdown ratio, and rejected only above a positive upper bound.
+     */
+    public static boolean throttlesIngestion(double compactionScore) {
+        if (!Config.lake_enable_ingest_slowdown) {
+            return false;
+        }
+        boolean delayed = compactionScore > slowdownThreshold() && slowdownRatio() > 0;
+        long upperBound = compactionScoreUpperBound();
+        boolean rejected = upperBound > 0 && compactionScore > upperBound;
+        return delayed || rejected;
+    }
+
+    /**
      * Checks the commit rate for the given partition IDs and throws a CommitRateExceededException if necessary.
      *
-     * @param partitionIds the set of partition IDs to check. Must not be null.
+     * @param partitionIds the set of physical partition IDs to check. Must not be null.
      * @throws CommitFailedException       if the allow commit time exceeds the transaction timeout
      * @throws CommitRateExceededException if the commit rate exceeds the threshold
      */
     public void check(@NotNull Set<Long> partitionIds, long currentTimeMs)
             throws CommitRateExceededException, CommitFailedException {
         Preconditions.checkNotNull(partitionIds, "partitionIds is null");
-        // Does not limit the commit rate of compaction transactions
-        if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+        // Does not limit the commit rate of compaction transactions, nor of an online-rewrite alter's shadow
+        // rewrite. Compaction is skipped on a table under that alter (see CompactionScheduler), so only the
+        // rewrite finishing lets the score come down: delaying it parks the single alter scheduler thread
+        // while concurrent loads keep raising the score, and the upper bound below then rejects it outright.
+        TransactionState.LoadJobSourceType sourceType = transactionState.getSourceType();
+        if (sourceType == TransactionState.LoadJobSourceType.LAKE_COMPACTION
+                || sourceType == TransactionState.LoadJobSourceType.SHADOW_REWRITE) {
             return;
         }
 
@@ -102,9 +123,10 @@ public class CommitRateLimiter {
         setAllowCommitTimeOnce(partitionIds);
 
         long txnId = transactionState.getTransactionId();
-        long abortTime = transactionState.getPrepareTime() + transactionState.getTimeoutMs();
+        long abortTime = transactionState.getTimeoutDeadlineMs();
 
         if (transactionState.getAllowCommitTimeMs() >= abortTime) {
+            transactionState.clearTemporaryReason();
             throw new CommitFailedException("Txn " + txnId + " timed out due to ingestion slowdown", txnId);
         }
         if (transactionState.getAllowCommitTimeMs() > currentTimeMs) {
@@ -112,11 +134,12 @@ public class CommitRateLimiter {
                     transactionState.getAllowCommitTimeMs() - currentTimeMs,
                     transactionState.getWriteDurationMs());
             // it will show in `show proc '/transactions/xxx/running'`
-            transactionState.setReason("Partition's compaction score is larger than " + slowdownThreshold() +
+            transactionState.setTemporaryReason("Partition's compaction score is larger than " + slowdownThreshold() +
                     ", delay commit for " + (transactionState.getAllowCommitTimeMs() - currentTimeMs) + "ms." +
                     " You can try to increase compaction concurrency.");
             throw new CommitRateExceededException(txnId, transactionState.getAllowCommitTimeMs());
         }
+        transactionState.clearTemporaryReason();
         long upperBound = compactionScoreUpperBound();
         if (upperBound > 0) {
             Optional<Pair<Long, Double>> partitionAndScore = anyCompactionScoreExceedsUpperBound(partitionIds, upperBound);
@@ -138,22 +161,41 @@ public class CommitRateLimiter {
 
     private void setAllowCommitTimeOnce(@NotNull Set<Long> partitionIds) {
         if (transactionState.getAllowCommitTimeMs() < 0) {
+            long maxScorePartitionId = -1;
             double maxCompactionScore = 0;
             for (Long partitionId : partitionIds) {
-                maxCompactionScore = Math.max(maxCompactionScore, getPartitionCompactionScore(partitionId));
+                double compactionScore = getPartitionCompactionScore(partitionId);
+                if (compactionScore > maxCompactionScore) {
+                    maxScorePartitionId = partitionId;
+                    maxCompactionScore = compactionScore;
+                }
             }
             long allowCommitTime = getAllowCommitTime(transactionState, maxCompactionScore);
             transactionState.setAllowCommitTimeMs(allowCommitTime);
+            if (allowCommitTime > transactionState.getWriteEndTimeMs()) {
+                LOG.info("txn {} commit is delayed {}ms after write end, because compaction score {} of partition {}"
+                                + " in table {} exceeds the slowdown threshold {}, write took {}ms",
+                        transactionState.getTransactionId(), allowCommitTime - transactionState.getWriteEndTimeMs(),
+                        maxCompactionScore, maxScorePartitionId, tableId, slowdownThreshold(),
+                        transactionState.getWriteDurationMs());
+            }
         }
     }
 
+    // partitionId is a physical partition id, the key under which compaction statistics are recorded
     private double getPartitionCompactionScore(@NotNull Long partitionId) {
         long dbId = transactionState.getDbId();
-        // TODO: Should be able to fetch statistics by partition id
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, tableId, partitionId);
         PartitionStatistics statistics = compactionMgr.getStatistics(partitionIdentifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
-        return compactionScore != null ? compactionScore.getMax() : 0;
+        if (compactionScore == null) {
+            // Expected only before the partition's first load becomes visible. Anything else means the lookup key
+            // does not match the one the statistics were recorded under, and the partition escapes throttling.
+            LOG.info("txn {} found no compaction score for partition {} in table {}, its commit is not throttled"
+                            + " by this partition", transactionState.getTransactionId(), partitionId, tableId);
+            return 0;
+        }
+        return compactionScore.getMax();
     }
 
     // Returns the first partition id and its compaction score that exceeds the upper bound

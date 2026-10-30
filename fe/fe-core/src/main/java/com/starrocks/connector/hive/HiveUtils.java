@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
@@ -41,6 +42,7 @@ import static com.starrocks.connector.hive.HiveMetastoreOperations.EXTERNAL_LOCA
 
 public class HiveUtils {
     private static final Logger LOG = LogManager.getLogger(HiveUtils.class);
+
     public static boolean isS3Url(String prefix) {
         return prefix.startsWith("oss://") || prefix.startsWith("s3n://") || prefix.startsWith("s3a://") ||
                 prefix.startsWith("s3://") || prefix.startsWith("cos://") || prefix.startsWith("cosn://") ||
@@ -61,7 +63,16 @@ public class HiveUtils {
         }
     }
 
+    /**
+     * Every method below is one storage request, and this class is where the FE reaches storage directly
+     * rather than through {@link HiveRemoteFileIO}: the sink's commit (staging rename, cleanup of a failed
+     * write) goes through {@code RemoteFileOperations} and the DDL paths through
+     * {@code HiveMetastoreOperations}, both of which land here. Those DDL paths run inside a database lock,
+     * so the wait has to be reportable; the guard sits before the {@code FileSystem} is even resolved,
+     * because {@code FileSystem.get} itself contacts the namenode or the object store on a cache miss.
+     */
     public static boolean pathExists(Path path, Configuration conf) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             return fileSystem.exists(path);
@@ -72,6 +83,7 @@ public class HiveUtils {
     }
 
     public static boolean isDirectory(Path path, Configuration conf) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             return fileSystem.getFileStatus(path).isDirectory();
@@ -82,6 +94,7 @@ public class HiveUtils {
     }
 
     public static boolean isEmpty(Path path, Configuration conf) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             return !fileSystem.listFiles(path, false).hasNext();
@@ -92,6 +105,7 @@ public class HiveUtils {
     }
 
     public static void createDirectory(Path path, Configuration conf) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             if (!fileSystem.mkdirs(path)) {
@@ -128,6 +142,7 @@ public class HiveUtils {
     }
 
     public static void checkedDelete(FileSystem fileSystem, Path file, boolean recursive) throws IOException {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             if (!fileSystem.delete(file, recursive)) {
                 if (fileSystem.exists(file)) {
@@ -140,6 +155,7 @@ public class HiveUtils {
     }
 
     public static boolean deleteIfExists(Path path, boolean recursive, Configuration conf) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             if (fileSystem.delete(path, recursive)) {
@@ -157,6 +173,7 @@ public class HiveUtils {
     }
 
     public static boolean createDirectoryIfNotExists(Path path, Configuration conf) {
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileSystem fileSystem = FileSystem.get(path.toUri(), conf);
             if (fileSystem.exists(path)) {
@@ -174,10 +191,10 @@ public class HiveUtils {
             DecimalLiteral decimalKey = (DecimalLiteral) key;
             ScalarType type = (ScalarType) targetType;
             int scale = type.decimalScale();
-    
+
             BigDecimal scaled = decimalKey.getValue()
                     .setScale(scale, RoundingMode.HALF_UP);
-    
+
             key = new DecimalLiteral(scaled);
         }
 

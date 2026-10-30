@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "common/storage_aggregate_type.h"
-#include "runtime/agg_state_desc.h"
+#include "types/agg_state_desc.h"
 
 namespace starrocks {
 
@@ -163,8 +163,8 @@ TEST(FieldTest, test_with_nullable) {
 }
 
 TEST(FieldTest, test_with_agg_state_desc) {
-    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
-    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> arg_types = {TYPE_SMALLINT_DESC};
+    auto return_type = TYPE_DOUBLE_DESC;
     AggStateDesc desc("avg", return_type, arg_types, true, 1);
 
     // copy assignment

@@ -22,7 +22,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.common.Config;
+import com.starrocks.common.CsvFormat;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -36,6 +40,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
@@ -474,6 +479,91 @@ public class FileScanNodeTest {
     }
 
     @Test
+    public void testCsvWithEncloseOrEscapeIsNotSplit(@Mocked GlobalStateMgr globalStateMgr,
+                                                    @Mocked SystemInfoService systemInfoService,
+                                                    @Injectable Database db, @Injectable OlapTable table)
+            throws StarRocksException {
+        // table schema
+        List<Column> columns = Lists.newArrayList();
+        Column c1 = new Column("c1", IntegerType.BIGINT, true);
+        columns.add(c1);
+        Column c2 = new Column("c2", IntegerType.BIGINT, true);
+        columns.add(c2);
+        List<String> columnNames = Lists.newArrayList("c1", "c2");
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getBaseSchema();
+                result = columns;
+                table.getFullSchema();
+                result = columns;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+                table.getColumn("c1");
+                result = columns.get(0);
+                table.getColumn("c2");
+                result = columns.get(1);
+            }
+        };
+
+        // Same files as case 0 of testCreateScanRangeLocations: without enclose/escape, file1 (512M+) is
+        // split into 3 ranges. With enclose or escape set, a row delimiter may sit inside a field, so each
+        // file must be read as a single range; different files are still assigned to different instances.
+        List<CsvFormat> csvFormats = Lists.newArrayList(
+                new CsvFormat((byte) '"', (byte) 0, 0, false),
+                new CsvFormat((byte) 0, (byte) '\\', 0, false),
+                new CsvFormat((byte) '"', (byte) '\\', 0, false));
+        for (CsvFormat csvFormat : csvFormats) {
+            List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+            List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2");
+            DataDescription desc =
+                    new DataDescription("testTable", null, files, columnNames, null, null, null, false, null);
+            BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+            Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+            Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+            Deencapsulation.setField(brokerFileGroup, "csvFormat", csvFormat);
+            fileGroups.add(brokerFileGroup);
+
+            List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+            List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+            fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file1", false, 536870968, true));
+            fileStatusList.add(new TBrokerFileStatus("hdfs://127.0.0.1:9001/file2", false, 268435400, true));
+            fileStatusesList.add(fileStatusList);
+
+            DescriptorTable descTable = new DescriptorTable();
+            TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+            FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                    fileStatusesList, 2, WarehouseManager.DEFAULT_RESOURCE);
+            scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+            scanNode.init(descTable);
+            scanNode.finalizeStats();
+
+            List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
+            Assertions.assertEquals(2, locationsList.size());
+            Map<String, TBrokerRangeDesc> rangeByFile = Maps.newHashMap();
+            for (TScanRangeLocations locations : locationsList) {
+                List<TBrokerRangeDesc> ranges = locations.scan_range.broker_scan_range.ranges;
+                Assertions.assertEquals(1, ranges.size());
+                rangeByFile.put(ranges.get(0).path, ranges.get(0));
+            }
+            TBrokerRangeDesc file1Range = rangeByFile.get("hdfs://127.0.0.1:9001/file1");
+            Assertions.assertEquals(0, file1Range.start_offset);
+            Assertions.assertEquals(536870968, file1Range.size);
+            TBrokerRangeDesc file2Range = rangeByFile.get("hdfs://127.0.0.1:9001/file2");
+            Assertions.assertEquals(0, file2Range.start_offset);
+            Assertions.assertEquals(268435400, file2Range.size);
+        }
+    }
+
+    @Test
     public void testNoFilesFound() {
 
         DescriptorTable descTable = new DescriptorTable();
@@ -625,4 +715,104 @@ public class FileScanNodeTest {
                 "The valid bytes length for 'row delimiter' is [1, 50]",
                 () -> scanNode.init(descTable));
     }
+
+    @Test
+    public void testEnvelopeDebeziumRequiresPrimaryKeyTable(@Injectable OlapTable table)
+            throws StarRocksException {
+        new Expectations() {{
+            table.getKeysType();
+            result = KeysType.DUP_KEYS;
+        }};
+
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        DataDescription desc = new DataDescription("testTable", null, files,
+                Lists.newArrayList("c1"), null, null, "json", false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        fileGroups.add(brokerFileGroup);
+
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        fileStatusesList.add(Lists.newArrayList());
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+        jsonOptions.envelope = LoadStmt.ENVELOPE_DEBEZIUM;
+        scanNode.setJSONOptions(jsonOptions);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "envelope=debezium is only supported on PRIMARY KEY tables",
+                scanNode::finalizeStats);
+    }
+
+    @Test
+    public void testInferCompressionByName() {
+        // Test GZIP compression
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("file.json.gz"));
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("file.json.gzip"));
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("FILE.JSON.GZ"));
+        Assertions.assertEquals(TCompressionType.GZIP,
+                FileScanNode.inferCompressionByName("FILE.JSON.GZIP"));
+
+        // Test BZIP2 compression
+        Assertions.assertEquals(TCompressionType.BZIP2,
+                FileScanNode.inferCompressionByName("file.json.bz2"));
+        Assertions.assertEquals(TCompressionType.BZIP2,
+                FileScanNode.inferCompressionByName("FILE.JSON.BZ2"));
+
+        // Test ZSTD compression
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("file.json.zst"));
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("file.json.zstd"));
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("FILE.JSON.ZST"));
+        Assertions.assertEquals(TCompressionType.ZSTD,
+                FileScanNode.inferCompressionByName("FILE.JSON.ZSTD"));
+
+        // Test LZ4 compression
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME,
+                FileScanNode.inferCompressionByName("file.json.lz4"));
+        Assertions.assertEquals(TCompressionType.LZ4_FRAME,
+                FileScanNode.inferCompressionByName("FILE.JSON.LZ4"));
+
+        // Test DEFLATE compression
+        Assertions.assertEquals(TCompressionType.DEFLATE,
+                FileScanNode.inferCompressionByName("file.json.deflate"));
+        Assertions.assertEquals(TCompressionType.DEFLATE,
+                FileScanNode.inferCompressionByName("FILE.JSON.DEFLATE"));
+
+        // Test SNAPPY compression
+        Assertions.assertEquals(TCompressionType.SNAPPY,
+                FileScanNode.inferCompressionByName("file.json.snappy"));
+        Assertions.assertEquals(TCompressionType.SNAPPY,
+                FileScanNode.inferCompressionByName("FILE.JSON.SNAPPY"));
+
+        // Test files with no compression (should return null)
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.txt"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.parquet"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName(""));
+        Assertions.assertNull(FileScanNode.inferCompressionByName(null));
+
+        // Test files with unsupported compression extensions
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json.xz"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json.lzo"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.json.brotli"));
+
+        // Test edge cases
+        Assertions.assertNull(FileScanNode.inferCompressionByName("gz"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.gz.txt"));
+        Assertions.assertNull(FileScanNode.inferCompressionByName("file.gz.json"));
+    }
+
 }

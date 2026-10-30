@@ -17,6 +17,7 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -84,7 +85,13 @@ Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
 StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_reference_builder_hash_table_once());
-    return _join_prober->pull_chunk(state);
+    ASSIGN_OR_RETURN(auto chunk, _join_prober->pull_chunk(state));
+    // The FE attaches a runtime filter to a join node when it cannot be pushed further down,
+    // e.g. a partitioned global filter whose partition_exprs span tables on both sides of this join.
+    // Nulls are kept: an outer join records the probe slot of every filter pushed through it in
+    // filter_null_value_columns, which would also drop preserved-side NULLs for a TopN filter.
+    eval_runtime_bloom_filters_keep_nulls(chunk.get());
+    return chunk;
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
@@ -125,20 +132,22 @@ Status HashJoinProbeOperator::reset_state(RuntimeState* state, const vector<Chun
     return Status::OK();
 }
 
-void HashJoinProbeOperator::update_exec_stats(RuntimeState* state) {
-    auto ctx = state->query_ctx();
-    if (ctx != nullptr) {
-        ctx->update_pull_rows_stats(_plan_node_id, COUNTER_VALUE(_pull_row_num_counter));
-        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
-            ctx->update_pred_filter_stats(
-                    _plan_node_id, COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter));
-        }
-        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
-            int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
-            int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
-            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
-        }
+OperatorExecStatsSnapshot HashJoinProbeOperator::exec_stats_snapshot() const {
+    OperatorExecStatsSnapshot snapshot;
+    snapshot.plan_node_id = _plan_node_id;
+    snapshot.update_pull_rows = true;
+    snapshot.pull_rows = COUNTER_VALUE(_pull_row_num_counter);
+    if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+        snapshot.update_pred_filter_rows = true;
+        snapshot.pred_filter_rows = COUNTER_VALUE(_conjuncts_input_counter) - COUNTER_VALUE(_conjuncts_output_counter);
     }
+    if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+        snapshot.update_rf_filter_rows = true;
+        int64_t input_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_input_counter);
+        int64_t output_rows = COUNTER_VALUE(_bloom_filter_eval_context.join_runtime_filter_output_counter);
+        snapshot.rf_filter_rows = input_rows - output_rows;
+    }
+    return snapshot;
 }
 
 HashJoinProbeOperatorFactory::HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id,

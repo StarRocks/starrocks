@@ -1,0 +1,39 @@
+-- name: test_mv_date_trunc_week_rollup
+-- description: Regression for the MV date_trunc rollup that rewrote a month/quarter/year
+--              query using a date_trunc('week') MV. A week can straddle a month/quarter/year
+--              boundary, so the week-grain rollup mis-bucketed those rows -> wrong result.
+--              The rewrite must be declined when rolling a week grain up to a coarser unit,
+--              so the answer is identical with the MV rewrite on and off.
+
+CREATE DATABASE IF NOT EXISTS test_mv_date_trunc_week_rollup_db;
+USE test_mv_date_trunc_week_rollup_db;
+
+CREATE TABLE wkt (
+  dt DATE,
+  v INT
+) DUPLICATE KEY(dt)
+DISTRIBUTED BY HASH(dt) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- week of Mon 2024-12-30 spans into Jan 2025 (2024-12-30, 2024-12-31 in Dec; 2025-01-01 in Jan)
+INSERT INTO wkt VALUES ('2024-12-30', 1), ('2024-12-31', 1), ('2025-01-01', 1);
+
+CREATE MATERIALIZED VIEW mv_week
+REFRESH MANUAL
+AS SELECT date_trunc('week', dt) AS wk, sum(v) AS s FROM wkt GROUP BY date_trunc('week', dt);
+REFRESH MATERIALIZED VIEW mv_week WITH SYNC MODE;
+
+-- month rollup, rewrite OFF: correct baseline (Dec=2, Jan=1)
+SET enable_materialized_view_rewrite = false;
+SELECT date_trunc('month', dt) mo, sum(v) s FROM wkt GROUP BY date_trunc('month', dt) ORDER BY mo;
+
+-- month rollup, rewrite ON: must match (week->month rollup declined); was wrongly {Dec=3}
+SET enable_materialized_view_rewrite = true;
+SELECT date_trunc('month', dt) mo, sum(v) s FROM wkt GROUP BY date_trunc('month', dt) ORDER BY mo;
+
+-- quarter and year rollups must also stay correct with rewrite ON
+SELECT date_trunc('quarter', dt) q, sum(v) s FROM wkt GROUP BY date_trunc('quarter', dt) ORDER BY q;
+SELECT date_trunc('year', dt) y, sum(v) s FROM wkt GROUP BY date_trunc('year', dt) ORDER BY y;
+
+-- a week-grain query CAN still use the week MV (identical unit) with rewrite ON
+SELECT date_trunc('week', dt) wk, sum(v) s FROM wkt GROUP BY date_trunc('week', dt) ORDER BY wk;

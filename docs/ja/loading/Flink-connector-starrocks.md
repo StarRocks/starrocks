@@ -1,8 +1,12 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
+description: "StarRocks Flink コネクタは DataStream API・Table API & SQL・Python API に対応し、Flink から StarRocks への継続的なデータロードを実現します。"
 ---
 
 # Apache Flink® からデータを継続的にロードする
+
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks は、Apache Flink® 用の StarRocks Connector（以下、Flink コネクタ）という独自開発のコネクタを提供しており、Flink を使用して StarRocks テーブルにデータをロードするのに役立ちます。基本的な原理は、データを蓄積し、それを一度に StarRocks に [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を通じてロードすることです。
 
@@ -16,10 +20,10 @@ Flink コネクタは DataStream API、Table API & SQL、Python API をサポー
 
 | コネクタ | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 以降      | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 以降      | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 以降      | 8    | 2.11,2.12 |
 
 ## Flink コネクタの取得
 
@@ -76,17 +80,21 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
       sh build.sh <flink_version>
       ```
 
-   例えば、環境の Flink バージョンが 1.15 の場合、以下のコマンドを実行する必要があります。
+   例えば、環境の Flink バージョンが 1.16 の場合、以下のコマンドを実行する必要があります。
 
       ```bash
-      sh build.sh 1.15
+      sh build.sh 1.16
       ```
 
-3. `target/` ディレクトリに移動し、コンパイルによって生成された Flink コネクタ JAR ファイル（例: `flink-connector-starrocks-1.2.7_flink-1.15-SNAPSHOT.jar`）を見つけます。
+3. `target/` ディレクトリに移動し、コンパイルによって生成された Flink コネクタ JAR ファイル（例: `flink-connector-starrocks-1.2.7_flink-1.16-SNAPSHOT.jar`）を見つけます。
 
 > **注意**
 >
 > 正式にリリースされていない Flink コネクタの名前には `SNAPSHOT` サフィックスが含まれています。
+
+## StarRocks に接続する
+
+<FlinkStarRocksConnection />
 
 ## オプション
 
@@ -139,7 +147,7 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 - **必須**: いいえ
 - **デフォルト値**: AUTO
 - **説明**: データのロードに使用されるインターフェース。このパラメータは、Flink connector バージョン 1.2.4 以降でサポートされています。有効な値:
-  - `V1`: [Stream Load](../loading/StreamLoad.md) インターフェースを使用してデータをロードします。1.2.4 より前のコネクタは、このモードのみをサポートしています。
+  - `V1`: [Stream Load](./StreamLoad.md) インターフェースを使用してデータをロードします。1.2.4 より前のコネクタは、このモードのみをサポートしています。
   - `V2`: [Stream Load transaction](./Stream_Load_transaction_interface.md) インターフェースを使用してデータをロードします。StarRocks のバージョンが 2.4 以上である必要があります。メモリ使用量を最適化し、より安定した exactly-once の実装を提供するため、`V2` を推奨します。
   - `AUTO`: StarRocks のバージョンがトランザクション Stream Load をサポートしている場合、自動的に `V2` を選択し、そうでない場合は `V1` を選択します。
 
@@ -178,8 +186,14 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 #### sink.max-retries
 
 - **必須**: いいえ
-- **デフォルト値**: 3
-- **説明**: システムが Stream Load ジョブの実行をリトライする回数。このパラメータは、`sink.version` を `V1` に設定した場合にのみ使用できます。有効な値: 0～10。
+- **デフォルト値**: 3 (Merge Commit が有効な場合は `0`)
+- **説明**: システムが Stream Load ジョブの実行をリトライする回数。このパラメータは、`sink.version` を `V1` に設定した場合、または Merge Commit が有効な場合に有効です。有効な値: 0～10。Merge Commit が有効な場合、このパラメータを明示的に設定しない限り (例: `'sink.max-retries' = '3'`)、コネクタは失敗したロードリクエストをリトライしません。リトライを有効にすると、コネクタは各ロードリクエストのデータをリクエストが成功するまでメモリに保持するため、メモリ使用量が増加します。Merge Commit は少なくとも 1 回のセマンティクスのみを保証するため、元のリクエストが実際には成功していた場合 (レスポンスが失われた場合など)、リトライされたリクエストによってデータが 2 回ロードされる可能性があります。
+
+#### sink.retry.interval-ms
+
+- **必須**: いいえ
+- **デフォルト値**: 10000
+- **説明**: Merge Commit が有効な場合に、失敗したロードリクエストをリトライする間隔。単位: ms。このパラメータは、`sink.max-retries` が `0` より大きい場合にのみ有効です。`sink.version` を `V1` に設定した場合は有効になりません。
 
 #### sink.connect.timeout-ms
 
@@ -210,6 +224,12 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 - **必須**: いいえ
 - **デフォルト値**: true
 - **説明**: バージョン 1.2.8 以降でサポートされています。Primary Key テーブルにデータをロードする際に、Flink からの `UPDATE_BEFORE` レコードを無視するかどうかを指定します。このパラメータを false に設定すると、レコードは StarRocks テーブルに対する削除操作として扱われます。
+
+#### sink.json.columns-from-flink-schema
+
+- **必須**: いいえ
+- **デフォルト値**: false
+- **説明**: 1.2.16 以降でサポートされています。形式が `json` の場合に、Stream Load の `columns` ヘッダーを Flink テーブルスキーマから生成するかどうかを指定します。デフォルトでは `json` の場合にヘッダーは送信されないため、サーバーはすべてのテーブル列をロード対象として宣言します。ペイロードに含まれていない列は、`DEFAULT` が定義されている場合でも `NULL` として格納されます。`true` に設定すると、Flink テーブルの列がヘッダーとして送信されるため、Flink スキーマで定義されていない列はヘッダーから除外され、サーバーによってその `DEFAULT` 値が適用されます。Flink スキーマと `sink.properties.format=json` が必要であり、`sink.properties.columns` または `sink.properties.jsonpaths` と併用することはできません。
 
 #### sink.parallelism
 
@@ -327,26 +347,26 @@ v1.2.14 以降でサポートされています。Merge Commit を使用する�
 
 ## Flink と StarRocks 間のデータ型マッピング
 
-| Flink データ型                   | StarRocks データ型   |
-|-----------------------------------|-----------------------|
-| BOOLEAN                           | BOOLEAN               |
-| TINYINT                           | TINYINT               |
-| SMALLINT                          | SMALLINT              |
-| INTEGER                           | INTEGER               |
-| BIGINT                            | BIGINT                |
-| FLOAT                             | FLOAT                 |
-| DOUBLE                            | DOUBLE                |
-| DECIMAL                           | DECIMAL               |
-| BINARY                            | INT                   |
-| CHAR                              | STRING                |
-| VARCHAR                           | STRING                |
-| STRING                            | STRING                |
-| DATE                              | DATE                  |
-| TIMESTAMP_WITHOUT_TIME_ZONE(N)    | DATETIME              |
-| TIMESTAMP_WITH_LOCAL_TIME_ZONE(N) | DATETIME              |
-| ARRAY&lt;T&gt;                    | ARRAY&lt;T&gt;        |
-| MAP&lt;KT,VT&gt;                  | JSON STRING           |
-| ROW&lt;arg T...&gt;               | JSON STRING           |
+| Flink データ型                      | StarRocks データ型     |
+|-------------------------------------|------------------------|
+| `BOOLEAN`                           | `BOOLEAN`              |
+| `TINYINT`                           | `TINYINT`              |
+| `SMALLINT`                          | `SMALLINT`             |
+| `INTEGER`                           | `INTEGER`              |
+| `BIGINT`                            | `BIGINT`               |
+| `FLOAT`                             | `FLOAT`                |
+| `DOUBLE`                            | `DOUBLE`               |
+| `DECIMAL`                           | `DECIMAL`              |
+| `BINARY`                            | `INT`                  |
+| `CHAR`                              | `STRING`               |
+| `VARCHAR`                           | `STRING`               |
+| `STRING`                            | `STRING`               |
+| `DATE`                              | `DATE`                 |
+| `TIMESTAMP_WITHOUT_TIME_ZONE(N)`    | `DATETIME`             |
+| `TIMESTAMP_WITH_LOCAL_TIME_ZONE(N)` | `DATETIME`             |
+| `ARRAY<T>`                          | `ARRAY<T>`             |
+| `MAP<KT,VT>`                        | `JSON STRING`          |
+| `ROW<arg T...>`                     | `JSON STRING`          |
 
 ## 使用上の注意
 
@@ -408,6 +428,10 @@ Merge Commit を使用する際の重要な注意事項を以下に示します�
 
   Merge Commit は、少なくとも 1 回のセマンティクスのみを保証します。正確に 1 回のセマンティクスはサポートしていません。Merge Commit が有効になっている場合は、`sink.semantic` を `exactly-once` に設定しないでください。
 
+- **デフォルトではリトライしない**
+
+  Merge Commit が有効な場合、`sink.max-retries` のデフォルトは `0` です。そのため、一時的なエラー (StarRocks ノードのスケールインなど) で失敗したロードリクエストはリトライされず、シンクが失敗します。失敗したロードリクエストをリトライするには、`sink.max-retries` を明示的に設定します (例: `'sink.max-retries' = '3'`)。リトライの間隔は `sink.retry.interval-ms` で制御できます。
+
 - **主キーテーブルの順序付け**
 
   デフォルトでは、`sink.merge-commit.max-concurrent-requests` は `Integer.MAX_VALUE` です。これは、単一のシンクサブタスクが複数の Stream Load リクエストを同時に送信できることを意味します。これにより、順序が狂ったロードが発生する可能性があり、主キーテーブルでは問題になる可能性があります。順序どおりのロードを保証するには、`sink.merge-commit.max-concurrent-requests` を `0` に設定します。ただし、これによりスループットが低下します。または、条件付き更新を使用して、古いデータが新しいデータで上書きされるのを防ぐことができます。設定例については、[主キーテーブルの順序どおりのロード](#in-order-loading-for-primary-key-tables) を参照してください。
@@ -423,12 +447,28 @@ Merge Commit を使用する際の重要な注意事項を以下に示します�
 
   これら 2 つのパラメータは、異なるレイヤーで並行処理を制御するため、個別に調整する必要があります。
   - `sink.parallelism` は、Flink シンクサブタスクの数を制御します。各サブタスクは、データをバッファリングして StarRocks に送信します。Flink シンク operator が CPU またはメモリにバインドされている場合は、この値を増やします。Flink の operator ごとの CPU とメモリの使用量を監視して、より多くのサブタスクが必要かどうかを判断できます。
-  - `sink.properties.merge_commit_parallel` は、StarRocks が各 Merge Commit トランザクション用に作成するロードプランの並行処理の度合いを制御します。StarRocks がボトルネックになる場合は、この値を増やします。StarRocks のメトリクス [merge_commit_pending_total](../administration/management/monitoring/metrics.md#merge_commit_pending_total) (保留中の Merge Commit タスクの数) と [merge_commit_pending_bytes](../administration/management/monitoring/metrics.md#merge_commit_pending_bytes) (保留中のタスクが保持するバイト数) を監視して、StarRocks 側でより多くの並行処理が必要かどうかを判断できます。高い値が持続する場合は、ロードプランが受信データに追いついていないことを示します。
+  - `sink.properties.merge_commit_parallel` は、StarRocks が各 Merge Commit トランザクション用に作成するロードプランの並行処理の度合いを制御します。StarRocks がボトルネックになる場合は、この値を増やします。StarRocks のメトリクス [merge_commit_pending_total](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_total) (保留中の Merge Commit タスクの数) と [merge_commit_pending_bytes](../administration/management/monitoring/metric_details/i-p.md#merge_commit_pending_bytes) (保留中のタスクが保持するバイト数) を監視して、StarRocks 側でより多くの並行処理が必要かどうかを判断できます。高い値が持続する場合は、ロードプランが受信データに追いついていないことを示します。
 
 - **`sink.merge-commit.chunk.size` と `sink.buffer-flush.max-bytes` の関係**:
   - `sink.merge-commit.chunk.size` は、個々の Stream Load リクエスト (チャンクごと) あたりの最大データサイズを制御します。チャンク内のデータがこのサイズに達すると、すぐにフラッシュされます。
   - `sink.buffer-flush.max-bytes` は、すべてのテーブルにわたるキャッシュされたデータすべての合計メモリ制限を制御します。キャッシュされたデータの合計がこの制限を超えると、コネクタはメモリを解放するためにチャンクを早期に削除します。
   - したがって、少なくとも 1 つの完全なチャンクを累積できるように、`sink.buffer-flush.max-bytes` は `sink.merge-commit.chunk.size` よりも大きく設定する必要があります。一般に、特に複数のテーブルがある場合や並行処理が高い場合は、`sink.buffer-flush.max-bytes` は `sink.merge-commit.chunk.size` よりも数倍大きくする必要があります。
+
+### JSON 形式でサーバー側の DEFAULT 値を適用する
+
+`json` 形式では、コネクタはデフォルトで `columns` ヘッダーを送信しません。そのため、サーバーはすべてのテーブル列をロード対象に含めます。JSON ペイロードに列が含まれていない場合、サーバーはその列を明示的な `NULL` として扱い、その列に定義された `DEFAULT` 値を上書きします。たとえば、テーブルに `ingest_ts DATETIME DEFAULT CURRENT_TIMESTAMP` が含まれている場合、すべての行で `ingest_ts` に値が指定されていなければ、その列は `NULL` としてロードされます。
+
+サーバー側の `DEFAULT` 値を適用するには、`sink.json.columns-from-flink-schema=true` を設定します。コネクタは Flink テーブルスキーマを使用して `columns` ヘッダーを生成します。これは、Flink スキーマと StarRocks スキーマが異なる場合に `csv` 形式で行われる処理と同様です。
+
+Flink テーブルスキーマに定義されていない StarRocks 列は `columns` ヘッダーから除外されるため、サーバーはその列の `DEFAULT` 値を適用できます。したがって、ロード対象に含める列は Flink テーブル定義によって決まります。
+
+- **Flink スキーマから列を省略した場合:** コネクタはその列を送信しないため、StarRocks はその列の `DEFAULT` 値を適用します。
+
+- **Flink スキーマで列を定義した場合:** コネクタは行からその列の値を送信します。値が null の場合は `NULL` も送信されます。
+
+このオプションを使用するには Flink テーブルスキーマが必要であるため、Flink SQL およびスキーマを指定して作成したシンクに適用されます。`sink.version=V1` の場合は、`sink.properties.strip_outer_array=true` も設定する必要があります。V1 シンクは各バッチを JSON 配列として送信し、このプロパティを自動的には設定しません。V2 では自動的に設定されます。
+
+raw `String` DataStream シンクにはスキーマがないため、`sink.json.columns-from-flink-schema=true` を設定すると、起動時にこの設定が拒否されます。このシンクでは、代わりに `sink.properties.columns` を明示的に設定してください。
 
 ### データロードのメトリクスのモニタリング
 
@@ -480,7 +520,7 @@ DISTRIBUTED BY HASH(`id`);
 
 #### ネットワーク設定
 
-Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/management/FE_configuration.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/management/FE_configuration.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/management/BE_configuration.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
+Flink が配置されているマシンが、StarRocks クラスターの FE ノードに [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（デフォルト: `8030`）および [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port)（デフォルト: `9030`）を介してアクセスでき、BE ノードに [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port)（デフォルト: `8040`）を介してアクセスできることを確認してください。
 
 ### Flink SQL で実行
 
@@ -674,7 +714,7 @@ v1.2.9 以降、StarRocks 用の Flink コネクタはこのフレームワー�
 - スキーマ変更の同期
 - フルおよびインクリメンタルデータの同期
 
-クイックスタートについては、[Flink CDC 3.0 を使用して MySQL から StarRocks へのストリーミング ELT を行う](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/get-started/quickstart/mysql-to-starrocks) を参照してください。
+クイックスタートについては、[Flink CDC 3.0 を使用して MySQL から StarRocks へのストリーミング ELT を行う](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.4/docs/get-started/quickstart/mysql-to-starrocks/) を参照してください。
 
 [fast_schema_evolution](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md#set-fast-schema-evolution) を有効にするために、StarRocks v3.2.1 以降のバージョンを使用することをお勧めします。これにより、カラムの追加や削除の速度が向上し、リソース使用量が削減されます。
 
@@ -792,7 +832,7 @@ DISTRIBUTED BY HASH(`id`);
   
     - すべてのカラムを含む DDL を定義します。
     - コネクタにカラム `score` を条件として使用することを伝えるために、オプション `sink.properties.merge_condition` を `score` に設定します。
-    - コネクタに Stream Load を使用することを伝えるために、オプション `sink.version` を `V1` に設定します。
+    - オプション `sink.version` を `V1` または `V2` に設定します。どちらも条件付き更新をサポートしています。
 
     ```SQL
     CREATE TABLE `score_board` (

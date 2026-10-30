@@ -153,7 +153,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"hive0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -165,7 +165,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"hive0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -177,7 +177,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"not_exist_reousrce\", \"database\"=\"db0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -189,7 +189,7 @@ public class HiveTableTest {
                     "(\"database\"=\"db0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -216,7 +216,7 @@ public class HiveTableTest {
                     "(\"resource\"=\"hive0\", \"database\"=\"db0\", \"table\"=\"table0\")";
             CreateTableStmt createTableStmt =
                     (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
-            com.starrocks.catalog.Table table = createTable(createTableStmt);
+            createTable(createTableStmt);
             Assertions.fail("No exception throws.");
         });
     }
@@ -298,6 +298,9 @@ public class HiveTableTest {
 
             Assertions.assertTrue(table instanceof HiveTable);
             HiveTable hiveTable = (HiveTable) table;
+            if (targetFormat.equals("AVRO")) {
+                hiveTable.setAvroSchemaJson("{\"type\":\"record\",\"name\":\"T\",\"fields\":[]}");
+            }
             List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
             TTableDescriptor tTableDescriptor = hiveTable.toThrift(partitions);
 
@@ -305,6 +308,12 @@ public class HiveTableTest {
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getSerde_lib(), serde);
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_names(), "col2");
             Assertions.assertEquals(tTableDescriptor.getHdfsTable().getHive_column_types(), "INT");
+            if (targetFormat.equals("AVRO")) {
+                Assertions.assertEquals("{\"type\":\"record\",\"name\":\"T\",\"fields\":[]}",
+                        tTableDescriptor.getHdfsTable().getAvro_schema_json());
+            } else {
+                Assertions.assertFalse(tTableDescriptor.getHdfsTable().isSetAvro_schema_json());
+            }
         }
     }
 
@@ -334,5 +343,23 @@ public class HiveTableTest {
         HiveTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
         HiveTable table = newBuilder.build();
         Assertions.assertEquals(table.getResourceName(), resourceName);
+    }
+
+    /**
+     * getProperties merges the resource's current metastore URIs into what it returns. It used to merge them
+     * into the table's own map, i.e. write to a shared object from a getter that queries call without the
+     * meta lock.
+     */
+    @Test
+    public void testGetPropertiesDoesNotWriteToTheTable() {
+        Map<String, String> stored = new HashMap<>();
+        HiveTable table = new HiveTable(1L, "hive_tbl", Lists.newArrayList(new Column("k", IntegerType.INT)),
+                "hive0", null, "db0", "table0", "hdfs://127.0.0.1:10000/hive", "", 0L,
+                Lists.newArrayList(), Lists.newArrayList("k"), stored, new HashMap<>(),
+                HiveStorageFormat.PARQUET, HiveTable.HiveTableType.EXTERNAL_TABLE);
+
+        Map<String, String> properties = table.getProperties();
+        Assertions.assertEquals("thrift://127.0.0.1:9083", properties.get(HiveTable.HIVE_METASTORE_URIS));
+        Assertions.assertTrue(stored.isEmpty());
     }
 }

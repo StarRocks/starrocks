@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ラムダ式は匿名関数であり、高階 SQL 関数のパラメータとして渡すことができます。"
 sidebar_position: 0.9
 ---
 

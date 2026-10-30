@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+description: "v3.1以降、StarRocks は非同期マテリアライズドビューのメトリクスを Prometheus で監視できます。"
+sidebar_position: 20
 ---
 
 # 非同期マテリアライズドビューの監視メトリクス
@@ -35,17 +37,17 @@ scrape_configs:
 ### mv_refresh_jobs
 
 - Type: Counter
-- Description: マテリアライズドビューのリフレッシュジョブの総数。
+- Description: マテリアライズドビューに対してトリガーされたリフレッシュジョブの総数。1つのリフレッシュジョブはユーザー起動またはスケジュールによる1回のリフレッシュに対応し、内部で複数の Task Run が実行される場合がある。各ジョブは終了状態に達した時点で1回カウントされる。MERGED 状態の Task Run（後のバッチにマージされたサブタスク）はカウントされない。
 
 ### mv_refresh_total_success_jobs
 
 - Type: Counter
-- Description: マテリアライズドビューの成功したリフレッシュジョブの数。
+- Description: 正常完了したリフレッシュジョブの数。ジョブ成功時に1回カウントされる。
 
 ### mv_refresh_total_failed_jobs
 
 - Type: Counter
-- Description: マテリアライズドビューの失敗したリフレッシュジョブの数。
+- Description: 失敗したリフレッシュジョブの数。ジョブ失敗時に1回カウントされる。
 
 ### mv_refresh_total_empty_jobs
 
@@ -110,4 +112,48 @@ scrape_configs:
 ### mv_refresh_duration
 
 - Type: Histogram
-- Description: 成功したマテリアライズドビューのリフレッシュジョブの期間。
+- Description: リフレッシュジョブの実時間（ミリ秒）。マルチバッチジョブの場合、最初の Task Run 開始から最後の Task Run 完了までを計測する。
+
+### mv_global_count
+
+- Type: Gauge
+- Description: クラスター内の非同期マテリアライズドビューの現在の数。ラベル `refresh_mode`（マテリアライズドビューのリフレッシュモード）と `status`（`ACTIVE` または `INACTIVE`）を持ちます。このメトリクスは、マテリアライズドビューごとのメトリクス権限に関係なく常に出力されます。
+
+### mv_global_query_rewrite_queries_total
+
+- Type: Counter
+- Description: マテリアライズドビューの書き換え結果でグループ化されたクエリ数。ラベル `state`：`HIT`（クエリがマテリアライズドビューを使用するように書き換えられた）、`NO_HIT`（書き換えは有効だがマテリアライズドビューが使用されなかった）、`DISABLED`（セッション変数または FE 設定でマテリアライズドビューの書き換えが無効化されている）。クエリごとに 1 回カウントされます。
+
+### mv_global_query_mv_usage_total
+
+- Type: Counter
+- Description: クエリによってマテリアライズドビューが使用された回数。ラベル `usage_type`（`REWRITE` はクエリがマテリアライズドビューを使用するように書き換えられた場合、`DIRECT` はマテリアライズドビューを直接クエリする場合）と `refresh_mode` を持ちます。
+### mv_global_refresh_jobs_total
+
+- Type: Counter
+- Description: 全マテリアライズドビューにわたるリフレッシュジョブの総数。ラベル `warehouse_name` を持つ。`mv_refresh_jobs` のフリート全体の集計で、各ジョブはその終端 Task Run で 1 回カウントされ、`MERGED` run は除外される。マテリアライズドビューごとのメトリクス権限に関係なく常に出力される。
+
+### mv_global_refresh_success_jobs_total
+
+- Type: Counter
+- Description: 全マテリアライズドビューにわたる成功したリフレッシュジョブの総数。`warehouse_name` で集計。
+
+### mv_global_refresh_failed_jobs_total
+
+- Type: Counter
+- Description: 全マテリアライズドビューにわたる失敗したリフレッシュジョブの総数。`warehouse_name` で集計。
+
+### mv_global_refresh_duration
+
+- Type: Histogram
+- Description: マテリアライズドビューのリフレッシュジョブのジョブ単位の実時間（ミリ秒）。`warehouse_name` で集計。
+
+### mv_global_refresh_pending_jobs
+
+- Type: Gauge
+- Description: 全マテリアライズドビューにわたる現在保留中のリフレッシュジョブ数。`warehouse_name` で集計。
+
+### mv_global_refresh_running_jobs
+
+- Type: Gauge
+- Description: 全マテリアライズドビューにわたる現在実行中のリフレッシュジョブ数。`warehouse_name` で集計。

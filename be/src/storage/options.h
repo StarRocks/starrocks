@@ -34,33 +34,21 @@
 
 #pragma once
 
+#include <atomic>
+#include <functional>
+#include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "base/uid_util.h"
 #include "fs/fs.h"
+#include "platform/store_path.h"
 #include "storage/lake/location_provider.h"
-#include "storage/olap_define.h"
 
 namespace starrocks {
 
 class MemTracker;
-
-struct StorePath {
-    StorePath() = default;
-    explicit StorePath(std::string path_) : path(std::move(path_)) {}
-    std::string path;
-    TStorageMedium::type storage_medium{TStorageMedium::HDD};
-};
-
-// parse a single root path of storage_root_path
-Status parse_root_path(const std::string& root_path, StorePath* path);
-
-Status parse_conf_store_paths(const std::string& config_path, std::vector<StorePath>* path,
-                              std::string_view configvar_name = "config::storage_root_path");
-
-Status parse_conf_datacache_paths(const std::string& config_path, std::vector<std::string>* paths);
+class TableMetricsManager;
 
 struct EngineOptions {
     // list paths that tablet will be put into.
@@ -69,6 +57,7 @@ struct EngineOptions {
     UniqueId backend_uid{0, 0};
     MemTracker* compaction_mem_tracker = nullptr;
     MemTracker* update_mem_tracker = nullptr;
+    TableMetricsManager* table_metrics_mgr = nullptr;
     // if start as cn, no need to write cluster id
     bool need_write_cluster_id = true;
 };
@@ -83,8 +72,17 @@ struct LakeIOOptions {
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
     bool fill_metadata_cache = false;
+    // Keep the loaded Segment objects alive on the Rowset instance and reuse them on the next
+    // segments() call. Vertical compaction reads the same rowsets once per column group; without
+    // this, every pass reloads and reparses every segment whenever the metadata cache cannot hold
+    // them all, which is CPU-bound and proportional to the column count.
+    bool hold_segments = false;
     bool use_page_cache = false;
     bool cache_file_only = false; // only used for CACHE SELECT
+    // Callback to warmup SST files, invoked at most once per tablet during CACHE SELECT.
+    // Protected by sst_warmup_done (CAS guard) to ensure single execution across segments.
+    std::function<Status()> sst_warmup_fn;
+    std::shared_ptr<std::atomic<bool>> sst_warmup_done;
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
 };

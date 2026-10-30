@@ -15,7 +15,12 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
-#include "runtime/runtime_state_helper.h"
+#include "compute_env/query/fragment_runtime_state.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "exec/pipeline/aggregate/spillable_aggregate_skew_compactor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
 
@@ -49,12 +54,10 @@ Status SpillablePartitionWiseAggregateSinkOperator::set_finishing(RuntimeState* 
         RETURN_IF_ERROR(_agg_op->set_finishing(state));
         return Status::OK();
     }
-    if (!_agg_op->aggregator()->spill_channel()->has_task()) {
-        if (_agg_op->aggregator()->hash_map_variant().size() > 0 || !_streaming_chunks.empty()) {
-            _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
-            _agg_op->aggregator()->spill_channel()->add_spill_task(_build_spill_task(state));
-        }
-    }
+    // Always queue a spill task for residual hash table and streaming data.
+    // Even if channel has_task(), the in-flight task may have been created with
+    // should_spill_hash_table=false and won't drain the hash table.
+    _agg_op->aggregator()->spill_channel()->add_spill_task(_build_spill_task(state));
 
     auto flush_function = [this](RuntimeState* state) {
         auto& spiller = _agg_op->aggregator()->spiller();
@@ -99,11 +102,6 @@ Status SpillablePartitionWiseAggregateSinkOperator::prepare(RuntimeState* state)
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
     }
 
-    if (state->enable_spill_partitionwise_agg_skew_elimination()) {
-        auto* agg_op_factory = dynamic_cast<AggregateBlockingSinkOperatorFactory*>(_agg_op->get_factory());
-        _agg_op->aggregator()->spiller()->options().opt_aggregator_params =
-                convert_to_aggregator_params(agg_op_factory->aggregator_factory()->t_node());
-    }
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
@@ -281,9 +279,6 @@ ChunkPtr& SpillablePartitionWiseAggregateSinkOperator::_append_hash_column(Chunk
 
 Status SpillablePartitionWiseAggregateSinkOperator::_spill_all_data(RuntimeState* state, bool should_spill_hash_table) {
     RETURN_IF(_agg_op->aggregator()->hash_map_variant().size() == 0, Status::OK());
-    if (should_spill_hash_table) {
-        _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
-    }
     CHECK(!_agg_op->aggregator()->spill_channel()->has_task());
     RETURN_IF_ERROR(
             _agg_op->aggregator()->spill_aggregate_data(state, _build_spill_task(state, should_spill_hash_table)));
@@ -292,13 +287,18 @@ Status SpillablePartitionWiseAggregateSinkOperator::_spill_all_data(RuntimeState
 
 std::function<StatusOr<ChunkPtr>()> SpillablePartitionWiseAggregateSinkOperator::_build_spill_task(
         RuntimeState* state, bool should_spill_hash_table) {
-    auto chunk_provider = [this, state, should_spill_hash_table]() -> StatusOr<ChunkPtr> {
+    auto chunk_provider = [this, state, should_spill_hash_table,
+                           iterator_initialized = false]() mutable -> StatusOr<ChunkPtr> {
         if (!_streaming_chunks.empty()) {
             auto chunk = _streaming_chunks.front();
             _streaming_chunks.pop();
             return chunk;
         }
-        if (should_spill_hash_table) {
+        if (should_spill_hash_table && _agg_op->aggregator()->hash_map_variant().size() > 0) {
+            if (!iterator_initialized) {
+                _agg_op->aggregator()->it_hash() = _agg_op->aggregator()->state_allocator().begin();
+                iterator_initialized = true;
+            }
             if (!_agg_op->aggregator()->is_ht_eos()) {
                 auto chunk = std::make_shared<Chunk>();
                 RETURN_IF_ERROR(_agg_op->aggregator()->convert_hash_map_to_chunk(state->chunk_size(), &chunk, true));
@@ -314,7 +314,7 @@ std::function<StatusOr<ChunkPtr>()> SpillablePartitionWiseAggregateSinkOperator:
         _streaming_bytes = 0;
         return Status::EndOfFile("no more data in current aggregator");
     };
-    return [this, chunk_provider]() -> StatusOr<ChunkPtr> {
+    return [this, chunk_provider]() mutable -> StatusOr<ChunkPtr> {
         auto maybe_chunk = chunk_provider();
         if (maybe_chunk.ok()) {
             auto chunk = std::move(maybe_chunk.value());
@@ -340,15 +340,19 @@ Status SpillablePartitionWiseAggregateSinkOperatorFactory::prepare(RuntimeState*
         _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     }
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
+    _spill_options->block_manager = state->query_runtime_state()->query_spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
     _spill_options->splittable = false;
     _spill_options->enable_block_compaction = state->spill_enable_compaction();
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
-    _spill_options->wg = state->fragment_ctx()->workgroup();
+    _spill_options->wg = state->fragment_runtime_state()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+    if (state->enable_spill_partitionwise_agg_skew_elimination()) {
+        _spill_options->skew_chunk_compactor = make_spill_aggregate_skew_compactor(
+                convert_to_aggregator_params(_agg_op_factory->aggregator_factory()->t_node()));
+    }
 
     return Status::OK();
 }
@@ -507,7 +511,7 @@ StatusOr<ChunkPtr> SpillablePartitionWiseAggregateSourceOperator::_pull_spilled_
                     state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_curr_partition_reader)));
             if (maybe_chunk.ok() && maybe_chunk.value() && !maybe_chunk.value()->is_empty()) {
                 DCHECK(_pw_agg->need_input() && !_pw_agg->is_finished());
-                RETURN_IF_ERROR(_pw_agg->push_chunk(state, std::move(maybe_chunk.value())));
+                RETURN_IF_ERROR(_pw_agg->push_chunk(state, maybe_chunk.value()));
             } else if (maybe_chunk.status().is_end_of_file()) {
                 _curr_partition_eos = true;
                 RETURN_IF_ERROR(_pw_agg->set_finishing(state));

@@ -12,67 +12,67 @@ create database hive_truncate_${uuid0}.hive_db_${uuid0} properties (
 );
 -- result:
 -- !result
-create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int);
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl1_${uuid0} (k1 int);
 -- result:
 -- !result
-insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1),(2),(3);
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl1_${uuid0} values (1),(2),(3);
 -- result:
 -- !result
-select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl1_${uuid0} order by k1;
 -- result:
 1
 2
 3
 -- !result
-truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl1_${uuid0};
 -- result:
 -- !result
-select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl1_${uuid0} order by k1;
 -- result:
 -- !result
-drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl1_${uuid0} force;
 -- result:
 -- !result
-create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int, k2 date) partition by (k2);
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl2_${uuid0} (k1 int, k2 date) partition by (k2);
 -- result:
 -- !result
-insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,'2020-01-01'),(2,'2020-01-01'),(3,'2020-01-02');
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl2_${uuid0} values (1,'2020-01-01'),(2,'2020-01-01'),(3,'2020-01-02');
 -- result:
 -- !result
-select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl2_${uuid0} order by k1;
 -- result:
 1	2020-01-01
 2	2020-01-01
 3	2020-01-02
 -- !result
-truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl2_${uuid0};
 -- result:
 -- !result
-select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl2_${uuid0} order by k1;
 -- result:
 -- !result
-drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl2_${uuid0} force;
 -- result:
 -- !result
-create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} (k1 int, k2 date, k3 string) partition by (k2,k3);
+create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl3_${uuid0} (k1 int, k2 date, k3 string) partition by (k2,k3);
 -- result:
 -- !result
-insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} values (1,'2020-01-01','a'),(2,'2020-01-01','b'),(3,'2020-01-02','a');
+insert into hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl3_${uuid0} values (1,'2020-01-01','a'),(2,'2020-01-01','b'),(3,'2020-01-02','a');
 -- result:
 -- !result
-select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl3_${uuid0} order by k1;
 -- result:
 1	2020-01-01	a
 2	2020-01-01	b
 3	2020-01-02	a
 -- !result
-truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0};
+truncate table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl3_${uuid0};
 -- result:
 -- !result
-select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} order by k1;
+select * from hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl3_${uuid0} order by k1;
 -- result:
 -- !result
-drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} force;
+drop table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl3_${uuid0} force;
 -- result:
 -- !result
 create table hive_truncate_${uuid0}.hive_db_${uuid0}.hive_tbl_par${uuid0} (k1 int, k2 date, k3 string) partition by (k2,k3);

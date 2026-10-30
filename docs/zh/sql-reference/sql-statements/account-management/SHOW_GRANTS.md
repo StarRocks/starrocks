@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW GRANTS displays all the privileges that have been granted to a user or role."
 ---
 
 # SHOW GRANTS
@@ -7,6 +8,8 @@ displayed_sidebar: docs
 ## 功能
 
 查看当前用户，指定用户，或指定角色的权限信息。
+
+AI 权限沿用相同输出格式：`USAGE ON AI FUNCTION`、`USAGE ON ALL AI FUNCTIONS`、`USAGE ON AI PROVIDER` 和 `USAGE ON ALL AI PROVIDERS`。Provider 名称使用引号，已删除 Provider 的授权不再展示。Provider 授权绑定 UUID，因此同名重建不会恢复旧授权。
 
 :::tip
 
@@ -18,12 +21,14 @@ displayed_sidebar: docs
 
 ```SQL
 SHOW GRANTS; -- 查看当前用户的权限信息。
+SHOW GRANTS FOR CURRENT_USER[()]; -- 查看当前用户的权限信息（MySQL 兼容语法）。
 SHOW GRANTS FOR ROLE <role_name>; -- 查看指定角色的权限信息。
 SHOW GRANTS FOR <user_identity>; -- 查看指定用户的权限信息。
 ```
 
 ## 参数说明
 
+- `CURRENT_USER[()]`：返回当前会话用户的权限信息，括号可省略。该语法与 `SHOW GRANTS` 等价，用于兼容在连接初始化时自动发送该语句的 MySQL 客户端（如 Metabase、DBeaver 等）。
 - role_name：角色名
 - user_identity：用户标识
 
@@ -52,6 +57,13 @@ SHOW GRANTS FOR <user_identity>; -- 查看指定用户的权限信息。
 
 ```SQL
 mysql> SHOW GRANTS;
++--------------+---------+----------------------------------------+
+| UserIdentity | Catalog | Grants                                 |
++--------------+---------+----------------------------------------+
+| 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
++--------------+---------+----------------------------------------+
+
+mysql> SHOW GRANTS FOR CURRENT_USER();
 +--------------+---------+----------------------------------------+
 | UserIdentity | Catalog | Grants                                 |
 +--------------+---------+----------------------------------------+

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW PLUGINS は、インストールされているプラグインを表示するために使用します。"
 ---
 
 # SHOW PLUGINS

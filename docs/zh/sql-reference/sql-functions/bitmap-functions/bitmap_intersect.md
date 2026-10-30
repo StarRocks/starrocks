@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算一组 Bitmap 值的交集并返回。"
 ---
 
 # bitmap_intersect

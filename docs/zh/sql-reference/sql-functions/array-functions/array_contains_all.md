@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "检查arr1是否包含arr2的所有元素，即arr2是否为arr1的子集。"
 ---
 
 # array_contains_all

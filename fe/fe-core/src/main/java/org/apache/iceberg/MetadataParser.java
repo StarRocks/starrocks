@@ -77,6 +77,7 @@ public class MetadataParser {
     });
 
     public MetadataParser(Table table,
+                          String schemaString,
                           Map<Integer, String> specStringCache,
                           Map<Integer, ResidualEvaluator> residualCache,
                           ExecutorService executorService,
@@ -91,7 +92,9 @@ public class MetadataParser {
         this.isPartitionedTable = table.spec().isPartitioned();
         this.specStringCache = specStringCache;
         this.residualCache = residualCache;
-        this.schemaString = SchemaParser.toJson(table.schema());
+        // Use the scan's read schema (the targeted snapshot's schema for a time-travel read), not the
+        // current table schema, so remote-planned tasks carry the same schema as locally-planned ones.
+        this.schemaString = schemaString;
         this.executorService = executorService;
         this.liveFilesCount = liveFilesCount;
     }
@@ -240,6 +243,9 @@ public class MetadataParser {
         // build key metadata
         ByteBuffer keyMetadata = thrift.isSetKey_metadata() ? ByteBuffer.wrap(thrift.getKey_metadata()) : null;
 
+        // build first row id (format v3); _row_id of the data file's rows derives from it
+        Long firstRowId = thrift.isSetFirst_row_id() ? thrift.getFirst_row_id() : null;
+
         BaseFile<?> baseFile;
         if (content == FileContent.DATA) {
             baseFile = new GenericDataFile(
@@ -252,7 +258,7 @@ public class MetadataParser {
                     keyMetadata,
                     splitOffsets,
                     null,
-                    null);
+                    firstRowId);
         } else {
             baseFile = new GenericDeleteFile(
                     specId,

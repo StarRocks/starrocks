@@ -1,10 +1,12 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
+description: "StarRocks Migration Tool（SMT）用于通过 Flink 将源数据库数据迁移导入 StarRocks。"
 ---
 
 # StarRocks migration tool（SMT）
 
-StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工具，用于将源数据库的数据通过 Flink 导入 StarRocks。其主要有两个功能：
+StarRocks migration tool（简称 SMT）是一个命令行工具，用于生成通过 Flink 将源数据库的数据导入 StarRocks 所需的 SQL。其主要有两个功能：
 
 - 根据源数据库和目标 StarRocks 集群的信息，生成 StarRocks 建表语句。
 - 生成 Flink 的 SQL 客户端 可执行的 SQL 语句，以提交同步数据的 Flink job，简化链路中全量或增量数据同步流程。
@@ -20,8 +22,24 @@ StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工�
 | ClickHouse  | 支持       | 支持     | 不支持   |
 | SQL Server  | 支持       | 支持     | 支持     |
 | TiDB       | 支持       | 支持     | 支持     |
-<!--pending clickhosue-->
+
 下载链接：https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
+
+## SMT 的作用与限制
+
+SMT 只负责生成 SQL 文件，生成后即退出。它读取源数据库中的表定义，并在 `result` 目录下生成两类文件：
+
+- `starrocks-create.*.sql`：CREATE TABLE 语句，需要您在 StarRocks 中执行。
+- `flink-create.*.sql`：定义 source table 和 sink table 并提交 `INSERT INTO ... SELECT` 作业的 Flink SQL，需要您在 Flink SQL 客户端中执行。
+
+SMT 不会启动、运行或连接 Flink，也不会迁移任何数据。您仍然需要安装并运行 Flink 集群，并为其配置源数据库对应的 Flink CDC connector 和 [StarRocks Flink connector](../../loading/Flink-connector-starrocks.md)，然后自行执行生成的文件。
+
+### 不使用 SMT 同步数据
+
+SMT 不是必需的。您也可以：
+
+- 使用 [Flink CDC pipeline](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/core-concept/data-pipeline/)。Pipeline 通过一个 YAML 文件定义，会自动创建 StarRocks 表并执行同步。参见 [从 PostgreSQL 实时同步](../../loading/Flink_cdc_postgres.md)；对于 MySQL，参见 Flink CDC 文档中的 [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.6/docs/get-started/quickstart-for-1.20/mysql-to-starrocks/)。
+- 自行创建 StarRocks 表，并使用 [StarRocks Flink connector](../../loading/Flink-connector-starrocks.md) 作为 sink 编写 Flink SQL。该方式适用于 Flink 能够读取的任何数据源。
 
 ## SMT 使用步骤
 
@@ -113,12 +131,12 @@ StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工�
 
 | 依赖                       | 安装包名                                       | 下载链接                                                            |
 | ------------------------- | --------------------------------------------- | ----------------------------------------------------------------- |
-| Flink                     | flink-x.x.x-bin-scala_2.12.tgz                | [点此下载](https://flink.apache.org/downloads.html)             |
+| Flink                     | flink-x.x.x-bin-scala_2.12.tgz                | [点此下载](https://flink.apache.org/downloads/)             |
 | Flink CDC connector       | flink-sql-connector-mysql-cdc-x.x.x.jar       | [点此下载](https://github.com/apache/flink-cdc/releases)        |
 | Flink-connector-starrocks | flink-connector-starrocks-x.x.x_flink-x.x.jar | [点此下载](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases) |
 | SMT                       | smt.tar.gz                                    | [点此下载](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2) |
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本 1.11。
+1. 下载 [Flink](https://flink.apache.org/downloads/)，最低支持版本 1.11。
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的 flink-sql-connector-mysql-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/starrocks-connector-for-apache-flink/releases).
 4. 复制 `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
@@ -217,6 +235,12 @@ StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工�
 
 ## 同步 PostgreSQL 到 StarRocks
 
+:::tip
+
+使用 Flink CDC 3.5 或更高版本时，Flink CDC pipeline 无需 SMT 即可将 PostgreSQL 同步到 StarRocks，并会自动创建 StarRocks 表。详细步骤请参见 [从 PostgreSQL 实时同步](../../loading/Flink_cdc_postgres.md)。
+
+:::
+
 ### 简介
 
 通过 Flink CDC connector 和 SMT 可以实现 PostgreSQL 数据的秒级同步。
@@ -227,7 +251,7 @@ SMT 可以根据 PostgreSQL 和 StarRocks 的集群信息和表结构自动生�
 
 ### 操作步骤
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本1.11。
+1. 下载 [Flink](https://flink.apache.org/downloads/)，最低支持版本1.11。
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的 flink-sql-connector-postgres-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)。
 4. 复制 `flink-sql-connector-postgres-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`。
@@ -317,13 +341,13 @@ SMT 可以根据 PostgreSQL 和 StarRocks 的集群信息和表结构自动生�
     ### and https://debezium.io/documentation/reference/postgres-plugins.html
     ### flink.cdc.decoding.plugin.name = decoderbufs
     ```
-    <!--pending-->
+
 2. 如何开启 PostgreSQL WAL？
 
     ```Bash
-    # 开启连接权限
-    echo "host all all 0.0.0.0/32 trust" >> pg_hba.conf
-    echo "host replication all 0.0.0.0/32 trust" >> pg_hba.conf
+    # 允许 Flink 所在主机连接。将 10.0.0.0/24 替换为这些主机的地址段。
+    echo "host all all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
+    echo "host replication all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
     # 开启 wal logical 复制
     echo "wal_level = logical" >> postgresql.conf
     echo "max_wal_senders = 2" >> postgresql.conf
@@ -350,7 +374,7 @@ SMT 可以根据 Oracle 和 StarRocks 的集群信息和表结构自动生成 so
 
 ### 操作步骤
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本 1.11。
+1. 下载 [Flink](https://flink.apache.org/downloads/)，最低支持版本 1.11。
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的flink-sql-connector-oracle-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)。
 4. 复制 `flink-sql-connector-oracle-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`。
@@ -468,15 +492,14 @@ SMT 可以根据 Oracle 和 StarRocks 的集群信息和表结构自动生成 so
     GRANT SELECT ON V_$ARCHIVE_DEST_STATUS TO flinkuser;
     ```
 
-- [table-rule.1] 中的db配置不支持正则，只可以写完整的db名称。<!--pending-->
-- 由于 Oracle12c 开始支持了 CDB 模式，SMT 内部会自动判断是否开启了 CDB，并自动修改对应的 flink-cdc 配置项。但用户需要注意的是 [db].user 的配置需要注意是否添加 c## 前缀，防止无权限访问的问题发生。<!--pending-->
+- [table-rule.1] 中的db配置不支持正则，只可以写完整的db名称。
+- 由于 Oracle12c 开始支持了 CDB 模式，SMT 内部会自动判断是否开启了 CDB，并自动修改对应的 flink-cdc 配置项。但用户需要注意的是 [db].user 的配置需要注意是否添加 c## 前缀，防止无权限访问的问题发生。
 
 ## 同步 Hive 到 StarRocks
 
 ### 简介
 
 介绍如何使用 SMT 同步 Hive 数据至 StarRocks 时，会创建 StarRocks 明细表，并且使用 Flink 任务来进行数据的同步。
-<!--pending一种是Hive外表同步，也就是仅仅创建Hive外表，然后可以通过外表直接查询Hive。-->
 
 ### 操作步骤
 
@@ -502,12 +525,6 @@ authentication = kerberos
 - kerberos，kerberos_http：此时需要如下操作：
   1. 在 Hive 集群执行 kadmin.local, 并查看 list_principals 找到对应的principal 名称，如：`hive/emr-header-1.cluster-49148@EMR.49148.COM`，那么 user 就需要设置为 `hive/emr-header-1.cluster-49148`，password 留空即可。
   2. 在执行 SMT 的机器上先执行 `kinit -kt  /path/to/keytab  principal` 并执行 klis t查看是否已有正确的 token 生成。
-
-<!--pending
-#### Hive 外表同步
-1. 执行 ./starrocks-migrate-tool 
-2. 在 StarRocks 中执行 result/starrocks-external-create.all.sql 即可。
--->
 
 #### 同步数据
 
@@ -542,11 +559,11 @@ authentication = kerberos
 
 SMT 可以根据 SQL Server 和 StarRocks 的集群信息和表结构自动生成 source table 和 sink table 的建表语句。
 
-通过 Flink CDC connector 捕获并记录 SQL Server 数据库服务器中发生的行级变更，其原理是使用 SQL Server 自身提供的 CDC 特性，SQL Server 自身提供的 CDC 能力可以将数据库中指定的变更存档到指定的 change tables 中。SQL Server CDC 连接器首先通过 JDBC 读取表中的历史数据，再从 change tables 中或缺增量变更数据，从而实现全增量同步。之后再经过Flink-connector-starrocks 将变更数据写入 StarRocks。<!--pending-->
+通过 Flink CDC connector 捕获并记录 SQL Server 数据库服务器中发生的行级变更，其原理是使用 SQL Server 自身提供的 CDC 特性，SQL Server 自身提供的 CDC 能力可以将数据库中指定的变更存档到指定的 change tables 中。SQL Server CDC 连接器首先通过 JDBC 读取表中的历史数据，再从 change tables 中或缺增量变更数据，从而实现全增量同步。之后再经过Flink-connector-starrocks 将变更数据写入 StarRocks。
 
 ### 操作步骤
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本 1.11。
+1. 下载 [Flink](https://flink.apache.org/downloads/)，最低支持版本 1.11。
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的flink-sql-connector-sqlserver-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)。
 4. 复制 `flink-sql-connector-sqlserver-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`。
@@ -687,7 +704,7 @@ SMT 可以根据 TiDB 和 StarRocks 的集群信息和表结构自动生成 sour
 
 ### 操作步骤
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本 1.11。
+1. 下载 [Flink](https://flink.apache.org/downloads/)，最低支持版本 1.11。
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的 flink-sql-connector-tidb-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)。
 4. 复制 `flink-sql-connector-tidb-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`。

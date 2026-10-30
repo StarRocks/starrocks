@@ -20,13 +20,16 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
+import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Delegate;
 import mockit.Expectations;
@@ -36,8 +39,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -55,7 +62,15 @@ public class JDBCMetadataTest {
     @Mocked
     Connection connection;
     @Mocked
+    DatabaseMetaData metaData;
+    @Mocked
     PreparedStatement preparedStatement;
+    @Mocked
+    Statement statement;
+    @Mocked
+    ResultSet queryResultSet;
+    @Mocked
+    ResultSetMetaData queryResultSetMetaData;
     MockResultSet partitionsInfoTablesResult;
     private Map<String, String> properties;
     private MockResultSet dbResult;
@@ -105,16 +120,20 @@ public class JDBCMetadataTest {
                 result = connection;
                 minTimes = 0;
 
-                connection.getMetaData().getCatalogs();
+                connection.getMetaData();
+                result = metaData;
+                minTimes = 0;
+
+                metaData.getCatalogs();
                 result = dbResult;
                 minTimes = 0;
 
-                connection.getMetaData().getTables("test", null, null,
+                metaData.getTables("test", null, null,
                         new String[] {"TABLE", "VIEW"});
                 result = tableResult;
                 minTimes = 0;
 
-                connection.getMetaData().getColumns("test", null, "tbl1", "%");
+                metaData.getColumns("test", null, "tbl1", "%");
                 result = columnResult;
                 minTimes = 0;
 
@@ -361,6 +380,116 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.URI, "jdbc:mysql://abc.mysql.com:3306");
         jdbcMetadata = new JDBCMetadata(properties, "catalog");
         Assertions.assertEquals("jdbc:mariadb://abc.mysql.com:3306", jdbcMetadata.getJdbcUrl());
+    }
+
+    @Test
+    public void testGetTableDoesNotFetchComment() throws SQLException {
+        // getTable() must not populate the comment — keep its hot path single
+        // round-trip (getColumns only). Comment fetch is deferred to
+        // getTableComment(). No getTables() mock is set for "tbl1" here so any
+        // unintended REMARKS round-trip in the lambda would also surface via the
+        // returned table's empty comment.
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+        Assertions.assertNotNull(table);
+        Assertions.assertEquals("", table.getComment());
+    }
+
+    @Test
+    public void testGetTableCommentReadsRemarks() throws SQLException {
+        MockResultSet tablesWithRemarks = new MockResultSet("tables_with_remarks");
+        tablesWithRemarks.addColumn("TABLE_NAME", Arrays.asList("tbl1"));
+        tablesWithRemarks.addColumn("REMARKS", Arrays.asList("jdbc table comment"));
+
+        new Expectations() {
+            {
+                connection.getMetaData().getTables("test", null, "tbl1", new String[] {"TABLE", "VIEW"});
+                result = tablesWithRemarks;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        String comment = jdbcMetadata.getTableComment(new ConnectContext(), "test", "tbl1");
+        Assertions.assertEquals("jdbc table comment", comment);
+    }
+
+    @Test
+    public void testGetTableFromQuery() throws SQLException {
+        String passThroughQuery = "SELECT 1 AS id, payload ? 'k' AS name FROM docs";
+        String metadataQuery = "SELECT * FROM (" + passThroughQuery + ") starrocks_query WHERE 1 = 0";
+
+        new Expectations() {
+            {
+                connection.createStatement();
+                result = statement;
+                minTimes = 1;
+
+                statement.executeQuery(metadataQuery);
+                result = queryResultSet;
+                minTimes = 1;
+
+                queryResultSet.getMetaData();
+                result = queryResultSetMetaData;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnCount();
+                result = 2;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(1);
+                result = Types.INTEGER;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(1);
+                result = "INTEGER";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(1);
+                result = 4;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(1);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(1);
+                result = "id";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(1);
+                result = ResultSetMetaData.columnNoNulls;
+                minTimes = 1;
+
+                queryResultSetMetaData.getColumnType(2);
+                result = Types.VARCHAR;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnTypeName(2);
+                result = "VARCHAR";
+                minTimes = 1;
+                queryResultSetMetaData.getPrecision(2);
+                result = 20;
+                minTimes = 1;
+                queryResultSetMetaData.getScale(2);
+                result = 0;
+                minTimes = 1;
+                queryResultSetMetaData.getColumnLabel(2);
+                result = "name";
+                minTimes = 1;
+                queryResultSetMetaData.isNullable(2);
+                result = ResultSetMetaData.columnNullable;
+                minTimes = 1;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+        Table table = jdbcMetadata.getTableFromQuery(new ConnectContext(), "test", passThroughQuery + ";");
+        Assertions.assertInstanceOf(JDBCTable.class, table);
+        JDBCTable jdbcTable = (JDBCTable) table;
+        Assertions.assertTrue(jdbcTable.isQueryTable());
+        Assertions.assertEquals("(" + passThroughQuery + ") starrocks_query", jdbcTable.getCatalogTableName());
+        Assertions.assertEquals(2, jdbcTable.getFullSchema().size());
+        Assertions.assertEquals("id", jdbcTable.getFullSchema().get(0).getName());
+        Assertions.assertEquals(Types.INTEGER, jdbcTable.getOriginalJdbcColumnTypes().get("id"));
+        Assertions.assertEquals(Types.VARCHAR, jdbcTable.getOriginalJdbcColumnTypes().get("name"));
+        Assertions.assertEquals(IntegerType.INT, jdbcTable.getFullSchema().get(0).getType());
+        Assertions.assertEquals("name", jdbcTable.getFullSchema().get(1).getName());
+        Assertions.assertEquals(TypeFactory.createVarcharType(20), jdbcTable.getFullSchema().get(1).getType());
     }
 
     @Test
@@ -636,4 +765,461 @@ public class JDBCMetadataTest {
             Assertions.fail("Test should not throw exception: " + e.getMessage());
         }
     }
+
+    @Test
+    public void testApplyLifecycleConfigDefaults() {
+        // Verify default config values produce correct HikariConfig settings
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(30000L, config.getKeepaliveTime());
+            Assertions.assertEquals(0L, config.getLeakDetectionThreshold());
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigInvalidMaxLifetime() {
+        // maxLifetime < 30000 should fall back to 300000
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 10000L; // too small
+            Config.jdbc_connection_keepalive_time_ms = 5000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime(),
+                    "maxLifetime < 30000 should fall back to 300000");
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepaliveTime 5000 is below minimum 30000, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigInvalidKeepaliveTime() {
+        // keepaliveTime >= maxLifetime or negative should fall back to 0 (disabled)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            // Case 1: keepaliveTime >= maxLifetime → disabled
+            Config.jdbc_connection_max_lifetime_ms = 60000L;
+            Config.jdbc_connection_keepalive_time_ms = 60000L; // equal to maxLifetime
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config1 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config1);
+
+            Assertions.assertEquals(60000L, config1.getMaxLifetime());
+            Assertions.assertEquals(0L, config1.getKeepaliveTime(),
+                    "keepaliveTime >= maxLifetime should fall back to 0 (disabled)");
+
+            // Case 2: keepaliveTime == 0 → disabled (passthrough, HikariCP semantics)
+            Config.jdbc_connection_keepalive_time_ms = 0L;
+
+            HikariConfig config2 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config2);
+
+            Assertions.assertEquals(0L, config2.getKeepaliveTime(),
+                    "keepaliveTime == 0 should be respected as disabled");
+
+            // Case 3: keepaliveTime negative → disabled
+            Config.jdbc_connection_keepalive_time_ms = -1L;
+
+            HikariConfig config3 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config3);
+
+            Assertions.assertEquals(0L, config3.getKeepaliveTime(),
+                    "negative keepaliveTime should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigLeakDetection() {
+        // Verify leak detection is set when > 0, not set when <= 0
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L;
+
+            // Enabled
+            Config.jdbc_connection_leak_detection_threshold_ms = 60000L;
+            HikariConfig config1 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config1);
+            Assertions.assertEquals(60000L, config1.getLeakDetectionThreshold(),
+                    "Positive threshold should enable leak detection");
+
+            // Disabled (0)
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+            HikariConfig config2 = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config2);
+            Assertions.assertEquals(0L, config2.getLeakDetectionThreshold(),
+                    "Zero threshold should disable leak detection");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigValidCustomValues() {
+        // Verify valid custom values are applied correctly
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 120000L;
+            Config.jdbc_connection_keepalive_time_ms = 60000L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 30000L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(120000L, config.getMaxLifetime());
+            Assertions.assertEquals(60000L, config.getKeepaliveTime());
+            Assertions.assertEquals(30000L, config.getLeakDetectionThreshold());
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveDisabledExplicitly() {
+        // keepaliveTime = 0 should be respected as "disabled" (HikariCP semantics)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 0L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepaliveTime=0 should mean disabled (no keepalive probing)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigMaxLifetimeAtMinimum() {
+        // When maxLifetime=30000, no valid enabled keepalive exists, so keepalive must be 0
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 30000L;
+            Config.jdbc_connection_keepalive_time_ms = 30000L; // would equal maxLifetime
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(30000L, config.getMaxLifetime(),
+                    "maxLifetime=30000 is valid (at minimum)");
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive must be 0 (disabled) when maxLifetime=30000");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveBelowMinimum() {
+        // keepalive > 0 but < 30000 should fall back to 0 (disabled)
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 300000L;
+            Config.jdbc_connection_keepalive_time_ms = 15000L; // below 30000 minimum
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(300000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive=15000 is below 30000 minimum, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    @Test
+    public void testApplyLifecycleConfigKeepaliveAlmostValid() {
+        // keepalive=29999 with maxLifetime=30000: below minimum AND below maxLifetime
+        long origMaxLifetime = Config.jdbc_connection_max_lifetime_ms;
+        long origKeepalive = Config.jdbc_connection_keepalive_time_ms;
+        long origLeakDetection = Config.jdbc_connection_leak_detection_threshold_ms;
+        try {
+            Config.jdbc_connection_max_lifetime_ms = 30000L;
+            Config.jdbc_connection_keepalive_time_ms = 29999L;
+            Config.jdbc_connection_leak_detection_threshold_ms = 0L;
+
+            HikariConfig config = new HikariConfig();
+            JDBCMetadata.applyLifecycleConfig(config);
+
+            Assertions.assertEquals(30000L, config.getMaxLifetime());
+            Assertions.assertEquals(0L, config.getKeepaliveTime(),
+                    "keepalive=29999 is below 30000 minimum, should fall back to 0 (disabled)");
+        } finally {
+            Config.jdbc_connection_max_lifetime_ms = origMaxLifetime;
+            Config.jdbc_connection_keepalive_time_ms = origKeepalive;
+            Config.jdbc_connection_leak_detection_threshold_ms = origLeakDetection;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Row-count cache & getTableStatistics tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testGetTableStatisticsCacheDisabledReturnsDefault() {
+        // Row-count cache is always built regardless of jdbc_meta_cache_enable.
+        // Cold start (nothing loaded yet) must return default_statistics_output_row_count immediately.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "false");
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        Statistics stats = jdbcMetadata.getTableStatistics(
+                null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount());
+    }
+
+    @Test
+    public void testGetTableStatisticsColdStartReturnsDefault() throws Exception {
+        // On first call with cache enabled and no prior load, return default and trigger async load.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+        props.put("jdbc_meta_cache_expire_sec", "600");
+
+        // Row-count query returns a future value of 5_000_000, but the first planning
+        // call happens before the async load completes → must see the default.
+        MockResultSet rowCountResult = new MockResultSet("row_count");
+        rowCountResult.addColumn("table_rows", Arrays.asList(5_000_000L));
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = rowCountResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Cold start: cache is empty → returns default_statistics_output_row_count.
+        Statistics stats = jdbcMetadata.getTableStatistics(
+                null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Cold start must return default without blocking");
+    }
+
+    @Test
+    public void testGetTableStatisticsReturnsCachedRowCount() throws Exception {
+        // After the async load completes, the second call should return the real row count.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+        props.put("jdbc_meta_cache_expire_sec", "600");
+
+        long expectedRowCount = 3_000_000L;
+        MockResultSet rowCountResult = new MockResultSet("row_count");
+        rowCountResult.addColumn("table_rows", Arrays.asList(expectedRowCount));
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = rowCountResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger cold start (fires async load).
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        // Wait for the background load to finish (max 3 s).
+        long deadline = System.currentTimeMillis() + 3000;
+        Statistics stats = null;
+        while (System.currentTimeMillis() < deadline) {
+            stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                    java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+            if ((long) stats.getOutputRowCount() != Config.default_statistics_output_row_count) {
+                break;
+            }
+            Thread.sleep(50);
+        }
+
+        Assertions.assertNotNull(stats);
+        Assertions.assertEquals(expectedRowCount, (long) stats.getOutputRowCount(),
+                "After async load completes, should return real row count");
+    }
+
+    @Test
+    public void testLoadRowCountFallsBackOnNegativeOne() throws Exception {
+        // Dialect returns -1 (unsupported) → loadRowCount must store default, not -1.
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+        props.put("jdbc_meta_cache_expire_sec", "600");
+
+        // preparedStatement.executeQuery() returns an empty ResultSet (no row) → getTableRowCount returns -1.
+        MockResultSet emptyResult = new MockResultSet("empty");
+        emptyResult.addColumn("table_rows", Arrays.asList());
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = emptyResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger load and wait.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Thread.sleep(500);
+
+        Statistics stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+
+        // Empty result set → getTableRowCount returns -1 → loadRowCount stores default.
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Row count should fall back to default when dialect returns -1 (unsupported)");
+    }
+
+    @Test
+    public void testBaseSchemaResolverGetTableRowCountReturnsNegativeOne() throws Exception {
+        // OracleSchemaResolver inherits the default JDBCSchemaResolver.getTableRowCount() which returns -1.
+        JDBCSchemaResolver resolver = new OracleSchemaResolver();
+        long count = resolver.getTableRowCount(connection, "anydb", "anytable");
+        Assertions.assertEquals(-1L, count);
+    }
+
+    @Test
+    public void testLoadRowCountExceptionFallsBackToDefault() throws Exception {
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = new SQLException("simulated connection error");
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger async load; the loader will throw and fall into the catch block.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Thread.sleep(500);
+
+        Statistics stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) stats.getOutputRowCount(),
+                "Exception in loadRowCount must fall back to default_statistics_output_row_count");
+    }
+
+    @Test
+    public void testRefreshTableInvalidatesRowCountCache() throws Exception {
+        Map<String, String> props = new HashMap<>(properties);
+        props.put("jdbc_meta_cache_enable", "true");
+
+        long expectedRowCount = 7_000_000L;
+        MockResultSet rowCountResult = new MockResultSet("row_count");
+        rowCountResult.addColumn("table_rows", Arrays.asList(expectedRowCount));
+
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = rowCountResult;
+                minTimes = 0;
+            }
+        };
+
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(props, "catalog", dataSource);
+        JDBCTable jdbcTable = (JDBCTable) jdbcMetadata.getTable(new ConnectContext(), "test", "tbl1");
+
+        // Trigger async load and wait for real row count to be cached.
+        jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        long deadline = System.currentTimeMillis() + 3000;
+        Statistics stats = null;
+        while (System.currentTimeMillis() < deadline) {
+            stats = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                    java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+            if ((long) stats.getOutputRowCount() != Config.default_statistics_output_row_count) {
+                break;
+            }
+            Thread.sleep(50);
+        }
+        Assertions.assertNotNull(stats);
+        Assertions.assertEquals(expectedRowCount, (long) stats.getOutputRowCount(),
+                "Row count should be loaded from cache after async load completes");
+
+        // Invalidate via refreshTable — covers rowCountCache.synchronous().invalidate().
+        jdbcMetadata.refreshTable("test", jdbcTable, null, false);
+
+        // Cache entry evicted → next call is cold start → returns default.
+        Statistics afterRefresh = jdbcMetadata.getTableStatistics(null, jdbcTable, java.util.Collections.emptyMap(),
+                java.util.Collections.<PartitionKey>emptyList(), null, -1, null);
+        Assertions.assertEquals(Config.default_statistics_output_row_count, (long) afterRefresh.getOutputRowCount(),
+                "After refreshTable, row-count cache entry must be invalidated");
+    }
+
 }

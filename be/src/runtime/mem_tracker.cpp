@@ -77,6 +77,9 @@ static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
         {MemTrackerType::INDEX_CACHE, "index_cache"},
         {MemTrackerType::DEL_VEC_CACHE, "del_vec_cache"},
         {MemTrackerType::COMPACTION_STATE, "compaction_state"},
+        {MemTrackerType::BUILTIN_INVERTED_INDEX, "builtin_inverted_index"},
+        {MemTrackerType::VECTOR_INDEX, "vector_index"},
+        {MemTrackerType::JVM, "jvm"},
 };
 
 static std::map<MemTrackerType, std::string> s_type_to_label_map;
@@ -112,35 +115,16 @@ MemTrackerType MemTracker::label_to_type(const std::string& label) {
 }
 
 MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent)
-        : _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(&_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(&_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) {
-        _parent->add_child_tracker(this);
-        _level = _parent->_level + 1;
-    }
-    Init();
-}
+        : MemTracker(MemTrackerType::NO_SET, byte_limit, std::move(label), parent) {}
 
 MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string label, MemTracker* parent)
-        : _type(type),
-          _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(&_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(&_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(&_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
+        : _type(type), _limit(byte_limit), _label(std::move(label)), _parent(parent) {
+    _local_consumption_holder = std::make_unique<RuntimeProfile::HighWaterMarkCounter>(TUnit::BYTES);
+    _consumption = _local_consumption_holder.get();
+    _local_allocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+    _allocation = _local_allocation_holder.get();
+    _local_deallocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+    _deallocation = _local_deallocation_holder.get();
     if (parent != nullptr) {
         _parent->add_child_tracker(this);
         _level = _parent->_level + 1;
@@ -151,26 +135,29 @@ MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string labe
 MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> attaching_info,
                        const std::string& counter_name_prefix, int64_t byte_limit, std::string label,
                        MemTracker* parent)
-        : _limit(byte_limit),
-          _label(std::move(label)),
-          _parent(parent),
-          _consumption(std::get<0>(attaching_info)
-                               ? profile->AddHighWaterMarkCounter(
-                                         counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
-                                         RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
-                               : &_local_consumption_counter),
-          _local_consumption_counter(TUnit::BYTES,
-                                     RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG)),
-          _allocation(std::get<1>(attaching_info)
-                              ? profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
-                                                     RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
-                              : &_local_allocation_counter),
-          _local_allocation_counter(TUnit::BYTES),
-          _deallocation(std::get<2>(attaching_info)
-                                ? profile->add_counter(counter_name_prefix + DEALLOCATED_MEMORY_USAGE, TUnit::BYTES,
-                                                       RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
-                                : &_local_deallocation_counter),
-          _local_deallocation_counter(TUnit::BYTES) {
+        : _limit(byte_limit), _label(std::move(label)), _parent(parent) {
+    if (std::get<0>(attaching_info)) {
+        _consumption =
+                profile->AddHighWaterMarkCounter(counter_name_prefix + PEAK_MEMORY_USAGE, TUnit::BYTES,
+                                                 RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+    } else {
+        _local_consumption_holder = std::make_unique<RuntimeProfile::HighWaterMarkCounter>(TUnit::BYTES);
+        _consumption = _local_consumption_holder.get();
+    }
+    if (std::get<1>(attaching_info)) {
+        _allocation = profile->add_counter(counter_name_prefix + ALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                           RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    } else {
+        _local_allocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+        _allocation = _local_allocation_holder.get();
+    }
+    if (std::get<2>(attaching_info)) {
+        _deallocation = profile->add_counter(counter_name_prefix + DEALLOCATED_MEMORY_USAGE, TUnit::BYTES,
+                                             RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    } else {
+        _local_deallocation_holder = std::make_unique<RuntimeProfile::Counter>(TUnit::BYTES);
+        _deallocation = _local_deallocation_holder.get();
+    }
     if (parent != nullptr) {
         _parent->add_child_tracker(this);
         _level = _parent->_level + 1;
@@ -179,7 +166,7 @@ MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> att
 }
 
 void MemTracker::Init() {
-    DCHECK_GE(_limit, -1);
+    DCHECK_GE(limit(), -1);
     // populate _all_trackers and _limit_trackers
     MemTracker* tracker = this;
     while (tracker != nullptr) {
@@ -230,7 +217,7 @@ MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, Sim
     item->label = _label;
     item->parent = parent;
     item->level = _level;
-    item->limit = _limit;
+    item->limit = limit();
     item->cur_consumption = _consumption->current_value();
     item->peak_consumption = COUNTER_VALUE(_consumption);
 
@@ -253,6 +240,9 @@ std::string MemTracker::err_msg(const std::string& msg, std::string_view fragmen
         str << "fragment: " << fragment_instance_id << " ";
     }
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
+    // The closing sentence is a contract: FE (StatisticsCollectJob#isSharedMemoryExhausted) matches it to
+    // tell a shared budget running out (retry) from a statement's own limit (fail). Pinned by
+    // MemTrackerTest.err_msg_closing_sentence_per_type; change both together.
     switch (type()) {
     case MemTrackerType::NO_SET:
         break;

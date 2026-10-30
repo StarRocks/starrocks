@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "From v2.5 onwards, the debuginfo file of BE is stripped from the StarRocks installation package to reduce the size and space usage of the installation package."
 ---
 
 # Use the debuginfo file for debugging

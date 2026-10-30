@@ -14,9 +14,10 @@
 
 #include "storage/primary_key_recover.h"
 
-#include "serde/column_array_serde.h"
+#include "column/chunk_factory.h"
+#include "column/serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
-#include "storage/primary_key_encoder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 namespace starrocks {
 
@@ -34,13 +35,13 @@ Status PrimaryKeyRecover::recover() {
     }
 
     // For simplicity, we use temp pk index for generate delvec, and then rebuild real pk index when retry publish
-    PrimaryIndex index(pkey_schema);
+    PrimaryIndex index(pkey_schema, encoding_type);
 
     OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;
     rowids.reserve(DEFAULT_CHUNK_SIZE);
     PrimaryIndex::DeletesMap new_deletes;
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
+    auto chunk_shared_ptr = ChunkFactory::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
     auto chunk = chunk_shared_ptr.get();
     // 3. scan all rowsets and segments to build primary index
     RETURN_IF_ERROR(rowset_iterator(
@@ -78,7 +79,6 @@ Status PrimaryKeyRecover::recover() {
                             continue;
                         }
                         uint32_t rssid = rowset_id + itr_index;
-                        uint32_t row_id_start = 0;
                         new_deletes[rssid] = {};
                         while (true) {
                             chunk->reset();
@@ -89,12 +89,16 @@ Status PrimaryKeyRecover::recover() {
                             } else if (!st.ok()) {
                                 return st;
                             } else {
+                                if (chunk->num_rows() == 0) {
+                                    continue;
+                                }
                                 pk_column->reset_column();
                                 PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
                                                           encoding_type);
-                                // upsert and generate new deletes
-                                RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
-                                row_id_start += pk_column->size();
+                                // A segment shared by a split tablet is read through the tablet's key range, so
+                                // its first row is not physical row 0. Use the physical rowids, which the iterator
+                                // returns contiguously within a chunk.
+                                RETURN_IF_ERROR(index.upsert(rssid, rowids[0], *pk_column, &new_deletes));
                             }
                         }
                         itr->close();

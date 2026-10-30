@@ -16,9 +16,13 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.HashJoinNode;
@@ -27,22 +31,30 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotId;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class ExecPlan {
@@ -53,11 +65,13 @@ public class ExecPlan {
     private final DescriptorTable descTbl = new DescriptorTable();
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
+    private final List<PlanFragment> preExecutedFragments = new ArrayList<>();
     private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
     // splitProduceFragments and joinNodeMap is used for skew join
     private final Map<Integer, PlanFragment> splitProduceFragments = Maps.newHashMap();
 
     private final Map<PhysicalHashJoinOperator, HashJoinNode> joinNodeMap = new HashMap<>();
+    private final Map<PhysicalScanOperator, ScanNode> scanNodeMap = new HashMap<>();
 
     private int planCount = 0;
 
@@ -78,6 +92,15 @@ public class ExecPlan {
     private final boolean isShortCircuit;
 
     private long useBaseline = -1;
+
+    private Set<Long> duplicatedLakeScanTableIds;
+
+    // A column-subset INSERT into a primary key table that this plan runs as a plain insert (missing
+    // columns filled with defaults, no partial update) because no transaction had ever committed to
+    // its target partitions when it was planned. The commit re-checks that assumption; see
+    // InsertTxnCommitAttachment. Lives on the plan, not the statement: the planner may re-analyze and
+    // re-plan the same InsertStmt, and the flag must describe this plan only.
+    private boolean plainInsertOnEmptyPartitions = false;
 
     @VisibleForTesting
     public ExecPlan() {
@@ -108,6 +131,14 @@ public class ExecPlan {
         this.isShortCircuit = false;
     }
 
+    public void setPlainInsertOnEmptyPartitions(boolean plainInsertOnEmptyPartitions) {
+        this.plainInsertOnEmptyPartitions = plainInsertOnEmptyPartitions;
+    }
+
+    public boolean isPlainInsertOnEmptyPartitions() {
+        return plainInsertOnEmptyPartitions;
+    }
+
     public ConnectContext getConnectContext() {
         return connectContext;
     }
@@ -116,12 +147,73 @@ public class ExecPlan {
         return scanNodes;
     }
 
+    // Bind only physical AIProject calls. Rebuilt plans independently capture current metadata.
+    Map<String, AIProvider> bindAIProviders(Map<SlotId, Expr> projectMap) {
+        Map<String, AIProvider> usedConfigs = new HashMap<>();
+        for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
+            if (!(entry.getValue() instanceof FunctionCallExpr call)
+                    || call.getFn() == null || !call.getFn().isAI()) {
+                // ignore none AI functions
+                continue;
+            }
+            AIProvider provider = AIModelConfigs.resolveProvider(connectContext.getGlobalStateMgr().getAIProviderMgr(), call);
+
+            try {
+                Authorizer.checkAIProviderAction(connectContext, provider, PrivilegeType.USAGE);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(null, connectContext.getCurrentUserIdentity(),
+                        connectContext.getCurrentRoleIds(), PrivilegeType.USAGE.name(), "AI PROVIDER", provider.getName());
+            }
+            AIModelConfigs.validateProvider(provider);
+            usedConfigs.put(provider.getId(), new AIProvider(provider));
+            entry.setValue(call.withAIProviderId(provider.getId()));
+        }
+        return Map.copyOf(usedConfigs);
+    }
+
+    // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one
+    // table). Derived lazily from the physical plan and consulted per scan to gate the prepared physical split
+    // scan, whose per-scan reuse of a shared prepared read state is unsafe when the same table feeds two scans.
+    public Set<Long> getDuplicatedLakeScanTableIds() {
+        if (duplicatedLakeScanTableIds == null) {
+            Map<Long, Integer> counts = new HashMap<>();
+            countLakeScanTableIds(physicalPlan, counts);
+            Set<Long> duplicated = new HashSet<>();
+            counts.forEach((tableId, count) -> {
+                if (count >= 2) {
+                    duplicated.add(tableId);
+                }
+            });
+            duplicatedLakeScanTableIds = duplicated;
+        }
+        return duplicatedLakeScanTableIds;
+    }
+
+    private static void countLakeScanTableIds(OptExpression optExpression, Map<Long, Integer> counts) {
+        if (optExpression == null) {
+            return;
+        }
+        if (optExpression.getOp() instanceof PhysicalOlapScanOperator) {
+            Table table = ((PhysicalOlapScanOperator) optExpression.getOp()).getTable();
+            if (table != null && table.isCloudNativeTableOrMaterializedView()) {
+                counts.merge(table.getId(), 1, Integer::sum);
+            }
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            countLakeScanTableIds(child, counts);
+        }
+    }
+
     public List<Expr> getOutputExprs() {
         return outputExprs;
     }
 
     public ArrayList<PlanFragment> getFragments() {
         return fragments;
+    }
+
+    public List<PlanFragment> getPreExecutedFragments() {
+        return preExecutedFragments;
     }
 
     public PlanFragment getTopFragment() {
@@ -175,6 +267,10 @@ public class ExecPlan {
 
     public Map<PhysicalHashJoinOperator, HashJoinNode> getJoinNodeMap() {
         return joinNodeMap;
+    }
+    
+    public Map<PhysicalScanOperator, ScanNode> getScanNodeMap() {
+        return scanNodeMap;
     }
 
     public OptExpression getPhysicalPlan() {

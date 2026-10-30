@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Range;
+import com.google.gson.JsonObject;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.binlog.BinlogConfig;
@@ -42,6 +43,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.parser.NodePosition;
@@ -394,6 +396,42 @@ public class LocalMetastoreTablePropertyEditLogTest {
         TableProperty replayedProperty = replayed.getTableProperty();
         Assertions.assertNotNull(replayedProperty);
         Assertions.assertEquals(3, replayedProperty.getPartitionTTLNumber());
+    }
+
+    @Test
+    public void testAlterTablePropertiesEnableStatisticAutoCollect() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = new Database(DB_ID + 4100, DB_NAME + "_auto_collect");
+        metastore.unprotectCreateDb(db);
+        OlapTable table = createHashOlapTable(TABLE_ID + 4100, TABLE_NAME + "_auto_collect", 3);
+        db.registerTableUnlocked(table);
+        Assertions.assertTrue(table.enableStatisticAutoCollect());
+        Assertions.assertFalse(table.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT));
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT, "false");
+        metastore.alterTableProperties(db, table, properties);
+
+        Assertions.assertFalse(table.enableStatisticAutoCollect());
+        Assertions.assertEquals("false", table.getProperties().get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT));
+        Assertions.assertFalse(table.getTableProperty().copy().enableStatisticAutoCollect());
+        TableProperty fromImage = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table.getTableProperty()),
+                TableProperty.class);
+        Assertions.assertFalse(fromImage.enableStatisticAutoCollect());
+        JsonObject olderFeImage = GsonUtils.GSON.toJsonTree(table.getTableProperty()).getAsJsonObject();
+        olderFeImage.remove("enableStatisticAutoCollect");
+        TableProperty fromOlderFeImage = GsonUtils.GSON.fromJson(olderFeImage, TableProperty.class);
+        Assertions.assertFalse(fromOlderFeImage.enableStatisticAutoCollect());
+
+        ModifyTablePropertyOperationLog replayInfo = (ModifyTablePropertyOperationLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_TABLE_PROPERTIES);
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID + 4100, DB_NAME + "_auto_collect");
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerTable = createHashOlapTable(TABLE_ID + 4100, TABLE_NAME + "_auto_collect", 3);
+        followerDb.registerTableUnlocked(followerTable);
+        followerMetastore.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, replayInfo);
+        Assertions.assertFalse(followerTable.enableStatisticAutoCollect());
     }
 
     @Test
@@ -1745,10 +1783,49 @@ public class LocalMetastoreTablePropertyEditLogTest {
         // Cover OlapTable setters/getters + getProperties export path.
         olapTable.setEnableStatisticCollectOnFirstLoad(false);
         Assertions.assertFalse(olapTable.enableStatisticCollectOnFirstLoad());
+        Assertions.assertTrue(olapTable.isSetEnableStatisticCollectOnFirstLoad());
         olapTable.setTableQueryTimeout(120);
         Assertions.assertEquals(120, olapTable.getTableQueryTimeout());
         Map<String, String> exported = olapTable.getProperties();
+        Assertions.assertEquals("false", exported.get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
         Assertions.assertEquals("120", exported.get(PropertyAnalyzer.PROPERTIES_TABLE_QUERY_TIMEOUT));
+
+        OlapTable unsetFirstLoadTable = createHashOlapTable(TABLE_ID + 9202, TABLE_NAME + "_first_load_unset", 3);
+        Assertions.assertFalse(unsetFirstLoadTable.isSetEnableStatisticCollectOnFirstLoad());
+        Assertions.assertFalse(unsetFirstLoadTable.getProperties()
+                .containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
+
+        unsetFirstLoadTable.setEnableStatisticCollectOnFirstLoad(true);
+        Assertions.assertTrue(unsetFirstLoadTable.isSetEnableStatisticCollectOnFirstLoad());
+        Assertions.assertEquals("true", unsetFirstLoadTable.getProperties()
+                .get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD));
+
+        Map<String, String> legacyDefaultTrueProperties = new HashMap<>();
+        legacyDefaultTrueProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true");
+        TableProperty legacyDefaultTrueTableProperty = new TableProperty(legacyDefaultTrueProperties)
+                .buildEnableStatisticCollectOnFirstLoad();
+        Assertions.assertTrue(legacyDefaultTrueTableProperty.enableStatisticCollectOnFirstLoad());
+        Assertions.assertFalse(legacyDefaultTrueTableProperty.isSetEnableStatisticCollectOnFirstLoad());
+
+        Map<String, String> legacyExplicitFalseProperties = new HashMap<>();
+        legacyExplicitFalseProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "false");
+        TableProperty legacyExplicitFalseTableProperty = new TableProperty(legacyExplicitFalseProperties)
+                .buildEnableStatisticCollectOnFirstLoad();
+        Assertions.assertFalse(legacyExplicitFalseTableProperty.enableStatisticCollectOnFirstLoad());
+        Assertions.assertTrue(legacyExplicitFalseTableProperty.isSetEnableStatisticCollectOnFirstLoad());
+
+        Database replayDb = new Database(DB_ID + 9202, DB_NAME + "_first_load_replay");
+        metastore.unprotectCreateDb(replayDb);
+        OlapTable replayTable = createHashOlapTable(TABLE_ID + 9203, TABLE_NAME + "_first_load_replay", 3);
+        replayDb.registerTableUnlocked(replayTable);
+
+        Map<String, String> replayProperties = new HashMap<>();
+        replayProperties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD, "true");
+        ModifyTablePropertyOperationLog replayLog = new ModifyTablePropertyOperationLog(
+                replayDb.getId(), replayTable.getId(), replayProperties);
+        metastore.replayModifyTableProperty(OperationType.OP_ALTER_TABLE_PROPERTIES, replayLog);
+        Assertions.assertTrue(replayTable.enableStatisticCollectOnFirstLoad());
+        Assertions.assertTrue(replayTable.isSetEnableStatisticCollectOnFirstLoad());
     }
 
     @Test

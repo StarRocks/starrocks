@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "char_length() 函数的别名，返回字符串的字符数。"
 ---
 
 # character_length

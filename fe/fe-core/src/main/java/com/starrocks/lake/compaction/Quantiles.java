@@ -68,15 +68,21 @@ public class Quantiles implements Comparable<Quantiles> {
 
     @Override
     public int compareTo(@NotNull Quantiles o) {
+        // Compare by max first: ScoreSorter uses this natural order to rank compaction
+        // candidates, and ScoreSelector admits a partition based on its MAX tablet score. A
+        // partition whose compaction debt is concentrated in a few tablets (high max, low avg)
+        // must still sort ahead of partitions with a lower max, or it is admitted every round
+        // yet never scheduled on a cluster whose compaction task slots stay saturated -- avg and
+        // p50 only break ties between partitions with an equal max.
         // must use Double.compare to avoid float type precision issue
+        if (Double.compare(max, o.max) != 0) {
+            return Double.compare(max, o.max);
+        }
         if (Double.compare(avg, o.avg) != 0) {
             return Double.compare(avg, o.avg);
         }
         if (Double.compare(p50, o.p50) != 0) {
             return Double.compare(p50, o.p50);
-        }
-        if (Double.compare(max, o.max) != 0) {
-            return Double.compare(max, o.max);
         }
         return 0;
     }

@@ -1,10 +1,9 @@
 ---
 displayed_sidebar: docs
+description: "通过指定字典表和key，返回该key所映射的value。"
 ---
 
 # dict_mapping
-
-
 
 通过指定字典表和 key，返回该 key 所映射的 value。
 
@@ -40,6 +39,12 @@ key_column_expr ::= <column_name> | <expr>
 返回值的数据类型与 value 列的数据类型保持一致。如果 value 列为字典表的自增列，则返回值的数据类型为 BIGINT。
 
 然而当未找到与该 key 呈映射关系的 value 时，如果为 `<null_if_not_exist>` 参数为 `true`，则返回 `NULL`。如果为默认的 `false`，则返回报错 `query failed if record not exist in dict table`。
+
+## 使用说明
+
+默认情况下，系统会允许优化器选择 `COUNT(DISTINCT)` 的实现方式。
+
+对低基数和中等基数的列进行去重时，可以通过查询 Hint 将 `count_distinct_implementation` 设置为 `multi_count_distinct`，以验证 `multi_distinct_count` 实现是否能够进行精确计数。但是，对于高基数列的去重，请勿使用 `multi_distinct_count` 实现，因为其 HashSet 状态以及最终合并过程可能导致过高的内存消耗，甚至引发 OOM。
 
 ## 示例
 
@@ -126,7 +131,7 @@ key_column_expr ::= <column_name> | <expr>
       4 rows in set (0.02 sec)
       ```
 
-    本示例中介绍的 `dict_mapping` 使用方式可以用于加速去重计算和 JOIN 的查询。相对于之前的[构建全局字典加速精确去重](../../../using_starrocks/query_acceleration_with_auto_increment.md)中提供的两种解决方案，使用 `dict_mapping` 的解决方案更加灵活易用。因为使用 `dict_mapping` 的解决方案时，在“将字典的映射关系导入至数据表”这一阶段，是由直接 StarRocks 从字典表获取映射的值，而不再需要您手动编写语句关联字典表，来获取映射的值。并且，该解决方案还支持使用各种导入方式导入数据。<!--详细的使用方式，请参见xxx。-->
+    本示例中介绍的 `dict_mapping` 使用方式可以用于加速去重计算和 JOIN 的查询。相对于之前的[构建全局字典加速精确去重](../../../using_starrocks/query_acceleration_with_auto_increment.md)中提供的两种解决方案，使用 `dict_mapping` 的解决方案更加灵活易用。因为使用 `dict_mapping` 的解决方案时，在“将字典的映射关系导入至数据表”这一阶段，是由直接 StarRocks 从字典表获取映射的值，而不再需要您手动编写语句关联字典表，来获取映射的值。并且，该解决方案还支持使用各种导入方式导入数据。
 
 **示例三：如果数据表中没有将映射列配置为生成列，则在导入至数据表时您需要显式为映射列配置 `dict _mapping` 函数，从而获取 key 所映射的 value。**
 

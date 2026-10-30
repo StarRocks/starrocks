@@ -180,6 +180,22 @@ public class HiveMetastoreTest {
     }
 
     @Test
+    public void testGetPartitionsByNamesThrowsWhenHmsReturnsPartialList() {
+        HiveMetaClient client = new MockedHiveMetaClient() {
+            @Override
+            public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
+                return super.getPartitionsByNames(dbName, tblName, Lists.newArrayList(partitionNames.get(0)));
+            }
+        };
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metastore.getPartitionsByNames("db1", "table1", partitionNames));
+        Assertions.assertTrue(e.getMessage().contains("Hive metastore did not return partition"));
+        Assertions.assertTrue(e.getMessage().contains("requested 2 partitions, got 1"));
+    }
+
+    @Test
     public void testGetTableStatistics() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
@@ -243,6 +259,49 @@ public class HiveMetastoreTest {
         Assertions.assertEquals(0, columnStatistics2.getTotalSizeBytes());
         Assertions.assertEquals(2, columnStatistics2.getNumNulls());
         Assertions.assertEquals(5, columnStatistics2.getNdv());
+    }
+
+    @Test
+    public void testGetTableStatisticsDegradesToEmptyWhenColumnStatsCallFails() {
+        HiveMetaClient client = new MockedHiveMetaClient() {
+            @Override
+            public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
+                throw new StarRocksConnectorException(
+                        "MetaException: User is not authorized to perform: glue:GetColumnStatisticsForTable");
+            }
+        };
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        HivePartitionStats statistics = Assertions.assertDoesNotThrow(
+                () -> metastore.getTableStatistics("db1", "table1"));
+        HiveCommonStats commonStats = statistics.getCommonStats();
+        Assertions.assertEquals(50, commonStats.getRowNums());
+        Assertions.assertEquals(100, commonStats.getTotalFileBytes());
+        Assertions.assertTrue(statistics.getColumnStats().isEmpty());
+    }
+
+    @Test
+    public void testGetPartitionStatisticsDegradesToEmptyWhenColumnStatsCallFails() {
+        HiveMetaClient client = new MockedHiveMetaClient() {
+            @Override
+            public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName, String tableName,
+                                                                                   List<String> columns,
+                                                                                   List<String> partitionNames) {
+                throw new StarRocksConnectorException(
+                        "MetaException: User is not authorized to perform: glue:GetPartitionColumnStatistics");
+            }
+        };
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        com.starrocks.catalog.Table hiveTable = metastore.getTable("db1", "table1");
+        Map<String, HivePartitionStats> statistics = Assertions.assertDoesNotThrow(
+                () -> metastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2")));
+
+        HivePartitionStats stats1 = statistics.get("col1=1");
+        Assertions.assertEquals(50, stats1.getCommonStats().getRowNums());
+        Assertions.assertTrue(stats1.getColumnStats().isEmpty());
+
+        HivePartitionStats stats2 = statistics.get("col1=2");
+        Assertions.assertEquals(50, stats2.getCommonStats().getRowNums());
+        Assertions.assertTrue(stats2.getColumnStats().isEmpty());
     }
 
     @Test

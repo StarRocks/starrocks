@@ -55,6 +55,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -327,56 +328,211 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         ((PulsarProgress) progress).unprotectUpdate(currentPulsarPartitions, defaultInitialPosition);
     }
 
-    // if customPulsarPartition is not null, then return false immediately
-    // else if pulsar partitions of topic has been changed, return true.
-    // else return false
-    // update current pulsar partition at the same time
-    // current pulsar partitions = customPulsarPartitions == 0 ? all of partition of pulsar topic : customPulsarPartitions
+    // Refresh `currentPulsarPartitions` against the broker. The slow step is a FE -> BE brpc
+    // (PulsarUtil.getAllPulsarPartitions), so we must not hold the per-job writeLock across it -
+    // otherwise readers (admin RPCs, SHOW ROUTINE LOAD, processTimeoutTasks) stall for the
+    // full RPC plus retries. Three phases: snapshot under readLock, fetch with no lock, apply
+    // under writeLock with a configVersion guard to discard a mid-flight ALTER.
     @Override
-    protected boolean unprotectNeedReschedule() throws StarRocksException {
-        // only running and need_schedule job need to be changed current pulsar partitions
+    protected void refreshPartitionsIfNeeded() throws StarRocksException {
+        FetchSnapshot snapshot;
+        readLock();
+        try {
+            snapshot = takeFetchSnapshot();
+        } finally {
+            readUnlock();
+        }
+        if (snapshot == null) {
+            return;
+        }
+        switch (snapshot.kind) {
+            case PAUSED_AUTO_SCHEDULE:
+                applyPausedAutoSchedule();
+                return;
+            case CUSTOM_ONLY:
+                applyCustomPartitions(snapshot);
+                return;
+            case FETCH:
+                break;
+            default:
+                return;
+        }
+
+        List<String> newPartitions = null;
+        Exception fetchError = null;
+        try {
+            newPartitions = PulsarUtil.getAllPulsarPartitions(snapshot.serviceUrl, snapshot.topic,
+                    snapshot.subscription, snapshotConvertedCustomProperties(), snapshot.computeResource);
+        } catch (Exception e) {
+            fetchError = e;
+        }
+
+        applyFetchResult(snapshot, newPartitions, fetchError);
+    }
+
+    // Phase 1 helper. Must be called with at least readLock held so the read of state,
+    // customPulsarPartitions, serviceUrl, topic, subscription, dataSourceConfigVersion is
+    // consistent. Returns null when the job is in a final state (STOPPED/CANCELLED) or any
+    // state that does not require partition refresh; callers must short-circuit the rest of
+    // the cycle in that case.
+    private FetchSnapshot takeFetchSnapshot() {
         if (this.state == JobState.RUNNING || this.state == JobState.NEED_SCHEDULE) {
-            if (customPulsarPartitions != null && customPulsarPartitions.size() != 0) {
+            if (customPulsarPartitions != null && !customPulsarPartitions.isEmpty()) {
+                // User pinned the partition list at CREATE time; no broker RPC needed.
+                return FetchSnapshot.customOnly(dataSourceConfigVersion);
+            }
+            return FetchSnapshot.fetch(serviceUrl, topic, subscription, computeResource, dataSourceConfigVersion);
+        }
+        if (this.state == JobState.PAUSED) {
+            // PAUSED jobs do not need partition info, but may be eligible for auto-resume.
+            return FetchSnapshot.pausedAutoSchedule();
+        }
+        return null;
+    }
+
+    // Phase 3 (fast path). For jobs created with PROPERTIES("pulsar_partitions"=...) there is no
+    // broker RPC; we just copy the user-pinned list into currentPulsarPartitions. We still take
+    // writeLock and re-check configVersion + state because phase 1 ran under readLock and an
+    // ALTER ROUTINE LOAD could have landed in between - in that case we drop the assignment and
+    // let the next scheduler tick re-snapshot with the new config.
+    private void applyCustomPartitions(FetchSnapshot snapshot) {
+        writeLock();
+        try {
+            if (dataSourceConfigVersion != snapshot.configVersion) {
+                return;
+            }
+            if (this.state != JobState.RUNNING && this.state != JobState.NEED_SCHEDULE) {
+                return;
+            }
+            if (customPulsarPartitions != null && !customPulsarPartitions.isEmpty()) {
                 currentPulsarPartitions = customPulsarPartitions;
-                return false;
-            } else {
-                List<String> newCurrentPulsarPartition;
-                try {
-                    newCurrentPulsarPartition = getAllPulsarPartitions();
-                } catch (Exception e) {
-                    String msg = "Job failed to fetch all current partition with error [" + e.getMessage() + "]";
-                    LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
-                            .add("error_msg", msg)
-                            .build(), e);
-                    if (this.state == JobState.NEED_SCHEDULE) {
-                        unprotectUpdateState(JobState.PAUSED,
-                                new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
-                    }
-                    return false;
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // Phase 3 (PAUSED auto-resume). If a PAUSED job's pauseReason is recoverable (currently:
+    // REPLICA_FEW_ERR within ScheduleRule's retry/window budget), promote it back to
+    // NEED_SCHEDULE so the next RoutineLoadScheduler tick re-divides it into tasks. Pure FE
+    // state-machine work; no external calls, so the writeLock window is tiny.
+    private void applyPausedAutoSchedule() throws StarRocksException {
+        writeLock();
+        try {
+            if (this.state != JobState.PAUSED) {
+                return;
+            }
+            if (!ScheduleRule.isNeedAutoSchedule(this)) {
+                return;
+            }
+            LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                    .add("name", name)
+                    .add("current_state", this.state)
+                    .add("msg", "Job need to be rescheduled")
+                    .build());
+            unprotectUpdateProgress();
+            unprotectUpdateState(JobState.NEED_SCHEDULE, null);
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    private void applyFetchResult(FetchSnapshot snapshot, List<String> newPartitions, Exception fetchError)
+            throws StarRocksException {
+        writeLock();
+        try {
+            if (dataSourceConfigVersion != snapshot.configVersion) {
+                // ALTER ROUTINE LOAD landed during the brpc; drop the stale fetch and let the
+                // next scheduler tick refetch with the new config.
+                return;
+            }
+            if (this.state != JobState.RUNNING && this.state != JobState.NEED_SCHEDULE) {
+                return;
+            }
+            if (fetchError != null) {
+                String msg = "Job failed to fetch all current partition with error [" + fetchError.getMessage() + "]";
+                LOG.warn(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                        .add("error_msg", msg)
+                        .build(), fetchError);
+                // Only PAUSE jobs that were waiting to be (re)scheduled; jobs already RUNNING
+                // keep their current tasks so a transient broker hiccup does not nuke an
+                // otherwise-healthy pipeline. The next scheduler tick will retry.
+                if (this.state == JobState.NEED_SCHEDULE) {
+                    unprotectUpdateState(JobState.PAUSED,
+                            new ErrorReason(InternalErrorCode.PARTITIONS_ERR, msg));
                 }
-                if (currentPulsarPartitions.containsAll(newCurrentPulsarPartition)) {
-                    if (currentPulsarPartitions.size() > newCurrentPulsarPartition.size()) {
-                        unprotectUpdateCurrentPartitions(newCurrentPulsarPartition);
-                        return true;
-                    } else {
-                        return false;
-                    }
+                return;
+            }
+            // Diff currentPulsarPartitions vs newPartitions. Three cases:
+            //   1) current is a strict superset of new  -> partitions were removed
+            //      -> swap to the smaller list and reschedule
+            //   2) current equals new (same set, same size) -> no change
+            //   3) current is missing at least one of new -> partitions were added (or set was
+            //      replaced) -> swap to the new list and reschedule
+            boolean changed;
+            if (currentPulsarPartitions.containsAll(newPartitions)) {
+                if (currentPulsarPartitions.size() > newPartitions.size()) {
+                    unprotectUpdateCurrentPartitions(newPartitions);
+                    changed = true;
                 } else {
-                    unprotectUpdateCurrentPartitions(newCurrentPulsarPartition);
-                    return true;
+                    changed = false;
                 }
+            } else {
+                unprotectUpdateCurrentPartitions(newPartitions);
+                changed = true;
             }
-        } else if (this.state == JobState.PAUSED) {
-            boolean autoSchedule = ScheduleRule.isNeedAutoSchedule(this);
-            if (autoSchedule) {
-                LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, name)
-                        .add("current_state", this.state)
-                        .add("msg", "should be rescheduled")
+            if (changed) {
+                LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)
+                        .add("msg", "Job need to be rescheduled")
                         .build());
+                unprotectUpdateProgress();
+                unprotectUpdateState(JobState.NEED_SCHEDULE, null);
             }
-            return autoSchedule;
-        } else {
-            return false;
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    // Discriminator for the apply phase of refreshPartitionsIfNeeded.
+    //   FETCH                - state RUNNING/NEED_SCHEDULE, no custom partitions; needs broker RPC
+    //   CUSTOM_ONLY          - state RUNNING/NEED_SCHEDULE, user-pinned partitions; no RPC needed
+    //   PAUSED_AUTO_SCHEDULE - state PAUSED; evaluate ScheduleRule for auto-resume
+    private enum FetchSnapshotKind { FETCH, CUSTOM_ONLY, PAUSED_AUTO_SCHEDULE }
+
+    // Immutable snapshot of the inputs captured in phase 1 (readLock) and consumed unchanged
+    // through phase 2 (unlocked broker RPC) and phase 3 (writeLock apply). Carrying the values
+    // on a snapshot rather than re-reading the mutable fields keeps the RPC inputs stable, and
+    // pairing them with configVersion lets phase 3 detect a concurrent ALTER and discard the
+    // stale fetch result.
+    private static final class FetchSnapshot {
+        final FetchSnapshotKind kind;
+        final String serviceUrl;
+        final String topic;
+        final String subscription;
+        final ComputeResource computeResource;
+        final long configVersion;
+
+        private FetchSnapshot(FetchSnapshotKind kind, String serviceUrl, String topic, String subscription,
+                              ComputeResource computeResource, long configVersion) {
+            this.kind = kind;
+            this.serviceUrl = serviceUrl;
+            this.topic = topic;
+            this.subscription = subscription;
+            this.computeResource = computeResource;
+            this.configVersion = configVersion;
+        }
+
+        static FetchSnapshot fetch(String serviceUrl, String topic, String subscription,
+                                   ComputeResource cr, long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.FETCH, serviceUrl, topic, subscription, cr, ver);
+        }
+
+        static FetchSnapshot customOnly(long ver) {
+            return new FetchSnapshot(FetchSnapshotKind.CUSTOM_ONLY, null, null, null, null, ver);
+        }
+
+        static FetchSnapshot pausedAutoSchedule() {
+            return new FetchSnapshot(FetchSnapshotKind.PAUSED_AUTO_SCHEDULE, null, null, null, null, 0L);
         }
     }
 
@@ -409,10 +565,22 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     public List<String> getAllPulsarPartitions() throws StarRocksException {
-        // Get custom properties like tokens
-        convertCustomProperties(false);
+        // Get custom properties like tokens.
         return PulsarUtil.getAllPulsarPartitions(serviceUrl, topic,
-                subscription, ImmutableMap.copyOf(convertedCustomProperties), computeResource);
+                subscription, snapshotConvertedCustomProperties(), computeResource);
+    }
+
+    // Snapshot `convertedCustomProperties` for use in an unlocked RPC call. Holds the intrinsic
+    // monitor across convertCustomProperties(false) + ImmutableMap.copyOf so a concurrent ALTER
+    // ROUTINE LOAD running modifyDataSourceProperties (which calls customProperties.putAll +
+    // convertCustomProperties(true) under the same monitor) cannot rebuild the backing HashMap
+    // mid-iteration. All RPC paths that need the converted-properties map must go through this
+    // helper - direct ImmutableMap.copyOf(convertedCustomProperties) is racy outside the monitor.
+    private ImmutableMap<String, String> snapshotConvertedCustomProperties() throws DdlException {
+        synchronized (this) {
+            convertCustomProperties(false);
+            return ImmutableMap.copyOf(convertedCustomProperties);
+        }
     }
 
     public static PulsarRoutineLoadJob fromCreateStmt(CreateRoutineLoadStmt stmt) throws StarRocksException {
@@ -579,8 +747,13 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
         }
 
         if (!customPulsarProperties.isEmpty()) {
-            this.customProperties.putAll(customPulsarProperties);
-            convertCustomProperties(true);
+            // Hold the intrinsic monitor across putAll + convertCustomProperties(true): the
+            // scheduler's lock-free refresh path reads customProperties via the synchronized
+            // convertCustomProperties(false); putAll outside the monitor would race that read.
+            synchronized (this) {
+                this.customProperties.putAll(customPulsarProperties);
+                convertCustomProperties(true);
+            }
 
             if (customPulsarProperties.containsKey(CreateRoutineLoadStmt.PULSAR_DEFAULT_INITIAL_POSITION)) {
                 // defaultInitialPosition should be updated by convertCustomProperties()

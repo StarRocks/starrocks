@@ -47,6 +47,7 @@ import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /*
  * e.g.
@@ -116,6 +117,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
         splitAggregations.forEach(c -> firstScanColumns.union(agg.getAggregations().get(c).getUsedColumns()));
         if (scan.getPredicate() != null) {
             firstScanColumns.union(scan.getPredicate().getUsedColumns());
+        }
+        // prunedPartitionPredicates columns must also be present in both scans
+        if (scan.getPrunedPartitionPredicates() != null) {
+            scan.getPrunedPartitionPredicates().forEach(p -> firstScanColumns.union(p.getUsedColumns()));
         }
 
         // Check predicate and column type constraints only for duplicated columns
@@ -226,6 +231,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
         if (scan.getPredicate() != null) {
             newAggUseRefs.union(scan.getPredicate().getUsedColumns());
         }
+        // prunedPartitionPredicates columns must be remapped in the right scan
+        if (scan.getPrunedPartitionPredicates() != null) {
+            scan.getPrunedPartitionPredicates().forEach(p -> newAggUseRefs.union(p.getUsedColumns()));
+        }
         Map<ColumnRefOperator, ColumnRefOperator> refToNew = Maps.newHashMap();
 
         newAggUseRefs.getStream().forEach(k -> {
@@ -244,6 +253,10 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 newScanUseRefs.union(v.getUsedColumns());
             }
         });
+        // prunedPartitionPredicates columns must stay in the scan's projection to survive column pruning
+        if (scan.getPrunedPartitionPredicates() != null) {
+            scan.getPrunedPartitionPredicates().forEach(p -> newScanUseRefs.union(p.getUsedColumns()));
+        }
 
         Map<ColumnRefOperator, ScalarOperator> scanProjections = Maps.newHashMap();
         newScanUseRefs.getStream().forEach(k -> scanProjections.put(factory.getColumnRef(k), factory.getColumnRef(k)));
@@ -254,9 +267,22 @@ public class SplitTopNAggregateRule extends TransformationRule {
                 .build();
 
         // build join
+        //
+        // The join is what puts the two halves of the split back together, so it has to match a group
+        // to itself for every group the aggregate produced -- including the one whose key is NULL.
+        // Plain equality does not: NULL = NULL is NULL, the row finds no partner in the inner join,
+        // and the whole NULL group disappears from the answer. With `limit 1` over a table whose
+        // smallest group key is NULL that meant a query returning no rows at all, under the default
+        // configuration and with nothing in the output to suggest a row had been dropped.
+        //
+        // A null-safe comparison matches NULL to NULL and leaves every other key alone. Only nullable
+        // keys need it, and the common case of a non-nullable grouping key keeps the plain equality
+        // it had, so the join strategies that only accept `=` stay reachable wherever they were
+        // reachable before.
         List<ScalarOperator> eqPredicate = Lists.newArrayList();
         for (ColumnRefOperator groupingKey : agg.getGroupingKeys()) {
-            eqPredicate.add(new BinaryPredicateOperator(BinaryType.EQ, groupingKey, refToNew.get(groupingKey)));
+            BinaryType eq = groupingKey.isNullable() ? BinaryType.EQ_FOR_NULL : BinaryType.EQ;
+            eqPredicate.add(new BinaryPredicateOperator(eq, groupingKey, refToNew.get(groupingKey)));
         }
 
         LogicalJoinOperator join = LogicalJoinOperator.builder()
@@ -313,12 +339,16 @@ public class SplitTopNAggregateRule extends TransformationRule {
         }
 
         ReplaceColumnRefRewriter refRewriter = new ReplaceColumnRefRewriter(refMapping);
+        List<ScalarOperator> newPrunedPredicates = scan.getPrunedPartitionPredicates().stream()
+                .map(refRewriter::rewrite)
+                .collect(Collectors.toList());
         LogicalOlapScanOperator newScan = LogicalOlapScanOperator.builder()
                 .withOperator(scan)
                 .setProjection(scanProjection)
                 .setColRefToColumnMetaMap(refToMeta)
                 .setColumnMetaToColRefMap(metaToRef)
                 .setPredicate(refRewriter.rewrite(scan.getPredicate()))
+                .setPrunedPartitionPredicates(newPrunedPredicates)
                 .build();
 
         Map<ColumnRefOperator, CallOperator> newAggregations = Maps.newHashMap();

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ALTER RESOURCE GROUP は、リソースグループの設定を変更します。"
 ---
 
 # ALTER RESOURCE GROUP

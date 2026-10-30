@@ -61,6 +61,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
@@ -69,6 +70,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TMemoryScratchSink;
 import com.starrocks.thrift.TNetworkAddress;
@@ -247,7 +249,8 @@ public class TableQueryPlanAction extends RestBaseAction {
         SelectRelation stmt = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         // only process sql like `select * from table where <predicate>`, only support executing scan semantic
         if (stmt.hasAggregation() || stmt.hasAnalyticInfo()
-                || stmt.hasOrderByClause() || stmt.hasOffset() || stmt.hasLimit() || statementBase.isExplain()) {
+                || stmt.hasOrderByClause() || stmt.hasOffset() || stmt.hasLimit() || statementBase.isExplain()
+                || ResolvedAIFunctionDetector.contains(statementBase)) {
             throw new StarRocksHttpException(HttpResponseStatus.BAD_REQUEST,
                     "only support single table filter-prune-scan, but found [ " + sql + "]");
         }
@@ -326,6 +329,10 @@ public class TableQueryPlanAction extends RestBaseAction {
             tabletInfo.put(tablet, new TTabletVersionInfo(tablet, node.version, 0, node.schemaHash));
         });
         tQueryPlanInfo.tablet_info = tabletInfo;
+
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("query plan: {}", execPlan.getExplainString(TExplainLevel.VERBOSE));
+        }
 
         // serialize TQueryPlanInfo and encode plan with Base64 to string in order to translate by json format
         String opaquedQueryPlan;

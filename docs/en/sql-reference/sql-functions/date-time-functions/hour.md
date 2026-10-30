@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the hour for a given date."
 ---
 
 # hour

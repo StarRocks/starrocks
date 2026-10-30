@@ -15,11 +15,12 @@
 
 package com.starrocks.meta;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DeleteSqlBlackLists;
 import com.starrocks.persist.ImageWriter;
@@ -29,13 +30,10 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SimpleScheduler;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.AddBackendBlackListStmt;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
-import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -46,11 +44,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
+import java.util.regex.PatternSyntaxException;
 
 // Used by sql's blacklist
 public class SqlBlackList {
@@ -59,23 +56,30 @@ public class SqlBlackList {
 
     public void verifying(String sql) throws AnalysisException {
         String formatSql = sql.replace("\r", " ").replace("\n", " ").replaceAll("\\s+", " ");
-        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            for (BlackListSql patternAndId : sqlBlackListMap.values()) {
-                Matcher m = patternAndId.pattern.matcher(formatSql);
-                if (m.find()) {
-                    MetricRepo.COUNTER_SQL_BLOCK_HIT_COUNT.increase(1L);
-                    ErrorReport.reportAnalysisException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR, patternAndId.id);
-                }
+        for (BlackListSql patternAndId : ruleSnapshot) {
+            Matcher m = patternAndId.pattern.matcher(formatSql);
+            if (m.find()) {
+                MetricRepo.COUNTER_SQL_BLOCK_HIT_COUNT.increase(1L);
+                ErrorReport.reportSqlBlackListException(ErrorCode.ERR_SQL_IN_BLACKLIST_ERROR, patternAndId.id);
             }
         }
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            int cnt = reader.readInt();
-            for (int i = 0; i < cnt; i++) {
-                SqlBlackListPersistInfo sqlBlackListPersistInfo = reader.readJson(SqlBlackListPersistInfo.class);
-                put(sqlBlackListPersistInfo.id, Pattern.compile(sqlBlackListPersistInfo.pattern));
+        try (LockCloseable ignored = new LockCloseable(updateLock)) {
+            try {
+                int cnt = reader.readInt();
+                for (int i = 0; i < cnt; i++) {
+                    SqlBlackListPersistInfo sqlBlackListPersistInfo = reader.readJson(SqlBlackListPersistInfo.class);
+                    Pattern pattern = Pattern.compile(sqlBlackListPersistInfo.pattern);
+                    BlackListSql blackListSql = sqlBlackListMap.get(pattern.toString());
+                    if (blackListSql == null) {
+                        ids.set(Math.max(ids.get(), sqlBlackListPersistInfo.id + 1));
+                        sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, sqlBlackListPersistInfo.id));
+                    }
+                }
+            } finally {
+                refreshSnapshot();
             }
             LOG.info("loaded {} SQL blacklist patterns", sqlBlackListMap.size());
         }
@@ -83,13 +87,16 @@ public class SqlBlackList {
 
     // we use string of sql as key, and (pattern, id) as value.
     public long put(Pattern pattern) {
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(updateLock)) {
             BlackListSql blackListSql = sqlBlackListMap.get(pattern.toString());
             if (blackListSql == null) {
                 long id = ids.getAndIncrement();
                 GlobalStateMgr.getCurrentState().getEditLog().logAddSQLBlackList(
                         new SqlBlackListPersistInfo(id, pattern.pattern()),
-                        wal -> sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, id)));
+                        wal -> {
+                            sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, id));
+                            refreshSnapshot();
+                        });
                 return id;
             } else {
                 return blackListSql.id;
@@ -98,13 +105,35 @@ public class SqlBlackList {
     }
 
     public void put(long id, Pattern pattern) {
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(updateLock)) {
             BlackListSql blackListSql = sqlBlackListMap.get(pattern.toString());
             if (blackListSql == null) {
                 ids.set(Math.max(ids.get(), id + 1));
                 sqlBlackListMap.put(pattern.toString(), new BlackListSql(pattern, id));
+                refreshSnapshot();
             }
         }
+    }
+
+    public void addBlackSql(AddSqlBlackListStmt addSqlBlackListStmt) {
+        Pattern sqlPattern = null;
+        String sql = addSqlBlackListStmt.getSql().trim().toLowerCase().replaceAll(" +", " ")
+                .replace("\r", " ")
+                .replace("\n", " ")
+                .replaceAll("\\s+", " ");
+        if (!sql.isEmpty()) {
+            try {
+                sqlPattern = Pattern.compile(sql);
+            } catch (PatternSyntaxException e) {
+                throw new SemanticException("Sql syntax error: %s", e.getMessage());
+            }
+        }
+
+        if (sqlPattern == null) {
+            throw new SemanticException("Sql pattern cannot be empty");
+        }
+
+        GlobalStateMgr.getCurrentState().getSqlBlackList().put(sqlPattern);
     }
 
     public void deleteBlackSql(DelSqlBlackListStmt delSqlBlackListStmt) {
@@ -119,24 +148,13 @@ public class SqlBlackList {
         }
     }
 
-    public void addBlackSql(AddBackendBlackListStmt addBackendBlackListStmt, ConnectContext context)
-            throws StarRocksException {
-        Authorizer.check(addBackendBlackListStmt, context);
-        for (Long beId : addBackendBlackListStmt.getBackendIds()) {
-            SystemInfoService sis = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-            if (sis.getBackend(beId) == null) {
-                throw new StarRocksException("Not found backend: " + beId);
-            }
-            SimpleScheduler.getHostBlacklist().addByManual(beId);
-        }
-    }
-
     // we delete sql's regular expression use id, so we iterate this map.
     public void delete(long id) {
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(updateLock)) {
             for (Map.Entry<String, BlackListSql> entry : sqlBlackListMap.entrySet()) {
                 if (entry.getValue().id == id) {
                     sqlBlackListMap.remove(entry.getKey());
+                    refreshSnapshot();
                     return;
                 }
             }
@@ -150,7 +168,7 @@ public class SqlBlackList {
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable ignored = new LockCloseable(updateLock)) {
             // one for self and N for patterns
             final int cnt = 1 + sqlBlackListMap.size();
             SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.BLACKLIST_MGR, cnt);
@@ -165,12 +183,22 @@ public class SqlBlackList {
     }
 
     public List<BlackListSql> getBlackLists() {
-        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            return this.sqlBlackListMap.values().stream().sorted(Comparator.comparing(x -> x.id)).collect(Collectors.toList());
-        }
+        return ruleSnapshot;
     }
 
-    private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private void refreshSnapshot() {
+        ruleSnapshot = this.sqlBlackListMap.values().stream().sorted(Comparator.comparing(x -> x.id))
+                .collect(ImmutableList.toImmutableList());
+    }
+
+    @VisibleForTesting
+    ReentrantLock getUpdateLock() {
+        return updateLock;
+    }
+
+    private final ReentrantLock updateLock = new ReentrantLock();
+
+    private volatile List<BlackListSql> ruleSnapshot = ImmutableList.of();
 
     // sqlBlackListMap: key is String(sql), value is BlackListSql.
     // BlackListSql is (Pattern, id). Pattern is the regular expression, id marks this sql, and is show with "show sqlblacklist";
@@ -180,10 +208,10 @@ public class SqlBlackList {
     private final AtomicLong ids = new AtomicLong();
 
     protected void cleanup() {
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
+        try (LockCloseable ignored = new LockCloseable(updateLock)) {
             sqlBlackListMap.clear();
             ids.set(0);
+            refreshSnapshot();
         }
     }
 }
-

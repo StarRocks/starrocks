@@ -136,16 +136,6 @@ TEST(ObjectColumnTest, HLL_test_filter_range) {
 }
 
 // NOLINTNEXTLINE
-TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
-    auto c = HyperLogLogColumn::create();
-    c->append(HyperLogLog());
-
-    auto ret = c->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-}
-
-// NOLINTNEXTLINE
 TEST(ObjectColumnTest, test_append_value_multiple_times) {
     auto src_col = BitmapColumn::create();
     auto copy_col = BitmapColumn::create();
@@ -166,24 +156,13 @@ TEST(ObjectColumnTest, test_append_value_multiple_times) {
 }
 
 // NOLINTNEXTLINE
-TEST(ObjectColumnTest, test_object_column_downgrade) {
-    auto c = HyperLogLogColumn::create();
-    c->append(HyperLogLog());
-
-    auto ret = c->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(c->has_large_column());
-}
-
-// NOLINTNEXTLINE
 TEST(ObjectColumnTest, HLL_test_reset_column) {
     auto c = HyperLogLogColumn::create();
 
     c->append(HyperLogLog());
     c->append(HyperLogLog());
     c->append(HyperLogLog());
-    const auto& data = c->get_data();
+    const auto& data = c->immutable_data();
     ASSERT_EQ(3, data.size());
     c->set_delete_state(DEL_PARTIAL_SATISFIED);
 
@@ -192,7 +171,7 @@ TEST(ObjectColumnTest, HLL_test_reset_column) {
     c->reset_column();
     ASSERT_EQ(0, c->size());
     ASSERT_EQ(DEL_NOT_SATISFIED, c->delete_state());
-    ASSERT_EQ(0, c->get_data().size());
+    ASSERT_EQ(0, c->immutable_data().size());
 }
 
 // NOLINTNEXTLINE
@@ -209,15 +188,15 @@ TEST(ObjectColumnTest, HLL_test_swap_column) {
     c1->swap_column(*c2);
 
     ASSERT_EQ(1, c1->size());
-    ASSERT_EQ(1, c1->get_data().size());
+    ASSERT_EQ(1, c1->immutable_data().size());
     ASSERT_EQ(3, c2->size());
-    ASSERT_EQ(3, c2->get_data().size());
+    ASSERT_EQ(3, c2->immutable_data().size());
 
     c2->swap_column(*c1);
     ASSERT_EQ(1, c2->size());
-    ASSERT_EQ(1, c2->get_data().size());
+    ASSERT_EQ(1, c2->immutable_data().size());
     ASSERT_EQ(3, c1->size());
-    ASSERT_EQ(3, c1->get_data().size());
+    ASSERT_EQ(3, c1->immutable_data().size());
 }
 
 } // namespace starrocks

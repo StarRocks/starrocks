@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE VIEW creates a logical view."
 keywords: ['shitu']
 ---
 

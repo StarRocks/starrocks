@@ -34,19 +34,32 @@
 
 #include "storage/rowset/column_writer.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 
 #include "base/simd/simd.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_compression_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "object_column_writer.h"
 #include "storage/index/inverted/inverted_index_option.h"
+
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
+#include "base/compression/zstd_dict.h"
 #include "base/string/faststring.h"
+#include "base/utility/alignment.h"
+#include "common/bloom_filter.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -60,11 +73,25 @@
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/struct_column_writer.h"
 #include "storage/rowset/zone_map_index.h"
+#include "storage/storage_metrics.h"
 #include "types/logical_type.h"
-#include "util/bloom_filter.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
+
+ColumnWriterOptions::ColumnWriterOptions()
+        : data_page_size(config::data_page_size),
+          // Declaration order, which -Wreorder enforces under the -Werror that non-test builds use:
+          // the gain is declared before the sample size in column_writer.h.
+          //
+          // Clamped, because a negative value would mean "keep the dictionary
+          // whatever it measures". Tests reach that on purpose by setting the field
+          // directly; an operator should not reach it by mis-typing a config.
+          zstd_compression_dict_min_gain(std::max(0.0, config::zstd_compression_dict_min_gain)),
+          // Signed config into an unsigned field: a negative value would wrap to 4G and turn the
+          // cap into "no cap", making the dictionary the whole of the first eligible page -- up to
+          // the 1MB a per-column page size allows, or a single oversized row.
+          zstd_compression_dict_sample_bytes(static_cast<uint32_t>(
+                  std::clamp<int64_t>(config::zstd_compression_dict_sample_bytes, 0, 1024 * 1024))) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -176,7 +203,9 @@ public:
             _encode_buf.resize(codec->max_compressed_len(_null_map.size()));
             Slice origin_slice(_null_map);
             Slice compressed_slice(_encode_buf);
-            status = codec->compress(origin_slice, &compressed_slice);
+            BlockCompressionOptions compression_options;
+            compression_options.lz4_acceleration = config::lz4_acceleration;
+            status = codec->compress(origin_slice, &compressed_slice, compression_options);
             if (!status.ok()) {
                 LOG(ERROR) << "compress null map failed";
                 return {};
@@ -242,6 +271,9 @@ public:
     Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _scalar_column_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
     Status write_inverted_index() override { return _scalar_column_writer->write_inverted_index(); };
 
@@ -288,6 +320,9 @@ public:
     Status write_ordinal_index() override { return _scalar_column_writer->write_ordinal_index(); };
     Status write_zone_map() override { return _scalar_column_writer->write_zone_map(); };
     Status write_bitmap_index() override { return _scalar_column_writer->write_bitmap_index(); };
+    void take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) override {
+        _scalar_column_writer->take_ordinal_index_builders(out);
+    }
     Status write_bloom_filter_index() override { return _scalar_column_writer->write_bloom_filter_index(); };
 
     ordinal_t get_next_rowid() const override { return _scalar_column_writer->get_next_rowid(); };
@@ -320,9 +355,14 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         dict_opts.need_speculate_encoding = true;
         auto column_writer = std::make_unique<ScalarColumnWriter>(dict_opts, type_info, wfile);
         return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
-    } else if (column->type() == LogicalType::TYPE_JSON) {
+    } else if (is_object_type(column->type())) {
         auto column_writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
-        return create_json_column_writer(opts, std::move(type_info), wfile, std::move(column_writer));
+        if (column->type() == TYPE_JSON) {
+            auto object_writer = std::make_unique<ObjectColumnWriter>(opts, type_info, std::move(column_writer));
+            return create_json_column_writer(opts, std::move(type_info), wfile, std::move(object_writer));
+        } else {
+            return std::make_unique<ObjectColumnWriter>(opts, std::move(type_info), std::move(column_writer));
+        }
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
         str_opts.field_name = column->name();
@@ -347,8 +387,7 @@ ScalarColumnWriter::ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfo
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _opts(opts),
           _wfile(wfile),
-          _curr_page_format(_opts.page_format),
-          _data_size(0) {
+          _curr_page_format(_opts.page_format) {
     // these opts.meta fields should be set by client
     DCHECK(opts.meta->has_column_id());
     DCHECK(opts.meta->has_unique_id());
@@ -471,6 +510,11 @@ uint64_t ScalarColumnWriter::estimate_buffer_size() {
         size += _inverted_index_builder->size();
     }
 #endif
+    // The retained dictionary sample is pending output like everything above: write_data()
+    // persists it as the dictionary page (whose size the sample bounds). Leaving it out lets a
+    // wide table pass the flush checks and then overshoot max_segment_file_size by roughly one
+    // dictionary page per nominated column.
+    size += _zstd_compression_dict_sample.size();
     return size;
 }
 
@@ -512,6 +556,29 @@ Status ScalarColumnWriter::write_data() {
         dict_pp.to_proto(_opts.meta->mutable_dict_page());
     }
     _opts.meta->set_all_dict_encoded(_page_builder->all_dict_encoded());
+
+    // persist the per-column compression dictionary page. It is a no-dict,
+    // self-decodable DICTIONARY_PAGE holding the raw sample bytes, read back on
+    // the read path to build the DDict. Gated on _cdict_used so a column that
+    // built a dict but never actually dict-compressed any page writes nothing.
+    // A PLAIN compression dict column never enters the DICT_ENCODING branch above, so the two
+    // dict pages never coexist.
+    if (_cdict_used) {
+        DCHECK(!_zstd_compression_dict_sample.empty());
+        PageFooterPB zstd_compression_dict_footer;
+        zstd_compression_dict_footer.set_type(DICTIONARY_PAGE);
+        zstd_compression_dict_footer.set_uncompressed_size(_zstd_compression_dict_sample.size());
+        zstd_compression_dict_footer.mutable_dict_page_footer()->set_encoding(PLAIN_ENCODING);
+
+        PagePointer zstd_compression_dict_pp;
+        std::vector<Slice> zstd_compression_dict_body{Slice(_zstd_compression_dict_sample)};
+        RETURN_IF_ERROR(PageIO::compress_and_write_page(_compress_codec, _opts.compression_min_space_saving, _wfile,
+                                                        zstd_compression_dict_body, zstd_compression_dict_footer,
+                                                        &zstd_compression_dict_pp));
+        zstd_compression_dict_pp.to_proto(_opts.meta->mutable_zstd_compression_dict_page());
+        StorageMetrics::instance()->zstd_compression_dict_pages_written.increment(1);
+        StorageMetrics::instance()->zstd_compression_dict_bytes.increment(zstd_compression_dict_pp.size);
+    }
 
     Page* page = _pages.head;
     while (page != nullptr) {
@@ -560,6 +627,13 @@ Status ScalarColumnWriter::write_zone_map() {
     return Status::OK();
 }
 
+// Give up the ordinal-index builder so the rest of this writer can be destroyed on schedule. The
+// meta pointer travels with it because write_ordinal_index() records the page pointer through
+// _opts.meta, and by the time the region is written this writer is gone.
+void ScalarColumnWriter::take_ordinal_index_builders(std::vector<DeferredOrdinalIndex>* out) {
+    out->push_back({std::move(_ordinal_index_builder), _opts.meta});
+}
+
 Status ScalarColumnWriter::write_bitmap_index() {
     if (_bitmap_index_builder != nullptr) {
         return _bitmap_index_builder->finish(_wfile, _opts.meta->add_indexes());
@@ -587,12 +661,19 @@ Status ScalarColumnWriter::write_inverted_index() {
 Status ScalarColumnWriter::_write_data_page(Page* page) {
     PagePointer pp;
     std::vector<Slice> compressed_body;
+    compressed_body.reserve(page->data.size());
     for (auto& data : page->data) {
         compressed_body.push_back(data.slice());
     }
     RETURN_IF_ERROR(PageIO::write_page(_wfile, compressed_body, page->footer, &pp));
     _ordinal_index_builder->append_entry(page->footer.data_page_footer().first_ordinal(), pp);
     return Status::OK();
+}
+
+int ScalarColumnWriter::_effective_compression_level() const {
+    return (_opts.meta != nullptr && _opts.meta->has_compression_level() && _opts.meta->compression_level() > 0)
+                   ? _opts.meta->compression_level()
+                   : -1;
 }
 
 Status ScalarColumnWriter::finish_current_page() {
@@ -641,10 +722,118 @@ Status ScalarColumnWriter::finish_current_page() {
         // for page format v2 or above, use the encoding type of config::null_encoding
         data_page_footer->set_null_encoding(_null_map_builder_v2->null_encoding());
     }
+    // lazily build the per-column compression dictionary from the first eligible
+    // page's encoded values, BEFORE compressing this page, so page 0 itself is
+    // dict-compressed. Building it is best-effort: a build failure leaves the column
+    // without a dictionary and the flush goes on. Compressing against one is not --
+    // once a dictionary exists, a failure to compress a page with it, or to write the
+    // dictionary page in write_data(), fails the flush like any other write error.
+    // Both plain variants qualify. PLAIN_ENCODING_DELTA_OFFSET (picked for high-cardinality strings
+    // when enable_binary_plain_delta_offset is on) differs from PLAIN_ENCODING only in what the offset
+    // trailer stores -- deltas instead of absolutes -- at the same size and position inside the encoded
+    // values, and the dictionary is raw content, so the sample is equally usable. The read path cannot
+    // tell them apart either: the dictionary is applied at the codec layer, before any page decoder
+    // exists. Excluding it would have made the whole feature a silent no-op for exactly the columns it
+    // targets whenever that switch is on. DICT_ENCODING is still excluded, deliberately: those values
+    // are already deduplicated.
+    const auto encoding = _encoding_info != nullptr ? _encoding_info->encoding() : DEFAULT_ENCODING;
+    if (_opts.use_zstd_compression && !_zstd_compression_dict_ready && !_zstd_compression_dict_abandoned &&
+        _compress_codec != nullptr && _compress_codec->type() == CompressionTypePB::ZSTD && _encoding_info != nullptr &&
+        (encoding == PLAIN_ENCODING || encoding == PLAIN_ENCODING_DELTA_OFFSET) && _page_builder->count() > 0 &&
+        _opts.zstd_compression_dict_sample_bytes > 0 &&
+        encoded_values->size() >= static_cast<size_t>(config::zstd_compression_dict_min_sample_bytes)) {
+        // The first data page is always format v2 -- the format only drops to v1 when the
+        // PREVIOUS page was mostly nulls -- so even an all-null first page arrives here with
+        // non-empty encoded values to sample, because v2 puts null rows into the page builder.
+        // This says nothing about frames: the sampling page and every trial page after it are
+        // written without the dictionary, so a dictionary-compressed page is always preceded by
+        // plain ones. That is safe for its own reason, which nodict_frame_decodes_under_ddict
+        // pins: a no-dict frame decodes identically whether or not a raw-content dictionary is
+        // referenced.
+        DCHECK(_first_rowid != 0 || _curr_page_format == 2);
+        size_t sample_len = std::min<size_t>(encoded_values->size(), _opts.zstd_compression_dict_sample_bytes);
+        _zstd_compression_dict_sample.assign(reinterpret_cast<const char*>(encoded_values->data()), sample_len);
+        auto cdict_or =
+                compression::ZstdCDict::create(Slice(_zstd_compression_dict_sample), _effective_compression_level());
+        if (cdict_or.ok()) {
+            _compression_cdict = std::move(cdict_or.value());
+            _zstd_compression_dict_ready = true;
+            // This page is the sample; compressing it against itself would be both
+            // free and meaningless; it goes out plain and the NEXT page decides
+            // whether the dictionary is worth keeping.
+            _sampling_page = true;
+        } else {
+            // Degrade for the whole column, not just this page: retrying on every later page
+            // would rebuild a dictionary that just failed and would count the fallback once per
+            // page, where the metric is documented as once per column per segment.
+            _zstd_compression_dict_sample.clear();
+            _zstd_compression_dict_abandoned = true;
+            StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
+        }
+    }
+    const compression::ZstdCDict* cdict = _zstd_compression_dict_ready ? _compression_cdict.get() : nullptr;
+    if (_sampling_page) {
+        // The dictionary was sampled from this very page. Compressing it against
+        // itself would collapse it to almost nothing and would prove nothing about
+        // the rest of the column, so this page goes out plain. That is safe: the
+        // reader decodes a no-dict frame identically whether or not a raw-content
+        // dictionary is referenced.
+        _sampling_page = false;
+        cdict = nullptr;
+    }
+
     // trying to compress page body
     faststring compressed_body;
-    RETURN_IF_ERROR(
-            PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body, &compressed_body));
+    if (cdict != nullptr && !_zstd_compression_dict_proven) {
+        // Trial. Compress both ways, keep the PLAIN result so the decision stays
+        // reversible, and accumulate over several pages before deciding. Whether a
+        // dictionary pays is a property of the data, so it is measured rather than
+        // guessed from row length or page size.
+        faststring dict_body;
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &compressed_body, nullptr));
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &dict_body, cdict));
+        // compress_page_body returns an empty body when compressing did not save
+        // enough to be worth it; that case means "the uncompressed size".
+        const uint64_t raw_size = Slice::compute_total_size(body);
+        _zstd_compression_dict_trial_with += dict_body.size() == 0 ? raw_size : dict_body.size();
+        _zstd_compression_dict_trial_without += compressed_body.size() == 0 ? raw_size : compressed_body.size();
+        cdict = nullptr; // this page goes out plain whichever way the trial lands
+
+        if (++_zstd_compression_dict_trial_pages >= kZstdDictTrialPages) {
+            _zstd_compression_dict_proven = true;
+            // Signed on purpose: a dictionary that made the pages BIGGER has to be able to fail
+            // this test, and a saving floored at zero cannot express that -- it would pass any
+            // margin of zero or less.
+            const int64_t saved = static_cast<int64_t>(_zstd_compression_dict_trial_without) -
+                                  static_cast<int64_t>(_zstd_compression_dict_trial_with);
+            // One condition: the saving has to be large, not merely real, and it has to exist at
+            // all -- a dictionary that broke even is pure cost, a page of its own plus a load per
+            // segment on every read. A negative margin is the one exception: it is not reachable
+            // from config (the value is floored at zero there) and means "keep the dictionary
+            // whatever the measurement says", which is how the roundtrip test gets the dictionary
+            // path to run on data that would rightly decline one.
+            // The other half of the rule is structural rather than arithmetic -- a column too
+            // short to finish the trial never gets a dictionary at all, which is the
+            // right answer for it, because the dictionary page is roughly a page in
+            // size and cannot pay for itself over a handful.
+            const double min_gain = _opts.zstd_compression_dict_min_gain;
+            const bool worth_the_margin =
+                    (min_gain < 0.0 || saved > 0) &&
+                    static_cast<double>(saved) >= static_cast<double>(_zstd_compression_dict_trial_without) * min_gain;
+            if (!worth_the_margin) {
+                _compression_cdict.reset();
+                _zstd_compression_dict_sample.clear();
+                _zstd_compression_dict_ready = false;
+                _zstd_compression_dict_abandoned = true;
+                StorageMetrics::instance()->zstd_compression_dict_build_fallback.increment(1);
+            }
+        }
+    } else {
+        RETURN_IF_ERROR(PageIO::compress_page_body(_compress_codec, _opts.compression_min_space_saving, body,
+                                                   &compressed_body, cdict));
+    }
     if (compressed_body.size() == 0) {
         // page body is uncompressed
         double space_saving =
@@ -667,6 +856,11 @@ Status ScalarColumnWriter::finish_current_page() {
     } else {
         // page body is compressed
         page->data.emplace_back(compressed_body.build());
+        if (cdict != nullptr) {
+            // This page was actually compressed referencing the compression dict, so
+            // the dict page must be persisted (gate for write_data()).
+            _cdict_used = true;
+        }
     }
 
     _push_back_page(page.release());
@@ -690,10 +884,28 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
-    const uint8_t* ptr = column.raw_data();
-    const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
-    return append(ptr, null, column.size(), column.has_null());
+    // Currently, ColumnWriter does not support null-only columns
+    const uint8_t* null = ColumnHelper::get_null_data_ptr(&column);
+    const Column* data_column = ColumnHelper::get_data_column(&column);
+    const uint8_t* ptr;
+    // TODO: Remove slice cache from column writer
+    if (data_column->is_binary()) {
+        down_cast<const BinaryColumn*>(data_column)->build_slices(_slice_buf);
+        ptr = reinterpret_cast<const uint8_t*>(_slice_buf.data());
+    } else {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(data_column->accept(&visitor));
+        ptr = visitor.result();
+    }
+    return _append(ptr, null, column.size(), column.has_null());
+}
+
+Status ScalarColumnWriter::append(const Column& column, const Buffer<Slice>& data) {
+    _total_mem_footprint += column.byte_size();
+    // Currently, ColumnWriter does not support null-only columns
+    const auto* null = ColumnHelper::get_null_data_ptr(&column);
+    const auto* ptr = reinterpret_cast<const uint8_t*>(data.data());
+    return _append(ptr, null, column.size(), column.has_null());
 }
 
 Status ScalarColumnWriter::append_array_offsets(const Column& column) {
@@ -736,7 +948,7 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
+Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
     const size_t field_size = type_info()->size();
     size_t remaining = count;
     while (remaining > 0) {
@@ -884,13 +1096,20 @@ inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const Binary
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
 
+    // When the column is too high-cardinality for dictionary encoding, fall back to plain.
+    // If delta-offset plain is enabled, use the delta-offset variant so the offset trailer
+    // (which dominates the compressed size of high-cardinality string columns) compresses
+    // far better. The choice is recorded in the column meta encoding.
+    const EncodingTypePB plain_encoding =
+            config::enable_binary_plain_delta_offset ? PLAIN_ENCODING_DELTA_OFFSET : PLAIN_ENCODING;
+
     if (row_count > dictionary_min_rowcount) {
         phmap::flat_hash_set<size_t> hash_set;
         for (size_t i = 0; i < row_count; i++) {
             size_t hash = SliceHash()(bin_col.get_slice(i));
             hash_set.insert(hash);
             if (hash_set.size() > max_card) {
-                return PLAIN_ENCODING;
+                return plain_encoding;
             }
         }
     }
@@ -911,6 +1130,14 @@ Status StringColumnWriter::finish() {
         if (!st.ok()) {
             return st;
         }
+    } else {
+        // No append ever ran, so the deferred speculate-and-set-encoding in
+        // append() never ran either and the inner ScalarColumnWriter still has
+        // _encoding_info == nullptr. ScalarColumnWriter::finish() dereferences
+        // _encoding_info unconditionally, so install a default encoding here
+        // before forwarding. DEFAULT_ENCODING resolves to the type's default
+        // inside EncodingInfo::get().
+        RETURN_IF_ERROR(_scalar_column_writer->set_encoding(DEFAULT_ENCODING));
     }
 
     return _scalar_column_writer->finish();
@@ -920,7 +1147,7 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     size_t limit = length();
     auto row_count = column.size();
     const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->immutable_null_column_data().data() : nullptr;
     const BinaryColumn* bin_col;
 
     if (is_nullable()) {
@@ -931,12 +1158,9 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     }
     for (size_t i = 0; i < row_count; i++) {
         // skip string length check if it is null
-        if (null != nullptr && null[i] == starrocks::DATUM_NULL) {
+        if (null != nullptr && null[i] == DATUM_NULL) {
             continue;
         }
-        // here we shouldn't use raw_data() api of column to get a vector of slices in advance,
-        // because raw_data() will call _build_slices() api, which will create a vector of slices,
-        // if there are many StringColumnWriter, each of them will have a vector of slices, which will consume many memory.
         Slice slice = bin_col->get_slice(i);
         if (slice.get_size() > limit) {
             return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}", slice.get_size(),
@@ -1070,6 +1294,11 @@ Status DictColumnWriter::finish() {
         if (!st.ok()) {
             return st;
         }
+    } else {
+        // Same deferred-encoding hazard as StringColumnWriter::finish(): with
+        // zero appends the inner ScalarColumnWriter has _encoding_info ==
+        // nullptr, and its finish() would deref it.
+        RETURN_IF_ERROR(_scalar_column_writer->set_encoding(DEFAULT_ENCODING));
     }
 
     return _scalar_column_writer->finish();

@@ -60,6 +60,8 @@ public interface AnalyzeStatus {
 
     Map<String, String> getProperties();
 
+    void setProperties(Map<String, String> properties);
+
     LocalDateTime getStartTime();
 
     LocalDateTime getEndTime();
@@ -75,6 +77,10 @@ public interface AnalyzeStatus {
     String getReason();
 
     void setReason(String reason);
+
+    boolean isCancelled();
+
+    void setCancelled(boolean cancelled);
 
     long getProgress();
 

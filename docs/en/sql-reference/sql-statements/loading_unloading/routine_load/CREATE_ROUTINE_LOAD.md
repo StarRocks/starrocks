@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Routine Load can continuously consume messages from Apache Kafka® and load data into StarRocks."
 ---
 
 import Tip from '../../../../_assets/commonMarkdown/quickstart-routine-load-tip.mdx';
@@ -15,7 +16,7 @@ Routine Load can continuously consume messages from Apache Kafka® and load data
 This topic describes the syntax, parameters, and examples of the CREATE ROUTINE LOAD statement.
 
 :::note
-- For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../../loading/Loading_intro.md).
+- For information about the application scenarios, principles, and basic operations of Routine Load, see [Load data using Routine Load](../../../../loading/loading_introduction/loading_introduction.mdx).
 - You can load data into StarRocks tables only as a user who has the INSERT privilege on those StarRocks tables. If you do not have the INSERT privilege, follow the instructions provided in [GRANT](../../account-management/GRANT.md) to grant the INSERT privilege to the user that you use to connect to your StarRocks cluster.
 :::
 
@@ -112,9 +113,9 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `desired_concurrent_number`
 
 **Required**: No\
-**Description**:  The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../../administration/management/FE_configuration.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.<br/>
+**Description**:  The expected task parallelism of a single Routine Load job. Default value: `3`. The actual task parallelism is determined by the minimum value of the multiple parameters: `min(alive_be_number, partition_number, desired_concurrent_number, max_routine_load_task_concurrent_num)`. <ul><li>`alive_be_number`: the number of alive BE nodes.</li><li>`partition_number`: the number of partitions to be consumed.</li><li>`desired_concurrent_number`: the expected task parallelism of a single Routine Load  job. Default value: `3`.</li><li>`max_routine_load_task_concurrent_num`: the default maximum task parallelism of a Routine Load job, which is `5`. See [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters).</li></ul>The maximum actual task parallelism is determined by either the number of alive BE nodes or the number of partitions to be consumed.<br/>
 
-####  `max_batch_interval`
+#### `max_batch_interval`
 
 **Required**: No\
 **Description**:  The scheduling interval for a task, that is, how often a task is executed. Unit: seconds. Value range: `5` ~ `60`. Default value: `10`. It is recommended to set a value larger than `10`. If the scheduling is shorter than 10 seconds, too many tablet versions are generated due to an excessively high loading frequency. 
@@ -137,7 +138,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `strict_mode`      
 
 **Required**: No\
-**Description**:  Specifies whether to enable the [strict mode](../../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. 
+**Description**:  Specifies whether to enable the [strict mode](../../../../loading/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. 
 
 #### `log_rejected_record_num`
 
@@ -167,7 +168,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `trim_space`
 
 **Required**: No\
-**Description**:  Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. 
+**Description**:  Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br />For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br />Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (`|`) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: `| "Love StarRocks "|`. If you set `trim_space` to `true`, StarRocks processes the preceding field values as `|"Love StarRocks"|`. 
 
 #### `enclose`     
 
@@ -192,17 +193,22 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 #### `json_root`
 
 **Required**: No\
-**Description**:  The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. 
+**Description**:  The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic.
+
+#### `envelope`
+
+**Required**: No\
+**Description**: Specifies the CDC envelope format of the JSON-formatted data. Valid value: `debezium`. Default: not set (no envelope wrapping). When set to `debezium`, StarRocks parses each Kafka message as a Debezium CDC event. The message must contain an `op` field (`c`=create, `u`=update, `d`=delete, `r`=snapshot read) and an `after` field (for c/u/r) or `before` field (for d) holding the actual row data. Tombstone messages where `payload` is `null` are silently skipped. Can only be specified when `format` is `json`. Cannot be used together with `json_root` or `strip_outer_array`.
 
 #### `task_consume_second`
 
 **Required**: No\
-**Description**:  The maximum time for each Routine Load task within the specified Routine Load job to consume data. Unit: second. Unlike the [FE dynamic parameters](../../../../administration/management/FE_configuration.md) `routine_load_task_consume_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0.<ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> </ul> 
+**Description**:  The maximum time for each Routine Load task within the specified Routine Load job to consume data. Unit: second. Unlike the [FE dynamic parameters](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_consume_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0.<ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> </ul> 
 
 #### `task_timeout_second`
 
 **Required**: No\
-**Description**: The timeout duration for each Routine Load task within the specified Routine Load job. Unit: second. Unlike the [FE dynamic parameter](../../../../administration/management/FE_configuration.md) `routine_load_task_timeout_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0. <ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> </ul>
+**Description**: The timeout duration for each Routine Load task within the specified Routine Load job. Unit: second. Unlike the [FE dynamic parameter](../../../../administration/configuration/FE_parameters/FE_parameters.md) `routine_load_task_timeout_second` (which applies to all Routine Load jobs within the cluster), this parameter is specific to an individual Routine Load job, which is more flexible. This parameter is supported since v3.1.0. <ul> <li>When `task_consume_second` and `task_timeout_second` are not configured, StarRocks uses the FE dynamic parameters `routine_load_task_consume_second` and `routine_load_task_timeout_second` to control the load behavior.</li> <li>When only `task_timeout_second` is configured, the default value for `task_consume_second` is calculated as `task_timeout_second`/4.</li> <li>When only `task_consume_second` is configured, the default value for `task_timeout_second` is calculated as `task_consume_second` * 4.</li> </ul>
 
 #### `pause_on_fatal_parse_error`
 
@@ -250,7 +256,12 @@ The properties of the data source.
 #### `property.kafka_default_offsets`
 
 **Required**: No\
-**Description**:  The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property.
+**Description**:  The default starting offset for all consumer partitions. The supported values for this property are same as those for the `kafka_offsets` property. Partitions that are discovered after the job already has consuming progress (for example, partitions added to the Kafka topic later) start from this offset, or from `OFFSET_BEGINNING` if this property is not specified.
+
+#### `property.kafka_partition_discovery`
+
+**Required**: No\
+**Description**: Whether the Routine Load job keeps discovering new Kafka partitions even if `kafka_partitions` is specified. Valid values: `true` and `false` (default). By default, specifying `kafka_partitions` pins the consumed partitions to that list, and partitions added to the topic later are not consumed. If this property is set to `true`, `kafka_partitions` and `kafka_offsets` only specify the starting offsets of the listed partitions, and the job consumes all partitions of the topic, including partitions added later. A partition that is not listed in `kafka_partitions` starts from the offset specified in `property.kafka_default_offsets`, or from `OFFSET_BEGINNING` if `property.kafka_default_offsets` is not specified. To start the unlisted partitions from the latest offset instead, explicitly set `property.kafka_default_offsets` to `OFFSET_END`. This property can only be used together with `kafka_partitions`.
 
 #### `confluent.schema.registry.url`
 
@@ -339,7 +350,7 @@ If `property.group.id` is not specified, StarRocks generates a random value base
 
 ### FE and BE configuration items
 
-For FE and BE configuration items related to Routine Load, see [configuration items](../../../../administration/management/FE_configuration.md).
+For FE and BE configuration items related to Routine Load, see [configuration items](../../../../administration/configuration/FE_parameters/FE_parameters.md).
 
 ## Column mapping
 
@@ -816,8 +827,8 @@ CREATE TABLE example_db.example_tbl3 (
     country varchar(26) NULL, 
     pay_time bigint(20) NULL, 
     price double SUM NULL) 
-AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 ENGINE=OLAP
+AGGREGATE KEY(commodity_id,customer_name,country,pay_time) 
 DISTRIBUTED BY HASH(commodity_id); 
 ```
 
@@ -962,7 +973,7 @@ CREATE TABLE sensor.sensor_log2 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 
@@ -1042,7 +1053,7 @@ CREATE TABLE sensor.sensor_log3 (
     `name` varchar(26) NOT NULL COMMENT "sensor name", 
     `checked` boolean NOT NULL COMMENT "checked", 
     `sensor_type` varchar(26) NOT NULL COMMENT "sensor type",
-    `data_y` long NULL COMMENT "sensor data" 
+    `data_y` bigint NULL COMMENT "sensor data" 
 ) 
 ENGINE=OLAP 
 DUPLICATE KEY (id) 

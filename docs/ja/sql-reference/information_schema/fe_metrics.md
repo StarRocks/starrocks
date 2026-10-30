@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "fe_metricsは各FEノードのメトリックに関する情報を提供します。"
 ---
 
 # fe_metrics

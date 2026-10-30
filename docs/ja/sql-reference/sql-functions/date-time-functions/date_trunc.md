@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された日付部分（年、日、時間、分など）に基づいて時間値を切り捨てます。"
 ---
 
 # date_trunc

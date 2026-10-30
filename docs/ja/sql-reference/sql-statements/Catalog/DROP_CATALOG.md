@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP CATALOG deletes an external catalog from the StarRocks cluster."
 ---
 
 # DROP CATALOG

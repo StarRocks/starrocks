@@ -1,0 +1,22 @@
+-- name: test_jit_largeint_literal
+-- description: A JIT-compiled expression must keep the full 128 bits of a LARGEINT literal.
+--              ir_helper built the constant via APInt(128, uint64_t,...), narrowing the int128
+--              and dropping the high half, so any literal >= 2^64 was zeroed/wrapped under JIT
+--              (jit_level=-1) while the interpreter (jit_level=0) was correct. The two must match.
+
+CREATE DATABASE IF NOT EXISTS test_jit_largeint_literal_db;
+USE test_jit_largeint_literal_db;
+
+CREATE TABLE jitli (id INT, v LARGEINT NULL) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+INSERT INTO jitli SELECT generate_series, 1 FROM TABLE(generate_series(1, 5000)) g;
+
+-- 2^64 literal: interpreter and JIT must agree (= 5000 * 2^64)
+SET jit_level = 0;
+SELECT sum(v + 18446744073709551616 - v) FROM jitli;
+SET jit_level = -1;
+SELECT sum(v + 18446744073709551616 - v) FROM jitli;
+
+-- 10^20 literal (also > 2^64), forced JIT: must equal 5000 * 10^20
+SET jit_level = -1;
+SELECT sum(v + 100000000000000000000 - v) FROM jitli;

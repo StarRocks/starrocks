@@ -16,20 +16,23 @@ package com.starrocks.connector.jdbc;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.CharType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -155,6 +158,24 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table getTableFromQuery(ConnectContext context, String dbName, String query) {
+        readLock();
+        try {
+            String normalizedQuery = JDBCTable.normalizePassThroughQuery(query);
+            long tableId = idGen.incrementAndGet();
+            String resolvedDbName = dbName == null ? MOCKED_PARTITIONED_DB_NAME : dbName;
+            JDBCTable queryTable = new JDBCTable(tableId, "_query_" + tableId, getQuerySchema(normalizedQuery),
+                    resolvedDbName, getCatalogName(), properties);
+            queryTable.setPassThroughQuery(normalizedQuery);
+            return queryTable;
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    @Override
     public Database getDb(ConnectContext context, String dbName) {
         readLock();
         try {
@@ -165,7 +186,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String dbName, String tableName, ConnectorMetadataRequestContext requestContext) {
         readLock();
         try {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
@@ -202,6 +223,150 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         } finally {
             readUnlock();
         }
+    }
+
+    private String getCatalogName() {
+        String jdbcUri = properties.get(JDBCResource.URI);
+        if (jdbcUri != null && (jdbcUri.startsWith("jdbc:postgresql") || jdbcUri.startsWith("jdbc:postgres"))) {
+            return MOCKED_JDBC_PG_CATALOG_NAME;
+        }
+        return MOCKED_JDBC_CATALOG_NAME;
+    }
+
+    private List<Column> getQuerySchema(String query) {
+        String projection = extractProjection(query);
+        if (projection == null || projection.isEmpty() || projection.contains("*")) {
+            return getSchema(MOCKED_PARTITIONED_TABLE_NAME0);
+        }
+
+        List<Column> querySchema = new ArrayList<>();
+        List<Column> defaultSchema = getSchema(MOCKED_PARTITIONED_TABLE_NAME0);
+        for (String item : splitProjectionItems(projection)) {
+            String columnName = extractProjectionColumnName(item);
+            if (columnName.isEmpty()) {
+                continue;
+            }
+
+            String lookupName = stripIdentifierQuote(columnName);
+            Column template = defaultSchema.stream()
+                    .filter(column -> column.getName().equalsIgnoreCase(lookupName))
+                    .findFirst()
+                    .orElse(new Column(columnName, VarcharType.VARCHAR));
+            querySchema.add(new Column(columnName, template.getType()));
+        }
+        return querySchema.isEmpty() ? defaultSchema : querySchema;
+    }
+
+    private String extractProjection(String query) {
+        String lowerQuery = query.toLowerCase(Locale.ROOT);
+        int selectIndex = lowerQuery.indexOf("select");
+        if (selectIndex < 0) {
+            return null;
+        }
+
+        int projectionStart = selectIndex + "select".length();
+        int fromIndex = findTopLevelKeyword(lowerQuery, "from", projectionStart);
+        return query.substring(projectionStart, fromIndex >= 0 ? fromIndex : query.length()).trim();
+    }
+
+    private List<String> splitProjectionItems(String projection) {
+        List<String> items = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        int parentheses = 0;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        boolean inBackticks = false;
+        for (int i = 0; i < projection.length(); i++) {
+            char ch = projection.charAt(i);
+            if (ch == '\'' && !inDoubleQuote && !inBackticks) {
+                inSingleQuote = !inSingleQuote;
+            } else if (ch == '"' && !inSingleQuote && !inBackticks) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (ch == '`' && !inSingleQuote && !inDoubleQuote) {
+                inBackticks = !inBackticks;
+            } else if (!inSingleQuote && !inDoubleQuote && !inBackticks) {
+                if (ch == '(') {
+                    parentheses++;
+                } else if (ch == ')') {
+                    parentheses = Math.max(0, parentheses - 1);
+                } else if (ch == ',' && parentheses == 0) {
+                    items.add(current.toString().trim());
+                    current.setLength(0);
+                    continue;
+                }
+            }
+            current.append(ch);
+        }
+        if (current.length() > 0) {
+            items.add(current.toString().trim());
+        }
+        return items;
+    }
+
+    private String extractProjectionColumnName(String item) {
+        String trimmedItem = item.trim();
+        if (trimmedItem.isEmpty()) {
+            return "";
+        }
+
+        String lowerItem = trimmedItem.toLowerCase(Locale.ROOT);
+        int asIndex = findTopLevelKeyword(lowerItem, "as", 0);
+        if (asIndex >= 0) {
+            return trimmedItem.substring(asIndex + 2).trim();
+        }
+
+        int dotIndex = trimmedItem.lastIndexOf('.');
+        if (dotIndex >= 0 && dotIndex < trimmedItem.length() - 1) {
+            return trimmedItem.substring(dotIndex + 1).trim();
+        }
+        return trimmedItem;
+    }
+
+    private int findTopLevelKeyword(String sql, String keyword, int startIndex) {
+        int parentheses = 0;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        boolean inBackticks = false;
+        for (int i = startIndex; i <= sql.length() - keyword.length(); i++) {
+            char ch = sql.charAt(i);
+            if (ch == '\'' && !inDoubleQuote && !inBackticks) {
+                inSingleQuote = !inSingleQuote;
+            } else if (ch == '"' && !inSingleQuote && !inBackticks) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (ch == '`' && !inSingleQuote && !inDoubleQuote) {
+                inBackticks = !inBackticks;
+            } else if (!inSingleQuote && !inDoubleQuote && !inBackticks) {
+                if (ch == '(') {
+                    parentheses++;
+                } else if (ch == ')') {
+                    parentheses = Math.max(0, parentheses - 1);
+                }
+            }
+
+            if (inSingleQuote || inDoubleQuote || inBackticks || parentheses != 0) {
+                continue;
+            }
+
+            if (sql.startsWith(keyword, i)
+                    && (i == 0 || Character.isWhitespace(sql.charAt(i - 1)))
+                    && (i + keyword.length() == sql.length()
+                    || Character.isWhitespace(sql.charAt(i + keyword.length())))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private String stripIdentifierQuote(String name) {
+        String trimmed = name.trim();
+        if (trimmed.length() >= 2) {
+            char first = trimmed.charAt(0);
+            char last = trimmed.charAt(trimmed.length() - 1);
+            if ((first == '"' && last == '"') || (first == '`' && last == '`')) {
+                return trimmed.substring(1, trimmed.length() - 1);
+            }
+        }
+        return trimmed;
     }
 
     @Override

@@ -1,0 +1,28 @@
+-- name: test_parse_json_throw_exception
+-- Reproduces an unfixed sibling of PR #73199 (commit cb7d9b5e3ec,
+-- "[BugFix] Respect ALLOW_THROW_EXCEPTION in get_json_string").
+-- #73199 made get_json_string (via _string_json) raise the JSON parse error
+-- under sql_mode='ALLOW_THROW_EXCEPTION'. The user-facing parse_json()
+-- (JsonFunctions::parse_json) was NOT fixed: on a genuinely-malformed JSON it
+-- still silently appends NULL instead of raising.
+--
+-- NOTE: inputs must be genuinely malformed. A bare word like 'invalid json'
+-- parses as a JSON *string*, so it does NOT trigger the parse-failure path.
+-- Use '{' , '{"a":}' etc. Column values are used so the expression runs on
+-- the BE (constant args are folded on the FE and bypass the C++ code).
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+create table t_pj (id int, s varchar(100)) properties('replication_num' = '1');
+insert into t_pj values (1, '{"a": 1}'), (2, '{'), (3, '[1,2,3]'), (4, '{"a":}');
+-- CONTROL: get_json_string is FIXED -> raises on the malformed row.
+select id, get_json_string(s, '$.a') from t_pj order by id;
+-- BUG: parse_json should ALSO raise, but silently returns NULL rows.
+select id, parse_json(s) from t_pj order by id;
+-- BUG: INSERT..SELECT silently writes NULL for malformed rows instead of failing.
+create table t_dst (id int, j json) properties('replication_num' = '1');
+insert into t_dst select id, parse_json(s) from t_pj;
+select id, j from t_dst order by id;
+-- Without the mode, parse_json must keep returning NULL (no raise).
+set sql_mode = '';
+select id, parse_json(s) from t_pj order by id;
+drop table if exists t_dst;
+drop table if exists t_pj;

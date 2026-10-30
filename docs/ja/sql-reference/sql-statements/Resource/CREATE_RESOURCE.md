@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Creates resources for managing Spark load configurations and external data source access."
 ---
 
 # CREATE RESOURCE

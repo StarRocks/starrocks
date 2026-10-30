@@ -41,15 +41,18 @@
 #include "base/string/slice.h" // for Slice
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
+#include "column/chunk_factory.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
-#include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "storage/rowset/common.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -58,10 +61,9 @@ using strings::Substitute;
 
 BinaryDictPageBuilder::BinaryDictPageBuilder(const PageBuilderOptions& options)
         : _options(options),
-          _finished(false),
+
           _data_page_builder(nullptr),
-          _dict_builder(nullptr),
-          _encoding_type(DICT_ENCODING) {
+          _dict_builder(nullptr) {
     // initially use DICT_ENCODING
     _data_page_builder = std::make_unique<BitshufflePageBuilder<TYPE_INT>>(options);
     _data_page_builder->reserve_head(BINARY_DICT_PAGE_HEADER_SIZE);
@@ -183,8 +185,7 @@ bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dic
 }
 
 template <LogicalType Type>
-BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data)
-        : _data(data), _data_page_decoder(nullptr), _parsed(false), _encoding_type(UNKNOWN_ENCODING) {}
+BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data) : _data(data), _data_page_decoder(nullptr) {}
 
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::init() {
@@ -243,15 +244,17 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
     DCHECK(_parsed);
     DCHECK(_dict_decoder != nullptr) << "dict decoder pointer is nullptr";
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(range.span_size());
 
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
 
     static_assert(sizeof(Slice) == sizeof(int128_t));
     auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(nread * sizeof(Slice));
@@ -298,10 +301,22 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         auto temp_data_column = temp_nullable_column->data_column_raw_ptr();
         auto& temp_null_column = temp_nullable_column->null_column_ref();
 
-        // Read data column and null column
-        ContainerResource container(_page_handle, null_data, num_rows);
-        int n = temp_null_column.append_numbers(container);
-        DCHECK_EQ(n, num_rows);
+        // Read data column and null column. null_data is indexed by the in-page ordinal (see
+        // PageDecoder::next_batch_with_filter): a contiguous range can alias the page's null flags directly, a sparse
+        // range has to pick the flags of each sub-range, otherwise the rows after the first gap would take the
+        // null flags of the skipped rows.
+        if (range.size() == 1) {
+            ContainerResource container(_page_handle, null_data + range.begin(), num_rows);
+            int n = temp_null_column.append_numbers(container);
+            DCHECK_EQ(n, num_rows);
+        } else {
+            temp_null_column.reserve(num_rows);
+            SparseRangeIterator<> iter = range.new_iterator();
+            while (iter.has_more()) {
+                Range<> r = iter.next(num_rows);
+                temp_null_column.append_numbers(null_data + r.begin(), r.span_size());
+            }
+        }
         RETURN_IF_ERROR(next_batch(range, temp_data_column));
         DCHECK(temp_null_column.size() == num_rows);
         DCHECK(temp_data_column->size() == num_rows);
@@ -335,6 +350,12 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
                                                              &dict_selected_count));
     if (dict_selected_count == 0) {
         memset(selection, 0, num_rows);
+        // The predicate rejects every dictionary entry, so no row of `range` is selected. Even though nothing is
+        // appended, the data page decoder must still be advanced past `range`: the caller (ParsedPageV2::read_with_filter)
+        // unconditionally moves _offset_in_page to range.end(), and the next chunk of the same page asserts
+        // _offset_in_page == _data_decoder->current_index(). Returning here without advancing leaves the decoder at the
+        // range's start and trips that DCHECK (crashing ASan/Debug builds) on the following read.
+        RETURN_IF_ERROR(_data_page_decoder->seek_to_position_in_page(range.end()));
         return Status::OK();
     }
     if (dict_selected_count == dict_size) {
@@ -344,7 +365,7 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
 
     // Step 2: Read dictionary codes for the range (we must do this regardless of dict selection)
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(num_rows);
@@ -356,8 +377,10 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         return Status::OK();
     }
 
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
 
     // Step 3: Update selection based on dictionary selection and collect matching slices
     std::vector<Slice> selected_slices;
@@ -396,7 +419,7 @@ Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal
         return Status::OK();
     }
     if (_vec_code_buf == nullptr) {
-        _vec_code_buf = ChunkHelper::column_from_field_type(TYPE_INT, false);
+        _vec_code_buf = ChunkFactory::column_from_field_type(TYPE_INT, false);
     }
     _vec_code_buf->resize(0);
     _vec_code_buf->reserve(*count);
@@ -409,8 +432,10 @@ Status BinaryDictPageDecoder<Type>::read_by_rowids(const ordinal_t first_ordinal
         *count = 0;
         return Status::OK();
     }
-    using cast_type = CppTypeTraits<TYPE_INT>::CppType;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    using cast_type = StorageCppType<TYPE_INT>;
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
     auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(read_count * sizeof(Slice));
     Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
     if constexpr (Type == TYPE_CHAR) {

@@ -19,9 +19,16 @@
 
 #include <cmath>
 
+#include "column/array_column.h"
+#include "column/column_helper.h"
+#include "column/const_column.h"
+#include "column/nullable_column.h"
 #include "exprs/binary_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/time_functions.h"
+#include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 #define PI acos(-1)
 
@@ -43,7 +50,7 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
 
         double expected_res[] = {2341.23, 4999.901, 2144.2, 934.1243};
 
-        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+        for (int i = 0; i < std::size(dous); ++i) {
             c0->append(dous[i]);
             c1->append(ints[i]);
         }
@@ -56,7 +63,7 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
 
         auto* raw_res = ColumnHelper::cast_to<TYPE_DOUBLE>(res)->immutable_data().data();
 
-        for (int i = 0; i < sizeof(expected_res) / sizeof(expected_res[0]); ++i) {
+        for (int i = 0; i < std::size(expected_res); ++i) {
             ASSERT_EQ(expected_res[i], raw_res[i]);
         }
     }
@@ -414,7 +421,7 @@ TEST_F(VecMathFunctionsTest, RoundUpToTest) {
 
         double res[] = {2341.23, 4999.901, 2144.3, 934.1244};
 
-        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+        for (int i = 0; i < std::size(dous); ++i) {
             tc1->append(dous[i]);
             tc2->append(ints[i]);
         }
@@ -427,7 +434,7 @@ TEST_F(VecMathFunctionsTest, RoundUpToTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
 
-        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+        for (int i = 0; i < std::size(res); ++i) {
             ASSERT_EQ(res[i], v->immutable_data()[i]);
         }
     }
@@ -445,7 +452,7 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithPositiveTest) {
 
         double res[] = {7.85, 7.86};
 
-        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+        for (int i = 0; i < std::size(dous); ++i) {
             tc1->append(dous[i]);
             tc2->append(ints[i]);
         }
@@ -458,7 +465,7 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithPositiveTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
 
-        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+        for (int i = 0; i < std::size(res); ++i) {
             ASSERT_EQ(res[i], v->immutable_data()[i]);
         }
     }
@@ -476,7 +483,7 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithNegativeTest) {
 
         double res[] = {50, 40};
 
-        for (int i = 0; i < sizeof(dous) / sizeof(dous[0]); ++i) {
+        for (int i = 0; i < std::size(dous); ++i) {
             tc1->append(dous[i]);
             tc2->append(ints[i]);
         }
@@ -489,7 +496,7 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithNegativeTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
 
-        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+        for (int i = 0; i < std::size(res); ++i) {
             ASSERT_EQ(res[i], v->immutable_data()[i]);
         }
     }
@@ -516,8 +523,8 @@ TEST_F(VecMathFunctionsTest, BinTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-        for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
-            ASSERT_EQ(res[i], v->get_data()[i].to_string());
+        for (int i = 0; i < std::size(res); ++i) {
+            ASSERT_EQ(res[i], v->get_slice(i).to_string());
         }
     }
 }
@@ -528,8 +535,8 @@ TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
     auto tc1 = DecimalColumn::create();
     {
         std::string str[] = {"3333333333.2222222222", "-740740740.716049"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -540,8 +547,8 @@ TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
     auto tc2 = DecimalColumn::create();
     {
         std::string str[] = {"2342.111", "9866.9011"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -558,12 +565,12 @@ TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
     auto v = ColumnHelper::cast_to<TYPE_DECIMALV2>(result);
 
     std::string result_str[] = {"2342.111", "-740740740.716049"};
-    DecimalV2Value results[sizeof(result_str) / sizeof(result_str[0])];
-    for (int i = 0; i < sizeof(result_str) / sizeof(result_str[0]); ++i) {
+    DecimalV2Value results[std::size(result_str)];
+    for (int i = 0; i < std::size(result_str); ++i) {
         results[i] = DecimalV2Value(result_str[i]);
     }
 
-    for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+    for (int i = 0; i < std::size(results); ++i) {
         ASSERT_EQ(results[i], v->immutable_data()[i]);
     }
 }
@@ -574,8 +581,8 @@ TEST_F(VecMathFunctionsTest, GreatestDecimalTest) {
     auto tc1 = DecimalColumn::create();
     {
         std::string str[] = {"3333333333.2222222222", "-740740740.716049"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -586,8 +593,8 @@ TEST_F(VecMathFunctionsTest, GreatestDecimalTest) {
     auto tc2 = DecimalColumn::create();
     {
         std::string str[] = {"2342.111", "9866.9011"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -604,12 +611,12 @@ TEST_F(VecMathFunctionsTest, GreatestDecimalTest) {
     auto v = ColumnHelper::cast_to<TYPE_DECIMALV2>(result);
 
     std::string result_str[] = {"3333333333.2222222222", "9866.9011"};
-    DecimalV2Value results[sizeof(result_str) / sizeof(result_str[0])];
-    for (int i = 0; i < sizeof(result_str) / sizeof(result_str[0]); ++i) {
+    DecimalV2Value results[std::size(result_str)];
+    for (int i = 0; i < std::size(result_str); ++i) {
         results[i] = DecimalV2Value(result_str[i]);
     }
 
-    for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+    for (int i = 0; i < std::size(results); ++i) {
         ASSERT_EQ(results[i], v->immutable_data()[i]);
     }
 }
@@ -620,8 +627,8 @@ TEST_F(VecMathFunctionsTest, PositiveDecimalTest) {
     auto tc1 = DecimalColumn::create();
     {
         std::string str[] = {"-3333333333.2222222222", "-740740740.716049"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -637,12 +644,12 @@ TEST_F(VecMathFunctionsTest, PositiveDecimalTest) {
     auto v = ColumnHelper::cast_to<TYPE_DECIMALV2>(result);
 
     std::string result_str[] = {"-3333333333.2222222222", "-740740740.716049"};
-    DecimalV2Value results[sizeof(result_str) / sizeof(result_str[0])];
-    for (int i = 0; i < sizeof(result_str) / sizeof(result_str[0]); ++i) {
+    DecimalV2Value results[std::size(result_str)];
+    for (int i = 0; i < std::size(result_str); ++i) {
         results[i] = DecimalV2Value(result_str[i]);
     }
 
-    for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+    for (int i = 0; i < std::size(results); ++i) {
         ASSERT_EQ(results[i], v->immutable_data()[i]);
     }
 }
@@ -653,8 +660,8 @@ TEST_F(VecMathFunctionsTest, NegativeDecimalTest) {
     auto tc1 = DecimalColumn::create();
     {
         std::string str[] = {"3333333333.2222222222", "740740740.716049"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -670,12 +677,12 @@ TEST_F(VecMathFunctionsTest, NegativeDecimalTest) {
     auto v = ColumnHelper::cast_to<TYPE_DECIMALV2>(result);
 
     std::string result_str[] = {"-3333333333.2222222222", "-740740740.716049"};
-    DecimalV2Value results[sizeof(result_str) / sizeof(result_str[0])];
-    for (int i = 0; i < sizeof(result_str) / sizeof(result_str[0]); ++i) {
+    DecimalV2Value results[std::size(result_str)];
+    for (int i = 0; i < std::size(result_str); ++i) {
         results[i] = DecimalV2Value(result_str[i]);
     }
 
-    for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+    for (int i = 0; i < std::size(results); ++i) {
         ASSERT_EQ(results[i], v->immutable_data()[i]);
     }
 }
@@ -686,8 +693,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalGeneralTest) {
     auto tc1 = DecimalColumn::create();
     {
         std::string str[] = {"3333333333.3222222222", "2342414342.132", "32413241.12342", "999234812.222"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -698,8 +705,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalGeneralTest) {
     auto tc2 = DecimalColumn::create();
     {
         std::string str[] = {"4", "3", "0", "1"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -717,12 +724,12 @@ TEST_F(VecMathFunctionsTest, ModDecimalGeneralTest) {
     auto v = ColumnHelper::cast_to<TYPE_DECIMALV2>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
     std::string str[] = {"1.3222222222", "2.132", "0.12342", "0.222"};
-    DecimalV2Value results[sizeof(str) / sizeof(str[0])];
-    for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+    DecimalV2Value results[std::size(str)];
+    for (int i = 0; i < std::size(str); ++i) {
         results[i] = DecimalV2Value(str[i]);
     }
 
-    for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+    for (int i = 0; i < std::size(results); ++i) {
         ASSERT_EQ(results[i], v->immutable_data()[i]);
     }
 }
@@ -735,8 +742,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalBigTest) {
         std::string str[] = {
                 "333333099873333.322222222", "23112133142414342.132", "413241.12342", "999234812.222", "68482.48227",
                 "2413424287348.24221"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -747,8 +754,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalBigTest) {
     auto tc2 = DecimalColumn::create();
     {
         std::string str[] = {"4535.3452", "7.34535", "2.91", "71.234", "34241.24114", "777982341.234234"};
-        DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-        for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+        DecimalV2Value dec_values[std::size(str)];
+        for (int i = 0; i < std::size(str); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
         for (auto dec_value : dec_values) {
@@ -766,12 +773,12 @@ TEST_F(VecMathFunctionsTest, ModDecimalBigTest) {
     auto v = ColumnHelper::cast_to<TYPE_DECIMALV2>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
     std::string str[] = {"163.573422222", "4.4786", "0.75342", "19.69", "34241.24113", "123064839.648342"};
-    DecimalV2Value results[sizeof(str) / sizeof(str[0])];
-    for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+    DecimalV2Value results[std::size(str)];
+    for (int i = 0; i < std::size(str); ++i) {
         results[i] = DecimalV2Value(str[i]);
     }
 
-    for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+    for (int i = 0; i < std::size(results); ++i) {
         ASSERT_EQ(results[i], v->immutable_data()[i]);
     }
 }
@@ -819,7 +826,7 @@ TEST_F(VecMathFunctionsTest, Conv_intTest) {
                                  "18446743787748822378",
                                  "-285960729238"};
 
-        for (int i = 0; i < sizeof(bigints) / sizeof(bigints[0]); ++i) {
+        for (int i = 0; i < std::size(bigints); ++i) {
             tc1->append(bigints[i]);
             tc2->append(baseints[i]);
             tc3->append(destints[i]);
@@ -834,8 +841,8 @@ TEST_F(VecMathFunctionsTest, Conv_intTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
-            ASSERT_EQ(results[i], v->get_data()[i].to_string());
+        for (int i = 0; i < std::size(results); ++i) {
+            ASSERT_EQ(results[i], v->get_slice(i).to_string());
         }
     }
 }
@@ -922,7 +929,7 @@ TEST_F(VecMathFunctionsTest, Conv_stringTest) {
                                  "10000000000000000000",
                                  "0"};
 
-        for (int i = 0; i < sizeof(bigints) / sizeof(bigints[0]); ++i) {
+        for (int i = 0; i < std::size(bigints); ++i) {
             tc1->append(bigints[i]);
             tc2->append(baseints[i]);
             tc3->append(destints[i]);
@@ -937,8 +944,8 @@ TEST_F(VecMathFunctionsTest, Conv_stringTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
-            ASSERT_EQ(results[i], v->get_data()[i].to_string());
+        for (int i = 0; i < std::size(results); ++i) {
+            ASSERT_EQ(results[i], v->get_slice(i).to_string());
         }
     }
 }
@@ -992,10 +999,7 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
     {
         Columns columns;
 
-        auto tc1 = DoubleColumn::create();
-        tc1->append(710.0);
-        tc1->append(2.47498282E8);
-        tc1->append(2.47498282E3);
+        auto tc1 = ColumnTestHelper::build_column<double>({710.0, 2.47498282E8, 2.47498282E3});
         columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1102,7 +1106,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_SMALLINT>(result);
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        for (int i = 0; i < std::size(inputs); ++i) {
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
@@ -1112,7 +1116,6 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto tc1 = Int16Column::create();
         int16_t inputs[] = {1000, 1000, 1000, -500, -35, 35, -32768};
-        int32_t results[] = {1000, 1000, 1000, 500, 35, 35, 32768};
 
         for (short input : inputs) {
             tc1->append(input);
@@ -1125,7 +1128,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        for (int i = 0; i < std::size(inputs); ++i) {
+            int32_t results[] = {1000, 1000, 1000, 500, 35, 35, 32768};
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
@@ -1148,7 +1152,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        for (int i = 0; i < std::size(inputs); ++i) {
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
@@ -1173,7 +1177,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        for (int i = 0; i < std::size(inputs); ++i) {
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
@@ -1198,7 +1202,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        for (int i = 0; i < std::size(inputs); ++i) {
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
@@ -1221,7 +1225,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_DOUBLE>(result);
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        for (int i = 0; i < std::size(inputs); ++i) {
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
@@ -1244,7 +1248,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
 
         auto v = ColumnHelper::cast_to<TYPE_FLOAT>(result);
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
+        for (int i = 0; i < std::size(inputs); ++i) {
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
@@ -1255,8 +1259,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         auto tc1 = DecimalColumn::create();
         {
             std::string str[] = {"3333333333.2222222222", "-740740740.716049"};
-            DecimalV2Value dec_values[sizeof(str) / sizeof(str[0])];
-            for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
+            DecimalV2Value dec_values[std::size(str)];
+            for (int i = 0; i < std::size(str); ++i) {
                 dec_values[i] = DecimalV2Value(str[i]);
             }
             for (auto dec_value : dec_values) {
@@ -1272,15 +1276,47 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         auto v = ColumnHelper::cast_to<TYPE_DECIMALV2>(result);
 
         std::string result_str[] = {"3333333333.2222222222", "740740740.716049"};
-        DecimalV2Value results[sizeof(result_str) / sizeof(result_str[0])];
-        for (int i = 0; i < sizeof(result_str) / sizeof(result_str[0]); ++i) {
+        DecimalV2Value results[std::size(result_str)];
+        for (int i = 0; i < std::size(result_str); ++i) {
             results[i] = DecimalV2Value(result_str[i]);
         }
 
-        for (int i = 0; i < sizeof(results) / sizeof(results[0]); ++i) {
+        for (int i = 0; i < std::size(results); ++i) {
             ASSERT_EQ(results[i], v->immutable_data()[i]);
         }
     }
+}
+
+TEST_F(VecMathFunctionsTest, AbsDecimalNullableAllNullPreservesScale) {
+    constexpr int precision = 38;
+    constexpr int input_scale = 8;
+    constexpr int result_scale = 12;
+
+    auto data_column = DecimalV3Column<int128_t>::create(precision, input_scale);
+    data_column->append_default(2);
+
+    auto null_column = NullColumn::create();
+    null_column->append(1);
+    null_column->append(1);
+
+    Columns columns;
+    columns.emplace_back(NullableColumn::create(std::move(data_column), std::move(null_column)));
+
+    FunctionContext::TypeDesc return_type;
+    return_type.type = TYPE_DECIMAL128;
+    return_type.precision = precision;
+    return_type.scale = result_scale;
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context(std::vector<FunctionContext::TypeDesc>(), return_type));
+
+    ColumnPtr result = MathFunctions::abs_decimal128(ctx.get(), columns).value();
+    ASSERT_TRUE(result->is_nullable());
+    ASSERT_EQ("[NULL, NULL]", result->debug_string());
+
+    auto result_data =
+            ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_nullable(result)).get();
+    EXPECT_EQ(precision, result_data->precision());
+    EXPECT_EQ(result_scale, result_data->scale());
 }
 
 TEST_F(VecMathFunctionsTest, CotTest) {
@@ -1321,16 +1357,10 @@ TEST_F(VecMathFunctionsTest, CotTest) {
 TEST_F(VecMathFunctionsTest, Atan2Test) {
     {
         Columns columns;
-        auto tc1 = DoubleColumn::create();
-        tc1->append(0.1);
-        tc1->append(0.2);
-        tc1->append(0.3);
+        auto tc1 = ColumnTestHelper::build_column<double>({0.1, 0.2, 0.3});
         columns.emplace_back(std::move(tc1));
 
-        auto tc2 = DoubleColumn::create();
-        tc2->append(0.1);
-        tc2->append(0.2);
-        tc2->append(0.3);
+        auto tc2 = ColumnTestHelper::build_column<double>({0.1, 0.2, 0.3});
         columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1495,10 +1525,7 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         tc1->append(0.3);
         binary_columns.emplace_back(std::move(tc1));
 
-        auto tc2 = DoubleColumn::create();
-        tc2->append(0.8);
-        tc2->append(0.2);
-        tc2->append(0.3);
+        auto tc2 = ColumnTestHelper::build_column<double>({0.8, 0.2, 0.3});
         binary_columns.emplace_back(std::move(tc2));
 
         std::vector<bool> null_expect = {true, false, false};
@@ -1517,10 +1544,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
 
     {
         Columns columns;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(33);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({33});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
@@ -1532,9 +1557,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns;
-        auto col1 = Int32Column::create();
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
         auto col2 = Int32Column::create();
-        col1->append(123);
         auto col3 = NullableColumn::create(std::move(col1), NullColumn::create(col1->size(), DATUM_NOT_NULL));
         col3->append_nulls(1);
         col2->append(33);
@@ -1549,10 +1573,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns_const;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(15);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({15});
         auto const_col1 = ConstColumn::create(std::move(col1), 1);
         columns_const.emplace_back(std::move(const_col1));
         columns_const.emplace_back(std::move(col2));
@@ -1618,10 +1640,8 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
     }
     {
         Columns columns;
-        auto col1 = BinaryColumn::create();
-        auto col2 = Int32Column::create();
-        col1->append("我是");
-        col2->append(1);
+        auto col1 = ColumnTestHelper::build_column<Slice>({"我是"});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({1});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
@@ -1635,17 +1655,15 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
 
     {
         Columns columns;
-        auto col1 = Int32Column::create();
-        auto col2 = Int32Column::create();
-        col1->append(123);
-        col2->append(10);
+        auto col1 = ColumnTestHelper::build_column<int32_t>({123});
+        auto col2 = ColumnTestHelper::build_column<int32_t>({10});
         columns.emplace_back(std::move(col1));
         columns.emplace_back(std::move(col2));
 
         ColumnPtr result = MathFunctions::iceberg_bucket_int<TYPE_INT>(ctx.get(), columns).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(4, v->get_data()[0]);
     }
 
@@ -1664,7 +1682,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL64>(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(9, v->get_data()[0]);
     }
 
@@ -1747,7 +1765,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_string(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(8, v->get_data()[0]);
     }
 
@@ -1764,7 +1782,7 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_date(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(3, v->get_data()[0]);
     }
 
@@ -1781,8 +1799,69 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         ColumnPtr result = MathFunctions::iceberg_bucket_datetime(ctx.get(), columns_const).value();
         ASSERT_TRUE(result->is_numeric());
         ASSERT_FALSE(result->is_nullable());
-        auto v = ColumnHelper::as_column<UInt32Column>(result);
+        auto v = ColumnHelper::as_column<Int32Column>(result);
         ASSERT_EQ(0, v->get_data()[0]);
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("UTC");
+        auto state = std::make_unique<RuntimeState>(globals);
+        std::unique_ptr<FunctionContext> ctx_with_state(FunctionContext::create_test_context());
+        ctx_with_state->set_runtime_state(state.get());
+
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(TimestampValue::create(2000, 1, 1, 12, 12, 12));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(std::move(col1), 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result =
+                MathFunctions::iceberg_bucket_timestamptz_datetime(ctx_with_state.get(), columns_const).value();
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        auto v = ColumnHelper::as_column<Int32Column>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+    }
+
+    {
+        TQueryGlobals globals;
+        globals.__set_time_zone("Asia/Shanghai");
+        auto state = std::make_unique<RuntimeState>(globals);
+        std::unique_ptr<FunctionContext> ctx_with_state(FunctionContext::create_test_context());
+        ctx_with_state->set_runtime_state(state.get());
+
+        Columns columns_const;
+        auto col1 = TimestampColumn::create();
+        auto col2 = Int32Column::create();
+        col1->append(TimestampValue::create(1970, 1, 1, 1, 0, 0));
+        col2->append(10);
+        auto const_col1 = ConstColumn::create(std::move(col1), 1);
+        columns_const.emplace_back(std::move(const_col1));
+        columns_const.emplace_back(std::move(col2));
+
+        ColumnPtr result =
+                MathFunctions::iceberg_bucket_timestamptz_datetime(ctx_with_state.get(), columns_const).value();
+
+        Columns normalized_columns_const;
+        auto normalized_col1 = TimestampColumn::create();
+        auto normalized_col2 = Int32Column::create();
+        normalized_col1->append(TimestampValue::create(1969, 12, 31, 17, 0, 0));
+        normalized_col2->append(10);
+        auto normalized_const_col1 = ConstColumn::create(std::move(normalized_col1), 1);
+        normalized_columns_const.emplace_back(std::move(normalized_const_col1));
+        normalized_columns_const.emplace_back(std::move(normalized_col2));
+
+        std::unique_ptr<FunctionContext> utc_ctx(FunctionContext::create_test_context());
+        ColumnPtr expected = MathFunctions::iceberg_bucket_datetime(utc_ctx.get(), normalized_columns_const).value();
+
+        ASSERT_TRUE(result->is_numeric());
+        ASSERT_FALSE(result->is_nullable());
+        ASSERT_EQ(ColumnHelper::as_column<Int32Column>(expected)->get_data()[0],
+                  ColumnHelper::as_column<Int32Column>(result)->get_data()[0]);
     }
 
     {
@@ -1813,6 +1892,275 @@ TEST_F(VecMathFunctionsTest, IcbergTransTest) {
         auto result = MathFunctions::iceberg_truncate_int<TYPE_INT>(ctx.get(), columns_const);
         ASSERT_EQ(result.status().message(), "Truncate to integer failed, because the result is overflow.");
     }
+}
+
+// Helper: build an ArrayColumn<float> from a vector of float vectors.
+static ColumnPtr build_float_array_column(const std::vector<std::vector<float>>& rows) {
+    auto elements = NullableColumn::create(FloatColumn::create(), NullColumn::create());
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    for (const auto& row : rows) {
+        for (float v : row) {
+            elements->append_datum(Datum(v));
+        }
+        offsets->append(static_cast<uint32_t>(elements->size()));
+    }
+    return ArrayColumn::create(std::move(elements), std::move(offsets));
+}
+
+// cosine_similarity: both non-const columns
+TEST_F(VecMathFunctionsTest, cosineSimilarityBasic) {
+    // base = [[1, 0, 0], [0, 1, 0]], target = [[1, 0, 0], [0, 0, 1]]
+    auto base_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}, {0, 0, 1}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f); // identical vectors
+    ASSERT_FLOAT_EQ(res[1], 0.0f); // orthogonal vectors
+}
+
+// cosine_similarity: const base, non-const target
+TEST_F(VecMathFunctionsTest, cosineSimilarityConstBase) {
+    auto base_arr = build_float_array_column({{1, 0, 0}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 3);
+    auto target_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}, {1, 1, 0}});
+
+    Columns columns{base_const, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+    ASSERT_NEAR(res[2], 1.0f / std::sqrt(2.0f), 1e-5f);
+}
+
+// cosine_similarity: non-const base, const target
+TEST_F(VecMathFunctionsTest, cosineSimilarityConstTarget) {
+    auto base_col = build_float_array_column({{1, 0, 0}, {0, 1, 0}, {1, 1, 0}});
+    auto target_arr = build_float_array_column({{1, 0, 0}});
+    auto target_const = ConstColumn::create(std::move(target_arr), 3);
+
+    Columns columns{base_col, target_const};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+    ASSERT_NEAR(res[2], 1.0f / std::sqrt(2.0f), 1e-5f);
+}
+
+// cosine_similarity: both const columns
+TEST_F(VecMathFunctionsTest, cosineSimilarityBothConst) {
+    auto base_arr = build_float_array_column({{1, 0, 0}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 2);
+    auto target_arr = build_float_array_column({{0, 1, 0}});
+    auto target_const = ConstColumn::create(std::move(target_arr), 2);
+
+    Columns columns{base_const, target_const};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 0.0f);
+    ASSERT_FLOAT_EQ(res[1], 0.0f);
+}
+
+// cosine_similarity with isNorm=true (pre-normalized vectors)
+TEST_F(VecMathFunctionsTest, cosineSimilarityNorm) {
+    float inv_sqrt2 = 1.0f / std::sqrt(2.0f);
+    auto base_col = build_float_array_column({{1, 0, 0}, {inv_sqrt2, inv_sqrt2, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}, {inv_sqrt2, 0, inv_sqrt2}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, true>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 1.0f);
+    ASSERT_NEAR(res[1], 0.5f, 1e-5f);
+}
+
+TEST_F(VecMathFunctionsTest, innerProduct) {
+    auto base_col = build_float_array_column({{2, 3, -1}, {1, 2, 3}});
+    auto target_col = build_float_array_column({{4, -2, 5}, {2, 0, 1}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], -3.0f);
+    ASSERT_FLOAT_EQ(res[1], 5.0f);
+}
+
+TEST_F(VecMathFunctionsTest, innerProductConstColumns) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        auto base = ConstColumn::create(build_float_array_column({{2, 3}}), 2);
+        auto target = build_float_array_column({{4, 5}, {1, -1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_TRUE(result.ok());
+        auto* data = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+        EXPECT_FLOAT_EQ(data[0], 23.0f);
+        EXPECT_FLOAT_EQ(data[1], -1.0f);
+    }
+
+    {
+        auto base = build_float_array_column({{4, 5}, {1, -1}});
+        auto target = ConstColumn::create(build_float_array_column({{2, 3}}), 2);
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_TRUE(result.ok());
+        auto* data = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+        EXPECT_FLOAT_EQ(data[0], 23.0f);
+        EXPECT_FLOAT_EQ(data[1], -1.0f);
+    }
+}
+
+TEST_F(VecMathFunctionsTest, innerProductInvalidArguments) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    {
+        auto base = build_float_array_column({{1, 2}});
+        auto target = build_float_array_column({{1, 2}, {3, 4}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays. base array size is 1 and target array size is 2.");
+    }
+
+    {
+        auto base = NullableColumn::create(build_float_array_column({{1}}), NullColumn::create(1, 1));
+        auto target = build_float_array_column({{1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(), "inner_product does not support null values. base array has null value.");
+    }
+
+    {
+        auto elements = NullableColumn::create(FloatColumn::create(), NullColumn::create());
+        elements->append_nulls(1);
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        offsets->append(1);
+        auto base = ArrayColumn::create(std::move(elements), std::move(offsets));
+        auto target = build_float_array_column({{1}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(), "inner_product does not support null values");
+    }
+
+    {
+        auto base = ConstColumn::create(build_float_array_column({{1, 2}}), 2);
+        auto target = build_float_array_column({{1, 2, 3}, {4, 5, 6}});
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays in each row. base array dimension size is 2, target "
+                  "array dimension size is 3.");
+    }
+
+    {
+        auto base = build_float_array_column({{1, 2, 3}, {4, 5, 6}});
+        auto target = ConstColumn::create(build_float_array_column({{1, 2}}), 2);
+        auto result = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), {base, target});
+        ASSERT_FALSE(result.ok());
+        EXPECT_EQ(result.status().message(),
+                  "inner_product requires equal length arrays in each row. base array dimension size is 3, target "
+                  "array dimension size is 2.");
+    }
+}
+
+TEST_F(VecMathFunctionsTest, innerProductDiffersFromCosineForUnnormalizedVectors) {
+    auto base_col = build_float_array_column({{2, 0}});
+    auto target_col = build_float_array_column({{3, 0}});
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    auto inner_product = MathFunctions::inner_product<TYPE_FLOAT>(ctx.get(), columns);
+    ASSERT_TRUE(inner_product.ok());
+    auto cosine_similarity = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(cosine_similarity.ok());
+
+    ASSERT_FLOAT_EQ(ColumnHelper::cast_to<TYPE_FLOAT>(inner_product.value())->get_data()[0], 6.0f);
+    ASSERT_FLOAT_EQ(ColumnHelper::cast_to<TYPE_FLOAT>(cosine_similarity.value())->get_data()[0], 1.0f);
+}
+
+// cosine_similarity: zero vector returns 0 (not NaN/inf)
+TEST_F(VecMathFunctionsTest, cosineSimilarityZeroVector) {
+    auto base_col = build_float_array_column({{0, 0, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_FLOAT_EQ(res[0], 0.0f);
+}
+
+// cosine_similarity: tiny magnitude vectors should not produce inf/nan
+TEST_F(VecMathFunctionsTest, cosineSimilarityTinyMagnitude) {
+    float tiny = 1e-20f;
+    auto base_arr = build_float_array_column({{tiny, tiny, tiny}});
+    auto base_const = ConstColumn::create(std::move(base_arr), 2);
+    auto target_col = build_float_array_column({{tiny, tiny, tiny}, {tiny, 0, 0}});
+
+    Columns columns{base_const, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_TRUE(result.ok());
+    auto* res = ColumnHelper::cast_to<TYPE_FLOAT>(result.value())->immutable_data().data();
+    ASSERT_TRUE(std::isfinite(res[0]));
+    ASSERT_TRUE(std::isfinite(res[1]));
+    ASSERT_NEAR(res[0], 1.0f, 1e-3f); // same direction
+}
+
+// cosine_similarity: dimension mismatch should return error
+TEST_F(VecMathFunctionsTest, cosineSimilarityDimMismatch) {
+    auto base_col = build_float_array_column({{1, 0}});
+    auto target_col = build_float_array_column({{1, 0, 0}});
+
+    Columns columns{base_col, target_col};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto result = MathFunctions::cosine_similarity<TYPE_FLOAT, false>(ctx.get(), columns);
+    ASSERT_FALSE(result.ok());
+}
+
+TEST_F(VecMathFunctionsTest, intToByteArray) {
+    using Bytes = std::vector<uint8_t>;
+    // Minimal two's-complement big-endian bytes, matching Java BigInteger.toByteArray().
+    ASSERT_EQ(Bytes({0x00}), MathFunctions::int_to_byte_array<int32_t>(0));
+    ASSERT_EQ(Bytes({0x01}), MathFunctions::int_to_byte_array<int32_t>(1));
+    ASSERT_EQ(Bytes({0xFF}), MathFunctions::int_to_byte_array<int32_t>(-1));
+    ASSERT_EQ(Bytes({0x7F}), MathFunctions::int_to_byte_array<int32_t>(127));
+    ASSERT_EQ(Bytes({0x00, 0x80}), MathFunctions::int_to_byte_array<int32_t>(128));
+    ASSERT_EQ(Bytes({0x80}), MathFunctions::int_to_byte_array<int32_t>(-128));
+    ASSERT_EQ(Bytes({0xFF, 0x7F}), MathFunctions::int_to_byte_array<int32_t>(-129));
+    ASSERT_EQ(Bytes({0x7F, 0xFF, 0xFF, 0xFF}),
+              MathFunctions::int_to_byte_array<int32_t>(std::numeric_limits<int32_t>::max()));
+    ASSERT_EQ(Bytes({0x80, 0x00, 0x00, 0x00}),
+              MathFunctions::int_to_byte_array<int32_t>(std::numeric_limits<int32_t>::min()));
+
+    ASSERT_EQ(Bytes({0xF9, 0xE3}), MathFunctions::int_to_byte_array<int64_t>(-1565));
+    ASSERT_EQ(Bytes({0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
+              MathFunctions::int_to_byte_array<int64_t>(std::numeric_limits<int64_t>::min()));
+    ASSERT_EQ(Bytes({0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}),
+              MathFunctions::int_to_byte_array<int64_t>(std::numeric_limits<int64_t>::max()));
+
+    ASSERT_EQ(Bytes({0x01, 0x00}), MathFunctions::int_to_byte_array<int128_t>(256));
+    Bytes int128_min(16, 0x00);
+    int128_min[0] = 0x80;
+    ASSERT_EQ(int128_min, MathFunctions::int_to_byte_array<int128_t>(std::numeric_limits<int128_t>::min()));
+    Bytes int128_max(16, 0xFF);
+    int128_max[0] = 0x7F;
+    ASSERT_EQ(int128_max, MathFunctions::int_to_byte_array<int128_t>(std::numeric_limits<int128_t>::max()));
 }
 
 } // namespace starrocks

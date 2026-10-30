@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回子字符串在字符串中出现的位置，支持从指定位置开始查找。"
 ---
 
 # locate

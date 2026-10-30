@@ -1,5 +1,6 @@
 #include "exec/pipeline/table_function_operator.h"
 
+#include "common/config_exec_fwd.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
@@ -85,7 +86,7 @@ private:
 };
 
 void TableFunctionOperatorTest::SetUp() {
-    _runtime_state.set_query_ctx(_query_ctx.get());
+    _runtime_state.set_query_ctx(_query_ctx.get(), &_query_ctx->query_runtime_state(), _query_ctx->object_pool());
 
     TTableDescriptor t_table_desc;
     t_table_desc.id = 0;
@@ -174,7 +175,7 @@ TEST_F(TableFunctionOperatorTest, key_partition_exchanger) {
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(4096, 134217728);
 
     ChunkPtr chunk = std::make_shared<Chunk>();
-    auto c = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true);
+    auto c = ColumnHelper::create_column(TYPE_INT_DESC, true);
     c->append_datum(Datum(1));
     c->append_datum(Datum(2));
     c->append_datum(Datum(1));

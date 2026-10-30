@@ -20,10 +20,14 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.SqlCredentialRedactor;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.sql.common.PListCell;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
@@ -137,6 +141,7 @@ public class TaskRunHistoryTable {
                 // To be compatible with old task runs, filter out unnecessary properties to avoid json content too large
                 // and deserialize error.
                 removeUnnecessaryProperties(status);
+                redactCredentials(status);
 
                 // Since the content is stored in JSON format and insert into the starrocks olap table, we need to escape the
                 // content to make it safer in deserializing the json.
@@ -157,7 +162,8 @@ public class TaskRunHistoryTable {
     }
 
     /**
-     * Normalize the task run status, remove unnecessary properties
+     * Normalize the task run status, remove unnecessary properties and shrink the list partition values that a
+     * batched refresh carries in every task run.
      * @param status
      */
     private void removeUnnecessaryProperties(TaskRunStatus status) {
@@ -166,11 +172,27 @@ public class TaskRunHistoryTable {
             removeUnnecessaryProperties(status.getProperties());
         }
         // remove unnecessary properties in mvTaskRunExtraMessage
-        if (status.getMvTaskRunExtraMessage() != null) {
-            ExecuteOption executeOption = status.getMvTaskRunExtraMessage().getExecuteOption();
+        MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+        if (extraMessage != null) {
+            ExecuteOption executeOption = extraMessage.getExecuteOption();
             if (executeOption != null) {
                 removeUnnecessaryProperties(executeOption.getTaskRunProperties());
             }
+            extraMessage.setNextPartitionValues(shrinkPartitionValues(extraMessage.getNextPartitionValues()));
+        }
+    }
+
+    private static String shrinkPartitionValues(String partitionValues) {
+        return PListCell.shrinkBatchForDisplay(partitionValues, Config.max_mv_task_run_meta_message_values_length);
+    }
+
+    /**
+     * Mask credentials in the definition before it is archived, the same way information_schema.task_runs masks
+     * it on read. This must run on the field: once serialized, Gson escapes the quotes the redactor matches on.
+     */
+    private void redactCredentials(TaskRunStatus status) {
+        if (Config.enable_task_info_mask_credential) {
+            status.setDefinition(SqlCredentialRedactor.redact(status.getDefinition()));
         }
     }
 
@@ -188,6 +210,27 @@ public class TaskRunHistoryTable {
                 iterator.remove();
             }
         }
+        properties.computeIfPresent(TaskRun.PARTITION_VALUES, (key, values) -> shrinkPartitionValues(values));
+    }
+
+    /**
+     * Quote a value as a SQL string literal, escaping embedded backslashes and quotes so a value
+     * carrying a quote (or a backslash that would escape the closing quote) cannot close the literal
+     * and inject additional SQL. These predicates are concatenated into a query executed over the
+     * privileged internal repository connection, so an unescaped value here is a second-order SQL
+     * injection. See {@link SqlUtils#escapeSqlString} for why quote-doubling alone is insufficient.
+     */
+    private static String quoteLiteral(String value) {
+        return "'" + SqlUtils.escapeSqlString(value) + "'";
+    }
+
+    /**
+     * The database name inside history_content_json. Rows written by older versions carry the default_cluster
+     * prefix and stay until their partition expires, so both forms are matched.
+     */
+    private static String dbNamePredicate(String dbName) {
+        return " get_json_string(" + CONTENT_COLUMN + ", 'dbName') IN (" + quoteLiteral(dbName) + ", "
+                + quoteLiteral(ClusterNamespace.getFullName(dbName)) + ")";
     }
 
     public List<TaskRunStatus> lookup(TGetTasksParams params) {
@@ -197,17 +240,16 @@ public class TaskRunHistoryTable {
         String sql = LOOKUP;
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(params.getDb())) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + Strings.quote(ClusterNamespace.getFullName(params.getDb())));
+            predicates.add(dbNamePredicate(params.getDb()));
         }
         if (StringUtils.isNotEmpty(params.getTask_name())) {
-            predicates.add(" task_name = " + Strings.quote(params.getTask_name()));
+            predicates.add(" task_name = " + quoteLiteral(params.getTask_name()));
         }
         if (StringUtils.isNotEmpty(params.getQuery_id())) {
-            predicates.add(" task_run_id = " + Strings.quote(params.getQuery_id()));
+            predicates.add(" task_run_id = " + quoteLiteral(params.getQuery_id()));
         }
         if (StringUtils.isNotEmpty(params.getState())) {
-            predicates.add(" task_state = " + Strings.quote(params.getState()));
+            predicates.add(" task_state = " + quoteLiteral(params.getState()));
         }
         sql += Joiner.on(" AND ").join(predicates);
         // If user explicitly specify the LIMIT in sql, we don't apply default limit
@@ -217,7 +259,7 @@ public class TaskRunHistoryTable {
             sql += " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number;
         }
 
-        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+        List<TResultBatch> batch = executeRepoDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -227,16 +269,15 @@ public class TaskRunHistoryTable {
     public List<TaskRunStatus> lookupByTaskNames(String dbName, Set<String> taskNames) {
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + Strings.quote(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
-            String values = taskNames.stream().sorted().map(Strings::quote).collect(Collectors.joining(","));
+            String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
             predicates.add(" task_name IN (" + values + ")");
         }
 
         String sql = LOOKUP + Joiner.on(" AND ").join(predicates);
-        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+        List<TResultBatch> batch = executeRepoDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -266,11 +307,10 @@ public class TaskRunHistoryTable {
 
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + Strings.quote(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
-            String values = taskNames.stream().sorted().map(Strings::quote).collect(Collectors.joining(","));
+            String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
             predicates.add(" task_name IN (" + values + ")");
         }
         String where = Joiner.on(" AND ").join(predicates);
@@ -283,7 +323,20 @@ public class TaskRunHistoryTable {
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         String sql = sw.toString();
 
-        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+        List<TResultBatch> batch = executeRepoDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
+    }
+
+    /**
+     * Run an internal DQL against the task-run history table, bounded by the outer user query's
+     * remaining {@code query_timeout} instead of the default {@code statistic_collect_query_timeout}.
+     * This keeps serving-path callers (e.g. {@code information_schema.materialized_views} /
+     * {@code SHOW MATERIALIZED VIEWS}) from outliving the user query when the underlying scan is
+     * unavailable. Background callers keep the previous (large) timeout via
+     * {@link SimpleExecutor#outerRemainingQueryTimeoutS()}.
+     */
+    private static List<TResultBatch> executeRepoDQL(String sql) {
+        int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
+        return SimpleExecutor.getRepoExecutor().executeDQL(sql, Math.max(1, remaining));
     }
 }

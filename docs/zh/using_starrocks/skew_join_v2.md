@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何在 StarRocks 中通过 Skew Join V2 广播倾斜值优化存在数据倾斜的 JOIN 查询性能。"
 ---
 
 # Skew Join V2
@@ -104,7 +105,7 @@ ON join_condition
     ```SQL
     SELECT o.order_id, c.customer_name, o.amount
     FROM orders o 
-    JOIN [skew|o.customer_id(1001)] c 
+    JOIN [skew|o.customer_id(1001)] customers c
     ON o.customer_id = c.customer_id;
     ```
 
@@ -243,4 +244,4 @@ SELECT ... FROM ... JOIN [skew|...] ...;
 - [Query Planning](../best_practices/query_tuning/query_planning.md)
 - [Query Profile Tuning](../best_practices/query_tuning/query_profile_tuning_recipes.md)
 - [System Variables](../sql-reference/System_variable.md)
-- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md#join)
+- [JOIN Operations](../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md#join)

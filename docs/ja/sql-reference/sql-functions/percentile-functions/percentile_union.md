@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "PERCENTILEデータを集計します。"
 ---
 
 # percentile_union

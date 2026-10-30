@@ -21,13 +21,14 @@
 #include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/hash_join_components.h"
 #include "exec/join/join_hash_table.h"
-#include "exec/spill/spiller.hpp"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
@@ -53,6 +54,7 @@ void HashJoinProbeMetrics::prepare(RuntimeProfile* runtime_profile) {
 }
 
 void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
+    this->runtime_profile = runtime_profile;
     copy_right_table_chunk_timer = ADD_TIMER(runtime_profile, "CopyRightTableChunkTime");
     build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
@@ -64,8 +66,6 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     partial_runtime_bloom_filter_bytes =
             ADD_COUNTER(runtime_profile, "PartialRuntimeMembershipFilterBytes", TUnit::BYTES);
     partition_nums = ADD_COUNTER(runtime_profile, "PartitionNums", TUnit::UNIT);
-    runtime_profile->add_info_string("HashMapType", "NONE");
-    hash_map_type_info = runtime_profile->get_info_string("HashMapType");
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -78,8 +78,8 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
           _other_join_conjunct_ctxs(param._other_join_conjunct_ctxs),
           _conjunct_ctxs(param._conjunct_ctxs),
           _common_expr_ctxs(param._common_expr_ctxs),
-          _build_row_descriptor(param._build_row_descriptor),
-          _probe_row_descriptor(param._probe_row_descriptor),
+          _build_record_descriptor(param._build_record_descriptor),
+          _probe_record_descriptor(param._probe_record_descriptor),
           _build_node_type(param._build_node_type),
           _probe_node_type(param._probe_node_type),
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
@@ -110,6 +110,14 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     _hash_join_prober = _pool->add(new HashJoinProber(*this));
     _build_metrics = _pool->add(new HashJoinBuildMetrics());
     _probe_metrics = _pool->add(new HashJoinProbeMetrics());
+}
+
+size_t HashJoiner::runtime_bloom_filter_row_limit() const {
+    uint64_t runtime_join_filter_pushdown_limit = 1024000;
+    if (_runtime_state->query_options().__isset.runtime_join_filter_pushdown_limit) {
+        runtime_join_filter_pushdown_limit = _runtime_state->query_options().runtime_join_filter_pushdown_limit;
+    }
+    return runtime_join_filter_pushdown_limit;
 }
 
 Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile) {
@@ -159,8 +167,8 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 void HashJoiner::_init_hash_table_param(HashTableParam* param, RuntimeState* state) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
-    param->build_row_desc = &_build_row_descriptor;
-    param->probe_row_desc = &_probe_row_descriptor;
+    param->build_record_desc = &_build_record_descriptor;
+    param->probe_record_desc = &_probe_record_descriptor;
     param->build_output_slots = _build_output_slots;
     param->probe_output_slots = _probe_output_slots;
     param->enable_late_materialization = _enable_late_materialization;
@@ -255,7 +263,7 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket, &hash_map_type);
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
         COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket));
-        *(build_metrics().hash_map_type_info) = std::move(hash_map_type);
+        build_metrics().runtime_profile->add_info_string_if_not_exists("HashMapType", hash_map_type);
     }
 
     return Status::OK();
@@ -613,15 +621,18 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
     size_t ht_row_count = get_ht_row_count();
     std::vector<JoinHashTable*> hash_tables;
     _hash_join_builder->visitHt([&hash_tables](JoinHashTable* ht) { hash_tables.emplace_back(ht); });
+    // the row limit PartialRuntimeFilterMerger applies to a bitset filter, see HashJoinNode::_decompose_to_pipeline
+    size_t global_rf_limit = UINT64_MAX;
+    const auto& query_options = state->query_options();
+    if (query_options.__isset.global_runtime_filter_build_max_size &&
+        query_options.global_runtime_filter_build_max_size > 0) {
+        global_rf_limit = query_options.global_runtime_filter_build_max_size;
+    }
 
     for (auto* rf_desc : _build_runtime_filters) {
         rf_desc->set_is_pipeline(true);
         // skip if it does not have consumer.
         if (!rf_desc->has_consumer()) {
-            _runtime_bloom_filter_build_params.emplace_back();
-            continue;
-        }
-        if (!rf_desc->has_remote_targets() && ht_row_count > limit) {
             _runtime_bloom_filter_build_params.emplace_back();
             continue;
         }
@@ -635,6 +646,13 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
             ColumnPtr column = ht->get_key_columns()[expr_order];
             is_empty |= column == nullptr || column->empty();
             columns.push_back(column);
+        }
+
+        if (pipeline::PartialRuntimeFilterMerger::skips_local_filter_over_limit(
+                    state->enable_join_runtime_bitset_filter(), state->func_version(), _is_skew_join, rf_desc, columns,
+                    ht_row_count, limit, global_rf_limit)) {
+            _runtime_bloom_filter_build_params.emplace_back();
+            continue;
         }
 
         TypeDescriptor type_descriptor = _build_expr_ctxs[expr_order]->root()->type();

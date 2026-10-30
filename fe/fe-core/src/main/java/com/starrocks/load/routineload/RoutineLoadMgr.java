@@ -282,6 +282,29 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
         }
     }
 
+    /**
+     * Reset all BE task-slot accounting to the empty state. Called from
+     * {@code RoutineLoadTaskScheduler.onStopped()} once the dispatch pools have drained during leader
+     * demotion, so a re-elected leader re-divides jobs from a clean slot count instead of inheriting
+     * stale in-flight counts. updateBeTaskSlot() only initializes a node's count when the node is newly
+     * seen (it never resets an existing count), so without this reset a slot taken but not released
+     * across a demote/re-elect cycle would leak and eventually produce "no available be slot" errors.
+     * updateBeTaskSlot() refreshes node membership on the next cycle.
+     */
+    public void clearBeTaskSlot() {
+        slotLock.lock();
+        try {
+            for (Map<Long, Integer> nodesInfo : warehouseNodeTasksNum.values()) {
+                nodesInfo.replaceAll((nodeId, count) -> 0);
+            }
+            for (Map<Long, Set<Long>> nodeToJobs : warehouseNodeToJobs.values()) {
+                nodeToJobs.values().forEach(Set::clear);
+            }
+        } finally {
+            slotLock.unlock();
+        }
+    }
+
     public void createRoutineLoadJob(CreateRoutineLoadStmt createRoutineLoadStmt) throws StarRocksException {
         RoutineLoadJob routineLoadJob = null;
         LoadDataSourceType type = LoadDataSourceType.valueOf(createRoutineLoadStmt.getTypeName());

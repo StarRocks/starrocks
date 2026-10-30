@@ -37,6 +37,9 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/types.h"
+#include "storage_primitive/zone_map_detail.h"
+#include "types/datum.h"
 
 namespace starrocks {
 
@@ -58,6 +61,20 @@ public:
               _pool(),
               _num_rows(num_rows),
               _path(path) {}
+
+    ~DefaultValueColumnIterator() override {
+        // For complex types (ARRAY/MAP/STRUCT), a Datum is placement-new'd into _mem_value.
+        // MemPool only frees raw memory without calling destructors, so we must explicitly
+        // destroy the Datum to avoid leaking its internal heap-allocated containers.
+        if (_mem_value != nullptr && _type_info != nullptr && !_is_default_value_null) {
+            auto type = _type_info->type();
+            if (type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT) {
+                reinterpret_cast<Datum*>(_mem_value)->~Datum();
+            }
+        }
+    }
+
+    bool only_nulls() const override { return _is_default_value_null; }
 
     Status init(const ColumnIteratorOptions& opts) override;
 
@@ -103,6 +120,15 @@ public:
     }
 
 private:
+    // Builds the synthetic zone map that describes this iterator's constant output: every row of a
+    // column that is physically absent from the segment carries the same value, so the zone map
+    // degenerates to min == max (or to "all NULL"). Returns false when no sound zone map can be
+    // built, in which case the caller must fall back to the legacy conservative behaviour.
+    bool _build_constant_zone_map(ZoneMapDetail* detail) const;
+
+    // True when |pred| reads a zone-map Datum through exactly this column's storage type.
+    bool _predicate_type_matches(const ColumnPredicate* pred) const;
+
     bool _has_default_value;
     std::string _default_value;
     bool _is_nullable;

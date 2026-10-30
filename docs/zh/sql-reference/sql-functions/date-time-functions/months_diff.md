@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算两个日期表达式的月数差（expr1 − expr2），精确到月。"
 ---
 
 # months_diff

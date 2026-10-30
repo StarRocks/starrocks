@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE RESOURCE GROUP は、リソースグループを作成します。"
 ---
 
 # CREATE RESOURCE GROUP

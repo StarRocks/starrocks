@@ -16,14 +16,14 @@
 
 #include <memory>
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "types/logical_type.h"
-#include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
 
@@ -53,13 +53,26 @@ struct GeneralFuncMapHash {
     }
 };
 
-class AggregateFuncResolver {
-    DECLARE_SINGLETON(AggregateFuncResolver);
+// Values for AggregateFuncResolver::add_aggregate_mapping's |is_window| argument.
+inline constexpr std::true_type kWithWindow{};
+inline constexpr std::false_type kWithoutWindow{};
 
+class AggregateFuncResolver {
 public:
+    static AggregateFuncResolver* instance() {
+        static AggregateFuncResolver s_instance;
+        return &s_instance;
+    }
+
     void register_avg();
+    void register_sum_map1();
+    void register_sum_map2();
+    void register_sum_map3();
     void register_bitmap();
     void register_minmaxany();
+    void register_maxminby1();
+    void register_maxminby2();
+    void register_maxminby3();
     void register_sumcount();
     void register_distinct();
     void register_variance();
@@ -142,18 +155,20 @@ public:
         }
     }
 
+    // |is_window| is kWithWindow or kWithoutWindow rather than a bool, so the window variant of the
+    // nullable wrapper is only instantiated for mappings that actually register it.
     template <LogicalType ArgType, LogicalType RetType, class StateType,
               typename SpecificAggFunctionPtr = AggregateFunctionPtr, bool IgnoreNull = true,
-              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>>
-    void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun,
-                               AggNullPred null_pred = AggNullPred()) {
+              IsAggNullPred<StateType> AggNullPred = AggNonNullPred<StateType>, bool IsWindow>
+    void add_aggregate_mapping(const std::string& name, std::bool_constant<IsWindow> /*is_window*/,
+                               SpecificAggFunctionPtr fun, AggNullPred null_pred = AggNullPred()) {
         track_function(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         auto nullable_agg =
                 AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false, IgnoreNull>(fun, null_pred);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), track_function(nullable_agg));
 
-        if (is_window) {
+        if constexpr (IsWindow) {
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
             auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true, IgnoreNull>(
                     fun, std::move(null_pred));
@@ -293,7 +308,12 @@ public:
         return func;
     }
 
+protected:
+    AggregateFuncResolver();
+
 private:
+    ~AggregateFuncResolver();
+
     std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
     std::unordered_map<GeneralFuncKey, AggregateFunctionPtr, GeneralFuncMapHash> _general_mapping;
     std::unordered_set<AggregateFunctionPtr> _functions;

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to create and use Primary Key tables in StarRocks for real-time upsert and delete with consistency, supporting efficient ad-hoc queries."
 keywords: ['zhujian']
 sidebar_position: 20
 ---
@@ -150,11 +151,17 @@ PROPERTIES (
 <Tabs groupId="主键索引">
 <TabItem value="example1" label="持久化主键索引" default>
 
-`enable_persistent_index`：设置为 `true`（默认），表示持久化主键索引。导入时少部分主键索引存在内存中，大部分主键索引存在磁盘中，避免占用过大内存空间。通常情况下，持久化主键索引后，<!--主键索引所占内存为之前的 1/10，并且-->查询和更新性能几乎接近全内存索引。
+`enable_persistent_index`：设置为 `true`（默认），表示持久化主键索引。导入时少部分主键索引存在内存中，大部分主键索引存在磁盘中，避免占用过大内存空间。通常情况下，持久化主键索引后，查询和更新性能几乎接近全内存索引。
 
 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
 
 自 3.1.4 版本起，StarRocks 存算分离集群支持基于本地磁盘上的持久化索引。自 3.3.2 版本起，存算分离集群进一步支持基于对象存储上的持久化索引。您可以通过将主键表 Property `persistent_index_type` 设置为 `CLOUD_NATIVE` 启用该功能。
+
+:::note
+
+在存算分离集群中，主键表现仅支持云原生持久化索引（`persistent_index_type = CLOUD_NATIVE`）。创建或修改表时，不再支持将 `persistent_index_type` 设置为 `LOCAL`。此前使用 `LOCAL`（或内存）持久化索引的存量表会自动升级为云原生持久化索引。
+
+:::
 
 </TabItem>
 <TabItem value="example2" label="全内存主键索引">
@@ -196,7 +203,7 @@ PROPERTIES (
 
 ## 更多信息
 
-- 建表后导入数据，您可以参考[导入概览](../../loading/Loading_intro.md)选择合适的导入方式。
+- 建表后导入数据，您可以参考[导入概览](../../loading/loading_introduction/loading_introduction.mdx)选择合适的导入方式。
 - 如果需要对主键表中数据进行变更，则可以参考 [通过导入实现数据变更](../../loading/Load_to_Primary_Key_tables.md) 或者 DML 语句（[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md)、[DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)）。
 - 如果您需要进一步加速查询，则可以参考[查询加速](../../using_starrocks/async_mv/Materialized_view.md)。
 - 如果需要修改表结构，则可以参考 [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)。

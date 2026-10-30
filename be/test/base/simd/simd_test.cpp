@@ -152,4 +152,50 @@ TEST_F(SIMDTest, contains_nonzero_bit) {
     EXPECT_TRUE(SIMD::contains_nonzero_bit(nums.data(), nums.size()));
 }
 
+TEST_F(SIMDTest, all_zeros) {
+    // Empty: vacuously all zeros (no non-zero element exists).
+    EXPECT_TRUE(SIMD::all_zeros(std::vector<uint8_t>{}));
+    EXPECT_TRUE(SIMD::all_zeros(std::vector<uint8_t>{0, 0, 0, 0}));
+    EXPECT_FALSE(SIMD::all_zeros(std::vector<uint8_t>{0, 0, 1}));
+    EXPECT_FALSE(SIMD::all_zeros(std::vector<uint8_t>{1, 0, 0}));
+
+    // Large block all-zero, then flip various positions to make sure SIMD body
+    // and scalar tail both reject.
+    std::vector<uint8_t> nums(1024, 0);
+    EXPECT_TRUE(SIMD::all_zeros(nums));
+
+    nums[0] = 1;
+    EXPECT_FALSE(SIMD::all_zeros(nums));
+    nums[0] = 0;
+
+    nums[512] = 1; // middle of SIMD body
+    EXPECT_FALSE(SIMD::all_zeros(nums));
+    nums[512] = 0;
+
+    nums.back() = 1; // tail
+    EXPECT_FALSE(SIMD::all_zeros(nums));
+}
+
+TEST_F(SIMDTest, all_ones) {
+    // Contract: all_ones means "no zero byte present" (memchr-style), NOT
+    // "every byte == 0xFF". Equivalent to count_zero == 0.
+    EXPECT_TRUE(SIMD::all_ones(std::vector<uint8_t>{})); // vacuously true
+    EXPECT_TRUE(SIMD::all_ones(std::vector<uint8_t>{1, 2, 3, 4}));
+    EXPECT_TRUE(SIMD::all_ones(std::vector<uint8_t>{0xFF, 0xFF, 0xFF}));
+    EXPECT_FALSE(SIMD::all_ones(std::vector<uint8_t>{1, 0, 1}));
+    EXPECT_FALSE(SIMD::all_ones(std::vector<uint8_t>{0, 1, 1}));
+    EXPECT_FALSE(SIMD::all_ones(std::vector<uint8_t>{1, 1, 0}));
+
+    std::vector<uint8_t> nums(1024, 0xFF);
+    EXPECT_TRUE(SIMD::all_ones(nums));
+    nums[0] = 0;
+    EXPECT_FALSE(SIMD::all_ones(nums));
+    nums[0] = 0xFF;
+    nums[512] = 0;
+    EXPECT_FALSE(SIMD::all_ones(nums));
+    nums[512] = 0xFF;
+    nums.back() = 0;
+    EXPECT_FALSE(SIMD::all_ones(nums));
+}
+
 } // namespace starrocks

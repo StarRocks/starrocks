@@ -22,9 +22,11 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.Row;
 import io.delta.kernel.defaults.engine.DefaultJsonHandler;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.exceptions.KernelEngineException;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.util.Utils;
@@ -57,7 +59,7 @@ public class TraceDefaultJsonHandler extends DefaultJsonHandler {
     private final Configuration hadoopConf;
     private final int maxBatchSize;
     public TraceDefaultJsonHandler(Configuration hadoopConf) {
-        super(hadoopConf);
+        super(new HadoopFileIO(hadoopConf));
         this.hadoopConf = hadoopConf;
         this.maxBatchSize =
                 hadoopConf.getInt("delta.kernel.default.json.reader.batch-size", 1024);
@@ -131,6 +133,9 @@ public class TraceDefaultJsonHandler extends DefaultJsonHandler {
                 currentFileReader = null;
 
                 if (scanFileIter.hasNext()) {
+                    // Guarded inside the branch, not at the method's entry: the last call of an iteration
+                    // comes here with no file left to open and waits on nothing.
+                    BlockingCallValidator.validateNotUnderLock("remote-storage");
                     try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "TraceDefaultJsonHandler.ReadJsonFile")) {
                         currentFile = scanFileIter.next();
                         Path filePath = new Path(currentFile.getPath());

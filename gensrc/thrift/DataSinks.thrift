@@ -42,25 +42,34 @@ include "Descriptors.thrift"
 include "Partitions.thrift"
 include "PlanNodes.thrift"
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TDataSinkType {
-    DATA_STREAM_SINK,
-    RESULT_SINK,
-    DATA_SPLIT_SINK,
-    MYSQL_TABLE_SINK,
-    EXPORT_SINK,
-    OLAP_TABLE_SINK,
-    MEMORY_SCRATCH_SINK,
-    MULTI_CAST_DATA_STREAM_SINK,
-    SCHEMA_TABLE_SINK,
-    ICEBERG_TABLE_SINK,
-    HIVE_TABLE_SINK,
-    TABLE_FUNCTION_TABLE_SINK,
-    BLACKHOLE_TABLE_SINK,
-    DICTIONARY_CACHE_SINK,
-    MULTI_OLAP_TABLE_SINK,
-    SPLIT_DATA_STREAM_SINK,
-    NOOP_SINK,
-    ICEBERG_DELETE_SINK
+    DATA_STREAM_SINK = 0,
+    RESULT_SINK = 1,
+    DATA_SPLIT_SINK = 2,
+    MYSQL_TABLE_SINK = 3,
+    EXPORT_SINK = 4,
+    OLAP_TABLE_SINK = 5,
+    MEMORY_SCRATCH_SINK = 6,
+    MULTI_CAST_DATA_STREAM_SINK = 7,
+    SCHEMA_TABLE_SINK = 8,
+    ICEBERG_TABLE_SINK = 9,
+    HIVE_TABLE_SINK = 10,
+    TABLE_FUNCTION_TABLE_SINK = 11,
+    BLACKHOLE_TABLE_SINK = 12,
+    DICTIONARY_CACHE_SINK = 13,
+    MULTI_OLAP_TABLE_SINK = 14,
+    SPLIT_DATA_STREAM_SINK = 15,
+    NOOP_SINK = 16,
+    ICEBERG_DELETE_SINK = 17,
+    ICEBERG_ROW_DELTA_SINK = 18
 }
 
 enum TResultSinkType {
@@ -242,11 +251,41 @@ struct TOlapTableSink {
     32: optional bool dynamic_overwrite
     33: optional bool enable_data_file_bundling
     34: optional bool is_multi_statements_txn
+    // Shared-data only: FE-controlled switch that tells each target CN to elect
+    // a per-partition coordinator for combined_txn_log collection instead of the
+    // legacy "sender_id == 0 collects all" rule. FE only sets this to true once
+    // it knows every target CN supports the mode (rolling-upgrade interlock).
+    35: optional bool enable_lake_per_partition_coordinator_txn_log
+    // Shared-data only: when true, a tablet's `TTabletLocation.node_ids` is a SHARD set rather than
+    // a replica set -- the sender round-robins rows across those nodes so one tablet is written by
+    // several CNs in parallel, instead of sending the same rows to every node in the list. FE sets
+    // it only when the session variable `lake_multi_node_tablet_write_mode` selects it AND the transaction uses
+    // combined txn logs (each writing CN produces a PARTIAL txn log for the tablet; the sender
+    // aggregates them into one before writing the combined log).
+    36: optional bool enable_multi_node_write
 }
 
 struct TSchemaTableSink {
     1: optional string table
     2: optional Descriptors.TNodesInfo nodes_info
+}
+
+enum TIcebergWriteMode {
+    APPEND,
+    // Iceberg row-delta UPDATE layout:
+    //   [_file, _pos, data_col1, ..., data_colN]
+    ROW_DELTA_UPDATE,
+    // Iceberg row-delta mixed-operation layout:
+    //   [_file, _pos, data_col1, ..., data_colN, op_code]
+    ROW_DELTA_MIXED
+}
+
+// Extension point for TIcebergTableSink. DO NOT MODIFY: do not add fields
+// here, and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TIcebergTableSink
+// fields belong on TIcebergTableSink itself, whose remaining numbers are free.
+struct TIcebergTableSinkExt {
 }
 
 struct TIcebergTableSink {
@@ -260,6 +299,18 @@ struct TIcebergTableSink {
     7: optional i64 target_max_file_size
     8: optional i32 tuple_id
     9: optional string data_location
+    // write mode: ROW_DELTA_UPDATE for pure UPDATE, ROW_DELTA_MIXED for MERGE-style
+    // mixed routing (delete / update / insert / no-op)
+    10: optional TIcebergWriteMode write_mode
+    // Codec for position-delete files. `compression_type` is the codec for data
+    // files. Each sink populates only the field(s) it actually writes:
+    //   IcebergTableSink    (data only)   → compression_type
+    //   IcebergDeleteSink   (delete only) → delete_compression_type
+    //   IcebergRowDeltaSink (both)        → both
+    11: optional Types.TCompressionType delete_compression_type
+    12: optional TIcebergTableSinkExt ext
+    // Parquet encryption info for encrypted Iceberg tables
+    13: optional PlanNodes.TParquetEncryptionInfo parquet_encryption_info
 }
 
 struct THiveTableSink {
@@ -285,6 +336,14 @@ struct TSplitDataStreamSink {
     3: optional list<Exprs.TExpr> splitExprs;
 }
 
+// Extension point for TDataSink. DO NOT MODIFY: do not add fields here, and do
+// not rename, renumber or remove it. The field numbers inside are allocated
+// separately, so anything added here collides with them, and renaming or
+// removing it breaks whatever fills it in. New TDataSink fields belong on
+// TDataSink itself, whose remaining numbers are free.
+struct TDataSinkExt {
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -302,4 +361,5 @@ struct TDataSink {
   15: optional list<TDataSink> multi_olap_table_sinks
   16: optional i64 sink_id
   17: optional TSplitDataStreamSink split_stream_sink
+  18: optional TDataSinkExt ext
 }

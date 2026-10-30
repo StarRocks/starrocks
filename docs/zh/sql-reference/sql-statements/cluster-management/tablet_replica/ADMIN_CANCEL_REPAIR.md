@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN CANCEL REPAIR cancels prioritized repairing schedules for specified tables or partitions."
 ---
 
 # ADMIN CANCEL REPAIR
@@ -9,8 +10,6 @@ displayed_sidebar: docs
 取消对指定表或分区执行优先级修复操作的计划。该语句仅表示系统不再以高优先级修复指定表或分区的分片副本。系统仍会以默认调度方式修复副本。
 
 ADMIN CANCEL REPAIR 仅适用于存算一体集群中的内表。
-
-详细操作指南请参阅[管理副本](../../../../administration/management/resource_management/Replica.md)。
 
 :::tip
 

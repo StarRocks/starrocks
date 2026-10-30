@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Pair;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -31,6 +34,20 @@ public class HiveScanTest extends ConnectorPlanTestBase {
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.doInit(newFolder(temp, "junit").toURI().toString());
         connectContext.changeCatalogDb("hive0.partitioned_db");
+    }
+
+    @Test
+    public void testStatsSourceInExplain() throws Exception {
+        // External (connector) scan nodes surface their StatsSource in `explain costs` / `explain verbose`.
+        // The mocked hive metadata does not tag a source, so it renders as NONE here; the point is that
+        // the line is emitted for the connector scan node.
+        String hiveSql = "select * from hive0.tpch.region";
+        String costPlan = getCostExplain(hiveSql);
+        assertContains(costPlan, "HdfsScanNode");
+        assertContains(costPlan, "stats source:");
+        assertContains(getVerboseExplain(hiveSql), "stats source:");
+        // OlapScanNode is intentionally excluded (its source is always ANALYZE and would churn plan
+        // tests); that exclusion is covered by the OlapScan-based plan suites such as ExplainTest.
     }
 
     @Test
@@ -188,5 +205,25 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+
+    @Test
+    public void testTwoKeyRollupSkipsUnprunedPartitionedScan() throws Exception {
+        // PushDownAggregateGroupingSetsRule runs before external partition pruning; estimating an unpruned
+        // partitioned hive scan would read every partition's statistics, so the rule keeps main's plan unestimated
+        boolean previous = connectContext.getSessionVariable().isCboPushDownGroupingSet();
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            Pair<ExecPlan, String> planAndTrace = UtFrameUtils.getFragmentPlanWithTrace(connectContext,
+                    "select l_returnflag, l_linestatus, count(*) from hive0.partitioned_db.lineitem_par " +
+                            "group by rollup(l_returnflag, l_linestatus)", "Optimizer").second;
+            String plan = planAndTrace.first.getExplainString(TExplainLevel.NORMAL);
+            assertNotContains(plan, "MultiCastDataSinks");
+            assertContains(plan, "repeat: repeat 2 lines");
+            Assertions.assertTrue(planAndTrace.second.contains(
+                    "scans a partitioned table before partition pruning"), planAndTrace.second);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(previous);
+        }
     }
 }

@@ -14,9 +14,12 @@
 
 package com.starrocks.http.rest.transaction;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -37,8 +40,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.HOST_NAME;
 import static com.starrocks.transaction.TransactionState.LoadJobSourceType.BYPASS_WRITE;
@@ -78,7 +86,9 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                         .getTable(db.getFullName(), tableName))
                             .orElseThrow(() -> new StarRocksException(
                                 String.format("Table[%s.%s] does not exist.", dbName, tableName)));
-                result = handleBeginTransaction(db, table, label, sourceType, timeoutMillis);
+                // TransactionOperationParams carries the timeout in milliseconds, while
+                // GlobalTransactionMgr#beginTransaction takes seconds
+                result = handleBeginTransaction(db, table, label, sourceType, timeoutMillis / 1000);
                 break;
             case TXN_PREPARE:
                 result = handlePrepareTransaction(
@@ -108,14 +118,15 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
                                                      Table table,
                                                      String label,
                                                      LoadJobSourceType sourceType,
-                                                     long timeoutMillis) throws StarRocksException {
+                                                     long timeoutSecond) throws StarRocksException {
         long dbId = db.getId();
         long tableId = table.getId();
 
         TxnCoordinator coordinator = new TxnCoordinator(TxnSourceType.FE, HOST_NAME);
         GlobalTransactionMgr globalTxnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = globalTxnMgr.beginTransaction(
-                dbId, Lists.newArrayList(tableId), label, coordinator, sourceType, timeoutMillis);
+                dbId, Lists.newArrayList(tableId), label, coordinator, sourceType, timeoutSecond);
+        LOG.info("Begin bypass write transaction, label: {}, txn_id: {}, timeout: {}s", label, txnId, timeoutSecond);
         TransactionResult result = new TransactionResult();
         result.addResultEntry(TransactionResult.TXN_ID_KEY, txnId);
         result.addResultEntry(TransactionResult.LABEL_KEY, label);
@@ -135,6 +146,7 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
         TransactionResult result = new TransactionResult();
         switch (txnStatus) {
             case PREPARE:
+                registerLoadedIndexes(txnState, committedTablets);
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
                         dbId, txnId, preparedTimeoutMs, committedTablets, failedTablets,
                         new MiniLoadTxnCommitAttachment(), timeoutMillis);
@@ -225,6 +237,38 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
 
         throw new StarRocksException(String.format(
                 "Transaction found by label %s isn't created in %s scenario.", label, BYPASS_WRITE.name()));
+    }
+
+    @VisibleForTesting
+    static void registerLoadedIndexes(TransactionState txnState, List<TabletCommitInfo> committedTablets) {
+        if (committedTablets == null || committedTablets.isEmpty()) {
+            return;
+        }
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        List<Long> tabletIds = committedTablets.stream()
+                .map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
+        List<TabletMeta> tabletMetaList = invertedIndex.getTabletMetaList(tabletIds);
+
+        // Group tablet index IDs by (tableId, partitionId)
+        Map<Long, Map<Long, Set<Long>>> tablePartitionIndexIds = new HashMap<>();
+        for (TabletMeta meta : tabletMetaList) {
+            if (meta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
+                continue;
+            }
+            tablePartitionIndexIds
+                    .computeIfAbsent(meta.getTableId(), k -> new HashMap<>())
+                    .computeIfAbsent(meta.getPhysicalPartitionId(), k -> new HashSet<>())
+                    .add(meta.getIndexId());
+        }
+
+        for (Map.Entry<Long, Map<Long, Set<Long>>> tableEntry : tablePartitionIndexIds.entrySet()) {
+            long tableId = tableEntry.getKey();
+            for (Map.Entry<Long, Set<Long>> partEntry : tableEntry.getValue().entrySet()) {
+                long partitionId = partEntry.getKey();
+                List<Long> indexIds = new ArrayList<>(partEntry.getValue());
+                txnState.addPartitionLoadedIndexes(tableId, partitionId, indexIds);
+            }
+        }
     }
 
 }

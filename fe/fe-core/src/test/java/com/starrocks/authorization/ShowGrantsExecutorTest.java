@@ -19,7 +19,6 @@ import com.starrocks.authentication.LDAPGroupProvider;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -37,25 +36,32 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 public class ShowGrantsExecutorTest {
+
+    @BeforeAll
+    public static void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterAll
+    public static void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
     @BeforeEach
     public void setUp() throws Exception {
-        // Mock EditLog
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         MockedLocalMetaStore localMetastore = new MockedLocalMetaStore(globalStateMgr, globalStateMgr.getRecycleBin(), null);
@@ -564,6 +570,54 @@ public class ShowGrantsExecutorTest {
         // Verify that the result contains exactly 2 privilege entries
         Assertions.assertEquals(2, resultSet.getResultRows().size(),
                 "Should have exactly 2 privilege entries, but got: " + resultSet.getResultRows().size());
+    }
+
+    /**
+     * Test case: MySQL-compatible SHOW GRANTS FOR CURRENT_USER() syntax
+     * Test point: Verify that SHOW GRANTS FOR CURRENT_USER() and SHOW GRANTS FOR CURRENT_USER
+     * parse successfully and produce identical results to plain SHOW GRANTS.
+     */
+    @Test
+    public void testShowGrantsForCurrentUserMysqlCompat() throws Exception {
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+
+        AuthenticationMgr authenticationMgr = new AuthenticationMgr();
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+
+        authenticationMgr.createUser(
+                new CreateUserStmt(new UserRef("compat_user", "%"), true, null, List.of(), Map.of(), NodePosition.ZERO));
+
+        // Execute GRANT without a session user — consistent with other tests using DefaultAuthorizationProvider
+        ConnectContext adminCtx = new ConnectContext();
+        String grantSql = "grant SELECT on ALL TABLES IN ALL DATABASES to 'compat_user'@'%'";
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql, adminCtx);
+        DDLStmtExecutor.execute(grantStmt, adminCtx);
+
+        // Switch to compat_user session for the actual SHOW GRANTS tests
+        ConnectContext ctx = new ConnectContext();
+        UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithIp("compat_user", "%");
+        ctx.setCurrentUserIdentity(userIdentity);
+
+        // SHOW GRANTS FOR CURRENT_USER() — MySQL-compatible form with parentheses
+        ShowGrantsStmt stmtWithParens = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW GRANTS FOR CURRENT_USER()", ctx);
+        Assertions.assertNull(stmtWithParens.getUser(),
+                "SHOW GRANTS FOR CURRENT_USER() should resolve to current user (null UserRef)");
+
+        // SHOW GRANTS FOR CURRENT_USER — form without parentheses
+        ShowGrantsStmt stmtNoParens = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "SHOW GRANTS FOR CURRENT_USER", ctx);
+        Assertions.assertNull(stmtNoParens.getUser(),
+                "SHOW GRANTS FOR CURRENT_USER should resolve to current user (null UserRef)");
+
+        // Both variants must produce the same result as plain SHOW GRANTS
+        ShowResultSet baseResult = ShowExecutor.execute(
+                new ShowGrantsStmt((UserRef) null, NodePosition.ZERO), ctx);
+        ShowResultSet compatResult = ShowExecutor.execute(stmtWithParens, ctx);
+
+        Assertions.assertEquals(baseResult.getResultRows(), compatResult.getResultRows(),
+                "SHOW GRANTS FOR CURRENT_USER() must return same rows as SHOW GRANTS");
     }
 
     /**

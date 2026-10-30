@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -94,13 +95,13 @@ import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
@@ -120,6 +121,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTaskStmt;
@@ -152,6 +154,7 @@ import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UserRef;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
@@ -386,7 +389,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateMaterializedViewStmt(CreateMaterializedViewStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateSyncMVStmt(CreateSyncMVStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
             });
@@ -687,6 +690,15 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.alterGroupProvider(statement.getName(), statement.getProperties());
+            });
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 List<Pair<String, String>> list = Lists.newArrayList();
@@ -815,6 +827,14 @@ public class DDLStmtExecutor {
         }
 
         @Override
+        public ShowResultSet visitDropSnapshotStatement(DropSnapshotStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getBackupHandler().dropSnapshot(stmt);
+            });
+            return null;
+        }
+
+        @Override
         public ShowResultSet visitSyncStatement(SyncStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
             });
@@ -873,7 +893,7 @@ public class DDLStmtExecutor {
             });
 
             if (isDryRun) {
-                return new ShowResultSet(TabletRepairHelper.getDryRunRepairResultMetaData(), result);
+                return new ShowResultSet(new ShowResultMetaFactory().getMetadata(stmt), result);
             } else {
                 return null;
             }
@@ -1141,17 +1161,24 @@ public class DDLStmtExecutor {
         public ShowResultSet visitDropTaskStmt(DropTaskStmt dropTaskStmt, ConnectContext context) {
             TaskManager taskManager = context.getGlobalStateMgr().getTaskManager();
             String taskName = dropTaskStmt.getTaskName().getName();
-            if (!taskManager.containTask(taskName)) {
+            Task task = taskManager.getTask(taskName);
+            if (task == null) {
                 if (dropTaskStmt.isSetIfExists()) {
                     return null;
                 }
                 throw new SemanticException("Task " + taskName + " is not exist");
             }
-            Task task = taskManager.getTask(taskName);
-            if (task.getSource() == Constants.TaskSource.MV && !dropTaskStmt.isForce()) {
-                throw new RuntimeException("Can not drop task generated by materialized view. You can use " +
-                        "DROP MATERIALIZED VIEW to drop task, when the materialized view is deleted, " +
-                        "the related task will be deleted automatically.");
+            if (!dropTaskStmt.isForce()) {
+                if (task.getSource() == Constants.TaskSource.MV) {
+                    throw new RuntimeException("Can not drop task generated by materialized view. You can use " +
+                            "DROP MATERIALIZED VIEW to drop task, when the materialized view is deleted, " +
+                            "the related task will be deleted automatically.");
+                }
+                if (task.getSource() == Constants.TaskSource.PIPE) {
+                    throw new RuntimeException("Can not drop task generated by pipe. " +
+                            "Use DROP PIPE to remove the pipe, " +
+                            "or DROP TASK ... FORCE to delete this task directly.");
+                }
             }
             taskManager.dropTasks(Collections.singletonList(task.getId()));
             return null;
@@ -1235,6 +1262,70 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() ->
                     context.getGlobalStateMgr().getStorageVolumeMgr().setDefaultStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        //=========================================== AI Provider ====================================================
+        @Override
+        public ShowResultSet visitCreateAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getAIProviderMgr().createProvider(
+                            stmt.getName(),
+                            com.starrocks.context.ai.AIProviderType.fromString(stmt.getType()),
+                            stmt.getProperties(), stmt.getComment());
+                } catch (AlreadyExistsException e) {
+                    if (stmt.isIfNotExists()) {
+                        LOG.info("create ai provider[{}] which already exists", stmt.getName());
+                    } else {
+                        throw e;
+                    }
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getAIProviderMgr().alterProvider(
+                            stmt.getName(), stmt.getProperties(), stmt.isIfExists());
+                } catch (MetaNotFoundException e) {
+                    if (!stmt.isIfExists()) {
+                        throw e;
+                    }
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DropAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                try {
+                    context.getGlobalStateMgr().getAIProviderMgr().dropProvider(
+                            stmt.getName(), stmt.isIfExists());
+                } catch (MetaNotFoundException e) {
+                    if (stmt.isIfExists()) {
+                        LOG.info("drop ai provider[{}] which does not exist", stmt.getName());
+                    } else {
+                        throw e;
+                    }
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSetDefaultAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getAIProviderMgr().setDefaultProvider(stmt.getName())
             );
             return null;
         }
@@ -1451,6 +1542,16 @@ public class DDLStmtExecutor {
                                                                                ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotInterval(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt stmt,
+                                                                          ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getGlobalTransactionMgr()
+                        .markCommittedTransactionAsNoOpPublish(stmt.getTxnId(), stmt.getReason());
             });
             return null;
         }

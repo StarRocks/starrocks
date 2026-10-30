@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "2つの日付式の分の差を返します。"
 ---
 
 # minutes_diff

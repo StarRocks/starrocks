@@ -14,6 +14,7 @@
 
 #pragma once
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -128,11 +129,8 @@ public:
             }
 
             Column* data_column = nullable_column->data_column_raw_ptr();
-            auto* column = down_cast<InputColumnType*>(data_column);
             auto& value = AggregateFunctionStateHelper<State>::data(state).value;
-            for (size_t i = start; i < end; ++i) {
-                AggDataTypeTraits<LT>::append_value(column, value);
-            }
+            AggDataTypeTraits<LT>::append_values(data_column, value, end - start);
         } else {
             /// The dst column has been resized.
             if (AggregateFunctionStateHelper<State>::data(state).is_null) {
@@ -208,8 +206,10 @@ class RankWindowFunction final : public WindowFunction<RankState> {
                     size_t end) const override {
         DCHECK_GT(end, start);
         auto* column = down_cast<Int64Column*>(dst);
+        auto* data = column->get_data().data();
+        const int64_t rank = this->data(state).rank;
         for (size_t i = start; i < end; ++i) {
-            column->get_data()[i] = this->data(state).rank;
+            data[i] = rank;
         }
     }
 
@@ -417,12 +417,6 @@ template <LogicalType LT, bool ignoreNulls, typename T = RunTimeCppType<LT>, typ
 class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValueState<LT>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
-        this->data(state).is_null = false;
-        this->data(state).has_value = false;
-    }
-
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
@@ -449,12 +443,17 @@ class FirstValueWindowFunction final : public ValueWindowFunction<LT, FirstValue
             }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
             AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
+                                                AggDataTypeTraits<LT>::get_row_ref(*data_column, value_index));
         }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).value = {};
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -477,12 +476,6 @@ template <LogicalType LT, bool ignoreNulls, typename T = RunTimeCppType<LT>>
 class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueState<LT, ignoreNulls>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
-        this->data(state).is_null = false;
-        this->data(state).has_value = false;
-    }
-
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
@@ -504,12 +497,17 @@ class LastValueWindowFunction final : public ValueWindowFunction<LT, LastValueSt
             }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-            const auto* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
             this->data(state).has_value = true;
             AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
+                                                AggDataTypeTraits<LT>::get_row_ref(*data_column, value_index));
         }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).value = {};
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
@@ -541,56 +539,21 @@ struct LeadLagState<LT, true> {
     bool default_is_null = false;
     int64_t target_not_null_index = 0; // recored the 'offset' not null value's position
     size_t non_null_count;             // only used for lag
+    int64_t lead_ready_current_row = INT64_MIN;
+    int64_t lead_ready_scan_end = 0;
+    int64_t lead_ready_non_null_count = 0;
+    // First non-null in (lead_ready_current_row, lead_ready_scan_end), valid when count > 0.
+    int64_t lead_ready_first_non_null = 0;
+    // The partition the cursor above was built in, in local coordinates. It tells a
+    // new partition apart from a re-entry into the current one, because `reset()` does not clear the
+    // cursor. See `is_window_result_ready`.
+    int64_t lead_ready_partition_start = 0;
     bool default_value_is_constant = false;
 };
 
 template <LogicalType LT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<LT>>
 class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<LT, ignoreNulls>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
-
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).value = {};
-        this->data(state).is_null = false;
-
-        // get offset
-        const Column* arg1 = args[1].get();
-        DCHECK(arg1->is_constant());
-        const auto* offset_column = down_cast<const ConstColumn*>(arg1);
-        if (offset_column->is_nullable()) {
-            this->data(state).offset = 0;
-        } else {
-            this->data(state).offset = ColumnHelper::get_const_value<LogicalType::TYPE_BIGINT>(arg1);
-        }
-
-        // get default value
-        const Column* arg2 = args[2].get();
-        DCHECK(arg2 != nullptr);
-
-        if (arg2->is_constant()) {
-            this->data(state).default_value_is_constant = true;
-            const auto* default_column = down_cast<const ConstColumn*>(arg2);
-            if (default_column->is_nullable()) {
-                this->data(state).default_is_null = true;
-            } else {
-                if constexpr (lt_is_array<LT>) {
-                    const auto* column = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(arg2));
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
-                                                        AggDataTypeTraits<LT>::get_row_ref(*column, 0));
-                } else {
-                    auto value = ColumnHelper::get_const_value<LT>(arg2);
-                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
-                }
-            }
-        } else {
-            this->data(state).default_value_is_constant = false;
-            this->data(state).default_is_null = false;
-        }
-
-        if constexpr (ignoreNulls) {
-            this->data(state).target_not_null_index = INT64_MIN;
-            this->data(state).non_null_count = 0;
-        }
-    }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
@@ -703,11 +666,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                             current_row < static_cast<int64_t>(def_col->size())) {
                             this->data(state).is_null = def_col->is_null(static_cast<size_t>(current_row));
                             if (!this->data(state).is_null) {
-                                const auto* column =
-                                        down_cast<const InputColumnType*>(ColumnHelper::get_data_column(def_col));
+                                const Column* def_data_column = ColumnHelper::get_data_column(def_col);
                                 AggDataTypeTraits<LT>::assign_value(
                                         this->data(state).value,
-                                        AggDataTypeTraits<LT>::get_row_ref(*column, current_row));
+                                        AggDataTypeTraits<LT>::get_row_ref(*def_data_column, current_row));
                             }
                         } else {
                             this->data(state).is_null = true;
@@ -716,10 +678,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 }
             } else {
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-                const auto* column = down_cast<const InputColumnType*>(data_column);
                 this->data(state).is_null = false;
                 AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                    AggDataTypeTraits<LT>::get_row_ref(*column, value_index));
+                                                    AggDataTypeTraits<LT>::get_row_ref(*data_column, value_index));
             }
         } else {
             // frame_start < peer_group_start is for lag function
@@ -746,11 +707,10 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                         current_row_index < static_cast<int64_t>(def_col->size())) {
                         this->data(state).is_null = def_col->is_null(static_cast<size_t>(current_row_index));
                         if (!this->data(state).is_null) {
-                            const auto* column =
-                                    down_cast<const InputColumnType*>(ColumnHelper::get_data_column(def_col));
+                            const Column* def_data_column = ColumnHelper::get_data_column(def_col);
                             AggDataTypeTraits<LT>::assign_value(
                                     this->data(state).value,
-                                    AggDataTypeTraits<LT>::get_row_ref(*column, current_row_index));
+                                    AggDataTypeTraits<LT>::get_row_ref(*def_data_column, current_row_index));
                         }
                     } else {
                         this->data(state).is_null = true;
@@ -762,11 +722,187 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             if (!columns[0]->is_null(frame_end - 1)) {
                 this->data(state).is_null = false;
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-                const auto* column = down_cast<const InputColumnType*>(data_column);
                 AggDataTypeTraits<LT>::assign_value(this->data(state).value,
-                                                    AggDataTypeTraits<LT>::get_row_ref(*column, frame_end - 1));
+                                                    AggDataTypeTraits<LT>::get_row_ref(*data_column, frame_end - 1));
             } else {
                 this->data(state).is_null = true;
+            }
+        }
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).value = {};
+        this->data(state).is_null = false;
+
+        // get offset
+        const Column* arg1 = args[1].get();
+        DCHECK(arg1->is_constant());
+        const auto* offset_column = down_cast<const ConstColumn*>(arg1);
+        if (offset_column->is_nullable()) {
+            this->data(state).offset = 0;
+        } else {
+            this->data(state).offset = ColumnHelper::get_const_value<LogicalType::TYPE_BIGINT>(arg1);
+        }
+
+        // get default value
+        const Column* arg2 = args[2].get();
+        DCHECK(arg2 != nullptr);
+
+        if (arg2->is_constant()) {
+            this->data(state).default_value_is_constant = true;
+            const auto* default_column = down_cast<const ConstColumn*>(arg2);
+            if (default_column->is_nullable()) {
+                this->data(state).default_is_null = true;
+            } else {
+                if constexpr (lt_is_array<LT>) {
+                    const auto* column = ColumnHelper::get_data_column(arg2);
+                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value,
+                                                        AggDataTypeTraits<LT>::get_row_ref(*column, 0));
+                } else {
+                    auto value = ColumnHelper::get_const_value<LT>(arg2);
+                    AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
+                }
+            }
+        } else {
+            this->data(state).default_value_is_constant = false;
+            this->data(state).default_is_null = false;
+        }
+
+        if constexpr (ignoreNulls) {
+            this->data(state).target_not_null_index = INT64_MIN;
+            this->data(state).non_null_count = 0;
+            // The `lead_ready_*` scan cursor is deliberately NOT cleared here. While the first row of the
+            // first partition waits for a future non-null, `_current_row_position` stays put and the
+            // analytor re-runs PRE_PROCESSING() -> reset() for every arriving chunk
+        }
+    }
+
+    // Only `lead ... IGNORE NULLS` can look past the physical frame, so it is the only variant the
+    // analytor has to consult per row.
+    bool needs_window_result_ready_check() const override { return ignoreNulls && !isLag; }
+
+    // `lead ... IGNORE NULLS` needs the offset-th non-null after the current row, which can lie
+    // beyond the physical N FOLLOWING frame. Wait while the partition may still grow and that
+    // non-null is not yet in [current+1, available_end). Once the partition is complete, the
+    // existing update path may emit the default.
+    bool is_window_result_ready(FunctionContext* ctx, AggDataPtr __restrict state, const Columns& columns,
+                                int64_t partition_start, int64_t available_end, int64_t frame_start, int64_t frame_end,
+                                bool partition_is_complete, int64_t* ready_end = nullptr) const override {
+        // The cursor fields below exist only in the IGNORE NULLS state specialization, so the whole
+        // body must sit inside `if constexpr` to stay uninstantiated for the other cases.
+        if constexpr (ignoreNulls && !isLag) { // LEAD .. IGNORE NULLS
+            if (partition_is_complete) {
+                return true;
+            }
+            const int64_t offset = this->data(state).offset;
+            DCHECK_GT(offset, 0);
+            // Same encoding as update_batch_single_state_with_frame: frame_end = current + offset + 1.
+            int64_t current_row = frame_end - 1 - offset;
+            if (current_row < partition_start) {
+                current_row = partition_start;
+            }
+            if (columns.empty() || columns[0] == nullptr) {
+                return false;
+            }
+            const Column* col = columns[0].get();
+            const int64_t search_end = std::min(available_end, static_cast<int64_t>(col->size()));
+            auto& lead_state = this->data(state);
+
+            // Both current_row and search_end move forward within a partition. Keep the number of
+            // non-nulls in (lead_ready_current_row, lead_ready_scan_end). The first-non-null cursor
+            // retracts values that leave the window; the scan-end cursor adds newly available ones.
+            // Both cursors advance monotonically, keeping total scanning linear with constant space.
+            //
+            // The cursor outlives `reset()`, so a new partition must be recognised here. Both
+            // `partition_start` and the stored copy are local, post-eviction positions shifted by the
+            // same amounts (see `reset_state_for_contraction`), and a later partition always starts
+            // after an earlier one, so the comparison cannot alias across partitions.
+            const bool is_cache_not_initialized = lead_state.lead_ready_current_row == INT64_MIN ||
+                                                  lead_state.lead_ready_partition_start != partition_start;
+            if (is_cache_not_initialized) { // Fresh state, or the first row of a new partition
+                lead_state.lead_ready_partition_start = partition_start;
+                lead_state.lead_ready_current_row = current_row;
+                lead_state.lead_ready_scan_end = current_row + 1;
+                lead_state.lead_ready_non_null_count = 0;
+            } else if (current_row > lead_state.lead_ready_current_row) {
+                while (lead_state.lead_ready_non_null_count > 0 &&
+                       lead_state.lead_ready_first_non_null <= current_row) {
+                    --lead_state.lead_ready_non_null_count;
+                    if (lead_state.lead_ready_non_null_count > 0) {
+                        lead_state.lead_ready_first_non_null = ColumnHelper::find_nonnull(
+                                col, lead_state.lead_ready_first_non_null + 1, lead_state.lead_ready_scan_end);
+                    }
+                }
+                lead_state.lead_ready_current_row = current_row;
+                lead_state.lead_ready_scan_end = std::max(lead_state.lead_ready_scan_end, current_row + 1);
+            }
+
+            while (lead_state.lead_ready_non_null_count < offset && lead_state.lead_ready_scan_end < search_end) {
+                const int64_t next = static_cast<int64_t>(
+                        ColumnHelper::find_nonnull(col, lead_state.lead_ready_scan_end, search_end));
+                if (next >= search_end) {
+                    lead_state.lead_ready_scan_end = search_end;
+                    break;
+                }
+                if (lead_state.lead_ready_non_null_count == 0) {
+                    lead_state.lead_ready_first_non_null = next;
+                }
+                lead_state.lead_ready_scan_end = next + 1;
+                ++lead_state.lead_ready_non_null_count;
+            }
+            const bool ready = lead_state.lead_ready_non_null_count >= offset;
+            if (ready && ready_end != nullptr) {
+                // All offset future non-nulls remain available for every row strictly before
+                // the first one. This bound works for every positive offset.
+                *ready_end = lead_state.lead_ready_first_non_null;
+            }
+            return ready;
+        }
+        return true;
+    }
+
+    // `lag ... IGNORE NULLS` supports streaming eviction. Once at least one non-null value has
+    // been seen, `target_not_null_index` is the oldest buffered row the function may still read.
+    std::optional<int64_t> get_min_retained_position(FunctionContext* ctx,
+                                                     ConstAggDataPtr __restrict state) const override {
+        if constexpr (ignoreNulls && isLag) {
+            const int64_t idx = this->data(state).target_not_null_index;
+            if (idx >= 0) {
+                return idx;
+            }
+        }
+        return std::nullopt;
+    }
+
+    // Shift the index after eviction so it stays in the operator's (post-eviction) local indices.
+    // Both lag and lead IGNORE NULLS store `target_not_null_index` in local column coordinates.
+    void reset_state_for_contraction(FunctionContext* ctx, AggDataPtr __restrict state, size_t count) const override {
+        if constexpr (ignoreNulls) {
+            if (this->data(state).target_not_null_index >= 0) {
+                this->data(state).target_not_null_index -= count;
+                DCHECK_GE(this->data(state).target_not_null_index, 0);
+            }
+            if constexpr (!isLag) { // LEAD
+                auto& lead_data = this->data(state);
+                if (lead_data.lead_ready_current_row != INT64_MIN) {
+                    lead_data.lead_ready_current_row -= count;
+                    lead_data.lead_ready_scan_end -= count;
+                    if (lead_data.lead_ready_non_null_count > 0) {
+                        lead_data.lead_ready_first_non_null -= count;
+                    }
+                    // Shifted with the cursor so it stays comparable to `Analytor::_partition.start`,
+                    // which the same eviction shifts by the same amount. It may go negative once the
+                    // rows at the start of the partition are gone, exactly as `_partition.start` does.
+                    lead_data.lead_ready_partition_start -= count;
+                    if (lead_data.lead_ready_current_row < 0) {
+                        // The row the cursor is anchored to has been evicted. Eviction never passes the
+                        // row being evaluated, but readiness checks may have skipped that far ahead.
+                        // Drop the old cursor so the next check rebuilds it at the current row.
+                        lead_data.lead_ready_current_row = INT64_MIN;
+                    } else {
+                        DCHECK_GT(lead_data.lead_ready_scan_end, lead_data.lead_ready_current_row);
+                    }
+                }
             }
         }
     }
@@ -795,24 +931,10 @@ class SessionNumberWindowFunction final : public WindowFunction<AllocateSessionS
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
-    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
-        this->data(state).session_id = 1;
-        this->data(state).last_not_null_value = {};
-        this->data(state).is_null = false;
-        this->data(state).has_value = false;
-
-        const Column* delta_column = args[1].get();
-        DCHECK(delta_column->is_constant());
-        if (!delta_column->only_null() && !delta_column->empty()) {
-            this->data(state).delta = ColumnHelper::get_const_value<LogicalType::TYPE_INT>(args[1]);
-        }
-    }
-
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
-        const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
 
         DCHECK(frame_start < frame_end);
         if (frame_start > frame_end) {
@@ -824,14 +946,27 @@ public:
         if (columns[0]->is_null(current_row)) {
             this->data(state).is_null = true;
         } else {
-            auto current_value = AggDataTypeTraits<LT>::get_row_ref(*column, current_row);
+            auto current_value = AggDataTypeTraits<LT>::get_row_ref(*data_column, current_row);
             if (this->data(state).has_value && current_value - this->data(state).last_not_null_value > delta) {
                 this->data(state).session_id++;
             }
             this->data(state).is_null = false;
-            this->data(state).last_not_null_value = AggDataTypeTraits<LT>::get_row_ref(*column, frame_start);
+            this->data(state).last_not_null_value = AggDataTypeTraits<LT>::get_row_ref(*data_column, frame_start);
         }
         this->data(state).has_value = true;
+    }
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
+        this->data(state).session_id = 1;
+        this->data(state).last_not_null_value = {};
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
+
+        const Column* delta_column = args[1].get();
+        DCHECK(delta_column->is_constant());
+        if (!delta_column->only_null() && !delta_column->empty()) {
+            this->data(state).delta = ColumnHelper::get_const_value<LogicalType::TYPE_INT>(args[1]);
+        }
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,

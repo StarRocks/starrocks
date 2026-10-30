@@ -1,0 +1,70 @@
+-- name: test_bitmap_index_partial_cover_or @sequential
+-- Regression for the bitmap-index OR erasure bug: when an OR branch is only partially covered by a
+-- bitmap index -- (a=1 AND b=2) OR (a=2 AND b=3) with `a` bitmap-indexed and `b` not -- the indexed
+-- leaves must NOT be erased from the residual predicate. Before the fix, the residual collapsed to
+-- (b=2 OR b=3) over the scan range {a in (1,2)}, wrongly matching rows like (a=1,b=3) and (a=2,b=2).
+-- Keep the OR as a pushed-down predicate tree (do not rewrite it to a UNION), and isolate the bitmap
+-- index filter from the other index filters so the bitmap path is the only thing under test.
+set scan_or_to_union_limit = 1;
+-- result:
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_page_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
+CREATE TABLE t_or_bitmap (
+  id BIGINT NOT NULL,
+  a  INT    NOT NULL,
+  b  INT    NOT NULL,
+  INDEX idx_a (a) USING BITMAP
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_or_bitmap
+SELECT generate_series AS id, CAST(generate_series + 1000 AS INT) AS a, 100 AS b
+FROM TABLE(generate_series(1, 5000))
+UNION ALL SELECT 100001, 1, 2
+UNION ALL SELECT 100002, 2, 3
+UNION ALL SELECT 100003, 1, 3
+UNION ALL SELECT 100004, 2, 2;
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result
+select count(1) from t_or_bitmap where (a = 1 and b = 2) or (a = 2 and b = 3);
+-- result:
+2
+-- !result
+select id, a, b from t_or_bitmap where (a = 1 and b = 2) or (a = 2 and b = 3) order by id;
+-- result:
+100001	1	2
+100002	2	3
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result
+select count(1) from t_or_bitmap where (a = 1 and b = 2) or (a = 2 and b = 3);
+-- result:
+2
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_page_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result

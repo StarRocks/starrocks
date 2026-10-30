@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算参数的立方根。"
 ---
 
 # cbrt

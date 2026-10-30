@@ -1,0 +1,162 @@
+-- name: test_dict_lookup_batch_in_list
+-- Test IN predicate with large value list on dictionary-encoded VARCHAR column.
+-- The BE uses batch dict_lookup (hash-based) when dict_size or IN list size >= 100.
+
+SET enable_large_in_predicate = false;
+
+CREATE TABLE t_dict_in (
+    id INT NOT NULL,
+    val VARCHAR(50) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Insert data with very low cardinality: only 20 distinct VARCHAR values over 1000 rows
+-- This ensures dictionary encoding is used in the segment.
+INSERT INTO t_dict_in VALUES
+    (1, 'alpha'), (2, 'beta'), (3, 'gamma'), (4, 'delta'), (5, 'epsilon'),
+    (6, 'zeta'), (7, 'eta'), (8, 'theta'), (9, 'iota'), (10, 'kappa'),
+    (11, 'lambda'), (12, 'mu'), (13, 'nu'), (14, 'xi'), (15, 'omicron'),
+    (16, 'pi'), (17, 'rho'), (18, 'sigma'), (19, 'tau'), (20, 'upsilon'),
+    (21, 'alpha'), (22, 'beta'), (23, 'gamma'), (24, 'delta'), (25, 'epsilon'),
+    (26, 'zeta'), (27, 'eta'), (28, 'theta'), (29, 'iota'), (30, 'kappa'),
+    (31, 'lambda'), (32, 'mu'), (33, 'nu'), (34, 'xi'), (35, 'omicron'),
+    (36, 'pi'), (37, 'rho'), (38, 'sigma'), (39, 'tau'), (40, 'upsilon'),
+    (41, 'alpha'), (42, 'beta'), (43, 'gamma'), (44, 'delta'), (45, 'epsilon'),
+    (46, 'zeta'), (47, 'eta'), (48, 'theta'), (49, 'iota'), (50, 'kappa');
+
+-- IN predicate with found values
+SELECT id FROM t_dict_in WHERE val IN ('alpha', 'gamma', 'epsilon', 'eta', 'iota', 'lambda', 'nu', 'omicron', 'rho', 'tau') ORDER BY id;
+
+-- IN predicate with some values not in dict
+SELECT id FROM t_dict_in WHERE val IN ('alpha', 'beta', 'gamma', 'nonexistent_1', 'nonexistent_2', 'epsilon') ORDER BY id;
+
+-- IN predicate with no matching values
+SELECT COUNT(*) FROM t_dict_in WHERE val IN ('not_there_1', 'not_there_2', 'not_there_3');
+
+-- NOT IN predicate
+SELECT id FROM t_dict_in WHERE val NOT IN ('alpha', 'beta', 'gamma', 'delta', 'epsilon') ORDER BY id;
+
+
+-- Test with a larger IN list that should trigger the hash-based batch lookup path.
+-- The BE threshold is kDictLookupHashThreshold=100.
+
+SET enable_large_in_predicate = false;
+
+
+CREATE TABLE t_dict_large (
+    id INT NOT NULL,
+    val VARCHAR(50) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+-- Insert 3000 rows with 128 distinct values to get dict_size=128 (> threshold of 100)
+-- Use generate_series for bulk data generation
+INSERT INTO t_dict_large
+SELECT
+    generate_series,
+    CONCAT('val_', CAST(generate_series % 128 AS VARCHAR))
+FROM TABLE(generate_series(1, 3000));
+
+-- IN predicate: match first 50 values (values in dict) plus 100 non-existent values = 150 total
+-- dict_size=128 >=100 and IN list=150 >=100, both trigger the batch hash path
+SELECT COUNT(*) AS cnt FROM t_dict_large
+WHERE val IN (
+    'val_0', 'val_1', 'val_2', 'val_3', 'val_4', 'val_5', 'val_6', 'val_7', 'val_8', 'val_9',
+    'val_10', 'val_11', 'val_12', 'val_13', 'val_14', 'val_15', 'val_16', 'val_17', 'val_18', 'val_19',
+    'val_20', 'val_21', 'val_22', 'val_23', 'val_24', 'val_25', 'val_26', 'val_27', 'val_28', 'val_29',
+    'val_30', 'val_31', 'val_32', 'val_33', 'val_34', 'val_35', 'val_36', 'val_37', 'val_38', 'val_39',
+    'val_40', 'val_41', 'val_42', 'val_43', 'val_44', 'val_45', 'val_46', 'val_47', 'val_48', 'val_49',
+    'nx_00', 'nx_01', 'nx_02', 'nx_03', 'nx_04', 'nx_05', 'nx_06', 'nx_07', 'nx_08', 'nx_09',
+    'nx_10', 'nx_11', 'nx_12', 'nx_13', 'nx_14', 'nx_15', 'nx_16', 'nx_17', 'nx_18', 'nx_19',
+    'nx_20', 'nx_21', 'nx_22', 'nx_23', 'nx_24', 'nx_25', 'nx_26', 'nx_27', 'nx_28', 'nx_29',
+    'nx_30', 'nx_31', 'nx_32', 'nx_33', 'nx_34', 'nx_35', 'nx_36', 'nx_37', 'nx_38', 'nx_39',
+    'nx_40', 'nx_41', 'nx_42', 'nx_43', 'nx_44', 'nx_45', 'nx_46', 'nx_47', 'nx_48', 'nx_49',
+    'nx_50', 'nx_51', 'nx_52', 'nx_53', 'nx_54', 'nx_55', 'nx_56', 'nx_57', 'nx_58', 'nx_59',
+    'nx_60', 'nx_61', 'nx_62', 'nx_63', 'nx_64', 'nx_65', 'nx_66', 'nx_67', 'nx_68', 'nx_69',
+    'nx_70', 'nx_71', 'nx_72', 'nx_73', 'nx_74', 'nx_75', 'nx_76', 'nx_77', 'nx_78', 'nx_79',
+    'nx_80', 'nx_81', 'nx_82', 'nx_83', 'nx_84', 'nx_85', 'nx_86', 'nx_87', 'nx_88', 'nx_89',
+    'nx_90', 'nx_91', 'nx_92', 'nx_93', 'nx_94', 'nx_95', 'nx_96', 'nx_97', 'nx_98', 'nx_99'
+);
+
+-- NOT IN predicate with large list: exclude 50 values, plus 100 non-existent values = 150 total
+SELECT COUNT(*) AS cnt FROM t_dict_large
+WHERE val NOT IN (
+    'val_0', 'val_1', 'val_2', 'val_3', 'val_4', 'val_5', 'val_6', 'val_7', 'val_8', 'val_9',
+    'val_10', 'val_11', 'val_12', 'val_13', 'val_14', 'val_15', 'val_16', 'val_17', 'val_18', 'val_19',
+    'val_20', 'val_21', 'val_22', 'val_23', 'val_24', 'val_25', 'val_26', 'val_27', 'val_28', 'val_29',
+    'val_30', 'val_31', 'val_32', 'val_33', 'val_34', 'val_35', 'val_36', 'val_37', 'val_38', 'val_39',
+    'val_40', 'val_41', 'val_42', 'val_43', 'val_44', 'val_45', 'val_46', 'val_47', 'val_48', 'val_49',
+    'nx_00', 'nx_01', 'nx_02', 'nx_03', 'nx_04', 'nx_05', 'nx_06', 'nx_07', 'nx_08', 'nx_09',
+    'nx_10', 'nx_11', 'nx_12', 'nx_13', 'nx_14', 'nx_15', 'nx_16', 'nx_17', 'nx_18', 'nx_19',
+    'nx_20', 'nx_21', 'nx_22', 'nx_23', 'nx_24', 'nx_25', 'nx_26', 'nx_27', 'nx_28', 'nx_29',
+    'nx_30', 'nx_31', 'nx_32', 'nx_33', 'nx_34', 'nx_35', 'nx_36', 'nx_37', 'nx_38', 'nx_39',
+    'nx_40', 'nx_41', 'nx_42', 'nx_43', 'nx_44', 'nx_45', 'nx_46', 'nx_47', 'nx_48', 'nx_49',
+    'nx_50', 'nx_51', 'nx_52', 'nx_53', 'nx_54', 'nx_55', 'nx_56', 'nx_57', 'nx_58', 'nx_59',
+    'nx_60', 'nx_61', 'nx_62', 'nx_63', 'nx_64', 'nx_65', 'nx_66', 'nx_67', 'nx_68', 'nx_69',
+    'nx_70', 'nx_71', 'nx_72', 'nx_73', 'nx_74', 'nx_75', 'nx_76', 'nx_77', 'nx_78', 'nx_79',
+    'nx_80', 'nx_81', 'nx_82', 'nx_83', 'nx_84', 'nx_85', 'nx_86', 'nx_87', 'nx_88', 'nx_89',
+    'nx_90', 'nx_91', 'nx_92', 'nx_93', 'nx_94', 'nx_95', 'nx_96', 'nx_97', 'nx_98', 'nx_99'
+);
+
+-- IN predicate with large list where ALL values are in the dict (no misses)
+SELECT COUNT(*) AS cnt FROM t_dict_large
+WHERE val IN (
+    'val_0', 'val_1', 'val_2', 'val_3', 'val_4', 'val_5', 'val_6', 'val_7', 'val_8', 'val_9',
+    'val_10', 'val_11', 'val_12', 'val_13', 'val_14', 'val_15', 'val_16', 'val_17', 'val_18', 'val_19',
+    'val_20', 'val_21', 'val_22', 'val_23', 'val_24', 'val_25', 'val_26', 'val_27', 'val_28', 'val_29',
+    'val_30', 'val_31', 'val_32', 'val_33', 'val_34', 'val_35', 'val_36', 'val_37', 'val_38', 'val_39',
+    'val_40', 'val_41', 'val_42', 'val_43', 'val_44', 'val_45', 'val_46', 'val_47', 'val_48', 'val_49',
+    'val_50', 'val_51', 'val_52', 'val_53', 'val_54', 'val_55', 'val_56', 'val_57', 'val_58', 'val_59',
+    'val_60', 'val_61', 'val_62', 'val_63', 'val_64', 'val_65', 'val_66', 'val_67', 'val_68', 'val_69',
+    'val_70', 'val_71', 'val_72', 'val_73', 'val_74', 'val_75', 'val_76', 'val_77', 'val_78', 'val_79',
+    'val_80', 'val_81', 'val_82', 'val_83', 'val_84', 'val_85', 'val_86', 'val_87', 'val_88', 'val_89',
+    'val_90', 'val_91', 'val_92', 'val_93', 'val_94', 'val_95', 'val_96', 'val_97', 'val_98', 'val_99',
+    'val_100', 'val_101', 'val_102', 'val_103', 'val_104', 'val_105', 'val_106', 'val_107', 'val_108', 'val_109',
+    'val_110', 'val_111', 'val_112', 'val_113', 'val_114', 'val_115', 'val_116', 'val_117', 'val_118', 'val_119',
+    'val_120', 'val_121', 'val_122', 'val_123', 'val_124', 'val_125', 'val_126', 'val_127'
+);
+
+-- IN predicate with duplicates should return correct results (no duplicates in output)
+SELECT COUNT(*) AS cnt FROM t_dict_large
+WHERE val IN ('val_5', 'val_5', 'val_5', 'val_10', 'val_10', 'val_15');
+
+
+-- Test that EQ/NE predicates also work correctly alongside the dict_lookup code path.
+-- EQ and NE use single-value dict_lookup, not batch.
+
+SET enable_large_in_predicate = false;
+
+
+CREATE TABLE t_dict_eq (
+    id INT NOT NULL,
+    val VARCHAR(50) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+INSERT INTO t_dict_eq VALUES
+    (1, 'foo'), (2, 'bar'), (3, 'baz'), (4, 'foo'), (5, 'qux'),
+    (6, 'bar'), (7, 'foo'), (8, 'quux'), (9, 'baz'), (10, 'foo');
+
+-- EQ on dict column
+SELECT id FROM t_dict_eq WHERE val = 'foo' ORDER BY id;
+
+-- NE on dict column
+SELECT id FROM t_dict_eq WHERE val != 'foo' ORDER BY id;
+
+-- IN list (single element - should behave like EQ after optimization)
+SELECT id FROM t_dict_eq WHERE val IN ('foo', 'bar') ORDER BY id;
+
+-- NOT IN list
+SELECT id FROM t_dict_eq WHERE val NOT IN ('foo', 'bar') ORDER BY id;

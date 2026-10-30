@@ -18,40 +18,12 @@
 
 #include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "base/utility/factory_method.h"
-#include "exec/pipeline/pipeline_driver.h"
-#include "exec/workgroup/work_group_fwd.h"
+#include "compute_env/workgroup/work_group_fwd.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
+#include "exec/runtime/pipeline_driver.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 
 namespace starrocks::pipeline {
-
-class DriverQueue;
-using DriverQueuePtr = std::unique_ptr<DriverQueue>;
-class DriverQueueMetrics;
-
-class DriverQueue {
-public:
-    DriverQueue(DriverQueueMetrics* metrics) : _metrics(metrics) {}
-    virtual ~DriverQueue() = default;
-    virtual void close() = 0;
-
-    virtual void put_back(const DriverRawPtr driver) = 0;
-    virtual void put_back(const std::vector<DriverRawPtr>& drivers) = 0;
-    // *from_executor* means that the executor thread puts the driver back to the queue.
-    virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
-
-    virtual StatusOr<DriverRawPtr> take(const bool block) = 0;
-    virtual void cancel(DriverRawPtr driver) = 0;
-
-    // Update statistics of the driver's workgroup,
-    // when yielding the driver in the executor thread.
-    virtual void update_statistics(const DriverRawPtr driver) = 0;
-
-    virtual size_t size() const = 0;
-    bool empty() const { return size() == 0; }
-
-    virtual bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const = 0;
-
-    DriverQueueMetrics* _metrics;
-};
 
 // SubQuerySharedDriverQueue is used to store the driver waiting to be executed.
 // It guarantees the following characteristics:
@@ -79,7 +51,18 @@ public:
         _accu_consume_time.fetch_add(driver->driver_acct().get_last_time_spent());
     }
 
-    double accu_time_after_divisor() { return _accu_consume_time.load() / factor_for_normal; }
+    double accu_time_after_divisor() const { return _accu_consume_time.load() / factor_for_normal; }
+
+    // Raise the accumulated time, so that accu_time_after_divisor() is not less than min_accu_time_after_divisor.
+    void catch_up_accu_time(double min_accu_time_after_divisor);
+    // Subtract a common normalized origin; levels behind the origin restart at zero.
+    void rebase_accu_time(double origin);
+
+    void update_wait_time(int64_t wait_time_ns) {
+        _wait_time_ns.fetch_add(wait_time_ns, std::memory_order_relaxed);
+        _schedule_count.fetch_add(1, std::memory_order_relaxed);
+    }
+    DriverQueueLevelStats stats() const;
 
     void put(const DriverRawPtr driver);
     void cancel(const DriverRawPtr driver);
@@ -99,6 +82,8 @@ public:
 
 private:
     std::atomic<int64_t> _accu_consume_time = 0;
+    std::atomic<int64_t> _wait_time_ns = 0;
+    std::atomic<int64_t> _schedule_count = 0;
     DriverQueueMetrics* _metrics;
 };
 
@@ -124,26 +109,39 @@ public:
 
     bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override { return false; }
 
-    static double ratio_of_adjacent_queue() { return config::pipeline_driver_queue_ratio_of_adjacent_queue; }
+    std::vector<DriverQueueLevelStats> level_stats() const override;
+
+    static double ratio_of_adjacent_queue();
     static constexpr size_t QUEUE_SIZE = 8;
 
 private:
     // When the driver at the i-th level costs _level_time_slices[i],
     // it will move to (i+1)-th level.
     int _compute_driver_level(const DriverRawPtr driver) const;
+    // Should be guarded by _global_mutex.
+    void _put_back_unlocked(const DriverRawPtr driver, int level, int64_t now_ns);
+    void _rebase_accu_time_unlocked();
 
 private:
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns,
     // so when a driver's execution time exceeds 0.2s, 0.6s, 1.2s, 2.0s, 3.0s, 4.2s, 5.6s, 7.4s.
     // it will move to next level.
-    const int64_t LEVEL_TIME_SLICE_BASE_NS = config::pipeline_driver_queue_level_time_slice_base_ns;
-    const double RATIO_OF_ADJACENT_QUEUE = ratio_of_adjacent_queue();
+    const int64_t LEVEL_TIME_SLICE_BASE_NS;
+    const double RATIO_OF_ADJACENT_QUEUE;
 
     SubQuerySharedDriverQueue _queues[QUEUE_SIZE];
     // The time slice of the i-th level is (i+1)*LEVEL_TIME_SLICE_BASE ns.
     int64_t _level_time_slices[QUEUE_SIZE];
 
     size_t _num_drivers = 0;
+
+    // The largest accu_time_after_divisor() of the levels picked since the last common rebase. No
+    // non-empty level is below it, because a level turning from empty to non-empty catches up to it.
+    // Without the catch-up, a level that has been empty for a long time, such as a level of heavy queries,
+    // would keep its small accumulated time and be picked before every other level until it caught up,
+    // which could starve level 0 for seconds.
+    // Rebase all levels and this watermark together before a catch-up target approaches the int64 limit.
+    double _min_accu_time_after_divisor = 0;
 
     mutable std::mutex _global_mutex;
     std::condition_variable _cv;
@@ -156,7 +154,8 @@ class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQu
     friend class FactoryMethod<DriverQueue, WorkGroupDriverQueue>;
 
 public:
-    WorkGroupDriverQueue(DriverQueueMetrics* metrics) : FactoryMethod(metrics) {}
+    WorkGroupDriverQueue(DriverQueueMetrics* metrics, const workgroup::WorkGroupSchedulePolicy& schedule_policy)
+            : FactoryMethod(metrics), _schedule_policy(schedule_policy) {}
     ~WorkGroupDriverQueue() override = default;
     void close() override;
 
@@ -221,6 +220,7 @@ private:
 
     // Cache the minimum entity, used to check should_yield() without lock.
     std::atomic<workgroup::WorkGroupDriverSchedEntity*> _min_wg_entity = nullptr;
+    const workgroup::WorkGroupSchedulePolicy& _schedule_policy;
 
     moodycamel::ConcurrentQueue<DriverRawPtr> _local_queue;
     std::atomic_int32_t _local_queue_cntl{};

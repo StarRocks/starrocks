@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "v3.4.0 以降、StarRocks は Python UDF の作成をサポートしています。"
 sidebar_position: 0.91
 ---
 
@@ -20,7 +21,7 @@ v3.4.0 以降、StarRocks は Python UDF の作成をサポートしています
 次の要件を満たしていることを確認してください。
 
 - [Python 3.8](https://www.python.org/downloads/release/python-380/) 以降をインストールします。
-- StarRocks で UDF を有効にするには、FE 設定ファイル **fe/conf/fe.conf** で `enable_udf` を `true` に設定し、FE ノードを再起動して設定を有効にします。詳細については、[FE configuration - enable_udf](../../administration/management/FE_configuration.md#enable_udf) を参照してください。
+- StarRocks で UDF を有効にするには、FE 設定ファイル **fe/conf/fe.conf** で `enable_udf` を `true` に設定し、FE ノードを再起動して設定を有効にします。詳細については、[FE configuration - enable_udf](../../administration/configuration/FE_parameters/FE_parameters.md#enable_udf) を参照してください。
 - Python UDFには以下のパッケージが必要です： pyarrow
 - 環境変数を使用して BE インスタンスで Python インタープリタ環境の場所を設定します。変数項目 `python_envs` を追加し、Python インタープリタのインストール場所に設定します。例: `/opt/Python-3.8/`。
 
@@ -150,10 +151,10 @@ symbol = "main.echo"
 | VARCHAR                              | STRING                  |
 | DATE                                 | DATETIME.DATE           |
 | DECIMAL                              | DECIMAL.DECIMAL         |
-| ARRAY                                | List                    |
-| MAP                                  | Dict                    |
-| STRUCT                               | COLLECTIONS.NAMEDTUPLE  |
-| JSON                                 | dict                    |
+| ARRAY                                | list                    |
+| MAP                                  | dict                    |
+| STRUCT                               | dict（フィールド名をキーとする） |
+| JSON                                 | str（`json.loads` でパース） |
 | **VECTORIZED**                       |                         |
 | TYPE_BOOLEAN                         | pyarrow.lib.BoolArray   |
 | TYPE_TINYINT                         | pyarrow.lib.Int8Array   |
@@ -167,6 +168,16 @@ symbol = "main.echo"
 | DATE                                 | pyarrow.Date32Array     |
 | TYPE_TIME                            | pyarrow.TimeArray       |
 | ARRAY                                | pyarrow.ListArray       |
+| MAP                                  | pyarrow.MapArray        |
+| STRUCT                               | pyarrow.StructArray     |
+
+ネスト型（`ARRAY`、`MAP`、`STRUCT`）は任意に組み合わせ可能です。例えば
+`array<map<string,int>>`、`map<string,array<int>>`、
+`struct<a array<int>, b map<string,int>>`、`array<struct<...>>` などです。
+`scalar` モードでは、各行は再帰的に Python の `list` / `dict` に変換されて渡
+されます。ネスト型を返すには、対応する Python の `list` / `dict` を返してくだ
+さい（`dict` のキーは struct のフィールド名）。`pyarrow` が再帰的な変換を自動
+で行います。
 
 ### Python のコンパイル
 

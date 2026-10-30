@@ -18,6 +18,8 @@
  */
 package org.apache.iceberg;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.avro.specific.SpecificData;
@@ -36,12 +38,36 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.5.0/core/src/main/java/org/apache/iceberg/PartitionData.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.11.0/core/src/main/java/org/apache/iceberg/PartitionData.java
+// KEEP THIS TAG IN SYNC WITH ${iceberg.version} IN fe/pom.xml -- this class shadows the one
+// in iceberg-core, so upstream behaviour changes must be re-applied here on every bump.
+// StarRocks additions on top of upstream: the Caffeine SCHEMA_CACHE/CachedSchema and the
+// PartitionData(PartitionData, Object[]) copy constructor.
 public class PartitionData
         implements IndexedRecord, StructLike, SpecificData.SchemaConstructable, Serializable {
 
+    // Avro schema is a pure function of the partition struct, so it is safe to share across
+    // instances. Bounded so an unfamiliar set of struct shapes cannot pin schemas forever; an
+    // evicted entry just rebuilds on next use.
+    private static final Cache<Types.StructType, CachedSchema> SCHEMA_CACHE =
+            Caffeine.newBuilder().maximumSize(1024).build();
+
+    private static CachedSchema cachedSchemaFor(Types.StructType partitionType) {
+        return SCHEMA_CACHE.get(partitionType, CachedSchema::new);
+    }
+
     static Schema partitionDataSchema(Types.StructType partitionType) {
-        return AvroSchemaUtil.convert(partitionType, PartitionData.class.getName());
+        return cachedSchemaFor(partitionType).schema;
+    }
+
+    private static final class CachedSchema {
+        private final Schema schema;
+        private final String stringSchema;
+
+        CachedSchema(Types.StructType partitionType) {
+            this.schema = AvroSchemaUtil.convert(partitionType, PartitionData.class.getName());
+            this.stringSchema = schema.toString();
+        }
     }
 
     private final Types.StructType partitionType;
@@ -70,8 +96,9 @@ public class PartitionData
         this.partitionType = partitionType;
         this.size = partitionType.fields().size();
         this.data = new Object[size];
-        this.schema = partitionDataSchema(partitionType);
-        this.stringSchema = schema.toString();
+        CachedSchema cached = cachedSchemaFor(partitionType);
+        this.schema = cached.schema;
+        this.stringSchema = cached.stringSchema;
     }
 
     /** Copy constructor */
@@ -145,7 +172,13 @@ public class PartitionData
         }
 
         if (data[pos] instanceof byte[]) {
-            return ByteBuffer.wrap((byte[]) data[pos]);
+            // Iceberg 1.11.0 added this defensive copy; 1.5.0 (which this file was vendored from),
+            // 1.9.0 and 1.10.0 all wrapped the live array. Without it the returned buffer aliases
+            // this PartitionData's internal array, so a caller mutating the buffer corrupts the
+            // partition value and vice versa. This class shadows the one in iceberg-core, so
+            // omitting the copy would silently give iceberg-core the pre-fix behaviour.
+            byte[] copied = Arrays.copyOf((byte[]) data[pos], ((byte[]) data[pos]).length);
+            return ByteBuffer.wrap(copied);
         }
 
         return data[pos];

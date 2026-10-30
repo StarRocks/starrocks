@@ -17,13 +17,14 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "column/global_dict/types_fwd_decl.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
-#include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
 
 namespace starrocks {
@@ -86,7 +87,7 @@ public:
     // [thread-safe]
     //
     // TODO: Change signature to `Future<Status> finish()`
-    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, cb); }
+    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, std::move(cb)); }
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
 
@@ -235,6 +236,12 @@ public:
         return *this;
     }
 
+    // See DeltaWriterBuilder::set_multi_node_write.
+    AsyncDeltaWriterBuilder& set_multi_node_write(bool multi_node_write) {
+        _multi_node_write = multi_node_write;
+        return *this;
+    }
+
     StatusOr<AsyncDeltaWriterPtr> build();
 
 private:
@@ -257,6 +264,7 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    bool _multi_node_write = false;
 };
 
 } // namespace starrocks::lake

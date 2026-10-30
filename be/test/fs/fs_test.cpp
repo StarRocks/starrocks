@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "fs/fs_factory.h"
 
 namespace starrocks {
 
@@ -27,49 +28,39 @@ TEST(FileSystemTest, test_good_construction) {
     };
 
     std::vector<Case> cases = {
-            {.uri = "viewfs://aaa", .type = FileSystem::HDFS}, {.uri = "hdfs://aaa", .type = FileSystem::HDFS},
-            {.uri = "s3a://aaa", .type = FileSystem::S3},      {.uri = "s3n://aaa", .type = FileSystem::S3},
-            {.uri = "s3://aaa", .type = FileSystem::S3},       {.uri = "oss://aaa", .type = FileSystem::S3},
+            {.uri = "s3a://aaa", .type = FileSystem::S3}, {.uri = "s3n://aaa", .type = FileSystem::S3},
+            {.uri = "s3://aaa", .type = FileSystem::S3},  {.uri = "oss://aaa", .type = FileSystem::S3},
             {.uri = "cos://aaa", .type = FileSystem::S3},
     };
 
     for (auto& c : cases) {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(c.uri));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateUniqueFromString(c.uri));
         ASSERT_EQ(fs->type(), c.type);
     }
 
     for (auto& c : cases) {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(c.uri));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(c.uri));
         ASSERT_EQ(fs->type(), c.type);
     }
 
     {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("unknown1://"));
-        ASSERT_EQ(fs->type(), FileSystem::HDFS);
-    }
-
-    {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("unknown1://"));
-        ASSERT_EQ(fs->type(), FileSystem::HDFS);
-    }
-
-    {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("unknown2://"));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateUniqueFromString("unknown2://"));
         ASSERT_EQ(fs->type(), FileSystem::S3);
     }
 
     {
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("unknown2://"));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("unknown2://"));
         ASSERT_EQ(fs->type(), FileSystem::S3);
     }
 
     {
         std::unordered_map<std::string, std::string> params = {{"fs.s3a.readahead.range", "100"}};
         std::unique_ptr<FSOptions> fs_options = std::make_unique<FSOptions>(params);
-        ASSIGN_OR_ABORT(auto fs, FileSystem::Create("unknown2://", *fs_options));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::Create("unknown2://", *fs_options));
         ASSERT_EQ(fs->type(), FileSystem::S3);
     }
 
+#ifndef __APPLE__
     {
         std::string uri = "wasbs://container_name@account_name.blob.core.windows.net/blob_name";
 
@@ -83,9 +74,10 @@ TEST(FileSystemTest, test_good_construction) {
         scan_range_params.__set_hdfs_properties(hdfs_properties);
         FSOptions options(&scan_range_params);
 
-        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri, options));
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateUniqueFromString(uri, options));
         ASSERT_EQ(fs->type(), FileSystem::AZBLOB);
     }
+#endif
 }
 
 } // namespace starrocks

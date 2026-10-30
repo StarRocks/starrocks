@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Aggregate function that combines multiple HLL values into a single HLL for approximate COUNT(DISTINCT)."
 ---
 
 # hll_raw_agg

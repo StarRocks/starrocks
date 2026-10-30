@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/core/io_error.h"
+#include "io/io_error.h"
 
 #include <gtest/gtest.h>
 

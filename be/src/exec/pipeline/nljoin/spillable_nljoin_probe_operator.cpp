@@ -19,11 +19,12 @@
 #include <memory>
 
 #include "common/statusor.h"
-#include "exec/spill/common.h"
-#include "exec/spill/options.h"
-#include "exec/spill/spiller_factory.h"
+#include "compute_env/spill/common.h"
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/spiller_factory.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/runtime_compat/runtime_state_helper.h"
 #include "exprs/expr_executor.h"
-#include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {
 
@@ -132,7 +133,7 @@ Status SpillableNLJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_prober.prepare(state, _unique_metrics.get()));
     _spill_factory = std::make_shared<spill::SpillerFactory>();
     spill::SpilledOptions opts;
-    opts.wg = state->fragment_ctx()->workgroup();
+    opts.wg = state->fragment_runtime_state()->workgroup();
     _spiller = _spill_factory->create(opts);
     _spiller->set_metrics(
             spill::SpillProcessMetrics(_unique_metrics.get(), RuntimeStateHelper::mutable_total_spill_bytes(state)));
@@ -232,18 +233,14 @@ void SpillableNLJoinProbeOperator::_init_chunk_stream() const {
     }
 }
 
-void SpillableNLJoinProbeOperatorFactory::_init_row_desc() {
-    for (auto& tuple_desc : _left_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _probe_column_count++;
-        }
+void SpillableNLJoinProbeOperatorFactory::_init_col_types() {
+    for (auto* slot : _left_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _probe_column_count++;
     }
-    for (auto& tuple_desc : _right_row_desc.tuple_descriptors()) {
-        for (auto& slot : tuple_desc->slots()) {
-            _col_types.emplace_back(slot);
-            _build_column_count++;
-        }
+    for (auto* slot : _right_record_desc.slots()) {
+        _col_types.emplace_back(slot);
+        _build_column_count++;
     }
 }
 
@@ -258,7 +255,7 @@ Status SpillableNLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
 
     _cross_join_context->ref();
 
-    _init_row_desc();
+    _init_col_types();
     RETURN_IF_ERROR(ExprExecutor::prepare(_join_conjuncts, state));
     RETURN_IF_ERROR(ExprExecutor::open(_join_conjuncts, state));
     RETURN_IF_ERROR(ExprExecutor::prepare(_conjunct_ctxs, state));

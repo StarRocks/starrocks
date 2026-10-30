@@ -35,26 +35,14 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.proc.CurrentQueryInfoProvider;
+import com.starrocks.common.util.QueryProgressUtils;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.thrift.TQueryStatisticsInfo;
-import org.apache.http.HttpStatus;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -62,8 +50,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class QueryStatisticsInfo {
-    private static final Logger LOG = LogManager.getLogger(QueryStatisticsInfo.class);
-
     private long queryStartTime;
     private String feIp;
     private String queryId;
@@ -81,6 +67,7 @@ public class QueryStatisticsInfo {
     private String wareHouseName;
     private String customQueryId;
     private String resourceGroupName;
+    private String queryType = "";
 
     public QueryStatisticsInfo() {
     }
@@ -176,6 +163,10 @@ public class QueryStatisticsInfo {
         return customQueryId;
     }
 
+    public String getQueryType() {
+        return queryType;
+    }
+
     public QueryStatisticsInfo withQueryStartTime(long queryStartTime) {
         this.queryStartTime = queryStartTime;
         return this;
@@ -261,6 +252,11 @@ public class QueryStatisticsInfo {
         return this;
     }
 
+    public QueryStatisticsInfo withQueryType(String queryType) {
+        this.queryType = queryType;
+        return this;
+    }
+
     public TQueryStatisticsInfo toThrift() {
         return new TQueryStatisticsInfo()
                 .setQueryStartTime(queryStartTime)
@@ -279,7 +275,8 @@ public class QueryStatisticsInfo {
                 .setExecState(execState)
                 .setWareHouseName(wareHouseName)
                 .setCustomQueryId(customQueryId)
-                .setResourceGroupName(resourceGroupName);
+                .setResourceGroupName(resourceGroupName)
+                .setQueryType(queryType);
     }
 
     public static QueryStatisticsInfo fromThrift(TQueryStatisticsInfo tinfo) {
@@ -300,7 +297,9 @@ public class QueryStatisticsInfo {
                 .withExecState(tinfo.getExecState())
                 .withWareHouseName(tinfo.getWareHouseName())
                 .withCustomQueryId(tinfo.getCustomQueryId())
-                .withResourceGroupName(tinfo.getResourceGroupName());
+                .withResourceGroupName(tinfo.getResourceGroupName())
+                // queryType may be absent when the info comes from an older FE during a rolling upgrade.
+                .withQueryType(tinfo.isSetQueryType() ? tinfo.getQueryType() : "");
     }
 
     public List<String> formatToList() {
@@ -322,6 +321,7 @@ public class QueryStatisticsInfo {
         values.add(this.getWareHouseName());
         values.add(this.getCustomQueryId());
         values.add(this.getResourceGroupName());
+        values.add(this.getQueryType());
         return values;
     }
 
@@ -341,13 +341,14 @@ public class QueryStatisticsInfo {
                 spillBytes == that.spillBytes && execTime == that.execTime && execProgress == that.execProgress &&
                 execState == that.execState && Objects.equals(wareHouseName, that.wareHouseName) &&
                 Objects.equals(customQueryId, that.customQueryId) &&
-                Objects.equals(resourceGroupName, that.resourceGroupName);
+                Objects.equals(resourceGroupName, that.resourceGroupName) &&
+                Objects.equals(queryType, that.queryType);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(queryStartTime, feIp, queryId, connId, db, user, cpuCostNs, scanBytes, scanRows, memUsageBytes,
-                spillBytes, execTime, execProgress, execState, wareHouseName, customQueryId, resourceGroupName);
+                spillBytes, execTime, execProgress, execState, wareHouseName, customQueryId, resourceGroupName, queryType);
     }
 
     @Override
@@ -360,7 +361,8 @@ public class QueryStatisticsInfo {
                 ", db=" + db +
                 ", user=" + user +
                 ", cpuCostNs=" + cpuCostNs +
-                ", scanRows=" + scanBytes +
+                ", scanBytes=" + scanBytes +
+                ", scanRows=" + scanRows +
                 ", memUsageBytes=" + memUsageBytes +
                 ", spillBytes=" + spillBytes +
                 ", execTime=" + execTime +
@@ -369,6 +371,7 @@ public class QueryStatisticsInfo {
                 ", wareHouseName=" + wareHouseName +
                 ", customQueryId=" + customQueryId +
                 ", resourceGroupName=" + resourceGroupName +
+                ", queryType=" + queryType +
                 '}';
     }
 
@@ -384,7 +387,6 @@ public class QueryStatisticsInfo {
                 statistic.values().stream()
                         .sorted(Comparator.comparingLong(QueryStatisticsItem::getQueryStartTime))
                         .collect(Collectors.toList());
-        final HttpClient httpClient = HttpClient.newHttpClient();
         for (QueryStatisticsItem item : sorted) {
             final CurrentQueryInfoProvider.QueryStatistics statistics = statisticsMap.get(item.getQueryId());
 
@@ -396,12 +398,12 @@ public class QueryStatisticsInfo {
                     .withDb(item.getDb())
                     .withUser(item.getUser())
                     .withExecTime(item.getQueryExecTime())
-                    .withExecProgress(getExecProgress(FrontendOptions.getLocalHostAddress(), 
-                                                      item.getQueryId(), httpClient))
+                    .withExecProgress(getExecProgress(item.getQueryId()))
                     .withExecState(item.getExecState())
                     .withWareHouseName(item.getWarehouseName())
                     .withCustomQueryId(item.getCustomQueryId())
-                    .withResourceGroupName(item.getResourceGroupName());
+                    .withResourceGroupName(item.getResourceGroupName())
+                    .withQueryType(item.getQueryType());
             if (statistics != null) {
                 info.withScanBytes(statistics.getScanBytes())
                         .withScanRows(statistics.getScanRows())
@@ -415,34 +417,7 @@ public class QueryStatisticsInfo {
         return sortedRowData;
     }
 
-    public static String getExecProgress(String feIp, String queryId, HttpClient httpClient) {
-        String result = "";
-        try {
-            String url = String.format("http://%s:%s/api/query/progress?query_id=%s",
-                    feIp, Config.http_port, queryId);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .GET()
-                    .build();
-
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() == HttpStatus.SC_OK) {
-                try {
-                    JsonElement jsonElement = JsonParser.parseString(response.body());
-                    JsonObject jsonObject = jsonElement.getAsJsonObject();
-                    JsonObject progressInfo = jsonObject.getAsJsonObject("progress_info");
-                    result = progressInfo.get("progress_percent").getAsString();
-                } catch (JsonSyntaxException e) {
-                    LOG.warn("failed to get query progress, query_id: {}, msg: {}", queryId, response.body());
-                }
-            } else {
-                LOG.warn("failed to get query progress, query_id: {}, status code: {}, msg: {}",
-                        queryId, response.statusCode(), response.body());
-            }
-        } catch (IOException | InterruptedException e) {
-            LOG.warn("failed to get query progress, query_id: {}, msg: {}", queryId, e);
-        } finally {
-            return result;
-        }
+    public static String getExecProgress(String queryId) {
+        return QueryProgressUtils.getProgressPercent(queryId);
     }
 }

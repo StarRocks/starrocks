@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "stream_loads 提供 Stream Load 作业的信息。"
 ---
 
 # stream_loads

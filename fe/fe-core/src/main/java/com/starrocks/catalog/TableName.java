@@ -66,7 +66,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     private String db;
     @SerializedName(value = "fullDb")
     private String fullDb;
-
     private final NodePosition pos;
 
     public TableName() {
@@ -232,7 +231,9 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     @Override
     public void gsonPreProcess() throws IOException {
-        fullDb = ClusterNamespace.getFullName(db);
+        // The JSON key keeps its historical name; the value is the plain database name. gsonPostProcess still strips
+        // the default_cluster prefix that older versions wrote.
+        fullDb = db;
     }
 
     @Override

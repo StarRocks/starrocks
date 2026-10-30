@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_tablets 提供每个 BE 节点上 Tablet 的信息。"
 ---
 
 # be_tablets

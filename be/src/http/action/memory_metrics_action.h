@@ -38,22 +38,32 @@
 
 #include <string>
 
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 
 class ExecEnv;
+class RuntimeEnv;
 class HttpRequest;
 
 class MemoryMetricsAction : public HttpHandler {
 public:
-    explicit MemoryMetricsAction() = default;
+    explicit MemoryMetricsAction(const RuntimeEnv& runtime_env) : _runtime_env(runtime_env) {}
 
     ~MemoryMetricsAction() override = default;
 
     void handle(HttpRequest* req) override;
 
+    // AuthN-only: require Basic identity when `config::enable_http_auth` is on (the
+    // injected verifier short-circuits when it is off). No extra privilege required —
+    // `required_privilege()` stays NONE. Defined out-of-line in the .cpp so BE
+    // incremental-coverage attributes the line to a be/src translation unit; a
+    // header-inline override is inlined into callers and not counted.
+    bool need_auth() const override;
+
 private:
+    const RuntimeEnv& _runtime_env;
+
     void getMemoryMetricTree(MemTracker* memTracker, std::stringstream& result, int64_t total_size);
 };
 

@@ -1,0 +1,173 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "platform/http/http_request.h"
+
+#include <event2/buffer.h>
+#include <event2/http.h>
+#include <event2/http_struct.h>
+#include <event2/keyvalq_struct.h>
+
+#include <algorithm>
+#include <boost/algorithm/string.hpp>
+#include <sstream>
+#include <string>
+
+#include "base/auth/credential_mask.h"
+#include "common/logging.h"
+#include "platform/http/http_handler.h"
+#include "platform/http/http_headers.h"
+
+namespace starrocks {
+
+static std::string s_empty;
+
+HttpRequest::HttpRequest(evhttp_request* evhttp_request) : _ev_req(evhttp_request) {}
+
+HttpRequest::~HttpRequest() {
+    if (_handler_ctx != nullptr) {
+        DCHECK(_handler != nullptr);
+        _handler->free_handler_ctx(_handler_ctx);
+    }
+}
+
+int HttpRequest::init_from_evhttp() {
+    _method = to_http_method(evhttp_request_get_command(_ev_req));
+    if (_method == HttpMethod::UNKNOWN) {
+        LOG(WARNING) << "unknown method of HTTP request, method=" << evhttp_request_get_command(_ev_req);
+        return -1;
+    }
+    _uri = evhttp_request_get_uri(_ev_req);
+    // conver header
+    auto headers = evhttp_request_get_input_headers(_ev_req);
+    for (auto header = headers->tqh_first; header != nullptr; header = header->next.tqe_next) {
+        _headers.emplace(header->key, header->value);
+    }
+    // parse
+    auto ev_uri = evhttp_request_get_evhttp_uri(_ev_req);
+    _raw_path = evhttp_uri_get_path(ev_uri);
+    auto query = evhttp_uri_get_query(ev_uri);
+    if (query == nullptr || *query == '\0') {
+        return 0;
+    }
+    struct evkeyvalq params;
+    auto res = evhttp_parse_query_str(query, &params);
+    if (res < 0) {
+        LOG(WARNING) << "parse query str failed, query=" << query;
+        return res;
+    }
+    for (auto param = params.tqh_first; param != nullptr; param = param->next.tqe_next) {
+        _query_params.emplace(param->key, param->value);
+    }
+    _params.insert(_query_params.begin(), _query_params.end());
+    evhttp_clear_headers(&params);
+    return 0;
+}
+
+// Headers that carry a credential: Basic Auth is base64 of "user:password", and a browser sends the
+// session cookie of another service on the same host (such as the FE web UI) along to the BE port.
+static bool is_credential_header(const std::string& key) {
+    return boost::iequals(key, HttpHeaders::AUTHORIZATION) || boost::iequals(key, HttpHeaders::PROXY_AUTHORIZATION) ||
+           boost::iequals(key, HttpHeaders::COOKIE);
+}
+
+std::string HttpRequest::debug_string() const {
+    return debug_string(nullptr);
+}
+
+std::string HttpRequest::debug_string(const std::function<bool(std::string_view)>& is_sensitive_param) const {
+    auto is_sensitive = [&](const std::string& key) { return is_sensitive_param && is_sensitive_param(key); };
+    // The uri carries the query string verbatim. If it holds a sensitive param, print it rebuilt from the
+    // parsed query params instead, with that value masked.
+    std::string uri = _uri;
+    if (std::any_of(_query_params.begin(), _query_params.end(),
+                    [&](const auto& kv) { return is_sensitive(kv.first); })) {
+        uri = _raw_path + "?";
+        bool first = true;
+        for (const auto& [key, value] : _query_params) {
+            uri += (first ? "" : "&") + key + "=" + (is_sensitive(key) ? std::string(kCredentialMask) : value);
+            first = false;
+        }
+    }
+
+    std::stringstream ss;
+    ss << "HttpRequest: \n"
+       << "method:" << _method << "\n"
+       << "uri:" << uri << "\n"
+       << "raw_path:" << _raw_path << "\n"
+       << "headers: \n";
+    for (auto& iter : _headers) {
+        if (is_credential_header(iter.first)) {
+            ss << "key=" << iter.first << ", value=" << kCredentialMask << "\n";
+        } else {
+            ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        }
+    }
+    ss << "params: \n";
+    for (auto& iter : _params) {
+        if (is_sensitive(iter.first)) {
+            ss << "key=" << iter.first << ", value=" << kCredentialMask << "\n";
+        } else {
+            ss << "key=" << iter.first << ", value=" << iter.second << "\n";
+        }
+    }
+
+    return ss.str();
+}
+
+const std::string& HttpRequest::header(const std::string& key) const {
+    auto iter = _headers.find(key);
+    if (iter == _headers.end()) {
+        return s_empty;
+    }
+    return iter->second;
+}
+
+const std::string& HttpRequest::param(const std::string& key) const {
+    auto iter = _params.find(key);
+    if (iter == _params.end()) {
+        return s_empty;
+    }
+    return iter->second;
+}
+
+void HttpRequest::add_output_header(const char* key, const char* value) {
+    // #ifndef BE_TEST
+    evhttp_add_header(evhttp_request_get_output_headers(_ev_req), key, value);
+    // #endif
+}
+
+std::string HttpRequest::get_request_body() {
+    if (!_request_body.empty()) {
+        return _request_body;
+    }
+    // read buf
+    auto evbuf = evhttp_request_get_input_buffer(_ev_req);
+    if (evbuf == nullptr) {
+        return _request_body;
+    }
+    auto length = evbuffer_get_length(evbuf);
+    _request_body.resize(length);
+    evbuffer_remove(evbuf, (char*)_request_body.data(), length);
+    return _request_body;
+}
+
+const char* HttpRequest::remote_host() const {
+    return _ev_req->remote_host;
+}
+
+} // namespace starrocks

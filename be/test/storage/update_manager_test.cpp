@@ -20,12 +20,17 @@
 
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
+#include "column/chunk_factory.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/storage_define.h"
 #include "fs/fs_util.h"
+#include "gutil/walltime.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
-#include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
@@ -66,12 +71,12 @@ public:
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-        auto chunk = ChunkHelper::new_chunk(schema, keys.size());
-        auto cols = chunk->mutable_columns();
-        for (long key : keys) {
-            cols[0]->append_datum(Datum(key));
-            cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
-            cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));
+        auto chunk = ChunkFactory::new_chunk(schema, keys.size());
+        auto cols = chunk->columns();
+        for (int64_t key : keys) {
+            cols[0]->as_mutable_ptr()->append_datum(Datum(key));
+            cols[1]->as_mutable_ptr()->append_datum(Datum((int16_t)(key % 100 + 1)));
+            cols[2]->as_mutable_ptr()->append_datum(Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -271,6 +276,30 @@ TEST_F(UpdateManagerTest, testEraseDCGCacheByTablet) {
 
     _update_manager->clear_cached_delta_column_group_by_tablet_id(_tablet->tablet_id());
     ASSERT_EQ(0, _root_mem_tracker->consumption());
+}
+
+TEST_F(UpdateManagerTest, test_refresh_mem_limits) {
+    const int64_t process_mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    SCOPED_UPDATE(int32_t, config::update_memory_limit_percent, 60);
+    MemTracker update_tracker(1000, "update");
+    UpdateManager manager(&update_tracker);
+    ASSERT_EQ(process_mem_limit * 60 / 100, manager.index_cache().capacity());
+
+    config::update_memory_limit_percent = 30;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(process_mem_limit * 30 / 100, manager.index_cache().capacity());
+
+    // out-of-range values are clamped to [0, 100]
+    config::update_memory_limit_percent = 200;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(process_mem_limit, manager.index_cache().capacity());
+    config::update_memory_limit_percent = -1;
+    manager.refresh_mem_limits();
+    ASSERT_EQ(0, manager.index_cache().capacity());
+
+    // the shared-nothing update state tracker has no limit
+    ASSERT_EQ(-1, manager.update_state_mem_tracker()->limit());
 }
 
 } // namespace starrocks

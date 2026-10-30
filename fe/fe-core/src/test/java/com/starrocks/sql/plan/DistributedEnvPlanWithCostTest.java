@@ -14,19 +14,34 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SystemVariable;
+import com.starrocks.sql.ast.expression.FloatLiteral;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TKeyRange;
+import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -82,7 +97,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 " WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
                 "THEN l_shipdate ELSE NULL END, 3))), 2) ELSE NULL END) from lineitem";
         String plan = getCostExplain(sql);
-        assertContains(plan, "CONCAT-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
+        assertContains(plan, "CONCAT-->[-Infinity, Infinity, 0.7037037037037036, 3.0, 411.8] ESTIMATE");
     }
 
     @Test
@@ -296,7 +311,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "        and ps_suppkey = l_suppkey\n" +
                 "        and ps_partkey = l_partkey        \n" +
                 "        and p_name like '%peru%';";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
     }
 
     @Test
@@ -357,13 +372,117 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
-    public void testBroadcastHintExceedMaxExecMemByte() throws Exception {
-        long maxMemExec = connectContext.getSessionVariable().getMaxExecMemByte();
-        connectContext.getSessionVariable().setMaxExecMemByte(200);
-        String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "join op: INNER JOIN (BROADCAST)");
-        connectContext.getSessionVariable().setMaxExecMemByte(maxMemExec);
+    public void testBroadcastHintExceedThreshold() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(0);
+            String sql = "select l_orderkey from lineitem join[broadcast] orders where l_orderkey = o_orderkey";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+        }
+    }
+
+    @Test
+    public void testBroadcastThresholdIndependentOfExecMemLimit() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        long execMemLimit = connectContext.getSessionVariable().getMaxExecMemByte();
+        // Nation has only 25 rows and remains cheaper to broadcast even with the penalty.
+        String sql = "select l_orderkey from lineitem join part on l_partkey = p_partkey";
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(2147483648L);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "join op: INNER JOIN (BROADCAST)");
+            connectContext.getSessionVariable().setMaxExecMemByte(1);
+            Assertions.assertEquals(plan, getFragmentPlan(sql));
+            connectContext.getSessionVariable().setBroadcastMemThreshold(0);
+            assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+            connectContext.getSessionVariable().setMaxExecMemByte(execMemLimit);
+        }
+    }
+
+    @Test
+    public void testBroadcastCostMultiplierSelectionAndHint() throws Exception {
+        long threshold = connectContext.getSessionVariable().getBroadcastMemThreshold();
+        double multiplier = connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor();
+        // The build side needs enough rows for the penalty to change the chosen distribution.
+        String sql = "select l_orderkey from lineitem join part on l_partkey = p_partkey";
+        try {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(1);
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1000.0);
+            assertNotContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1.0);
+            assertContains(getFragmentPlan(sql), "join op: INNER JOIN (BROADCAST)");
+
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(1000.0);
+            String hintSql = "select /*+ SET_VAR(broadcast_mem_exceeded_penalty_factor=1.0) */ " +
+                    "l_orderkey from lineitem join part on l_partkey = p_partkey";
+            assertContains(getFragmentPlan(hintSql), "join op: INNER JOIN (BROADCAST)");
+            Assertions.assertEquals(1000.0,
+                    connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor());
+        } finally {
+            connectContext.getSessionVariable().setBroadcastMemThreshold(threshold);
+            connectContext.getSessionVariable().setBroadcastMemExceededPenaltyFactor(multiplier);
+        }
+    }
+
+    @Test
+    public void testBroadcastOnlyCrossJoinAtMaximumPenaltyFactor() throws Exception {
+        assertBroadcastOnlyJoinAtMaximumPenaltyFactor(
+                "select l_orderkey, o_orderkey from lineitem cross join orders", "CROSS JOIN");
+    }
+
+    @Test
+    public void testBroadcastOnlyNonEquiJoinAtMaximumPenaltyFactor() throws Exception {
+        assertBroadcastOnlyJoinAtMaximumPenaltyFactor(
+                "select l_orderkey, o_orderkey from lineitem join orders on l_orderkey < o_orderkey", "INNER JOIN");
+    }
+
+    @Test
+    public void testBroadcastOnlyJoinChainAtMaximumPenaltyFactor() throws Exception {
+        String plan = assertBroadcastOnlyJoinAtMaximumPenaltyFactor(
+                "select l_orderkey, o_orderkey, p_partkey from lineitem cross join orders cross join part", "CROSS JOIN");
+        Assertions.assertEquals(2, plan.split("NESTLOOP JOIN", -1).length - 1);
+    }
+
+    private String assertBroadcastOnlyJoinAtMaximumPenaltyFactor(String sql, String joinType) throws Exception {
+        SessionVariable session = connectContext.getSessionVariable();
+        double maxMultiplier = SessionVariable.MAX_BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR;
+        long threshold = session.getBroadcastMemThreshold();
+        double multiplier = session.getBroadcastMemExceededPenaltyFactor();
+        try {
+            session.setBroadcastMemThreshold(4096);
+            // Establish that the same broadcast-only query plans with the default multiplier.
+            session.setBroadcastMemExceededPenaltyFactor(1000.0);
+            String baseline = getFragmentPlan(sql);
+            assertContains(baseline, "NESTLOOP JOIN", "join op: " + joinType);
+
+            SystemVariable variable = new SystemVariable(SetType.SESSION,
+                    SessionVariable.BROADCAST_MEM_EXCEEDED_PENALTY_FACTOR, new FloatLiteral(maxMultiplier));
+            SetStmtAnalyzer.analyze(new SetStmt(List.of(variable)), connectContext);
+            new VariableMgr().setSystemVariable(session, variable, false);
+            Assertions.assertEquals(maxMultiplier, session.getBroadcastMemExceededPenaltyFactor());
+
+            // No join hint: cross joins and inner non-equi joins require broadcast naturally.
+            String plan = Assertions.assertDoesNotThrow(() -> getFragmentPlan(sql),
+                    "An accepted penalty factor must not eliminate the only executable join plan");
+            assertContains(plan, "NESTLOOP JOIN", "join op: " + joinType);
+
+            session.setBroadcastMemExceededPenaltyFactor(1000.0);
+            String hintSql = "select /*+ SET_VAR(broadcast_mem_exceeded_penalty_factor=" + maxMultiplier + ") */ " +
+                    sql.substring("select ".length());
+            String hintPlan = Assertions.assertDoesNotThrow(() -> getFragmentPlan(hintSql),
+                    "SET_VAR must also preserve an executable broadcast-only join plan");
+            assertContains(hintPlan, "NESTLOOP JOIN", "join op: " + joinType);
+            Assertions.assertEquals(1000.0, connectContext.getSessionVariable().getBroadcastMemExceededPenaltyFactor());
+            return plan;
+        } finally {
+            session.setBroadcastMemThreshold(threshold);
+            session.setBroadcastMemExceededPenaltyFactor(multiplier);
+        }
     }
 
     @Test
@@ -508,16 +627,16 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testSetVar() throws Exception {
         String sql = "explain select c2 from db1.tbl3;";
-        String plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=false) */c2 from db1.tbl3";
-        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select c2 from db1.tbl3";
-        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
 
         sql = "explain select /*+ SET_VAR(enable_vectorized_engine=true, enable_cbo=true) */ c2 from db1.tbl3";
-        plan = UtFrameUtils.getFragmentPlan(connectContext, sql);
+        UtFrameUtils.getFragmentPlan(connectContext, sql);
     }
 
     @Test
@@ -771,7 +890,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  equal join conjunct: [1: PS_PARTKEY, INT, true] = [7: P_PARTKEY, INT, true]\n"
                 + "  |  other predicates: [1: PS_PARTKEY, INT, true] IS NULL\n"
                 + "  |  output columns: 1, 2\n"
-                + "  |  cardinality: 4000000");
+                + "  |  cardinality: 8000000");
     }
 
     @Test
@@ -812,11 +931,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         // check cardinality is not 0
         String sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) = 6";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "cardinality=11111111");
+        assertContains(plan, "cardinality=11320755");
 
         sql = "SELECT sum(L_DISCOUNT * L_TAX) AS revenue FROM lineitem WHERE weekofyear(L_RECEIPTDATE) in (6)";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "cardinality=11111111");
+        assertContains(plan, "cardinality=11320755");
     }
 
     @Test
@@ -899,8 +1018,8 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select (case when `O_ORDERKEY` = 0 then 'ALGERIA' when `O_ORDERKEY` = 1 then 'ARGENTINA' end) a " +
                 "from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "cardinality: 2");
-        assertContains(plan, "* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0]");
+        assertContains(plan, "cardinality: 3");
+        assertContains(plan, "* case-->[-Infinity, Infinity, 0.3333333333333333, 16.0, 2.0]");
 
         sql = "select (case when `O_ORDERKEY` = 0 then O_ORDERSTATUS when `O_ORDERKEY` = 1 then 'ARGENTINA' " +
                 "else 'other' end) a from orders group by 1";
@@ -912,21 +1031,21 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testIFFunctionCardinalityEstimate() throws Exception {
         String sql = "select (case when `O_ORDERKEY` = 0 then 'ALGERIA' else 'others' end) a from orders group by 1";
         String plan = getCostExplain(sql);
-        assertContains(plan, "* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE");
+        assertContains(plan, "* case-->[-Infinity, Infinity, 0.0, 16.0, 2.0] MCV: [[others:149999999][ALGERIA:1]] ESTIMATE");
 
         sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', 'others') a from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE");
+        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 2.0] MCV: [[others:149999999][ALGERIA:1]] ESTIMATE");
 
         sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', " +
                 "if (`O_ORDERKEY` = 1, 'ARGENTINA', 'others')) a from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE");
+        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 3.0]");
 
         sql = "select if(`O_ORDERKEY` = 0, 'ALGERIA', if (`O_ORDERKEY` = 1, 'ARGENTINA', " +
                 "if(`O_ORDERKEY` = 2, 'BRAZIL', 'Others'))) a from orders group by 1";
         plan = getCostExplain(sql);
-        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0] ESTIMATE");
+        assertContains(plan, "* if-->[-Infinity, Infinity, 0.0, 16.0, 4.0]");
     }
 
     @Test
@@ -1479,6 +1598,91 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testOneTabletOptGatedByTabletRowCount() throws Exception {
+        // dates_n has a single tablet. "group by d_date" (d_date is not the distribution column, d_datekey is)
+        // only collapses into a one-phase aggregation because of the one-tablet optimization. The
+        // one_tablet_opt_max_tablet_rows gate must turn that optimization off when the single tablet is
+        // oversized, forcing a normal two-phase (shuffled) aggregation.
+        OlapTable datesN = (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("dates_n");
+        LocalTablet tablet = (LocalTablet) datesN.getPartitions().iterator().next()
+                .getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
+        Replica replica = tablet.getImmutableReplicas().get(0);
+
+        long originalVersion = replica.getVersion();
+        long originalDataSize = replica.getDataSize();
+        long originalRowCount = replica.getRowCount();
+        long originalMaxTabletRows = connectContext.getSessionVariable().getOneTabletOptMaxTabletRows();
+
+        long bigRowCount = 20_000_000L;
+        String sql = "select count(d_datekey), d_date from dates_n group by d_date";
+        try {
+            // Make getFuzzyRowCount() (max replica row count on a LocalTablet) report an oversized tablet.
+            replica.updateRowCount(originalVersion, originalDataSize, bigRowCount);
+
+            // Gate disabled (-1): the one-tablet optimization stays on -> one-phase aggregation.
+            connectContext.getSessionVariable().setOneTabletOptMaxTabletRows(-1);
+            String plan = getVerboseExplain(sql);
+            assertNotContains(plan, "LocalShuffleColumns");
+            assertContains(plan, "  1:AGGREGATE (update finalize)");
+            assertContains(plan, "  0:OlapScanNode");
+
+            // Threshold below the tablet row count: the gate disables the one-tablet optimization, so the plan
+            // falls back to a two-phase shuffled aggregation with an EXCHANGE.
+            connectContext.getSessionVariable().setOneTabletOptMaxTabletRows(100);
+            plan = getVerboseExplain(sql);
+            assertNotContains(plan, "  1:AGGREGATE (update finalize)");
+            assertContains(plan, "AGGREGATE (update serialize)");
+            assertContains(plan, "AGGREGATE (merge finalize)");
+            assertContains(plan, "EXCHANGE");
+        } finally {
+            connectContext.getSessionVariable().setOneTabletOptMaxTabletRows(originalMaxTabletRows);
+            replica.updateRowCount(originalVersion, originalDataSize, originalRowCount);
+        }
+    }
+
+    @Test
+    public void testIsSelectedSingleTabletTooLarge() throws Exception {
+        // Directly exercise the gate helper against dates_n's real single tablet.
+        OlapTable datesN = (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore()
+                .getDb("test").getTable("dates_n");
+        Partition partition = datesN.getPartitions().iterator().next();
+        LocalTablet tablet = (LocalTablet) partition.getDefaultPhysicalPartition()
+                .getLatestBaseIndex().getTablets().get(0);
+        Replica replica = tablet.getImmutableReplicas().get(0);
+
+        long indexMetaId = datesN.getBaseIndexMetaId();
+        List<Long> partitionIds = Lists.newArrayList(partition.getId());
+        List<Long> oneTablet = Lists.newArrayList(tablet.getId());
+        List<Long> twoTablets = Lists.newArrayList(tablet.getId(), tablet.getId() + 1);
+
+        long originalVersion = replica.getVersion();
+        long originalDataSize = replica.getDataSize();
+        long originalRowCount = replica.getRowCount();
+        try {
+            replica.updateRowCount(originalVersion, originalDataSize, 5000L);
+
+            // rows (5000) strictly greater than the threshold -> too large.
+            Assertions.assertTrue(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, 4999L));
+            // rows equal to the threshold -> not too large (strict greater-than).
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, 5000L));
+            // rows below the threshold -> not too large.
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, 5001L));
+            // maxTabletRows < 0 disables the gate.
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, oneTablet, -1L));
+            // more than one selected tablet -> gate does not apply.
+            Assertions.assertFalse(Utils.isSelectedSingleTabletTooLarge(
+                    datesN, indexMetaId, partitionIds, twoTablets, 4999L));
+        } finally {
+            replica.updateRowCount(originalVersion, originalDataSize, originalRowCount);
+        }
+    }
+
+    @Test
     public void testValidateJoinReorderPlan() throws Exception {
         String sql = "select  \n" +
                 "  ref_0.N_NAME as c0, \n" +
@@ -1704,5 +1908,18 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n"
                 + "  |  \n"
                 + "  2:ANALYTIC");
+    }
+
+    @Test
+    public void testPartitionRangeGen() throws Exception {
+        String sql = "select * from lineitem_partition where L_SHIPDATE = cast(abs('19950101') as date);";
+        ExecPlan p = getExecPlan(sql);
+        OlapScanNode scanNodes = (OlapScanNode) p.getScanNodes().get(0);
+        List<TScanRangeLocations> locations = scanNodes.getScanRangeLocations(0);
+        List<TKeyRange> keyRange = locations.get(0).getScan_range().getInternal_scan_range().getPartition_column_ranges();
+        Assertions.assertEquals(1, keyRange.size());
+        Assertions.assertEquals(19920101, keyRange.get(0).begin_key);
+        Assertions.assertEquals(19930101, keyRange.get(0).end_key);
+        Assertions.assertEquals(1, scanNodes.getPartitionConjuncts().size());
     }
 }

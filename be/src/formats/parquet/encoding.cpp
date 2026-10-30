@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "common/config_scan_io_fwd.h"
 #include "formats/parquet/encoding_bss.h"
 #include "formats/parquet/encoding_delta.h"
 #include "formats/parquet/encoding_dict.h"
@@ -28,6 +29,58 @@
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::parquet {
+
+CacheAwareDictDecoder::CacheAwareDictDecoder() {
+    _dict_size_threshold = CpuInfo::get_l2_cache_size();
+}
+
+Status CacheAwareDictDecoder::next_batch(size_t count, ColumnContentType content_type, Column* dst,
+                                         const FilterData* filter) {
+    switch (content_type) {
+    case DICT_CODE: {
+        FixedLengthColumn<int32_t>* data_column;
+        if (dst->is_nullable()) {
+            auto nullable_column = down_cast<NullableColumn*>(dst);
+            nullable_column->null_column_raw_ptr()->append_default(count);
+            data_column = down_cast<FixedLengthColumn<int32_t>*>(nullable_column->data_column_raw_ptr());
+        } else {
+            data_column = down_cast<FixedLengthColumn<int32_t>*>(dst);
+        }
+        size_t cur_size = data_column->size();
+        data_column->resize_uninitialized(cur_size + count);
+        int32_t* __restrict__ data = data_column->get_data().data() + cur_size;
+        auto decoded_num = _rle_batch_reader.GetBatch(reinterpret_cast<uint32_t*>(data), count);
+        if (decoded_num < count) {
+            return Status::InternalError("didn't get enough data from dict-decoder");
+        }
+        break;
+    }
+    case VALUE: {
+#ifdef BE_TEST
+        return _next_batch_value(count, dst, filter);
+#else
+        if (_get_dict_size() > _dict_size_threshold && config::parquet_cache_aware_dict_decoder_enable) {
+            return _next_batch_value(count, dst, filter);
+        } else {
+            return _next_batch_value(count, dst, nullptr);
+        }
+#endif // BE_TEST
+    }
+    default:
+        return Status::NotSupported("read type not supported");
+    }
+    return Status::OK();
+}
+
+Status CacheAwareDictDecoder::next_batch_with_nulls(size_t count, const NullInfos& null_infos,
+                                                    ColumnContentType content_type, Column* dst,
+                                                    const FilterData* filter) {
+    if (_get_dict_size() > _dict_size_threshold && config::parquet_cache_aware_dict_decoder_enable) {
+        return _do_next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+    } else {
+        return _do_next_batch_with_nulls(count, null_infos, content_type, dst, nullptr);
+    }
+}
 
 Status Decoder::next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type,
                                       Column* dst, const FilterData* filter) {
@@ -156,6 +209,21 @@ struct TypeEncodingTraits<tparquet::Type::FIXED_LEN_BYTE_ARRAY, tparquet::Encodi
     }
 };
 
+// The generic trait would instantiate DictDecoder<bool>, whose std::vector<bool> dictionary is bit-packed and
+// has no contiguous storage. Decode through uint8_t instead: PlainDecoder<bool> unpacks the dictionary page one
+// byte per value, and BooleanColumn is a UInt8Column.
+template <>
+struct TypeEncodingTraits<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY> {
+    static Status create_decoder(std::unique_ptr<Decoder>* decoder) {
+        *decoder = std::make_unique<DictDecoder<uint8_t>>();
+        return Status::OK();
+    }
+    static Status create_encoder(std::unique_ptr<Encoder>* encoder) {
+        *encoder = std::make_unique<DictEncoder<uint8_t>>();
+        return Status::OK();
+    }
+};
+
 template <tparquet::Type::type type_arg, tparquet::Encoding::type encoding_arg>
 struct EncodingTraits : TypeEncodingTraits<type_arg, encoding_arg> {
     static constexpr tparquet::Type::type type = type_arg;
@@ -189,6 +257,7 @@ private:
 EncodingInfoResolver::EncodingInfoResolver() {
     // BOOL
     _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::PLAIN>();
+    _add_map<tparquet::Type::BOOLEAN, tparquet::Encoding::RLE_DICTIONARY>();
     // INT32
     _add_map<tparquet::Type::INT32, tparquet::Encoding::PLAIN>();
     _add_map<tparquet::Type::INT32, tparquet::Encoding::RLE_DICTIONARY>();

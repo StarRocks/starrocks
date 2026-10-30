@@ -37,19 +37,21 @@ package com.starrocks.qe;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
 import com.starrocks.authentication.AccessControlContext;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -75,6 +77,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.PreResolvedState;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -90,6 +93,7 @@ import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.optimizer.statistics.StatisticsLoadBudget;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.thrift.TPipelineProfileLevel;
@@ -171,7 +175,9 @@ public class ConnectContext {
     protected String currentDb = "";
 
     // Unified access control context holding authentication and authorization information
-    protected AccessControlContext accessControlContext = new AccessControlContext();
+    // volatile: the HTTP SQL API replaces it per request (setAccessControlContext) from whichever
+    // executor thread handles that request, and later requests on the same channel read it.
+    protected volatile AccessControlContext accessControlContext = new AccessControlContext();
 
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
@@ -210,7 +216,7 @@ public class ConnectContext {
     //    or current processing stmt is the last stmt for multi stmts
     // used to set mysql result package
     protected boolean isLastStmt = true;
-    protected boolean isSingleStmt = false;
+    protected boolean isMultiStmt = false;
     // set true when user dump query through HTTP
     protected boolean isHTTPQueryDump = false;
 
@@ -228,6 +234,10 @@ public class ConnectContext {
 
     protected StatementBase.ExplainLevel explainLevel;
 
+    // Set while the finished query's plan is rendered into its profile; scan nodes skip explain lines that read
+    // remote metadata, since nothing bounds that read after the query has ended.
+    protected boolean explainForProfile = false;
+
     protected TWorkGroup resourceGroup;
 
     protected volatile boolean isPending = false;
@@ -237,6 +247,19 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+
+    // Keys of the views currently being expanded on the analysis path, used to detect cyclic view
+    // definitions. It lives on the session (not on a single QueryAnalyzer.Visitor) so the path is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // cycle routed through a subquery would otherwise reset the per-Visitor set on every hop.
+    private final Set<String> viewExpansionPath = Sets.newHashSet();
+
+    // Names of the recursive CTEs whose recursive member is currently being analyzed. Like
+    // viewExpansionPath it lives on the session (not on a single QueryAnalyzer.Visitor) so it is
+    // shared across the fresh QueryAnalyzer instances spawned for scalar/IN/EXISTS subqueries; a
+    // recursive reference routed through such a subquery would otherwise not see the enclosing
+    // recursive CTE, fall through to the optimizer and expand without end (StackOverflowError).
+    private final Set<String> recursiveCteAnalysisPath = Sets.newHashSet();
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
@@ -251,6 +274,17 @@ public class ConnectContext {
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     private QueryMaterializationContext queryMVContext;
+    private StatisticsLoadBudget statisticsLoadBudget;
+
+    // What the unlocked pre-pass resolved for the statement being planned, handed to the locked analyzer.
+    // Scoped to one statement: StatementPlanner clears it.
+    private final PreResolvedState preResolvedState = new PreResolvedState();
+
+    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
+    // its per-statement timings here so the eventual profile can attach them. Broker Load instead
+    // uses a job-owned collector because its asynchronous work must not depend on this context's
+    // statement-level reset or on a reused client context.
+    private volatile PreSplitProfile preSplitProfile;
 
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
@@ -267,9 +301,6 @@ public class ConnectContext {
     // session level SPM storage
     private SQLPlanStorage sqlPlanStorage = SQLPlanStorage.create(false);
 
-    // Whether leader is transferred during executing stmt
-    private boolean isLeaderTransferred = false;
-
     private AtomicLong currentThreadAllocatedMemory = new AtomicLong(0);
 
     // thread id is the thread who created this ConnectContext's id
@@ -281,11 +312,49 @@ public class ConnectContext {
     // listeners for this connection
     private List<Listener> listeners = Lists.newArrayList();
 
+    // Upper bound on the entries the diagnostics area below keeps, so that it stays bounded for
+    // the lifetime of the connection whatever a statement records into it. The value is the
+    // MySQL default for max_error_count, and the entries kept are the first ones, as MySQL does
+    // once the limit is reached.
+    private static final int MAX_WARNING_COUNT = 64;
+
+    // Session-level SQL warning buffer (MySQL diagnostics area). Holds the diagnostics produced
+    // by the most recent statement that generated any, so they can be read back via
+    // SHOW WARNINGS / SHOW ERRORS. Cleared at the start of the next statement, except for SET,
+    // transaction control and SHOW statements, which leave it unchanged while they succeed and
+    // replace it with their own error when they fail (see StmtExecutor.execute).
+    private final List<QueryWarning> warnings = Lists.newArrayList();
+
     private boolean skipFinishSink = false;
     private FinishSinkHandler handler = null;
 
     // Track if current write is CTAS (Create Table As Select)
     private boolean isCTAS = false;
+
+    // An optimize rewrite copies logical rows into a temporary partition and must not
+    // include unrelated schema-change shadow columns in its sink tuple.
+    private boolean optimizeRewrite = false;
+
+    // Per-physical-partition read-version override: if set, OlapScanNode uses the mapped version
+    // instead of physicalPartition.getVisibleVersion() for each entry in this map.
+    // Null means no override (normal visible-version path).
+    private Map<Long, Long> scanVersionOverride = null;
+
+    public void setScanVersionOverride(Map<Long, Long> scanVersionOverride) {
+        this.scanVersionOverride = scanVersionOverride;
+    }
+
+    public Map<Long, Long> getScanVersionOverride() {
+        return scanVersionOverride;
+    }
+
+    public void setOptimizeRewrite(boolean optimizeRewrite) {
+        this.optimizeRewrite = optimizeRewrite;
+    }
+
+    public boolean isOptimizeRewrite() {
+        return optimizeRewrite;
+    }
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
@@ -373,6 +442,13 @@ public class ConnectContext {
 
     /**
      * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     * <p>
+     * Note: callers that subsequently invoke {@link #setCurrentWarehouse(String)} or
+     * {@link #setCurrentWarehouseId(long)} must re-apply
+     * {@code setEnableMaterializedViewRewrite(false)} (and any other per-context
+     * session-variable override) AFTER the warehouse switch, because setCurrentWarehouse
+     * replaces the sessionVariable with a fresh clone of the global default and silently
+     * discards earlier overrides.
      */
     public static ConnectContext buildInner() {
         ConnectContext connectContext = new ConnectContext();
@@ -569,6 +645,15 @@ public class ConnectContext {
     }
 
     /**
+     * Replace the access-control context wholesale. The HTTP SQL API authenticates each request
+     * onto a fresh one and installs it here only once the attempt has succeeded, so a refused
+     * attempt leaves nothing of itself on a context that outlives the request.
+     */
+    public void setAccessControlContext(AccessControlContext accessControlContext) {
+        this.accessControlContext = accessControlContext;
+    }
+
+    /**
      * Get the authentication context for this connection
      */
     public AccessControlContext getAccessControlContext() {
@@ -753,6 +838,7 @@ public class ConnectContext {
         startTime = Instant.now();
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
     }
 
     @VisibleForTesting
@@ -760,6 +846,24 @@ public class ConnectContext {
         startTime = start;
         returnRows = 0;
         pendingTimeSecond = 0;
+        preSplitProfile = null;
+    }
+
+    public PreSplitProfile getPreSplitProfile() {
+        return preSplitProfile;
+    }
+
+    public PreSplitProfile getOrCreatePreSplitProfile() {
+        PreSplitProfile current = preSplitProfile;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            if (preSplitProfile == null) {
+                preSplitProfile = new PreSplitProfile();
+            }
+            return preSplitProfile;
+        }
     }
 
     public void setEndTime() {
@@ -896,6 +1000,16 @@ public class ConnectContext {
             return;
         }
         closed = true;
+        // Clean up explicit transaction state to prevent memory leak in explicitTxnStateMap
+        if (txnId != 0) {
+            try {
+                globalStateMgr.getGlobalTransactionMgr()
+                        .clearExplicitTxnState(txnId);
+            } catch (Exception e) {
+                // Ignore exceptions during cleanup to avoid masking the original close reason
+            }
+            txnId = 0;
+        }
         mysqlChannel.close();
         threadLocalInfo.remove();
         returnRows = 0;
@@ -904,6 +1018,24 @@ public class ConnectContext {
 
     public boolean isKilled() {
         return (parent != null && parent.isKilled()) || isKilled;
+    }
+
+    /**
+     * Whether this statement has been cancelled by any route, as opposed to {@link #isKilled()}, which
+     * only covers connection-scoped kills. {@code KILL QUERY}, a cancelled TaskRun and a closed client
+     * all call {@code kill(false, ...)}, which reaches only {@link StmtExecutor#cancel(String)} and
+     * leaves {@code isKilled} false. Use this wherever work outside query execution needs to notice
+     * cancellation -- by then the coordinator {@code cancel()} targets has usually already finished.
+     */
+    public boolean isStatementCancelled() {
+        if (isKilled()) {
+            return true;
+        }
+        StmtExecutor executorRef = executor;
+        if (executorRef != null && executorRef.isCancelled()) {
+            return true;
+        }
+        return parent != null && parent.isStatementCancelled();
     }
 
     // Set kill flag to true;
@@ -1002,6 +1134,14 @@ public class ConnectContext {
 
     public void setExplainLevel(StatementBase.ExplainLevel explainLevel) {
         this.explainLevel = explainLevel;
+    }
+
+    public boolean isExplainForProfile() {
+        return explainForProfile;
+    }
+
+    public void setExplainForProfile(boolean explainForProfile) {
+        this.explainForProfile = explainForProfile;
     }
 
     public TWorkGroup getResourceGroup() {
@@ -1139,7 +1279,13 @@ public class ConnectContext {
                 this.resetComputeResource();
                 throw new RuntimeException(errMsg);
             }
-            if (!warehouseManager.isResourceAvailable(computeResource)) {
+            // Re-acquire if the cached compute resource belongs to a different warehouse than the
+            // current session warehouse. This can happen when a query-scope warehouse hint modifies
+            // the session variable but the compute resource is not properly restored afterwards.
+            if (computeResource.getWarehouseId() != this.getCurrentWarehouseId()) {
+                this.resetComputeResource();
+                acquireComputeResource();
+            } else if (!warehouseManager.isResourceAvailable(computeResource)) {
                 if (state != null && !state.isRunning()) {
                     // if the query is not running, we can acquire a new compute resource.
                     acquireComputeResource();
@@ -1262,6 +1408,14 @@ public class ConnectContext {
         return relationAliasCaseInsensitive;
     }
 
+    public Set<String> getViewExpansionPath() {
+        return viewExpansionPath;
+    }
+
+    public Set<String> getRecursiveCteAnalysisPath() {
+        return recursiveCteAnalysisPath;
+    }
+
     public void setForwardTimes(int forwardTimes) {
         this.forwardTimes = forwardTimes;
     }
@@ -1284,6 +1438,18 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public PreResolvedState getPreResolvedState() {
+        return preResolvedState;
+    }
+
+    public StatisticsLoadBudget getStatisticsLoadBudget() {
+        return statisticsLoadBudget;
+    }
+
+    public void setStatisticsLoadBudget(StatisticsLoadBudget statisticsLoadBudget) {
+        this.statisticsLoadBudget = statisticsLoadBudget;
     }
 
     public QuerySource getQuerySource() {
@@ -1419,12 +1585,49 @@ public class ConnectContext {
     }
 
     /**
+     * Returns the session variable name that governs the timeout for the current execution context,
+     * used when building timeout-hint messages.
+     */
+    public String getTimeoutHintVariable() {
+        if (isExecLoadType()) {
+            return SessionVariable.INSERT_TIMEOUT;
+        } else if (isMetadataContext()) {
+            return SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT;
+        }
+        return SessionVariable.QUERY_TIMEOUT;
+    }
+
+    /**
+     * A connection whose handshake was answered before the user finished the IdP login - an
+     * OAuth2 user on a client that cannot speak the OAuth2 plugin - is not logged in until the
+     * browser callback deposits the token, and until then {@code ConnectProcessor} refuses every
+     * command. Bound how long it may stay that way by the integration's {@code
+     * connect_wait_timeout}, the same bound the plugin-aware client's handshake waits for;
+     * otherwise any name could hold a connection open for the whole {@code wait_timeout} without
+     * ever logging in.
+     */
+    private boolean isLoginPendingPastTimeout(long now) {
+        AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
+        if (!(provider instanceof OAuth2AuthenticationProvider oauth2) || accessControlContext.getAuthToken() != null) {
+            return false;
+        }
+        return now - connectionStartTime > oauth2.getoAuth2Context().connectWaitTimeout() * 1000L;
+    }
+
+    /**
      * Check the connect context is timeout or not. If true, kill the connection, otherwise, return false.
      *
      * @param now : current time in milliseconds
      * @return true if timeout, false otherwise
      */
     public boolean checkTimeout(long now) {
+        if (isLoginPendingPastTimeout(now)) {
+            LOG.warn("kill connection whose OAuth2 login never completed, remote: {}, user: {}",
+                    getRemoteIP(), getQualifiedUser());
+            kill(true, "Connection closed: the OAuth2 login was not completed within connect_wait_timeout");
+            return true;
+        }
+
         long startTimeMillis = getStartTime();
         if (startTimeMillis <= 0) {
             return false;
@@ -1473,7 +1676,7 @@ public class ConnectContext {
                             tableName, tableTimeout, pendingTime);
                 } else {
                     msg = String.format("please increase the '%s' session variable, pending time:%s",
-                            isExecLoadType() ? SessionVariable.INSERT_TIMEOUT : SessionVariable.QUERY_TIMEOUT, pendingTime);
+                            getTimeoutHintVariable(), pendingTime);
                 }
                 errMsg = ErrorCode.ERR_TIMEOUT.formatErrorMsg(getExecType(), execTimeout, msg);
             }
@@ -1631,8 +1834,32 @@ public class ConnectContext {
         dbName = normalizeName(dbName);
 
         if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            // On a follower FE, the database may have been created on the leader but the
+            // corresponding journal entry has not been replayed locally yet. Wait for the
+            // local replayer to catch up to the latest committed journal before giving up.
+            // This avoids spurious "Unknown database" errors when DDL statements are issued
+            // immediately after CREATE DATABASE hits a different FE pod.
+            if (!globalStateMgr.isLeader()) {
+                try {
+                    // Fetch the leader's current max journal ID via a lightweight forward RPC.
+                    // Using the local journal.getMaxJournalId() is insufficient because BDBJE
+                    // replication itself may not have delivered the latest entries to the local
+                    // BDB database yet. The leader's value is authoritative and guaranteed to be
+                    // >= any journal ID written before this USE/COM_INIT_DB arrived.
+                    long leaderMaxJournalId = LeaderOpExecutor.fetchLeaderMaxJournalId(this);
+                    if (leaderMaxJournalId > 0) {
+                        int timeoutMs = (int) (getSessionVariable().getQueryTimeoutS() * 1000L);
+                        globalStateMgr.getJournalObservable().waitOn(leaderMaxJournalId, timeoutMs);
+                    }
+                } catch (Exception e) {
+                    LOG.warn("Failed to wait for journal replay in changeCatalogDb, db={}: {}",
+                            dbName, e.getMessage());
+                }
+            }
+            if (metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
+                LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
+                ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
         }
 
         // Here we check the request permission that sent by the mysql client or jdbc.
@@ -1703,14 +1930,6 @@ public class ConnectContext {
         }
     }
 
-    public boolean isLeaderTransferred() {
-        return isLeaderTransferred;
-    }
-
-    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
-        this.isLeaderTransferred = isLeaderTransferred;
-    }
-
     /**
      * Set thread-local context for the scope, and remove it after leaving the scope
      */
@@ -1752,7 +1971,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
+            row.add(getQualifiedUser());
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
@@ -1760,7 +1979,7 @@ public class ConnectContext {
             } else {
                 row.add(getMysqlChannel().getRemoteHostPortString());
             }
-            row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentDb);
             // Command
             row.add(command.toString());
             // connection start Time
@@ -1864,6 +2083,24 @@ public class ConnectContext {
         return listeners;
     }
 
+    // Every failure path replaces the buffer before recording its error (StmtExecutor.execute and
+    // ConnectProcessor.recordPreExecutionFailureDiagnostics), so the error a client just received
+    // in the ERR packet is never the entry dropped once the limit is reached.
+    public void addWarning(QueryWarning warning) {
+        if (warnings.size() >= MAX_WARNING_COUNT) {
+            return;
+        }
+        this.warnings.add(warning);
+    }
+
+    public List<QueryWarning> getWarnings() {
+        return ImmutableList.copyOf(warnings);
+    }
+
+    public void clearWarnings() {
+        this.warnings.clear();
+    }
+
     public void onQueryFinished() {
         for (Listener listener : listeners) {
             try {
@@ -1884,11 +2121,11 @@ public class ConnectContext {
         listeners.clear();
     }
 
-    public boolean isSingleStmt() {
-        return isSingleStmt;
+    public boolean isMultiStmt() {
+        return isMultiStmt;
     }
 
-    public void setSingleStmt(boolean singleStmt) {
-        isSingleStmt = singleStmt;
+    public void setMultiStmt(boolean multiStmt) {
+        isMultiStmt = multiStmt;
     }
 }

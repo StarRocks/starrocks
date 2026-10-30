@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Parses a date or time string according to the specified format and converts the string to a DATETIME  value."
 ---
 
 # to_tera_timestamp

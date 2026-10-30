@@ -1,0 +1,50 @@
+-- name: test_mv_rewrite_s026
+CREATE TABLE t1_s026 (
+    id BIGINT, dt DATE, region VARCHAR(32), name VARCHAR(64)
+) PRIMARY KEY(id, dt, region) DISTRIBUTED BY HASH(id) BUCKETS 4;
+-- result:
+-- !result
+CREATE TABLE t2_s026 (
+    id BIGINT, dt DATE, region VARCHAR(32), amount DECIMAL(18, 2)
+) PRIMARY KEY(id, dt, region) DISTRIBUTED BY HASH(id) BUCKETS 4;
+-- result:
+-- !result
+INSERT INTO t1_s026 VALUES
+    (1, '2026-01-15', 'north', 'alice'),
+    (2, '2026-01-15', 'south', 'bob'),
+    (3, '2026-02-15', 'north', 'carol'),
+    (4, '2026-02-15', 'east', 'dan'),
+    (5, '2026-03-15', 'south', 'eve'),
+    (6, '2026-03-15', 'east', 'frank');
+-- result:
+-- !result
+INSERT INTO t2_s026 VALUES
+    (1, '2026-01-15', 'north', 100), (2, '2026-01-15', 'south', 200),
+    (3, '2026-02-15', 'north', 150), (4, '2026-02-15', 'east', 300),
+    (5, '2026-03-15', 'south', 250), (6, '2026-03-15', 'east', 350);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_s026 REFRESH ASYNC EVERY (INTERVAL 10 MINUTE)
+DISTRIBUTED BY HASH(dt) BUCKETS 4
+AS
+SELECT a.dt, a.region, SUM(b.amount) AS total_amount, COUNT(*) AS cnt
+FROM t1_s026 a FULL OUTER JOIN t2_s026 b ON a.id = b.id
+GROUP BY a.dt, a.region;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_s026 WITH SYNC MODE;
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SELECT a.dt, a.region, SUM(b.amount), COUNT(*)
+FROM t1_s026 a FULL OUTER JOIN t2_s026 b ON a.id = b.id
+GROUP BY a.dt, a.region
+ORDER BY a.dt LIMIT 10;
+-- result:
+2026-01-15	south	200.00	1
+2026-01-15	north	100.00	1
+2026-02-15	north	150.00	1
+2026-02-15	east	300.00	1
+2026-03-15	south	250.00	1
+2026-03-15	east	350.00	1
+-- !result

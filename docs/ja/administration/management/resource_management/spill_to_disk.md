@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "大規模オペレーター（集計・ソート・ジョイン）の中間結果をローカルディスク/オブジェクトストレージにスピルして OOM を防ぎます。"
 sidebar_position: 50
 ---
 

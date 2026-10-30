@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CREATE ANALYZE customizes an automatic collection task for collecting CBO statistics."
 ---
 
 # CREATE ANALYZE

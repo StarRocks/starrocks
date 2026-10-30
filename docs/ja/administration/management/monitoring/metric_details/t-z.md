@@ -1,0 +1,282 @@
+---
+displayed_sidebar: docs
+hide_table_of_contents: true
+description: "Alphabetical t - z"
+---
+
+# メトリクス t から z
+
+## `tablet_base_max_compaction_score`
+
+- 単位: -
+- 説明: このBE内のタブレットの最高ベースコンパクションスコア。
+
+## `tablet_cumulative_max_compaction_score`
+
+- 単位: -
+- 説明: このBE内のタブレットの最高累積コンパクションスコア。
+
+## `tablet_metadata_mem_bytes`
+
+- 単位: バイト
+- 説明: タブレットメタデータが使用するメモリ。
+
+## `tablet_pre_split_data_tier_file_selection`
+
+- 単位: カウント
+- タイプ: 累積
+- ラベル: `mode` — `subset`（一部のファイルだけをスキャン。スキャン量は `tablet_pre_split_data_tier_scan_byte_limit` で決まる）、`under_limit`（入力が上限以内のため全ファイルをスキャン）、`disabled`（上限が `0` のため全ファイルをスキャン）、`all_selected`（入力は上限を超えたが、ファイル単位の選択、パーティションごとの最低 1 ファイル、最少ファイル数の下限により、結果的に全ファイルが選ばれた）、`partition_from_file_data`（入力は上限を超えたが、パーティション列がパスではなくファイルのデータから取られる、またはパス由来と定数由来のパーティション列が混在するため、サブセットではパーティション全体を取りこぼすおそれがあり、全ファイルをスキャン）、`path_not_expressible`（`INSERT INTO ... SELECT FROM FILES()` のみ。選ばれたファイルのパスに FILES がそのままのパスとして扱えない文字（`,`、`*`、`?`、`[`、`{`、`\`、ホスト以降のパス中の `:`、先頭・末尾の空白）を含むため、ステートメント自身の `path` で全ファイルをスキャン）。
+- 説明: Broker Load と `INSERT INTO ... SELECT FROM FILES()` の取り込みにおける data tier サンプリングの累計回数を、スキャン対象ファイルの選び方別に集計したもの。
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- 単位: -
+- タイプ: ヒストグラム
+- 説明: Broker Load と `INSERT INTO ... SELECT FROM FILES()` の取り込みで、data tier の各サンプリングがスキャンしたバイト数の入力全体に対する割合（パーセント、整数に切り捨て）。したがって `100` はすべてのファイルをスキャンしたことを表します。
+
+## `tablet_reshard_merge_candidate_blocked`
+
+- 単位: カウント
+- 説明: このメトリクスは、マージ プランニング中にタブレットが除外されたイベントの累積回数を表すものであり、現在ブロックされているタブレット数ではありません。あるプランニング パスで本来マージ可能なタブレットが除外と判定されるたびに 1 増加し、その後値が減ることはなく、FE の再起動時にのみ 0 に戻ります。そのため、値そのものではなく増加のレートに注目してください。タブレットが除外される理由は、タブレット分割で残った、マージをブロックする共有データファイルをまだ保持しているか、そうしたファイルを保持していないことがまだ証明されていないかのいずれかです。後者は多くの場合 compaction がまだ追いついていないことを意味しますが、対象タブレットがこのチェックに対応する前の BE 上にある、あるいはまだ観測されていないだけということもあります。分割が残した共有ファイルを解消するには、それらを書き換える compaction が必要です。主キー以外のテーブルであれば `ALTER TABLE ... COMPACT` で任意のタイミングで実行できます。主キーテーブルでも同じ文を実行できますが、base compaction が行われるのは未処理の削除を抱えたタブレットに限られ、分割直後によく見られる削除のないタブレットには効果がなく、通常の compaction が該当する rowset に到達するのを待つことになります。このカウンタをインクリメントするのは Leader FE のみです。
+
+## `tablet_reshard_merge_rejected_total`
+
+- 単位: カウント
+- 説明: この BE がファイルを書き込む前に実行を拒否したタブレットマージの累計回数。マージ対象のタブレットがマージの前提条件を満たさない場合に拒否されます。典型的な原因は、分割後も他のタブレットと共有しているデータファイルをタブレットがまだ保持している、2 つのタブレットが同じファイルを宣言している、各タブレットのテーブルレベルの設定が一致しない、などです。拒否された publish はメッセージが `MERGE_REJECTED` で始まるエラーを返し、BE はソースタブレットとターゲットタブレットを示す WARNING ログを出力します。
+
+## `tablet_schema_mem_bytes`
+
+- 単位: バイト
+- 説明: タブレットスキーマが使用するメモリ。
+
+## `tablet_update_max_compaction_score`
+
+- 単位: -
+- 説明: 現在のBEにおけるプライマリキーテーブル内のタブレットの最高コンパクションスコア。
+
+## `threadpool_task_exception_total`
+
+- 単位: カウント
+- 説明: BE プロセス内のすべての ThreadPool ワーカースレッドがキャッチして飲み込んだタスク例外の累計回数。[`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) が `true` の場合にのみ増加します。この項目が `false`（デフォルト）のときは外層の catch 句がないため、このメトリクスは変化しません。catch モード有効時のアラートに利用できます。プール名および例外の詳細は BE の ERROR ログに記録されます。
+
+## `thrift_client_retries_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: FE が発行した Thrift RPC が接続の切断により再試行した累計回数。各再試行の前に、FE はランダムな時間だけ待機（指数バックオフ: 最初の再試行の前は 100～200 ms、以降は再試行ごとに下限と上限がともに倍増し、500～1000 ms に達するまで増加）してから、接続を再開してリクエストを再送します。タイムアウトした呼び出しは再試行されず、カウントもされません。1 回の呼び出しあたりの再試行回数は `thrift_rpc_retry_times` によって制限されます。値が増加し続けている場合、FE と他のノードとの Thrift 接続が頻繁に切断されていることを意味します。よくある原因は、接続先（たとえば Leader FE）の Thrift ワーカー プールが飽和し、新しい接続を即座にクローズしていることです。接続先の `thrift_server_rejected_connections_total` と併せて確認してください。
+
+## `thrift_connections_total`
+
+- 単位: カウント
+- 説明: thrift接続の合計数（完了した接続を含む）。
+
+## `thrift_current_connections (Deprecated)`
+
+## `thrift_opened_clients`
+
+- 単位: カウント
+- 説明: 現在開かれているthriftクライアントの数。
+
+## `thrift_server_acceptor_stall_ms`
+
+- 単位: ms
+- タイプ: 瞬間
+- 説明: FE Thrift の accept ループが最後に接続を返してからの経過時間（ミリ秒）。accept ループが停止すると増加しますが、Thrift トラフィックがない FE でも同様に増加するため、この指標のみで警報を出さず、接続の到着レートと併せて判断してください。また、accept ループがまったく動作していない場合（Thrift サーバーの起動前および停止後）もこの値は `0` になるため、しきい値による警報では Thrift サービスの停止と正常稼働を区別できません。
+
+## `thrift_server_expired_connections_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: 待機キューでの滞留時間が `thrift_server_queue_timeout_ms` を超えたため、FE Thrift サーバーが処理せずにクローズした接続の総数。このチェックはデフォルトで無効なため、運用者がタイムアウトを有効化するまでこの値は 0 のままです。値が増加している場合、呼び出し元がすでに諦めている可能性が高い接続のバックログを FE が処理していたことを意味します。キューの遅れ具合を把握するには `thrift_server_queue_wait_ms` と併せて確認してください。
+
+## `thrift_server_queue_wait_ms`
+
+- 単位: ms
+- タイプ: 瞬間的
+- 説明: 接続がワーカー スレッドに取り出されるまで FE Thrift サーバーの待機キューに滞留した時間の分位数。期限切れとして破棄された接続も含め、キューから取り出されたすべての接続がサンプリングされるため、分布が `thrift_server_queue_timeout_ms` で頭打ちになることはありません。これは Thrift 飽和の先行指標であり、ワーカー プールがまだ追いついている段階、つまり `thrift_server_rejected_connections_total` が動き出すよりかなり前から上昇します。
+
+## `thrift_server_rejected_connections_total`
+
+- 単位: カウント
+- タイプ: 累積
+- 説明: ワーカー スレッド プールが飽和したために FE Thrift サーバーが即座にクローズした接続の総数。レート制限によって警告ログが抑制されたものも含め、すべての拒否がカウントされます。値が増加している場合はクライアントが拒否されていることを意味します。`thrift-server-pool` の `thread_pool` メトリックと併せて確認してください。増加の速さからワーカー容量の不足量を判断できます。
+
+## `thrift_used_clients`
+
+- 単位: カウント
+- 説明: 現在使用中のthriftクライアントの数。
+
+## `total_column_pool_bytes (Deprecated)`
+
+## `transaction_streaming_load_bytes`
+
+- 単位: バイト
+- 説明: トランザクションロードの合計ロードバイト数。
+
+## `transaction_streaming_load_current_processing`
+
+- 単位: カウント
+- 説明: 現在実行中のトランザクションStream Loadタスクの数。
+
+## `transaction_streaming_load_duration_ms`
+
+- 単位: ms
+- 説明: Stream Loadトランザクションインターフェースに費やされた合計時間。
+
+## `transaction_streaming_load_requests_total`
+
+- 単位: カウント
+- 説明: トランザクションロードリクエストの合計数。
+
+## `txn_request`
+
+- 単位: -
+- 説明: BEGIN、COMMIT、ROLLBACK、EXECのトランザクションリクエスト。
+
+## `uint8_column_pool_bytes`
+
+- 単位: バイト
+- 説明: UINT8カラムプールが使用するバイト数。
+
+## `unused_rowsets_count`
+
+- 単位: カウント
+- 説明: 未使用の行セットの合計数。これらの行セットは後で再利用されます。
+
+## `update_apply_queue_count`
+
+- 単位: カウント
+- 説明: プライマリキーテーブルトランザクションAPPLYスレッドプール内のキューイングされたタスク数。
+
+## `update_compaction_duration_us`
+
+- 単位: us
+- Description: Primary Keyテーブルのコンパクションに費やされた合計時間。
+
+## `update_compaction_outputs_bytes_total`
+
+- Unit: バイト
+- Description: Primary Keyテーブルのコンパクションによって書き込まれた合計バイト数。
+
+## `update_compaction_outputs_total`
+
+- Unit: カウント
+- Description: Primary Keyテーブルのコンパクションの合計数。
+
+## `update_compaction_task_byte_per_second`
+
+- Unit: バイト/秒
+- Description: Primary Keyテーブルのコンパクションの推定レート。
+
+## `update_compaction_task_cost_time_ns`
+
+- Unit: ns
+- Description: Primary Keyテーブルのコンパクションに費やされた合計時間。
+
+## `update_del_vector_bytes_total`
+
+- Unit: バイト
+- Description: Primary KeyテーブルでDELETEベクトルをキャッシュするために使用された合計メモリ。
+
+## `update_del_vector_deletes_new`
+
+- Unit: カウント
+- Description: Primary Keyテーブルで使用された新しく生成されたDELETEベクトルの合計数。
+
+## `update_del_vector_deletes_total (Deprecated)`
+
+## `update_del_vector_dels_num (Deprecated)`
+
+## `update_del_vector_num`
+
+- Unit: カウント
+- Description: Primary Keyテーブル内のDELETEベクトルキャッシュアイテムの数。
+
+## `update_mem_bytes`
+
+- Unit: バイト
+- Description: Primary KeyテーブルのAPPLYタスクとPrimary Keyインデックスによって使用されるメモリ。
+
+## `update_primary_index_bytes_total`
+
+- Unit: バイト
+- Description: Primary Keyインデックスの合計メモリコスト。
+
+## `update_primary_index_num`
+
+- Unit: カウント
+- Description: メモリにキャッシュされたPrimary Keyインデックスの数。
+
+## `update_rowset_commit_apply_duration_us`
+
+- Unit: us
+- Description: Primary KeyテーブルのAPPLYタスクに費やされた合計時間。
+
+## `update_rowset_commit_apply_total`
+
+- Unit: カウント
+- Description: Primary KeyテーブルのCOMMITおよびAPPLYの合計数。
+
+## `update_rowset_commit_request_failed`
+
+- Unit: カウント
+- Description: Primary Keyテーブルでの失敗した行セットCOMMITリクエストの合計数。
+
+## `update_rowset_commit_request_total`
+
+- Unit: カウント
+- Description: Primary Keyテーブルでの行セットCOMMITリクエストの合計数。
+
+## `vector_index_cache_async_load_failure`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: 実行を開始したものの、ロードまたはキャッシュへの公開中に失敗したベクターインデックスキャッシュのバックグラウンドロードタスクの累計数です。実行前にキャンセルされたタスクは含まれません。
+
+## `vector_index_cache_async_load_inflight`
+
+- タイプ: ゲージ
+- 単位: カウント
+- 説明: バックグラウンド worker で現在実行中のベクターインデックスキャッシュロードタスク数です。
+
+## `vector_index_cache_async_load_ns`
+
+- タイプ: 累積
+- 単位: ナノ秒
+- 説明: 実行を開始したベクターインデックスキャッシュのバックグラウンドロードタスクの累積実行時間です。成功したタスクと失敗したタスクを含み、キューでの待機時間および拒否されたタスクは含みません。
+
+## `vector_index_cache_async_load_queued`
+
+- タイプ: ゲージ
+- 単位: カウント
+- 説明: バックグラウンドプールに受け付けられたものの、まだ実行を開始していないベクターインデックスキャッシュロードタスク数です。
+
+## `vector_index_cache_async_load_rejected`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: 実行前に拒否されたベクターインデックスキャッシュのバックグラウンドロード要求の累計数です。たとえば、キャッシュ容量がゼロ、プールが停止済み、またはキューがタスクを受け付けられない場合に増加します。
+
+## `vector_index_cache_async_load_success`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: インデックスのロードとキャッシュへの公開に成功したバックグラウンドタスクの累計数です。キャッシュがエントリを保持できない場合、容量制御によって公開直後のエントリが削除されることがあります。
+
+## `vector_index_cache_loading_wait_timeout`
+
+- タイプ: 累積
+- 単位: カウント
+- 説明: 同期キャッシュ呼び出し元が、進行中のベクターインデックスロードを `vector_index_cache_loading_wait_timeout_ms` まで待機した累計回数です。このメトリクスは一意のインデックス数ではなく呼び出し元ごとにカウントされ、タイムアウト後も既存の loader は実行を継続します。
+
+## `wait_base_compaction_task_num`
+
+- Unit: カウント
+- Description: 実行を待機しているベースコンパクションタスクの数。
+
+## `wait_cumulative_compaction_task_num`
+
+- Unit: カウント
+- Description: 実行を待機している累積コンパクションタスクの数。
+
+## `writable_blocks_total (Deprecated)`

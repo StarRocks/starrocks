@@ -14,30 +14,53 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <atomic>
+#include <map>
 #include <random>
 
+#include "base/container/lru_cache.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h"
-#include "fs/key_cache.h"
+#include "fs/fs.h"
+#include "fs/fs_factory.h"
+#include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
+#include "storage/datum_variant.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
+#include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
+#include "storage/types.h"
+#include "storage/variant_tuple.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -109,8 +132,8 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         // check trash files already removed
         for (const auto& file : _trash_files) {
             EXPECT_FALSE(fs::path_exist(file));
@@ -153,7 +176,7 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int64_t ret = 0;
         while (true) {
             auto st = reader->get_next(chunk.get());
@@ -195,6 +218,216 @@ public:
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
         LakePartialUpdateTestBase::SetUp();
     }
+    void check_segment_cache_after_drop(bool condition_update, bool legacy_schema_change) {
+        const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+        const bool saved_alter_struct = config::lake_enable_alter_struct;
+        std::atomic<int> index_load_count{0};
+        DeferOp restore([&]() {
+            config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
+            config::lake_enable_alter_struct = saved_alter_struct;
+            SyncPoint::GetInstance()->ClearAllCallBacks();
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        config::lake_pk_partial_update_use_segment_cache = true;
+        if (legacy_schema_change) {
+            config::lake_enable_alter_struct = false;
+        }
+
+        const auto tablet_id = _tablet_metadata->id();
+        auto full_chunk = generate_data(kChunkSize, 0, false, 3);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        {
+            const auto txn_id = next_id();
+            ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                                 .set_tablet_manager(_tablet_mgr.get())
+                                                 .set_tablet_id(tablet_id)
+                                                 .set_txn_id(txn_id)
+                                                 .set_partition_id(_partition_id)
+                                                 .set_mem_tracker(_mem_tracker.get())
+                                                 .set_schema_id(_tablet_schema->id())
+                                                 .build());
+            ASSERT_OK(writer->open());
+            ASSERT_OK(writer->write(full_chunk, indexes.data(), indexes.size()));
+            ASSERT_OK(writer->finish_with_txnlog());
+            writer->close();
+            ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+        }
+        ASSIGN_OR_ABORT(auto old_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+        ASSERT_EQ(1, old_metadata->rowsets_size());
+        ASSERT_EQ(1, old_metadata->rowsets(0).segment_metas_size());
+        ASSERT_EQ(2, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+
+        // Pin the pre-DROP query's version and schema, but defer its segment open until publish finishes.
+        auto old_reader = std::make_shared<TabletReader>(_tablet_mgr.get(), old_metadata, *_schema);
+        const auto& base_segment_meta = old_metadata->rowsets(0).segment_metas(0);
+        FileInfo base_file{.path = _tablet_mgr->segment_location(tablet_id, base_segment_meta.filename())};
+        if (base_segment_meta.has_bundle_file_offset()) {
+            base_file.bundle_file_offset = base_segment_meta.bundle_file_offset();
+        }
+        const auto base_cache_key = base_file.cache_key();
+        const auto dropped_uid = old_metadata->schema().column(condition_update ? 2 : 1).unique_id();
+
+        // FSE v2 installs S1 on the first write naming it. Keep tablet metadata at v2 so its warm PK
+        // index is not evicted by a fake version gap and cannot seed a full-schema Segment on rebuild.
+        TabletSchemaPB new_schema_pb = old_metadata->schema();
+        new_schema_pb.clear_column();
+        for (const auto& column : old_metadata->schema().column()) {
+            if (column.unique_id() != dropped_uid) {
+                new_schema_pb.add_column()->CopyFrom(column);
+            }
+        }
+        new_schema_pb.set_id(next_id());
+        new_schema_pb.set_schema_version(old_metadata->schema().schema_version() + 1);
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, new_schema_pb));
+        auto new_tablet_schema = TabletSchema::create(new_schema_pb);
+        ASSERT_EQ(2, new_tablet_schema->num_columns());
+        ASSERT_EQ(_tablet_schema->column(condition_update ? 1 : 2).unique_id(),
+                  new_tablet_schema->column(1).unique_id());
+
+        SyncPoint::GetInstance()->SetCallBack("lake_index_load.1", [&](void*) { ++index_load_count; });
+        SyncPoint::GetInstance()->EnableProcessing();
+        int64_t base_version = 2;
+        if (legacy_schema_change) {
+            // The legacy metadata-only alter really publishes v3. With archival disabled it keeps
+            // no rowset schema pin, but finalize still advances the existing PK index to v3.
+            TxnLogPB alter_log;
+            alter_log.set_tablet_id(tablet_id);
+            alter_log.set_txn_id(next_id());
+            alter_log.mutable_op_alter_metadata()->add_metadata_update_infos()->mutable_tablet_schema()->CopyFrom(
+                    new_schema_pb);
+            ASSERT_OK(_tablet_mgr->put_txn_log(alter_log));
+            ASSIGN_OR_ABORT(auto altered_metadata, publish_single_version(tablet_id, 3, alter_log.txn_id()));
+            ASSERT_EQ(new_tablet_schema->id(), altered_metadata->schema().id());
+            ASSERT_TRUE(altered_metadata->historical_schemas().empty());
+            ASSERT_TRUE(altered_metadata->rowset_to_schema().empty());
+            ASSERT_EQ(3, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+            EXPECT_EQ(0, index_load_count.load());
+            base_version = 3;
+        }
+
+        // Row partial: key-only input must read c2 at current ordinal 1, not old ordinal 2.
+        // Condition update: full (c0,c1) input still has to read the old c1 to decide its winner.
+        std::vector<int> keys(kChunkSize);
+        std::iota(keys.begin(), keys.end(), 0);
+        auto key_column = Int32Column::create();
+        key_column->append_numbers(keys.data(), keys.size() * sizeof(int));
+        Chunk::SlotHashMap key_slot_map;
+        key_slot_map[0] = 0;
+        Chunk key_chunk({std::move(key_column)}, key_slot_map);
+        auto update_chunk = condition_update ? generate_data(kChunkSize, 0, true, 7) : std::move(key_chunk);
+        std::vector<SlotDescriptor> key_slots;
+        key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        std::vector<SlotDescriptor*> key_slot_pointers{&key_slots[0]};
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(new_tablet_schema->id())
+                                             .set_slot_descriptors(condition_update ? nullptr : &key_slot_pointers)
+                                             .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                             .set_merge_condition(condition_update ? "c1" : "")
+                                             .build());
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(update_chunk, indexes.data(), indexes.size()));
+        ASSIGN_OR_ABORT(auto txn_log, writer->finish_with_txnlog());
+        writer->close();
+        ASSERT_EQ(new_tablet_schema->id(), txn_log->op_write().schema_key().schema_id());
+        ASSERT_EQ(condition_update ? 0 : 1, txn_log->op_write().txn_meta().partial_update_column_unique_ids_size());
+        if (condition_update) {
+            ASSERT_EQ("c1", txn_log->op_write().txn_meta().merge_condition());
+        }
+
+        // Clear only metacache: a PK rebuild can open the full base schema first and hide the bug.
+        _tablet_mgr->prune_metacache();
+        ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_cache_key));
+        ASSERT_EQ(base_version, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+        ASSERT_GE(_tablet_mgr->metacache()->capacity(), 2 * 1024);
+        ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(tablet_id, base_version + 1, txn_id));
+        EXPECT_EQ(0, index_load_count.load()) << "PK index rebuild must not seed the base segment cache";
+        ASSERT_EQ(base_version + 1, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+        ASSERT_EQ(new_tablet_schema->id(), new_metadata->schema().id());
+        if (legacy_schema_change) {
+            ASSERT_TRUE(new_metadata->historical_schemas().empty());
+            ASSERT_TRUE(new_metadata->rowset_to_schema().empty());
+        } else {
+            ASSERT_EQ(1, new_metadata->historical_schemas().count(_tablet_schema->id()));
+            ASSERT_EQ(1, new_metadata->rowset_to_schema().count(old_metadata->rowsets(0).id()));
+            ASSERT_EQ(_tablet_schema->id(), new_metadata->rowset_to_schema().at(old_metadata->rowsets(0).id()));
+        }
+
+        auto cached = _tablet_mgr->metacache()->lookup_segment(base_cache_key);
+        if (legacy_schema_change) {
+            // With no schema pin, publish can cache S1. Force that precondition to prove the old
+            // reader uses a private full-schema Segment without replacing the narrowed shared one.
+            ASSERT_NE(nullptr, cached);
+            EXPECT_EQ(new_tablet_schema->id(), cached->tablet_schema().id());
+            EXPECT_EQ(nullptr, cached->column_with_uid(dropped_uid));
+        } else {
+            // Keep this check nonfatal so actual old-version values below still provide evidence.
+            EXPECT_TRUE(cached == nullptr || cached->column_with_uid(dropped_uid) != nullptr)
+                    << "publish cached a Segment without the dropped column reader";
+        }
+
+        auto read_and_check = [&](const std::shared_ptr<TabletReader>& reader, const TabletSchemaCSPtr& tablet_schema,
+                                  int c1_multiplier) {
+            ASSERT_OK(reader->prepare());
+            ASSERT_OK(reader->open(TabletReaderParams()));
+            auto schema = ChunkHelper::convert_schema(tablet_schema);
+            auto chunk = ChunkFactory::new_chunk(schema, 128);
+            int64_t rows = 0;
+            while (true) {
+                const auto status = reader->get_next(chunk.get());
+                if (status.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(status);
+                rows += chunk->num_rows();
+                for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                    const auto key = chunk->columns()[0]->get(i);
+                    ASSERT_FALSE(key.is_null());
+                    const auto c0 = key.get_int32();
+                    for (size_t j = 0; j < tablet_schema->num_columns(); ++j) {
+                        const auto uid = tablet_schema->column(j).unique_id();
+                        const auto value = chunk->columns()[j]->get(i);
+                        EXPECT_FALSE(value.is_null())
+                                << "schema " << tablet_schema->id() << " lost uid " << uid << " for key " << c0;
+                        if (!value.is_null()) {
+                            if (uid == _tablet_schema->column(0).unique_id()) {
+                                EXPECT_EQ(c0, value.get_int32());
+                            } else if (uid == _tablet_schema->column(1).unique_id()) {
+                                EXPECT_EQ(c0 * c1_multiplier, value.get_int32());
+                            } else {
+                                ASSERT_EQ(_tablet_schema->column(2).unique_id(), uid);
+                                EXPECT_EQ(c0 * 4, value.get_int32());
+                            }
+                        }
+                    }
+                }
+                chunk->reset();
+            }
+            EXPECT_EQ(kChunkSize, rows);
+            reader->close();
+        };
+        read_and_check(old_reader, _tablet_schema, /*c1_multiplier=*/3);
+        if (legacy_schema_change) {
+            auto cached_after_old_read = _tablet_mgr->metacache()->lookup_segment(base_cache_key);
+            ASSERT_NE(nullptr, cached_after_old_read);
+            EXPECT_NE(cached.get(), cached_after_old_read.get());
+            EXPECT_EQ(_tablet_schema->id(), cached_after_old_read->tablet_schema().id());
+            EXPECT_NE(nullptr, cached_after_old_read->column_with_uid(dropped_uid));
+            // The old query can make its compatible schema reusable without mutating a narrowed
+            // Segment that another reader still holds.
+            EXPECT_EQ(nullptr, cached->column_with_uid(dropped_uid));
+        }
+        auto current_schema = ChunkHelper::convert_schema(new_tablet_schema);
+        auto current_reader = std::make_shared<TabletReader>(_tablet_mgr.get(), new_metadata, current_schema);
+        read_and_check(current_reader, new_tablet_schema, /*c1_multiplier=*/condition_update ? 7 : 3);
+    }
+
     constexpr static const char* const kTestDirectory = "test_lake_partial_update";
 };
 
@@ -270,10 +503,179 @@ TEST_P(LakePartialUpdateTest, test_write) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
+}
+
+TEST_P(LakePartialUpdateTest, test_column_mode_partial_update_streams_source_segment) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only column mode reads source segments while generating DCGs";
     }
+
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+
+    const auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ConfigResetGuard<int32_t> chunk_size_guard(&config::vector_chunk_size, 4);
+    ConfigResetGuard<int64_t> memory_limit_guard(&config::partial_update_memory_limit_per_worker, 80);
+    int64_t upt_memory_usage_per_row = 0;
+    std::vector<std::pair<uint32_t, uint32_t>> emitted_ranges;
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row",
+                                          [&](void* arg) { upt_memory_usage_per_row = *static_cast<int64_t*>(arg); });
+    SyncPoint::GetInstance()->SetCallBack("ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit",
+                                          [&](void* arg) {
+                                              const auto* container = static_cast<StreamChunkContainer*>(arg);
+                                              emitted_ranges.emplace_back(container->start_rowid, container->end_rowid);
+                                          });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("ColumnModePartialUpdateHandler::_calc_upt_memory_usage_per_row");
+        SyncPoint::GetInstance()->ClearCallBack(
+                "ColumnModePartialUpdateHandler::_read_from_source_segment_and_update:emit");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    EXPECT_GE(upt_memory_usage_per_row, static_cast<int64_t>(sizeof(int32_t) * 2));
+    EXPECT_EQ((std::vector<std::pair<uint32_t, uint32_t>>{{0, 4}, {4, 8}, {8, 12}}), emitted_ranges);
+    EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
+}
+
+// Regression test: when a partial update orphans a bundled segment, the orphan_files entry must be
+// flagged shared so vacuum's cross-tablet alive-check protects it.
+//
+// Under file bundling one physical .dat holds the segments of several sibling tablets, and a
+// segment's shared-ness is encoded by bundle_file_offset (not the `shared` flag). The orphan
+// FileMetaPB only carries `shared`, so the orphan-producing paths must set it to
+// is_shared_segment() = shared || has_bundle_file_offset(). Otherwise collect_garbage_files sees
+// file.shared()==false, routes the orphan to the plain deleter, and deletes the physical bundle
+// file even while a sibling tablet still references it in a live rowset -- wedging that publish.
+//
+// This test stamps a bundle_file_offset onto a row-mode partial update segment (as a bundled load
+// records it), publishes so rewrite_segment orphans the raw segment, and asserts the orphaned
+// segment is flagged shared.
+TEST_P(LakePartialUpdateTest, test_bundled_orphan_segment_marked_shared) {
+    // Column mode orphans the partial-column update segment via a different path; this test targets
+    // the row-mode rewrite orphan path.
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
+    }
+
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // 1. Normal full write so the partial update has base rows to rewrite against.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // 2. Row-mode partial update write (num_rows > 0 so rewrite_segment rewrites + orphans the raw
+    //    segment); do not publish yet.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // 3. Simulate file bundling: stamp bundle_file_offset onto the written segment(s). Offset 0 keeps
+    //    the standalone segment file readable; num_rows is left intact so the rewrite runs normally.
+    std::set<std::string> bundled_segments;
+    {
+        ASSIGN_OR_ABORT(auto original_txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto new_txn_log = std::make_shared<TxnLogPB>(*original_txn_log);
+        auto* rowset = new_txn_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        for (int i = 0; i < rowset->segment_metas_size(); i++) {
+            auto* seg = rowset->mutable_segment_metas(i);
+            bundled_segments.insert(seg->filename());
+            seg->set_bundle_file_offset(0);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(new_txn_log));
+    }
+
+    // 4. Publish. rewrite_segment rewrites the bundled segment and orphans the raw one.
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    // 5. The orphaned raw bundle segment must be flagged shared for vacuum's alive-check.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    int checked = 0;
+    for (const auto& file : metadata->orphan_files()) {
+        if (bundled_segments.count(file.name()) > 0) {
+            checked++;
+            EXPECT_TRUE(file.shared()) << "orphaned bundle segment must be flagged shared: " << file.name();
+        }
+    }
+    EXPECT_EQ(checked, static_cast<int>(bundled_segments.size()))
+            << "every bundled segment should have been orphaned by the rewrite";
 }
 
 // This test case covers the following logic:
@@ -404,10 +806,6 @@ TEST_P(LakePartialUpdateTest, test_dcg_then_row_mode_with_default_and_expr_overr
 }
 
 TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
-    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
-        return;
-    }
-
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     std::vector<Chunk> chunks(3);
     chunks[0] = generate_data(kChunkSize, 0, true, 2);
@@ -475,9 +873,63 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
                       check(version, [](int c0, int c1, int c2) { return (c0 * 4 == c1) && (c0 * 4 == c2); }));
         }
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
+}
+
+// Validates that column-mode partial update rejects a merge_condition when the condition column
+// is not part of the partial update column set — the handler cannot read the new condition value
+// otherwise and must refuse rather than silently producing wrong results.
+TEST_P(LakePartialUpdateTest, test_column_mode_condition_missing_column_rejected) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        return;
     }
+
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 2);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // Baseline full write.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Partial update set is (c0, c1), but merge_condition references c2 which is NOT in the set.
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                               .set_merge_condition("c2")
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+    auto st = delta_writer->finish_with_txnlog().status();
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_not_supported()) << st;
+    delta_writer->close();
 }
 
 TEST_P(LakePartialUpdateTest, test_dcg_not_found_and_fallback_to_segment) {
@@ -746,12 +1198,9 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
@@ -831,10 +1280,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
 }
 
@@ -905,9 +1351,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict) {
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
 }
 
@@ -982,10 +1425,7 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict_multi_segment) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
 }
 
@@ -1071,9 +1511,6 @@ TEST_P(LakePartialUpdateTest, test_resolve_conflict2) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 5);
     }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
 }
 
 TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
@@ -1110,7 +1547,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
 
     // remove pk index, to make it reload again
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
 
     // partial update
     for (int i = 0; i < 3; i++) {
@@ -1150,9 +1587,6 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
     }
     if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE) {
         auto sstable_meta = new_tablet_metadata->sstable_meta();
@@ -1214,10 +1648,15 @@ TEST_P(LakePartialUpdateTest, test_partial_update_publish_retry) {
         ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
 
+        // The tablet metadata may be saved with the legacy headerless format or the checksummed
+        // header format depending on lake_enable_protobuf_file_checksum, so inject on both.
         SyncPoint::GetInstance()->SetCallBack("ProtobufFile::save:serialize", [](void* arg) { *(bool*)arg = false; });
+        SyncPoint::GetInstance()->SetCallBack("ProtobufFileWithHeader::save:serialize",
+                                              [](void* arg) { *(bool*)arg = false; });
         SyncPoint::GetInstance()->EnableProcessing();
         ASSERT_ERROR(publish_single_version(tablet_id, version + 1, txn_id).status());
         SyncPoint::GetInstance()->ClearCallBack("ProtobufFile::save:serialize");
+        SyncPoint::GetInstance()->ClearCallBack("ProtobufFileWithHeader::save:serialize");
         SyncPoint::GetInstance()->DisableProcessing();
     }
     // retry publish again
@@ -1376,7 +1815,7 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
     }
     _tablet_mgr->prune_metacache();
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
-    _update_mgr->try_remove_primary_index_cache(tablet_id);
+    _primary_key_mgr->try_remove_primary_index_cache(tablet_id);
 
     // publish again
     ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
@@ -1395,14 +1834,499 @@ TEST_P(LakePartialUpdateTest, test_batch_publish) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-        LakePartialUpdateTest, LakePartialUpdateTest,
-        ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false},
-                          PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
-                          PrimaryKeyParam{.enable_persistent_index = true,
-                                          .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE},
-                          PrimaryKeyParam{.enable_persistent_index = false,
-                                          .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE}));
+TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_reads_base_segment_through_metacache) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
+        GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
+    }
+
+    const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+    DeferOp restore_config([&]() { config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache; });
+
+    // A row-mode partial update rewrites the rows it touches into a fresh segment, so consecutive
+    // updates of the *same* keys would each read a different file. Updating three disjoint key ranges
+    // instead leaves the untouched rows in the base segment, which is therefore read by all three.
+    constexpr int kRangeSize = kChunkSize / 3;
+    static_assert(kChunkSize % 3 == 0);
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto chunk_range0 = generate_data(kRangeSize, 0, true, 5);
+    auto chunk_range1 = generate_data(kRangeSize, 1, true, 5);
+    auto chunk_range2 = generate_data(kRangeSize, 2, true, 5);
+
+    const auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    auto write_and_publish = [&](const Chunk& chunk, bool row_mode_partial_update) {
+        std::vector<uint32_t> indexes(chunk.num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const auto txn_id = next_id();
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id());
+        if (row_mode_partial_update) {
+            builder.set_slot_descriptors(&_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+        }
+        ASSIGN_OR_ABORT(auto delta_writer, builder.build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    };
+
+    // Base rowset: the segment every later partial update must read the untouched c2 from.
+    write_and_publish(chunk_full, /*row_mode_partial_update=*/false);
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, base_metadata->rowsets_size());
+    ASSERT_EQ(1, base_metadata->rowsets(0).segment_metas_size());
+    const auto base_segment_key =
+            _tablet_mgr->segment_location(tablet_id, base_metadata->rowsets(0).segment_metas(0).filename());
+
+    // Switched off, publish opens the base segment statically and leaves the metacache untouched.
+    _tablet_mgr->prune_metacache();
+    config::lake_pk_partial_update_use_segment_cache = false;
+    write_and_publish(chunk_range0, /*row_mode_partial_update=*/true);
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_segment_key));
+
+    // Switched on, the first publish after a prune populates the cache ...
+    _tablet_mgr->prune_metacache();
+    config::lake_pk_partial_update_use_segment_cache = true;
+    write_and_publish(chunk_range1, /*row_mode_partial_update=*/true);
+    auto cached_segment = _tablet_mgr->metacache()->lookup_segment(base_segment_key);
+    ASSERT_NE(nullptr, cached_segment);
+
+    // ... and the next publish reuses that very object rather than parsing the footer again.
+    write_and_publish(chunk_range2, /*row_mode_partial_update=*/true);
+    auto cached_segment_again = _tablet_mgr->metacache()->lookup_segment(base_segment_key);
+    EXPECT_EQ(cached_segment.get(), cached_segment_again.get());
+
+    // The row count catches a cached Segment carrying the wrong id: the delvec lookup key a query
+    // builds from it would miss, the superseded base rows would stay visible, and every key would come
+    // back twice. c1 was updated by every partial update; c2 was only ever written by the base rowset
+    // and has to survive the trip through the cached segment.
+    EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
+}
+
+TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_preserves_pinned_schema_after_drop) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
+        GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
+    }
+    check_segment_cache_after_drop(/*condition_update=*/false, /*legacy_schema_change=*/false);
+}
+
+TEST_P(LakePartialUpdateTest, test_condition_update_preserves_pinned_schema_after_drop) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
+        GTEST_SKIP() << "Exercise condition-only row publish independently of column update mode";
+    }
+    check_segment_cache_after_drop(/*condition_update=*/true, /*legacy_schema_change=*/false);
+}
+
+TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_preserves_old_schema_without_pin) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
+        GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
+    }
+    check_segment_cache_after_drop(/*condition_update=*/false, /*legacy_schema_change=*/true);
+}
+
+// A publish reads every base segment holding a row it updates. Once that set exceeds the metacache,
+// inserting all of them evicts as fast as it fills -- the hit rate stays at zero while every insert
+// still pays eviction and memory accounting, and the tablet metadata and schemas sharing the cache get
+// flushed out with it. Measured on a cluster at 2.2x slower than not caching at all, so publish stops
+// inserting once its own working set no longer fits.
+//
+// The decision has to hold for the *first* segment a call reads, not just later ones. An estimate
+// sampled from an opened Segment can only be read back after that segment is already cached, so the
+// first segment of every call would bypass the gate -- and under a key-sorted load, where a source
+// segment's keys land in one base segment, that first segment is the only one there is and the gate
+// would never apply. Hence the size is derived from the column count instead, and hence this test
+// asserts that a full cache rejects every segment including the first.
+//
+// Two mechanics this test has to get right, both learned the hard way:
+//   - It observes the decision through a sync point, not the resulting cache contents. An undersized
+//     cache drops oversized inserts by itself, so "the segment is not cached" holds with or without
+//     the gate and would make the test unable to fail.
+//   - The measurements need independent base segments. A partial update rewrites every row it
+//     touches into one new segment, so repeating a measurement over the same keys would leave the
+//     later measurement with a single base segment to read.
+TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_working_set_cache_limits) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
+        GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
+    }
+
+    // TestBase constructs its TabletManager with this metacache capacity.
+    constexpr int64_t kDefaultMetacacheLimit = 1024 * 1024;
+    constexpr int kRanges = 6;
+    constexpr int kRangeSize = kChunkSize / kRanges;
+    static_assert(kChunkSize % kRanges == 0);
+    constexpr int kThirdKeys = kChunkSize / 3;
+    static_assert(kChunkSize % 3 == 0);
+
+    const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+    std::vector<bool> fill_decisions;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp restore([&]() {
+        config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
+        _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                                          [&](void* arg) { fill_decisions.push_back(*static_cast<bool*>(arg)); });
+    config::lake_pk_partial_update_use_segment_cache = true;
+
+    const auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    auto write_and_publish = [&](const Chunk& chunk, bool row_mode_partial_update) {
+        std::vector<uint32_t> indexes(chunk.num_rows());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        const auto txn_id = next_id();
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id());
+        if (row_mode_partial_update) {
+            builder.set_slot_descriptors(&_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+        }
+        ASSIGN_OR_ABORT(auto delta_writer, builder.build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    };
+
+    for (int range = 0; range < kRanges; ++range) {
+        write_and_publish(generate_data(kRangeSize, range, false, 3), /*row_mode_partial_update=*/false);
+    }
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(kRanges, base_metadata->rowsets_size());
+
+    // Room to spare: every base segment this publish reads is cached.
+    fill_decisions.clear();
+    write_and_publish(generate_data(kThirdKeys, 0, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
+    EXPECT_TRUE(std::all_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
+
+    // The whole working set fits in 64 KiB, but each three-column segment is estimated at 3 KiB
+    // while a shard gets only 2 KiB. An aggregate-only gate incorrectly enables caching here.
+    constexpr int64_t kSmallMetacacheLimit = 64 * 1024;
+    ASSERT_LT(base_metadata->rowsets_size() * _tablet_schema->num_columns() * 1024, kSmallMetacacheLimit);
+    _tablet_mgr->update_metacache_limit(kSmallMetacacheLimit);
+    fill_decisions.clear();
+    write_and_publish(generate_data(kThirdKeys, 1, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
+    EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }))
+            << "a segment larger than its cache shard must use the static-open fallback";
+
+    // No room: every segment is skipped, the first one included -- nothing has to be cached before
+    // the gate can decide.
+    _tablet_mgr->update_metacache_limit(0);
+    fill_decisions.clear();
+    write_and_publish(generate_data(kThirdKeys, 2, true, 5), /*row_mode_partial_update=*/true);
+    ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
+    EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
+
+    _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+    EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
+}
+
+INSTANTIATE_TEST_SUITE_P(LakePartialUpdateTest, LakePartialUpdateTest,
+                         ::testing::Values(PrimaryKeyParam{true, PersistentIndexTypePB::CLOUD_NATIVE},
+                                           PrimaryKeyParam{
+                                                   .enable_persistent_index = true,
+                                                   .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE,
+                                                   .partial_update_mode = PartialUpdateMode::COLUMN_UPDATE_MODE}));
+
+class LakeNestedSegmentCacheTest : public LakePartialUpdateTestBase, public testing::WithParamInterface<const char*> {
+public:
+    LakeNestedSegmentCacheTest() : LakePartialUpdateTestBase("test_lake_nested_segment_cache") {}
+};
+
+TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
+    constexpr int kFields = 64;
+    constexpr int64_t kCacheCapacity = 128 * 1024;
+    const std::string type = GetParam();
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->set_id(next_id());
+    auto* complex = schema_pb->mutable_column(2);
+    complex->set_type(type);
+    complex->clear_default_value();
+    ColumnPB nested_struct;
+    nested_struct.set_unique_id(next_id());
+    nested_struct.set_name("element");
+    nested_struct.set_type("STRUCT");
+    nested_struct.set_is_nullable(true);
+    for (int field = 0; field < kFields; ++field) {
+        auto* child = nested_struct.add_children_columns();
+        child->set_unique_id(next_id());
+        child->set_name(fmt::format("f{}", field));
+        child->set_type("INT");
+        child->set_is_nullable(true);
+    }
+    if (type == "STRUCT") {
+        complex->mutable_children_columns()->CopyFrom(nested_struct.children_columns());
+    } else if (type == "ARRAY") {
+        complex->add_children_columns()->CopyFrom(nested_struct);
+    } else if (type == "MAP") {
+        auto* key = complex->add_children_columns();
+        key->set_unique_id(next_id());
+        key->set_name("key");
+        key->set_type("INT");
+        key->set_is_nullable(true);
+        complex->add_children_columns()->CopyFrom(nested_struct);
+    }
+    const TabletSchemaPtr tablet_schema = TabletSchema::create(*schema_pb);
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), kChunkSize);
+    std::vector<JsonValue> json_values;
+    json_values.reserve(kChunkSize);
+    for (int row = 0; row < kChunkSize; ++row) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(row));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(100 + row));
+        DatumStruct fields;
+        std::string json = "{";
+        for (int field = 0; field < kFields; ++field) {
+            fields.emplace_back(row * 100 + field);
+            if (field != 0) json += ",";
+            json += fmt::format("\"f{}\":{}", field, row * 100 + field);
+        }
+        json += "}";
+        auto* values = chunk->get_column_raw_ptr_by_index(2);
+        if (type == "JSON") {
+            ASSIGN_OR_ABORT(auto value, JsonValue::parse(json));
+            json_values.emplace_back(std::move(value));
+            values->append_datum(Datum(&json_values.back()));
+        } else if (type == "ARRAY") {
+            values->append_datum(DatumArray{Datum(fields)});
+        } else if (type == "MAP") {
+            values->append_datum(DatumMap{{int32_t{1}, Datum(fields)}});
+        } else {
+            values->append_datum(fields);
+        }
+    }
+
+    const auto tablet_id = metadata->id();
+    const auto filename = fmt::format("nested_cache_{}.dat", next_id());
+    FileInfo file_info{.path = _tablet_mgr->segment_location(tablet_id, filename)};
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
+    ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_info.path));
+    SegmentWriterOptions writer_options;
+    writer_options.flat_json_config = std::make_shared<FlatJsonConfig>(true, 0.5, 0.9, kFields);
+    SegmentWriter writer(std::move(file), 0, tablet_schema, writer_options);
+    ASSERT_OK(writer.init());
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0, index_size = 0, footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    file_info.size = file_size;
+    ASSIGN_OR_ABORT(auto probe, Segment::open(fs, file_info, 0, tablet_schema));
+    auto* complex_reader = probe->column_with_uid(complex->unique_id());
+    ASSERT_NE(nullptr, complex_reader);
+    ASSERT_NE(nullptr, complex_reader->sub_readers());
+    if (type == "JSON") {
+        ASSERT_TRUE(complex_reader->is_flat_json());
+    }
+    // The old three-top-level-column estimate admits the entry, although its real footer readers
+    // cannot fit in a shard. Opening the probe privately must not seed the segment cache.
+    ASSERT_LE(tablet_schema->num_columns() * 1024, kCacheCapacity / kNumShards);
+    ASSERT_GT(probe->mem_usage(), kCacheCapacity / kNumShards);
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(kChunkSize);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename(filename);
+    segment_meta->set_size(file_size);
+    RssidFileInfoContainer container;
+    container.add_rssid_to_file(*metadata);
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    const TabletMetadataPtr read_metadata = metadata;
+    const TxnLogPB_OpWrite op_write;
+    const RowsetUpdateStateParams params{op_write, tablet_schema, read_metadata, &tablet, container};
+    std::vector<uint32_t> rowids(kChunkSize);
+    std::iota(rowids.begin(), rowids.end(), 0);
+    const std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{1, rowids}};
+
+    const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+    DeferOp restore([&]() {
+        config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
+        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    config::lake_pk_partial_update_use_segment_cache = true;
+    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    std::vector<bool> decisions;
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                                          [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    // A scalar-only projection still opens all readers in the construction schema. The second
+    // request also verifies that the static path preserves the complex values themselves.
+    for (const auto& projection : {std::vector<uint32_t>{1}, std::vector<uint32_t>{1, 2}}) {
+        decisions.clear();
+        MutableColumns values;
+        for (auto column_id : projection) {
+            values.emplace_back(chunk->get_column_by_index(column_id)->clone_empty());
+        }
+        ASSERT_OK(_primary_key_mgr->get_column_values(params, projection, false, rowids_by_rssid, &values));
+        ASSERT_EQ(1, decisions.size());
+        EXPECT_FALSE(decisions.front()) << "bypass must be decided before the first cache insertion";
+        for (size_t column = 0; column < projection.size(); ++column) {
+            ASSERT_EQ(kChunkSize, values[column]->size());
+            for (int row = 0; row < kChunkSize; ++row) {
+                EXPECT_EQ(1, values[column]->equals(row, *chunk->get_column_by_index(projection[column]), row));
+            }
+        }
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(ComplexTypes, LakeNestedSegmentCacheTest, ::testing::Values("STRUCT", "JSON", "ARRAY", "MAP"),
+                         [](const testing::TestParamInfo<const char*>& info) { return std::string(info.param); });
+
+class LakeZstdSegmentCacheTest : public LakePartialUpdateTestBase {
+public:
+    LakeZstdSegmentCacheTest() : LakePartialUpdateTestBase("test_lake_zstd_segment_cache") {}
+};
+
+TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compression_dictionary) {
+    constexpr int kRows = 400;
+    constexpr int64_t kCacheCapacity = 128 * 1024;
+    const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
+    const bool saved_write_dictionary = config::enable_zstd_compression_dict;
+    DeferOp restore([&]() {
+        config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
+        config::enable_zstd_compression_dict = saved_write_dictionary;
+        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    config::lake_pk_partial_update_use_segment_cache = true;
+    config::enable_zstd_compression_dict = true;
+
+    auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->set_id(next_id());
+    auto* dictionary_column = schema_pb->mutable_column(2);
+    dictionary_column->set_type("VARCHAR");
+    dictionary_column->set_length(65535);
+    dictionary_column->clear_default_value();
+    dictionary_column->set_use_zstd_compression(true);
+    dictionary_column->set_zstd_compression_page_size(4096);
+    const TabletSchemaPtr tablet_schema = TabletSchema::create(*schema_pb);
+    auto chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(tablet_schema), kRows);
+    // Each distinct value exceeds one data page. A plain page cannot exploit the common random
+    // prefix, whereas a dictionary sampled from the first value can. This keeps a real dictionary
+    // under the normal writer's gain threshold, without forcing retention through test options.
+    uint64_t random_state = 12345678901234567ULL;
+    auto next_char = [&]() {
+        random_state ^= random_state << 13;
+        random_state ^= random_state >> 7;
+        random_state ^= random_state << 17;
+        return static_cast<char>('a' + (random_state % 26));
+    };
+    std::string prefix(5000, ' ');
+    std::generate(prefix.begin(), prefix.end(), next_char);
+    for (int row = 0; row < kRows; ++row) {
+        chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(row));
+        chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(100 + row));
+        std::string value = prefix;
+        for (int byte = 0; byte < 1200; ++byte) {
+            value.push_back(next_char());
+        }
+        chunk->get_column_raw_ptr_by_index(2)->append_datum(Datum(Slice(value)));
+    }
+
+    const auto tablet_id = metadata->id();
+    const auto filename = fmt::format("zstd_cache_{}.dat", next_id());
+    FileInfo file_info{.path = _tablet_mgr->segment_location(tablet_id, filename)};
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
+    ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_info.path));
+    SegmentWriter writer(std::move(file), 0, tablet_schema, SegmentWriterOptions{});
+    ASSERT_OK(writer.init());
+    ASSERT_OK(writer.append_chunk(*chunk));
+    uint64_t file_size = 0, index_size = 0, footer_position = 0;
+    ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
+    file_info.size = file_size;
+    ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(file_info.path));
+    SegmentFooterPB footer;
+    ASSERT_OK(Segment::parse_segment_footer(read_file.get(), &footer, nullptr, nullptr).status());
+    ASSERT_EQ(3, footer.columns_size());
+    ASSERT_TRUE(footer.columns(2).has_zstd_compression_dict_page());
+    ASSERT_GT(footer.columns(2).zstd_compression_dict_page().size(), 0);
+    RecordProperty("persisted_dictionary_page_bytes", footer.columns(2).zstd_compression_dict_page().size());
+
+    std::vector<uint32_t> rowids(kRows);
+    std::iota(rowids.begin(), rowids.end(), 0);
+    {
+        ASSIGN_OR_ABORT(auto probe, Segment::open(fs, file_info, 0, tablet_schema));
+        const auto* reader = probe->column_with_uid(dictionary_column->unique_id());
+        ASSERT_NE(nullptr, reader);
+        ASSERT_TRUE(reader->has_zstd_compression_dict());
+        ASSIGN_OR_ABORT(auto iter, probe->new_column_iterator(tablet_schema->column(2), nullptr));
+        OlapReaderStatistics stats;
+        ColumnIteratorOptions options;
+        options.stats = &stats;
+        options.read_file = read_file.get();
+        ASSERT_OK(iter->init(options));
+        const auto before_dictionary_load = probe->mem_usage();
+        auto values = chunk->get_column_by_index(2)->clone_empty();
+        ASSERT_OK(iter->fetch_values_by_rowid(rowids.data(), rowids.size(), values.get()));
+        ASSERT_EQ(kRows, values->size());
+        // The old top-level-column estimate admits this segment, although loading its persisted
+        // dictionary alone adds more than a shard's entire budget and makes it evict itself.
+        ASSERT_LE(tablet_schema->num_columns() * 1024, kCacheCapacity / kNumShards);
+        const auto dictionary_bytes = probe->mem_usage() - before_dictionary_load;
+        RecordProperty("loaded_dictionary_bytes", static_cast<int>(dictionary_bytes));
+        RecordProperty("cache_shard_bytes", static_cast<int>(kCacheCapacity / kNumShards));
+        ASSERT_GT(dictionary_bytes, kCacheCapacity / kNumShards);
+    }
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(kRows);
+    auto* segment_meta = rowset->add_segment_metas();
+    segment_meta->set_filename(filename);
+    segment_meta->set_size(file_size);
+    RssidFileInfoContainer container;
+    container.add_rssid_to_file(*metadata);
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    const TabletMetadataPtr read_metadata = metadata;
+    const TxnLogPB_OpWrite op_write;
+    const RowsetUpdateStateParams params{op_write, tablet_schema, read_metadata, &tablet, container};
+    const std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{1, rowids}};
+    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    std::vector<bool> decisions;
+    SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
+                                          [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    // Disabling new dictionary writes cannot remove dictionaries from existing files. Check both
+    // switch values and a scalar-only projection: the bypass belongs to the construction schema.
+    for (bool write_dictionary : {true, false}) {
+        config::enable_zstd_compression_dict = write_dictionary;
+        for (const auto& projection : {std::vector<uint32_t>{1}, std::vector<uint32_t>{1, 2}}) {
+            decisions.clear();
+            MutableColumns values;
+            for (auto column_id : projection) {
+                values.emplace_back(chunk->get_column_by_index(column_id)->clone_empty());
+            }
+            ASSERT_OK(_primary_key_mgr->get_column_values(params, projection, false, rowids_by_rssid, &values));
+            ASSERT_EQ(1, decisions.size());
+            EXPECT_FALSE(decisions.front()) << "bypass must be decided before the first cache insertion";
+            for (size_t column = 0; column < projection.size(); ++column) {
+                ASSERT_EQ(kRows, values[column]->size());
+                for (int row = 0; row < kRows; ++row) {
+                    EXPECT_EQ(1, values[column]->equals(row, *chunk->get_column_by_index(projection[column]), row));
+                }
+            }
+        }
+    }
+}
 
 class LakeIncompleteSortKeyPartialUpdateTest : public TestBase {
 public:
@@ -1473,8 +2397,8 @@ public:
 
     void TearDown() override {
         // check primary index cache's ref
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
-        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
         remove_test_dir_or_die();
     }
 
@@ -1510,6 +2434,208 @@ protected:
     std::vector<SlotDescriptor*> _slot_pointers;
     Chunk::SlotHashMap _slot_cid_map;
 };
+
+// `ORDER BY` may put value columns into a primary key table's sort key while still keeping a key
+// column in it, e.g. PRIMARY KEY(c0) ORDER BY(c1, c0). A DELETE on such a table reaches the writer
+// as a "partial update" (its write schema is just the key columns), and its publish must not try to
+// rewrite the empty segment that the delete-only flush emits: the rewrite would write the unmodified
+// columns (c1, c2) alone, a column set that holds SOME sort key columns but not c0.
+class LakeSortKeyWithValueColumnDeleteTest : public TestBase {
+public:
+    LakeSortKeyWithValueColumnDeleteTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+        //
+        //  | column | type | KEY | NULL | SORTKEY |
+        //  +--------+------+-----+------+---------+
+        //  |   c0   |  INT | YES |  NO  |   YES   |
+        //  |   c1   |  INT | NO  |  YES |   YES   |
+        //  |   c2   |  INT | NO  |  YES |   NO    |
+        auto schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+        auto c0 = schema->add_column();
+        {
+            c0->set_unique_id(next_id());
+            c0->set_name("c0");
+            c0->set_type("INT");
+            c0->set_is_key(true);
+            c0->set_is_nullable(false);
+        }
+        auto c1 = schema->add_column();
+        {
+            c1->set_unique_id(next_id());
+            c1->set_name("c1");
+            c1->set_type("INT");
+            c1->set_is_key(false);
+            c1->set_is_nullable(true);
+            c1->set_aggregation("REPLACE");
+        }
+        auto c2 = schema->add_column();
+        {
+            c2->set_unique_id(next_id());
+            c2->set_name("c2");
+            c2->set_type("INT");
+            c2->set_is_key(false);
+            c2->set_is_nullable(true);
+            c2->set_aggregation("REPLACE");
+        }
+        // ORDER BY(c1, c0): a value column first, the key column second. The delete's rewrite column
+        // set (c1, c2) therefore intersects the sort key without covering it.
+        schema->add_sort_key_idxes(1);
+        schema->add_sort_key_idxes(0);
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+        // A DELETE hands the writer the key columns plus the trailing __op marker.
+        _delete_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _delete_slots.emplace_back(1, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        for (auto& slot : _delete_slots) {
+            _delete_slot_pointers.emplace_back(&slot);
+        }
+    }
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
+    void TearDown() override {
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        remove_test_dir_or_die();
+    }
+
+    Chunk generate_full_data(int64_t chunk_size) {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            c1->append(i * 3);
+            c2->append(i * 7);
+        }
+        Chunk::SlotHashMap slot_cid_map;
+        slot_cid_map[0] = 0;
+        slot_cid_map[1] = 1;
+        slot_cid_map[2] = 2;
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, slot_cid_map);
+    }
+
+    Chunk generate_delete_data(int64_t chunk_size) {
+        auto c0 = Int32Column::create();
+        auto cop = Int8Column::create();
+        for (int i = 0; i < chunk_size; i++) {
+            c0->append(i);
+            cop->append(TOpType::DELETE);
+        }
+        Chunk::SlotHashMap slot_cid_map;
+        slot_cid_map[0] = 0;
+        slot_cid_map[1] = 1;
+        return Chunk({std::move(c0), std::move(cop)}, slot_cid_map);
+    }
+
+    int64_t read_rows(int64_t tablet_id, int64_t version) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        int64_t rows = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            CHECK_OK(st);
+            rows += chunk->num_rows();
+            chunk->reset();
+        }
+        return rows;
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_sort_key_with_value_column_delete";
+    constexpr static const int kChunkSize = 12;
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    int64_t _partition_id = 4562;
+    std::vector<SlotDescriptor> _delete_slots;
+    std::vector<SlotDescriptor*> _delete_slot_pointers;
+};
+
+TEST_F(LakeSortKeyWithValueColumnDeleteTest, test_delete_publish) {
+    auto tablet_id = _tablet_metadata->id();
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+    int64_t version = 1;
+
+    // Load the rows with a full-schema write.
+    {
+        auto chunk = generate_full_data(kChunkSize);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+
+    // Delete every row. The delete-only flush emits a 0-row segment plus a del file, and the txn log
+    // carries partial-update metadata for it; publishing must skip the rewrite of that empty segment
+    // instead of failing with "is sort key but not find while init segment writer".
+    {
+        auto chunk = generate_delete_data(kChunkSize);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&_delete_slot_pointers)
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+
+        // The regression only bites when the txn log really does look like a partial update with an
+        // empty segment to rewrite -- assert that shape so the test cannot silently stop covering it.
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        const auto& op_write = txn_log->op_write();
+        ASSERT_TRUE(op_write.has_txn_meta());
+        ASSERT_GT(op_write.rewrite_segments_meta_size(), 0);
+        ASSERT_EQ(0, op_write.rowset().num_rows());
+        ASSERT_GT(op_write.rowset().segment_metas_size(), 0);
+        for (const auto& segment_meta : op_write.rowset().segment_metas()) {
+            ASSERT_EQ(0, segment_meta.num_rows());
+        }
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(0, read_rows(tablet_id, version));
+}
 
 TEST_F(LakeIncompleteSortKeyPartialUpdateTest, test_incomplete_sort_key) {
     auto chunk0 = generate_data(kChunkSize, 0, 3);
@@ -1611,6 +2737,649 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_rewrite_check) {
     ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
 }
 
+// The other half of the guard in RowsetUpdateState::rewrite_segment: a row-mode partial update whose
+// rowset-level num_rows has been apportioned to 0 by a split cross publish must STILL be rewritten,
+// because its segments do hold this tablet's rows. Emulate the apportionment by zeroing the txn log's
+// rowset counter while leaving the per-segment counts alone -- exactly what
+// tablet_reshard_helper::update_rowset_data_stats does to a sibling.
+//
+// c2 is the assertion that has teeth: it is not in the partial write, so it only survives if the
+// rewrite merged the unmodified columns back in. Skipping the rewrite would attach a segment holding
+// c0 and c1 alone.
+TEST_P(LakePartialUpdateTest, test_partial_update_rewrite_with_apportioned_num_rows) {
+    if (GetParam().enable_persistent_index) return;
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) return;
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 5);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // Apportion the rowset counter down to 0, leaving the per-segment counts as the only witness
+    // that this rowset holds rows.
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto apportioned = std::make_shared<TxnLogPB>(*txn_log);
+        auto* rowset = apportioned->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->num_rows(), 0);
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->set_num_rows(0);
+        int64_t segment_rows = 0;
+        for (const auto& segment_meta : rowset->segment_metas()) {
+            segment_rows += segment_meta.num_rows();
+        }
+        ASSERT_GT(segment_rows, 0) << "the per-segment counts must survive the apportionment";
+        ASSERT_OK(_tablet_mgr->put_txn_log(apportioned));
+        _tablet_mgr->prune_metacache();
+    }
+
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
+}
+
+// Turn the fixture's tablet into a range-distributed one owning [lower, upper): the order-preserving
+// big-endian PK encoding range distribution requires (create_sst_seek_range_from rejects anything else,
+// and CrossPublishRowSelector::create_if_needed declines to build without it) plus the range itself,
+// whose bound inclusivity is not a choice -- TabletRangeHelper::validate_tablet_range accepts
+// [lower, upper) and nothing else. The schema id is refreshed so the schema file the writers load stays
+// in step with the metadata this produces.
+static void make_range_distributed(TabletMetadata* metadata, int lower_inclusive, int upper_exclusive) {
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->set_id(next_id());
+    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    auto append_int_bound = [](auto* bound, int value) {
+        DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
+        VariantTuple tuple;
+        tuple.append(variant);
+        tuple.to_proto(bound);
+    };
+    auto* range_pb = metadata->mutable_range();
+    append_int_bound(range_pb->mutable_lower_bound(), lower_inclusive);
+    range_pb->set_lower_bound_included(true);
+    append_int_bound(range_pb->mutable_upper_bound(), upper_exclusive);
+    range_pb->set_upper_bound_included(false);
+}
+
+// A row-mode partial update reads the columns it does not carry from each row's old location, and a
+// cross published SPLIT child is handed its siblings' rows along with its own. Looking a sibling's key
+// up resolves against the sstables this child inherited from the parent, so the location it returns can
+// name a rowset the split pruned away -- get_column_values then fails the publish for good on an
+// unknown rssid, the same failure #77744 fixed for del files. Ask only about the rows this child owns
+// and leave the rest at the "no old row" sentinel, which plan_read_by_rssid turns into default values.
+//
+// A real SPLIT is out of reach here, so the two things CrossPublishRowSelector::create_if_needed keys
+// on are staged directly: a tablet range over the middle of the key space, and an op_write whose
+// segments are marked shared. The baseline write is LOCAL, which is what puts the siblings' keys in
+// this child's index -- without them a sibling lookup would simply miss and there would be nothing to
+// observe.
+//
+// The range is stamped onto the ROWSET here, exactly as convert_txn_log_for_splitting does, which is
+// what narrows the publish iterator to this child's slice of the segment -- and what this covers:
+//
+// - The rewrite's row-count contract. SegmentRewriter::rewrite_partial_update copies the source
+//   segment's own columns verbatim, every row of them, and appends the merged ones, so
+//   SegmentWriter::finalize_columns fails the publish outright ("num rows written mismatch") unless
+//   there is one merged value per SOURCE row. A narrowed iterator produces fewer, so rewrite_segment
+//   pads the rest with defaults. c2 is the witness: it is not in the partial write, so an owned row
+//   carries its old c2 (key * 4) and a padded row carries c2's declared default (10).
+// - That those padded rows stay out of reads. MetaFileBuilder clears `shared` on the rewrite output
+//   (the file really is private to this tablet), so what clips it is the range on the rowset --
+//   Rowset::set_segment_tablet_range accepts either. Hence one assertion on the file, which must hold
+//   every row, and one on the tablet, which must serve only this child's.
+TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_partial_update_reads_only_owned_rows) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "column mode resolves the unmodified columns through DCGs, not this lookup";
+    }
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+    const int kOwnedRows = kOwnedUpper - kOwnedLower;
+
+    make_range_distributed(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
+    auto chunk1 = generate_data(n, 0, true, 5);  // partial rows: c0 and c1 = key * 5 only
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // v2: a local full write puts every key -- this child's and its siblings' -- in the index. Not
+    // shared, so it is neither selected at publish nor clipped at read.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // v3: cross publish the partial update. What convert_txn_log_for_splitting leaves behind is the
+    // parent's segments on every child, so each has to select its own rows out of them.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    // Guards the staging as much as the fix: only the owned keys were re-indexed, so only their old
+    // rows were displaced. All n here would mean the selector never engaged.
+    EXPECT_EQ(kOwnedRows, metadata->rowsets(0).num_dels());
+
+    // The rewrite dropped the siblings' rows outright, so the output is private with nothing left to
+    // clip. Every key still appears exactly once -- the owned ones from the rewrite, the rest from the
+    // baseline rowset, which is what the split left holding them.
+    ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
+                  const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
+                  return owned ? (c1 == c0 * 5 && c2 == c0 * 4) : (c1 == c0 * 3 && c2 == c0 * 4);
+              }));
+
+    const auto& rewritten = metadata->rowsets(1);
+    ASSERT_EQ(1, rewritten.segment_metas_size());
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto segment_path = _tablet_mgr->segment_location(tablet_id, rewritten.segment_metas(0).filename());
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{segment_path}, /*segment_id=*/0, _tablet_schema));
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = fs;
+    opts.tablet_id = tablet_id;
+    opts.stats = &stats;
+    opts.chunk_size = 128;
+    ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
+    auto read_chunk = ChunkFactory::new_chunk(*_schema, 128);
+    std::map<int, std::pair<int, int>> rows;
+    while (true) {
+        read_chunk->reset();
+        auto st = seg_iter->get_next(read_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < read_chunk->num_rows(); i++) {
+            auto row = read_chunk->get(i);
+            rows[row[0].get_int32()] = {row[1].get_int32(), row[2].get_int32()};
+        }
+    }
+    seg_iter->close();
+
+    // This is the contract the owned-only rewrite buys: the file holds this tablet's rows and nothing
+    // else. Before it, the rewrite copied every source row and filled the siblings' unwritten columns
+    // with what "no old row" produces, so the file carried them at a default value and needed a delete
+    // vector, a withheld range and a later UNSHARE rewrite to keep them out of a read.
+    ASSERT_EQ(static_cast<size_t>(kOwnedRows), rows.size()) << "the rewrite must drop the unowned rows";
+    for (int key = 0; key < n; key++) {
+        const bool owned = key >= kOwnedLower && key < kOwnedUpper;
+        auto it = rows.find(key);
+        if (!owned) {
+            EXPECT_EQ(rows.end(), it) << "key " << key << " belongs to a sibling and must not be here";
+            continue;
+        }
+        ASSERT_NE(rows.end(), it) << "key " << key << " missing from the rewritten segment";
+        EXPECT_EQ(key * 5, it->second.first) << "key " << key;
+        EXPECT_EQ(key * 4, it->second.second) << "key " << key;
+    }
+}
+
+// The narrowed-emit check needs the SOURCE segment's row count, and it reads it off the txn log. A txn
+// log written by an older BE carries only the deprecated per-segment arrays, whose synthesized
+// segment_metas have no num_rows at all -- num_rows() then answers 0, the emit no longer looks short of
+// its source, the rewrite goes back to copy-and-append, and the publish stalls forever on
+// "num rows written 0 is not equal to segment num rows N". Same staging as the test above with the
+// count stripped.
+//
+// The range owns NONE of the written keys, which is the only staging that reaches the check at all: a
+// selector exists for every cross publish of a shared segment (CrossPublishRowSelector::
+// create_if_needed) and SegmentPKIterator::_load builds a mask from it for every non-empty chunk, so
+// an emit that returns rows always reports a mask and takes the ordinary masked path. Only the
+// zero-row emit -- this child owns nothing of the segment -- clears the mask, and that is the case
+// the narrowed branch exists for and the one that stalls production.
+TEST_P(LakePartialUpdateTest, test_cross_publish_narrowed_emit_reads_a_missing_row_count_off_the_file) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "column mode resolves the unmodified columns through DCGs, not this lookup";
+    }
+    const int n = kChunkSize;
+
+    // Every key this test writes is 0..n-1, so a range starting at n owns none of them and the
+    // narrowed read emits nothing.
+    make_range_distributed(_tablet_metadata.get(), n, 2 * n);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
+    auto chunk1 = generate_data(n, 0, true, 5);  // partial rows: c0 and c1 = key * 5 only
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // v2: a local full write puts every key -- this child's and its siblings' -- in the index. Not
+    // shared, so it is neither selected at publish nor clipped at read.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // v3: cross publish the partial update. What convert_txn_log_for_splitting leaves behind is the
+    // parent's segments on every child, so each has to select its own rows out of them.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+            // What an older BE's txn log looks like once its deprecated per-segment arrays are
+            // synthesized into segment_metas: a segment with no row count of its own.
+            segment_meta.clear_num_rows();
+        }
+        ASSERT_FALSE(rowset->segment_metas(0).has_num_rows());
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+
+    // Not inferred from the outcome: the publish would also succeed if the count had been there all
+    // along, so the fallback is what has to be observed. This is the only thing that distinguishes
+    // this test from the one above.
+    std::vector<size_t> rows_read_off_the_file;
+    SyncPoint::GetInstance()->SetCallBack("RowsetUpdateState::rewrite_segment:source_rows_from_file", [&](void* arg) {
+        rows_read_off_the_file.push_back(*static_cast<size_t*>(arg));
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp sync_point_guard([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("RowsetUpdateState::rewrite_segment:source_rows_from_file");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+    ASSERT_FALSE(rows_read_off_the_file.empty())
+            << "the fallback must have read the source row count off the segment file";
+    for (size_t rows : rows_read_off_the_file) {
+        EXPECT_EQ(static_cast<size_t>(n), rows) << "the file holds every source row, siblings included";
+    }
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    // This child owned none of the update's rows, so none of its old rows were displaced -- a non-zero
+    // count here would mean the selector never engaged and the update was applied wholesale.
+    EXPECT_EQ(0, metadata->rowsets(0).num_dels());
+    // And the baseline rowset still serves every key at the value the full write left, which is what
+    // the publish never reaches if the row count comes back 0 and stalls it.
+    ASSERT_EQ(n, check(3, [](int c0, int c1, int c2) { return c1 == c0 * 3 && c2 == c0 * 4; }));
+}
+
+// Force row-mode partial updates to rewrite their segment in c1 order.
+static void make_sort_key_differ_from_pk(TabletMetadata* metadata) {
+    auto* schema_pb = metadata->mutable_schema();
+    schema_pb->clear_sort_key_idxes();
+    schema_pb->add_sort_key_idxes(1);
+}
+
+// Verify that a condition update's losers are the only thing left in the rewritten segment's delvec:
+// the unowned rows are gone from the file, not masked in it.
+TEST_P(LakePartialUpdateTest, test_cross_publish_row_mode_condition_update_masks_unowned_rows) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "column-mode partial update is refused outright on a separate sort key";
+    }
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+    const int kOwnedRows = kOwnedUpper - kOwnedLower;
+    const int kUnownedRows = n - kOwnedRows;
+    int condition_winners = 0;
+    for (int key = kOwnedLower; key < kOwnedUpper; key++) {
+        condition_winners += key % 2 == 0;
+    }
+    const int condition_losers = kOwnedRows - condition_winners;
+    ASSERT_GT(kUnownedRows, 0) << "the sibling rows are the whole point of this test";
+    ASSERT_GT(condition_winners, 0);
+    ASSERT_GT(condition_losers, 0);
+
+    make_sort_key_differ_from_pk(_tablet_metadata.get());
+    make_range_distributed(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    ASSERT_TRUE(_tablet_schema->has_separate_sort_key())
+            << "without this the rowset range clips the rewrite and there is nothing to observe";
+
+    auto chunk0 = generate_data(n, 0, false, 3);
+    std::vector<int> keys(n);
+    std::vector<int> values(n);
+    for (int i = 0; i < n; i++) {
+        keys[i] = i;
+        values[i] = i * (i % 2 == 0 ? 5 : 2);
+    }
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c1->append_numbers(values.data(), values.size() * sizeof(int));
+    Chunk chunk1({std::move(c0), std::move(c1)}, _slot_cid_map);
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // The local baseline makes every key resolvable before the cross publish.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Cross publish a partial update whose owned even keys win and owned odd keys lose the condition.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .set_merge_condition("c1")
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        ASSERT_EQ(0, shared_log->op_write().ssts_size());
+        ASSERT_GT(shared_log->op_write().rewrite_segments_meta_size(), 0);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        rowset->mutable_range()->CopyFrom(_tablet_metadata->range());
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    EXPECT_EQ(condition_winners, metadata->rowsets(0).num_dels());
+    EXPECT_EQ(condition_losers, metadata->rowsets(1).num_dels())
+            << "only the condition losers belong in the delvec; the unowned rows are not in the file";
+
+    ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
+                  const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
+                  const bool condition_wins = c0 % 2 == 0;
+                  return c1 == c0 * (owned && condition_wins ? 5 : 3) && c2 == c0 * 4;
+              }));
+
+    // The file holds this tablet's rows only; its delvec hides just the condition losers among them.
+    const auto& rewritten = metadata->rowsets(1);
+    ASSERT_EQ(1, rewritten.segment_metas_size());
+    EXPECT_FALSE(rewritten.segment_metas(0).shared()) << "the rewrite output is private to this tablet";
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto segment_path = _tablet_mgr->segment_location(tablet_id, rewritten.segment_metas(0).filename());
+    ASSIGN_OR_ABORT(auto segment, Segment::open(fs, FileInfo{segment_path}, /*segment_id=*/0, _tablet_schema));
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.fs = fs;
+    opts.tablet_id = tablet_id;
+    opts.stats = &stats;
+    opts.chunk_size = 128;
+    ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
+    auto read_chunk = ChunkFactory::new_chunk(*_schema, 128);
+    std::map<int, std::pair<int, int>> rows;
+    while (true) {
+        read_chunk->reset();
+        auto st = seg_iter->get_next(read_chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        for (size_t i = 0; i < read_chunk->num_rows(); i++) {
+            auto row = read_chunk->get(i);
+            rows[row[0].get_int32()] = {row[1].get_int32(), row[2].get_int32()};
+        }
+    }
+    seg_iter->close();
+
+    // Only this tablet's rows reach the file now. A condition LOSER among them is still here, at the
+    // value the load wrote, because it is the delete vector that hides it -- but a sibling's row is
+    // gone outright, so there is no default-valued copy of it left to serve.
+    ASSERT_EQ(static_cast<size_t>(kOwnedRows), rows.size()) << "the rewrite must drop the unowned rows";
+    for (int key = 0; key < n; key++) {
+        const bool owned = key >= kOwnedLower && key < kOwnedUpper;
+        auto it = rows.find(key);
+        if (!owned) {
+            EXPECT_EQ(rows.end(), it) << "key " << key << " belongs to a sibling and must not be here";
+            continue;
+        }
+        ASSERT_NE(rows.end(), it) << "key " << key << " missing from the rewritten segment";
+        EXPECT_EQ(key * (key % 2 == 0 ? 5 : 2), it->second.first) << "key " << key;
+        EXPECT_EQ(key * 4, it->second.second) << "key " << key;
+    }
+}
+
+// Column-mode partial update on a cross-published rowset. This handler builds its OWN
+// SegmentPKIterators, so it needs its own selector: the mapping it derives from the index decides
+// which source row gets which update, and taking a sibling's row rewrites a value this child does not
+// own (in COLUMN_UPSERT_MODE it would materialize the key outright, which is why the ownership mask
+// has to reach build_rss_rowid_to_update_rowid -- a sibling's key that this child's inherited sstables
+// still answer for looks exactly like an update, and one they do not looks exactly like an insert).
+//
+// Staged as in the row-mode test: the baseline write is LOCAL, so every key -- siblings' included --
+// is in this child's index and resolvable. Only the owned half may end up updated.
+TEST_P(LakePartialUpdateTest, test_cross_publish_column_mode_updates_only_owned_rows) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "row mode merges the unmodified columns through the rewrite, not a DCG";
+    }
+    const int n = kChunkSize;
+    const int kOwnedLower = n / 4;
+    const int kOwnedUpper = n - n / 4;
+
+    make_range_distributed(_tablet_metadata.get(), kOwnedLower, kOwnedUpper);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    ASSERT_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+    _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+
+    auto chunk0 = generate_data(n, 0, false, 3); // full rows: c1 = key * 3, c2 = key * 4
+    auto chunk1 = generate_data(n, 0, true, 5);  // partial rows: c0 and c1 = key * 5 only
+    auto indexes = std::vector<uint32_t>(n);
+    for (int i = 0; i < n; i++) {
+        indexes[i] = i;
+    }
+    auto tablet_id = _tablet_metadata->id();
+
+    // v2: local full write -> every key lands in this child's index.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    }
+    ASSERT_EQ(n, check(2, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // v3: cross publish a column-mode update of every key.
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+    {
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        auto shared_log = std::make_shared<TxnLog>(*txn_log);
+        auto* rowset = shared_log->mutable_op_write()->mutable_rowset();
+        ASSERT_GT(rowset->segment_metas_size(), 0);
+        // Shared segments but no rowset range, so the iterator is never narrowed and the selector's
+        // mask is what decides -- see the note in
+        // LakePrimaryKeyPublishTest.test_cross_publish_condition_update_compares_only_owned_rows.
+        for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+            segment_meta.set_shared(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_txn_log(shared_log));
+        _tablet_mgr->prune_metacache();
+    }
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+
+    // The DCG lands on the baseline rowset, which this tablet wrote itself and reads whole, so a
+    // sibling's update would be plainly visible here: without the mask every key reads c1 = c0 * 5.
+    ASSERT_EQ(n, check(3, [&](int c0, int c1, int c2) {
+                  const bool owned = c0 >= kOwnedLower && c0 < kOwnedUpper;
+                  return c2 == c0 * 4 && c1 == (owned ? c0 * 5 : c0 * 3);
+              }));
+}
+
 TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     auto chunk1 = generate_data(kChunkSize, 0, true, 5);
@@ -1648,8 +3417,8 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     // partial update, and make it generate two segment files in one rowset
     const int64_t old_size = config::write_buffer_size;
     config::write_buffer_size = 1;
-    const int64_t old_limit = _update_mgr->update_state_mem_tracker()->limit();
-    _update_mgr->update_state_mem_tracker()->set_limit(1);
+    const int64_t old_limit = _primary_key_mgr->update_state_mem_tracker()->limit();
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(1);
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -1682,7 +3451,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
         }
     }
     config::write_buffer_size = old_size;
-    _update_mgr->update_state_mem_tracker()->set_limit(old_limit);
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(old_limit);
     ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 6 == c1) && (c0 * 4 == c2); }));
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
@@ -1690,10 +3459,7 @@ TEST_P(LakePartialUpdateTest, test_write_multi_segment_by_diff_val_mem_limit) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
-    }
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
 }
 
@@ -1859,12 +3625,9 @@ TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
     } else {
         EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
         // check segment size in last metadata
-        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segment_metas_size(), 2);
     }
-    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
-    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
-        check_local_persistent_index_meta(tablet_id, version);
-    }
+    EXPECT_TRUE(_primary_key_mgr->update_state_mem_tracker()->consumption() == 0);
 }
 
 namespace {
@@ -1996,7 +3759,7 @@ public:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
-        auto chunk = ChunkHelper::new_chunk(*schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*schema, 128);
         auto ret = int64_t{0};
         auto rowid = int64_t{0};
         while (true) {
@@ -2142,6 +3905,92 @@ public:
     constexpr static const char* const kTestDirectory = "test_lake_column_upsert_mode";
 };
 
+// _handle_column_upsert_mode materializes inserted rows in batches of
+// column_mode_partial_update_insert_batch_size, and every batch of one source segment now reads
+// through a single Segment and RandomAccessFile opened once for that segment. Every other test in
+// this file writes one source segment and fits its inserts in one batch, leaving both loops at a
+// single iteration; this one forces two source segments of two batches each.
+//
+// The synthesized rowset's row count is the assertion that bites: the primary index deduplicates on
+// read, so a batch that materialized the wrong rowids would still produce the right query result
+// while writing the wrong number of rows.
+TEST_F(LakeColumnUpsertModeTest, upsert_new_rows_across_multiple_source_segments_and_batches) {
+    const int32_t saved_batch_size = config::column_mode_partial_update_insert_batch_size;
+    const int64_t saved_write_buffer_size = config::write_buffer_size;
+    DeferOp restore_config([&]() {
+        config::column_mode_partial_update_insert_batch_size = saved_batch_size;
+        config::write_buffer_size = saved_write_buffer_size;
+    });
+
+    constexpr int kHalf = kChunkSize / 2;
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    // Two disjoint PK ranges, both far above the baseline keys, so every row of this write is new and
+    // goes through the insert path.
+    auto chunk_insert_a = generate_data(kHalf, 100, true, 7);
+    auto chunk_insert_b = generate_data(kHalf, 101, true, 7);
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+    auto version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+
+    {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+    ASSIGN_OR_ABORT(auto md_before, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    const auto rowsets_before = md_before->rowsets_size();
+
+    // A one-byte write buffer flushes each write() into its own segment; 3-row batches then split each
+    // of those 6-row segments in two.
+    config::write_buffer_size = 1;
+    config::column_mode_partial_update_insert_batch_size = 3;
+    {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_insert_a, indexes.data(), kHalf));
+        ASSERT_OK(delta_writer->write(chunk_insert_b, indexes.data(), kHalf));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_EQ(2, txn_log->op_write().rowset().segment_metas_size())
+                << "the test needs more than one source segment to cover the per-segment reader";
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+
+    // _handle_column_upsert_mode appends exactly one rowset holding the materialized inserts. Each
+    // batch must have contributed only its own slice, so that rowset holds kChunkSize rows.
+    ASSIGN_OR_ABORT(auto md_after, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(md_after->rowsets_size(), rowsets_before);
+    EXPECT_EQ(kChunkSize, md_after->rowsets(md_after->rowsets_size() - 1).num_rows());
+
+    // c2 is absent from the write, so the inserted rows carry the column default (10).
+    EXPECT_EQ(kChunkSize * 2, check(version, [](int c0, int c1, int c2) {
+                  return c0 >= kChunkSize ? (c1 == c0 * 7 && c2 == 10) : (c1 == c0 * 3 && c2 == c0 * 4);
+              }));
+}
+
 TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
     auto chunk_full = generate_data(kChunkSize, 0, false, 3);
     auto chunk_partial = generate_data(kChunkSize, 0, true, 5);
@@ -2191,6 +4040,131 @@ TEST_F(LakeColumnUpsertModeTest, upsert_existing_rows_generates_dcg_only) {
     ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(md->rowsets_size(), 3);
     EXPECT_GT(md->dcg_meta().dcgs_size(), 0);
+}
+
+// A COLUMN_UPSERT_MODE load synthesizes one new-row segment per update segment and upserts each into
+// the primary index in turn, so a key that occurs in more than one of the load's own update segments
+// makes a later iteration return deletes against an earlier iteration's segment. When two later
+// iterations both hit the same earlier segment, that segment's delete vector is written twice inside
+// one publish -- and append_delvec() replaces the entry rather than merging it, so a fresh DelVector
+// drops the first write's marks and those superseded rows go live again, leaving two live rows for one
+// primary key with no error anywhere.
+//
+// The shape below is the minimal one that writes a segment's delete vector twice: twelve brand-new
+// keys in the first update segment, then the even half, then the odd half. Both later segments
+// supersede rows in the first, and neither overlaps the other.
+TEST_F(LakeColumnUpsertModeTest, column_upsert_merges_delvec_across_update_segments) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+    constexpr int kNewKeyBase = 100;
+
+    auto partial_chunk = [this](const std::vector<int>& keys, int multiplier) {
+        std::vector<int> values(keys.size());
+        for (size_t i = 0; i < keys.size(); i++) {
+            values[i] = keys[i] * multiplier;
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(values.data(), values.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
+    };
+
+    std::vector<int> all_keys(kChunkSize);
+    std::vector<int> even_keys;
+    std::vector<int> odd_keys;
+    for (int i = 0; i < kChunkSize; i++) {
+        all_keys[i] = kNewKeyBase + i;
+        (i % 2 == 0 ? even_keys : odd_keys).push_back(all_keys[i]);
+    }
+
+    // Seed the table so the column-upsert load runs against real base data.
+    {
+        auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+        auto indexes = std::vector<uint32_t>(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // One column-upsert load, three update segments: all keys, then the even half, then the odd half.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        for (const auto& [keys, multiplier] :
+             std::vector<std::pair<std::vector<int>, int>>{{all_keys, 5}, {even_keys, 7}, {odd_keys, 9}}) {
+            auto chunk = partial_chunk(keys, multiplier);
+            std::vector<uint32_t> indexes(keys.size());
+            for (size_t i = 0; i < keys.size(); i++) indexes[i] = i;
+            ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+            // Close the memtable so each batch becomes its own update segment.
+            ASSERT_OK(delta_writer->flush());
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Every key must be live exactly once, carrying the value of the last segment that wrote it:
+    // the even keys were last written by the second segment, the odd keys by the third. Without the
+    // merge, the first segment's even rows survive as well and those keys have two live rows.
+    std::map<int, std::vector<std::pair<int, int>>> rows_by_key;
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            auto cols = chunk->columns();
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                rows_by_key[cols[0]->get(i).get_int32()].emplace_back(cols[1]->get(i).get_int32(),
+                                                                      cols[2]->get(i).get_int32());
+            }
+            chunk->reset();
+        }
+    }
+
+    for (int key : all_keys) {
+        const auto& rows = rows_by_key[key];
+        ASSERT_EQ(1, rows.size()) << "primary key " << key << " has " << rows.size() << " live rows";
+        const int expected_multiplier = ((key - kNewKeyBase) % 2 == 0) ? 7 : 9;
+        EXPECT_EQ(key * expected_multiplier, rows[0].first) << "key " << key << " kept a superseded value";
+        EXPECT_EQ(10, rows[0].second) << "key " << key << " should carry c2's default";
+    }
+    EXPECT_EQ(2 * kChunkSize, rows_by_key.size());
+    size_t total_rows = 0;
+    for (const auto& [key, rows] : rows_by_key) {
+        total_rows += rows.size();
+    }
+    EXPECT_EQ(2 * kChunkSize, total_rows) << "a superseded row was resurrected";
 }
 
 TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
@@ -2347,6 +4321,159 @@ TEST_F(LakeColumnUpsertModeTest, upsert_with_new_rows_adds_new_segments) {
     EXPECT_EQ(total, kChunkSize * 2);
 }
 
+// Locks down the CopyFrom contract in _handle_column_upsert_mode: the synthesized
+// new_rows_op rowset must inherit the source op_write's uid verbatim. The DCG path
+// (apply_column_mode_partial_update) orphans the original op_write segments, so
+// new_rows_op is the only top-level rowset this publish adds; reusing op_write.uid
+// gives split siblings replaying the same op_write an identical uid → MERGE dedup.
+//
+// If a future change accidentally re-introduces XOR-salt derivation or a fresh
+// mint here, this test fails (uid would differ from the captured op_write.uid).
+TEST_F(LakeColumnUpsertModeTest, new_rows_op_inherits_op_write_uid) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Phase 1: baseline INSERT to populate the table so subsequent COLUMN_UPSERT_MODE
+    // writes against new PK offsets hit the "new rows" synthesis path.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSIGN_OR_ABORT(auto md_before, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    auto prev_rowsets = md_before->rowsets_size();
+
+    // Phase 2: COLUMN_UPSERT_MODE write at PK offset 100 (disjoint from baseline 0..kChunkSize),
+    // so every row is "new" and goes through the new_rows_op synthesis path.
+    auto chunk_insert = generate_data(kChunkSize, 100, true, 7);
+    PUniqueId captured_op_write_uid;
+    auto txn_id = next_id();
+    {
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_insert, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        // Capture op_write.rowset.uid before publish consumes the txn_log.
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        ASSERT_TRUE(txn_log->has_op_write());
+        ASSERT_TRUE(tablet_reshard_helper::has_valid_uid(txn_log->op_write().rowset()))
+                << "delta_writer must mint a uid on the op_write rowset at write time";
+        captured_op_write_uid = txn_log->op_write().rowset().uid();
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Phase 3: verify the new top-level rowset (new_rows_op) inherits the op_write's uid.
+    // apply_opwrite appends via _tablet_meta->add_rowsets(), so new_rows_op is the last entry.
+    ASSIGN_OR_ABORT(auto md_after, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(md_after->rowsets_size(), prev_rowsets);
+    const auto& new_rows_rs = md_after->rowsets(md_after->rowsets_size() - 1);
+    EXPECT_TRUE(tablet_reshard_helper::has_valid_uid(new_rows_rs))
+            << "synthesized new_rows_op rowset must carry a valid uid";
+    EXPECT_EQ(captured_op_write_uid.hi(), new_rows_rs.uid().hi())
+            << "new_rows_op.uid.hi must CopyFrom op_write.rowset.uid.hi (no derivation)";
+    EXPECT_EQ(captured_op_write_uid.lo(), new_rows_rs.uid().lo())
+            << "new_rows_op.uid.lo must CopyFrom op_write.rowset.uid.lo (no derivation)";
+}
+
+// Column-mode legacy compatibility: a COLUMN_UPSERT_MODE op_write written before the
+// uid field existed (rolling upgrade / BE restart with pending txn logs) carries no
+// uid. _handle_column_upsert_mode must MINT a fresh uid for the synthesized new_rows_op
+// rather than hard-fail the in-flight transaction. Such a legacy write is never
+// range-distributed (a new, post-uid feature), hence never cross-published, so a fresh
+// per-publish uid is safe. delta_writer always mints in production; we rewrite the
+// persisted txn log (clear its uid) between write and publish to drive the legacy path.
+TEST_F(LakeColumnUpsertModeTest, new_rows_op_without_op_write_uid_mints_fresh) {
+    auto chunk_full = generate_data(kChunkSize, 0, false, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Phase 1: baseline INSERT.
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Phase 2: COLUMN_UPSERT_MODE write at a disjoint PK offset (all rows new), then
+    // rewrite the persisted txn log to drop the op_write uid before publish.
+    auto chunk_insert = generate_data(kChunkSize, 100, true, 7);
+    auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk_insert, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_TRUE(txn_log->has_op_write());
+    auto rewritten = std::make_shared<TxnLog>(*txn_log);
+    rewritten->mutable_op_write()->mutable_rowset()->clear_uid(); // producer-side regression
+    ASSERT_OK(_tablet_mgr->put_txn_log(rewritten));
+
+    // Publish must SUCCEED (mint-if-absent), not hard-fail on the missing uid.
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+    version++;
+
+    // The synthesized new_rows_op (appended last by apply_opwrite) must carry a
+    // freshly-minted valid uid even though the source op_write had none.
+    ASSIGN_OR_ABORT(auto md_after, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_GT(md_after->rowsets_size(), 0);
+    const auto& new_rows_rs = md_after->rowsets(md_after->rowsets_size() - 1);
+    EXPECT_TRUE(tablet_reshard_helper::has_valid_uid(new_rows_rs))
+            << "legacy uid-less column-mode op_write must yield a freshly-minted new_rows_op uid";
+}
+
 TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
     // Create a schema with default values
     auto tablet_metadata = std::make_shared<TabletMetadata>();
@@ -2472,7 +4599,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_default_values = false;
@@ -2679,10 +4806,10 @@ TEST_F(LakeColumnUpsertModeTest, test_error_handling_scenarios) {
     }
 
     // Test with memory pressure to trigger error paths during upsert index operations
-    const int64_t old_limit = _update_mgr->update_state_mem_tracker()->limit();
-    _update_mgr->update_state_mem_tracker()->set_limit(1); // Very low limit to trigger memory errors
+    const int64_t old_limit = _primary_key_mgr->update_state_mem_tracker()->limit();
+    _primary_key_mgr->update_state_mem_tracker()->set_limit(1); // Very low limit to trigger memory errors
 
-    DeferOp defer([&]() { _update_mgr->update_state_mem_tracker()->set_limit(old_limit); });
+    DeferOp defer([&]() { _primary_key_mgr->update_state_mem_tracker()->set_limit(old_limit); });
 
     // This should still succeed but may trigger some error handling paths
     {
@@ -2917,7 +5044,7 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_updated_rows = false;
@@ -3072,7 +5199,7 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(TabletReaderParams()));
-        auto chk = ChunkHelper::new_chunk(*_schema, 256);
+        auto chk = ChunkFactory::new_chunk(*_schema, 256);
         std::vector<bool> seen(kChunkSize, false);
         while (true) {
             auto st = reader->get_next(chk.get());
@@ -3243,7 +5370,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     ASSERT_OK(reader->prepare());
     ASSERT_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_new_rows = false;
@@ -3379,7 +5506,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *reader_schema);
     ASSERT_OK(reader->prepare());
     ASSERT_OK(reader->open(TabletReaderParams()));
-    auto result_chunk = ChunkHelper::new_chunk(*reader_schema, 128);
+    auto result_chunk = ChunkFactory::new_chunk(*reader_schema, 128);
 
     int total_rows = 0;
     bool found_correct_defaults = false;
@@ -3492,7 +5619,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
         CHECK_OK(reader->prepare());
         CHECK_OK(reader->open(TabletReaderParams()));
 
-        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
         int total_rows = 0;
         int new_rows_found = 0;
 
@@ -3552,7 +5679,7 @@ TEST_F(LakeColumnUpsertModeTest, memory_optimization_skip_column_reading) {
     CHECK_OK(reader->prepare());
     CHECK_OK(reader->open(TabletReaderParams()));
 
-    auto chunk = ChunkHelper::new_chunk(*_schema, 128);
+    auto chunk = ChunkFactory::new_chunk(*_schema, 128);
     int total_rows = 0;
     int existing_rows_updated = 0;
     int new_rows_verified = 0;
@@ -3648,7 +5775,7 @@ TEST_F(LakeColumnUpsertModeTest, test_orphan_files_gc_in_column_upsert_mode) {
         const auto& op_write = txn_log->op_write();
 
         // The partial update should have generated segments (before GC)
-        int segment_count = op_write.rowset().segments_size();
+        int segment_count = op_write.rowset().segment_metas_size();
         LOG(INFO) << "Partial update generated " << segment_count << " segments before publish";
 
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -3777,8 +5904,19 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
         ASSERT_TRUE(txn_log->has_op_write());
         const auto& op_write = txn_log->op_write();
-        int original_dels_count = op_write.dels_size();
+        int original_dels_count = op_write.dels_meta_size();
         LOG(INFO) << "Original del files count: " << original_dels_count;
+
+        // The writer must emit del_num_rows parallel to dels_meta, and it must account every
+        // tombstone (kChunkSize/4 deletes). This is the input that _handle_column_upsert_mode
+        // has to carry onto the synthesized new_rows_op.
+        ASSERT_GT(original_dels_count, 0);
+        ASSERT_EQ(op_write.del_num_rows_size(), op_write.dels_meta_size());
+        int64_t txnlog_del_rows = 0;
+        for (int i = 0; i < op_write.del_num_rows_size(); i++) {
+            txnlog_del_rows += op_write.del_num_rows(i);
+        }
+        EXPECT_EQ(txnlog_del_rows, kChunkSize / 4);
 
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
@@ -3793,7 +5931,7 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(TabletReaderParams()));
 
-        auto chk = ChunkHelper::new_chunk(*_schema, 256);
+        auto chk = ChunkFactory::new_chunk(*_schema, 256);
         std::set<int> found_keys;
         while (true) {
             auto st = reader->get_next(chk.get());
@@ -3826,10 +5964,993 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         // Check that rowsets have proper del file info or delvec metadata
         ASSERT_GE(metadata->rowsets_size(), 1);
 
+        // The fix under test: _handle_column_upsert_mode must carry op_write.del_num_rows onto the
+        // synthesized new_rows_op, so the persisted del files record their tombstone count. Sum
+        // num_rows across every persisted del file; it must match the tombstones written above and
+        // every persisted del file must carry a recorded count.
+        int64_t persisted_del_rows = 0;
+        int del_files_seen = 0;
+        int del_files_with_count = 0;
+        for (const auto& rs : metadata->rowsets()) {
+            for (const auto& df : rs.del_files()) {
+                ++del_files_seen;
+                if (df.has_num_rows()) {
+                    ++del_files_with_count;
+                    persisted_del_rows += df.num_rows();
+                }
+            }
+        }
+        ASSERT_GT(del_files_seen, 0);
+        EXPECT_EQ(del_files_with_count, del_files_seen); // every persisted del file carries a count
+        EXPECT_EQ(persisted_del_rows, kChunkSize / 4);   // matches the tombstones written
+
         LOG(INFO) << "Final version: " << version;
         LOG(INFO) << "Total rowsets: " << metadata->rowsets_size();
         LOG(INFO) << "DCG count: " << metadata->dcg_meta().dcgs_size();
     }
+}
+
+// A column-mode partial update publishes its del files through PrimaryKeyManager::_handle_delete_files,
+// which always erases via the memtable path and never reads op_write.del_ssts(). The import-time
+// tombstone-sstable build is byte-threshold-driven and would otherwise fire here too, producing a
+// sstable no publisher ingests: it never enters sstable_meta(), so only a full vacuum's orphan scan
+// would ever reclaim it. Drive the threshold to 1 byte (so every del file would qualify) and assert the
+// writer emits no tombstone sstable for a COLUMN_UPSERT_MODE load, while the deletes still apply.
+TEST_F(LakeColumnUpsertModeTest, test_no_del_tombstone_sstable_in_column_upsert_mode) {
+    ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1);
+    const int64_t kChunkSize = 64;
+    auto tablet_id = _tablet_metadata->id();
+    int64_t version = 1;
+
+    // Seed the tablet so the deletes below have existing rows to shadow.
+    {
+        auto chunk = generate_data(kChunkSize, 0, false, 100);
+        std::vector<uint32_t> indexes(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) indexes[i] = i;
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Column-mode partial update that DELETEs the first quarter and upserts the rest.
+    {
+        std::vector<int> v0(kChunkSize);
+        std::vector<int> v1(kChunkSize, 777);
+        std::vector<uint8_t> ops(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) {
+            v0[i] = i;
+            ops[i] = (i < kChunkSize / 4) ? TOpType::DELETE : TOpType::UPSERT;
+        }
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto cop = Int8Column::create();
+        c0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        cop->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+
+        Chunk::SlotHashMap ops_slot_map;
+        ops_slot_map[0] = 0;
+        ops_slot_map[1] = 1;
+        ops_slot_map[3] = 2; // op column
+        Chunk chunk_with_ops({std::move(c0), std::move(c1), std::move(cop)}, ops_slot_map);
+
+        std::vector<uint32_t> idx(kChunkSize);
+        for (int i = 0; i < kChunkSize; i++) idx[i] = i;
+
+        std::vector<SlotDescriptor> op_slots;
+        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        std::vector<SlotDescriptor*> op_slot_pointers;
+        for (auto& slot : op_slots) {
+            op_slot_pointers.emplace_back(&slot);
+        }
+
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto dw, DeltaWriterBuilder()
+                                         .set_tablet_manager(_tablet_mgr.get())
+                                         .set_tablet_id(tablet_id)
+                                         .set_txn_id(txn_id)
+                                         .set_partition_id(_partition_id)
+                                         .set_mem_tracker(_mem_tracker.get())
+                                         .set_schema_id(_tablet_schema->id())
+                                         .set_slot_descriptors(&op_slot_pointers)
+                                         .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                         .build());
+        ASSERT_OK(dw->open());
+        ASSERT_OK(dw->write(chunk_with_ops, idx.data(), idx.size()));
+        ASSERT_OK(dw->finish_with_txnlog());
+        dw->close();
+
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+        const auto& op_write = txn_log->op_write();
+        // Precondition: this load really did produce a del file, and it really is a column-mode partial
+        // update -- otherwise the assertion below would pass vacuously.
+        ASSERT_GT(op_write.dels_meta_size(), 0);
+        ASSERT_EQ(PartialUpdateMode::COLUMN_UPSERT_MODE, op_write.txn_meta().partial_update_mode());
+        // The fix under test: no tombstone sstable was built. Entries stay index-aligned with dels_meta,
+        // so an entry may exist -- it must just be empty, which is what publish reads as "no sstable".
+        for (int i = 0; i < op_write.del_ssts_size(); i++) {
+            EXPECT_TRUE(op_write.del_ssts(i).name().empty())
+                    << "del_ssts[" << i << "] would never be ingested by the column-mode publish path";
+        }
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // The deletes still applied: the first quarter is gone, the rest survives.
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams()));
+        auto chk = ChunkFactory::new_chunk(*_schema, 256);
+        std::set<int> found_keys;
+        while (true) {
+            auto st = reader->get_next(chk.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (int i = 0; i < chk->num_rows(); i++) {
+                found_keys.insert(chk->columns()[0]->get(i).get_int32());
+            }
+            chk->reset();
+        }
+        for (int i = 0; i < kChunkSize / 4; i++) {
+            EXPECT_EQ(found_keys.count(i), 0) << "deleted key " << i << " should be gone";
+        }
+        for (int i = kChunkSize / 4; i < kChunkSize; i++) {
+            EXPECT_EQ(found_keys.count(i), 1) << "upserted key " << i << " should be present";
+        }
+    }
+}
+
+// Test parallel column mode partial update publish with multiple source segments
+// and multiple update segments. This exercises both Phase 1 (cross-segment parallel
+// PK index lookup via batch_parallel_get_rss_rowids) and Phase 2 (parallel DCG
+// generation across source segments).
+TEST_P(LakePartialUpdateTest, test_parallel_column_mode_partial_update_multi_segments) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "Only COLUMN_UPDATE_MODE uses parallel column mode partial update";
+    }
+
+    const int kNumSourceWrites = 5;
+    const int kNumPartialUpdates = 3;
+
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Step 1: Create multiple source segments by writing full data multiple times
+    // with different key ranges, so each write creates a separate rowset/segment.
+    for (int i = 0; i < kNumSourceWrites; i++) {
+        auto chunk_full = generate_data(kChunkSize, i, false, 3);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    // Verify: 5 rowsets with kChunkSize * 5 total rows
+    ASSERT_EQ(kChunkSize * kNumSourceWrites,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(auto md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(md->rowsets_size(), kNumSourceWrites);
+
+    // Step 2: Perform partial column updates with multiple update segments per txn.
+    // Using write_buffer_size=1 forces each write() call to flush as a separate segment,
+    // creating multiple update segments that exercise parallel PK index lookup.
+    // Restore the config via RAII so a failing ASSERT in the loop below cannot leak
+    // state into subsequent tests.
+    const int64_t old_write_buffer_size = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    DeferOp restore_cfg([&]() { config::write_buffer_size = old_write_buffer_size; });
+
+    for (int i = 0; i < kNumPartialUpdates; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        // Write partial updates for different key ranges, creating multiple update segments.
+        // Each write targets keys from a different source segment.
+        for (int j = 0; j < kNumSourceWrites; j++) {
+            auto chunk_partial = generate_data(kChunkSize, j, true, 5 + i);
+            ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish triggers parallel column mode partial update:
+        // - Phase 1: parallel PK index lookup with lazy-load SegmentPKIterator
+        // - Phase 2: parallel DCG generation across source segments
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 3: Verify correctness - the last partial update set c1 = c0 * (5 + kNumPartialUpdates - 1)
+    // while c2 should remain unchanged (c0 * 4, set by original full writes).
+    const int expected_c1_ratio = 5 + kNumPartialUpdates - 1;
+    ASSERT_EQ(kChunkSize * kNumSourceWrites, check(version, [expected_c1_ratio](int c0, int c1, int c2) {
+                  return (c0 * expected_c1_ratio == c1) && (c0 * 4 == c2);
+              }));
+
+    // Step 4: Verify metadata - should still have same number of rowsets (column update
+    // mode doesn't add new rowsets), and DCGs should have been generated.
+    ASSIGN_OR_ABORT(md, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(md->rowsets_size(), kNumSourceWrites);
+    EXPECT_GT(md->dcg_meta().dcgs_size(), 0);
+}
+
+// Test parallel row-mode partial update publish with multiple segments.
+// This exercises the parallel Phase 1 (load_segment + rewrite_segment in parallel)
+// and sequential Phase 2 (_do_update) path.
+TEST_P(LakePartialUpdateTest, test_parallel_row_mode_partial_update_multi_segments) {
+    if (GetParam().partial_update_mode != PartialUpdateMode::ROW_MODE) {
+        GTEST_SKIP() << "Only ROW_MODE uses parallel row-mode partial update";
+    }
+
+    const int kNumSourceWrites = 3;
+
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+
+    // Step 1: Create initial full data with multiple key ranges.
+    for (int i = 0; i < kNumSourceWrites; i++) {
+        auto chunk_full = generate_data(kChunkSize, i, false, 3);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk_full, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * kNumSourceWrites,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+
+    // Step 2: Perform row-mode partial update with multiple segments per txn.
+    // Using write_buffer_size=1 forces each write() call to flush as a separate segment,
+    // creating multiple update segments that exercise parallel load + rewrite.
+    const int64_t old_write_buffer_size = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    DeferOp restore_cfg([&]() { config::write_buffer_size = old_write_buffer_size; });
+
+    {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(PartialUpdateMode::ROW_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        // Write partial updates for different key ranges, creating multiple update segments.
+        for (int j = 0; j < kNumSourceWrites; j++) {
+            auto chunk_partial = generate_data(kChunkSize, j, true, 7);
+            ASSERT_OK(delta_writer->write(chunk_partial, indexes.data(), indexes.size()));
+        }
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish triggers parallel row-mode partial update:
+        // - Phase 1: parallel load_segment + rewrite_segment
+        // - Phase 2: sequential _do_update
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // Step 3: Verify correctness - c1 should be updated (c0 * 7),
+    // c2 should remain unchanged (c0 * 4).
+    ASSERT_EQ(kChunkSize * kNumSourceWrites,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 7 == c1) && (c0 * 4 == c2); }));
+}
+
+// Regression tests for column-mode partial update (PCU) under schema drift.
+//
+// Background: PCU records the column id (cid) of target columns at write time
+// in the txn log. If ALTER TABLE changes the schema before publish, those cids
+// may no longer match the current schema. The handler must resolve target
+// columns via their unique id (uid) instead of the stale cid; otherwise writes
+// land on the wrong column or crash on type-mismatched column writers.
+class LakePcuSchemaDriftTest : public TestBase {
+public:
+    LakePcuSchemaDriftTest() : TestBase(kTestDirectory) { build_default_schema(); }
+
+    constexpr static const char* const kTestDirectory = "test_lake_pcu_schema_drift";
+    constexpr static const int kChunkSize = 10;
+
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        CHECK_OK(_tablet_mgr->create_schema_file(_tablet_metadata->id(), _tablet_metadata->schema()));
+    }
+
+    void TearDown() override {
+        StorageEngine::instance()->wait_storage_cleanup_tasks();
+        remove_test_dir_or_die();
+    }
+
+protected:
+    // Build default schema {c0(INT,key), v_int(INT,nullable), v_arr(ARRAY<INT>,nullable)}.
+    void build_default_schema() {
+        _tablet_metadata = std::make_shared<TabletMetadata>();
+        _tablet_metadata->set_id(next_id());
+        _tablet_metadata->set_version(1);
+        _tablet_metadata->set_next_rowset_id(1);
+
+        auto* schema = _tablet_metadata->mutable_schema();
+        schema->set_id(next_id());
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_num_rows_per_row_block(65535);
+
+        auto* c0 = schema->add_column();
+        _c0_uid = next_id();
+        c0->set_unique_id(_c0_uid);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+
+        auto* v_int = schema->add_column();
+        _v_int_uid = next_id();
+        v_int->set_unique_id(_v_int_uid);
+        v_int->set_name("v_int");
+        v_int->set_type("INT");
+        v_int->set_is_key(false);
+        v_int->set_is_nullable(true);
+        v_int->set_aggregation("REPLACE");
+
+        auto* v_arr = schema->add_column();
+        _v_arr_uid = next_id();
+        v_arr->set_unique_id(_v_arr_uid);
+        v_arr->set_name("v_arr");
+        v_arr->set_type("ARRAY");
+        v_arr->set_is_key(false);
+        v_arr->set_is_nullable(true);
+        v_arr->set_aggregation("REPLACE");
+        auto* child = v_arr->add_children_columns();
+        child->set_unique_id(next_id());
+        child->set_name("element");
+        child->set_type("INT");
+        child->set_is_nullable(true);
+
+        _tablet_schema = TabletSchema::create(*schema);
+
+        // Build slot descriptors. Slot id <-> column id mapping mirrors LakePartialUpdateTestBase.
+        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "v_int", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TypeDescriptor{LogicalType::TYPE_INT}));
+
+        _slot_pointers_full.emplace_back(&_slots[0]);
+        _slot_pointers_full.emplace_back(&_slots[1]);
+        _slot_pointers_full.emplace_back(&_slots[2]);
+
+        _slot_pointers_v_arr.emplace_back(&_slots[0]);
+        _slot_pointers_v_arr.emplace_back(&_slots[2]);
+
+        _slot_pointers_v_int.emplace_back(&_slots[0]);
+        _slot_pointers_v_int.emplace_back(&_slots[1]);
+
+        _slot_cid_map.emplace(0, 0);
+        _slot_cid_map.emplace(1, 1);
+        _slot_cid_map.emplace(2, 2);
+    }
+
+    // Build an ARRAY<INT> nullable column: row i = [i*scale, i*scale+1].
+    ColumnPtr build_array_column(int n_rows, int scale) {
+        auto element = Int32Column::create();
+        auto null_column = NullColumn::create();
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        for (int i = 0; i < n_rows; i++) {
+            element->append(i * scale);
+            null_column->append(0);
+            element->append(i * scale + 1);
+            null_column->append(0);
+            offsets->append((i + 1) * 2);
+        }
+        auto nullable_element = NullableColumn::create(std::move(element), std::move(null_column));
+        auto array_col = ArrayColumn::create(std::move(nullable_element), std::move(offsets));
+        // Wrap in NullableColumn since the outer v_arr is nullable.
+        auto outer_null = NullColumn::create();
+        for (int i = 0; i < n_rows; i++) outer_null->append(0);
+        return NullableColumn::create(std::move(array_col), std::move(outer_null));
+    }
+
+    // Full-row chunk: c0=[0..N-1], v_int=[100..100+N-1], v_arr=[i*10, i*10+1].
+    Chunk make_full_chunk(int n_rows) {
+        auto c0 = Int32Column::create();
+        auto v_int = Int32Column::create();
+        for (int i = 0; i < n_rows; i++) {
+            c0->append(i);
+            v_int->append(100 + i);
+        }
+        auto v_arr = build_array_column(n_rows, /*scale=*/10);
+        return Chunk({std::move(c0), std::move(v_int), std::move(v_arr)}, _slot_cid_map);
+    }
+
+    // Partial chunk for PCU on v_arr: only c0 + v_arr columns.
+    // v_arr[i] = [i*scale, i*scale+1].
+    Chunk make_partial_chunk_v_arr(int n_rows, int scale) {
+        auto c0 = Int32Column::create();
+        for (int i = 0; i < n_rows; i++) c0->append(i);
+        auto v_arr = build_array_column(n_rows, scale);
+        // Slot id 0 -> column index 0, slot id 2 -> column index 1 (v_arr is 2nd in this partial chunk)
+        Chunk::SlotHashMap partial_map;
+        partial_map.emplace(0, 0);
+        partial_map.emplace(2, 1);
+        return Chunk({std::move(c0), std::move(v_arr)}, partial_map);
+    }
+
+    // Verify v_arr contents after publish. Also asserts:
+    //   - inserted column c_new (created by AddColumn) is all NULL
+    //   - v_int unchanged at base value (100+i)
+    //   - row count matches kChunkSize
+    // expected_v_arr_scale: each row's v_arr should be [rowid*scale, rowid*scale+1].
+    void verify_v_arr_content(int64_t version, int expected_v_arr_scale) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = tablet_schema->schema();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*schema, 128);
+
+        // Locate column indexes by name in the post-ALTER schema.
+        int c0_idx = -1, v_int_idx = -1, v_arr_idx = -1, c_new_idx = -1;
+        for (size_t i = 0; i < tablet_schema->num_columns(); i++) {
+            const auto& name = tablet_schema->column(i).name();
+            if (name == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (name == "v_int")
+                v_int_idx = static_cast<int>(i);
+            else if (name == "v_arr")
+                v_arr_idx = static_cast<int>(i);
+            else
+                c_new_idx = static_cast<int>(i);
+        }
+        ASSERT_EQ(c0_idx, 0);
+        ASSERT_EQ(c_new_idx, 1);
+        ASSERT_EQ(v_int_idx, 2);
+        ASSERT_EQ(v_arr_idx, 3);
+
+        int64_t total = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                int rowid = chunk->columns()[c0_idx]->get(i).get_int32();
+                EXPECT_TRUE(chunk->columns()[c_new_idx]->get(i).is_null())
+                        << "rowid=" << rowid << " c_new should be NULL";
+                EXPECT_EQ(100 + rowid, chunk->columns()[v_int_idx]->get(i).get_int32())
+                        << "rowid=" << rowid << " v_int drifted";
+                auto arr = chunk->columns()[v_arr_idx]->get(i).get_array();
+                ASSERT_EQ(2u, arr.size()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * expected_v_arr_scale, arr[0].get_int32()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * expected_v_arr_scale + 1, arr[1].get_int32()) << "rowid=" << rowid;
+            }
+            total += chunk->num_rows();
+            chunk->reset();
+        }
+        EXPECT_EQ(kChunkSize, total);
+    }
+
+    // Partial chunk for PCU on v_int: only c0 + v_int columns.
+    // v_int[i] = delta + i.
+    Chunk make_partial_chunk_v_int(int n_rows, int delta) {
+        auto c0 = Int32Column::create();
+        auto v_int = Int32Column::create();
+        for (int i = 0; i < n_rows; i++) {
+            c0->append(i);
+            v_int->append(delta + i);
+        }
+        Chunk::SlotHashMap partial_map;
+        partial_map.emplace(0, 0);
+        partial_map.emplace(1, 1);
+        return Chunk({std::move(c0), std::move(v_int)}, partial_map);
+    }
+
+    // Verify v_int = delta+i (post-fix correct); v_arr at base [i*10, i*10+1] (unchanged).
+    void verify_v_int_content(int64_t version, int delta) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = tablet_schema->schema();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *schema);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*schema, 128);
+
+        // Post-ALTER schema layout: [c0, c_new, v_int, v_arr].
+        int c0_idx = -1, c_new_idx = -1, v_int_idx = -1, v_arr_idx = -1;
+        for (size_t i = 0; i < tablet_schema->num_columns(); i++) {
+            const auto& name = tablet_schema->column(i).name();
+            if (name == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (name == "v_int")
+                v_int_idx = static_cast<int>(i);
+            else if (name == "v_arr")
+                v_arr_idx = static_cast<int>(i);
+            else
+                c_new_idx = static_cast<int>(i);
+        }
+        ASSERT_EQ(c0_idx, 0);
+        ASSERT_EQ(c_new_idx, 1);
+        ASSERT_EQ(v_int_idx, 2);
+        ASSERT_EQ(v_arr_idx, 3);
+
+        int64_t total = 0;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                int rowid = chunk->columns()[c0_idx]->get(i).get_int32();
+                EXPECT_EQ(delta + rowid, chunk->columns()[v_int_idx]->get(i).get_int32())
+                        << "rowid=" << rowid << " v_int silently drifted";
+                auto arr = chunk->columns()[v_arr_idx]->get(i).get_array();
+                ASSERT_EQ(2u, arr.size()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * 10, arr[0].get_int32()) << "rowid=" << rowid;
+                EXPECT_EQ(rowid * 10 + 1, arr[1].get_int32()) << "rowid=" << rowid;
+            }
+            total += chunk->num_rows();
+            chunk->reset();
+        }
+        EXPECT_EQ(kChunkSize, total);
+    }
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::vector<SlotDescriptor> _slots;
+    std::vector<SlotDescriptor*> _slot_pointers_full;
+    std::vector<SlotDescriptor*> _slot_pointers_v_arr;
+    std::vector<SlotDescriptor*> _slot_pointers_v_int;
+    Chunk::SlotHashMap _slot_cid_map;
+    int64_t _partition_id = 4561;
+    uint32_t _c0_uid = 0;
+    uint32_t _v_int_uid = 0;
+    uint32_t _v_arr_uid = 0;
+};
+
+// PCU targets an ARRAY column whose cid is shifted by a subsequent ADD COLUMN.
+// Without uid-based resolution the write hits a non-array column writer and
+// crashes inside ArrayColumnWriter::append; this test guards against that
+// regression by asserting the array values are written to the correct column.
+TEST_F(LakePcuSchemaDriftTest, WriteThenAddColumnAfterPublish_ArrayCrashRegression) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // ---- Step A: write base full row, publish v2 ----
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // ---- Step B: PCU partial update on v_arr (writes txn_log under OLD schema) ----
+    auto pcu_txn_id = next_id();
+    {
+        auto chunk = make_partial_chunk_v_arr(kChunkSize, /*scale=*/100);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_arr)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ---- Step C: ALTER ADD COLUMN at pos=1 (between c0 and v_int) ----
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        AddColumn modifier(/*pos=*/1, "BIGINT", /*nullable=*/true, /*default=*/"NULL");
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // ---- Step D: publish PCU under NEW schema. Pre-fix: segfault. Post-fix: OK. ----
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, pcu_txn_id).status());
+    version++;
+
+    // ---- Step E: read & verify ----
+    verify_v_arr_content(version, /*expected_v_arr_scale=*/100);
+}
+
+// PCU targets a fixed-length INT column whose cid is shifted by ADD COLUMN.
+// The bug here was silent data corruption: writes landed on the newly inserted
+// BIGINT column without any error. This test verifies the values are routed
+// back to the original column via uid lookup.
+TEST_F(LakePcuSchemaDriftTest, WriteThenAddColumnAfterPublish_FixedLengthDriftIsSilent) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // base full-row write
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // PCU partial update on v_int (writes 200+i)
+    auto pcu_txn_id = next_id();
+    {
+        auto chunk = make_partial_chunk_v_int(kChunkSize, /*delta=*/200);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_int)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ALTER ADD COLUMN at pos=1
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        AddColumn modifier(1, "BIGINT", true, "NULL");
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // publish PCU
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, pcu_txn_id).status());
+    version++;
+
+    // verify: v_int must be 200+i (not base 100+i); v_arr must be base [i*10, i*10+1]
+    verify_v_int_content(version, /*delta=*/200);
+}
+
+// Conditional update where the merge-condition column's cid is shifted by
+// ADD COLUMN. The handler must re-resolve the condition cid against the
+// current schema and locate it within the partial-update schema; otherwise
+// the merge_condition filter compares against the wrong column.
+TEST_F(LakePcuSchemaDriftTest, ConditionalUpdateAfterAddColumn) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // Base write: full row with v_int=[100,101,102,...], v_arr=[[0,1],[10,11],[20,21],...]
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // PCU + condition update on v_int.
+    //   base v_int[i]   = 100 + i              (i=0..9 → 100..109)
+    //   new  v_int[i]   = i==0 ? 50 : 200+50*i (→ [50, 250, 300, 350, ..., 650])
+    // merge_condition='v_int' updates a row only if new > old:
+    //   row 0: 50  > 100   → filtered out, keeps 100
+    //   row i (i>=1): 200+50*i > 100+i  → always true, applied
+    auto pcu_txn_id = next_id();
+    {
+        auto c0 = Int32Column::create();
+        auto v_int = Int32Column::create();
+        for (int i = 0; i < kChunkSize; i++) {
+            c0->append(i);
+            v_int->append(i == 0 ? 50 : 200 + 50 * i);
+        }
+        Chunk::SlotHashMap partial_map;
+        partial_map.emplace(0, 0);
+        partial_map.emplace(1, 1);
+        Chunk chunk({std::move(c0), std::move(v_int)}, partial_map);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_int)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .set_merge_condition("v_int")
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ALTER ADD COLUMN at pos=1 (between c0 and v_int)
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        AddColumn modifier(1, "BIGINT", true, "NULL");
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // publish PCU
+    ASSERT_OK(publish_single_version(tablet_id, version + 1, pcu_txn_id).status());
+    version++;
+
+    // verify: row 0 must keep base value (100), others updated
+    {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
+        auto ts = TabletSchema::create(metadata->schema());
+        auto sch = ts->schema();
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *sch);
+        CHECK_OK(reader->prepare());
+        CHECK_OK(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*sch, 128);
+        int c0_idx = -1, v_int_idx = -1;
+        for (size_t i = 0; i < ts->num_columns(); i++) {
+            if (ts->column(i).name() == "c0")
+                c0_idx = static_cast<int>(i);
+            else if (ts->column(i).name() == "v_int")
+                v_int_idx = static_cast<int>(i);
+        }
+        ASSERT_GE(c0_idx, 0);
+        ASSERT_GE(v_int_idx, 0);
+
+        std::map<int, int> got;
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) break;
+            CHECK_OK(st);
+            for (int i = 0; i < chunk->num_rows(); i++) {
+                int rowid = chunk->columns()[c0_idx]->get(i).get_int32();
+                int v = chunk->columns()[v_int_idx]->get(i).get_int32();
+                got[rowid] = v;
+            }
+            chunk->reset();
+        }
+        EXPECT_EQ(static_cast<size_t>(kChunkSize), got.size());
+        // Row 0: merge_condition filters (50 < 100), so v_int stays at base value 100
+        EXPECT_EQ(100, got[0]) << "row 0 should be filtered by merge_condition (50 < 100)";
+        // Row 1+: new value > old value, so update passes
+        for (int i = 1; i < kChunkSize; i++) {
+            EXPECT_EQ(200 + 50 * i, got[i]) << "row " << i << " should be updated";
+        }
+    }
+}
+
+// A PCU target column is dropped by ALTER between write and publish. The
+// handler must surface a clean InternalError referencing the missing unique
+// id, rather than dereferencing a stale cid or producing corrupt output.
+TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
+    auto tablet_id = _tablet_metadata->id();
+    auto version = 1;
+
+    // base full-row write
+    {
+        auto chunk = make_full_chunk(kChunkSize);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+
+    // PCU partial update on v_arr (write while v_arr still exists)
+    auto pcu_txn_id = next_id();
+    {
+        auto chunk = make_partial_chunk_v_arr(kChunkSize, 100);
+        std::vector<uint32_t> indexes(kChunkSize);
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(pcu_txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers_v_arr)
+                                                   .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    }
+
+    // ALTER DROP COLUMN v_arr (col_idx=2 in default schema)
+    {
+        ASSIGN_OR_ABORT(auto latest_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto new_metadata = std::make_shared<TabletMetadataPB>(*latest_metadata);
+        auto* schema_pb = new_metadata->mutable_schema();
+        DropColumn modifier(/*col_idx=*/2);
+        modifier.modify(schema_pb);
+        schema_pb->set_id(next_id());
+        schema_pb->set_schema_version(schema_pb->schema_version() + 1);
+        new_metadata->set_version(version + 1);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(new_metadata));
+        ASSERT_OK(_tablet_mgr->create_schema_file(tablet_id, *schema_pb));
+        version++;
+    }
+
+    // publish PCU under new schema — expect failure.
+    auto res = publish_single_version(tablet_id, version + 1, pcu_txn_id);
+    auto st = res.status();
+    ASSERT_FALSE(st.ok()) << "publish should fail when PCU target column is dropped";
+    EXPECT_TRUE(st.is_internal_error()) << "got: " << st.to_string();
+    EXPECT_NE(std::string::npos, st.message().find("unique id"))
+            << "expected 'unique id' in message; got: " << st.message();
+}
+
+// A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
+// ownership mask -- every row it emitted is this tablet's -- so an empty mask cannot be read as "the
+// iterator emitted the whole segment". Reading it that way sends the segment down the copy-and-append
+// rewrite, which copies all of the source's written-column rows while appending only the emitted rows'
+// resolved ones; the halves then disagree ("num rows written 0 is not equal to segment num rows 300")
+// and the publish fails identically on every retry.
+TEST(RowsetUpdateStateNarrowedEmitTest, an_emit_short_of_the_segment_owns_only_what_it_emitted) {
+    Filter mask;
+    // Narrowed: the iterator emitted 120 of the segment's 300 rows.
+    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/120, /*source_rows=*/300, &mask));
+    ASSERT_EQ(120u, mask.size()) << "the mask must span exactly the rows the iterator emitted";
+    EXPECT_EQ(120, std::count(mask.begin(), mask.end(), 1)) << "every emitted row is owned";
+}
+
+// The case that actually stalls production, and the reason this answers with a bool instead of through
+// the mask's emptiness: a shared segment none of whose rows fall in this tablet's range makes the
+// iterator emit NOTHING. "Own nothing" still means filter -- keep none of the source's rows and write
+// an empty segment -- which is a different instruction from "was not narrowed at all".
+TEST(RowsetUpdateStateNarrowedEmitTest, an_empty_narrowed_emit_still_owns_only_its_nothing) {
+    Filter mask;
+    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty()) << "owning no row is an empty mask, not the absence of one";
+}
+
+TEST(RowsetUpdateStateNarrowedEmitTest, a_whole_segment_emit_keeps_the_copy_and_append_rewrite) {
+    Filter mask;
+    // Not narrowed: the copy-and-append rewrite is correct as is, and must not be given a mask.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/300, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty());
+    // An empty segment has nothing to narrow.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/0, &mask));
+    EXPECT_TRUE(mask.empty());
+    // An emit longer than its source is not a narrowing; leave it to the assertions downstream.
+    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/301, /*source_rows=*/300, &mask));
+    EXPECT_TRUE(mask.empty());
 }
 
 } // namespace starrocks::lake

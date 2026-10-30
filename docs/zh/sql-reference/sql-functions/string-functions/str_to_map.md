@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将字符串分割成键值对，使用两个分隔符并返回Map。"
 ---
 
 # str_to_map

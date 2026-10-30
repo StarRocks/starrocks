@@ -15,12 +15,17 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
@@ -38,6 +43,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -132,22 +138,30 @@ public class MetaFunctionsTest extends MVTestBase {
 
     @Test
     public void testInspectTableAccessDeniedException() {
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
         assertThrows(ErrorReportException.class, () -> {
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
             connectContext.setThreadLocalInfo();
             MetaFunctions.inspectTable(new TableName("test", "tbl1"));
         });
+        connectContext.setCurrentUserIdentity(currentUserIdentity);
+        connectContext.setCurrentRoleIds(currentRoleIds);
     }
 
     @Test
     public void testInspectExternalTableAccessDeniedException() {
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
         assertThrows(ErrorReportException.class, () -> {
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
             connectContext.setThreadLocalInfo();
             MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
         });
+        connectContext.setCurrentUserIdentity(currentUserIdentity);
+        connectContext.setCurrentRoleIds(currentRoleIds);
     }
 
     private String lookupString(String tableName, String key, String column) {
@@ -193,7 +207,8 @@ public class MetaFunctionsTest extends MVTestBase {
             // normal
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql) {
+                public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                              ConnectContext caller) {
                     MetaFunctions.LookupRecord record = new MetaFunctions.LookupRecord();
                     record.data = Lists.newArrayList("v1");
                     String json = GsonUtils.GSON.toJson(record);
@@ -209,11 +224,144 @@ public class MetaFunctionsTest extends MVTestBase {
             // record not found
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql) {
+                public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                              ConnectContext caller) {
                     throw new RuntimeException("query failed if record not exist in dict table");
                 }
             };
             Assertions.assertNull(lookupString("t1", "v1", "c1"));
+            starRocksAssert.dropTable("t1");
+        }
+    }
+
+    @Test
+    public void testLookupStringEscapesArguments() throws Exception {
+        starRocksAssert.withTable("create table t_esc(c1 string, v string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        String[] captured = new String[1];
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                         ConnectContext caller) {
+                captured[0] = sql;
+                return Lists.newArrayList();
+            }
+        };
+        try {
+            // A single quote in the key must be escaped (doubled), not break out of the literal.
+            Assertions.assertNull(lookupString("t_esc", "a'b", "v"));
+            Assertions.assertTrue(captured[0].contains("'a''b'"), captured[0]);
+            // Identifiers are backquoted.
+            Assertions.assertTrue(captured[0].contains("`v`"), captured[0]);
+            Assertions.assertTrue(captured[0].contains("`c1`"), captured[0]);
+        } finally {
+            starRocksAssert.dropTable("t_esc");
+        }
+    }
+
+    @Test
+    public void testLookupStringUnknownReturnColumn() throws Exception {
+        starRocksAssert.withTable("create table t_col(c1 string, v string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        try {
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_col", "k", "no_such_col"));
+            Assertions.assertTrue(e.getMessage().contains("Unknown column 'no_such_col'"), e.getMessage());
+        } finally {
+            starRocksAssert.dropTable("t_col");
+        }
+    }
+
+    @Test
+    public void testLookupStringRunsAsCaller() throws Exception {
+        starRocksAssert.withTable("create table t_lookup_caller(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        Set<String> currentGroups = connectContext.getGroups();
+        String currentRemoteIP = connectContext.getRemoteIP();
+        UserIdentity[] innerUser = new UserIdentity[1];
+        Set<String>[] innerGroups = new Set[1];
+        String[] innerRemoteIP = new String[1];
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                innerUser[0] = context.getCurrentUserIdentity();
+                innerGroups[0] = context.getGroups();
+                innerRemoteIP[0] = context.getRemoteIP();
+                return Lists.newArrayList();
+            }
+        };
+        Set<String> callerGroups = Set.of("g_ranger");
+        String callerRemoteIP = "10.1.2.3";
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setGroups(callerGroups);
+            connectContext.setRemoteIP(callerRemoteIP);
+            connectContext.setThreadLocalInfo();
+            Assertions.assertNull(lookupString("t_lookup_caller", "k", "c2"));
+            // The internal lookup query must run as the caller, never as ROOT
+            Assertions.assertEquals(testUser, innerUser[0]);
+            // Groups must be propagated: Ranger authorization and row/column policies read
+            // context.getGroups(), so dropping them would silently bypass group-based policies.
+            Assertions.assertEquals(callerGroups, innerGroups[0]);
+            // Remote IP must be propagated: USER()/SESSION_USER() are folded from qualifiedUser
+            // plus remoteIP, and Ranger row-filter/masking expressions are analyzed here.
+            Assertions.assertEquals(callerRemoteIP, innerRemoteIP[0]);
+            Assertions.assertSame(connectContext, ConnectContext.get());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            connectContext.setGroups(currentGroups);
+            connectContext.setRemoteIP(currentRemoteIP);
+            starRocksAssert.dropTable("t_lookup_caller");
+        }
+    }
+
+    @Test
+    public void testLookupStringAccessDenied() throws Exception {
+        starRocksAssert.withTable("create table t_lookup_denied(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_lookup_denied", "k", "c2"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            starRocksAssert.dropTable("t_lookup_denied");
+        }
+    }
+
+    @Test
+    public void testLookupStringIgnoresCallerBypass() throws Exception {
+        // A lookup triggered inside an existing bypassAuthorizerCheck scope must still be
+        // authorized: the internal query must not inherit the caller's bypass flag, otherwise
+        // the SELECT / Ranger checks would be skipped again.
+        starRocksAssert.withTable("create table t_lookup_bypass(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        boolean currentBypass = connectContext.isBypassAuthorizerCheck();
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setBypassAuthorizerCheck(true);
+            connectContext.setThreadLocalInfo();
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_lookup_bypass", "k", "c2"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            connectContext.setBypassAuthorizerCheck(currentBypass);
+            starRocksAssert.dropTable("t_lookup_bypass");
         }
     }
 
@@ -223,8 +371,67 @@ public class MetaFunctionsTest extends MVTestBase {
                 "as select k1, sum(v1) from test.tbl1 group by k1");
         ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv1"));
         Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("mvToRefreshPartitions"));
         Assertions.assertTrue(result.getVarchar().contains("tableToUpdatePartitions"));
         starRocksAssert.dropMaterializedView("mv1");
+    }
+
+    @Test
+    public void inspectMVRefreshInfoKeysSameNamedBaseTablesByFullName() throws Exception {
+        starRocksAssert.withDatabase("same_name_db1").withDatabase("same_name_db2");
+        String createTable = "create table %s.tj(k1 int, v1 int) distributed by hash(k1) buckets 1 " +
+                "properties('replication_num'='1')";
+        starRocksAssert.withTable(String.format(createTable, "same_name_db1"));
+        starRocksAssert.withTable(String.format(createTable, "same_name_db2"));
+        try {
+            starRocksAssert.withRefreshedMaterializedView("create materialized view test.mv_same_name " +
+                    "distributed by random as select a.k1, b.v1 from same_name_db1.tj a " +
+                    "join same_name_db2.tj b on a.k1 = b.k1 join test.tbl1 c on a.k1 = c.k2");
+            ConstantOperator result =
+                    MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv_same_name"));
+
+            JsonObject json = JsonParser.parseString(result.getVarchar()).getAsJsonObject();
+            Set<String> expectedKeys = Set.of("default_catalog.same_name_db1.tj", "default_catalog.same_name_db2.tj",
+                    "tbl1");
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("tablePartitionInfos").keySet());
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("baseOlapTableVisibleVersionMap").keySet());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_same_name");
+            starRocksAssert.dropDatabase("same_name_db1");
+            starRocksAssert.dropDatabase("same_name_db2");
+            starRocksAssert.useDatabase("test");
+        }
+    }
+
+    @Test
+    public void inspectMVRefreshInfoKeysATableNamedLikeAnotherTablesFullName() throws Exception {
+        starRocksAssert.withDatabase("dotted_db1").withDatabase("dotted_db2").withDatabase("dotted_db3");
+        String createTable = "create table %s.`%s`(k1 int, v1 int) distributed by hash(k1) buckets 1 " +
+                "properties('replication_num'='1')";
+        starRocksAssert.withTable(String.format(createTable, "dotted_db1", "tj"));
+        starRocksAssert.withTable(String.format(createTable, "dotted_db2", "tj"));
+        starRocksAssert.withTable(String.format(createTable, "dotted_db3", "default_catalog.dotted_db1.tj"));
+        try {
+            starRocksAssert.withRefreshedMaterializedView("create materialized view test.mv_dotted_name " +
+                    "distributed by random as select a.k1, b.v1 from dotted_db1.tj a " +
+                    "join dotted_db2.tj b on a.k1 = b.k1 join dotted_db3.`default_catalog.dotted_db1.tj` c " +
+                    "on a.k1 = c.k1");
+            ConstantOperator result =
+                    MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv_dotted_name"));
+
+            JsonObject json = JsonParser.parseString(result.getVarchar()).getAsJsonObject();
+            long db1TableId = starRocksAssert.getTable("dotted_db1", "tj").getId();
+            Set<String> expectedKeys = Set.of("default_catalog.dotted_db1.tj#" + db1TableId,
+                    "default_catalog.dotted_db2.tj", "default_catalog.dotted_db3.default_catalog.dotted_db1.tj");
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("tablePartitionInfos").keySet());
+            Assertions.assertEquals(expectedKeys, json.getAsJsonObject("baseOlapTableVisibleVersionMap").keySet());
+        } finally {
+            starRocksAssert.dropMaterializedView("test.mv_dotted_name");
+            starRocksAssert.dropDatabase("dotted_db1");
+            starRocksAssert.dropDatabase("dotted_db2");
+            starRocksAssert.dropDatabase("dotted_db3");
+            starRocksAssert.useDatabase("test");
+        }
     }
 
     @Test
@@ -260,6 +467,7 @@ public class MetaFunctionsTest extends MVTestBase {
                 "   as select k1 from test.tbl1 group by k1");
         ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar("test.mv_empty"));
         Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.getVarchar().contains("mvToRefreshPartitions"));
         Assertions.assertTrue(result.getVarchar().contains("{}")); // Ensure empty base tables are handled
         starRocksAssert.dropMaterializedView("mv_empty");
     }
@@ -439,5 +647,276 @@ public class MetaFunctionsTest extends MVTestBase {
         Assertions.assertNotNull(result);
         // External tables typically have no related MVs
         Assertions.assertEquals("[]", result.getVarchar());
+    }
+
+    private static QueryDetail makeQueryDetail(String queryId, String sql, UserIdentity owner) {
+        QueryDetail detail = new QueryDetail(
+                queryId, true, 0, "127.0.0.1",
+                System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
+                "test", sql, owner == null ? "" : owner.getUser(), "",
+                "default_catalog", "QUERY", null);
+        if (owner != null) {
+            detail.setUserIdentity(owner.toString());
+        }
+        return detail;
+    }
+
+    private static void removeFromQueryDetailQueue(String queryId) {
+        QueryDetailQueue.TOTAL_QUERIES.removeIf(d -> queryId.equals(d.getQueryId()));
+    }
+
+    /**
+     * Snapshot/restore the two FE configs that get_query_dump_from_query_id checks
+     * upfront, so per-test overrides don't bleed into sibling tests.
+     */
+    private static final class QueryDumpConfigGuard implements AutoCloseable {
+        private final boolean prevCollect = com.starrocks.common.Config.enable_collect_query_detail_info;
+        private final boolean prevDesensitize = com.starrocks.common.Config.enable_sql_desensitize_in_log;
+
+        QueryDumpConfigGuard(boolean enableCollect, boolean enableDesensitize) {
+            com.starrocks.common.Config.enable_collect_query_detail_info = enableCollect;
+            com.starrocks.common.Config.enable_sql_desensitize_in_log = enableDesensitize;
+        }
+
+        @Override
+        public void close() {
+            com.starrocks.common.Config.enable_collect_query_detail_info = prevCollect;
+            com.starrocks.common.Config.enable_sql_desensitize_in_log = prevDesensitize;
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdRequiresFeatureEnabled() {
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(false, false)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(
+                            ConstantOperator.createVarchar("11111111-2222-3333-4444-555555555555")));
+            Assertions.assertTrue(ex.getMessage().contains("query detail collection is disabled"));
+            Assertions.assertTrue(ex.getMessage().contains("enable_collect_query_detail_info"));
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdRejectsDesensitizationEnabled() {
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, true)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(
+                            ConstantOperator.createVarchar("11111111-2222-3333-4444-555555555555")));
+            Assertions.assertTrue(ex.getMessage().contains("SQL desensitization is enabled"));
+            Assertions.assertTrue(ex.getMessage().contains("enable_sql_desensitize_in_log"));
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdNotFound() {
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(
+                            ConstantOperator.createVarchar("11111111-2222-3333-4444-555555555555")));
+            Assertions.assertTrue(ex.getMessage().contains("query_id not found"));
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdDesensitizedSql() {
+        String queryId = "ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb";
+        QueryDetail detail = makeQueryDetail(queryId, "this is a desensitized sql",
+                connectContext.getCurrentUserIdentity());
+        QueryDetailQueue.addQueryDetail(detail);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            SemanticException ex = assertThrows(SemanticException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId)));
+            Assertions.assertTrue(ex.getMessage().contains("original sql not retained"));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdLooksUpSql() throws Exception {
+        String queryId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        QueryDetail detail = makeQueryDetail(queryId, "select count(*) from test.tbl1",
+                connectContext.getCurrentUserIdentity());
+        QueryDetailQueue.addQueryDetail(detail);
+        // QueryDumper expects a fresh QueryDumpInfo on the context; PlanTestBase / MVTestBase
+        // installs a MockDumpInfo that the dumper would otherwise try to cast.
+        com.starrocks.sql.optimizer.dump.DumpInfo prevDumpInfo = connectContext.getDumpInfo();
+        connectContext.setDumpInfo(null);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            ConstantOperator result = MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId));
+            Assertions.assertNotNull(result);
+            Assertions.assertTrue(result.getVarchar().contains("query_id")
+                    || result.getVarchar().contains("statement"));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+            connectContext.setDumpInfo(prevDumpInfo);
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdRejectsSameUsernameDifferentHost() {
+        // QueryDetail.user is just the username; two distinct accounts that share a
+        // username but differ on host must NOT cross-match. The check has to look at
+        // userIdentity (user + host).
+        String queryId = "cafecafe-cafe-cafe-cafe-cafecafecafe";
+        UserIdentity originalIdentity = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "10.0.0.1");
+        UserIdentity callerIdentity = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "10.0.0.2");
+        QueryDetail detail = makeQueryDetail(queryId, "select 1", originalIdentity);
+        QueryDetailQueue.addQueryDetail(detail);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            connectContext.setCurrentUserIdentity(callerIdentity);
+            connectContext.setCurrentRoleIds(callerIdentity);
+            connectContext.setThreadLocalInfo();
+            assertThrows(ErrorReportException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId)));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            connectContext.setCurrentRoleIds(UserIdentity.ROOT);
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
+    public void testGetQueryDumpFromQueryIdAccessDenied() {
+        String queryId = "12345678-1234-1234-1234-123456789012";
+        UserIdentity ownerIdentity = UserIdentity.createAnalyzedUserIdentWithIp("some_other_user", "%");
+        QueryDetail detail = makeQueryDetail(queryId, "select 1", ownerIdentity);
+        QueryDetailQueue.addQueryDetail(detail);
+        try (QueryDumpConfigGuard guard = new QueryDumpConfigGuard(true, false)) {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            assertThrows(ErrorReportException.class,
+                    () -> MetaFunctions.getQueryDumpFromQueryId(ConstantOperator.createVarchar(queryId)));
+        } finally {
+            removeFromQueryDetailQueue(queryId);
+            connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+            connectContext.setCurrentRoleIds(UserIdentity.ROOT);
+            connectContext.setThreadLocalInfo();
+        }
+    }
+
+    @Test
+    public void testInvalidateGlobalDict() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateGlobalDict(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateGlobalDict(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Whether tbl1.k1 currently has a global dict depends on cache state left by earlier tests,
+        // so accept either valid outcome -- both mean invalidate_global_dict behaved correctly.
+        ConstantOperator result = MetaFunctions.invalidateGlobalDict(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertNotNull(result);
+        String msg = result.getVarchar();
+        Assertions.assertTrue(
+                msg.equals("invalidated column dict")
+                        || msg.equals("No global dictionary found for column: k1"), msg);
+        // After invalidation any dict is gone, so a second call deterministically reports none found.
+        ConstantOperator second = MetaFunctions.invalidateGlobalDict(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertEquals("No global dictionary found for column: k1", second.getVarchar());
+    }
+
+    @Test
+    public void testInvalidateMinMax() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateMinMax(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.invalidateMinMax(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with valid table and column
+        ConstantOperator result = MetaFunctions.invalidateMinMax(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertTrue(result.getVarchar().contains("invalidated column minmax"), result.getVarchar());
+    }
+
+    @Test
+    public void testInspectMinMax() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectMinMax(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectMinMax(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with valid table and column (should return null since no MinMax stats exist)
+        ConstantOperator result = MetaFunctions.inspectMinMax(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.isNull());
+    }
+
+    @Test
+    public void testInspectGlobalDict() throws Exception {
+        // Test with non-existent table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectGlobalDict(
+                    ConstantOperator.createVarchar("test.non_existent_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with non-OLAP table
+        assertThrows(SemanticException.class, () -> {
+            MetaFunctions.inspectGlobalDict(
+                    ConstantOperator.createVarchar("test.mysql_external_table"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+
+        // Test with valid table and column (should return null since no global dict exists)
+        ConstantOperator result = MetaFunctions.inspectGlobalDict(
+                ConstantOperator.createVarchar("test.tbl1"),
+                ConstantOperator.createVarchar("k1"));
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.isNull());
+    }
+
+    @Test
+    public void testInspectMinMaxRequiresTablePrivilege() {
+        // inspect_minmax must enforce table privileges so it cannot disclose min/max for a table
+        // the caller has no access to.
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        assertThrows(ErrorReportException.class, () -> {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            MetaFunctions.inspectMinMax(
+                    ConstantOperator.createVarchar("test.tbl1"),
+                    ConstantOperator.createVarchar("k1"));
+        });
+        connectContext.setCurrentUserIdentity(currentUserIdentity);
+        connectContext.setCurrentRoleIds(currentRoleIds);
+        connectContext.setThreadLocalInfo();
     }
 }

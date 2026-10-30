@@ -16,10 +16,12 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "exec/exec_env.h"
 #include "exec/schema_scanner.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -78,8 +80,10 @@ Status SchemaScanContext::_prepare_params(RuntimeState* state, const std::vector
         _param->label = _obj_pool.add(new std::string(_tnode.schema_scan_node.label));
     }
 
-    // only for no predicate and limit parameter is set
-    if (_tnode.conjuncts.empty() && _tnode.limit > 0) {
+    // No predicate + limit only, and only for the internal catalog: the nameless describe reads the local metastore.
+    const bool internal_catalog =
+            !_tnode.schema_scan_node.__isset.catalog_name || _tnode.schema_scan_node.catalog_name == "default_catalog";
+    if (internal_catalog && _tnode.conjuncts.empty() && _tnode.limit > 0) {
         _param->without_db_table = true;
         _param->limit = _tnode.limit;
     }

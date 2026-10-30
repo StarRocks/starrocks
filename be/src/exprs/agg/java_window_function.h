@@ -22,13 +22,14 @@
 
 #include "common/compiler_util.h"
 #include "exprs/agg/java_udaf_function.h"
+#include "exprs/udf/java/java_data_converter.h"
+#include "exprs/udf/java/java_udf.h"
 #include "jni.h"
 #include "types/logical_type.h"
-#include "udf/java/java_data_converter.h"
-#include "udf/java/java_udf.h"
 
 namespace starrocks {
-void assign_jvalue(MethodTypeDescriptor method_type_desc, Column* col, int row_num, jvalue val);
+Status assign_jvalue(const TypeDescriptor& type_desc, bool is_box, Column* col, int row_num, jvalue val,
+                     bool error_if_overflow);
 
 class JavaWindowFunction final : public JavaUDAFAggregateFunction {
 public:
@@ -51,8 +52,7 @@ public:
         }
 
         std::vector<jobject> args;
-        auto& helper = JVMFunctionHelper::getInstance();
-        JNIEnv* env = helper.getEnv();
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
         DeferOp defer = DeferOp([&]() {
             // clean up arrays
             for (auto& arg : args) {
@@ -77,16 +77,18 @@ public:
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
-        auto& helper = JVMFunctionHelper::getInstance();
         auto* udaf_ctx = get_java_udaf_context(ctx);
         DCHECK(udaf_ctx != nullptr);
         jvalue val = udaf_ctx->_func->finalize(this->data(state).handle);
         // insert values to column
-        JNIEnv* env = helper.getEnv();
-        MethodTypeDescriptor desc = {(LogicalType)ctx->get_return_type().type, true};
+        JNIEnv* env = JVMHelper::getInstance().getEnv();
+        const auto& return_type = ctx->get_return_type();
+        const bool error_if_overflow = ctx->error_if_overflow();
         int sz = end - start;
         for (int i = 0; i < sz; ++i) {
-            assign_jvalue(desc, dst, start + i, val);
+            auto st = assign_jvalue(return_type, true, dst, start + i, val, error_if_overflow);
+            SET_FUNCTION_CONTEXT_ERR(st, ctx);
+            if (!st.ok()) break;
         }
         env->DeleteLocalRef(val.l);
     }

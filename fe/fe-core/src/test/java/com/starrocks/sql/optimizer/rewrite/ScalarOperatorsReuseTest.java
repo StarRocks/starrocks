@@ -19,7 +19,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -337,6 +339,36 @@ public class ScalarOperatorsReuseTest {
                 ScalarOperatorsReuse.collectCommonSubScalarOperators(null, oldOperators, columnRefFactory);
         assertEquals(0, commonSubScalarOperators.size());
         Config.max_scalar_operator_flat_children = prev;
+    }
+
+    @Test
+    public void testReuseCommutativeCompoundPredicates() {
+        // Regression test: when two distinct OperatorIds (different child group order, e.g.
+        // `a AND b` vs `b AND a`) both qualify as common subexpressions, their rewritten
+        // ScalarOperators are considered equal by CompoundPredicateOperator#equals (which
+        // normalizes child order). The previous ImmutableMap.Builder put failed with
+        // "Multiple entries with same key".
+        ColumnRefOperator c1 = columnRefFactory.create("c1", IntegerType.INT, true);
+        ColumnRefOperator c2 = columnRefFactory.create("c2", IntegerType.INT, true);
+
+        BinaryPredicateOperator a = new BinaryPredicateOperator(BinaryType.GT, c1, ConstantOperator.createInt(1));
+        BinaryPredicateOperator b = new BinaryPredicateOperator(BinaryType.GT, c2, ConstantOperator.createInt(2));
+
+        // Two copies of `a AND b` and two copies of `b AND a` — each pair makes its own OperatorId
+        // qualify as duplicated/common at the same depth.
+        CompoundPredicateOperator andAB1 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, a, b);
+        CompoundPredicateOperator andAB2 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, a, b);
+        CompoundPredicateOperator andBA1 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, b, a);
+        CompoundPredicateOperator andBA2 =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, b, a);
+
+        List<ScalarOperator> oldOperators = Lists.newArrayList(andAB1, andAB2, andBA1, andBA2);
+        // Should not throw IllegalArgumentException("Multiple entries with same key").
+        List<ScalarOperator> newOperators = ScalarOperatorsReuse.rewriteOperators(oldOperators, columnRefFactory);
+        assertEquals(4, newOperators.size());
     }
 
     @Test

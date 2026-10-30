@@ -35,6 +35,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 
 typedef i64 TTimestamp
 typedef i32 TPlanNodeId
@@ -104,7 +105,10 @@ enum TPrimitiveType {
   VARBINARY,
   DECIMAL256,
   INT256,
-  VARIANT
+  VARIANT,
+  GEOGRAPHY,
+  GEOMETRY,
+  FILE
 }
 
 enum TTypeNodeType {
@@ -112,6 +116,70 @@ enum TTypeNodeType {
     ARRAY,
     MAP,
     STRUCT
+}
+
+// Metadata recognition does not enable computation for an edge algorithm.
+enum TGeoLogicalType {
+    UNKNOWN = 0,
+    GEOGRAPHY = 1,
+    GEOMETRY = 2
+}
+
+enum TGeoCoordinateSystem {
+    UNKNOWN = 0,
+    SPHERICAL = 1,
+    CARTESIAN = 2
+}
+
+enum TGeoEdgeAlgorithm {
+    UNKNOWN = 0,
+    SPHERICAL = 1,
+    VINCENTY = 2,
+    THOMAS = 3,
+    ANDOYER = 4,
+    KARNEY = 5,
+    PLANAR = 6
+}
+
+enum TGeoEncoding {
+    UNKNOWN = 0,
+    WKB = 1
+}
+
+enum TGeoDimension {
+    UNKNOWN = 0,
+    XY = 1,
+    XYZ = 2,
+    XYM = 3,
+    XYZM = 4,
+    MIXED = 5
+}
+
+enum TGeoValidationState {
+    UNKNOWN = 0,
+    UNVALIDATED = 1,
+    STRUCTURALLY_VALIDATED = 2,
+    SEMANTICALLY_VALIDATED = 3
+}
+
+// Semantic and physical metadata for native geo types.
+struct TGeoTypeDesc {
+    1: optional TGeoLogicalType logical_type
+    2: optional TGeoCoordinateSystem coordinate_system
+    3: optional TGeoEdgeAlgorithm edge_algorithm
+    4: optional string crs
+    5: optional i32 srid
+}
+
+struct TGeoStorageDesc {
+    1: optional TGeoEncoding encoding
+    2: optional TGeoDimension dimension
+    3: optional TGeoValidationState validation_state
+}
+
+struct TGeoColumnDesc {
+    1: optional TGeoTypeDesc type
+    2: optional TGeoStorageDesc storage
 }
 
 struct TScalarType {
@@ -123,6 +191,15 @@ struct TScalarType {
     // Only set for DECIMAL
     3: optional i32 precision
     4: optional i32 scale
+
+    // Only meaningful for DATETIME read from lake formats that distinguish
+    // timestamp-without-time-zone (NTZ) from timestamp-with-local-time-zone. Rides along
+    // as metadata and does NOT affect type identity. Default (false) means the value is a
+    // UTC instant that must be shifted into the session timezone (Hive/Iceberg/Paimon LTZ);
+    // Paimon TIMESTAMP sets it to true so the reader keeps the wall clock unshifted.
+    5: optional bool datetime_is_ntz
+    // Native primitive type is authoritative; never attach this to VARBINARY.
+    6: optional TGeoTypeDesc geo
 }
 
 // Represents a field in a STRUCT type.
@@ -219,6 +296,8 @@ enum TTaskType {
     UPDATE_SCHEMA,
     COMPACTION_CONTROL,
     EXTERNAL_CLUSTER_SNAPSHOT,
+    // Placeholder for external cluster snapshot feature.
+    TABLET_RESTORE,
     NUM_TASK_TYPE
 }
 
@@ -292,7 +371,10 @@ enum TFunctionBinaryType {
   SRJAR,
   
   // 
-  PYTHON
+  PYTHON,
+
+  // AI functions executed by the asynchronous AI runtime.
+  AI
 }
 
 // Represents a fully qualified function name.
@@ -392,6 +474,10 @@ struct TFunction {
   34: optional bool isolated
   35: optional string input_type
   36: optional string content
+  37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+  // For Python UDFs: user-provided Arrow Flight worker service URL. When set, the BE connects
+  // to this external worker instead of spawning a local one (see CREATE FUNCTION "service_url").
+  38: optional string service_url
 }
 
 enum TLoadJobState {
@@ -409,33 +495,44 @@ enum TEtlState {
     UNKNOWN
 }
 
+// NOTE: enum values are assigned explicitly on purpose.
+// Under implicit numbering, inserting a member anywhere but the end silently
+// shifts the value of every member after it, which breaks the wire format
+// between mixed-version processes. Explicit values make such an insertion a
+// no-op for existing members.
+// Rules for this enum:
+//   - append new members with the next free value; never renumber or reuse one;
+//   - values >= 300 are reserved for extension fields and must not be used here.
 enum TTableType {
-    MYSQL_TABLE,
-    OLAP_TABLE,
-    SCHEMA_TABLE,
-    KUDU_TABLE, // Deprecated
-    BROKER_TABLE,
-    ES_TABLE,
-    HDFS_TABLE,
-    ICEBERG_TABLE,
-    HUDI_TABLE,
-    JDBC_TABLE,
-    PAIMON_TABLE,
+    MYSQL_TABLE = 0,
+    OLAP_TABLE = 1,
+    SCHEMA_TABLE = 2,
+    KUDU_TABLE = 3, // Deprecated
+    BROKER_TABLE = 4,
+    ES_TABLE = 5,
+    HDFS_TABLE = 6,
+    ICEBERG_TABLE = 7,
+    HUDI_TABLE = 8,
+    JDBC_TABLE = 9,
+    PAIMON_TABLE = 10,
     VIEW = 20,
-    MATERIALIZED_VIEW,
-    FILE_TABLE,
-    DELTALAKE_TABLE,
-    TABLE_FUNCTION_TABLE,
-    ODPS_TABLE,
-    LOGICAL_ICEBERG_METADATA_TABLE,
-    ICEBERG_REFS_TABLE,
-    ICEBERG_HISTORY_TABLE,
-    ICEBERG_METADATA_LOG_ENTRIES_TABLE,
-    ICEBERG_SNAPSHOTS_TABLE,
-    ICEBERG_MANIFESTS_TABLE,
-    ICEBERG_FILES_TABLE,
-    ICEBERG_PARTITIONS_TABLE,
-    BENCHMARK_TABLE
+    MATERIALIZED_VIEW = 21,
+    FILE_TABLE = 22,
+    DELTALAKE_TABLE = 23,
+    TABLE_FUNCTION_TABLE = 24,
+    ODPS_TABLE = 25,
+    LOGICAL_ICEBERG_METADATA_TABLE = 26,
+    ICEBERG_REFS_TABLE = 27,
+    ICEBERG_HISTORY_TABLE = 28,
+    ICEBERG_METADATA_LOG_ENTRIES_TABLE = 29,
+    ICEBERG_SNAPSHOTS_TABLE = 30,
+    ICEBERG_MANIFESTS_TABLE = 31,
+    ICEBERG_FILES_TABLE = 32,
+    ICEBERG_PARTITIONS_TABLE = 33,
+    BENCHMARK_TABLE = 34,
+    ICEBERG_PROPERTIES_TABLE = 35,
+    LANCE_TABLE = 36,
+    FLUSS_TABLE = 37
 }
 
 enum TKeysType {
@@ -486,6 +583,7 @@ struct TTabletCommitInfo {
     3: optional list<string> invalid_dict_cache_columns
     4: optional list<string> valid_dict_cache_columns
     5: optional list<i64> valid_dict_collected_versions
+    6: optional list<i64> valid_dict_content_identities
 }
 
 struct TTabletFailInfo {
@@ -591,6 +689,14 @@ enum TIcebergFileContent {
     EQUALITY_DELETES,
 }
 
+// Extension point for TIcebergDataFile. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TIcebergDataFile
+// fields belong on TIcebergDataFile itself, whose remaining numbers are free.
+struct TIcebergDataFileExt {
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -602,6 +708,19 @@ struct TIcebergDataFile {
     8: optional string partition_null_fingerprint;
     9: optional TIcebergFileContent file_content;
     10: optional string referenced_data_file;
+    11: optional TIcebergDataFileExt ext;
+    // Iceberg key metadata for an encrypted data file: the serialized StandardKeyMetadata
+    // that FE commits, carrying the per-file data key. Not set by BE.
+    12: optional binary key_metadata;
+    // Per-file encryption material generated by BE when writing an encrypted file. FE turns
+    // file_dek into key_metadata (field 12) at commit time.
+    //
+    // SECRET. This struct travels to FE inside TReportExecStatusParams, which the BE fragment
+    // reporter dumps in full at VLOG(10) -- so both fields must be redacted before that dump
+    // (pipeline_fragment_reporter.cpp). Anything else that logs or profiles a struct reaching these
+    // fields must do the same: a DEK in a log file outlives the query and gets shipped off the host.
+    13: optional binary file_dek;
+    14: optional binary aad_prefix;
 }
 
 struct THiveFileInfo {
@@ -609,6 +728,14 @@ struct THiveFileInfo {
     2: optional string partition_path
     4: optional i64 record_count
     5: optional i64 file_size_in_bytes
+}
+
+// Extension point for TSinkCommitInfo. DO NOT MODIFY: do not add fields here,
+// and do not rename, renumber or remove it. The field numbers inside are
+// allocated separately, so anything added here collides with them, and
+// renaming or removing it breaks whatever fills it in. New TSinkCommitInfo
+// fields belong on TSinkCommitInfo itself, whose remaining numbers are free.
+struct TSinkCommitInfoExt {
 }
 
 struct TSinkCommitInfo {
@@ -619,12 +746,21 @@ struct TSinkCommitInfo {
     100: optional bool is_overwrite;
     101: optional string staging_dir
     102: optional bool is_rewrite;
+    103: optional TSinkCommitInfoExt ext;
 }
 
 struct TSnapshotInfo {
     1: optional TBackend backend
     2: optional string snapshot_path
     3: optional bool incremental_snapshot
+}
+
+// Placeholder for external cluster snapshot feature.
+struct TClusterSnapshotPartitionSpec {
+    1: optional i64 db_id
+    2: optional i64 table_id
+    3: optional i64 partition_id
+    4: optional i64 physical_partition_id
 }
 
 enum TTxnType {

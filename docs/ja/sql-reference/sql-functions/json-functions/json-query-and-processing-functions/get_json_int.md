@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定されたパスからJSON文字列内の整数値を抽出します。"
 ---
 
 # get_json_int

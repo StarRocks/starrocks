@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocksの現在のバージョンを返します。"
 ---
 
 # current_version

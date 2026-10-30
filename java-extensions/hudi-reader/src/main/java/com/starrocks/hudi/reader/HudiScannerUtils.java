@@ -79,7 +79,6 @@ public class HudiScannerUtils {
     }
 
     public static String mapColumnTypeToHiveType(ColumnType type) {
-        ColumnType.TypeValue typeValue = type.getTypeValue();
         StringBuilder sb = new StringBuilder();
         if (type.isStruct()) {
             List<String> childNames = type.getChildNames();

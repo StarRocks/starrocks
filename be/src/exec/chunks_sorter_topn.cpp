@@ -15,15 +15,16 @@
 #include "chunks_sorter_topn.h"
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
 #include "base/orlp/pdqsort.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/merge.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
@@ -66,7 +67,7 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
           _max_buffered_rows(max_buffered_rows),
           _max_buffered_bytes(max_buffered_bytes),
           _max_buffered_chunks(max_buffered_chunks),
-          _init_merged_segment(false),
+
           _limit(limit),
           _offset(offset),
           _topn_type(topn_type) {
@@ -217,9 +218,6 @@ Status ChunksSorterTopn::_do_get_next(ChunkPtr* chunk, bool* eos) {
     size_t chunk_size = _state->chunk_size();
     MergedRun& run = _merged_runs.front();
     *chunk = run.steal_chunk(chunk_size);
-    if (*chunk != nullptr) {
-        RETURN_IF_ERROR((*chunk)->downgrade());
-    }
     if (run.empty()) {
         _merged_runs.pop_front();
     }
@@ -624,7 +622,7 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
 
         materialize_by_permutation(big_chunk.get(), chunks, merged_perm);
 
-        RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
+        RETURN_IF_ERROR(big_chunk->capacity_limit_reached());
         ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(big_chunk), *_sort_exprs));
         dst->push_back(std::move(run));
     }
@@ -720,7 +718,7 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     new_permutation.resize(rows_to_keep);
     materialize_by_permutation(big_chunk.get(), chunks, new_permutation);
 
-    RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
+    RETURN_IF_ERROR(big_chunk->capacity_limit_reached());
     ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(big_chunk), *_sort_exprs));
     _merged_runs.push_back(std::move(run));
 
@@ -749,7 +747,7 @@ void ChunksSorterTopn::_rank_pruning() {
 
     const auto& merged_runs = _merged_runs;
     for (int i = 0; i < merged_runs.num_chunks(); ++i) {
-        if (target_index > merged_runs.at(i).num_rows()) {
+        if (target_index >= merged_runs.at(i).num_rows()) {
             target_index -= merged_runs.at(i).num_rows();
         } else {
             index_in_runs = i;

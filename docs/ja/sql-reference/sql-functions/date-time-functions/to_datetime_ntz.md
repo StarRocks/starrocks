@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "UnixタイムスタンプをDATETIME型の値に変換します（UTC+0ベース）。"
 ---
 
 # to_datetime_ntz

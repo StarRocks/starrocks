@@ -15,21 +15,26 @@
 #pragma once
 
 #include <cstring>
+#include <type_traits>
 
 #include "base/bit/bit_stream_utils.h"
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/simd/expand.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "base/types/int256.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/current_thread.h"
 
 #ifdef __AVX2__
 #include <immintrin.h>
@@ -142,6 +147,44 @@ public:
         return Status::OK();
     }
 
+    // Writes the null column once from `null_infos` and scatters the non-null values straight from the
+    // page buffer, instead of one append_nulls / append_numbers pair per null run. `filter` is ignored,
+    // as in next_batch: a plain value costs the same to copy whether or not the row is selected.
+    Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
+                                 const FilterData* filter) override {
+        if (null_infos.num_ranges <= 2) {
+            return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+        }
+        DCHECK(dst->is_nullable());
+        size_t read_count = count - null_infos.num_nulls;
+        size_t read_bytes = read_count * SIZE_OF_TYPE;
+        if (read_bytes + _offset > _data.size) {
+            return Status::InternalError(strings::Substitute(
+                    "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, read_count, _data.size));
+        }
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        auto* data_column = down_cast<FixedLengthColumnBase<T>*>(nullable_column->data_column_raw_ptr());
+        size_t cur_size = data_column->size();
+        _next_null_column(count, null_infos, nullable_column);
+        data_column->resize_uninitialized(cur_size + count);
+
+        const uint8_t* __restrict is_nulls = null_infos.nulls_data();
+        // expand_load reads src[k] where k is the number of non-nulls before the current row, so over trailing
+        // nulls it reads one element past the last value, which may be past the end of the page. Values at
+        // null rows are unspecified anyway, so stop at the last non-null row.
+        size_t expand_count = count;
+        while (expand_count > 0 && is_nulls[expand_count - 1]) {
+            --expand_count;
+        }
+        // The values start wherever the definition levels end, so they are not necessarily aligned for T;
+        // expand_load reads its source with unaligned loads.
+        const T* src = reinterpret_cast<const T*>(_data.data + _offset);
+        T* __restrict data = data_column->get_data().data() + cur_size;
+        SIMD::Expand::expand_load(data, src, is_nulls, expand_count);
+        _offset += read_bytes;
+        return Status::OK();
+    }
+
     Status skip(size_t values_to_skip) override {
         size_t fetch_size = values_to_skip * SIZE_OF_TYPE;
         if (fetch_size + _offset > _data.size) {
@@ -208,10 +251,14 @@ public:
 
         size_t max_size = 0;
         size_t read_count = count - null_cnt;
-        uint32_t lengths[read_count + 1];
-        char* datas[read_count + 1];
+        // Reusable members rather than VLAs: large batches blow the stack.
+        _temp_lengths.resize(read_count + 1);
+        _temp_datas.resize(read_count + 1);
+        uint32_t* lengths = _temp_lengths.data();
+        char** datas = _temp_datas.data();
         size_t i = 0;
         size_t cursor = _offset;
+        size_t total_length = 0;
         //
         for (i = 0; (i < read_count) & (_offset < _data.size); ++i) {
             uint32_t length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(_data.data) + cursor);
@@ -220,6 +267,7 @@ public:
             cursor += length;
             lengths[i] = length;
             max_size = max_size > length ? max_size : length;
+            total_length += length;
         }
 
         _offset = cursor;
@@ -232,15 +280,21 @@ public:
             auto& offsets = binary_column->get_offset();
             auto& bytes = binary_column->get_bytes();
             size_t prev_offsets = offsets.size();
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
             size_t offset = bytes.size();
+            size_t final_offset = offset + total_length;
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
             size_t cnt = 0;
-            for (size_t i = 0; i < count; ++i) {
-                offset += is_nulls[i] ? 0 : lengths[cnt++];
-                offsets[prev_offsets + i] = offset;
-            }
+            const uint32_t* lengths_ptr = lengths;
+            offsets.visit_storage([prev_offsets, count, is_nulls, lengths_ptr, offset, cnt](auto& offsets_buf) mutable {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* dst_offsets = offsets_buf.data() + prev_offsets;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
 
-            binary_column->get_bytes().reserve(offset);
+            binary_column->get_bytes().reserve(final_offset);
         }
 
         if (read_count == 0) {
@@ -248,14 +302,16 @@ public:
         }
 
         // fill bytes data
-        max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
-        if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
-            binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
-            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
-        } else {
-            binary_column->append_bytes(datas, lengths, read_count);
-            DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
-        }
+        max_size = std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
+                                                static_cast<decltype(max_size)>(8));
+        TRY_CATCH_BAD_ALLOC({
+            if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
+                binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
+            } else {
+                binary_column->append_bytes(datas, lengths, read_count);
+            }
+        });
+        DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
 
         return Status::OK();
     }
@@ -286,7 +342,7 @@ public:
                 num_decoded++;
             }
             CHECK_DECODING_BOUND
-        } else {
+        } else if (count > 0) {
             auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(count * sizeof(Slice));
             Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
             size_t max_size = 0;
@@ -301,12 +357,16 @@ public:
             CHECK_DECODING_BOUND
             bool ret = false;
             // when last slices offset + max_size > _data.size, there is overflow on reading
-            max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
-            if (slices[count - 1].data - _data.data + max_size <= _data.size) {
-                ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
-            } else {
-                ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
-            }
+            max_size =
+                    std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
+                                                 static_cast<decltype(max_size)>(8));
+            TRY_CATCH_BAD_ALLOC({
+                if (slices[count - 1].data - _data.data + max_size <= _data.size) {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
+                } else {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
+                }
+            });
 
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("PlainDecoder append strings to column failed");
@@ -354,6 +414,8 @@ public:
 private:
     Slice _data;
     size_t _offset = 0;
+    std::vector<uint32_t> _temp_lengths;
+    std::vector<char*> _temp_datas;
 };
 
 // plain encoding for boolean type is stored as `Bit Packed`, `LSB` first format
@@ -375,7 +437,9 @@ public:
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         auto original_size = dst->size();
         dst->resize(original_size + count);
-        auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data() + original_size);
+        MutableRawDataVisitor visitor;
+        RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+        auto num_unpacked_values = unpack_batch(count, visitor.result() + original_size);
         if (num_unpacked_values < count) {
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));
@@ -383,11 +447,44 @@ public:
         return Status::OK();
     }
 
+    // Unpacks the non-null values once and expands them into place under the null flags, instead of one
+    // append_nulls / next_batch pair per null run.
+    Status next_batch_with_nulls(size_t count, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
+                                 const FilterData* filter) override {
+        if (null_infos.num_ranges <= 2) {
+            return Decoder::next_batch_with_nulls(count, null_infos, content_type, dst, filter);
+        }
+        DCHECK(dst->is_nullable());
+        size_t read_count = count - null_infos.num_nulls;
+        raw::stl_vector_resize_uninitialized(&_values_buffer, read_count);
+        auto num_unpacked_values = unpack_batch(read_count, _values_buffer.data());
+        if (num_unpacked_values < read_count) {
+            return Status::InternalError(
+                    strings::Substitute("going to read out-of-bounds data, count=$0,num_unpacked_values=$1", read_count,
+                                        num_unpacked_values));
+        }
+        auto* nullable_column = down_cast<NullableColumn*>(dst);
+        auto* data_column = down_cast<FixedLengthColumnBase<uint8_t>*>(nullable_column->data_column_raw_ptr());
+        size_t cur_size = data_column->size();
+        _next_null_column(count, null_infos, nullable_column);
+        data_column->resize_uninitialized(cur_size + count);
+        const uint8_t* is_nulls = null_infos.nulls_data();
+        // the expand reads one value past the last one over trailing nulls; stop at the last non-null row
+        size_t expand_count = count;
+        while (expand_count > 0 && is_nulls[expand_count - 1]) {
+            --expand_count;
+        }
+        SIMD::Expand::expand_load(data_column->get_data().data() + cur_size, _values_buffer.data(), is_nulls,
+                                  expand_count);
+        return Status::OK();
+    }
+
     Status skip(size_t values_to_skip) override {
         //TODO(Smith) still heavy work load
-        std::vector<uint8_t> tmp;
-        tmp.reserve(values_to_skip);
-        return next_batch(values_to_skip, tmp.data());
+        // resize() — see encoding_bss.h: reserve() leaves storage uninitialised,
+        // writing through data() is UB.
+        _skip_buffer.resize(values_to_skip);
+        return next_batch(values_to_skip, _skip_buffer.data());
     }
 
     Status next_batch(size_t count, uint8_t* dst) override {
@@ -404,6 +501,9 @@ private:
     static const int kBitPackedDefaultValue = 8;
 
     BatchedBitReader _batched_bit_reader;
+    std::vector<uint8_t> _skip_buffer;
+    // the non-null values of one next_batch_with_nulls call
+    std::vector<uint8_t> _values_buffer;
 
     std::unique_ptr<uint8_t[]> _decoded_values_buffer;
     std::size_t _decoded_buffer_size;
@@ -551,13 +651,19 @@ public:
         }
         auto& offsets = binary_column->get_offset();
         size_t prev_offsets = offsets.size();
-        raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
+        size_t final_offset = offset + read_count * _type_length;
+        offsets.resize_uninitialized(count + prev_offsets, final_offset);
         {
             // fill offset columns
-            for (size_t i = 0; i < count; ++i) {
-                offset += is_nulls[i] ? 0 : _type_length;
-                offsets[prev_offsets + i] = offset;
-            }
+            offsets.visit_storage(
+                    [prev_offsets, count, is_nulls, type_length = _type_length, offset](auto& offsets_buf) mutable {
+                        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                        auto* dst_offsets = offsets_buf.data() + prev_offsets;
+                        for (size_t i = 0; i < count; ++i) {
+                            offset += is_nulls[i] ? 0 : type_length;
+                            dst_offsets[i] = static_cast<OffsetValue>(offset);
+                        }
+                    });
         }
         DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
 
@@ -591,9 +697,12 @@ public:
         __m256i cur = _mm256_set1_epi64x((uint64_t)(_data.data + _offset));
         cur = _mm256_add_epi64(cur, offsets);
         for (; i + 4 <= count; i += 4) {
-            // mix two i64 to i128
-            __m256i lo = __builtin_shufflevector(cur, fixed_length, 0, 4, 1, 4);
-            __m256i hi = __builtin_shufflevector(cur, fixed_length, 2, 4, 3, 4);
+            // Interleave (ptr,len) lanes to materialise 4 Slice{ptr,len} structs.
+            // Replaces clang-only __builtin_shufflevector with portable AVX2 intrinsics.
+            __m256i unpacklo = _mm256_unpacklo_epi64(cur, fixed_length); // [ptr0, len, ptr2, len]
+            __m256i unpackhi = _mm256_unpackhi_epi64(cur, fixed_length); // [ptr1, len, ptr3, len]
+            __m256i lo = _mm256_permute2x128_si256(unpacklo, unpackhi, 0x20);
+            __m256i hi = _mm256_permute2x128_si256(unpacklo, unpackhi, 0x31);
 
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i]), lo);
             _mm256_storeu_si256(reinterpret_cast<__m256i*>(&slices[i + 2]), hi);

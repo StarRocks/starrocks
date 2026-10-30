@@ -22,39 +22,9 @@
 #include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "exec/sorting/sorting.h"
+#include "column/sorting/sorting.h"
 
 namespace starrocks {
-
-// NOLINTNEXTLINE
-PARALLEL_TEST(NullableColumnTest, test_nullable_column_upgrade_if_overflow) {
-    auto c0 = NullableColumn::create(UInt32Column::create(), NullColumn::create());
-    c0->append_datum((uint32_t)1);
-
-    auto ret = c0->upgrade_if_overflow();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-}
-
-// NOLINTNEXTLINE
-PARALLEL_TEST(NullableColumnTest, test_nullable_column_downgrade) {
-    auto c0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    c0->append_datum(Slice("1"));
-
-    ASSERT_FALSE(c0->has_large_column());
-    auto ret = c0->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-
-    c0 = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
-    c0->append_datum(Slice("1"));
-
-    ASSERT_TRUE(c0->has_large_column());
-    ret = c0->downgrade();
-    ASSERT_TRUE(ret.ok());
-    ASSERT_TRUE(ret.value() == nullptr);
-    ASSERT_FALSE(c0->has_large_column());
-}
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(NullableColumnTest, test_copy_constructor) {
@@ -396,7 +366,7 @@ PARALLEL_TEST(NullableColumnTest, test_replicate) {
     column->append_datum({});
     column->append_datum((int32_t)4);
 
-    Offsets offsets;
+    Buffer<uint32_t> offsets;
     offsets.emplace_back(0);
     offsets.emplace_back(2);
     offsets.emplace_back(4);

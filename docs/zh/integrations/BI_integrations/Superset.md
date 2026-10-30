@@ -1,5 +1,7 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
+description: "Apache Superset 支持对 StarRocks 的内部数据和外部数据进行查询和可视化处理。"
 ---
 
 # Apache Superset

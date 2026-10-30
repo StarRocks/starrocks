@@ -266,6 +266,10 @@ public class SelectRelation extends QueryRelation {
         return groupByClause;
     }
 
+    public void setGroupByClause(GroupByClause groupByClause) {
+        this.groupByClause = groupByClause;
+    }
+
     public boolean hasHavingClause() {
         return having != null;
     }

@@ -42,7 +42,9 @@ import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.CsvFormat;
@@ -63,6 +65,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -76,6 +79,8 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TCompressionType;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
@@ -91,8 +96,10 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
@@ -366,10 +373,12 @@ public class FileScanNode extends LoadScanNode {
             columnsFromPath = context.fileGroup.getColumnsFromPath();
         }
 
+        // Json format type check does not need file path
+        boolean isLoadJson = Load.getFormatType(context.fileGroup.getFileFormat(), "") == TFileFormatType.FORMAT_JSON;
         Load.initColumns(targetTable, columnExprs,
                 context.fileGroup.getColumnToHadoopFunction(), context.exprMap, descriptorTable,
                 context.tupleDescriptor, context.slotDescByName, context.params, true,
-                useVectorizedLoad, columnsFromPath);
+                useVectorizedLoad, columnsFromPath, isLoadJson);
     }
 
     private void finalizeParams(ParamCreateContext context) throws StarRocksException, AnalysisException {
@@ -584,8 +593,8 @@ public class FileScanNode extends LoadScanNode {
             long rangeBytes = 0;
             // The rest of the file belongs to one range
             boolean isEndOfFile = false;
-            if (smallestLocations.second + leftBytes > bytesPerInstance && isFileFormatSupportSplit(formatType)
-                            && fileStatus.isSplitable) {
+            if (smallestLocations.second + leftBytes > bytesPerInstance
+                    && isFileFormatSupportSplit(formatType, context.fileGroup) && fileStatus.isSplitable) {
                 rangeBytes = bytesPerInstance - smallestLocations.second;
             } else {
                 rangeBytes = leftBytes;
@@ -600,6 +609,14 @@ public class FileScanNode extends LoadScanNode {
             rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
             rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
             rangeDesc.setJson_root(jsonOptions.jsonRoot);
+            if (!Strings.isNullOrEmpty(jsonOptions.envelope)) {
+                if (formatType != TFileFormatType.FORMAT_JSON) {
+                    throw new StarRocksException(LoadStmt.ENVELOPE + " can only be specified when format is json");
+                }
+                if (jsonOptions.envelope.equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)) {
+                    rangeDesc.setEnvelope(TEnvelopeType.DEBEZIUM);
+                }
+            }
 
             brokerScanRange(smallestLocations.first).addToRanges(rangeDesc);
             smallestLocations.second += rangeBytes;
@@ -617,9 +634,16 @@ public class FileScanNode extends LoadScanNode {
         }
     }
     
-    private boolean isFileFormatSupportSplit(TFileFormatType format) {
+    private boolean isFileFormatSupportSplit(TFileFormatType format, BrokerFileGroup fileGroup) {
         switch (format) {
             case FORMAT_CSV_PLAIN:
+                // A plain CSV file can only be split at arbitrary byte offsets when every row delimiter
+                // ends a row. Once enclose or escape is set, a row delimiter may be part of a field
+                // (enclosed, or preceded by the escape character), and a scanner that starts in the
+                // middle of the file cannot tell whether the first row delimiter it sees is a real row
+                // end. Reading such a file as a single range is the only way to keep its rows intact;
+                // different files are still assigned to different instances.
+                return fileGroup.getEnclose() == 0 && fileGroup.getEscape() == 0;
             case FORMAT_PARQUET:
             case FORMAT_ORC:
                 return true;
@@ -641,7 +665,32 @@ public class FileScanNode extends LoadScanNode {
         rangeDesc.setFile_size(fileStatus.size);
         rangeDesc.setNum_of_columns_from_file(numberOfColumnsFromFile);
         rangeDesc.setColumns_from_path(columnsFromPath);
+        // Infer compression for JSON by suffix so BE can decompress
+        if (formatType == TFileFormatType.FORMAT_JSON) {
+            rangeDesc.setCompression_type(inferCompressionByName(fileStatus.getPath()));
+        }
         return rangeDesc;
+    }
+
+    public static TCompressionType inferCompressionByName(String fileName) {
+        if (StringUtils.isEmpty(fileName)) {
+            return null;
+        }
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".gz") || lower.endsWith(".gzip")) {
+            return TCompressionType.GZIP;
+        } else if (lower.endsWith(".bz2")) {
+            return TCompressionType.BZIP2;
+        } else if (lower.endsWith(".zst") || lower.endsWith(".zstd")) {
+            return TCompressionType.ZSTD;
+        } else if (lower.endsWith(".lz4")) {
+            return TCompressionType.LZ4_FRAME;
+        } else if (lower.endsWith(".deflate")) {
+            return TCompressionType.DEFLATE;
+        } else if (lower.endsWith(".snappy")) {
+            return TCompressionType.SNAPPY;
+        }
+        return null;
     }
 
     private void createScanRangeLocations(ParamCreateContext context, List<TBrokerFileStatus> fileStatuses)
@@ -663,6 +712,13 @@ public class FileScanNode extends LoadScanNode {
 
     @Override
     public void finalizeStats() throws StarRocksException {
+        if (!Strings.isNullOrEmpty(jsonOptions.envelope)
+                && jsonOptions.envelope.equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)
+                && targetTable instanceof OlapTable
+                && ((OlapTable) targetTable).getKeysType() != KeysType.PRIMARY_KEYS) {
+            throw new StarRocksException("envelope=debezium is only supported on PRIMARY KEY tables");
+        }
+
         locationsList = Lists.newArrayList();
         locationsHeap = new PriorityQueue<>(SCAN_RANGE_LOCATIONS_COMPARATOR);
 

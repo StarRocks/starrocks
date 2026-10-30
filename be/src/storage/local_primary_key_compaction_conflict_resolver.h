@@ -35,7 +35,7 @@ public:
               _new_version(new_version),
               _total_deletes(total_deletes),
               _delvecs(delvecs) {}
-    ~LocalPrimaryKeyCompactionConflictResolver() {}
+    ~LocalPrimaryKeyCompactionConflictResolver() override = default;
 
     StatusOr<FileInfo> filename() const override;
     Schema generate_pkey_schema() override;

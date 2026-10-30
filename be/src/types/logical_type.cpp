@@ -16,6 +16,7 @@
 
 #include <algorithm>
 
+#include "common/logging.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type_infra.h"
 
@@ -65,6 +66,7 @@ LogicalType string_to_logical_type(const std::string& type_str) {
     if (upper_type_str == "ANY_STRUCT") return TYPE_STRUCT;
     if (upper_type_str == "ANY_MAP") return TYPE_MAP;
     if (upper_type_str == "VARIANT") return TYPE_VARIANT;
+    if (upper_type_str == "FILE") return TYPE_FILE;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
     return TYPE_UNKNOWN;
 }
@@ -155,6 +157,12 @@ const char* logical_type_to_string(LogicalType type) {
         return "VARBINARY";
     case TYPE_VARIANT:
         return "VARIANT";
+    case TYPE_FILE:
+        return "FILE";
+    case TYPE_GEOGRAPHY:
+        return "GEOGRAPHY";
+    case TYPE_GEOMETRY:
+        return "GEOMETRY";
     }
     return "";
 }
@@ -313,3 +321,8 @@ const std::vector<LogicalType>& sortable_types() {
 }
 
 } // namespace starrocks
+
+auto fmt::formatter<starrocks::LogicalType>::format(const starrocks::LogicalType value, format_context& ctx) const
+        -> format_context::iterator {
+    return formatter<std::string_view>::format(starrocks::logical_type_to_string(value), ctx);
+}

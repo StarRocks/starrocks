@@ -18,12 +18,14 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
-import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.AbstractOlapTableScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
@@ -48,14 +50,14 @@ import java.util.function.Function;
 public class ColocatedBackendSelector implements BackendSelector {
     private static final Logger LOG = LogManager.getLogger(ColocatedBackendSelector.class);
 
-    private final OlapScanNode scanNode;
+    private final AbstractOlapTableScanNode scanNode;
     private final FragmentScanRangeAssignment assignment;
     private final ColocatedBackendSelector.Assignment colocatedAssignment;
     private final boolean isRightOrFullBucketShuffleFragment;
     private final WorkerProvider workerProvider;
     private final BucketSequenceIterator bucketSequenceIterator;
 
-    public ColocatedBackendSelector(OlapScanNode scanNode, FragmentScanRangeAssignment assignment,
+    public ColocatedBackendSelector(AbstractOlapTableScanNode scanNode, FragmentScanRangeAssignment assignment,
                                     ColocatedBackendSelector.Assignment colocatedAssignment,
                                     boolean isRightOrFullBucketShuffleFragment, WorkerProvider workerProvider,
                                     int maxBucketsPerBeToUseBalancerAssignment) {
@@ -76,7 +78,7 @@ public class ColocatedBackendSelector implements BackendSelector {
 
         Iterable<Integer> bucketSeqs = bucketSequenceIterator.createIterable();
         for (Integer bucketSeq : bucketSeqs) {
-            List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
+            List<TScanRangeLocations> locations = scanNode.getBucketSeqToLocations().get(bucketSeq);
             if (!bucketSeqToWorkerId.containsKey(bucketSeq)) {
                 // Use the first tablet to represent the locations, calculate the backend assigned to this bucket sequence.
                 // In colocation table, all tablets of a bucket sequence have the same locations.
@@ -141,9 +143,11 @@ public class ColocatedBackendSelector implements BackendSelector {
         if (minBackendId == Long.MAX_VALUE && workerProvider.allowUsingBackupNode() &&
                 !unavailableDataNodeIds.isEmpty()) {
             // [Shared-Data Only] If all locations are in unavailable nodes, a backup node can be selected on behalf of starmgr.
-            Collections.shuffle(unavailableDataNodeIds);
+            // Keep the order deterministic, so the same bucket resolves to the same backup on every query.
+            Collections.sort(unavailableDataNodeIds);
+            long affinityKey = bucketAffinityKey(bucketSeq);
             for (long id : unavailableDataNodeIds) {
-                long backupNodeId = workerProvider.selectBackupWorker(id);
+                long backupNodeId = workerProvider.selectBackupWorker(id, affinityKey);
                 LOG.debug("Select a backup node:{} for node:{}", backupNodeId, id);
                 if (backupNodeId > 0) {
                     Integer bucketNum = buckendIdToBucketCountMap.getOrDefault(backupNodeId, 0);
@@ -164,6 +168,24 @@ public class ColocatedBackendSelector implements BackendSelector {
         workerProvider.selectWorker(minBackendId);
         colocatedAssignment.seqToWorkerId.put(bucketSeq, minBackendId);
         bucketSequenceIterator.useBackend(minBackendId);
+    }
+
+    /**
+     * The backup affinity key of a bucket: (colocate group id, bucket seq) for a colocated table, so every table of the
+     * group sends that bucket to the same backup, and (table id, bucket seq) otherwise. The representative tablet is
+     * not used, as it changes with partition pruning.
+     */
+    private long bucketAffinityKey(int bucketSeq) {
+        long tableId = scanNode.getOlapTable().getId();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        // Shared-data colocate groups are either hash (StarOS meta group) or range ones. Both lookups return null
+        // instead of failing when the table leaves its group concurrently, which falls back to the table id.
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getMetaGroupColocateGroupId(tableId);
+        if (groupId == null) {
+            groupId = colocateTableIndex.getRangeColocateGroupId(tableId);
+        }
+        long scopeId = groupId != null ? groupId.grpId : tableId;
+        return WorkerProviderHelper.combineAffinityKey(scopeId, bucketSeq);
     }
 
     public static class BucketSeqToScanRange
@@ -227,7 +249,7 @@ public class ColocatedBackendSelector implements BackendSelector {
      * {@link NormalBucketSequenceIterator}, so only use {@link BalancerBucketSequenceIterator} when  {@code numBucketsPerBe} is
      * smaller than the parameter {@code maxBucketsPerBeToUseBalancerAssignment}.
      */
-    private static BucketSequenceIterator createBucketIterator(OlapScanNode scanNode,
+    private static BucketSequenceIterator createBucketIterator(AbstractOlapTableScanNode scanNode,
                                                                int maxBucketsPerBeToUseBalancerAssignment) {
         if (maxBucketsPerBeToUseBalancerAssignment <= 0) {
             return new NormalBucketSequenceIterator(scanNode);
@@ -236,8 +258,8 @@ public class ColocatedBackendSelector implements BackendSelector {
         boolean hasMultiReplications = false;
         int numTotalBuckets = 0;
         Set<Long> backends = Sets.newHashSet();
-        for (Integer bucket : scanNode.bucketSeq2locations.keySet()) {
-            List<TScanRangeLocations> bucketLocations = scanNode.bucketSeq2locations.get(bucket);
+        for (Integer bucket : scanNode.getBucketSeqToLocations().keySet()) {
+            List<TScanRangeLocations> bucketLocations = scanNode.getBucketSeqToLocations().get(bucket);
             if (bucketLocations.isEmpty()) {
                 continue;
             }
@@ -283,8 +305,8 @@ public class ColocatedBackendSelector implements BackendSelector {
     private static class NormalBucketSequenceIterator implements BucketSequenceIterator {
         private final Iterator<Integer> iterator;
 
-        public NormalBucketSequenceIterator(OlapScanNode scanNode) {
-            this.iterator = scanNode.bucketSeq2locations.keySet().iterator();
+        public NormalBucketSequenceIterator(AbstractOlapTableScanNode scanNode) {
+            this.iterator = scanNode.getBucketSeqToLocations().keySet().iterator();
         }
 
         @Override
@@ -347,8 +369,8 @@ public class ColocatedBackendSelector implements BackendSelector {
         private final Map<Integer, Integer> bucketToBackendUsedTimes;
         private final NavigableSet<Integer> buckets;
 
-        public BalancerBucketSequenceIterator(OlapScanNode scanNode) {
-            ArrayListMultimap<Integer, TScanRangeLocations> bucketToLocations = scanNode.bucketSeq2locations;
+        public BalancerBucketSequenceIterator(AbstractOlapTableScanNode scanNode) {
+            ArrayListMultimap<Integer, TScanRangeLocations> bucketToLocations = scanNode.getBucketSeqToLocations();
 
             this.backendToBuckets = Maps.newHashMap();
             this.bucketToBackendUsedTimes = Maps.newHashMap();

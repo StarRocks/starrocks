@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算参数x的平方根。"
 ---
 
 # sqrt, dsqrt

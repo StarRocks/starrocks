@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 30
+description: "Monitoring metrics for StarRocks shared-data clusters, covering the Shared-data Dashboard and Starlet Dashboard templates."
 ---
 
 # Monitoring Metrics for Shared-data Clusters

@@ -22,9 +22,12 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskRun;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -35,6 +38,7 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -43,7 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class TaskRunStatus implements Writable {
+public class TaskRunStatus implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
     // Sort task run status by create time in descending order
@@ -91,6 +95,11 @@ public class TaskRunStatus implements Writable {
     @SerializedName("userIdentity")
     private UserIdentity userIdentity;
 
+    // Who triggered this run: the session user for a manual submit, "system" for scheduled/event-triggered
+    // runs; batch follow-up runs inherit the leader's value. Feeds refresh_jobs.SUBMIT_USER.
+    @SerializedName("submitUser")
+    private String submitUser;
+
     @SerializedName("expireTime")
     private long expireTime;
 
@@ -101,8 +110,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("mergeRedundant")
     private boolean mergeRedundant = false;
 
+    // Runs persisted before this field existed have no recorded source and default to UNKNOWN (not a misleading CTAS).
     @SerializedName("source")
-    private Constants.TaskSource source = Constants.TaskSource.CTAS;
+    private Constants.TaskSource source = Constants.TaskSource.UNKNOWN;
 
     //////////// Variables should be volatile which can be visited by multi threads ///////////
 
@@ -226,13 +236,27 @@ public class TaskRunStatus implements Writable {
         this.catalogName = catalogName;
     }
 
+    public String getWarehouseName() {
+        if (properties != null) {
+            return properties.getOrDefault(PropertyAnalyzer.PROPERTIES_WAREHOUSE,
+                    WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        } else {
+            return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+        }
+    }
+
     public String getDbName() {
-        return ClusterNamespace.getNameFromFullName(dbName);
+        return dbName;
     }
 
     public void setDbName(String dbName) {
-        // // compatible with old version
-        this.dbName = ClusterNamespace.getFullName(dbName);
+        this.dbName = dbName;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // Images, edit logs and task_run_history rows written by older versions carry the default_cluster prefix.
+        dbName = ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public String getUser() {
@@ -249,6 +273,14 @@ public class TaskRunStatus implements Writable {
 
     public void setUserIdentity(UserIdentity userIdentity) {
         this.userIdentity = userIdentity;
+    }
+
+    public String getSubmitUser() {
+        return submitUser;
+    }
+
+    public void setSubmitUser(String submitUser) {
+        this.submitUser = submitUser;
     }
 
     public String getPostRun() {
@@ -399,25 +431,12 @@ public class TaskRunStatus implements Writable {
             if (!state.equals(Constants.TaskRunState.SUCCESS)) {
                 return true;
             }
-            // if state is success, we should check if the mvTaskRunExtraMessage is empty
-            return Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
+            // if state is success, we should check if the mvTaskRunExtraMessage is empty (a run rehydrated from
+            // archived history can have a null extra message, which means no pending partitions, i.e. finished)
+            return mvTaskRunExtraMessage == null
+                    || (Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) &&
                     Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart()) &&
-                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues());
-        }
-    }
-
-    public long calculateRefreshProcessDuration() {
-        if (finishTime > processStartTime) {
-            // NOTE:
-            // It's mostly because of tech debt, before this pr, the processStartTime can be persisted as 0 .
-            // In this case to avoid return a weird duration we choose the createTime as startTime
-            if (processStartTime > 0) {
-                return finishTime - processStartTime;
-            } else {
-                return finishTime - createTime;
-            }
-        } else {
-            return 0L;
+                    Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionValues()));
         }
     }
 

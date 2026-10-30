@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -35,6 +36,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class DeferProjectAfterTopNRule extends TransformationRule {
@@ -59,10 +61,18 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
         return false;
     }
 
+    // An access path is rooted at the column's storage-side id, which a rename leaves alone while the
+    // name changes, so the roots have to be matched against the ids. Matching the ColumnRefOperator's
+    // name instead makes a renamed column - and only that column, the others still answer to their id -
+    // look as if no path were pushed down for it, so the projection reading its subfields is deferred
+    // past the TopN. The whole struct then travels through the TopN and the exchange, and the scan
+    // loses its access path as well, because no subfield expression is left above it to build one from.
     private boolean mayBenefitFromPruningSubField(OptimizerContext context,
+                                                  Map<ColumnRefOperator, Column> refToColumn,
                                                   Set<String> columnAccessPaths, ScalarOperator scalarOperator) {
         return scalarOperator.getUsedColumns().getColumnRefOperators(context.getColumnRefFactory())
-                .stream().anyMatch(columnRefOperator -> columnAccessPaths.contains(columnRefOperator.getName()));
+                .stream().map(refToColumn::get).filter(Objects::nonNull)
+                .anyMatch(column -> columnAccessPaths.contains(column.getColumnId().getId()));
     }
 
     @Override
@@ -77,6 +87,8 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
         Set<String> columnsWithAccessPath = new HashSet<>();
 
         Operator projectChild = projectExpression.getInputs().get(0).getOp();
+        Map<ColumnRefOperator, Column> refToColumn = projectChild instanceof LogicalOlapScanOperator
+                ? ((LogicalOlapScanOperator) projectChild).getColRefToColumnMetaMap() : Map.of();
         if (projectChild instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator olapScanOperator = projectChild.cast();
             List<ColumnAccessPath> columnAccessPaths = olapScanOperator.getColumnAccessPaths();
@@ -96,7 +108,7 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
                 }
                 // If some columns of the expression appear in ColumnAccessPath,
                 // it may benefit from pruning subfield, in which case we should keep it.
-                return !mayBenefitFromPruningSubField(context, columnsWithAccessPath, entry.getValue());
+                return !mayBenefitFromPruningSubField(context, refToColumn, columnsWithAccessPath, entry.getValue());
             }
             return false;
         });
@@ -111,7 +123,7 @@ public class DeferProjectAfterTopNRule extends TransformationRule {
 
         projectOperator.getColumnRefMap().forEach((columnRefOperator, scalarOperator) -> {
             if (topNRequiredInputColumns.contains(columnRefOperator) ||
-                    mayBenefitFromPruningSubField(context, columnsWithAccessPath, scalarOperator)) {
+                    mayBenefitFromPruningSubField(context, refToColumn, columnsWithAccessPath, scalarOperator)) {
                 preProjectionMap.put(columnRefOperator, scalarOperator);
                 // In theory, expressions calculated in pre-project do not need to be recalculated in post-project.
                 // Here we only keep the column ref operator in postProjectionMap.

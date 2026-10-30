@@ -1,6 +1,8 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
+description: "StarRocks Iceberg Catalog supports a variety of Data Definition Language (DDL) operations, including creating and managing databases, tables, and views."
 ---
 
 # Iceberg DDL operations
@@ -84,12 +86,59 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 #### `column_definition`
 
 ```SQL
-col_name col_type [COMMENT 'comment']
+col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 ```
 
 :::note
 All non-partition columns must use `NULL` as the default value. Partition columns must be defined after non-partition columns and cannot use `NULL` as the default value.
 :::
+
+##### Default values
+
+From v4.1 onwards, StarRocks supports setting default values for columns in Iceberg tables. This feature requires Iceberg format version 3 (`"format-version" = "3"`).
+
+**Usage:**
+
+- **Write-time filling**: When executing an INSERT statement, if a value is not specified for a column, the system automatically uses the column's default value.
+- **Schema Evolution filling**: When a new column is added to an existing table, reading old data files (that do not contain the new column) will use the new column's default value.
+
+**Syntax:**
+
+```SQL
+col_name col_type DEFAULT default_value
+```
+
+**Requirements:**
+
+- The table must use Iceberg format version 3 (`"format-version" = "3"`).
+- Default values for numeric types (INT, BIGINT, FLOAT, DOUBLE), BOOLEAN, STRING, and DATE/TIMESTAMP types must be wrapped in quotes. For example: `DEFAULT "18"`, `DEFAULT "100.0"`, `DEFAULT "true"`.
+
+**Examples:**
+
+- **Create a table with default values:**
+
+```SQL
+CREATE TABLE user_info (
+    id INT,
+    name STRING,
+    age INT DEFAULT "18",
+    score DOUBLE DEFAULT "100.0",
+    status STRING DEFAULT 'active',
+    is_active BOOLEAN DEFAULT "true"
+) PROPERTIES ("format-version" = "3");
+```
+
+- **Add a column with a default value:**
+
+```SQL
+ALTER TABLE user_info ADD COLUMN bonus DOUBLE DEFAULT "50.5";
+```
+
+- **Modify a column's default value:**
+
+```SQL
+ALTER TABLE user_info MODIFY COLUMN status STRING DEFAULT "inactive";
+```
 
 #### `partition_desc`
 
@@ -180,6 +229,9 @@ ADD PARTITION COLUMN partition_expr [, partition_expr ...];
 
 ALTER TABLE [catalog.][database.]table_name
 DROP PARTITION COLUMN partition_expr [, partition_expr ...];
+
+ALTER TABLE [catalog.][database.]table_name
+REPLACE PARTITION COLUMN old_partition_expr WITH new_partition_expr;
 ```
 
 Supported `partition_expr` formats:
@@ -200,6 +252,42 @@ ADD PARTITION COLUMN month(sale_date), bucket(customer_id, 10);
 ```SQL
 ALTER TABLE sales_data
 DROP PARTITION COLUMN day(sale_date);
+```
+
+- **Replace partition column:**
+
+```SQL
+ALTER TABLE sales_data
+REPLACE PARTITION COLUMN day(sale_date) WITH month(sale_date);
+```
+
+## ALTER TABLE to add or drop a nested field
+
+Adds a field to, or drops a field from, a STRUCT column or a STRUCT nested in it.
+
+```SQL
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+ADD FIELD field_path field_type [FIRST | AFTER field_name];
+
+ALTER TABLE [catalog.][database.]table_name MODIFY COLUMN column_name
+DROP FIELD field_path;
+```
+
+`field_path` is the path to the field in the column, such as `c2.v3`. Use `[*]` for the elements of an ARRAY, such as `c2.[*].v3`.
+
+:::note
+In a catalog backed by a Hive metastore, the metastore rejects the change if it is configured to disallow incompatible column type changes (`hive.metastore.disallow.incompatible.col.type.changes`).
+:::
+
+**Examples:**
+
+Suppose the column `fx` is `STRUCT<c1 INT, c2 ARRAY<STRUCT<v1 INT>>>`.
+
+```SQL
+-- Add the field v2 to the STRUCT in the ARRAY c2
+ALTER TABLE t MODIFY COLUMN fx ADD FIELD c2.[*].v2 STRING AFTER v1;
+-- Drop the field c1
+ALTER TABLE t MODIFY COLUMN fx DROP FIELD c1;
 ```
 
 ## DROP TABLE

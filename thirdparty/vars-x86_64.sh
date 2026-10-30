@@ -40,19 +40,19 @@ JINDOSDK_SOURCE="jindosdk-4.6.8-linux"
 JINDOSDK_MD5SUM="5436e4fe39c4dfdc942e41821f1dd8a9"
 
 # tenann
-TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.0-RELEASE/tenann-v0.5.0-RELEASE-x86_64.tar.gz"
-TENANN_NAME="tenann-v0.5.0-RELEASE-x86_64.tar.gz"
-TENANN_SOURCE="tenann-v0.5.0-RELEASE"
-TENANN_MD5SUM="b4ac5be487dd136c4903fe5db1bbd11f"
+TENANN_DOWNLOAD="https://github.com/StarRocks/tenann/releases/download/v0.5.1-rc2/tenann-v0.5.1-rc2-x86_64.tar.gz"
+TENANN_NAME="tenann-v0.5.1-rc2-x86_64.tar.gz"
+TENANN_SOURCE="tenann-v0.5.1-rc2"
+TENANN_MD5SUM="d3ee63132e0d3633fb417789feb9cb03"
 
 # starcache
-STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.1-rc1/starcache-centos7_amd64.tar.gz"
+STARCACHE_DOWNLOAD="https://cdn-thirdparty.starrocks.com/starcache/v4.3-rc1/starcache-centos7_amd64.tar.gz"
 STARCACHE_NAME="starcache.tar.gz"
 STARCACHE_SOURCE="starcache"
-STARCACHE_MD5SUM="c969df9d1b105059ddb71456842c7af8"
+STARCACHE_MD5SUM="f12ac6af8ce7232601a8cb82103e76d5"
 
 # pprof
-PPROF_DOWNLOAD="https://github.com/murphyatwork/pprof/releases/download/20251124/pprof-linux-amd64.zip"
-PPROF_NAME="pprof.zip"
+PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20261022/pprof-linux-amd64"
+PPROF_NAME="pprof"
 PPROF_SOURCE="pprof"
-PPROF_MD5SUM="577dd8a01845a13b3ba76719cc2edb28"
+PPROF_MD5SUM="4a1533413af73e01ba44d5c0d8dc17e8"

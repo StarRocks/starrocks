@@ -29,6 +29,11 @@ class TExprNode;
 
 class ExprFactory {
 public:
+    using ExprCreateHook = Status (*)(ObjectPool* pool, const TExprNode& texpr_node, Expr** expr, RuntimeState* state);
+
+    // Hook for non-core expr creation that should run after core FUNCTION_CALL dispatch.
+    static void set_non_core_create_post_hook(ExprCreateHook hook);
+
     static Status create_expr_tree(ObjectPool* pool, const TExpr& texpr, Expr** root_expr, RuntimeState* state,
                                    bool can_jit = false);
 

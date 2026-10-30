@@ -21,12 +21,11 @@
 #include "base/concurrency/stopwatch.hpp"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "exec/data_sink.h"
-#include "exec/exec_node.h"
 #include "exec/scan_node.h"
+#include "exec_primitive/data_sink.h"
+#include "exec_primitive/exec_node.h"
 #include "gen_cpp/ShortCircuit_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "storage/table_reader.h"
 
 namespace starrocks {

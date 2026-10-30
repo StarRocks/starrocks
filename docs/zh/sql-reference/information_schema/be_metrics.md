@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "be_metrics 提供每个 BE 节点指标的信息。"
 ---
 
 # be_metrics

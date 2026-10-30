@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "AUTO_INCREMENT column attribute automatically assigns unique integer values to rows since StarRocks v3.0."
 ---
 
 # AUTO_INCREMENT
@@ -378,6 +379,12 @@ mysql > SELECT * FROM test_tbl3 ORDER BY id;
     +------+------+--------+------+
     3 rows in set (0.01 sec)
     ```
+
+## 使用上の注意
+
+デフォルトでは、システムはオプティマイザによる `COUNT(DISTINCT)` の実装方法の選択を許可します。
+
+カーディナリティが低い列または中程度の列を重複排除する場合は、クエリヒントで `count_distinct_implementation` を `multi_count_distinct` に設定し、正確なカウントを行う `multi_distinct_count` 実装を検証できます。ただし、カーディナリティが高い列の重複排除には `multi_distinct_count` 実装を使用しないでください。HashSet の状態保持と最終マージによってメモリ使用量が過剰になり、OOM が発生する可能性があります。
 
 ## 制限事項
 

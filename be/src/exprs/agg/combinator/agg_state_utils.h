@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exprs/agg/combinator/state_combinator.h"
-#include "runtime/agg_state_desc.h"
+#include "types/agg_state_desc.h"
 
 namespace starrocks {
 class AggStateDesc;

@@ -14,17 +14,25 @@
 
 #include "io/compressed_input_stream.h"
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
 #include <lz4/lz4frame.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
+#include <cerrno>
+#include <cstring>
+#include <iostream>
 #include <memory>
+#include <string>
+#include <vector>
 
+#include "base/compression/block_compression.h"
+#include "base/compression/stream_decompressor.h"
 #include "base/testutil/assert.h"
-#include "fs/fs_posix.h"
-#include "io/core/string_input_stream.h"
+#include "io/fd_input_stream.h"
+#include "io/string_input_stream.h"
 #include "io_test_base.h"
-#include "util/compression/block_compression.h"
-#include "util/compression/stream_decompressor.h"
 namespace starrocks::io {
 
 class CompressedInputStreamTest : public ::testing::Test {
@@ -73,17 +81,17 @@ protected:
     }
 
     void read_compressed_file_ctx(CompressionTypePB type, const char* path, std::string& out, const ReadContext& ctx) {
-        auto fs = new_fs_posix();
-        auto st = fs->new_random_access_file(path);
-        ASSERT_TRUE(st.ok()) << st.status().message();
-        auto file = std::move(st.value());
+        int fd = ::open(path, O_RDONLY);
+        ASSERT_GE(fd, 0) << path << ": " << std::strerror(errno);
+        auto file = std::make_shared<FdInputStream>(fd);
+        file->set_close_on_delete(true);
 
         using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
         auto dec = StreamDecompressor::create_decompressor(type);
         ASSERT_TRUE(dec.ok());
 
         auto compressed_input_stream = std::make_shared<io::CompressedInputStream>(
-                file->stream(), DecompressorPtr(std::move(dec).value().release()), ctx.decompressor_buffer_size);
+                file, DecompressorPtr(std::move(dec).value().release()), ctx.decompressor_buffer_size);
 
         std::vector<char> vec_buf(ctx.read_buffer_size + 1);
         char* buf = vec_buf.data();
@@ -190,52 +198,6 @@ TEST_F(CompressedInputStreamTest, test_LZ4F) {
     }
 }
 
-TEST_F(CompressedInputStreamTest, test_LZO0) {
-    const char* path = "be/test/exec/test_data/csv_scanner/decompress_test0.csv.lzo";
-    std::string out;
-    read_compressed_file(CompressionTypePB::LZO, path, out);
-    std::string expected = R"(Alice,1
-Bob,2
-CharlieX,3
-)";
-    std::cout << out << "\n";
-    ASSERT_EQ(out, expected);
-}
-
-TEST_F(CompressedInputStreamTest, test_LZO1) {
-    const char* path = "be/test/exec/test_data/csv_scanner/decompress_test1.csv.lzo";
-
-    std::string head = R"(0,1
-1,2
-2,3
-3,4
-4,5
-5,6
-6,)";
-
-    std::string tail = R"(9998
-99998,99999
-99999,100000
-)";
-
-    std::vector<size_t> decompressor_buffer_sizes = {
-            1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
-    std::vector<size_t> read_buffer_sizes = {
-            32, 1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
-    for (size_t decompressor_buffer_size : decompressor_buffer_sizes) {
-        for (size_t read_buffer_size : read_buffer_sizes) {
-            std::cout << "test lzo1: read_buffer_size: " << read_buffer_size
-                      << ", decompressor_buffer_size: " << decompressor_buffer_size << std::endl;
-            std::string out;
-            ReadContext ctx{.read_buffer_size = read_buffer_size, .decompressor_buffer_size = decompressor_buffer_size};
-            read_compressed_file_ctx(CompressionTypePB::LZO, path, out, ctx);
-            ASSERT_EQ(out.size(), 1177785);
-            ASSERT_EQ(out.substr(0, head.size()), head);
-            ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);
-        }
-    }
-}
-
 TEST_F(CompressedInputStreamTest, test_Snappy0) {
     const char* path = "be/test/exec/test_data/csv_scanner/decompress_test0.csv.snappy";
     std::string out;
@@ -274,6 +236,42 @@ TEST_F(CompressedInputStreamTest, test_Snappy1) {
         ASSERT_EQ(out.substr(0, head.size()), head);
         ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);
     }
+}
+
+namespace {
+// Minimal InputStream whose get_io_stats_snapshot() returns a recognizable
+// sentinel byte count, used by the forwarding test below.
+class SentinelInputStream : public InputStream {
+public:
+    static constexpr int64_t kSentinel = 0x1A2B3C4D;
+
+    StatusOr<int64_t> read(void* /*data*/, int64_t /*count*/) override { return 0; }
+    Status read_fully(void* /*data*/, int64_t /*count*/) override { return Status::OK(); }
+    Status skip(int64_t /*count*/) override { return Status::OK(); }
+
+    IoStatsSnapshot get_io_stats_snapshot() const override {
+        IoStatsSnapshot snap;
+        snap.bytes_read_local_disk = kSentinel;
+        return snap;
+    }
+};
+} // namespace
+
+// CompressedInputStream and CompressedSeekableInputStream both implement
+// get_io_stats_snapshot() as a single-line forward to the inner stream. Anyone
+// removing the override would silently downgrade the publish-trace counters
+// (which call get_io_stats_snapshot through whatever wrapper chain is in play)
+// to all-zero on compressed streams. Verify the sentinel passed via the inner
+// stream survives both wrappers.
+TEST_F(CompressedInputStreamTest, test_io_stats_snapshot_forwarding) {
+    auto sentinel_inner = std::make_shared<SentinelInputStream>();
+
+    CompressedInputStream cis(sentinel_inner, LZ4F_decompressor());
+    EXPECT_EQ(SentinelInputStream::kSentinel, cis.get_io_stats_snapshot().bytes_read_local_disk);
+
+    auto cis_shared = std::make_shared<CompressedInputStream>(sentinel_inner, LZ4F_decompressor());
+    CompressedSeekableInputStream csis(cis_shared);
+    EXPECT_EQ(SentinelInputStream::kSentinel, csis.get_io_stats_snapshot().bytes_read_local_disk);
 }
 
 } // namespace starrocks::io

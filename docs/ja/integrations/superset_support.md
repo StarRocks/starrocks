@@ -1,12 +1,13 @@
 ---
 displayed_sidebar: docs
+description: "Apache Superset は SQLAlchemy を使用して StarRocks のクエリを実行し、モダンなデータ探索と可視化プラットフォームを提供します。"
 ---
 
 # Superset サポート
 
 [Apache Superset](https://superset.apache.org) は、モダンなデータ探索と可視化プラットフォームです。データのクエリには [SQLAlchemy](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks) を使用します。
 
-[MySQL Dialect](https://superset.apache.org/docs/databases/mysql) を使用することもできますが、`largeint` をサポートしていません。そのため、[StarRocks Dialect](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks/) を開発しました。
+MySQL Dialect を使用することもできますが、`largeint` をサポートしていません。そのため、[StarRocks Dialect](https://github.com/StarRocks/starrocks/tree/main/contrib/starrocks-python-client/starrocks/) を開発しました。
 
 ## 環境
 

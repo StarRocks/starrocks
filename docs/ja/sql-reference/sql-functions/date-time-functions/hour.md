@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "指定された日付の時間を返します。"
 ---
 
 # hour

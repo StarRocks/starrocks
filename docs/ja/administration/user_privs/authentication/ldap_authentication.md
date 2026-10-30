@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks で LDAP を使用してユーザーを作成・認証し、外部 LDAP サーバーと統合します。"
 sidebar_position: 30
 ---
 
@@ -28,18 +29,42 @@ authentication_ldap_simple_ssl_conn_trust_store_path =
 authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 
-StarRocks が LDAP システム内でユーザーを直接取得する方法でユーザーを認証したい場合は、**以下の追加設定項目を追加する必要があります**。
+StarRocks が LDAP システム内でユーザーを直接取得する方法でユーザーを認証したい場合（検索バインドモード）は、**以下の追加設定項目を追加する必要があります**。
 
 ```Properties
 # ユーザーのベース DN を追加し、ユーザーの取得範囲を指定します。
 authentication_ldap_simple_bind_base_dn =
-# LDAP オブジェクト内でユーザーを識別する属性の名前を追加します。デフォルトは uid です。
+# ログイン名を保持する属性の名前を追加します。デフォルトは uid（OpenLDAP の慣例）です。
+# Active Directory では sAMAccountName を使用してください。
 authentication_ldap_simple_user_search_attr =
 # ユーザーを取得するための管理者 DN を追加します。
 authentication_ldap_simple_bind_root_dn =
 # ユーザーを取得するための管理者パスワードを追加します。
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+**ダイレクトバインドモード**（検索ステップをスキップし、構築した DN で直接バインドする）を使用する場合は、DN パターンを設定できます。ユーザー DN の構造が予測可能な場合に便利です。
+
+```Properties
+# ダイレクトバインド認証の DN パターン。
+# ユーザー名のプレースホルダーとして ${USER} を使用します。
+# 複数のパターンはセミコロン ';' で区切ります。
+authentication_ldap_simple_bind_dn_pattern =
+```
+
+例: `uid=${USER},ou=People,dc=example,dc=com`
+
+ユーザーが複数の OU に分散している場合は、セミコロンで区切って複数のパターンを指定できます:
+
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
+
+システムは各パターンを順番に試行し、最初にバインドに成功した結果を返します。
+
+:::note
+
+パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@corp.example.com` のような UPN 形式のパターンはサポートされていません。結果が DN ではないため、ダウンストリームのグループ検索が失敗します。DN の属性値に `@` が含まれる場合（例: `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`）は有効です。
+
+:::
 
 ## DN マッチングメカニズム
 
@@ -61,30 +86,77 @@ v3.5.0 以降、StarRocks は LDAP 認証時にユーザーの識別名 (DN) 情
 - **Microsoft AD 環境**: グループメンバーにユーザー名属性が存在しない場合があります。`ldap_user_search_attr` は設定できません。システムは直接 DN を使用して照合を行います。
 - **混合環境**: 両方の照合方法を柔軟に切り替えることがサポートされています。
 
+## 認証の優先順位
+
+ユーザーが LDAP 認証でログインする際、StarRocks は以下の優先順位でユーザーの DN を決定します：
+
+1. **ユーザー指定の DN**: ユーザー作成時に明示的な DN が指定されている場合（`CREATE USER ... AS 'dn'`）、その DN が直接使用されます。
+2. **DN パターンによるダイレクトバインド**: `authentication_ldap_simple_bind_dn_pattern` が設定されている場合、システムはパターンから DN を構築し、直接バインドを試みます。複数のパターンは順番に試行されます。
+3. **検索バインド**: 上記のいずれも該当しない場合、システムは管理者アカウントを使用して LDAP 内のユーザーを検索し、見つかった DN でバインドします。
+
+## ユーザーエントリーからグループを解決する（memberOf）
+
+v4.2 以降、LDAP ユーザーのグループは、設定でどのグループを参照するかを宣言する代わりに、ユーザー自身のエントリーのグループメンバーシップ属性から読み取ることができます。この場合、ディレクトリー側で新しく作成されたグループは、設定を変更しなくても次回ログイン時に反映されます。
+
+2 つの FE 設定項目で制御します。どちらも動的に変更できます。
+
+```Properties
+# グループの取得元: group_provider（デフォルト）| memberof | both
+authentication_ldap_simple_group_source = group_provider
+# ユーザーエントリー上でグループメンバーシップを保持する属性名
+authentication_ldap_simple_memberof_attr = memberOf
+```
+
+- `group_provider`（デフォルト）は以前のバージョンと同じ動作で、Group Provider のみを使用します。
+- `memberof` はユーザー自身のエントリーの属性のみを使用します。設定された Group Provider は無視されますが、設定は保持されます。
+- `both` は両方の和集合を返します。
+
+`memberOf` は Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。
+
+これらはクラスター全体のデフォルト値です。security integration は同名のプロパティで両方を上書きできます。LDAP サービスごとに設定する場合はこちらが推奨されます。各認証モードで属性がどのように読み取られるか、および対象外となるもの（ネストされたグループ、Active Directory のプライマリーグループ、クロスドメインのグループ）を含む完全な動作は [Security Integration](./security_integration.md) を参照してください。
+
+:::note
+
+明示的な DN を指定して作成されたユーザー（`CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'`）は、この機能を**サポートしません**。この形式は廃止予定のユーザー単位の旧メカニズムであり、そのグループ解決の動作は変更されません。ユーザー作成時に `AS '<dn>'` を省略するか、security integration を使用してください。
+
+:::
+
+## 大文字小文字の扱い
+
+LDAP 関連の設定には統一した答えはありません。FE が比較する値とディレクトリーが比較する値があるため、以下の表で項目ごとに示します。
+
+| 項目 | 比較する場所 | 大文字小文字を区別するか |
+| --- | --- | --- |
+| 属性名: `authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_memberof_attr` | ディレクトリー、および FE が結果を読み取るとき | **区別しません。** LDAP の属性名（attribute description）は定義上大文字小文字を区別しないため、`memberof` と `memberOf` は同じ属性です。 |
+| `authentication_ldap_simple_group_source` | FE | **区別しません。** 前後の空白も無視されます。認識できない値は `CREATE` / `ALTER SECURITY INTEGRATION` では拒否され、FE 設定項目から渡された場合は `group_provider` にフォールバックしてログに ERROR を出します。 |
+| DN の値: `authentication_ldap_simple_bind_root_dn`、`..._bind_base_dn`、`..._bind_dn_pattern` | ディレクトリー | **ディレクトリー次第です。** DN 内の属性タイプ（`cn=`、`ou=`、`dc=`）は常に大文字小文字を区別しません。値を区別するかは各属性のマッチングルールによりますが、一般的な `cn` / `ou` / `dc` は区別しません。 |
+| ログイン名 | FE、ディレクトリーに送る前 | **区別しません。** 検索フィルターに入れる前、またはバインド DN パターンに代入する前に小文字に変換されます。これは Active Directory がアカウント名を扱う方式に合わせたものです。 |
+| グループ名 | FE | **照合では区別せず、表示では原文を保ちます。** `GRANT ... TO EXTERNAL GROUP` と `permitted_groups` はデフォルトで大文字小文字を無視して照合されますが（FE 設定項目 `authentication_group_case_insensitive`。`false` にすると厳密に照合します）、グループ名の文字列自体は書き換えられません。`current_group()` と Apache Ranger に渡されるグループ集合は、ディレクトリーが返した表記をそのまま保ちます。Ranger はグループ名を大文字小文字を区別して照合するため、そのポリシーはディレクトリー側の表記に合わせる必要があります。 |
+
 ## LDAP でユーザーを作成する
 
 ユーザーを作成する際、認証方法を LDAP 認証として `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'` と指定します。xxx は LDAP 内のユーザーの DN (Distinguished Name) です。
 
-例 1:
+例 1: 明示的な DN を指定してユーザーを作成する。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ```
 
-LDAP 内でユーザーの DN を指定せずにユーザーを作成することも可能です。ユーザーがログインすると、StarRocks は LDAP システムにアクセスしてユーザー情報を取得します。1 つだけ一致する場合、認証は成功します。
-
-例 2:
+例 2: DN を指定せずにユーザーを作成する。設定に応じて、ログイン時に DN パターン（ダイレクトバインド）または検索バインドによって DN が解決されます。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple
 ```
 
-この場合、FE に追加の設定を追加する必要があります。
+**検索バインド**モードを使用する場合、FE に以下の追加設定が必要です：
 
 - `authentication_ldap_simple_bind_base_dn`: ユーザーのベース DN で、ユーザーの取得範囲を指定します。
 - `authentication_ldap_simple_user_search_attr`: LDAP オブジェクト内でユーザーを識別する属性の名前で、デフォルトは uid です。
 - `authentication_ldap_simple_bind_root_dn`: ユーザー情報を取得する際に使用する管理者アカウントの DN です。
 - `authentication_ldap_simple_bind_root_pwd`: ユーザー情報を取得する際に使用する管理者アカウントのパスワードです。
+
+**ダイレクトバインド**モードを使用する場合は、`authentication_ldap_simple_bind_dn_pattern` を設定するだけで、管理者アカウントは不要です。
 
 ## ユーザーを認証する
 
@@ -125,3 +197,13 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 ODBC の DSN に `default\_auth=mysql_clear_password` と `ENABLE_CLEARTEXT\_PLUGIN=1` を追加し、ユーザー名とパスワードを指定します。
+
+### HTTP または Arrow Flight から LDAP で接続する
+
+HTTP API と Arrow Flight SQL はもともと平文パスワードを送るため、LDAP ユーザーはこれらのエントリポイントで特別な設定を必要としません。HTTP Basic 認証も Arrow Flight のユーザー名とパスワードも、最終的には同じ LDAP bind に行き着きます。`IDENTIFIED WITH authentication_ldap_simple` で作成したユーザーと、LDAP [セキュリティインテグレーション](./security_integration.md)のユーザーで挙動は同じです。[各認証方式が使えるエントリポイント](./authentication.mdx#各認証方式が使えるエントリポイント)を参照してください。
+
+```Bash
+curl -u tom:<password> -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+```

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "JSONオブジェクトからトップレベルのキーをJSON配列として返します。"
 ---
 
 # json_keys

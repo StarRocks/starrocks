@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+description: "StarRocks のテーブルクラスタリングを通じた、物理設計の最適化と効果的なソートキーの選択。"
 ---
 
 # テーブルクラスタリング

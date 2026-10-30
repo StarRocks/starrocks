@@ -16,8 +16,11 @@ package com.starrocks.connector.delta;
 
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.defaults.engine.DefaultParquetHandler;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
+import io.delta.kernel.engine.FileReadResult;
 import io.delta.kernel.expressions.Predicate;
 import io.delta.kernel.internal.util.Utils;
 import io.delta.kernel.types.StructType;
@@ -33,20 +36,21 @@ import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 public class TraceDefaultParquetHandler extends DefaultParquetHandler {
     private final Configuration hadoopConf;
     public TraceDefaultParquetHandler(Configuration hadoopConf) {
-        super(hadoopConf);
+        super(new HadoopFileIO(hadoopConf));
         this.hadoopConf = hadoopConf;
     }
 
     // This method copies the implementation from DefaultParquetHandler.java
     @Override
-    public CloseableIterator<ColumnarBatch> readParquetFiles(
+    public CloseableIterator<FileReadResult> readParquetFiles(
             CloseableIterator<FileStatus> fileIter,
             StructType physicalSchema,
             Optional<Predicate> predicate) throws IOException {
-        return new CloseableIterator<ColumnarBatch>() {
+        return new CloseableIterator<FileReadResult>() {
             private final io.delta.kernel.defaults.internal.parquet.ParquetFileReader batchReader =
-                    new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(hadoopConf);
+                    new io.delta.kernel.defaults.internal.parquet.ParquetFileReader(new HadoopFileIO(hadoopConf));
             private CloseableIterator<ColumnarBatch> currentFileReader;
+            private String currentFilePath;
 
             @Override
             public void close() throws IOException {
@@ -64,9 +68,13 @@ public class TraceDefaultParquetHandler extends DefaultParquetHandler {
                     Utils.closeCloseables(currentFileReader);
                     currentFileReader = null;
                     if (fileIter.hasNext()) {
+                        // Inside the branch for the same reason as the json handler: the call that finds
+                        // no next file opens nothing.
+                        BlockingCallValidator.validateNotUnderLock("remote-storage");
                         try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL,
                                 "TraceDefaultParquetHandler.readParquetFile")) {
-                            String nextFile = fileIter.next().getPath();
+                            FileStatus nextFile = fileIter.next();
+                            currentFilePath = nextFile.getPath();
                             currentFileReader = batchReader.read(nextFile, physicalSchema, predicate);
                             return hasNext(); // recurse since it's possible the loaded file is empty
                         }
@@ -77,9 +85,9 @@ public class TraceDefaultParquetHandler extends DefaultParquetHandler {
             }
 
             @Override
-            public ColumnarBatch next() {
+            public FileReadResult next() {
                 try (Timer ignored = Tracers.watchScope(Tracers.get(), EXTERNAL, "TraceDefaultParquetHandler.GetColumnarBatch")) {
-                    return currentFileReader.next();
+                    return new FileReadResult(currentFileReader.next(), currentFilePath);
                 }
             }
         };

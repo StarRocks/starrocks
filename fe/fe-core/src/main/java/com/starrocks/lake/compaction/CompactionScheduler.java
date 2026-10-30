@@ -16,6 +16,7 @@ package com.starrocks.lake.compaction;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -33,7 +34,9 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.CommitRateLimiter;
 import com.starrocks.lake.LakeAggregator;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -54,12 +57,14 @@ import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.queue.CircularFifoQueue;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -159,6 +164,20 @@ public class CompactionScheduler extends Daemon {
                     errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
                     LOG.error("Compaction job {} failed: {}", job.getDebugString(), errorMsg);
                     job.abort(); // Abort any executing task, if present.
+                } else if (taskResult == CompactionTask.TaskResult.NOT_FINISHED && job.isAborted()
+                        && job.getResult() == CompactionTask.TaskResult.NOT_FINISHED) {
+                    // The job was aborted (e.g. by tablet-reshard cleaning) but its compaction task has not
+                    // finished — the best-effort abort RPC may have been lost. Abort the transaction here so a
+                    // waiter does not block on the still-running compaction. getResult() is re-read after the
+                    // isAborted() check because the task may have finished since taskResult was first sampled;
+                    // if so this branch is skipped and the next cycle commits/fails it normally (an
+                    // ALL_SUCCESS aborted job must still commit and cross-publish, not be discarded). This
+                    // abort runs on the scheduler thread — the same thread that commits compaction txns — so
+                    // it adds no new commit-vs-abort interleaving. The BE/CN task output is orphaned and
+                    // reclaimed by vacuum.
+                    job.getPartition().setMinRetainVersion(0);
+                    errorMsg = "compaction cancelled";
+                    LOG.info("Aborting transaction of cancelled compaction job {}", job.getDebugString());
                 } else if (taskResult != CompactionTask.TaskResult.NOT_FINISHED) {
                     errorMsg = String.format("Unexpected compaction result: %s, %s", taskResult.name(), job.getDebugString());
                     LOG.error(errorMsg);
@@ -170,6 +189,9 @@ public class CompactionScheduler extends Daemon {
                     history.offer(CompactionRecord.build(job, errorMsg));
                     compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_failure);
                     abortTransactionIgnoreException(job, errorMsg);
+                    if (MetricRepo.hasInit) {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_FAILED.increase(1L);
+                    }
                     continue;
                 }
             }
@@ -184,6 +206,16 @@ public class CompactionScheduler extends Daemon {
                 } else if (LOG.isDebugEnabled()) {
                     LOG.debug("Removed published compaction. {} cost={}s running={}", job.getDebugString(),
                             cost / 1000, runningCompactions.size());
+                }
+                if (MetricRepo.hasInit) {
+                    // Mutually exclusive status counters: a partial-success commit lands
+                    // only in PARTIAL_SUCCESS, not also in SUCCESS, so dashboards can sum
+                    // success + partial + failed without double-counting.
+                    if (job.isPartialSuccess()) {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_PARTIAL_SUCCESS.increase(1L);
+                    } else {
+                        MetricRepo.COUNTER_LAKE_COMPACTION_SUCCESS.increase(1L);
+                    }
                 }
                 int factor = (statistics != null) ? statistics.getPunishFactor() : 1;
                 compactionManager.enableCompactionAfter(partition, Config.lake_compaction_interval_ms_on_success * factor);
@@ -234,9 +266,16 @@ public class CompactionScheduler extends Daemon {
             }
             info.taskRunning += job.getNumTabletCompactionTasks();
             runningCompactions.put(partitionStatisticsSnapshot.getPartition(), job);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Created new compaction job, {}", job.getDebugString());
+            if (MetricRepo.hasInit) {
+                // Feed the partition's MAX tablet score because the trigger logic itself selects
+                // partitions by max score, so this metric reflects the same criterion. Rounded to
+                // the nearest integer for the long-valued gauge; sub-integer precision is not needed.
+                Quantiles scoreBefore = job.getScoreBefore();
+                if (scoreBefore != null) {
+                    MetricRepo.recordCompactionScoreAtTrigger(Math.round(scoreBefore.getMax()));
+                }
             }
+            LOG.debug("Started compaction, {}", job.getDebugString());
         }
     }
 
@@ -295,6 +334,7 @@ public class CompactionScheduler extends Daemon {
     protected CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot,
             CompactionWarehouseInfo info) {
         PartitionIdentifier partitionIdentifier = partitionStatisticsSnapshot.getPartition();
+        boolean unshare = partitionStatisticsSnapshot.getPriority() == PartitionStatistics.CompactionPriority.UNSHARE;
         Database db = stateMgr.getLocalMetastore().getDb(partitionIdentifier.getDbId());
         if (db == null) {
             compactionManager.removePartition(partitionIdentifier);
@@ -307,23 +347,62 @@ public class CompactionScheduler extends Daemon {
         PhysicalPartition partition;
         Map<Long, List<Long>> beToTablets;
 
+        // Intensive path: IS on DB + READ on this one table. The critical section
+        // only reads / mutates state of one known table (partition lookup,
+        // collectPartitionTablets, beginTransaction, setMinRetainVersion). Concurrent
+        // schema change on this table takes IX + table-WRITE which still conflicts
+        // with our table-READ, preserving the "no shadow index appears before
+        // beginTransaction" invariant the original comment below relies on.
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = partitionIdentifier.getTableId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
 
         try {
             // lake table or lake materialized view
             table = (OlapTable) stateMgr.getLocalMetastore()
-                        .getTable(db.getId(), partitionIdentifier.getTableId());
+                        .getTable(db.getId(), tableId);
 
-            // Compact a table of SCHEMA_CHANGE state does not make much sense, because the compacted data
-            // will not be used after the schema change job finished.
-            if (table != null && table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE) {
-                compactionManager.enableCompactionAfter(partitionIdentifier, Config.lake_compaction_interval_ms_on_failure);
+            // Skip compaction while the table is under an alter that makes it wasteful or unsafe:
+            //   - SCHEMA_CHANGE: the compacted data would be discarded once the schema change finishes.
+            //   - ROLLUP: both lake rollup paths (LakeRollupJob for hash tables and sync MVs, LakeRangeRollupJob
+            //     for range-distribution tables) publish the new index by replaying the rollup tablets' per-version
+            //     txn vlogs over [alter_version + 1, commit_version). A compaction only writes the visible (base)
+            //     index tablets, so a compaction version inside that range has no rollup vlog and the rollup
+            //     publish fails on every retry, wedging the job forever (RB-320).
+            if (table != null && (table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE
+                    || table.getState() == OlapTable.OlapTableState.ROLLUP)) {
+                long retryAfterMs = Config.lake_compaction_interval_ms_on_failure;
+                compactionManager.enableCompactionAfter(partitionIdentifier, retryAfterMs);
+                logCompactionSkippedByAlter(db, table, partitionStatisticsSnapshot, retryAfterMs);
                 return null;
             }
             partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
             if (partition == null) {
                 compactionManager.removePartition(partitionIdentifier);
+                return null;
+            }
+            // A full UNSHARE rewrite needs to be the only compaction on its occupied partition.
+            // Other physical partitions keep compacting while this table retains its aggregate barrier.
+            boolean isPartitionResharding = table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && stateMgr.getTabletReshardJobMgr().isPhysicalPartitionReshardingLocked(table, partition.getId());
+            if (!unshare && isPartitionResharding && TabletReshardUtils.splitRewritesEveryShard(table)) {
+                compactionManager.enableCompactionAfter(partitionIdentifier,
+                        Config.lake_compaction_interval_ms_on_failure);
+                return null;
+            }
+            if (unshare && (!isPartitionResharding
+                    || !partition.isUnsharing() || !table.isFileBundling())) {
+                // Clear the marker before dropping the request. Priority is otherwise only reset for
+                // partitions that made it into runningCompactions, and this one never will -- while
+                // the retained priority would route every retry back here as UNSHARE, so the partition
+                // would be refused on each retry and its ordinary compaction would never resume.
+                // Reachable across a leader switch: a new leader can retrigger
+                // UNSHARE while the committed transaction is still becoming visible, and the cutover
+                // returns the table to NORMAL before this request is served.
+                compactionManager.resetPriority(partitionIdentifier);
+                compactionManager.enableCompactionAfter(partitionIdentifier,
+                        Config.lake_compaction_interval_ms_on_failure);
+                LOG.warn("Ignore stale UNSHARE compaction request for partition {}", partitionIdentifier);
                 return null;
             }
 
@@ -335,9 +414,9 @@ public class CompactionScheduler extends Daemon {
                 return null;
             }
 
-            // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
-            // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
-            txnId = beginTransaction(partitionIdentifier, info.computeResource);
+            // Note: call `beginTransaction()` while holding the per-table READ lock (intensive path) to make sure
+            // no shadow index will be added to this table (i.e., no schema change) before calling `beginTransaction()`.
+            txnId = beginTransaction(partitionIdentifier, partition, info.computeResource);
 
             partition.setMinRetainVersion(currentVersion);
 
@@ -348,19 +427,20 @@ public class CompactionScheduler extends Daemon {
             LOG.error("Unknown error: {}", e.getMessage());
             return null;
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         long nextCompactionInterval = Config.lake_compaction_interval_ms_on_success;
-        CompactionJob job = new CompactionJob(db, table, partition, txnId, Config.lake_compaction_allow_partial_success,
-                                              info.computeResource, info.warehouseName);
+        boolean allowPartialSuccess = !unshare && Config.lake_compaction_allow_partial_success;
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, allowPartialSuccess,
+                                              info.computeResource, info.warehouseName,
+                                              partitionStatisticsSnapshot.getCompactionScore(), unshare);
         try {
             if (table.isFileBundling()) {
                 CompactionTask task = createAggregateCompactionTask(currentVersion, beToTablets, txnId,
                         partitionStatisticsSnapshot.getPriority(), info.computeResource, partition.getId(), table);
                 task.sendRequest();
                 job.setAggregateTask(task);
-                LOG.debug("Create aggregate compaction task. {}", job.getDebugString());
             } else {
                 List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId,
                         job.getAllowPartialSuccess(), partitionStatisticsSnapshot.getPriority(), table);
@@ -377,10 +457,37 @@ public class CompactionScheduler extends Daemon {
             abortTransactionIgnoreError(job, e.getMessage());
             job.finish();
             history.offer(CompactionRecord.build(job, e.getMessage()));
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_LAKE_COMPACTION_FAILED.increase(1L);
+            }
             return null;
         } finally {
             compactionManager.enableCompactionAfter(partitionIdentifier, nextCompactionInterval);
         }
+    }
+
+    // While an alter pauses compaction, the partition's compaction score keeps climbing under ingestion, and
+    // loads get delayed or rejected with a hint to raise compaction concurrency, which cannot help. Log each
+    // skip so an operator can tie the score to the running alter job. The partition id and score match
+    // PARTITION_ID and MAX_CS in information_schema.partitions_meta. A skipped partition is retried at most
+    // once per retryAfterMs, so log at INFO only while its score already delays or rejects commits into it, and
+    // at DEBUG otherwise to keep a wide table from flooding fe.log.
+    private static void logCompactionSkippedByAlter(Database db, OlapTable table, PartitionStatisticsSnapshot snapshot,
+                                                    long retryAfterMs) {
+        double score = snapshot.getCompactionScore().getMax();
+        Level level = CommitRateLimiter.throttlesIngestion(score) ? Level.INFO : Level.DEBUG;
+        LOG.log(level, "Skip compaction of partition {} of table {}.{} while the table is in {} state, compaction "
+                        + "score: {}. Compaction resumes after the alter job finishes; next check in {}ms",
+                snapshot.getPartition().getPartitionId(), db.getFullName(), table.getName(), table.getState(), score,
+                retryAfterMs);
+    }
+
+    private static boolean allowBaseCompaction(OlapTable table, PartitionStatistics.CompactionPriority priority) {
+        // An explicit manual request is an operator override. The forbidden
+        // ranges only limit automatic base compaction.
+        return priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT ||
+                !CompactionControlScheduler.isBaseCompactionForbidden(
+                        table.getBaseCompactionForbiddenTimeRanges(), new Date());
     }
 
     @NotNull
@@ -392,6 +499,7 @@ public class CompactionScheduler extends Daemon {
         // Get parallel compaction configuration from table property
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
+        boolean allowBaseCompaction = allowBaseCompaction(table, priority);
 
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -409,6 +517,8 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = allowPartialSuccess;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction;
+            request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
             // Set parallel compaction configuration if enabled via table property
             // maxParallel > 0 means parallel compaction is enabled
@@ -442,13 +552,23 @@ public class CompactionScheduler extends Daemon {
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
 
+        // Track the candidate aggregator nodes (those that actually own tablets in the
+        // batch). We prefer one of them as aggregator so the BE side can resolve the
+        // first tablet id locally through the staros worker cache when deriving the
+        // combined_txn_log / bundle_tablet_metadata file path.
+        List<ComputeNode> candidateAggregatorNodes = Lists.newArrayList();
+
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
                 throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
             }
+            candidateAggregatorNodes.add(node);
             ComputeNodePB nodePB = new ComputeNodePB();
-            nodePB.setHost(node.getHost());
+            // Resolved IP rather than hostname, for the same reason as the aggregate publish path:
+            // the aggregator feeds this straight into LakeServiceBrpcStubCache::get_stub(), which
+            // must resolve before it can even look up its cache. See Utils#createSubRequestForAggregatePublish.
+            nodePB.setHost(node.getIP());
             nodePB.setBrpcPort(node.getBrpcPort());
             nodePB.setId(entry.getKey());
 
@@ -460,7 +580,9 @@ public class CompactionScheduler extends Daemon {
             request.allowPartialSuccess = false;
             request.encryptionMeta = GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta();
             request.forceBaseCompaction = (priority == PartitionStatistics.CompactionPriority.MANUAL_COMPACT);
+            request.allowBaseCompaction = allowBaseCompaction(table, priority);
             request.skipWriteTxnlog = true;
+            request.unshareSegments = priority == PartitionStatistics.CompactionPriority.UNSHARE;
 
             // Set parallel compaction configuration if enabled via table property
             // maxParallel > 0 means parallel compaction is enabled
@@ -479,7 +601,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         // 2. pick aggregator node and build lake service
-        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource);
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }
@@ -491,7 +613,8 @@ public class CompactionScheduler extends Daemon {
 
     @NotNull
     protected Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition, ComputeResource computeResource) {
-        List<MaterializedIndex> visibleIndexes = partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+        List<MaterializedIndex> visibleIndexes =
+                partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -509,8 +632,9 @@ public class CompactionScheduler extends Daemon {
         return beToTablets;
     }
 
-    // REQUIRE: has acquired the exclusive lock of Database.
-    protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource)
+    // REQUIRE: has acquired the read lock of Database.
+    protected long beginTransaction(PartitionIdentifier partition, PhysicalPartition physicalPartition,
+            ComputeResource computeResource)
             throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
@@ -521,8 +645,21 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
 
-        return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
+        long txnId = transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
                 loadJobSourceType, Config.lake_compaction_default_timeout_second, computeResource);
+
+        // Register loaded indexes so prePrepared() validates the same indexes that were collected,
+        // not the latest (which may change due to tablet split).
+        TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
+        if (txnState != null) {
+            List<Long> indexIds = physicalPartition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)
+                    .stream().map(MaterializedIndex::getId)
+                    .collect(Collectors.toList());
+            txnState.addPartitionLoadedIndexes(tableId, physicalPartition.getId(), indexIds);
+        }
+
+        return txnId;
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)
@@ -532,9 +669,6 @@ public class CompactionScheduler extends Daemon {
         Database db = stateMgr.getLocalMetastore().getDb(partition.getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
-        }
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Committing compaction transaction. partition={} txnId={}", partition, job.getTxnId());
         }
 
         VisibleStateWaiter waiter;
@@ -546,8 +680,8 @@ public class CompactionScheduler extends Daemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         try {
             CompactionTxnCommitAttachment attachment = null;
-            if (forceCommit) { // do not write extra info if no need to force commit
-                attachment = new CompactionTxnCommitAttachment(true /* forceCommit */);
+            if (forceCommit || job.isUnshare()) {
+                attachment = new CompactionTxnCommitAttachment(forceCommit, job.isUnshare());
             }
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), attachment);
@@ -603,8 +737,79 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    /**
+     * Handle the previous (txn id no greater than {@code endTransactionId}) in-flight compactions on
+     * the given table for a tablet-reshard CLEANING phase, so it does not have to wait for slow
+     * compaction before cleaning up.
+     *
+     * <p>For a compaction on an included physical partition ({@code includePartitionIds}, e.g. the
+     * partitions a reshard job is resharding), an uncommitted pre-reshard compaction is aborted (it is
+     * dropped when it is cross-published to the child tablets anyway, so aborting loses nothing). An
+     * already-committed compaction has taken a partition version and must still publish so its version
+     * cross-publishes onto the child tablets, hence it is left running for the previous-transactions wait
+     * to drain.
+     *
+     * <p>A compaction on a partition NOT in {@code includePartitionIds} is unaffected by the reshard: it
+     * is neither cancelled nor needs to be waited on. Its txn id is returned so the caller can exclude
+     * it from the previous-transactions wait.
+     *
+     * <p>The UNSHARE compaction started by the current reshard job is never cancelled. Its transaction
+     * can equal {@code endTransactionId} because the reshard job records the next transaction id before
+     * triggering UNSHARE; cancelling that equality case would make a successful UNSHARE appear as a
+     * failed compaction in history. It remains part of the previous-transactions wait until it publishes.
+     *
+     * <p>For any other uncommitted compaction this only requests the abort of the compaction task. The
+     * compaction scheduler thread then aborts the transaction: {@link #scheduleNewCompaction} aborts an
+     * aborted job's transaction even if its task has not finished (e.g. because the best-effort abort RPC
+     * was lost), so the previous-transactions wait drains without blocking on the original long-running
+     * compaction. Doing the transaction abort there keeps it on the same thread that commits compaction
+     * transactions, so it adds no new commit-vs-abort interleaving. It is safe to re-issue every cleaning
+     * retry — {@link CompactionJob#abort} is idempotent once the abort has been requested.
+     *
+     * @return the txn ids of compactions on partitions not in {@code includePartitionIds}.
+     */
+    public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                                               Set<Long> includePartitionIds) {
+        Set<Long> ignoredTxnIds = new HashSet<>();
+        for (Map.Entry<PartitionIdentifier, CompactionJob> entry : runningCompactions.entrySet()) {
+            PartitionIdentifier partition = entry.getKey();
+            CompactionJob job = entry.getValue();
+            if (partition.getDbId() != dbId || partition.getTableId() != tableId
+                    || job.getTxnId() > endTransactionId) {
+                continue;
+            }
+            if (!includePartitionIds.contains(partition.getPartitionId())) {
+                ignoredTxnIds.add(job.getTxnId());
+                continue;
+            }
+            if (!job.isUnshare() && !job.transactionHasCommitted()) {
+                job.abort();
+            }
+        }
+        return ignoredTxnIds;
+    }
+
     protected ConcurrentHashMap<PartitionIdentifier, CompactionJob> getRunningCompactions() {
         return runningCompactions;
+    }
+
+    // Total number of tablets currently being compacted across all running jobs. This is the
+    // same unit the scheduler caps with Config.lake_compaction_max_tasks (see the per-warehouse
+    // taskRunning accounting and getRunningTaskInfo()), i.e. one running compaction "task" == one
+    // tablet still awaiting its BE/CN response. getNumTabletCompactionTasks() counts only
+    // not-yet-done tasks, so a job in its commit/visibility phase (all responses in, not yet
+    // removed from runningCompactions) contributes 0; this count can therefore be either above
+    // or below the running-job count. Weakly-consistent read over the ConcurrentHashMap; no
+    // locking needed.
+    public int getRunningTabletCompactionTaskCount() {
+        return getRunningCompactions().values().stream().mapToInt(CompactionJob::getNumTabletCompactionTasks).sum();
+    }
+
+    public void setScoreAfter(PartitionIdentifier partition, Quantiles scoreAfter) {
+        CompactionJob job = runningCompactions.get(partition);
+        if (job != null) {
+            job.setScoreAfter(scoreAfter);
+        }
     }
 
     public boolean existCompaction(long txnId) {

@@ -38,6 +38,7 @@ http {
         location /api/transaction/load {
             proxy_pass http://127.0.0.1:{{fewebport}};
             proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
             proxy_set_header Expect $http_expect;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
@@ -48,6 +49,7 @@ http {
         location ~ ^/api/.*/.*/_stream_load$ {
             proxy_pass http://127.0.0.1:{{fewebport}};
             proxy_pass_request_body off;
+            proxy_set_header Content-Length "";
             proxy_set_header Expect $http_expect;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

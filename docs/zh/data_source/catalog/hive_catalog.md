@@ -1,5 +1,7 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
+description: "Hive catalog 是外部 catalog，无需数据导入即可查询 Hive 数据及执行数据转换。"
 toc_max_heading_level: 5
 ---
 
@@ -31,14 +33,23 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
   - Textfile 文件从 v3.1.5 起支持 LZO 压缩格式。
 
-- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 MAP、STRUCT 数据类型。
+- StarRocks 查询 Hive 内的数据时，不支持 INTERVAL、BINARY 和 UNION 三种数据类型。此外，对于 Textfile 格式的 Hive 表，StarRocks 不支持 STRUCT 数据类型；自 v4.2 起支持 MAP 数据类型。
+
+- 自 v4.2 起，StarRocks 查询 Textfile 格式的 Hive 表时，解析行为与 Hive 保持一致：
+
+  - 对于使用 OpenCSVSerde 的表，遵循 `quoteChar` 和 `escapeChar` 属性（含默认值 `"` 和 `\`），解析规则与 Hive 0.14 至 4.0 内置的 opencsv 2.3 库一致。
+  - 对于使用 LazySimpleSerDe 的表，遵循 `ESCAPED BY` 定义的转义字符。
+  - 按物理行边界切分行，并在去转义之前识别 `\N` NULL 标记，两者均与 Hive 一致。
+  - 按 Hive 文本格式解析 MAP 列，即多个键值对之间使用集合分隔符分隔，键和值之间使用 Map Key 分隔符分隔。
+
+  以上规则仅影响对 Hive 表的查询，Broker Load、Stream Load 和 FILES() 函数不受影响。在更早的 StarRocks 版本中，引号和转义字符会被忽略，行列切分结果可能与 Hive 不同。
 
 - StarRocks 写入数据到 Hive 时，支持 Parquet（3.2 版本及以上）、以及 ORC 或 Textfile（3.3 版本及以上）文件格式，其中：
 
   - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
   - Textfile 文件支持 NO_COMPRESSION 压缩格式。
 
-  您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+  您可以通过表属性 [`compression_codec`](./hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
 
   在写入 Hive 表时，如果该表的属性中包含了 `compression_codec`，StarRocks 优先使用该算法对写入数据进行压缩。否则，使用系统变量 `connector_sink_compression_codec` 中设置的压缩算法代替。
 
@@ -56,7 +67,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 - Assumed Role
 - IAM User
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/csp_auth/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
@@ -193,8 +204,9 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 | aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | hive.metastore.glue.catalogid | 否       | 要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。 |
+| aws.glue.resource_share_type  | 否       | 通过设置发送给 AWS Glue `GetDatabases` API 的 `ResourceShareType`，控制 `SHOW DATABASES` 列出哪些数据库。不区分大小写。取值范围：`FOREIGN`（其他账户通过 AWS Resource Access Manager 与你的账户共享的数据库）、`FEDERATED`（引用外部数据源的数据库，如 JDBC 连接）、`ALL`（本地数据库加上前两者）。不指定时仅列出本地数据库。该参数仅影响列表结果：StarRocks 查询数据库时仍然使用 `hive.metastore.glue.catalogid` 配置的单一账户，因此列出的 `FOREIGN` 数据库仍无法查询，除非将 `hive.metastore.glue.catalogid` 也设置为其所有者账户，或在自己的 Data Catalog 中为其创建 [resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html)；而 `FEDERATED` 数据库并非 Hive 兼容的数据库，无法通过该 Catalog 查询。 |
 
-有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
+有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
 #### StorageCredentialParams
 
@@ -242,7 +254,7 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
 ##### 阿里云 OSS
 
@@ -256,9 +268,9 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 
 | 参数                            | 是否必须 | 说明                                                         |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
-| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。      |
+| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/zh/oss/user-guide/regions-and-endpoints)。    |
+| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。                                     |
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/zh/document_detail/53045.html)。      |
 
 ##### 兼容 S3 协议的对象存储
 
@@ -371,6 +383,22 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -741,6 +769,21 @@ PROPERTIES
   );
   ```
 
+- 如果基于 Workload Identity 进行认证和鉴权，可以按如下创建 Hive Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - 如果基于 VM 进行认证和鉴权，可以按如下创建 Hive Catalog：
@@ -872,7 +915,7 @@ DROP Catalog hive_catalog_glue;
 
 2. [切换至目标 Hive Catalog 和数据库](#切换-hive-catalog-和数据库)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
@@ -1262,13 +1305,13 @@ REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 
 ## 周期性刷新元数据缓存
 
-自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/management/FE_configuration.md)配置 Hive 元数据缓存周期性刷新：
+自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/configuration/FE_parameters/FE_parameters.md)配置 Hive 元数据缓存周期性刷新：
 
 | 配置名称                                                      | 默认值                        | 说明                                  |
 | ------------------------------------------------------------ | ---------------------------- | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/management/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/management/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/management/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
 
 元数据缓存周期性刷新与元数据自动异步更新策略配合使用，可以进一步加快数据访问速度，降低从外部数据源读取数据的压力，提升查询性能。
 

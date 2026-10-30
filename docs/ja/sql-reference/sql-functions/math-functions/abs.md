@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "数値xの絶対値を返します。"
 ---
 
 # abs

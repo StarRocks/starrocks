@@ -14,6 +14,7 @@
 
 #include "storage/lake/metadata_iterator.h"
 
+#include "storage/lake/filenames.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -23,7 +24,15 @@ namespace starrocks::lake {
 template <>
 StatusOr<TabletMetadataPtr> MetadataIterator<TabletMetadataPtr>::get_metadata_from_tablet_manager(
         const std::string& path) {
-    ASSIGN_OR_RETURN(auto tablet_metadata, _manager->get_tablet_metadata(path, false));
+    TabletMetadataPtr tablet_metadata;
+    // For initial metadata path (tablet_id=0 in filename), route to the (tablet_id, version)
+    // overload using the real tablet_id held by this iterator, so that cn-free tablet creation
+    // fallback can be triggered with the correct tablet_id.
+    if (is_tablet_initial_metadata(basename(path))) {
+        ASSIGN_OR_RETURN(tablet_metadata, _manager->get_tablet_metadata(_tablet_id, 1, false));
+    } else {
+        ASSIGN_OR_RETURN(tablet_metadata, _manager->get_tablet_metadata(path, false));
+    }
 
     if (tablet_metadata->gtid() < _max_gtid) {
         return Status::NotFound("no more element");

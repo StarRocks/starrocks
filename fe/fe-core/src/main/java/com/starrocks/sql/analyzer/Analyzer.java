@@ -31,6 +31,8 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
+import com.starrocks.sql.ast.AdminSkipCommittedTransactionStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -67,13 +69,13 @@ import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -96,6 +98,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -107,6 +110,7 @@ import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
@@ -154,6 +158,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -283,6 +288,12 @@ public class Analyzer {
 
         @Override
         public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext session) {
+            AdminStmtAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, ConnectContext session) {
             AdminStmtAnalyzer.analyze(statement, session);
             return null;
         }
@@ -500,8 +511,8 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement, ConnectContext context) {
-            statement.analyze(context);
+        public Void visitCreateSyncMVStmt(CreateSyncMVStmt statement, ConnectContext context) {
+            CreateSyncMVStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -653,6 +664,16 @@ public class Analyzer {
             return null;
         }
 
+        @Override
+        public Void visitAdminSkipCommittedTransactionStatement(AdminSkipCommittedTransactionStmt statement,
+                                                                  ConnectContext context) {
+            // No additional analysis needed beyond grammar parsing:
+            // txn_id is INTEGER, reason is a string. All validation (state, source type,
+            // file_bundling, etc.) happens at execution time in the txn manager because
+            // it requires reading mutable txn state under lock.
+            return null;
+        }
+
         // ---------------------------------------- Catalog Statement -------------------------------------------
 
         @Override
@@ -707,6 +728,12 @@ public class Analyzer {
 
         @Override
         public Void visitDeleteStatement(DeleteStmt statement, ConnectContext context) {
+            DMLStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt statement, ConnectContext context) {
             DMLStmtAnalyzer.analyze(statement, context);
             return null;
         }
@@ -906,6 +933,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitAlterGroupProviderStatement(AlterGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, ConnectContext context) {
             GroupProviderStatementAnalyzer.analyze(statement, context);
             return null;
@@ -914,6 +947,49 @@ public class Analyzer {
         @Override
         public Void visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, ConnectContext context) {
             GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- AI Provider Statement --------------------------------------------------
+        @Override
+        public Void visitCreateAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.CreateAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.AlterAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DropAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowAIProvidersStatement(
+                com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.SetDefaultAIProviderStmt statement, ConnectContext context) {
+            AIProviderAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -990,6 +1066,12 @@ public class Analyzer {
         @Override
         public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
             RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropSnapshotStatement(DropSnapshotStmt statement, ConnectContext context) {
+            DropSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
 

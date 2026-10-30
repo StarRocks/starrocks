@@ -20,7 +20,7 @@ namespace starrocks::avrocpp {
 
 class StructColumnReader final : public ColumnReader {
 public:
-    explicit StructColumnReader(const std::string& col_name, const TypeDescriptor& type_desc,
+    explicit StructColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                                 std::vector<ColumnReaderUniquePtr> field_readers);
     ~StructColumnReader() override = default;
 
@@ -32,7 +32,7 @@ private:
 
 class ArrayColumnReader final : public ColumnReader {
 public:
-    explicit ArrayColumnReader(const std::string& col_name, const TypeDescriptor& type_desc,
+    explicit ArrayColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                                ColumnReaderUniquePtr element_reader)
             : ColumnReader(col_name, type_desc), _element_reader(std::move(element_reader)) {}
     ~ArrayColumnReader() override = default;
@@ -45,7 +45,7 @@ private:
 
 class MapColumnReader final : public ColumnReader {
 public:
-    explicit MapColumnReader(const std::string& col_name, const TypeDescriptor& type_desc,
+    explicit MapColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                              ColumnReaderUniquePtr key_reader, ColumnReaderUniquePtr value_reader)
             : ColumnReader(col_name, type_desc),
               _key_reader(std::move(key_reader)),

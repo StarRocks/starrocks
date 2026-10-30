@@ -28,6 +28,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "common/status.h"
+#include "fs/fs_factory.h"
 #include "options.h"
 #include "starrocks_format/starrocks_lib.h"
 #include "storage/chunk_helper.h"
@@ -78,7 +79,8 @@ public:
              * fs.s3a.retry.interval
              */
             auto fs_options = filter_map_by_key_prefix(_options, "fs.");
-            FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs, FileSystem::Create(_tablet_root_path, FSOptions(fs_options)));
+            FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs,
+                                                FileSystemFactory::Create(_tablet_root_path, FSOptions(fs_options)));
             // get tablet schema;
             FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto metadata, get_tablet_metadata(fs));
             _tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
@@ -127,8 +129,7 @@ private:
             op_write->mutable_rowset()->add_segments(f.path);
             op_write->mutable_rowset()->add_segment_size(f.size.value());
             auto* segment_meta = op_write->mutable_rowset()->add_segment_metas();
-            f.sort_key_min.to_proto(segment_meta->mutable_sort_key_min());
-            f.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
+            f.write_sort_key_fields_to(segment_meta);
             segment_meta->set_num_rows(f.num_rows);
         }
         for (const auto& f : _tablet_writer->dels()) {
@@ -150,7 +151,7 @@ private:
 
         auto txn_log_path = _loc_provider->txn_log_location(log->tablet_id(), log->txn_id());
         auto fs_options = filter_map_by_key_prefix(_options, "fs.");
-        ASSIGN_OR_RETURN(auto fs, FileSystem::Create(txn_log_path, FSOptions(fs_options)));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::Create(txn_log_path, FSOptions(fs_options)));
         ProtobufFile file(txn_log_path, fs);
         return file.save(*log);
     }

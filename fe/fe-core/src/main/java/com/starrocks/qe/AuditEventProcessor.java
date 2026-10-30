@@ -82,32 +82,38 @@ public class AuditEventProcessor {
         public void run() {
             AuditEvent auditEvent;
             while (!isStopped) {
-                // update audit plugin list every UPDATE_PLUGIN_INTERVAL_MS.
-                // because some of plugins may be installed or uninstalled at runtime.
-                if (auditPlugins == null || System.currentTimeMillis() - lastUpdateTime > UPDATE_PLUGIN_INTERVAL_MS) {
-                    auditPlugins = pluginMgr.getActivePluginList(PluginType.AUDIT);
-                    lastUpdateTime = System.currentTimeMillis();
-                    LOG.debug("update audit plugins. num: {}", auditPlugins.size());
-                }
-
                 try {
-                    auditEvent = eventQueue.poll(5, TimeUnit.SECONDS);
-                    if (auditEvent == null) {
+                    // update audit plugin list every UPDATE_PLUGIN_INTERVAL_MS.
+                    // because some of plugins may be installed or uninstalled at runtime.
+                    if (auditPlugins == null || System.currentTimeMillis() - lastUpdateTime > UPDATE_PLUGIN_INTERVAL_MS) {
+                        auditPlugins = pluginMgr.getActivePluginList(PluginType.AUDIT);
+                        lastUpdateTime = System.currentTimeMillis();
+                        LOG.debug("update audit plugins. num: {}", auditPlugins.size());
+                    }
+
+                    try {
+                        auditEvent = eventQueue.poll(5, TimeUnit.SECONDS);
+                        if (auditEvent == null) {
+                            continue;
+                        }
+                    } catch (InterruptedException e) {
+                        LOG.warn("encounter exception when getting audit event from queue, ignore", e);
                         continue;
                     }
-                } catch (InterruptedException e) {
-                    LOG.warn("encounter exception when getting audit event from queue, ignore", e);
-                    continue;
-                }
 
-                try {
-                    for (Plugin plugin : auditPlugins) {
-                        if (((AuditPlugin) plugin).eventFilter(auditEvent.type)) {
-                            ((AuditPlugin) plugin).exec(auditEvent);
+                    try {
+                        for (Plugin plugin : auditPlugins) {
+                            if (((AuditPlugin) plugin).eventFilter(auditEvent.type)) {
+                                ((AuditPlugin) plugin).exec(auditEvent);
+                            }
                         }
+                    } catch (Exception e) {
+                        LOG.warn("encounter exception when processing audit event.", e);
                     }
-                } catch (Exception e) {
-                    LOG.warn("encounter exception when processing audit event.", e);
+                } catch (Throwable t) {
+                    // TODO: If plugin.exec throws OutOfMemoryError, the corresponding audit event
+                    // (i.e., that audit log entry) will be lost; this scenario should be considered later.
+                    LOG.warn("Error occurred during processing audit event.", t);
                 }
             }
         }

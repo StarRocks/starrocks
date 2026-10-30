@@ -101,6 +101,7 @@ public class StartSchedulingTest extends SchedulerTestBase {
                 } catch (TException e) {
                     throw new RuntimeException(e);
                 }
+                Assertions.assertFalse(tRequest.isSetIs_stream_pipeline());
                 backendToRequests.computeIfAbsent(address, (k) -> Lists.newArrayList()).add(tRequest);
 
                 int rootNodeId = tRequest.getFragment().getPlan().getNodes().get(0).getNode_id();

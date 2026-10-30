@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将数字或字符串转换为十六进制表示。"
 ---
 
 # hex

@@ -45,6 +45,26 @@ public class SessionVariableConstants {
     public static final String ETL = "etl";
     public static final String DEFAULT = "default";
 
+    public enum ExecMode {
+        DEFAULT,
+        ETL;
+
+        public static ExecMode getDefault() {
+            return DEFAULT;
+        }
+
+        public boolean isETL() {
+            return this == ETL;
+        }
+
+        public static ExecMode parse(String str) {
+            try {
+                return EnumUtils.getEnumIgnoreCase(ExecMode.class, str);
+            } catch (Exception e) {
+                return getDefault();
+            }
+        }
+    }
 
     public enum ChooseInstancesMode {
 
@@ -72,12 +92,39 @@ public class SessionVariableConstants {
     }
 
     public enum ComputationFragmentSchedulingPolicy {
-        
+
         // only select compute node in scheduler policy (default)
         COMPUTE_NODES_ONLY,
 
         // both select compute node and backend in scheduler policy
         ALL_NODES
+    }
+
+    /**
+     * How to pick a backup compute node in shared-data mode when the scan's primary worker is unavailable
+     * (for example because it is blocklisted).
+     */
+    public enum BlacklistBackupRoutingPolicy {
+        /**
+         * Walk the sorted warehouse node id ring starting from the primary worker and return the first eligible
+         * buddy (deterministic behavior).
+         */
+        CIRCULAR,
+        /**
+         * Choose uniformly at random from eligible nodes.
+         */
+        RANDOM,
+        /**
+         * Rendezvous (highest random weight) hashing on the tablet: among eligible nodes, pick the one with the
+         * highest hash of (tablet, node). The tablets of an unavailable node spread evenly over the others, and the
+         * same tablet keeps going to the same backup across queries and FEs (as long as they see the same eligible
+         * nodes), so its cache only warms on one node (default).
+         */
+        TABLET_HASH;
+
+        public static BlacklistBackupRoutingPolicy getDefault() {
+            return TABLET_HASH;
+        }
     }
 
     public enum AggregationStage {
@@ -96,6 +143,22 @@ public class SessionVariableConstants {
         public static String MODE_DEFAULT = DEFAULT.toString();
         public static CountDistinctImplMode parse(String str) {
             return EnumUtils.getEnumIgnoreCase(CountDistinctImplMode.class, str);
+        }
+    }
+
+    /**
+     * The default SQL SECURITY characteristic applied when CREATE VIEW omits the SECURITY clause.
+     */
+    public enum DefaultViewSqlSecurity {
+        // Querying the view only checks that the invoker has privileges on the view itself; the tables the view
+        // references are not checked against the invoker (maps to SECURITY NONE).
+        NONE,
+        // Additionally checks that the invoker has privileges on the tables the view references
+        // (maps to SECURITY INVOKER).
+        INVOKER;
+
+        public static DefaultViewSqlSecurity getDefault() {
+            return NONE;
         }
     }
 }

@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks 存算分离集群的 Shared-data 和 Starlet Dashboard 监控指标。"
+sidebar_position: 30
 ---
 
 # 存算分离集群监控指标

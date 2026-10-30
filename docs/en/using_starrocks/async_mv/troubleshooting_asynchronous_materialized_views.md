@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 sidebar_position: 30
+description: "Troubleshooting guide for asynchronous materialized views in StarRocks: how to diagnose and fix refresh failures, query rewrite issues, and data consistency..."
 ---
 
 # Troubleshooting asynchronous materialized views
@@ -392,7 +393,7 @@ If your materialized view fails to rewrite relevant queries, you can look into t
   StarRocks checks the consistency of data in the materialized view and in the base table data. By default, queries can be rewritten only when the data in the materialized view is up-to-date. To solve this problem, you can:
 
   - Add `PROPERTIES('query_rewrite_consistency'='LOOSE')` to the materialized view to disable consistency checks.
-  - Add `PROPERTIES('mv_rewrite_staleness_second'='5')` to tolerate a certain degree of data inconsistency. Queries can be rewritten if the last refresh is before this time interval, regardless of whether the data in the base tables changes.
+  - Add `PROPERTIES('mv_rewrite_staleness_second'='5')` to tolerate a certain degree of data inconsistency. Queries can be rewritten if the materialized view's last confirmed complete refresh is within this time interval, regardless of whether the data in the base tables changes. A refresh covering only part of the partitions does not renew this baseline.
 
 - **Check whether the query statement of the materialized view lacks output columns.**
 

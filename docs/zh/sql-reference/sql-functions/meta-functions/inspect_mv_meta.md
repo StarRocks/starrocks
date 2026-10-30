@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回物化视图的详细元数据，以 JSON 格式呈现，用于调试和检查。"
 ---
 
 # inspect_mv_meta

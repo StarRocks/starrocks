@@ -21,12 +21,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorProperties;
-import com.starrocks.connector.ConnectorScanRangeSource;
-import com.starrocks.connector.ConnectorType;
-import com.starrocks.connector.GetRemoteFilesParams;
-import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaLakeAddFileStatsSerDe;
 import com.starrocks.connector.delta.DeltaLakeMetadata;
@@ -126,7 +120,6 @@ public class ExternalResourceCleanupTest {
         schema.add(new Column("id", IntegerType.INT));
         schema.add(new Column("k1", IntegerType.INT));
         schema.add(new Column("k2", VarcharType.VARCHAR));
-
 
         // minimal IcebergTable: nativeTable can be null for this test because getNativeTable isn't invoked in close().
         IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
@@ -253,7 +246,8 @@ public class ExternalResourceCleanupTest {
         TupleDescriptor tupleDescriptor = new TupleDescriptor(new TupleId(1));
         tupleDescriptor.setTable(table);
 
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode");
+        DeltaLakeScanNode scanNode =
+                new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode", null, null, null);
         DeltaConnectorScanRangeSource scanRangeSource = Mockito.mock(DeltaConnectorScanRangeSource.class);
 
         Field field = DeltaLakeScanNode.class.getDeclaredField("scanRangeSource");
@@ -273,7 +267,8 @@ public class ExternalResourceCleanupTest {
         TupleDescriptor tupleDescriptor = new TupleDescriptor(new TupleId(1));
         tupleDescriptor.setTable(table);
 
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode");
+        DeltaLakeScanNode scanNode =
+                new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode", null, null, null);
         DeltaConnectorScanRangeSource scanRangeSource = Mockito.mock(DeltaConnectorScanRangeSource.class);
 
         Field field = DeltaLakeScanNode.class.getDeclaredField("scanRangeSource");
@@ -294,7 +289,8 @@ public class ExternalResourceCleanupTest {
         TupleDescriptor tupleDescriptor = new TupleDescriptor(new TupleId(1));
         tupleDescriptor.setTable(table);
 
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode");
+        DeltaLakeScanNode scanNode =
+                new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode", null, null, null);
         // scanRangeSource remains null
         scanNode.clear(); // should not throw
     }
@@ -398,13 +394,13 @@ public class ExternalResourceCleanupTest {
         Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
         Mockito.when(meta.getSchema()).thenReturn(schema);
         Mockito.when(meta.getPartitionColNames()).thenReturn(Set.of());
-        Mockito.when(snapshot.getVersion(engine)).thenReturn(1L);
+        Mockito.when(snapshot.getVersion()).thenReturn(1L);
 
         // Mock scan builder flow.
         ScanBuilderImpl scanBuilder = Mockito.mock(ScanBuilderImpl.class);
         ScanImpl scan = Mockito.mock(ScanImpl.class);
-        Mockito.when(snapshot.getScanBuilder(engine)).thenReturn(scanBuilder);
-        Mockito.when(scanBuilder.withFilter(Mockito.eq(engine), Mockito.any())).thenReturn(scanBuilder);
+        Mockito.when(snapshot.getScanBuilder()).thenReturn(scanBuilder);
+        Mockito.when(scanBuilder.withFilter(Mockito.any())).thenReturn(scanBuilder);
         Mockito.when(scanBuilder.build()).thenReturn(scan);
 
         // Mock row/batch iterators.
@@ -423,7 +419,7 @@ public class ExternalResourceCleanupTest {
             internalMock.when(() -> InternalScanFileUtils.getDeletionVectorDescriptorFromRow(row))
                     .thenReturn((DeletionVectorDescriptor) null);
             scanFileMock.when(() -> ScanFileUtils.convertFromRowToFileScanTask(
-                    Mockito.anyBoolean(), Mockito.eq(row), Mockito.eq(meta), Mockito.anyLong(), Mockito.isNull()))
+                            Mockito.anyBoolean(), Mockito.eq(row), Mockito.eq(meta), Mockito.anyLong(), Mockito.isNull()))
                     .thenReturn(Pair.create(fileTask, serDe));
 
             // invoke iterator
@@ -474,7 +470,7 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         Mockito.when(table.getCatalogDBName()).thenReturn("db");
@@ -509,17 +505,17 @@ public class ExternalResourceCleanupTest {
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         ExecutorService exec = Executors.newSingleThreadExecutor();
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class);
+                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
         m.setAccessible(true);
         org.apache.iceberg.io.CloseableIterator<FileScanTask> iter =
                 (org.apache.iceberg.io.CloseableIterator<FileScanTask>) m.invoke(
                         metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                        TvrTableSnapshot.empty(), null, false);
+                        TvrTableSnapshot.empty(), null, false, null);
         Assertions.assertFalse(iter.hasNext());
         iter.close();
     }
@@ -531,7 +527,7 @@ public class ExternalResourceCleanupTest {
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         ExecutorService exec = Executors.newSingleThreadExecutor();
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
@@ -544,11 +540,11 @@ public class ExternalResourceCleanupTest {
 
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class);
+                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
         m.setAccessible(true);
         Assertions.assertThrows(java.lang.reflect.InvocationTargetException.class, () -> m.invoke(
                 metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                TvrTableSnapshot.of(Optional.of(1L)), null, false));
+                TvrTableSnapshot.of(Optional.of(1L)), null, false, null));
     }
 
     @Test
@@ -558,7 +554,7 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
@@ -585,12 +581,12 @@ public class ExternalResourceCleanupTest {
 
         Method m = IcebergMetadata.class.getDeclaredMethod(
                 "buildFileScanTaskIterator", IcebergTable.class, org.apache.iceberg.expressions.Expression.class,
-                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class);
+                TvrVersionRange.class, com.starrocks.qe.ConnectContext.class, boolean.class, List.class);
         m.setAccessible(true);
         org.apache.iceberg.io.CloseableIterator<FileScanTask> iter =
                 (org.apache.iceberg.io.CloseableIterator<FileScanTask>) m.invoke(
                         metadata, table, org.apache.iceberg.expressions.Expressions.alwaysTrue(),
-                        TvrTableDelta.of(Optional.of(1L), Optional.of(2L)), null, true);
+                        TvrTableDelta.of(Optional.of(1L), Optional.of(2L)), null, true, null);
         // iterator should be created and be consumable without exception
         iter.hasNext();
         iter.close();
@@ -603,7 +599,7 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
@@ -722,7 +718,8 @@ public class ExternalResourceCleanupTest {
         TupleDescriptor tupleDescriptor = new TupleDescriptor(new TupleId(1));
         tupleDescriptor.setTable(table);
 
-        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode");
+        DeltaLakeScanNode scanNode =
+                new DeltaLakeScanNode(new PlanNodeId(1), tupleDescriptor, "DeltaLakeScanNode", null, null, null);
         DeltaConnectorScanRangeSource scanRangeSource = Mockito.mock(DeltaConnectorScanRangeSource.class);
         Mockito.doThrow(new RuntimeException("close error")).when(scanRangeSource).close();
 
@@ -764,12 +761,13 @@ public class ExternalResourceCleanupTest {
         IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(
                 java.util.Map.of(IcebergCatalogProperties.ICEBERG_CATALOG_TYPE, "hive"));
         IcebergMetadata metadata = new IcebergMetadata("ice", new HdfsEnvironment(new java.util.HashMap<>()),
-                icebergCatalog, exec, exec, catalogProps);
+                icebergCatalog, exec, catalogProps);
 
         IcebergTable table = Mockito.mock(IcebergTable.class);
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
         org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
         Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(nativeTbl.spec()).thenReturn(org.apache.iceberg.PartitionSpec.unpartitioned());
         Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
         Mockito.when(table.getCatalogDBName()).thenReturn("db");
         Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
@@ -861,12 +859,12 @@ public class ExternalResourceCleanupTest {
         Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
         Mockito.when(meta.getSchema()).thenReturn(schema);
         Mockito.when(meta.getPartitionColNames()).thenReturn(Set.of());
-        Mockito.when(snapshot.getVersion(engine)).thenReturn(1L);
+        Mockito.when(snapshot.getVersion()).thenReturn(1L);
 
         ScanBuilderImpl scanBuilder = Mockito.mock(ScanBuilderImpl.class);
         ScanImpl scan = Mockito.mock(ScanImpl.class);
-        Mockito.when(snapshot.getScanBuilder(engine)).thenReturn(scanBuilder);
-        Mockito.when(scanBuilder.withFilter(Mockito.eq(engine), Mockito.any())).thenReturn(scanBuilder);
+        Mockito.when(snapshot.getScanBuilder()).thenReturn(scanBuilder);
+        Mockito.when(scanBuilder.withFilter(Mockito.any())).thenReturn(scanBuilder);
         Mockito.when(scanBuilder.build()).thenReturn(scan);
 
         CloseableIterator<FilteredColumnarBatch> emptyIter = new CloseableIterator<>() {

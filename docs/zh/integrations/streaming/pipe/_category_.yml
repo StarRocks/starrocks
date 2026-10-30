@@ -1,0 +1,8 @@
+position: 30
+label: 'StarRocks Pipe'
+description: 'Pipe: Ideal for continuous loading at scale'
+collapsible: true
+collapsed: true
+link:
+  id: pipe
+  type: doc

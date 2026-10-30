@@ -36,6 +36,19 @@ void MetadataCache::cache_rowset(Rowset* ptr) {
     _insert(ptr->rowset_id_str(), weak_ptr, ptr->segment_memory_usage());
 }
 
+void MetadataCache::update_rowset_charge(Rowset* ptr, size_t charge) {
+    auto rowset_owner_matches = [](void* value, const void* ctx) {
+        const auto& cached = *static_cast<const std::weak_ptr<Rowset>*>(value);
+        const auto& expected = *static_cast<const std::weak_ptr<Rowset>*>(ctx);
+        // Compare ownership without locking the weak_ptr: destroying a temporary strong
+        // reference under the shard lock could destroy another Rowset and re-enter the cache.
+        return !cached.owner_before(expected) && !expected.owner_before(cached);
+    };
+    const std::string key = ptr->rowset_id_str();
+    const auto expected = ptr->weak_from_this();
+    _cache->update_charge_if(CacheKey(key), charge, rowset_owner_matches, &expected);
+}
+
 void MetadataCache::evict_rowset(Rowset* ptr) {
     _erase(ptr->rowset_id_str());
 }
@@ -77,10 +90,7 @@ void MetadataCache::_cache_value_deleter(const CacheKey& /*key*/, void* value) {
 }
 
 void MetadataCache::_warmup(const std::string& key) {
-    Cache::Handle* handle = _cache->lookup(CacheKey(key));
-    if (handle != nullptr) {
-        _cache->release(handle);
-    }
+    _cache->touch(CacheKey(key));
 }
 
 } // namespace starrocks

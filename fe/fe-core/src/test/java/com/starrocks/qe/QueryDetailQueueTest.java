@@ -116,6 +116,7 @@ public class QueryDetailQueueTest extends PlanTestBase {
         String sql = "select * from test_running_detail";
         QueryStatement parsedStmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor executor = new StmtExecutor(connectContext, parsedStmt);
+        connectContext.setMultiStmt(false);
         long startTime = System.currentTimeMillis();
         executor.addRunningQueryDetail(parsedStmt);
         executor.execute();

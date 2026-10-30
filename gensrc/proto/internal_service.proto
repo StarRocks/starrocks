@@ -44,6 +44,7 @@ import "types.proto";
 import "olap_common.proto";
 import "olap_file.proto";
 import "lake_types.proto";
+import "failpoint.proto";
 
 option cc_generic_services = true;
 
@@ -158,6 +159,7 @@ message PTabletInfo {
     repeated string valid_dict_cache_columns = 4;
     optional int64 node_id = 5;
     repeated int64 valid_dict_collected_version = 6;
+    repeated int64 valid_dict_content_identities = 7;
 }
 
 message PLoadChannelProfileConfig {
@@ -172,6 +174,30 @@ message PTabletWriterOpenRequest {
         optional bool write_txn_log = 1;
         optional bool enable_data_file_bundling = 2;
         optional bool is_multi_statements_txn = 3;
+        // FE-controlled, transaction-level switch for combined_txn_log collection.
+        //
+        // When true, the CN elects one coordinator per partition (the smallest
+        // sender_id among those that declared tablets of that partition via
+        // (incremental_)open) and routes that partition's txn logs to the elected
+        // coordinator at close time. The claim set is derived from the per-tablet
+        // partition_id already carried by PTabletWithPartition — no extra payload.
+        //
+        // When false or unset, the legacy "sender_id == 0 collects all logs" rule
+        // applies. FE only sets this to true when it can be sure every target CN
+        // supports the mode (rolling-upgrade interlock: FE is always upgraded
+        // after BE, so by the time FE emits `true`, all BEs have the fix).
+        //
+        // This avoids the silent txn log loss on incremental-only channels where
+        // sender 0 is not present (the driver with _sender_id==0 never routed a
+        // row that triggered `_incremental_open_node_channel` onto this CN).
+        optional bool enable_per_partition_coordinator = 4;
+
+        // See TOlapTableSink.enable_multi_node_write. When true this CN receives only PART of the
+        // tablet's rows for this transaction, so the txn log its delta writer produces is a
+        // PARTIAL log. It must not be cached under the per-tablet metacache key
+        // `txn_log_location(tablet_id, txn_id)`: publish looks that key up first and would
+        // short-circuit on the partial log, silently dropping the other nodes' data.
+        optional bool multi_node_write = 5;
     };
 
     required PUniqueId id = 1;
@@ -215,6 +241,16 @@ message PTabletWriterOpenResult {
     optional bool is_repeated_chunk = 2 [default = false];
     repeated int64 immutable_tablet_ids = 3;
     repeated int64 immutable_partition_ids = 4;
+    // Mask of serde encode-level bits this BE honors in the ChunkPB payloads of
+    // tablet_writer_add_chunk(s).
+    //
+    // The level a receiver applies is the one the *sender* records per column in ChunkPB, so a
+    // sender may only set a bit the receiver has advertised here. A BE predating this field leaves
+    // it unset and always parses the payload at level 0; the sender must therefore read "absent"
+    // as "level 0 only". This is the only version signal on the path -- the two ends of this RPC
+    // are different BEs, and a rolling upgrade can put the scan fragment and the sink on nodes of
+    // different versions.
+    optional int32 supported_chunk_encode_level = 5;
 };
 
 // Add batch to tablet writer.
@@ -270,6 +306,10 @@ message PTabletWriterAddChunksRequest {
 message PTabletWriterAddBatchResult {
     message LakeTabletData {
         repeated TxnLogPB txn_logs = 1;
+        // Serialized staros AddShardInfo of one tablet this node owns per partition in txn_logs.
+        // With it the load coordinator writes the partition's combined txn log without asking
+        // starmgr for the shard info of a tablet it does not own. Carries storage credentials.
+        repeated bytes shard_infos = 2;
     };
 
     required StatusPB status = 1;
@@ -283,6 +323,9 @@ message PTabletWriterAddBatchResult {
     repeated int64 immutable_partition_ids = 8;
     optional bytes load_channel_profile = 9;
     optional LakeTabletData lake_tablet_data = 10;
+    // Time the server-side add_chunk handler spent blocked in count_down_latch.wait(),
+    // i.e. waiting for the async delta-writer write()/finish() callbacks to complete.
+    optional int64 wait_writer_time_us = 11;
 };
 
 message PTabletWriterAddSegmentRequest {
@@ -649,41 +692,6 @@ message ExecuteCommandResultPB {
     optional string result = 2;
 };
 
-enum FailPointTriggerModeType {
-    ENABLE = 1;
-    DISABLE = 2;
-    PROBABILITY_ENABLE = 3;
-    ENABLE_N_TIMES = 4;
-}
-
-message PFailPointTriggerMode {
-    optional FailPointTriggerModeType mode = 1;
-    optional double probability = 2;
-    optional int32 n_times = 3;
-}
-
-message PUpdateFailPointStatusRequest {
-    optional string fail_point_name = 1;
-    optional PFailPointTriggerMode trigger_mode = 2;
-}
-
-message PUpdateFailPointStatusResponse {
-    optional StatusPB status = 1;
-}
-
-message PFailPointInfo {
-    optional string name = 1;
-    optional PFailPointTriggerMode trigger_mode = 2;
-}
-
-message PListFailPointRequest {
-}
-
-message PListFailPointResponse {
-    optional StatusPB status = 1;
-    repeated PFailPointInfo fail_points = 2;
-}
-
 message PExecShortCircuitResult {
     optional StatusPB status = 1;
     optional int64 affected_rows = 2;
@@ -769,6 +777,14 @@ message PLookUpResponse {
     repeated PColumn columns = 2;
 }
 
+message PLookUpCloseRequest {
+    optional PUniqueId query_id = 1;
+    optional int32 lookup_node_id = 2;
+}
+
+message PLookUpCloseResponse {
+    optional StatusPB status = 1;
+}
 
 service PInternalService {
     rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
@@ -821,4 +837,5 @@ service PInternalService {
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
     rpc lookup(PLookUpRequest) returns (PLookUpResponse);
+    rpc lookup_close(PLookUpCloseRequest) returns (PLookUpCloseResponse);
 };

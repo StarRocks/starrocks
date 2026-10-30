@@ -14,18 +14,25 @@
 
 #include "column/column_visitor.h"
 
+#include <stdexcept>
+
 namespace starrocks {
+
+Status ColumnVisitor::visit(const GeoColumn&) {
+    // Hash callers can discard Status. Preserve rejection until they support GEO.
+    throw std::runtime_error("GeoColumn does not support visitor");
+}
 
 #define VISIT_IMPL(ClassName) \
     Status ColumnVisitor::visit(const ClassName& column) { return Status::NotSupported(#ClassName); }
 
 VISIT_IMPL(NullableColumn)
+VISIT_IMPL(AdaptiveNullableColumn)
 VISIT_IMPL(ConstColumn)
 VISIT_IMPL(ArrayColumn)
 VISIT_IMPL(MapColumn)
 VISIT_IMPL(StructColumn)
 VISIT_IMPL(BinaryColumn)
-VISIT_IMPL(LargeBinaryColumn)
 VISIT_IMPL(Int8Column)
 VISIT_IMPL(UInt8Column)
 VISIT_IMPL(Int16Column)
@@ -49,6 +56,7 @@ VISIT_IMPL(BitmapColumn)
 VISIT_IMPL(PercentileColumn)
 VISIT_IMPL(JsonColumn)
 VISIT_IMPL(VariantColumn)
+VISIT_IMPL(FileColumn)
 VISIT_IMPL(FixedLengthColumn<int96_t>)
 VISIT_IMPL(FixedLengthColumn<uint24_t>)
 VISIT_IMPL(FixedLengthColumn<decimal12_t>)

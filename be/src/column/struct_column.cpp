@@ -56,17 +56,6 @@ bool StructColumn::is_struct() const {
     return true;
 }
 
-const uint8_t* StructColumn::raw_data() const {
-    // TODO(SmithCruise)
-    DCHECK(false) << "Don't support struct column raw_data";
-    return nullptr;
-}
-
-uint8_t* StructColumn::mutable_raw_data() {
-    // TODO(SmithCruise)
-    DCHECK(false) << "Don't support struct column raw_data";
-    return nullptr;
-}
 size_t StructColumn::size() const {
     return _fields[0]->size();
 }
@@ -118,45 +107,11 @@ void StructColumn::resize(size_t n) {
     // Don't need to resize _field_names, because the number of struct subfield is fixed.
 }
 
-StatusOr<MutableColumnPtr> StructColumn::upgrade_if_overflow() {
-    for (auto& column : _fields) {
-        auto ret = upgrade_helper_func(column->as_mutable_raw_ptr());
-        if (!ret.ok()) {
-            return ret;
-        }
-        if (ret.value() != nullptr) {
-            column = std::move(ret.value());
-        }
-    }
-    return nullptr;
-}
-
-StatusOr<MutableColumnPtr> StructColumn::downgrade() {
-    for (auto& column : _fields) {
-        StatusOr<MutableColumnPtr> status = downgrade_helper_func(column->as_mutable_raw_ptr());
-        if (!status.ok()) {
-            return status;
-        }
-        if (status.value() != nullptr) {
-            column = std::move(status.value());
-        }
-    }
-    return nullptr;
-}
-
-bool StructColumn::has_large_column() const {
-    bool res = false;
-    for (const auto& column : _fields) {
-        res = res || column->has_large_column();
-    }
-    return res;
-}
-
 void StructColumn::assign(size_t n, size_t idx) {
     DCHECK_LE(idx, size()) << "Range error when assign StructColumn";
     auto desc = this->clone_empty();
-    auto datum = get(idx);
-    desc->append_value_multiple_times(&datum, n);
+    // Avoid Datum-based round-trip for nested object fields (e.g. shredded VARIANT).
+    desc->append_value_multiple_times(*this, idx, n);
     swap_column(*desc);
     desc->reset_column();
 }
@@ -489,6 +444,13 @@ void StructColumn::check_or_die() const {
 
     // fields and field_names must have the same size.
     DCHECK(_fields.size() == _field_names.size());
+
+    // every field must hold the same number of rows: size() reports _fields[0]->size(), so a field
+    // that was never materialized is invisible to every size-based check and only surfaces as an
+    // out-of-bounds read once something appends this column.
+    for (const auto& column : _fields) {
+        DCHECK_EQ(_fields[0]->size(), column->size());
+    }
 
     for (const auto& column : _fields) {
         column->check_or_die();

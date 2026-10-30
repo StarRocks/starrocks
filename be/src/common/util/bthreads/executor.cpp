@@ -14,7 +14,7 @@
 
 #include "common/util/bthreads/executor.h"
 
-#include "common/config.h"
+#include "common/config_diagnostic_fwd.h"
 #include "common/thread/threadpool.h"
 
 namespace starrocks::bthreads {

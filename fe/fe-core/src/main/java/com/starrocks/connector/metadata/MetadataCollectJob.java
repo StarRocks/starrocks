@@ -109,7 +109,12 @@ public abstract class MetadataCollectJob {
 
     protected ConnectContext buildConnectContext(SessionVariable originSessionVariable) {
         ConnectContext context = ConnectContext.buildInner();
+        // Set warehouse FIRST: ConnectContext.setCurrentWarehouse() replaces sessionVariable
+        // with a fresh clone of defaultSessionVariable, which would discard every override
+        // applied below (notably enable_profile honoring isEnableMetadataProfile()).
+        context.setCurrentWarehouse(originSessionVariable.getWarehouseName());
         context.getSessionVariable().setEnableProfile(originSessionVariable.isEnableMetadataProfile());
+        context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         context.getSessionVariable().setParallelExecInstanceNum(1);
         context.getSessionVariable().setQueryTimeoutS(originSessionVariable.getMetadataCollectQueryTimeoutS());
         context.getSessionVariable().setEnablePipelineEngine(true);
@@ -124,7 +129,6 @@ public abstract class MetadataCollectJob {
         context.setQueryId(UUIDUtil.genUUID());
         context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
         context.setStartTime();
-        context.setCurrentWarehouse(originSessionVariable.getWarehouseName());
 
         return context;
     }

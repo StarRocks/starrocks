@@ -3,4 +3,5 @@ label: '表，分区，分桶，索引'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: table_bucket_part_index

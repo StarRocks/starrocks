@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "値がNULLかどうかを確認し、結果を1または0で返します。"
 ---
 
 # isnull

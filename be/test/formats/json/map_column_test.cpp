@@ -25,8 +25,7 @@ namespace starrocks {
 class AddMapColumnTest : public ::testing::Test {};
 
 TEST_F(AddMapColumnTest, test_good_json) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
-                                                               TypeDescriptor::create_varchar_type(10));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, false);
 
@@ -41,8 +40,7 @@ TEST_F(AddMapColumnTest, test_good_json) {
 }
 
 TEST_F(AddMapColumnTest, test_bad_json) {
-    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TypeDescriptor::create_varchar_type(10),
-                                                               TypeDescriptor::create_varchar_type(10));
+    TypeDescriptor type_desc = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC);
 
     auto column = ColumnHelper::create_column(type_desc, false);
 
@@ -51,7 +49,7 @@ TEST_F(AddMapColumnTest, test_bad_json) {
     auto doc = parser.iterate(json);
     simdjson::ondemand::value val = doc.get_value();
 
-    EXPECT_STATUS(Status::DataQualityError(""), add_map_column(column.get(), type_desc, "root_key", &val));
+    ASSERT_THROW(auto st = add_map_column(column.get(), type_desc, "root_key", &val), simdjson::simdjson_error);
 }
 
 } // namespace starrocks

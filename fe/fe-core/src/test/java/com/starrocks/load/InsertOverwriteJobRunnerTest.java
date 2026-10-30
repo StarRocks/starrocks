@@ -12,33 +12,64 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.alter.reshard.presplit.InsertPreSplitHook;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.thrift.TAIProvider;
+import com.starrocks.thrift.TAIProviderProtocol;
+import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -87,7 +118,18 @@ public class InsertOverwriteJobRunnerTest {
                 .withTable("create table insert_overwrite_test.t4(c1 int, c2 int, c3 int) " +
                         "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
-                        + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
+                        + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
+                .withTable("create table insert_overwrite_test.t_live_number(k1 date, k2 int) " +
+                        "DUPLICATE KEY(k1) PARTITION BY RANGE(k1) "
+                        + "(PARTITION p20250101 VALUES [('2025-01-01'), ('2025-01-02')))"
+                        + " DISTRIBUTED BY HASH(`k2`) BUCKETS 1"
+                        + " PROPERTIES('replication_num'='1', 'partition_live_number'='3');")
+                .withTable("create table insert_overwrite_test.t_lambda_target(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("create table insert_overwrite_test.t_lambda_src1(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');")
+                .withTable("create table insert_overwrite_test.t_lambda_src2(k1 int, k2 array<int>) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
     }
 
     @Test
@@ -127,6 +169,117 @@ public class InsertOverwriteJobRunnerTest {
         Assertions.assertFalse(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"alter", "drop", "recreate"})
+    public void testInsertOverwriteReplanUsesCurrentProviderConfiguration(String change) throws Exception {
+        AIProviderMgr providerMgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        String providerName = "overwrite_provider_" + change;
+        String tableName = "overwrite_ai_" + change;
+        providerMgr.createProvider(providerName, AIProviderType.CHAT, providerProperties("original"), "");
+        try {
+            starRocksAssert.withTable("create table " + tableName + "(k1 int, response varchar(65533)) "
+                    + "distributed by hash(k1) buckets 1 properties('replication_num'='1')", () -> {
+                        ConnectContext context = UtFrameUtils.createDefaultCtx();
+                        context.setDatabase("insert_overwrite_test");
+                        context.setQueryId(UUIDUtil.genUUID());
+                        context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
+                        context.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+                        String sql = "insert overwrite " + tableName + " select k1, ai_complete(provider => '"
+                                + providerName + "', model => 'explicit-model', prompt => cast(k2 as "
+                                + "varchar)) from t2";
+                        InsertStmt statement = (InsertStmt) SqlParser.parseSingleStatement(
+                                sql, context.getSessionVariable().getSqlMode());
+                        AtomicReference<ExecPlan> originalPlan = new AtomicReference<>();
+                        AtomicReference<ExecPlan> loadPlan = new AtomicReference<>();
+                        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(context.getDatabase(), tableName);
+                        long originalPartitionId = table.getPartition(tableName).getId();
+                        StmtExecutor executor = new StmtExecutor(context, statement) {
+                            @Override
+                            public void handleInsertOverwrite(ExecPlan plan, InsertStmt insertStmt) throws Exception {
+                                originalPlan.set(plan);
+                                // Simulate concurrent DDL after the first plan, before the real manager/runner replan.
+                                if (change.equals("alter")) {
+                                    providerMgr.alterProvider(providerName, providerProperties("changed"), false);
+                                } else {
+                                    providerMgr.dropProvider(providerName, false);
+                                    if (change.equals("recreate")) {
+                                        providerMgr.createProvider(providerName, AIProviderType.CHAT,
+                                                providerProperties("changed"), "");
+                                    }
+                                }
+                                super.handleInsertOverwrite(plan, insertStmt);
+                            }
+
+                            @Override
+                            public void handleDMLStmt(ExecPlan plan, DmlStmt stmt) throws Exception {
+                                if (((InsertStmt) stmt).isFromOverwrite()) {
+                                    loadPlan.set(plan);
+                                }
+                                // The pseudo backends finish the real load transaction; no external AI service is called.
+                                super.handleDMLStmt(plan, stmt);
+                            }
+                        };
+                        context.setExecutor(executor);
+                        executor.execute();
+
+                        Assertions.assertNotNull(originalPlan.get());
+                        assertProviderConfiguration(originalPlan.get(), "original");
+                        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+                        Assertions.assertEquals(0, GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().getJobNum());
+
+                        String nextSql = "select ai_complete(provider => '" + providerName
+                                + "', model => 'explicit-model', prompt => cast(k2 as varchar)) from t2";
+                        if (change.equals("drop")) {
+                            Assertions.assertEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType());
+                            Assertions.assertTrue(context.getState().getErrorMessage()
+                                    .contains("AI provider '" + providerName + "' does not exist"),
+                                    context.getState().getErrorMessage());
+                            Assertions.assertNull(loadPlan.get(), "A missing provider must prevent the overwrite load");
+                            Assertions.assertEquals(originalPartitionId, table.getPartition(tableName).getId());
+                            Assertions.assertThrows(SemanticException.class, () -> StatementPlanner.plan(
+                                    SqlParser.parseSingleStatement(nextSql, context.getSessionVariable().getSqlMode()), context));
+                        } else {
+                            Assertions.assertNotEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType(),
+                                    context.getState().getErrorMessage());
+                            Assertions.assertNotNull(loadPlan.get(), "The overwrite runner must execute its second plan");
+                            Assertions.assertNotSame(originalPlan.get(), loadPlan.get());
+                            assertProviderConfiguration(loadPlan.get(), "changed");
+                            Assertions.assertNotEquals(originalPartitionId, table.getPartition(tableName).getId());
+                            ExecPlan nextPlan = StatementPlanner.plan(SqlParser.parseSingleStatement(
+                                    nextSql, context.getSessionVariable().getSqlMode()), context);
+                            assertProviderConfiguration(nextPlan, "changed");
+                        }
+                    });
+        } finally {
+            providerMgr.dropProvider(providerName, true);
+        }
+    }
+
+    private static Map<String, String> providerProperties(String version) {
+        return Map.of("endpoint", "https://" + version + ".example.test/v1/chat/completions",
+                "model", version + "-model", "api_key", version + "-test-key", "timeout_ms", "1200");
+    }
+
+    private static void assertProviderConfiguration(ExecPlan plan, String version) {
+        List<Map<String, TAIProvider>> configurations = plan.getFragments().stream()
+                .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
+                .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
+                .map(node -> node.getAi_project_node().getAi_provider_mapping())
+                .toList();
+        Assertions.assertFalse(configurations.isEmpty());
+        configurations.forEach(configs -> {
+            Assertions.assertEquals(Set.of(configs.values().iterator().next().getId()), configs.keySet());
+            TAIProvider configuration = configs.values().iterator().next();
+            Assertions.assertEquals(version + "-model", configuration.getParams().get("model"));
+            Assertions.assertEquals(version + "-test-key", configuration.getParams().get("api_key"));
+            Assertions.assertEquals("https://" + version + ".example.test/v1/chat/completions",
+                    configuration.getParams().get("endpoint"));
+            Assertions.assertEquals(TAIProviderProtocol.OPENAI, configuration.getProtocol());
+            Assertions.assertEquals("1200", configuration.getParams().get("timeout_ms"));
+        });
+    }
+
     @Test
     public void testInsertOverwrite() throws Exception {
         String sql = "insert overwrite t1 select * from t2";
@@ -140,6 +293,361 @@ public class InsertOverwriteJobRunnerTest {
                 WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assertions.assertFalse(runner.isFinished());
+    }
+
+    @Test
+    public void testDynamicOverwritePreSplitRunsAfterTransactionIsAssigned() {
+        InsertStmt insertStmt = Mockito.mock(InsertStmt.class);
+        ConnectContext context = Mockito.mock(ConnectContext.class);
+        StmtExecutor executor = Mockito.mock(StmtExecutor.class);
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                101L, insertStmt, 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        job.setTxnId(42L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job, context, executor);
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitDynamicOverwriteTempPartitions();
+
+            hook.verify(() -> InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(
+                    insertStmt, context, 42L));
+        }
+    }
+
+    // ---- static INSERT OVERWRITE pre-split hook ----
+
+    /** A table shaped like a static overwrite target mid-job: real partitions plus a cloned temporary one. */
+    private void withClonedTemporaryPartition(String tableName, StaticOverwriteCase body) throws Exception {
+        starRocksAssert.withTable(
+                "create table insert_overwrite_test." + tableName + "(c1 int, c2 int) "
+                        + "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
+                        + "(PARTITION p1 VALUES [('0'), ('10')), PARTITION p2 VALUES [('10'), ('20'))) "
+                        + "DISTRIBUTED BY HASH(c2) BUCKETS 1 PROPERTIES('replication_num'='1')",
+                () -> {
+                    starRocksAssert.alterTable("ALTER TABLE insert_overwrite_test." + tableName
+                            + " ADD TEMPORARY PARTITION tp1 VALUES [('0'), ('10'))");
+                    Database db = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getDb("insert_overwrite_test");
+                    OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getTable(db.getFullName(), tableName);
+                    body.accept(db, table);
+                });
+    }
+
+    private interface StaticOverwriteCase {
+        void accept(Database db, OlapTable table) throws Exception;
+    }
+
+    private static InsertOverwriteJobRunner staticOverwriteRunner(
+            long jobId, long dbId, long tableId, InsertStmt insertStmt, ConnectContext context,
+            List<Long> tmpPartitionIds, List<String> sourcePartitionNames) {
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                jobId, insertStmt, dbId, tableId, WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                /*dynamicOverwrite*/ false);
+        job.setTmpPartitionIds(tmpPartitionIds);
+        job.setSourcePartitionNames(sourcePartitionNames);
+        return new InsertOverwriteJobRunner(job, context, Mockito.mock(StmtExecutor.class));
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitPassesClonedTemporaryPartitionNames() throws Exception {
+        withClonedTemporaryPartition("t_static_presplit_ok", (db, table) -> {
+            long temporaryPartitionId = table.getPartition("tp1", true).getId();
+            InsertStmt insertStmt = Mockito.mock(InsertStmt.class);
+            ConnectContext context = Mockito.mock(ConnectContext.class);
+            InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                    401L, db.getId(), table.getId(), insertStmt, context,
+                    Lists.newArrayList(temporaryPartitionId), Lists.newArrayList("p1"));
+
+            try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+                runner.preSplitStaticOverwriteTempPartitions();
+
+                // The ids resolve through OlapTable#getPartition's temporary-partition fallback, and
+                // the two lists must reach the hook index-aligned: PreSplitPartitionScope zips them
+                // positionally to map each sampled logical partition onto the replacement partition
+                // the load will actually write.
+                hook.verify(() -> InsertPreSplitHook.maybeRunStaticOverwritePreSplit(
+                        insertStmt, context, List.of("p1"), List.of("tp1"), Estimates.ZERO));
+            }
+        });
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsDynamicOverwrite() {
+        // Dynamic overwrite has its own hook, which runs after its transaction is assigned so the
+        // temporary partitions can be excluded from cleanup. Running both would split twice.
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                402L, Mockito.mock(InsertStmt.class), 11L, 12L,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, /*dynamicOverwrite*/ true);
+        job.setTmpPartitionIds(Lists.newArrayList(2001L));
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitStaticOverwriteTempPartitions();
+
+            hook.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenTmpPartitionIdsAreUnset() {
+        // tmpPartitionIds stays null until prepare() assigns it.
+        assertStaticOverwritePreSplitSkipped(403L, null);
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenNoTemporaryPartitionWasCloned() {
+        // An empty list means the overwrite resolved to no target partition, so there is nothing
+        // to pre-split.
+        assertStaticOverwritePreSplitSkipped(404L, Lists.newArrayList());
+    }
+
+    private static void assertStaticOverwritePreSplitSkipped(long jobId, List<Long> tmpPartitionIds) {
+        InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                jobId, 11L, 12L, Mockito.mock(InsertStmt.class), Mockito.mock(ConnectContext.class),
+                tmpPartitionIds, Lists.newArrayList("p1"));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitStaticOverwriteTempPartitions();
+
+            hook.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenDatabaseIsGone() {
+        // The database can be dropped between createTempPartitions() and this hook. Skipping keeps
+        // the overwrite itself free to fail (or not) on its own terms.
+        InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                405L, /*dbId*/ 11L, /*tableId*/ 12L, Mockito.mock(InsertStmt.class),
+                Mockito.mock(ConnectContext.class),
+                Lists.newArrayList(2001L), Lists.newArrayList("p1"));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            runner.preSplitStaticOverwriteTempPartitions();
+
+            hook.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSkipsWhenAClonedPartitionNoLongerResolves() throws Exception {
+        // One id resolving to nothing is the dangerous case: the surviving names would be shorter
+        // than job.getSourcePartitionNames(), so the positional zip in PreSplitPartitionScope would
+        // silently map a source partition onto some other partition's replacement and split the
+        // wrong target. The size check must drop the whole attempt instead.
+        withClonedTemporaryPartition("t_static_presplit_vanished", (db, table) -> {
+            long temporaryPartitionId = table.getPartition("tp1", true).getId();
+            InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                    406L, db.getId(), table.getId(), Mockito.mock(InsertStmt.class),
+                    Mockito.mock(ConnectContext.class),
+                    Lists.newArrayList(temporaryPartitionId, /*already dropped*/ 987654321L),
+                    Lists.newArrayList("p1", "p2"));
+
+            try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+                runner.preSplitStaticOverwriteTempPartitions();
+
+                hook.verifyNoInteractions();
+            }
+        });
+    }
+
+    @Test
+    public void testStaticOverwritePreSplitSwallowsFailureAndReleasesTheLock() {
+        // The target table can be dropped between createTempPartitions() and this hook, making
+        // checkAndGetTable throw from inside the table READ lock. By this point the temporary
+        // partitions are already cloned and the overwrite is committed to running, so the throw
+        // must not surface as a failed INSERT OVERWRITE -- and the lock must still be released.
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        InsertOverwriteJobRunner runner = staticOverwriteRunner(
+                407L, db.getId(), /*tableId that no longer exists*/ 987654321L,
+                Mockito.mock(InsertStmt.class), Mockito.mock(ConnectContext.class),
+                Lists.newArrayList(2001L), Lists.newArrayList("p1"));
+
+        try (MockedStatic<InsertPreSplitHook> hook = Mockito.mockStatic(InsertPreSplitHook.class)) {
+            Assertions.assertDoesNotThrow(runner::preSplitStaticOverwriteTempPartitions);
+
+            hook.verifyNoInteractions();
+        }
+
+        // A leaked READ lock would deadlock the next writer; taking the same lock again proves the
+        // try-with-resources released it on the throwing path.
+        Assertions.assertDoesNotThrow(runner::preSplitStaticOverwriteTempPartitions);
+    }
+
+    @Test
+    public void testDropUnusedDynamicOverwriteTempPartitions() {
+        // Sampling and the load use different source snapshots, so a pre-created temporary
+        // partition can end up with no rows and never be promoted. Only this transaction's
+        // leftovers may be dropped -- another concurrent overwrite owns the rest.
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                301L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        job.setTxnId(42L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        // Build the partition mocks before opening the outer when(), otherwise Mockito sees a
+        // nested stubbing and fails with UnfinishedStubbing.
+        List<Partition> tempPartitions = Lists.newArrayList(
+                mockPartitionNamed("txn42_p20260101"),
+                mockPartitionNamed("txn7_p20260101"),
+                mockPartitionNamed("p20260101"));
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getTempPartitions()).thenReturn(tempPartitions);
+
+        runner.dropUnusedDynamicOverwriteTempPartitions(table);
+
+        Mockito.verify(table).dropTempPartition("txn42_p20260101", true);
+        Mockito.verify(table, Mockito.never()).dropTempPartition("txn7_p20260101", true);
+        Mockito.verify(table, Mockito.never()).dropTempPartition("p20260101", true);
+    }
+
+    @Test
+    public void testDropUnusedDynamicOverwriteTempPartitionsSkipsNonDynamicJob() {
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                302L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+        job.setTxnId(42L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        OlapTable table = Mockito.mock(OlapTable.class);
+
+        runner.dropUnusedDynamicOverwriteTempPartitions(table);
+
+        Mockito.verifyNoInteractions(table);
+    }
+
+    @Test
+    public void testGetDynamicOverwriteTempPartitionsFallsBackToPrefixScan() {
+        // The transaction state is gone (here: never existed), which is exactly the case that used
+        // to lose the pre-created partitions. The prefix scan must still find this transaction's
+        // temporary partitions so GC can drop them.
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                303L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        job.setTxnId(4242L);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        List<Partition> tempPartitions = Lists.newArrayList(
+                mockPartitionNamed("txn4242_p20260101"),
+                mockPartitionNamed("txn4243_p20260101"));
+        OlapTable table = Mockito.mock(OlapTable.class);
+        Mockito.when(table.getTempPartitions()).thenReturn(tempPartitions);
+
+        Assertions.assertEquals(Lists.newArrayList("txn4242_p20260101"),
+                runner.getDynamicOverwriteTempPartitions(table));
+    }
+
+    @Test
+    public void testGetDynamicOverwriteTempPartitionsBeforePrepare() {
+        InsertOverwriteJob job = new InsertOverwriteJob(
+                304L, Mockito.mock(InsertStmt.class), 11L, 12L, WarehouseManager.DEFAULT_WAREHOUSE_ID, true);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(
+                job, Mockito.mock(ConnectContext.class), Mockito.mock(StmtExecutor.class));
+
+        OlapTable table = Mockito.mock(OlapTable.class);
+
+        Assertions.assertTrue(runner.getDynamicOverwriteTempPartitions(table).isEmpty());
+        Mockito.verifyNoInteractions(table);
+    }
+
+    private static Partition mockPartitionNamed(String name) {
+        Partition partition = Mockito.mock(Partition.class);
+        Mockito.when(partition.getName()).thenReturn(name);
+        return partition;
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OlapTable.OlapTableState.class, names = {"SCHEMA_CHANGE", "ROLLUP", "TABLET_RESHARD"})
+    public void testInsertOverwriteAbortsWhenTableStateNotNormal(OlapTable.OlapTableState state) throws Exception {
+        // Guards against the race where an overwrite passes analysis while the table is NORMAL,
+        // then the table state flips (e.g. an ALTER submits) before the job's prepare() runs.
+        String sql = "insert overwrite t1 select * from t2";
+        InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(301L, insertStmt, database.getId(), olapTable.getId(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
+
+        olapTable.setState(state);
+        try {
+            Assertions.assertThrows(DmlException.class, runner::run);
+        } finally {
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+        Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+        Assertions.assertTrue(olapTable.getTempPartitions().isEmpty());
+    }
+
+    @Test
+    public void testDoCommitAbortsWhenTableStateNotNormal() {
+        // Guards the same race as testInsertOverwriteAbortsWhenTableStateNotNormal, but at doCommit()
+        // itself: the table can flip out of NORMAL after prepare()'s own check passed (e.g. an ALTER
+        // submits while the load is running), so doCommit() re-checks right before the partition swap.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), "t1");
+        Assertions.assertTrue(table instanceof OlapTable);
+        OlapTable olapTable = (OlapTable) table;
+        InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(304L, database.getId(), olapTable.getId(),
+                Lists.newArrayList(olapTable.getPartition("t1").getId()), false);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob);
+
+        olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+        try {
+            // doCommit() wraps every exception from its try block into DmlException("replace partitions
+            // failed", cause) (see its catch (Exception e) below the state check) -- the original message
+            // survives only as the cause.
+            DmlException ex = Assertions.assertThrows(DmlException.class, runner::testDoCommit);
+            Assertions.assertNotNull(ex.getCause());
+            Assertions.assertTrue(ex.getCause().getMessage().contains("table state is"));
+        } finally {
+            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testDoCommitWhenSourcePartitionMissing() {
+        // A source partition recorded before the load can be dropped (e.g. by partition TTL) before the swap;
+        // doCommit() must report it with a hint instead of a NullPointerException.
+        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("insert_overwrite_test");
+        OlapTable noTtlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t3");
+        OlapTable ttlTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(database.getFullName(), "t_live_number");
+        String ttlHint = "also check whether the partition is still within the retention range";
+
+        // source partition resolved by name, table without partition TTL
+        InsertOverwriteJob byNameJob = new InsertOverwriteJob(305L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(noTtlTable.getPartition("p1").getId()), false);
+        byNameJob.setSourcePartitionNames(Lists.newArrayList("p_dropped"));
+        byNameJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        DmlException ex = Assertions.assertThrows(DmlException.class,
+                new InsertOverwriteJobRunner(byNameJob)::testDoCommit);
+        Assertions.assertEquals("replace partitions failed: partition 'p_dropped' of table 't3' no longer exists. " +
+                "Check whether it was dropped or renamed while the INSERT OVERWRITE was running", ex.getMessage());
+
+        // source partition resolved by name, table with partition TTL
+        InsertOverwriteJob ttlJob = new InsertOverwriteJob(306L, database.getId(), ttlTable.getId(),
+                Lists.newArrayList(ttlTable.getPartition("p20250101").getId()), false);
+        ttlJob.setSourcePartitionNames(Lists.newArrayList("p20241231"));
+        ttlJob.setTmpPartitionIds(Lists.newArrayList(ttlTable.getPartition("p20250101").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(ttlJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition 'p20241231' of table 't_live_number' no longer exists"),
+                ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains(ttlHint), ex.getMessage());
+
+        // source partition names not recorded, resolved by id
+        InsertOverwriteJob byIdJob = new InsertOverwriteJob(307L, database.getId(), noTtlTable.getId(),
+                Lists.newArrayList(-1L), false);
+        byIdJob.setTmpPartitionIds(Lists.newArrayList(noTtlTable.getPartition("p1").getId()));
+        ex = Assertions.assertThrows(DmlException.class, new InsertOverwriteJobRunner(byIdJob)::testDoCommit);
+        Assertions.assertTrue(ex.getMessage().contains("partition id -1 of table 't3' no longer exists"),
+                ex.getMessage());
+        Assertions.assertFalse(ex.getMessage().contains(ttlHint), ex.getMessage());
     }
 
     @Test
@@ -318,5 +826,45 @@ public class InsertOverwriteJobRunnerTest {
         // No temp partitions to clean up since prepare() never completed
         runner.cancel();
         Assertions.assertEquals(InsertOverwriteJobState.OVERWRITE_FAILED, insertOverwriteJob.getJobState());
+    }
+
+    @Test
+    public void testInsertOverwriteWithUnionAllAndLambda() throws Exception {
+        // Integration regression for issue #72831: INSERT OVERWRITE + UNION ALL + lambda used to
+        // surface "expr_type does not match slot_type" because the second plan was reading
+        // ColumnRefOperators allocated by the first plan's ColumnRefFactory. The lambda-arg cache
+        // now lives on ColumnRefFactory, so re-plan automatically starts with a fresh cache.
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+        String sql = "insert overwrite t_lambda_target " +
+                "select k1, array_map(x -> x + 1, k2) from t_lambda_src1 " +
+                "union all " +
+                "select k1, array_map(x -> x + 2, k2) from t_lambda_src2";
+        cluster.runSql("insert_overwrite_test", sql);
+    }
+
+    @Test
+    public void testOverwriteOfAutoPartitionDroppedAfterCreationFails() throws Exception {
+        starRocksAssert.withTable("create table insert_overwrite_test.t_auto_list(k1 int, k2 varchar(10)) " +
+                "DUPLICATE KEY(k1) PARTITION BY (k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                "PROPERTIES('replication_num'='1');");
+        // A DROP PARTITION lands right after INSERT OVERWRITE created the partition and released the lock.
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void addPartitions(Invocation invocation, ConnectContext ctx, Database db, String tableName,
+                                      AddPartitionClause addPartitionClause) throws DdlException {
+                invocation.proceed();
+                OlapTable table = (OlapTable) db.getTable(tableName);
+                List<String> names = ((ListPartitionDesc) addPartitionClause.getPartitionDesc()).getPartitionNames();
+                try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(),
+                        Lists.newArrayList(table.getId()), LockType.WRITE)) {
+                    for (String name : names) {
+                        table.dropPartition(db.getId(), name, true);
+                    }
+                }
+            }
+        };
+        SQLException e = Assertions.assertThrows(SQLException.class, () -> cluster.runSql("insert_overwrite_test",
+                "insert overwrite t_auto_list partition(k2='a') values(1, 'a')"));
+        Assertions.assertTrue(e.getMessage().contains("was dropped concurrently"), e.getMessage());
     }
 }

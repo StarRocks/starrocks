@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "配列をBITMAP値に変換します。"
 ---
 
 # array_to_bitmap

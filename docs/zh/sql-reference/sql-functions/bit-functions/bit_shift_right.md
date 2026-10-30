@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将数值的二进制表示向右移动指定的位数。"
 ---
 
 # bit_shift_right

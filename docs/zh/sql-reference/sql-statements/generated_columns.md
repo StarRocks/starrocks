@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Generated columns store precomputed expression results to accelerate queries with complex expressions."
 ---
 
 # 生成列

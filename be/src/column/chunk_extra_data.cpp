@@ -91,35 +91,6 @@ size_t ChunkExtraColumnsData::bytes_usage(size_t from, size_t size) const {
     return bytes_usage;
 }
 
-int64_t ChunkExtraColumnsData::max_serialized_size(const int encode_level) {
-    DCHECK_EQ(encode_level, 0);
-    int64_t serialized_size = 0;
-    for (auto& column : _columns) {
-        serialized_size += serde::ColumnArraySerde::max_serialized_size(*column, 0);
-    }
-    return serialized_size;
-}
-
-StatusOr<uint8_t*> ChunkExtraColumnsData::serialize(uint8_t* buff, bool sorted, const int encode_level) {
-    DCHECK_EQ(encode_level, 0);
-    for (auto& column : _columns) {
-        ASSIGN_OR_RETURN(buff, serde::ColumnArraySerde::serialize(*column, buff, sorted, encode_level));
-    }
-    return buff;
-}
-
-StatusOr<const uint8_t*> ChunkExtraColumnsData::deserialize(const uint8_t* buff, const uint8_t* end, bool sorted,
-                                                            const int encode_level) {
-    DCHECK_EQ(encode_level, 0);
-    for (auto& column : _columns) {
-        auto mutable_col = column->as_mutable_ptr();
-        using Serd = serde::ColumnArraySerde;
-        ASSIGN_OR_RETURN(buff, Serd::deserialize(buff, end, mutable_col.get(), sorted, encode_level));
-        column = std::move(mutable_col);
-    }
-    return buff;
-}
-
 ChunkExtraColumnsData* ChunkExtraColumnsData::as_raw(const ChunkExtraDataPtr& extra_data) {
     return extra_data ? down_cast<ChunkExtraColumnsData*>(extra_data.get()) : nullptr;
 }

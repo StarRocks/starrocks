@@ -36,6 +36,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.lang.reflect.Field;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -111,5 +112,38 @@ public class HiveConnectorScanRangeSourceTest {
         public void invokeInitRemoteFileInfoSource() {
             super.initRemoteFileInfoSource();
         }
+    }
+
+    @Test
+    public void testReset() throws Exception {
+        HiveTable table = Mockito.mock(HiveTable.class);
+        HDFSScanNodePredicates predicates = new HDFSScanNodePredicates();
+        DescriptorTable descriptorTable = new DescriptorTable();
+        HiveConnectorScanRangeSource source =
+                new HiveConnectorScanRangeSource(descriptorTable, table, predicates);
+
+        // simulate partially consumed state
+        setField(source, "hasMoreOutput", false);
+        setField(source, "backendSplitCount", 5L);
+
+        source.reset();
+
+        assertThat((boolean) getField(source, "hasMoreOutput")).isTrue();
+        assertThat((long) getField(source, "backendSplitCount")).isZero();
+        assertThat(getField(source, "remoteFileInfoSource")).isNull();
+        assertThat(getField(source, "iterator")).isNull();
+        assertThat(getField(source, "buffer")).isNull();
+    }
+
+    private static void setField(Object target, String fieldName, Object value) throws Exception {
+        Field f = HiveConnectorScanRangeSource.class.getDeclaredField(fieldName);
+        f.setAccessible(true);
+        f.set(target, value);
+    }
+
+    private static Object getField(Object target, String fieldName) throws Exception {
+        Field f = HiveConnectorScanRangeSource.class.getDeclaredField(fieldName);
+        f.setAccessible(true);
+        return f.get(target);
     }
 }

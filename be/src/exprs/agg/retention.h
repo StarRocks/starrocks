@@ -23,7 +23,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"

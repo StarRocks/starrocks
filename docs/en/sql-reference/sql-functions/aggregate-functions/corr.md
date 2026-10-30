@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the Pearson correlation coefficient between two expressions."
 ---
 
 # corr
@@ -25,10 +26,6 @@ If `expr1` and `expr2` are table columns, this function calculates the correlati
 Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
 
 ![corr formula](../../../_assets/corr_formula.png)
-
-<!--$$
-\frac{\sum_{i=1}^{n}((x_i - \bar{x})(y_i - \bar{y}))}{\sqrt{\sum_{i=1}^{n}((x_i - \bar{x})^2) \cdot \sum_{i=1}^{n}((y_i - \bar{y})^2)}}
-$$-->
 
 ## Usage notes
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "如何通过 StarRocks 的异步物化视图进行数据建模，简化 ETL Pipeline、构建可复用数据模型并提高查询性能。"
 sidebar_position: 10
 ---
 

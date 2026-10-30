@@ -18,10 +18,10 @@
 #include <limits>
 #include <memory>
 
+#include "base/compression/block_compression.h"
 #include "bench/bench_util.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks::parquet {
 

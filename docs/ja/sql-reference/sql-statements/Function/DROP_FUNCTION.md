@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP FUNCTION deletes a custom function by matching name and parameter types."
 ---
 
 # DROP FUNCTION

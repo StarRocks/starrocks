@@ -31,10 +31,8 @@ class FunctionContext;
 
 class BuiltinInvertedReader : public InvertedReader {
 public:
-    explicit BuiltinInvertedReader(const uint32_t index_id, int32_t gram_num)
-            : InvertedReader("", index_id), _gram_num(gram_num), _bitmap_index(nullptr) {}
-
-    ~BuiltinInvertedReader() override {}
+    explicit BuiltinInvertedReader(const uint32_t index_id, int32_t gram_num);
+    ~BuiltinInvertedReader() override;
 
     static Status create(const std::shared_ptr<TabletIndex>& tablet_index, LogicalType field_type,
                          std::unique_ptr<InvertedReader>* res);
@@ -44,16 +42,25 @@ public:
 
     Status load(const IndexReadOptions& opt, void* meta) override;
 
+    size_t mem_usage() const {
+        size_t size = sizeof(BuiltinInvertedReader);
+        if (_bitmap_index != nullptr) {
+            size += _bitmap_index->mem_usage();
+        }
+        return size;
+    }
+
     /*
        Implemented in BuiltinInvertedIndexIterator. For builtin inverted index, we have to define bitmap index iterator in BuiltinInvertedIndexIterator.
        Because BuiltinInvertedReader may be accessed by multiple threads, and bitmap index iterator is not thread-safe.
     */
-    Status query(OlapReaderStatistics* stats, const std::string& column_name, const void* query_value,
+    Status query(OlapReaderStatistics* stats, const std::string_view column_name, const void* query_value,
                  InvertedIndexQueryType query_type, roaring::Roaring* bit_map) override {
         return Status::InternalError("Unreachable");
     }
 
-    Status query_null(OlapReaderStatistics* stats, const std::string& column_name, roaring::Roaring* bit_map) override {
+    Status query_null(OlapReaderStatistics* stats, const std::string_view column_name,
+                      roaring::Roaring* bit_map) override {
         return Status::InternalError("Unreachable");
     }
 

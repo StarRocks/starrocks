@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW ROLES displays all roles in the system."
 ---
 
 # SHOW ROLES

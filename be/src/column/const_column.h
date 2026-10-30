@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <sstream>
+
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
@@ -46,6 +48,7 @@ public:
     bool is_nullable() const override { return _data->is_nullable(); }
     bool is_json() const override { return _data->is_json(); }
     bool is_variant() const override { return _data->is_variant(); }
+    bool is_file() const override { return _data->is_file(); }
     bool is_array() const override { return _data->is_array(); }
 
     bool is_null(size_t index) const override { return _data->is_null(0); }
@@ -58,10 +61,6 @@ public:
     bool has_null() const override { return _data->has_null(); }
 
     bool is_constant() const override { return true; }
-
-    const uint8_t* raw_data() const override { return _data->raw_data(); }
-
-    uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data->mutable_raw_data()); }
 
     size_t size() const override { return _size; }
 
@@ -170,6 +169,19 @@ public:
         }
     }
 
+    // serialize_batch() writes _data->serialize(0, ...) -- the persisted encoding -- into every row.
+    uint32_t serialize_batch_fixed_row_size() const override { return _data->serialize_size(0); }
+
+    void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const override {
+        if (chunk_size == 0) {
+            return;
+        }
+        const uint32_t row_bytes = _data->serialize_size(0);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += row_bytes;
+        }
+    }
+
     const uint8_t* deserialize_and_append(const uint8_t* pos) override {
         ++_size;
         if (_data->empty()) {
@@ -267,12 +279,6 @@ public:
     }
 
     void check_or_die() const override;
-
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override;
-
-    bool has_large_column() const override { return _data->has_large_column(); }
 
     void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
 

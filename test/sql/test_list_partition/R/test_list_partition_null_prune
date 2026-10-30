@@ -1,0 +1,134 @@
+-- name: test_list_partition_null_prune
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE fact (k INT NOT NULL, city VARCHAR(20)) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY LIST (city) (
+    PARTITION pmix VALUES IN ('beijing', NULL),
+    PARTITION psh VALUES IN ('shanghai')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO fact VALUES (1, NULL), (2, 'beijing'), (3, 'shanghai');
+-- result:
+-- !result
+CREATE TABLE dim (city VARCHAR(20)) ENGINE=OLAP
+DUPLICATE KEY(city) DISTRIBUTED BY HASH(city) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO dim VALUES ('beijing'), ('shanghai');
+-- result:
+-- !result
+function: assert_explain_contains("SELECT k FROM fact WHERE city IS NOT NULL", "partitions=2/2")
+-- result:
+None
+-- !result
+SELECT k, city FROM fact WHERE city IS NOT NULL ORDER BY k;
+-- result:
+2	beijing
+3	shanghai
+-- !result
+function: assert_explain_contains("SELECT k FROM fact WHERE city != 'shanghai'", "partitions=1/2")
+-- result:
+None
+-- !result
+SELECT k, city FROM fact WHERE city != 'shanghai' ORDER BY k;
+-- result:
+2	beijing
+-- !result
+function: assert_explain_contains("SELECT k FROM fact WHERE city NOT IN ('shanghai')", "partitions=1/2")
+-- result:
+None
+-- !result
+SELECT k, city FROM fact WHERE city NOT IN ('shanghai') ORDER BY k;
+-- result:
+2	beijing
+-- !result
+function: assert_explain_contains("SELECT f.k FROM fact f JOIN dim d ON f.city = d.city", "partitions=2/2")
+-- result:
+None
+-- !result
+SELECT f.k, f.city FROM fact f JOIN dim d ON f.city = d.city ORDER BY f.k;
+-- result:
+2	beijing
+3	shanghai
+-- !result
+function: assert_explain_contains("SELECT k FROM fact WHERE city IS NULL", "partitions=1/2")
+-- result:
+None
+-- !result
+SELECT k, city FROM fact WHERE city IS NULL ORDER BY k;
+-- result:
+1	None
+-- !result
+SELECT k, city FROM fact WHERE city <=> NULL ORDER BY k;
+-- result:
+1	None
+-- !result
+CREATE TABLE fact_null_only (k INT NOT NULL, city VARCHAR(20)) ENGINE=OLAP
+DUPLICATE KEY(k)
+PARTITION BY LIST (city) (
+    PARTITION pnull VALUES IN (NULL),
+    PARTITION psh VALUES IN ('shanghai')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO fact_null_only VALUES (1, NULL), (3, 'shanghai');
+-- result:
+-- !result
+function: assert_explain_contains("SELECT k FROM fact_null_only WHERE city IS NOT NULL", "partitions=1/2")
+-- result:
+None
+-- !result
+SELECT k, city FROM fact_null_only WHERE city IS NOT NULL ORDER BY k;
+-- result:
+3	shanghai
+-- !result
+function: assert_explain_contains("SELECT k FROM fact_null_only WHERE city != 'shanghai'", "EMPTYSET")
+-- result:
+None
+-- !result
+SELECT k, city FROM fact_null_only WHERE city != 'shanghai' ORDER BY k;
+-- result:
+-- !result
+CREATE TABLE fact_mc (id INT NOT NULL, city VARCHAR(20), k INT) ENGINE=OLAP
+DUPLICATE KEY(id)
+PARTITION BY LIST (city, k) (
+    PARTITION pmix VALUES IN (('beijing', '1'), (NULL, '2')),
+    PARTITION psh VALUES IN (('shanghai', '3'))
+)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO fact_mc VALUES (1, 'beijing', 1), (2, NULL, 2), (3, 'shanghai', 3);
+-- result:
+-- !result
+function: assert_explain_contains("SELECT id FROM fact_mc WHERE city IS NOT NULL", "partitions=2/2")
+-- result:
+None
+-- !result
+SELECT id, city, k FROM fact_mc WHERE city IS NOT NULL ORDER BY id;
+-- result:
+1	beijing	1
+3	shanghai	3
+-- !result
+function: assert_explain_contains("SELECT id FROM fact_mc WHERE city != 'shanghai'", "partitions=1/2")
+-- result:
+None
+-- !result
+SELECT id, city, k FROM fact_mc WHERE city != 'shanghai' ORDER BY id;
+-- result:
+1	beijing	1
+-- !result
+DROP database test_db_${uuid0} FORCE;
+-- result:
+-- !result

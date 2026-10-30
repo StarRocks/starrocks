@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the minimum value among all elements in an ARRAY."
 ---
 
 # array_min

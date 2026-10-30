@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW RUNNING QUERIES は、実行中またはクエリキューで保留中のすべてのクエリの情報を表示します。"
 ---
 
 # `SHOW RUNNING QUERIES`

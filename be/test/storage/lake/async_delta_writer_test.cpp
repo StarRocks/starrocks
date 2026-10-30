@@ -14,8 +14,12 @@
 
 #include "storage/lake/async_delta_writer.h"
 
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
+#include <atomic>
+#include <chrono>
 #include <random>
 #include <thread>
 
@@ -23,21 +27,29 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -82,7 +94,8 @@ protected:
 
     void do_block_merger(bool use_profile);
 
-    constexpr static const char* const kTestDirectory = "test_lake_async_delta_writer";
+    // Suffix with PID so concurrent processes (e.g. gtest-parallel) never share this dir.
+    inline static const std::string kTestDirectory = "test_lake_async_delta_writer_" + std::to_string(getpid());
 
     int64_t _partition_id;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -201,14 +214,14 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 
     // Check segment file
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
 
@@ -221,7 +234,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(2 * kChunkSize, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {
@@ -403,14 +416,14 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segment_metas_size());
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(kNumThreads * kChunksPerThread * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 
     // Check segment file
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
+    auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segment_metas(0).filename());
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
 
@@ -423,7 +436,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_concurrently) {
 
     auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, opts.chunk_size);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, opts.chunk_size);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(opts.chunk_size, read_chunk_ptr->num_rows());
         for (int i = 0; i < read_chunk_ptr->num_rows(); i++) {
@@ -475,7 +488,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_write_after_close) {
     ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
 
     // Segment file should not exist
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     ASSERT_OK(fs->iterate_dir(join_path(kTestDirectory, kMetadataDirectoryName), [&](std::string_view name) {
         EXPECT_TRUE(is_tablet_metadata(name)) << name;
         return true;
@@ -571,6 +584,44 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open_after_close) {
     ASSERT_EQ("AsyncDeltaWriter has been closed", st.message());
 }
 
+// A writer closed after being cancelled must report the cancel reason instead of the generic
+// "closed" message: the reason carries the root cause that the load coordinator has to surface.
+TEST_F(LakeAsyncDeltaWriterTest, test_open_and_write_after_cancel_and_close) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    delta_writer->cancel(Status::Cancelled("Division by zero"));
+    delta_writer->close();
+
+    auto st = delta_writer->open();
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_TRUE(st.message().find("Division by zero") != std::string::npos) << st;
+
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& write_st) {
+        ASSERT_TRUE(write_st.is_cancelled()) << write_st;
+        ASSERT_TRUE(write_st.message().find("Division by zero") != std::string::npos) << write_st;
+        write_latch.count_down();
+    });
+    write_latch.wait();
+}
+
 TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     // Prepare data for writing
     static const int kChunkSize = 128;
@@ -612,7 +663,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     ASSERT_TRUE(tablet.get_txn_log(txn_id).status().is_not_found());
 
     // Segment file should not exist
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(kTestDirectory));
     ASSERT_OK(fs->iterate_dir(join_path(kTestDirectory, kMetadataDirectoryName), [&](std::string_view name) {
         EXPECT_TRUE(is_tablet_metadata(name)) << name;
         return true;
@@ -673,7 +724,7 @@ void LakeAsyncDeltaWriterTest::do_block_merger(bool use_profile) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -719,7 +770,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -764,12 +815,300 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
     delta_writer->close();
 }
 
+// Regression test: close() used to destroy _block_merge_token before joining the execution
+// queue, causing SIGSEGV when execute() called _block_merge_token->submit() for a finish
+// task with spill blocks.
+TEST_F(LakeAsyncDeltaWriterTest, test_close_race_with_finish_submit_merge_task) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    CountDownLatch latch(10);
+    // flush multiple times to generate spill blocks
+    int64_t old_val = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .set_immutable_tablet_size(10000000)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 10; i++) {
+        delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            latch.count_down();
+        });
+    }
+    latch.wait();
+    config::write_buffer_size = old_val;
+
+    // Ensure close() starts right when execute() begins processing the finish task.
+    // This maximizes the window for close() to race with execute()'s _block_merge_token->submit().
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency({{"AsyncDeltaWriterImpl::execute:1", "AsyncDeltaWriterImpl::close:1"}});
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Submit finish task (non-blocking). execute() will call _block_merge_token->submit()
+    // because there are spill blocks.
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {});
+
+    // Close concurrently. Before the fix, close() could destroy _block_merge_token while
+    // execute() was about to call _block_merge_token->submit(), causing SIGSEGV.
+    delta_writer->close();
+}
+
+// Regression test: ThreadPoolToken::shutdown() waits for the tasks it is running but cancels the
+// ones still queued, and a cancelled MergeBlockTask used to be destroyed without ever answering the
+// finish callback it owned. In production the caller of finish() is
+// LakeTabletsChannel::add_chunk(), which blocks on a latch that only that callback counts down, so
+// the bthread serving tablet_writer_add_chunks parked forever -- holding its brpc closure, and with
+// it a connection that Server::Join() then waited on for the rest of the process's life.
+//
+// Pin the merge pool to a single thread and keep that thread busy, so the task finish() submits has
+// to queue and close() is guaranteed to cancel it rather than run it.
+TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_task_is_cancelled) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    auto* merge_executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+
+    int64_t old_max_thread = config::load_spill_merge_max_thread;
+    config::load_spill_merge_max_thread = 1;
+    ASSERT_OK(merge_executor->refresh_max_thread_num());
+
+    CountDownLatch blocker_started(1);
+    CountDownLatch release_blocker(1);
+    CountDownLatch blocker_finished(1);
+    ASSERT_OK(merge_executor->get_thread_pool()->submit_func([&]() {
+        blocker_started.count_down();
+        release_blocker.wait();
+        blocker_finished.count_down();
+    }));
+    // The merge pool's only thread is now busy, so nothing submitted below can start.
+    blocker_started.wait();
+
+    DeferOp restore([&]() {
+        release_blocker.count_down();
+        // Releasing the blocker is not enough: these latches live on this frame, and the pool
+        // thread is still inside release_blocker.wait() reacquiring its lock. Wait for the task to
+        // return before letting them go out of scope.
+        blocker_finished.wait();
+        config::load_spill_merge_max_thread = old_max_thread;
+        (void)merge_executor->refresh_max_thread_num();
+    });
+
+    CountDownLatch flush_latch(10);
+    // Flush repeatedly so the writer ends up with spill blocks, which is what makes finish() hand
+    // its callback to a MergeBlockTask instead of answering it inline.
+    int64_t old_buffer_size = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .set_immutable_tablet_size(10000000)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 10; i++) {
+        delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            flush_latch.count_down();
+        });
+    }
+    flush_latch.wait();
+    // The flush callback only means the memtable was handed to the flush pool, not that it has been
+    // spilled. Wait for the spills themselves, or finish() can find no spill block yet and answer
+    // inline instead of submitting a merge task.
+    DeltaWriter::io_threads()->wait();
+    config::write_buffer_size = old_buffer_size;
+
+    // Wait for the merge task to be *submitted*, not merely for time to pass. If close() were to
+    // shut the token down first, submit() would fail and its own branch would answer the callback,
+    // which passes whether or not a cancelled task answers for itself.
+    CountDownLatch merge_task_submitted(1);
+    SyncPoint::GetInstance()->SetCallBack("AsyncDeltaWriterImpl::merge_task_submitted",
+                                          [&](void*) { merge_task_submitted.count_down(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("AsyncDeltaWriterImpl::merge_task_submitted");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic<int> finish_calls{0};
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) { finish_calls.fetch_add(1); });
+
+    ASSERT_TRUE(merge_task_submitted.wait_for(std::chrono::seconds(30)))
+            << "finish() never submitted a merge task -- did the writer end up with no spill block?";
+    // Queued behind the blocker, so it cannot have run.
+    ASSERT_EQ(0, finish_calls.load());
+
+    // close() shuts the merge token down, which cancels the queued task.
+    delta_writer->close();
+
+    // Whichever way the task ended, the callback owes exactly one answer.
+    EXPECT_EQ(1, finish_calls.load());
+}
+
 TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
     do_block_merger(true);
 }
 
 TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_without_input_profile) {
     do_block_merger(false);
+}
+
+// Regression test: close() used to trigger the stop handler which called delta_writer->close(),
+// destroying _mem_table_sink while a MergeBlockTask was still running merge_blocks_to_segments().
+// This caused use-after-free (SIGSEGV in LoadChunkSpiller::empty() or heap-use-after-free on
+// _flush_token). The fix defers delta_writer->close() until after all tasks are drained.
+TEST_F(LakeAsyncDeltaWriterTest, test_close_does_not_destroy_writer_during_merge) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    CountDownLatch flush_latch(10);
+    // flush multiple times to generate spill blocks
+    int64_t old_val = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .set_immutable_tablet_size(10000000)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 10; i++) {
+        delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            flush_latch.count_down();
+        });
+    }
+    flush_latch.wait();
+    config::write_buffer_size = old_val;
+
+    // Pause inside merge_blocks_to_segments() so the merge task is actively using
+    // _mem_table_sink when close() is called.
+    CountDownLatch merge_entered(1);
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("SpillMemTableSink::merge_blocks_to_segments", [&](void* arg) {
+        merge_entered.count_down();
+        // Wait long enough for close() to stop the execution queue and trigger the
+        // stop handler. Before the fix, the stop handler would call delta_writer->close()
+        // and destroy _mem_table_sink while we're still here.
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    });
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Submit finish — this will spawn a MergeBlockTask that enters merge_blocks_to_segments()
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {});
+
+    // Wait until merge task is inside merge_blocks_to_segments()
+    merge_entered.wait();
+
+    // Now close. Before the fix this would SIGSEGV or trigger ASAN heap-use-after-free.
+    // After the fix, close() waits for the merge task to complete before destroying writer state.
+    delta_writer->close();
+}
+
+// Test that AsyncDeltaWriter::close() can be called from a bthread without
+// triggering DCHECK_EQ(0, bthread_self()) in DeltaWriter::close().
+// Before the fix, calling close() from bthread context would crash in Debug builds
+// because DeltaWriter::close() has a DCHECK that forbids calling from bthread.
+// The fix moves _block_merge_token->shutdown() and delta_writer->close() into the
+// execution queue's stop handler, which runs in a pthread thread pool.
+TEST_F(LakeAsyncDeltaWriterTest, test_close_from_bthread_no_dcheck_failure) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    // Write some data
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) {
+        ASSERT_OK(st);
+        write_latch.count_down();
+    });
+    write_latch.wait();
+
+    // Finish
+    CountDownLatch finish_latch(1);
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
+        ASSERT_TRUE(res.ok()) << res.status();
+        finish_latch.count_down();
+    });
+    finish_latch.wait();
+
+    // Close from a bthread — this simulates LakeTabletsChannel::abort() being called
+    // from a brpc handler. Before the fix, this would crash in Debug builds due to
+    // DCHECK_EQ(0, bthread_self()) in DeltaWriter::close().
+    auto raw_ptr = delta_writer.get();
+    bthread_t bt;
+    int ret = bthread_start_background(
+            &bt, nullptr,
+            [](void* arg) -> void* {
+                // Verify we are indeed running in a bthread
+                EXPECT_NE(0, bthread_self());
+                auto* writer = static_cast<AsyncDeltaWriter*>(arg);
+                writer->close();
+                return nullptr;
+            },
+            raw_ptr);
+    ASSERT_EQ(0, ret);
+    bthread_join(bt, nullptr);
 }
 
 // Test that write tasks are rejected after finish task completes

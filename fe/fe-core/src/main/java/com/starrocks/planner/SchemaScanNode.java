@@ -55,10 +55,12 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TSchemaScanNode;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -206,7 +208,13 @@ public class SchemaScanNode extends ScanNode {
         msg.schema_scan_node.setIp(frontendIP);
         msg.schema_scan_node.setPort(frontendPort);
 
-        TUserIdentity tCurrentUser = UserIdentityUtils.toThrift(ConnectContext.get().getCurrentUserIdentity());
+        ConnectContext currentCtx = ConnectContext.get();
+        TUserIdentity tCurrentUser = UserIdentityUtils.toThrift(currentCtx.getCurrentUserIdentity());
+        if (currentCtx.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(currentCtx.getCurrentRoleIds()));
+            tCurrentUser.setCurrent_role_ids(userRoles);
+        }
         msg.schema_scan_node.setCurrent_user_ident(tCurrentUser);
 
         if (tableId != null) {
@@ -326,6 +334,12 @@ public class SchemaScanNode extends ScanNode {
             feInfo.setId(fe.getNodeName());
             feInfo.setIp(fe.getHost());
             feInfo.setHttp_port(Config.http_port);
+            // Thrift (FrontendService) port, used by the BE fe_metrics scanner to fetch
+            // metrics over RPC instead of scraping the HTTP /metrics endpoint. Prefer the
+            // per-FE port reported via heartbeat (Frontend.getRpcPort()); fall back to the
+            // local Config.rpc_port only when it is not yet known (e.g. before the first
+            // heartbeat of the local node).
+            feInfo.setRpc_port(fe.getRpcPort() > 0 ? fe.getRpcPort() : Config.rpc_port);
             frontends.add(feInfo);
         }
     }

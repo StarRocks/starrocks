@@ -1,0 +1,7 @@
+position: 60
+label: 'Load data from Apache Spark'
+collapsible: true
+collapsed: true
+link:
+  id: spark
+  type: doc

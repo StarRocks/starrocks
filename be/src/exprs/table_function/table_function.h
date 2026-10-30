@@ -18,7 +18,7 @@
 
 #include "column/fixed_length_column.h"
 #include "exprs/function_helper.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 
@@ -101,6 +101,12 @@ public:
     //Table function processing logic
     virtual std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                           TableFunctionState* state) const = 0;
+
+    // Whether process() is safe to run wrapped in TRY_CATCH_BAD_ALLOC: a std::bad_alloc thrown
+    // by an over-limit allocation can unwind out of process() without leaking memory or leaving
+    // any state corrupted. Default false; override to true only for implementations whose
+    // process() is fully RAII / exception-safe (e.g. Unnest/MultiUnnest).
+    virtual bool is_exception_safe() const { return false; }
 
     //Release the resources constructed in init and prepare
     virtual Status close(RuntimeState* runtime_state, TableFunctionState* context) const = 0;

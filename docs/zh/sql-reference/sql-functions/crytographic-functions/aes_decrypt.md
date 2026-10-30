@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "使用指定的 AES 算法和加密密钥对字符串进行解密。"
 ---
 
 # aes_decrypt

@@ -82,6 +82,17 @@ void DelVector::init(int64_t version, const uint32_t* data, size_t length) {
     _update_stats();
 }
 
+void DelVector::union_with(int64_t version, const Roaring& src) {
+    _loaded = true;
+    _version = version;
+    if (_roaring) {
+        *_roaring |= src;
+    } else if (!src.isEmpty()) {
+        _roaring = std::make_unique<Roaring>(src);
+    }
+    _update_stats();
+}
+
 string DelVector::save() const {
     string ret;
     auto roaring_size = _roaring ? _roaring->getSizeInBytes() : 0;

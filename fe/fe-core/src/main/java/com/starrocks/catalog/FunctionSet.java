@@ -51,8 +51,10 @@ import com.starrocks.catalog.combinator.StateMergeCombinator;
 import com.starrocks.catalog.combinator.StateUnionCombinator;
 import com.starrocks.sql.analyzer.PolymorphicFunctionAnalyzer;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.AnyArrayType;
 import com.starrocks.type.AnyElementType;
+import com.starrocks.type.AnyGeometryType;
 import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
@@ -81,6 +83,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -110,6 +113,7 @@ public class FunctionSet {
     public static final String DAYNAME = "dayname";
     public static final String DAYOFMONTH = "dayofmonth";
     public static final String DAYOFWEEK = "dayofweek";
+    public static final String DAYOFWEEK_ISO = "dayofweek_iso";
     public static final String DAYOFYEAR = "dayofyear";
     public static final String FROM_DAYS = "from_days";
     public static final String FROM_UNIXTIME = "from_unixtime";
@@ -141,6 +145,7 @@ public class FunctionSet {
     public static final String LOCALTIMESTAMP = "localtimestamp";
 
     public static final String WEEK = "week";
+    public static final String WEEK_ISO = "week_iso";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -184,25 +189,40 @@ public class FunctionSet {
     public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
+    public static final String BLAKE3 = "blake3";
     public static final String FROM_BINARY = "from_binary";
     public static final String TO_BINARY = "to_binary";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
-    public static final String ENCODE_ROW_ID = "encode_row_id";
     public static final String ENCODE_FINGERPRINT_SHA256 = "encode_fingerprint_sha256";
+    public static final String ENCODE_FINGERPRINT_SHA256_V2 = "encode_fingerprint_sha256_v2";
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
+    public static final String APPROX_INNER_PRODUCT = "approx_inner_product";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Geo functions:
     public static final String ST_ASTEXT = "st_astext";
     public static final String ST_ASWKT = "st_aswkt";
     public static final String ST_CIRCLE = "st_circle";
+    public static final String ST_CENTROID = "st_centroid";
+    public static final String ST_BUFFER = "st_buffer";
+    public static final String ST_SIMPLIFY_PRESERVE_TOPOLOGY = "st_simplifypreservetopology";
+    public static final String ST_COVERAGE_SIMPLIFY = "st_coveragesimplify";
+    public static final String ST_INTERSECTION = "st_intersection";
+    public static final String ST_UNION = "st_union";
+    public static final String ST_DIFFERENCE = "st_difference";
+    public static final String ST_SYMDIFFERENCE = "st_symdifference";
+    public static final String H3_TOBOUNDARY = "h3_toboundary";
+    public static final String ST_SRID = "st_srid";
+    public static final String ST_SETSRID = "st_setsrid";
+    public static final String ST_TRANSFORM = "st_transform";
     public static final String ST_CONTAINS = "st_contains";
     public static final String ST_DISTANCE_SPHERE = "st_distance_sphere";
     public static final String ST_GEOMETRYFROMTEXT = "st_geometryfromtext";
     public static final String ST_GEOMFROMTEXT = "st_geomfromtext";
+    public static final String ST_GEOMFROMWKB = "st_geomfromwkb";
     public static final String ST_LINEFROMTEXT = "st_linefromtext";
     public static final String ST_LINESTRINGFROMTEXT = "st_linestringfromtext";
     public static final String ST_POINT = "st_point";
@@ -255,10 +275,14 @@ public class FunctionSet {
     public static final String SPACE = "space";
     public static final String PARSE_URL = "parse_url";
     public static final String TRIM = "trim";
+    public static final String TRIM_STRING = "trim_string";
+    public static final String LTRIM_STRING = "ltrim_string";
+    public static final String RTRIM_STRING = "rtrim_string";
     public static final String UPPER = "upper";
     public static final String INITCAP = "initcap";
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
+    public static final String HTTP_REQUEST = "http_request";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -273,6 +297,7 @@ public class FunctionSet {
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String GET_JSON_SCALAR = "get_json_scalar";
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
@@ -282,6 +307,7 @@ public class FunctionSet {
     // Variant functions:
     public static final String VARIANT_QUERY = "variant_query";
     public static final String VARIANT_TYPEOF = "variant_typeof";
+    public static final String IS_VARIANT_NULL = "is_variant_null";
     public static final String GET_VARIANT_BOOL = "get_variant_bool";
     public static final String GET_VARIANT_INT = "get_variant_int";
     public static final String GET_VARIANT_DOUBLE = "get_variant_double";
@@ -297,6 +323,7 @@ public class FunctionSet {
     // Utility functions:
     public static final String CURRENT_VERSION = "current_version";
     public static final String LAST_QUERY_ID = "last_query_id";
+    public static final String QUERY_ID = "query_id";
     public static final String UUID = "uuid";
     public static final String UUID_NUMERIC = "uuid_numeric";
     public static final String UUID_V7 = "uuid_v7";
@@ -306,6 +333,10 @@ public class FunctionSet {
     public static final String ISNOTNULL = "isnotnull";
     public static final String ASSERT_TRUE = "assert_true";
     public static final String HOST_NAME = "host_name";
+    // materialize: identity function that acts as an optimization barrier.
+    // Returns the input unchanged but is opaque to the FE optimizer,
+    // preventing constant folding, partition pruning, and other rewrites.
+    public static final String MATERIALIZE = "materialize";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
     public static final String ENCODE_SORT_KEY = "encode_sort_key";
@@ -317,6 +348,13 @@ public class FunctionSet {
     public static final String DS_HLL_ACCUMULATE = "ds_hll_accumulate";
     public static final String DS_HLL_COMBINE = "ds_hll_combine";
     public static final String DS_HLL_ESTIMATE = "ds_hll_estimate";
+    public static final String DS_THETA_ACCUMULATE = "ds_theta_accumulate";
+    public static final String DS_THETA_COMBINE = "ds_theta_combine";
+    public static final String DS_THETA_ESTIMATE = "ds_theta_estimate";
+    public static final String DS_THETA_UNION = "ds_theta_union";
+    public static final String DS_THETA_INTERSECT = "ds_theta_intersect";
+    public static final String DS_THETA_A_NOT_B = "ds_theta_a_not_b";
+    public static final String DS_THETA_INTERSECT_COND_AGG = "ds_theta_intersect_cond_agg";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -448,6 +486,8 @@ public class FunctionSet {
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
     public static final String CRC32_HASH = "crc32_hash";
+    public static final String XX_HASH32 = "xx_hash32";
+    public static final String XX_HASH64 = "xx_hash64";
     public static final String XX_HASH3_64 = "xx_hash3_64";
     public static final String XX_HASH3_128 = "xx_hash3_128";
 
@@ -577,6 +617,11 @@ public class FunctionSet {
     public static final String NGRAM_SEARCH = "ngram_search";
     public static final String NGRAM_SEARCH_CASE_INSENSITIVE = "ngram_search_case_insensitive";
 
+    public static final String TOKENIZE = "tokenize";
+    // Tokenizers GinFunctions::tokenize() implements on the BE. Matching is case-sensitive there.
+    public static final Set<String> SUPPORTED_TOKENIZERS =
+            ImmutableSet.of("english", "standard", "chinese");
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {JsonType.JSON, VarcharType.VARCHAR}, JsonType.JSON, false);
@@ -590,6 +635,9 @@ public class FunctionSet {
 
     //user and role function
     public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
+
+    // query profile function
+    public static final String GET_QUERY_PROFILE = "get_query_profile";
 
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
@@ -727,9 +775,12 @@ public class FunctionSet {
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
-            ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
-                    PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY);
+            ImmutableSet.<String>builder()
+                    .add(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
+                            PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT,
+                            AES_DECRYPT, ENCODE_FINGERPRINT_SHA256, ENCODE_FINGERPRINT_SHA256_V2, ENCODE_SORT_KEY)
+                    .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
+                    .build();
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -768,6 +819,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .add(FunctionSet.FIELD)
                     .add(FunctionSet.SPLIT_PART)
+                    .add(FunctionSet.IS_VARIANT_NULL)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -785,12 +837,16 @@ public class FunctionSet {
                     .add(UUID_NUMERIC)
                     .add(UUID_V7)
                     .add(UUID_V7_NUMERIC)
+                    .add(QUERY_ID)
                     .add(SLEEP)
+                    .add(HTTP_REQUEST)
+                    .addAll(VectorizedBuiltinFunctions.AI_FUNCTION_NAMES)
                     .build();
 
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(APPROX_COSINE_SIMILARITY)
+                    .add(APPROX_INNER_PRODUCT)
                     .add(APPROX_L2_DISTANCE)
                     .build();
 
@@ -832,6 +888,7 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .add(FunctionSet.SESSION_NUMBER)
+            .add(FunctionSet.ST_COVERAGE_SIMPLIFY)
             .build();
 
     public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
@@ -933,6 +990,9 @@ public class FunctionSet {
                     .add(DS_HLL_ACCUMULATE)
                     .add(DS_HLL_COMBINE)
                     .add(DS_HLL_ESTIMATE)
+                    .add(DS_THETA_ACCUMULATE)
+                    .add(DS_THETA_COMBINE)
+                    .add(DS_THETA_INTERSECT_COND_AGG)
                     // Functions with constant contexts in be are not supported.
                     .add(WINDOW_FUNNEL)
                     .add(APPROX_TOP_K)
@@ -1156,6 +1216,22 @@ public class FunctionSet {
         return null;
     }
 
+    /** Returns the public AI family name shared by its overloads, or null for a non-grantable name. */
+    public String getGrantableAIFunctionFamily(String name) {
+        if (name == null || name.contains(".")) {
+            return null;
+        }
+        String canonicalName = name.toLowerCase(Locale.ROOT);
+        List<Function> family = vectorizedFunctions.get(canonicalName);
+        if (family == null || family.isEmpty()) {
+            return null;
+        }
+        if (family.stream().anyMatch(fn -> !fn.isAI() || !fn.isUserVisible())) {
+            return null;
+        }
+        return canonicalName;
+    }
+
     public Function getFunction(Function desc, Function.CompareMode mode) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
         if (desc.hasNamedArg() && fns != null && !fns.isEmpty()) {
@@ -1188,7 +1264,6 @@ public class FunctionSet {
     }
 
     private void addBuiltInFunction(Function fn) {
-        Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
@@ -1208,6 +1283,13 @@ public class FunctionSet {
 
         List<Type> argsType = Arrays.stream(args).collect(Collectors.toList());
         addVectorizedBuiltin(ScalarFunction.createVectorizedBuiltin(fid, fnName, argsType, varArgs, retType));
+    }
+
+    public void addVectorizedAIBuiltin(Function fn) {
+        Preconditions.checkState(nonDeterministicFunctions.contains(fn.functionName()),
+                "AI function %s must be non-deterministic", fn.functionName());
+        fn.setBinaryType(TFunctionBinaryType.AI);
+        addVectorizedBuiltin(fn);
     }
 
     private void addVectorizedBuiltin(Function fn) {
@@ -1399,6 +1481,11 @@ public class FunctionSet {
                     Lists.newArrayList(t), IntegerType.BIGINT, VarbinaryType.VARBINARY,
                     true, false, true));
 
+            // ds_theta_accumulate(col) — emits serialized compact theta sketch
+            addBuiltin(AggregateFunction.createBuiltin(DS_THETA_ACCUMULATE,
+                    Lists.newArrayList(t), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
+                    true, false, true));
+
             // HLL_RAW
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
                     Lists.newArrayList(t), HLLType.HLL, VarbinaryType.VARBINARY,
@@ -1446,6 +1533,16 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(DS_HLL_ESTIMATE,
                 Lists.newArrayList(VarbinaryType.VARBINARY), IntegerType.BIGINT, VarbinaryType.VARBINARY,
                 true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_THETA_COMBINE,
+                Lists.newArrayList(VarbinaryType.VARBINARY), VarbinaryType.VARBINARY, VarbinaryType.VARBINARY,
+                true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(DS_THETA_INTERSECT_COND_AGG,
+                Lists.newArrayList(VarbinaryType.VARBINARY, IntegerType.INT), FloatType.DOUBLE, VarbinaryType.VARBINARY,
+                true, false, true));
+        // DS_THETA_ESTIMATE is registered as a scalar function via gensrc/script/functions.py.
+        // It deserializes a compact theta sketch row-by-row and returns the estimate as DOUBLE.
 
         // Sum
         registerBuiltinSumAggFunction(SUM);
@@ -1535,6 +1632,14 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
+        Type coverageGeometry = AnyGeometryType.GEOMETRY;
+        AggregateFunction coverageTwo = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE), coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageTwo);
+        AggregateFunction coverageThree = AggregateFunction.createAnalyticBuiltin(ST_COVERAGE_SIMPLIFY,
+                Lists.newArrayList(coverageGeometry, FloatType.DOUBLE, BooleanType.BOOLEAN),
+                coverageGeometry, VarbinaryType.VARBINARY);
+        addBuiltin(coverageThree);
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), IntegerType.BIGINT, VarbinaryType.VARBINARY));

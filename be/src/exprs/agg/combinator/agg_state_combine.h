@@ -14,12 +14,14 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/combinator/agg_state_combinator.h"
 #include "exprs/agg/combinator/agg_state_utils.h"
-#include "runtime/agg_state_desc.h"
+#include "types/agg_state_desc.h"
 
 namespace starrocks {
 struct AggStateCombineState {};
@@ -38,7 +40,7 @@ struct AggStateCombineState {};
 class AggStateCombine final : public AggStateCombinator<AggStateCombineState, AggStateCombine> {
 public:
     AggStateCombine(AggStateDesc agg_state_desc, const AggregateFunction* function)
-            : AggStateCombinator(agg_state_desc, function) {
+            : AggStateCombinator(std::move(agg_state_desc), function) {
         DCHECK(_function != nullptr);
     }
 

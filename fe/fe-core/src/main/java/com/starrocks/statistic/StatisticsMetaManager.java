@@ -21,12 +21,11 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.AutoInferUtil;
-import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.filelist.RepoCreator;
 import com.starrocks.qe.ConnectContext;
@@ -34,6 +33,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -66,6 +66,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTI
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.PARTITION_ACCESS_TIME_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.QUERY_HISTORY_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
@@ -76,7 +77,7 @@ import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.JsonType.JSON;
 
-public class StatisticsMetaManager extends FrontendDaemon {
+public class StatisticsMetaManager extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     public StatisticsMetaManager() {
@@ -149,9 +150,12 @@ public class StatisticsMetaManager extends FrontendDaemon {
             "table_id", "column_ids"
     );
 
+    private static final List<String> PARTITION_ACCESS_TIME_KEY_COLUMNS = ImmutableList.of(
+            "db_id", "table_id", "partition_id"
+    );
+
     private boolean createSampleStatisticsTable(ConnectContext context) {
         LOG.info("create sample statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
         try {
             int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
@@ -183,8 +187,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private boolean createFullStatisticsTable(ConnectContext context) {
         LOG.info("create full statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME,
-                FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
 
@@ -217,7 +219,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private boolean createHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create histogram statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, HISTOGRAM_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
@@ -255,7 +256,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private boolean createExternalFullStatisticsTable(ConnectContext context) {
         LOG.info("create external full statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
 
@@ -288,7 +288,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private boolean createExternalHistogramStatisticsTable(ConnectContext context) {
         LOG.info("create external histogram statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.isSharedDataMode() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
@@ -318,17 +317,18 @@ public class StatisticsMetaManager extends FrontendDaemon {
         for (Map.Entry<AnalyzeMgr.StatsMetaColumnKey, ExternalHistogramStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getExternalHistogramStatsMetaMap().entrySet()) {
             ExternalHistogramStatsMeta histogramStatsMeta = entry.getValue();
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(
+            ExternalHistogramStatsMeta reInitMeta =
                     new ExternalHistogramStatsMeta(histogramStatsMeta.getCatalogName(), histogramStatsMeta.getDbName(),
                             histogramStatsMeta.getTableName(), histogramStatsMeta.getColumn(),
-                            histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties()));
+                            histogramStatsMeta.getType(), LocalDateTime.MIN, histogramStatsMeta.getProperties());
+            reInitMeta.setTableUUID(histogramStatsMeta.getTableUUID());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addExternalHistogramStatsMeta(reInitMeta);
         }
         return checkTableExist(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 
     private boolean createMultiColumnStatisticsTable(ConnectContext context) {
         LOG.info("create multi column statistics table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, MULTI_COLUMN_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
 
         try {
@@ -365,7 +365,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private boolean createSPMBaselinesTable(ConnectContext context) {
         LOG.info("create spm_baselines table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, SPM_BASELINE_TABLE_NAME);
         KeysType keysType = KeysType.PRIMARY_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
@@ -404,7 +403,6 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private boolean createQueryHistoryTable(ConnectContext context) {
         LOG.info("create query_history table start");
-        TableName tableName = new TableName(STATISTICS_DB_NAME, QUERY_HISTORY_TABLE_NAME);
         KeysType keysType = KeysType.DUP_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         try {
@@ -440,6 +438,43 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(QUERY_HISTORY_TABLE_NAME);
     }
 
+    private boolean createPartitionAccessTimeTable(ConnectContext context) {
+        LOG.info("create {} table start", PARTITION_ACCESS_TIME_TABLE_NAME);
+        // Aggregate table with last_access_time_ms MAX-aggregated: the periodic flush is a blind INSERT, so
+        // letting the storage engine keep the larger value on write makes the persisted timestamp monotonic --
+        // a late/stale batch from a rejoining FE can never move it backwards. Works in both run modes.
+        KeysType keysType = KeysType.AGG_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        try {
+            List<ColumnDef> columns = ImmutableList.of(
+                    new ColumnDef("db_id", new TypeDef(BIGINT)),
+                    new ColumnDef("table_id", new TypeDef(BIGINT)),
+                    new ColumnDef("partition_id", new TypeDef(BIGINT)),
+                    new ColumnDef("last_access_time_ms", new TypeDef(BIGINT), false, AggregateType.MAX, null,
+                            false, ColumnDef.DefaultValueDef.NOT_SET, "")
+            );
+
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            QualifiedName qualifiedName =
+                    QualifiedName.of(Arrays.asList(STATISTICS_DB_NAME, PARTITION_ACCESS_TIME_TABLE_NAME));
+            TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableRef, columns, EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, PARTITION_ACCESS_TIME_KEY_COLUMNS), null,
+                    new HashDistributionDesc(10, PARTITION_ACCESS_TIME_KEY_COLUMNS),
+                    properties, null, "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create {} table", PARTITION_ACCESS_TIME_TABLE_NAME, e);
+            return false;
+        }
+        LOG.info("create {} table done", PARTITION_ACCESS_TIME_TABLE_NAME);
+        return checkTableExist(PARTITION_ACCESS_TIME_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -454,11 +489,14 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    private void trySleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException e) {
-            LOG.warn(e.getMessage(), e);
+    private void trySleep(long millis) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + millis;
+        while (!isStopRequested()) {
+            long remaining = deadline - System.currentTimeMillis();
+            if (remaining <= 0) {
+                return;
+            }
+            Thread.sleep(Math.min(remaining, 100L));
         }
     }
 
@@ -481,13 +519,15 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 return createSPMBaselinesTable(context);
             } else if (QUERY_HISTORY_TABLE_NAME.equals(tableName)) {
                 return createQueryHistoryTable(context);
+            } else if (PARTITION_ACCESS_TIME_TABLE_NAME.equals(tableName)) {
+                return createPartitionAccessTimeTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
         }
     }
 
-    public boolean alterTable(String tableName) {
+    public boolean alterTable(String tableName) throws InterruptedException {
         ConnectContext context = StatisticUtils.buildConnectContext();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
         Table table =  GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
@@ -500,7 +540,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         }
     }
 
-    public boolean alterFullStatisticsTable(ConnectContext context, Table table) {
+    public boolean alterFullStatisticsTable(ConnectContext context, Table table) throws InterruptedException {
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 if (columnName.equalsIgnoreCase("collection_size")) {
@@ -526,6 +566,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     }
 
                     while (table.getColumn(columnName) == null) {
+                        if (isStopRequested()) {
+                            return false;
+                        }
                         // `alter table` may be sync in the shared-nothing cluster. So we need to check if job is done.
                         // TODO(stephen): This check is not robust because we can't get job handle here.
                         List<AlterJobV2> unfinishedAlterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
@@ -553,19 +596,22 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return true;
     }
 
-    private void refreshStatisticsTable(String tableName) {
-        while (!checkTableExist(tableName)) {
+    private void refreshStatisticsTable(String tableName) throws InterruptedException {
+        while (!isStopRequested() && !checkTableExist(tableName)) {
             if (createTable(tableName)) {
                 break;
             }
             LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
         }
+        if (isStopRequested()) {
+            return;
+        }
         if (checkTableExist(tableName)) {
             StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
         }
 
-        while (!checkTableCompatible(tableName)) {
+        while (!isStopRequested() && !checkTableCompatible(tableName)) {
             if (alterTable(tableName)) {
                 break;
             }
@@ -575,14 +621,17 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
+    protected void runAfterLeaseValid() throws InterruptedException {
         // To make UT pass, some UT will create database and table
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
-        while (!checkDatabaseExist()) {
+        while (!isStopRequested() && !checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
             }
             trySleep(10000);
+        }
+        if (isStopRequested()) {
+            return;
         }
 
         refreshStatisticsTable(SAMPLE_STATISTICS_TABLE_NAME);
@@ -593,6 +642,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
+        refreshStatisticsTable(PARTITION_ACCESS_TIME_TABLE_NAME);
+        if (isStopRequested()) {
+            return;
+        }
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();
@@ -603,25 +656,30 @@ public class StatisticsMetaManager extends FrontendDaemon {
     }
 
     public void createStatisticsTablesForTest() {
-        while (!checkDatabaseExist()) {
-            if (createDatabase()) {
-                break;
+        try {
+            while (!checkDatabaseExist()) {
+                if (createDatabase()) {
+                    break;
+                }
+                trySleep(1);
             }
-            trySleep(1);
-        }
 
-        boolean existsSample = false;
-        boolean existsFull = false;
-        while (!existsSample || !existsFull) {
-            existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
-            existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
-            if (!existsSample) {
-                createTable(SAMPLE_STATISTICS_TABLE_NAME);
+            boolean existsSample = false;
+            boolean existsFull = false;
+            while (!existsSample || !existsFull) {
+                existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
+                existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
+                if (!existsSample) {
+                    createTable(SAMPLE_STATISTICS_TABLE_NAME);
+                }
+                if (!existsFull) {
+                    createTable(FULL_STATISTICS_TABLE_NAME);
+                }
+                trySleep(1);
             }
-            if (!existsFull) {
-                createTable(FULL_STATISTICS_TABLE_NAME);
-            }
-            trySleep(1);
+        } catch (InterruptedException e) {
+            // Test helper: just restore the interrupt flag and return.
+            Thread.currentThread().interrupt();
         }
     }
 

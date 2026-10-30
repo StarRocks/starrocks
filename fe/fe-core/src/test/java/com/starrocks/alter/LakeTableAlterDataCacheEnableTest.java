@@ -132,7 +132,8 @@ public class LakeTableAlterDataCacheEnableTest {
             }
 
             @Mock
-            public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
+            public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {
+                walApplier.apply(info);
                 loggedBatchModifyPartitions.add(info);
             }
         };

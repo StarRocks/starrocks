@@ -30,7 +30,7 @@ MapColumnIterator::MapColumnIterator(ColumnReader* reader, std::unique_ptr<Colum
           _offsets(std::move(offsets)),
           _keys(std::move(keys)),
           _values(std::move(values)),
-          _path(std::move(path)) {}
+          _path(path) {}
 
 Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     if (_nulls != nullptr) {

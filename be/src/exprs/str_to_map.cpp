@@ -125,17 +125,21 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
             Slice haystack = string_viewer.value(off);
             if (haystack.empty()) { // return {"":NULL}
                 if (is_unique(tmp_slice, Slice(""))) {
-                    tmp_keys.push(Slice());
-                    tmp_values.push(Slice());
+                    tmp_keys.emplace();
+                    tmp_values.emplace();
                     val_is_null.push(true);
                 }
                 continue;
             }
             if (delimiter.size == 0) { // return {`1-th`:`rest`}
-                auto char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[0])];
+                // A truncated/invalid UTF-8 lead byte can claim more bytes than the haystack holds.
+                // Clamp char_size so the key slice stays in bounds and `haystack.size - char_size`
+                // (the value length) does not underflow into a huge size_t.
+                auto char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<unsigned char>(haystack.data[0])],
+                                                  haystack.size);
                 if (is_unique(tmp_slice, Slice(haystack.data, char_size))) {
-                    tmp_keys.push(Slice(haystack.data, char_size));
-                    tmp_values.push(Slice(haystack.data + char_size, haystack.size - char_size));
+                    tmp_keys.emplace(haystack.data, char_size);
+                    tmp_values.emplace(haystack.data + char_size, haystack.size - char_size);
                     val_is_null.push(false);
                 }
             } else {
@@ -148,14 +152,14 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
                 if (pos != nullptr) { // return {`0-pos`:`rest`}
                     if (is_unique(tmp_slice, Slice(haystack.data, pos - haystack.data))) {
                         auto offset = pos - haystack.data + delimiter.size;
-                        tmp_keys.push(Slice(haystack.data, pos - haystack.data));
-                        tmp_values.push(Slice(haystack.data + offset, haystack.size - offset));
+                        tmp_keys.emplace(haystack.data, pos - haystack.data);
+                        tmp_values.emplace(haystack.data + offset, haystack.size - offset);
                         val_is_null.push(false);
                     }
                 } else { // return {`all`:null}
                     if (is_unique(tmp_slice, Slice(haystack.data, haystack.size))) {
-                        tmp_keys.push(Slice(haystack.data, haystack.size));
-                        tmp_values.push(Slice());
+                        tmp_keys.emplace(haystack.data, haystack.size);
+                        tmp_values.emplace();
                         val_is_null.push(true);
                     }
                 }

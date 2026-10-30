@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "IPv4アドレスをA.B.C.D形式の文字列からビッグエンディアン整数に変換します。"
 ---
 
 # inet_aton

@@ -28,6 +28,7 @@ class AWSCloudCredential final : public CloudCredential {
 public:
     bool use_aws_sdk_default_behavior;
     bool use_instance_profile;
+    bool use_web_identity_profile;
     std::string access_key;
     std::string secret_key;
     std::string session_token;
@@ -40,7 +41,8 @@ public:
 
     bool operator==(const AWSCloudCredential& rhs) const {
         return use_aws_sdk_default_behavior == rhs.use_aws_sdk_default_behavior &&
-               use_instance_profile == rhs.use_instance_profile && access_key == rhs.access_key &&
+               use_instance_profile == rhs.use_instance_profile &&
+               use_web_identity_profile == rhs.use_web_identity_profile && access_key == rhs.access_key &&
                secret_key == rhs.secret_key && session_token == rhs.session_token && iam_role_arn == rhs.iam_role_arn &&
                sts_region == rhs.sts_region && sts_endpoint == rhs.sts_endpoint && external_id == rhs.external_id &&
                region == rhs.region && endpoint == rhs.endpoint;

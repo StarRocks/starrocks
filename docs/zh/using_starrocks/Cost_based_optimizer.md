@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "How to configure StarRocks CBO (Cost-based Optimizer) with statistics collection and histograms to optimize query execution plans."
 sidebar_position: 10
 ---
 
@@ -62,7 +63,7 @@ partition_name: p06
 
 StarRocks 采用等深直方图 (Equi-height Histogram)，即选定若干个 bucket，每个 bucket 中的数据量几乎相等。对于出现频次较高、对选择率（selectivity）影响较大的数值，StarRocks 会分配单独的桶进行存储。桶数量越多时，直方图的估算精度就越高，但是也会增加统计信息的内存使用。您可以根据业务情况调整直方图的桶个数和单个采集任务的 MCV（most common value）个数。
 
-**直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。**
+**直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。对于字符串类型，StarRocks 仅收集 MCV（most common value），不收集直方图桶。**
 
 直方图统计信息存储在 StarRocks 集群 `_statistics_` 数据库的 `histogram_statistics` 表中。查询时会返回类似如下信息：
 
@@ -209,7 +210,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_auto_collect_max_predicate_column_size_on_sample_strategy | INT    | 16       | 自动全量采集任务命中 Sample 策略时，如果表中 Predicate Column 特别多并且超过配置项，则不会转为对 Predicate Column 的全量采集，保持对所有列的抽样采集。当前配置项控制该行为中 Predicate Column 的最大值。 |
 | statistic_auto_collect_predicate_columns_threshold | INT     | 32       | 自动采集时若发现表中的列数超过配置项，则仅会采集 Predicate Column 的列统计信息。 |
 | statistic_predicate_columns_persist_interval_sec   | LONG    | 60       | FE 对 Predicate Column 的同步和持久化间隔周期。 |
-| statistic_predicate_columns_ttl_hours       | LONG    | 24       | Predicate Column 信息在 FE 中缓存淘汰时间。 |
+| statistic_predicate_columns_ttl_hours       | LONG    | 24       | Predicate Column 在 FE 中的 TTL（小时），vacuum 会清理更旧的数据；为负数时关闭 vacuum。 |
 | enable_predicate_columns_collection         | BOOLEAN | TRUE     | 是否启用 Predicate Column 采集。如果禁用，在查询优化期间将不会记录 Predicate Column。 |
 | enable_manual_collect_array_ndv             | BOOLEAN | FALSE        | 是否允许手动采集 ARRAY 类型列的 NDV 信息。 |
 | enable_auto_collect_array_ndv               | BOOLEAN | FALSE        | 是否允许自动采集 ARRAY 类型列的 NDV 信息。 |
@@ -243,7 +244,7 @@ ANALYZE [FULL|SAMPLE] TABLE tbl_name
 - 采集列类型：
   - `col_name`: 要采集统计信息的列，多列使用逗号分隔。如果不指定，表示采集整张表的信息。
   - `ALL COLUMNS`：对所有列进行采集。自 v3.5.0 起支持。
-  - `PREDICATE COLUMNS`：仅对 Predicate Column 进行采集。自 v3.5.0 起支持。
+  - `PREDICATE COLUMNS`：仅对 Predicate Column 进行采集。原生表自 v3.5.0 起支持，可分析的外部表（包括 Hive、Iceberg、Hudi、ODPS、Delta Lake 和 Paimon）自 v4.1.4 起支持。
   - `MULTIPLE COLUMNS`：对指定的多个列进行联合统计信息进行采集。当前多列联合统计信息仅支持手动同步采集。当前手动采集多列联合统计信息的列数不能超过 `statistics_max_multi_column_combined_num`, 默认值为 `10`。自 v3.5.0 起支持。
 
 - `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。
@@ -449,6 +450,12 @@ CREATE ANALYZE FULL ALL db_name PROPERTIES (
 );
 ```
 
+**保留 StarRocks 提供的自动采集任务，但不采集 `db_name.tbl_name` 表**
+
+```sql
+ALTER TABLE db_name.tbl_name SET ("enable_statistic_auto_collect" = "false");
+```
+
 ### 导入数据时采集统计信息
 
 为保证针对数据导入后立即查询产生相对较好的执行计划，StarRocks 会在 INSERT INTO/OVERWRITE 两种 DML 语句执行结束后，触发异步的统计信息采集任务。DML 结束后默认等待 30 秒。如果统计信息采集任务 30 秒没有结束，则返回 DML 执行结果。
@@ -634,7 +641,7 @@ KILL ANALYZE <ID>
 
 ## 采集外表的统计信息
 
-从 3.2 版本起，支持采集 Hive、Iceberg、Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集，不支持抽样采集**。自 v3.3.0 起，支持采集 Delta Lake 表的统计信息，并支持采集 STRUCT 子列的统计信息。自 v3.4.0 起，支持通过查询触发 ANALYZE 任务自动收集统计信息。
+从 3.2 版本起，支持采集 Hive、Iceberg、Hudi 表的统计信息。**采集的语法和内表相同，支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集**。自 v3.3.0 起，支持采集 Delta Lake 表的统计信息，并支持采集 STRUCT 子列的统计信息。自 v3.4.0 起，支持通过查询触发 ANALYZE 任务自动收集统计信息。自 v3.4.0 起，还支持手动抽样采集（`ANALYZE TABLE ... SAMPLE`）。目前 Histogram 仅支持 Hive 外表。
 
 收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
 
@@ -663,7 +670,7 @@ partition_name:
 对外表采集统计信息时，有如下限制：
 
 - 目前只支持采集 Hive、Iceberg、Hudi、Delta Lake（自 v3.3.0 起） 表的统计信息。
-- 目前只支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集、查询触发采集（自 v3.4.0 起），不支持抽样采集。
+- 目前支持手动全量采集、手动直方图采集（自 v3.2.7 起）、自动全量采集、查询触发采集（自 v3.4.0 起）、手动抽样采集（自 v3.4.0 起）。Histogram 仅支持 Hive 外表。
 - 全量自动采集，需要创建一个采集任务，系统不会默认自动采集外部数据源的统计信息。
 - 对于自动采集任务：
   - 只支持采集指定表的统计信息，不支持采集所有数据库、数据库下所有表的统计信息。
@@ -672,7 +679,7 @@ partition_name:
   - 目前只有 Leader FE 节点可以触发收集任务。
   - 仅支持检查 Hive、Iceberg 外表的分区变动，只收集数据发生变动分区的统计信息。对于 Delta Lake/Hudi 外表，系统会收集整表的统计信息。
   - 如果 Iceberg 表启用 Partition Transform，仅支持对于 `identity`、`year`、`month`、`day`、`hour` 类型 Transform 收集统计信息。
-  - 不支持针对 Iceberg 表的 Partition Evolution 收集统计信息。
+  - Iceberg 表 Partition Evolution 统计信息的收集功能在 4.0 及更高版本中已启用。
 
 以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
 

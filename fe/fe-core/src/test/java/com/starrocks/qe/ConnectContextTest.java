@@ -35,6 +35,12 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
+import com.starrocks.authentication.OAuth2AuthenticationProvider;
+import com.starrocks.authentication.OAuth2Context;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.Database;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -43,8 +49,10 @@ import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
@@ -69,6 +77,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.xnio.StreamConnection;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
@@ -125,12 +134,12 @@ public class ConnectContextTest {
 
         // Current db
         Assertions.assertEquals("", ctx.getDatabase());
-        ctx.setDatabase("testCluster:testDb");
-        Assertions.assertEquals("testCluster:testDb", ctx.getDatabase());
+        ctx.setDatabase("testDb");
+        Assertions.assertEquals("testDb", ctx.getDatabase());
 
         // User
-        ctx.setQualifiedUser("testCluster:testUser");
-        Assertions.assertEquals("testCluster:testUser", ctx.getQualifiedUser());
+        ctx.setQualifiedUser("testUser");
+        Assertions.assertEquals("testUser", ctx.getQualifiedUser());
 
         // Serializer
         Assertions.assertNotNull(ctx.getSerializer());
@@ -183,6 +192,23 @@ public class ConnectContextTest {
     }
 
     @Test
+    public void testPreSplitProfileLifecycle() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        Assertions.assertNull(ctx.getPreSplitProfile());
+        PreSplitProfile first = ctx.getOrCreatePreSplitProfile();
+        Assertions.assertSame(first, ctx.getPreSplitProfile());
+        Assertions.assertSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime();
+        Assertions.assertNull(ctx.getPreSplitProfile(), "a new statement must not reuse the previous profile");
+        Assertions.assertNotSame(first, ctx.getOrCreatePreSplitProfile());
+
+        ctx.setStartTime(Instant.EPOCH);
+        Assertions.assertNull(ctx.getPreSplitProfile(), "the test start-time overload must reset the profile too");
+    }
+
+    @Test
     public void testSleepTimeout() {
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
@@ -210,6 +236,40 @@ public class ConnectContextTest {
         ctx.cleanup();
     }
 
+    /**
+     * The handshake of an OAuth2 user on an ordinary MySQL client is answered at once; the login
+     * completes when the browser callback deposits the token. Until then the connection can do
+     * nothing, and it must not be kept for the whole wait_timeout either: the integration's
+     * connect_wait_timeout closes it, the same bound the plugin-aware client's handshake waits for.
+     */
+    @Test
+    public void testAnOAuth2LoginThatNeverCompletesIsClosedAfterConnectWaitTimeout() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_SLEEP);
+        OAuth2Context oauth2 = new OAuth2Context("http://as", "http://ts", "http://rd", "cid", "secret",
+                "jwks.json", "sub", new String[0], new String[0], 7L);
+        ctx.getAccessControlContext().setAuthenticationProvider(new OAuth2AuthenticationProvider(oauth2));
+
+        long now = ctx.getConnectionStartTime() + 7 * 1000 - 1;
+        ctx.checkTimeout(now);
+        Assertions.assertFalse(ctx.isKilled(), "still inside connect_wait_timeout");
+
+        now = ctx.getConnectionStartTime() + 7 * 1000 + 1;
+        ctx.checkTimeout(now);
+        Assertions.assertTrue(ctx.isKilled(), "the token never arrived");
+
+        // A connection whose token did arrive is logged in and lives by wait_timeout alone.
+        ConnectContext loggedIn = new ConnectContext(connection);
+        loggedIn.setCommand(MysqlCommand.COM_SLEEP);
+        loggedIn.getAccessControlContext().setAuthenticationProvider(new OAuth2AuthenticationProvider(oauth2));
+        loggedIn.setAuthToken("id-token");
+        loggedIn.setStartTime();
+        loggedIn.checkTimeout(loggedIn.getConnectionStartTime() + 7 * 1000 + 1);
+        Assertions.assertFalse(loggedIn.isKilled());
+        ctx.cleanup();
+        loggedIn.cleanup();
+    }
+
     @Test
     public void testQueryTimeout() {
         ConnectContext ctx = new ConnectContext(connection);
@@ -235,6 +295,48 @@ public class ConnectContextTest {
         Assertions.assertTrue(ctx.isKilled());
 
         // clean up
+        ctx.cleanup();
+    }
+
+    @Test
+    public void testQueryTimeoutErrorMessageUsesMetadataCollectQueryTimeoutForMetadataContext() {
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setCommand(MysqlCommand.COM_QUERY);
+        ctx.setThreadLocalInfo();
+        // A metadata collection job runs its inner query under a metadata context (see
+        // MetadataCollectJob.buildConnectContext), so the timeout hint must point at metadata_collect_query_timeout.
+        ctx.setMetadataContext(true);
+
+        StmtExecutor executor = new StmtExecutor(ctx, new QueryStatement(ValuesRelation.newDualRelation()));
+        ctx.setExecutor(executor);
+
+        // checkTimeout() builds the hint and passes it to executor.cancel(); capture it into the query state
+        // so we can assert on the message (mirrors testQueryTimeoutErrorMessageUsesTableQueryTimeoutHint).
+        new Expectations(executor) {
+            {
+                executor.cancel(anyString);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void cancel(String cancelledMessage) {
+                        ctx.getState().setError(cancelledMessage);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+
+        long now = ctx.getStartTime() + ctx.getSessionVariable().getQueryTimeoutS() * 1000L + 1;
+        boolean killed = ctx.checkTimeout(now);
+
+        // For query timeouts killConnection is false, so isKilled() stays false; assert the return value instead.
+        Assertions.assertTrue(killed);
+        String errorMsg = ctx.getState().getErrorMessage();
+        Assertions.assertNotNull(errorMsg);
+        Assertions.assertTrue(errorMsg.contains(SessionVariable.METADATA_COLLECT_QUERY_TIMEOUT));
+        // Note: METADATA_COLLECT_QUERY_TIMEOUT itself contains the substring "query_timeout", so quote the
+        // bare query_timeout hint to make sure the message is not the generic query_timeout one.
+        Assertions.assertFalse(errorMsg.contains("'" + SessionVariable.QUERY_TIMEOUT + "'"));
+
         ctx.cleanup();
     }
 
@@ -590,6 +692,50 @@ public class ConnectContextTest {
     }
 
     @Test
+    public void getCurrentComputeResource_reacquiresWhenWarehouseIdMismatch(
+            @Mocked WarehouseManager warehouseManager) {
+        new MockUp<RunMode>() {
+            @Mock
+            boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        // computeResource belongs to warehouse 999, but session warehouse is default (id=0)
+        ComputeResource staleResource = WarehouseComputeResource.of(999L);
+        ComputeResource freshResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
+        new Expectations() {
+            {
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.warehouseExists(anyString);
+                minTimes = 0;
+                result = true;
+
+                warehouseManager.acquireComputeResource(anyLong, (ComputeResource) any);
+                minTimes = 0;
+                result = freshResource;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setCurrentComputeResource(staleResource);
+
+        // getCurrentComputeResource should detect the mismatch and re-acquire
+        ComputeResource result = ctx.getCurrentComputeResource();
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, result.getWarehouseId());
+        ComputeResource currentWithoutAcquire = ctx.getCurrentComputeResourceNoAcquire();
+        Assertions.assertNotNull(currentWithoutAcquire);
+        Assertions.assertEquals(WarehouseManager.DEFAULT_WAREHOUSE_ID, currentWithoutAcquire.getWarehouseId());
+        Assertions.assertNotEquals(staleResource, currentWithoutAcquire);
+    }
+
+    @Test
     public void testConnectContextNoGlobalStateMgrNPE() {
         ConnectContext connectContext = ConnectContext.get();
         if (connectContext == null) {
@@ -695,5 +841,311 @@ public class ConnectContextTest {
 
         // Should not throw exception even if getting CN group name fails
         Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests for changeCatalogDb() journal-replay wait on follower FE
+    // -----------------------------------------------------------------------
+
+    /**
+     * On a follower FE, if the database is not found locally on the first check
+     * (journal not yet replayed), the follower fetches the leader's max journal ID,
+     * waits for local replay, and retries. If the database exists after the wait,
+     * changeCatalogDb() should succeed.
+     */
+    @Test
+    public void testChangeCatalogDb_followerWaitsForJournalAndSucceeds(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(1L, "testdb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // First call (outer condition): null  → enter wait block
+                // Second call (inner condition): mockDb → no error thrown
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                // Simulate a successful journal replay (no-op)
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("testdb"));
+        Assertions.assertEquals("testdb", ctx.getDatabase());
+    }
+
+    /**
+     * On a follower FE, if the database is still missing after journal replay wait
+     * (the database genuinely does not exist), changeCatalogDb() should throw ERR_BAD_DB_ERROR.
+     */
+    @Test
+    public void testChangeCatalogDb_followerThrowsWhenDbStillMissingAfterWait(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db genuinely does not exist
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                journalObservable.waitOn(100L, anyInt);
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+
+    /**
+     * On a follower FE, if fetchLeaderMaxJournalId returns -1 (leader unavailable),
+     * the waitOn call is skipped entirely. The inner db check still runs and throws
+     * ERR_BAD_DB_ERROR if the database is not found.
+     */
+    @Test
+    public void testChangeCatalogDb_followerSkipsWaitWhenLeaderJournalIdNegative(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db not found
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // waitOn must never be called when journalId <= 0
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("missingdb"));
+    }
+
+    /**
+     * On a follower FE, if fetchLeaderMaxJournalId returns -1 but the database
+     * actually exists on the second check (e.g. replayed in the meantime),
+     * changeCatalogDb() should succeed without calling waitOn.
+     */
+    @Test
+    public void testChangeCatalogDb_followerSucceedsWithoutWaitWhenDbAppearsAfterFetchFails(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws Exception {
+        Database mockDb = new Database(2L, "latedb");
+
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return -1L;
+            }
+        };
+
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkAnyActionOnOrInDb(ConnectContext ctx, String catalog, String db)
+                    throws AccessDeniedException {
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // First call: null (enter wait block), second call: found
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                returns(null, mockDb);
+
+                journalObservable.waitOn(anyLong, anyInt);
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertDoesNotThrow(() -> ctx.changeCatalogDb("latedb"));
+        Assertions.assertEquals("latedb", ctx.getDatabase());
+    }
+
+    /**
+     * On the leader FE, changeCatalogDb() should throw immediately without fetching
+     * the leader journal ID or waiting for journal replay.
+     */
+    @Test
+    public void testChangeCatalogDb_leaderDoesNotWaitForJournal(
+            @Mocked MetadataMgr metadataMgr) {
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = true;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // getJournalObservable must never be called on the leader
+                globalStateMgr.getJournalObservable();
+                times = 0;
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("somedb"));
+    }
+
+    /**
+     * On a follower FE, if the journal replay wait times out (DdlException from waitOn),
+     * the exception is swallowed and the inner db check still runs, throwing ERR_BAD_DB_ERROR.
+     */
+    @Test
+    public void testChangeCatalogDb_followerThrowsDbErrorAfterJournalWaitTimeout(
+            @Mocked MetadataMgr metadataMgr,
+            @Mocked JournalObservable journalObservable) throws DdlException {
+        new MockUp<LeaderOpExecutor>() {
+            @Mock
+            public static long fetchLeaderMaxJournalId(ConnectContext ctx) {
+                return 100L;
+            }
+        };
+
+        new Expectations() {
+            {
+                globalStateMgr.isLeader();
+                result = false;
+                minTimes = 0;
+
+                globalStateMgr.getMetadataMgr();
+                result = metadataMgr;
+                minTimes = 0;
+
+                globalStateMgr.getJournalObservable();
+                result = journalObservable;
+                minTimes = 0;
+
+                // Both calls return null: db does not appear even after wait
+                metadataMgr.getDb((ConnectContext) any, anyString, anyString);
+                result = null;
+
+                // Simulate journal replay timeout
+                journalObservable.waitOn(100L, anyInt);
+                result = new DdlException("journal replay timeout");
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext(connection);
+        ctx.setGlobalStateMgr(globalStateMgr);
+
+        // The timeout exception is caught internally; ERR_BAD_DB_ERROR is still thrown
+        Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
+    }
+
+    @Test
+    public void testWarningBufferKeepsFirstEntriesAndStaysBounded() {
+        ConnectContext ctx = new ConnectContext(connection);
+
+        // Recording without an intervening clear stops at the limit, and the entries kept are
+        // the first ones, so the buffer cannot grow for the lifetime of the connection.
+        for (int i = 0; i < 500; i++) {
+            ctx.addWarning(new QueryWarning("Warning", "1265", "warning " + i));
+        }
+
+        List<QueryWarning> warnings = ctx.getWarnings();
+        Assertions.assertEquals(64, warnings.size());
+        Assertions.assertEquals("warning 0", warnings.get(0).getMessage());
+        Assertions.assertEquals("warning 63", warnings.get(63).getMessage());
+
+        // The limit applies to what the buffer holds, not to the connection: the next statement
+        // clears it and records into an empty buffer again.
+        ctx.clearWarnings();
+        ctx.addWarning(QueryWarning.fromErrorState(ctx.getState()));
+        Assertions.assertEquals(1, ctx.getWarnings().size());
+        Assertions.assertEquals("Error", ctx.getWarnings().get(0).getLevel());
     }
 }

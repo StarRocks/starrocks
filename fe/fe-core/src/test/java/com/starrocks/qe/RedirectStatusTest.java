@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
@@ -71,13 +72,13 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -247,6 +248,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -730,6 +732,12 @@ public class RedirectStatusTest {
     }
 
     @Test
+    public void testAdminShowTabletStatusStmt() {
+        AdminShowTabletStatusStmt stmt = new AdminShowTabletStatusStmt(null, null, null, NodePosition.ZERO);
+        Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
     public void testShowResourcesStmt() {
         ShowResourcesStmt stmt = new ShowResourcesStmt();
         ConnectContext connectContext = ConnectContext.build();
@@ -929,13 +937,13 @@ public class RedirectStatusTest {
     }
 
     @Test
-    public void testCreateMaterializedViewStmt() {
-        // CreateMaterializedViewStmt requires: TableName, QueryStatement, Map<String,String>
+    public void testCreateSyncMVStmt() {
+        // CreateSyncMVStmt requires: TableName, QueryStatement, Map<String,String>
         // This test is simplified due to complex constructor
         TableName tableName = new TableName("catalog", "db", "mv");
         SelectRelation selectRelation = new SelectRelation(new SelectList(), null, null, null, null);
         QueryStatement queryStatement = new QueryStatement(selectRelation);
-        CreateMaterializedViewStmt stmt = new CreateMaterializedViewStmt(
+        CreateSyncMVStmt stmt = new CreateSyncMVStmt(
                 new TableRef(QualifiedName.of(Lists.newArrayList(
                         tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
                         null, NodePosition.ZERO), queryStatement,
@@ -1876,8 +1884,18 @@ public class RedirectStatusTest {
 
     @Test
     public void testCreateBaselinePlanStmtCoverage() {
+        // A session baseline only exists in the issuing ConnectContext, so it must not be forwarded: the
+        // leader would build it against a throwaway proxy context and drop it.
         CreateBaselinePlanStmt stmt = new CreateBaselinePlanStmt(false, null, null, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.NO_FORWARD, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testCreateGlobalBaselinePlanStmtCoverage() {
+        // A global baseline is journalled, so running it on a follower can only fail; forward it like every
+        // other baseline DDL.
+        CreateBaselinePlanStmt stmt = new CreateBaselinePlanStmt(true, null, null, NodePosition.ZERO);
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 
     @Test
@@ -1896,6 +1914,12 @@ public class RedirectStatusTest {
     @Test
     public void testCreateGroupProviderStmtCoverage() {
         CreateGroupProviderStmt stmt = new CreateGroupProviderStmt(null, null, null);
+        Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
+    }
+
+    @Test
+    public void testAlterGroupProviderStmtCoverage() {
+        AlterGroupProviderStmt stmt = new AlterGroupProviderStmt(null, null, NodePosition.ZERO);
         Assertions.assertEquals(RedirectStatus.FORWARD_WITH_SYNC, RedirectStatus.getRedirectStatus(stmt));
     }
 

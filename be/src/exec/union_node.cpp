@@ -16,8 +16,11 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/pipeline_builder_operators.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline/set/union_const_source_operator.h"
 #include "exec/pipeline/set/union_passthrough_operator.h"
@@ -261,8 +264,6 @@ Status UnionNode::_get_next_const(RuntimeState* state, ChunkPtr* chunk) {
 }
 
 void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chunk) {
-    const auto& tuple_descs = child(_child_idx)->row_desc().tuple_descriptors();
-
     if (!_pass_through_slot_maps.empty()) {
         for (auto* dest_slot : _tuple_desc->slots()) {
             auto slot_item = _pass_through_slot_maps[_child_idx][dest_slot->id()];
@@ -276,15 +277,7 @@ void UnionNode::_move_passthrough_chunk(ChunkPtr& src_chunk, ChunkPtr& dest_chun
             }
         }
     } else {
-        // For backward compatibility
-        // TODO(kks): when StarRocks 2.0 release, we could remove this branch.
-        size_t index = 0;
-        // When pass through, the child tuple size must be 1;
-        for (auto* src_slot : tuple_descs[0]->slots()) {
-            auto* dest_slot = _tuple_desc->slots()[index++];
-            ColumnPtr& column = src_chunk->get_column_by_slot_id(src_slot->id());
-            _move_column(dest_chunk, column, dest_slot, src_chunk->num_rows());
-        }
+        DCHECK(false) << "unreachable path";
     }
 }
 
@@ -343,7 +336,7 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
             dest_chunk->append_column(std::move(new_column), dest_slot->id());
         } else {
             if (dest_slot->is_nullable()) {
-                auto nullable_column = NullableColumn::create(std::move(src_column), NullColumn::create(row_count, 0));
+                auto nullable_column = NullableColumn::create(src_column, NullColumn::create(row_count, 0));
                 dest_chunk->append_column(std::move(nullable_column), dest_slot->id());
             } else {
                 dest_chunk->append_column(std::move(src_column), dest_slot->id());
@@ -352,7 +345,7 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
     }
 }
 
-pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> UnionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     std::vector<OpFactories> operators_list;
@@ -363,12 +356,12 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
     size_t i = 0;
     // UnionPassthroughOperator is used for the passthrough sub-node.
     for (; i < _first_materialized_child_idx; i++) {
-        auto child_ops = child(i)->decompose_to_pipeline(context);
+        ASSIGN_OR_RETURN(auto child_ops, child(i)->decompose_to_pipeline(context));
         if (!_local_partition_by_exprs.empty()) {
-            child_ops = context->maybe_interpolate_local_bucket_shuffle_exchange(
-                    context->runtime_state(), _id, child_ops, _local_partition_by_exprs[i]);
+            child_ops = ::starrocks::pipeline::builder::maybe_interpolate_local_bucket_shuffle_exchange(
+                    context, context->runtime_state(), _id, child_ops, _local_partition_by_exprs[i]);
         } else {
-            child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+            child_ops = ::starrocks::pipeline::builder::maybe_interpolate_grouped_exchange(context, _id, child_ops);
         }
         operators_list.emplace_back(child_ops);
 
@@ -381,22 +374,22 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
                 context->fragment_context()->runtime_state()->desc_tbl().get_tuple_descriptor(_tuple_id);
         const auto& dst_slots = dst_tuple_desc->slots();
 
-        // When pass through, the child tuple size must be 1;
-        const auto& tuple_descs = child(i)->row_desc().tuple_descriptors();
-        const auto& src_slots = tuple_descs[0]->slots();
+        auto src_slots_view = child(i)->record_desc().slots();
+        std::vector<SlotDescriptor*> src_slots(src_slots_view.begin(), src_slots_view.end());
 
         auto union_passthrough_op = std::make_shared<UnionPassthroughOperatorFactory>(
-                context->next_operator_id(), id(), dst2src_slot_map, dst_slots, src_slots);
+                context->next_operator_id(), id(), dst2src_slot_map, dst_slots, std::move(src_slots));
         operators_list[i].emplace_back(std::move(union_passthrough_op));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, operators_list[i].back().get(), context,
+                                                   rc_rf_probe_collector);
     }
 
     // ProjectOperatorFactory is used for the materialized sub-node.
     for (; i < _children.size(); i++) {
-        auto child_ops = child(i)->decompose_to_pipeline(context);
+        ASSIGN_OR_RETURN(auto child_ops, child(i)->decompose_to_pipeline(context));
         std::vector<ExprContext*> partition_by_exprs;
-        child_ops = context->maybe_interpolate_grouped_exchange(_id, child_ops);
+        child_ops = ::starrocks::pipeline::builder::maybe_interpolate_grouped_exchange(context, _id, child_ops);
         operators_list.emplace_back(child_ops);
 
         const auto& dst_tuple_desc =
@@ -417,7 +410,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
                 std::move(dst_column_is_nullables), std::vector<int32_t>(), std::vector<ExprContext*>());
         operators_list[i].emplace_back(std::move(project_op));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, operators_list[i].back().get(), context,
+                                                   rc_rf_probe_collector);
     }
 
     // UnionConstSourceOperatorFactory is used for the const sub exprs.
@@ -440,7 +434,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
 
         operators_list[i].emplace_back(std::move(union_const_source_op));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, operators_list[i].back().get(), context,
+                                                   rc_rf_probe_collector);
     }
 
     if (limit() != -1) {
@@ -450,8 +445,8 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         }
     }
 
-    auto final_operators =
-            context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list, _pass_through_type);
+    auto final_operators = ::starrocks::pipeline::builder::maybe_gather_pipelines_to_one(
+            context, runtime_state(), id(), operators_list, _pass_through_type);
 
     if (limit() != -1) {
         final_operators.emplace_back(

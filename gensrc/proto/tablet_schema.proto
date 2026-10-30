@@ -78,6 +78,11 @@ message ColumnPB {
     optional bool is_auto_increment = 18;
     // agg_state type
     optional AggStateDescPB agg_state_desc = 19;
+    // column-level compression dictionary (a ZSTD dictionary). Unset (default false) for every
+    // non-compression dict column so schemas serialize byte-identically.
+    optional bool use_zstd_compression = 20 [default = false];
+    // Data page size for this column, in bytes. Unset / 0 keeps the BE default.
+    optional int32 zstd_compression_page_size = 21 [default = 0];
 }
 
 message TabletSchemaPB {
@@ -97,6 +102,13 @@ message TabletSchemaPB {
     repeated TabletIndexPB table_indices = 14;
     optional int32 compression_level = 15 [default=-1];
     optional PrimaryKeyEncodingTypePB primary_key_encoding_type = 16;
+    // Indexes that were removed from `table_indices` but whose payload may
+    // still be embedded in existing segment footers (e.g. a legacy NGRAMBF
+    // written before the lake IDG fast path existed). Readers consult this
+    // list to avoid reinterpreting the stale footer payload after a
+    // metadata-only DROP INDEX. Compaction that rewrites the segment
+    // eventually obsoletes the entry.
+    repeated TabletIndexPB dropped_table_indices = 17;
     optional int64 id = 50;
 }
 

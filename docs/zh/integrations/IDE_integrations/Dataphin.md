@@ -1,5 +1,7 @@
 ---
+sidebar_position: 20
 displayed_sidebar: docs
+description: "Dataphin 与 StarRocks 集成用于数据采集、转换、存储和分析的全生命周期管理。"
 ---
 
 # Dataphin

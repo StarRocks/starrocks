@@ -17,15 +17,30 @@ package com.starrocks.sql.ast;
 public class IcebergRewriteStmt extends InsertStmt {
 
     private final boolean rewriteAll;
+    private final boolean writeRowLineage;
+    private final boolean hasPartitionFilter;
 
-    public IcebergRewriteStmt(InsertStmt base, boolean rewriteAll) {
-        super(base.getTableRef(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(), 
+    public IcebergRewriteStmt(InsertStmt base, boolean rewriteAll, boolean writeRowLineage,
+                              boolean hasPartitionFilter) {
+        super(base.getTableRef(), base.getTargetPartitionNames(), base.getLabel(), base.getTargetColumnNames(),
                 base.getQueryStatement(), base.isOverwrite(), base.getProperties(), base.getPos());
         super.setOrigStmt(base.getOrigStmt());
         this.rewriteAll = rewriteAll;
+        this.writeRowLineage = writeRowLineage;
+        this.hasPartitionFilter = hasPartitionFilter;
     }
 
     public boolean rewriteAll() {
         return rewriteAll;
+    }
+
+    // True when the rewrite was scoped by a WHERE clause. Such a rewrite covers only the files that survived
+    // pruning, so equality deletes it applied may still apply to data files left untouched.
+    public boolean hasPartitionFilter() {
+        return hasPartitionFilter;
+    }
+
+    public boolean writeRowLineage() {
+        return writeRowLineage;
     }
 }

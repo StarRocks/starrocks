@@ -20,7 +20,7 @@
 
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "io/formatted_output_stream_string.h"
+#include "formats/io/formatted_output_stream_string.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
@@ -65,11 +65,7 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary_fallback) {
     EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlq.", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), " ZWZnaGlqX2s= ?", Converter::Options()));
 
-    EXPECT_EQ(4, col->size());
-    EXPECT_EQ(Slice("YWJjZA==."), col->get(0).get_slice());
-    EXPECT_EQ(Slice("YQ== !"), col->get(1).get_slice());
-    EXPECT_EQ(Slice(" ZWZnaGlq."), col->get(2).get_slice());
-    EXPECT_EQ(Slice(" ZWZnaGlqX2s= ?"), col->get(3).get_slice());
+    EXPECT_EQ("['YWJjZA==.', 'YQ== !', ' ZWZnaGlq.', ' ZWZnaGlqX2s= ?']", col->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -102,7 +98,7 @@ TEST_F(VarBinaryConverterTest, test_write_string) {
     auto col = ColumnHelper::create_column(_type, false);
     (void)col->append_strings(std::vector<Slice>{"aaaaaaaaaaaa", "bbbbbbbb", "", "ccccc"});
 
-    io::FormattedOutputStreamString buff;
+    formats::FormattedOutputStreamString buff;
     EXPECT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_string(&buff, *col, 2, Converter::Options()).ok());
@@ -110,7 +106,7 @@ TEST_F(VarBinaryConverterTest, test_write_string) {
     EXPECT_TRUE(buff.finalize().ok());
     EXPECT_EQ("YWFhYWFhYWFhYWFhYmJiYmJiYmI=Y2NjY2M=", buff.as_string());
 
-    io::FormattedOutputStreamString buff2;
+    formats::FormattedOutputStreamString buff2;
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 0, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 1, Converter::Options()).ok());
     EXPECT_TRUE(conv->write_quoted_string(&buff2, *col, 2, Converter::Options()).ok());

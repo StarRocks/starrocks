@@ -16,7 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <future>
 #include <iomanip>
+#include <numeric>
+#include <set>
+#include <thread>
 #include <utility>
 
 #include "base/testutil/assert.h"
@@ -24,18 +31,36 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
+#include "exec/pipeline/scan/morsel.h"
+#include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/metacache.h"
+#include "storage/lake/rowset.h"
+#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
-#include "storage/rowset/common.h"
+#include "storage/query/split_scan_morsel.h"
 #include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/rowset_options.h"
+#include "storage/rowset/segment_options.h"
+#include "storage/rowset/short_key_range_option.h"
+#include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/rowid_types.h"
 #include "test_util.h"
 
 namespace starrocks::lake {
@@ -114,11 +139,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -144,7 +168,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -168,6 +192,101 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
 
     reader->close();
+}
+
+// Regression test for issue #75203: a transient object-storage failure while a physical-split scan
+// lazily loads a lake rowset's segments used to leave PhysicalSplitMorselQueue's range iterator
+// uninitialized; a successful retry inside the same loop then dereferenced a null _range in
+// SparseRangeIterator::has_more() -> SIGSEGV @0x0.
+//
+// We reproduce the exact non-idempotency window with a SyncPoint that fails the FIRST segment-load
+// attempt and succeeds afterward, then drive PhysicalSplitMorselQueue::try_get(). With the fix
+// (Rowset::get_segments_checked() primed in _init_segment), the failure surfaces as its real,
+// retryable Status instead of crashing, and repeated try_get() calls stay crash-free.
+TEST_F(LakeDuplicateTabletReaderTest, test_issue_75203_physical_split_transient_segment_load) {
+    // 1. Write one rowset with one segment that has rows.
+    std::vector<int> k{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::vector<int> v{10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k.data(), k.size() * sizeof(int));
+    c1->append_numbers(v.data(), v.size() * sizeof(int));
+    Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk));
+        ASSERT_OK(writer->finish());
+        auto* rowset_meta = _tablet_metadata->add_rowsets();
+        rowset_meta->set_overlapped(false);
+        rowset_meta->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* seg = rowset_meta->add_segment_metas();
+            seg->set_filename(file.path);
+            seg->set_size(file.size.value());
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // 2. Enable parallel segment load so the injectable sync point fires.
+    auto old_parallel = config::enable_load_segment_parallel;
+    config::enable_load_segment_parallel = true;
+    DeferOp restore_cfg([&]() { config::enable_load_segment_parallel = old_parallel; });
+
+    // 3. Fail the FIRST segment-load attempt, succeed after: the #75203 non-idempotency window.
+    std::atomic<int> load_calls{0};
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void* arg) {
+        if (load_calls.fetch_add(1) == 0) {
+            *reinterpret_cast<Status*>(arg) = Status::IOError("injected transient segment load failure (#75203)");
+        }
+    });
+    DeferOp clear_sp([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::load_segments::parallel_load");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // 4. Fresh lake rowsets (empty _segments, so the first checked load actually hits object storage).
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), _tablet_metadata);
+    ASSERT_FALSE(rowsets.empty());
+
+    // 5. Build a PhysicalSplitMorselQueue over the tablet + rowset (physical split; small
+    //    splitted_scan_rows forces the split walk).
+    TScanRange scan_range;
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.tablet_id = _tablet_metadata->id();
+    internal_scan_range.version = "2";
+    internal_scan_range.partition_id = 1;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    pipeline::Morsels morsels;
+    morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(1, scan_range));
+    pipeline::PhysicalSplitMorselQueue queue(std::move(morsels), 1, 1);
+
+    auto lake_tablet = std::make_shared<Tablet>(_tablet_mgr.get(), _tablet_metadata->id());
+    std::vector<BaseTabletSharedPtr> tablets{lake_tablet};
+    queue.set_tablets(tablets);
+
+    std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+    tablet_rowsets.push_back({rowsets[0]});
+    queue.set_tablet_rowsets(tablet_rowsets);
+    queue.set_tablet_schema(_tablet_schema);
+
+    // 6. Without the fix this crashes (@0x0) in has_more(); with the fix the transient failure
+    //    surfaces as its real Status from try_get(), no crash.
+    auto result = queue.try_get();
+    ASSERT_FALSE(result.ok());
+    EXPECT_NE(result.status().to_string().find("injected"), std::string::npos) << result.status().to_string();
+
+    // The crash repetition ends: a second call also does not crash (queue is exhausted).
+    auto again = queue.try_get();
+    ASSERT_TRUE(again.ok());
+    ASSERT_EQ(again.value(), nullptr);
 }
 
 class LakeAggregateTabletReaderTest : public TestBase {
@@ -241,11 +360,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -270,11 +388,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(false);
         rowset->set_id(2);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -290,7 +407,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
     for (int i = 0, sz = k0.size(); i < sz; i++) {
@@ -378,11 +495,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -451,7 +567,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -531,11 +647,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -566,7 +681,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(1, read_chunk_ptr->num_rows());
     EXPECT_EQ(10, read_chunk_ptr->get(0)[0].get_int32());
@@ -605,6 +720,41 @@ public:
     }
 
 protected:
+    void write_two_rowsets_with_three_segments() {
+        std::vector<int> keys{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+        std::vector<int> vals{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44};
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+        VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+        for (int rowset_index = 0; rowset_index < 2; ++rowset_index) {
+            const int num_segments = 2 - rowset_index;
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+            ASSERT_OK(writer->open());
+            for (int segment_index = 0; segment_index < num_segments; ++segment_index) {
+                ASSERT_OK(writer->write(chunk));
+                ASSERT_OK(writer->finish());
+            }
+            ASSERT_EQ(num_segments, writer->segments().size());
+
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(num_segments > 1);
+            rowset->set_id(rowset_index + 1);
+            rowset->set_num_rows(num_segments * chunk.num_rows());
+            for (const auto& file : writer->segments()) {
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(file.path);
+                segment_meta->set_size(file.size.value());
+            }
+            writer->close();
+        }
+        _tablet_metadata->set_version(3);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
     constexpr static const char* const kTestDirectory = "test_tablet_reader_split";
 
     std::shared_ptr<TabletMetadata> _tablet_metadata;
@@ -659,11 +809,10 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -689,11 +838,10 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         rowset->set_overlapped(false);
         rowset->set_id(2);
         rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -747,7 +895,7 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
         ASSERT_OK(reader->prepare());
         ASSERT_OK(reader->open(params));
 
-        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
         ASSERT_EQ(20, read_chunk_ptr->num_rows());
@@ -857,11 +1005,10 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
 
         writer->close();
@@ -878,7 +1025,7 @@ TEST_F(DISABLED_LakeLoadSegmentParallelTest, test_normal) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     for (int j = 0; j < 2; ++j) {
         read_chunk_ptr->reset();
         ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
@@ -969,11 +1116,10 @@ void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -997,7 +1143,7 @@ void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     ASSERT_OK(reader->get_next(read_chunk_ptr.get()));
     ASSERT_EQ(segment_rows, read_chunk_ptr->num_rows());
@@ -1046,11 +1192,10 @@ StatusOr<std::pair<size_t, size_t>> LakeDuplicateTablet10kColumnReaderTest::test
         auto* rowset = _tablet_metadata->add_rowsets();
         rowset->set_overlapped(true);
         rowset->set_id(1);
-        auto* segs = rowset->mutable_segments();
-        auto* segs_size = rowset->mutable_segment_size();
         for (const auto& file : writer->segments()) {
-            segs->Add()->assign(file.path);
-            segs_size->Add(file.size.value());
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
         }
         writer->close();
     }
@@ -1072,7 +1217,7 @@ StatusOr<std::pair<size_t, size_t>> LakeDuplicateTablet10kColumnReaderTest::test
     TabletReaderParams params;
     RETURN_IF_ERROR(reader->open(params));
 
-    auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
     read_chunk_ptr->reset();
     RETURN_IF_ERROR(reader->get_next(read_chunk_ptr.get()));
     EXPECT_EQ(segment_rows, read_chunk_ptr->num_rows());
@@ -1129,4 +1274,1395 @@ TEST_F(LakeDuplicateTablet10kColumnReaderTest, DISABLED_test_bench_5kcolumn_init
                  << "ns. Perf diff times: " << std::setprecision(3) << (double)total_time_ns_false / total_time_ns_true
                  << "x";
 }
+
+// Test case for issue: PhysicalSplitMorselQueue crashes when tablet has no rowsets
+// This test verifies that TabletReader::open correctly handles empty rowsets
+// when need_split is true, preventing SIGSEGV in PhysicalSplitMorselQueue::_cur_rowset
+TEST_F(LakeDuplicateTabletReaderTest, test_read_empty_tablet_with_split) {
+    // Create a tablet metadata without any rowsets (empty tablet)
+    // Do not add any rowsets to _tablet_metadata
+
+    // write tablet metadata (version 2, but no rowsets)
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    // test reader with need_split = true
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+    ASSERT_OK(reader->prepare());
+
+    TabletReaderParams params;
+    params.splitted_scan_rows = 16384; // Set a non-zero value
+    // This should not crash even with need_split=true and empty rowsets
+    ASSERT_OK(reader->open(params));
+
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
+    read_chunk_ptr->reset();
+    // Should return end of file immediately for empty tablet
+    ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+
+    reader->close();
+}
+
+// Verify that DeferOp in get_segment_iterators waits for all parallel tasks
+// before returning on error, preventing use-after-free of captured references.
+TEST_F(LakeDuplicateTabletReaderTest, test_parallel_read_error_waits_all_futures) {
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+    std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
+    std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+    c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+    // Write rowset 1
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        writer->close();
+    }
+
+    // Write rowset 2
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->write(chunk1));
+        ASSERT_OK(writer->finish());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(2);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        writer->close();
+    }
+
+    _tablet_metadata->set_version(3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+
+    std::atomic<int> total_hits{0};
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->ClearTrace();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // First call injects error; subsequent calls succeed normally.
+    // total_hits >= 2 proves DeferOp waited for all tasks before returning.
+    SyncPoint::GetInstance()->SetCallBack("TabletReader::get_segment_iterators::parallel_read", [&](void* arg) {
+        if (total_hits.fetch_add(1) == 0) {
+            *static_cast<Status*>(arg) = Status::IOError("injected");
+        }
+    });
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    TabletReaderParams params;
+    auto st = reader->open(params);
+    ASSERT_FALSE(st.ok());
+    ASSERT_GE(total_hits.load(), 2);
+    // The injected error precedes rowset->read(), so only the other task reads a segment.
+    // Its successful read must still be included after the error path waits for it.
+    EXPECT_EQ(2, reader->stats().rowsets_read_count);
+    EXPECT_EQ(1, reader->stats().segments_read_count);
+    EXPECT_EQ(1, reader->stats().phy_segments_count);
+}
+
+// Regression: TabletReaderParams::has_predicate_above_iterator must reach SegmentReadOptions
+// through the lake reader path (TabletReader::get_segment_iterators builds RowsetReadOptions,
+// Rowset::read builds SegmentReadOptions). Before the fix, lake/tablet_reader.cpp dropped the
+// flag when copying params into RowsetReadOptions, so the whole chain delivered the default
+// (false) to SegmentIterator and could not apply the configured top-k underfill fallback policy.
+TEST_F(LakeDuplicateTabletReaderTest, test_propagate_has_predicate_above_iterator) {
+    std::vector<int> k0{1, 2, 3, 4, 5};
+    std::vector<int> v0{2, 4, 6, 8, 10};
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_id(1);
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    bool seen = false;
+    bool propagated = false;
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("Rowset::read::seg_options", [&](void* arg) {
+        auto* seg_options = static_cast<SegmentReadOptions*>(arg);
+        seen = true;
+        propagated = seg_options->has_predicate_above_iterator;
+    });
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("Rowset::read::seg_options");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    TabletReaderParams params;
+    params.has_predicate_above_iterator = true;
+    ASSERT_OK(reader->open(params));
+
+    auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
+    (void)reader->get_next(read_chunk_ptr.get());
+    reader->close();
+
+    ASSERT_TRUE(seen);
+    EXPECT_TRUE(propagated);
+}
+
+// Drives the lake prepared-physical-split SEED path: with enable_prepared_physical_split_scan set,
+// TabletReader::open runs build_prepared_tablet_read_state -> build_initial_coarse_split_tasks, and
+// get_split_tasks returns INITIAL_COARSE seed tasks carrying the shared prepared read state -- rather
+// than the force-split PhysicalSplitMorselQueue path taken when the flag is off.
+TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_seed) {
+    std::vector<int> keys{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> vals{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44};
+    auto make_chunk = [&]() {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
+    };
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        // Several segments so the tablet has well above splitted_scan_rows * lake_tablet_rows_splitted_ratio
+        // rows and the split heuristic allows splitting.
+        for (int i = 0; i < 4; i++) {
+            auto chunk = make_chunk();
+            ASSERT_OK(writer->write(chunk));
+            ASSERT_OK(writer->finish());
+        }
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        rowset->set_num_rows(4 * keys.size());
+        for (const auto& file : writer->segments()) {
+            auto* segment_meta = rowset->add_segment_metas();
+            segment_meta->set_filename(file.path);
+            segment_meta->set_size(file.size.value());
+        }
+        writer->close();
+    }
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, /*need_split=*/true,
+                                                 /*could_split_physically=*/true);
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+    auto params = generate_tablet_reader_params(&scan_range);
+    params.enable_prepared_physical_split_scan = true; // take the prepared-split seed path
+
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+
+    // Profile counters: the seed builds prepared state for the single rowset. The per-segment prune
+    // counters (lake_prepared_segments / scan_rows) are bumped later when a child refines, not on the
+    // seed -- see the end-to-end test -- so they stay 0 here.
+    EXPECT_EQ(1, reader->stats().lake_prepared_rowsets);
+    EXPECT_EQ(0, reader->stats().lake_prepared_segments);
+
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    reader->get_split_tasks(&split_tasks);
+    ASSERT_GT(split_tasks.size(), 0);
+
+    for (auto& task : split_tasks) {
+        auto* ctx = dynamic_cast<pipeline::LakeSplitContext*>(task.get());
+        ASSERT_NE(nullptr, ctx) << "prepared-split seed must produce LakeSplitContext tasks";
+        EXPECT_EQ(pipeline::LakeSplitContext::RowidRangeSource::INITIAL_COARSE, ctx->rowid_range_source);
+        EXPECT_NE(nullptr, ctx->prepared_tablet_read_state)
+                << "seed task must carry the shared prepared tablet read state";
+    }
+    reader->close();
+}
+
+// A cancelled query stops opening the tablet: a scan over many segments returns Status::Cancelled
+// right after the segment being loaded when the cancel arrives, on every open path a query takes.
+class LakeTabletReaderCancelTest : public TestBase {
+public:
+    LakeTabletReaderCancelTest() : TestBase(kTestDirectory) {
+        _tablet_metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+protected:
+    void SetUp() override {
+        clear_and_init_test_dir();
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        // Rowset 1 holds two segments, rowset 2 one; 22 rows each.
+        std::vector<int> keys(22);
+        std::iota(keys.begin(), keys.end(), 1);
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(keys.data(), keys.size() * sizeof(int));
+        Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+        VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+        for (int rowset_index = 0; rowset_index < 2; ++rowset_index) {
+            const int num_segments = 2 - rowset_index;
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+            ASSERT_OK(writer->open());
+            for (int segment_index = 0; segment_index < num_segments; ++segment_index) {
+                ASSERT_OK(writer->write(chunk));
+                ASSERT_OK(writer->finish());
+            }
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(num_segments > 1);
+            rowset->set_id(rowset_index + 1);
+            rowset->set_num_rows(num_segments * chunk.num_rows());
+            for (const auto& file : writer->segments()) {
+                auto* segment_meta = rowset->add_segment_metas();
+                segment_meta->set_filename(file.path);
+                segment_meta->set_size(file.size.value());
+            }
+            writer->close();
+        }
+        _tablet_metadata->set_version(2);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        _internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+        _internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+        _scan_range.__set_internal_scan_range(_internal_scan_range);
+        SyncPoint::GetInstance()->EnableProcessing();
+    }
+
+    void TearDown() override {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+        remove_test_dir_ignore_error();
+    }
+
+    // Cancels |_state| once the |n|-th segment has been loaded serially.
+    void cancel_after_serial_loads(int n) {
+        SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::serial_loaded", [this, n](void*) {
+            if (++_loaded == n) {
+                _state.set_is_cancelled(true);
+            }
+        });
+    }
+
+    Status open(bool need_split, bool prepared_split) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, need_split,
+                                                     /*could_split_physically=*/need_split);
+        TabletReaderParams params;
+        params.splitted_scan_rows = 4;
+        params.scan_dop = 4;
+        params.plan_node_id = 1;
+        params.scan_range = &_scan_range;
+        params.runtime_state = &_state;
+        params.enable_prepared_physical_split_scan = prepared_split;
+        RETURN_IF_ERROR(reader->prepare());
+        auto st = reader->open(params);
+        reader->close();
+        return st;
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_tablet_reader_cancel";
+
+    std::shared_ptr<TabletMetadata> _tablet_metadata;
+    std::shared_ptr<TabletSchema> _tablet_schema;
+    std::shared_ptr<Schema> _schema;
+    TInternalScanRange _internal_scan_range;
+    TScanRange _scan_range;
+    RuntimeState _state;
+    int _loaded = 0;
+};
+
+TEST_F(LakeTabletReaderCancelTest, test_open_not_cancelled) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    ASSERT_OK(open(false, false));
+    ASSERT_OK(open(true, false));
+    ASSERT_OK(open(true, true));
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_open_already_cancelled) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(-1);
+    _state.set_is_cancelled(true);
+    for (auto [need_split, prepared] : {std::pair{false, false}, {true, false}, {true, true}}) {
+        auto st = open(need_split, prepared);
+        ASSERT_TRUE(st.is_cancelled()) << st;
+    }
+    ASSERT_EQ(0, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_open_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(1);
+    auto st = open(false, false);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    // Rowset 1 has two segments: the second one is not loaded, nor is rowset 2.
+    ASSERT_EQ(1, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_prepared_split_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(1);
+    auto st = open(true, true);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_EQ(1, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_physical_split_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, false);
+    cancel_after_serial_loads(1);
+    auto st = open(true, false);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    // The morsel queue loads a whole rowset per split, so the split loop stops before rowset 2.
+    ASSERT_EQ(2, _loaded);
+}
+
+TEST_F(LakeTabletReaderCancelTest, test_parallel_open_cancelled_while_loading_segments) {
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+    std::atomic<int> started{0};
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void*) {
+        started.fetch_add(1);
+        _state.set_is_cancelled(true);
+    });
+    auto st = open(false, false);
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_GE(started.load(), 1);
+    ASSERT_LE(started.load(), 3);
+}
+
+// subtract_sparse_ranges is the core range math behind the REFINED coverage set
+// (pruned - already-allocated-coarse). Exercise each branch: empty / exact-cover / superset-cover /
+// left-cut / right-cut / hole / disjoint / rhs-spanning-two-lhs / multiple-cuts.
+TEST(SubtractSparseRangesTest, CoversAllBranches) {
+    auto mk = [](std::initializer_list<std::pair<rowid_t, rowid_t>> parts) {
+        SparseRange<> r;
+        for (const auto& p : parts) {
+            r.add(Range<>(p.first, p.second));
+        }
+        return r;
+    };
+    auto to_vec = [](const SparseRange<>& r) {
+        std::vector<std::pair<rowid_t, rowid_t>> v;
+        for (size_t i = 0; i < r.size(); ++i) {
+            v.emplace_back(r[i].begin(), r[i].end());
+        }
+        return v;
+    };
+    using V = std::vector<std::pair<rowid_t, rowid_t>>;
+
+    EXPECT_EQ((V{{0, 10}}), to_vec(subtract_sparse_ranges(mk({{0, 10}}), mk({}))));               // rhs empty
+    EXPECT_TRUE(to_vec(subtract_sparse_ranges(mk({{0, 10}}), mk({{0, 10}}))).empty());            // exact cover
+    EXPECT_TRUE(to_vec(subtract_sparse_ranges(mk({{2, 8}}), mk({{0, 10}}))).empty());             // superset cover
+    EXPECT_EQ((V{{5, 10}}), to_vec(subtract_sparse_ranges(mk({{0, 10}}), mk({{0, 5}}))));         // left cut
+    EXPECT_EQ((V{{0, 5}}), to_vec(subtract_sparse_ranges(mk({{0, 10}}), mk({{5, 10}}))));         // right cut
+    EXPECT_EQ((V{{0, 3}, {7, 10}}), to_vec(subtract_sparse_ranges(mk({{0, 10}}), mk({{3, 7}})))); // hole in the middle
+    EXPECT_EQ((V{{0, 10}}), to_vec(subtract_sparse_ranges(mk({{0, 10}}), mk({{20, 30}}))));       // disjoint
+    EXPECT_EQ((V{{0, 2}, {18, 20}}),
+              to_vec(subtract_sparse_ranges(mk({{0, 5}, {15, 20}}), mk({{2, 18}})))); // rhs spans 2 lhs ranges
+    EXPECT_EQ((V{{0, 2}, {4, 6}, {8, 10}}),
+              to_vec(subtract_sparse_ranges(mk({{0, 10}}), mk({{2, 4}, {6, 8}})))); // multiple cuts in one lhs
+}
+
+// PreparedSegmentReadState is the cross-child shared cache. Verify the publish / clear / disable
+// truth table for both caches, and that the disabled flag is sticky: once a runtime-filter arrival
+// disables the cache, a later re-publish must NOT silently re-enable it.
+TEST(PreparedReadStateCacheTest, CacheStateMachine) {
+    PreparedSegmentReadState s;
+    EXPECT_FALSE(s.has_pruned_scan_range());
+    EXPECT_FALSE(s.has_rowid_bounds_cache());
+
+    // publish -> visible; clear -> hidden; re-publish after clear -> visible again.
+    s.publish_pruned_scan_range(std::make_shared<SparseRange<>>(0, 10));
+    EXPECT_TRUE(s.has_pruned_scan_range());
+    s.clear_pruned_scan_range();
+    EXPECT_FALSE(s.has_pruned_scan_range());
+    s.publish_pruned_scan_range(std::make_shared<SparseRange<>>(0, 5));
+    EXPECT_TRUE(s.has_pruned_scan_range());
+
+    std::vector<std::optional<Range<rowid_t>>> bounds{Range<rowid_t>(0, 5)};
+    s.publish_rowid_bounds_cache(std::move(bounds), Range<rowid_t>(0, 5));
+    EXPECT_TRUE(s.has_rowid_bounds_cache());
+
+    // disable_runtime_filter_dependent_cache disables BOTH caches and stays disabled after re-publish.
+    s.disable_runtime_filter_dependent_cache();
+    EXPECT_FALSE(s.has_pruned_scan_range());
+    EXPECT_FALSE(s.has_rowid_bounds_cache());
+    s.publish_pruned_scan_range(std::make_shared<SparseRange<>>(0, 3));
+    EXPECT_FALSE(s.has_pruned_scan_range()) << "disabled cache must stay disabled after re-publish";
+}
+
+// Build a 1-rowset, 4-segment DUP_KEYS tablet (22 rows/segment) on |tablet|; returns rows/segment.
+static int build_split_test_tablet(VersionedTablet& tablet, const std::shared_ptr<Schema>& schema,
+                                   const std::shared_ptr<TabletMetadata>& metadata, const std::vector<int>& keys,
+                                   const std::vector<int>& vals) {
+    auto make_chunk = [&]() {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+        c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+        return Chunk({std::move(c0), std::move(c1)}, schema);
+    };
+    int64_t txn_id = next_id();
+    auto writer_or = tablet.new_writer(kHorizontal, txn_id);
+    CHECK(writer_or.ok());
+    auto writer = std::move(writer_or.value());
+    CHECK_OK(writer->open());
+    for (int i = 0; i < 4; i++) {
+        auto chunk = make_chunk();
+        CHECK_OK(writer->write(chunk));
+        CHECK_OK(writer->finish());
+    }
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_overlapped(true);
+    rowset->set_id(1);
+    rowset->set_num_rows(4 * keys.size());
+    for (const auto& file : writer->segments()) {
+        auto* segment_meta = rowset->add_segment_metas();
+        segment_meta->set_filename(file.path);
+        segment_meta->set_size(file.size.value());
+    }
+    writer->close();
+    return static_cast<int>(keys.size());
+}
+
+// Gate OFF (default): the seed reader must NOT take the prepared-split path -- it falls back to the
+// regular PhysicalSplitMorselQueue, so every split task is a REGULAR one with no prepared state.
+TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_gate_off) {
+    std::vector<int> keys{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> vals{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44};
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    build_split_test_tablet(tablet, _schema, _tablet_metadata, keys, vals);
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+    auto params = generate_tablet_reader_params(&scan_range);
+    // enable_prepared_physical_split_scan left at its default (false).
+
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    reader->get_split_tasks(&split_tasks);
+    ASSERT_GT(split_tasks.size(), 0);
+    for (auto& task : split_tasks) {
+        auto* ctx = dynamic_cast<pipeline::LakeSplitContext*>(task.get());
+        ASSERT_NE(nullptr, ctx);
+        EXPECT_EQ(pipeline::LakeSplitContext::RowidRangeSource::REGULAR, ctx->rowid_range_source);
+        EXPECT_EQ(nullptr, ctx->prepared_tablet_read_state) << "gate off must not build prepared state";
+        EXPECT_FALSE(ctx->is_prepared_physical_split());
+    }
+    // Gate off must leave every prepared-split profile counter untouched.
+    EXPECT_EQ(0, reader->stats().lake_prepared_rowsets);
+    EXPECT_EQ(0, reader->stats().lake_prepared_segments);
+    reader->close();
+}
+
+// End-to-end correctness contract: the INITIAL_COARSE seed children (which read their coarse range
+// and refine) plus the REFINED children they append must together reproduce EXACTLY the full-scan
+// result -- no missing rows, no duplicates. This drives refine_initial_coarse_split_and_append_refined_tasks,
+// subtract_sparse_ranges, get_segment_iterators / read_prepared_segment and the shared prepared state,
+// mimicking how LakeDataSource (a follow-up PR) drives them.
+TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_end_to_end_equivalence) {
+    std::vector<int> keys{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+    std::vector<int> vals{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44};
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    const int rows_per_segment = build_split_test_tablet(tablet, _schema, _tablet_metadata, keys, vals);
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    using Row = std::pair<int, int>;
+    auto collect = [&](TabletReader* r, std::multiset<Row>* out) {
+        auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+        while (true) {
+            chunk->reset();
+            auto st = r->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_OK(st);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                out->emplace(chunk->get(i)[0].get_int32(), chunk->get(i)[1].get_int32());
+            }
+        }
+    };
+
+    // Baseline: a plain, non-split full scan.
+    std::multiset<Row> expected;
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        TabletReaderParams params;
+        ASSERT_OK(reader->open(params));
+        collect(reader.get(), &expected);
+        reader->close();
+    }
+    ASSERT_EQ(static_cast<size_t>(4 * rows_per_segment), expected.size());
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    // Seed: produces INITIAL_COARSE tasks carrying the shared prepared state.
+    std::vector<pipeline::ScanSplitContextPtr> queue;
+    {
+        auto seed = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                   /*need_split=*/true, /*could_split_physically=*/true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.enable_prepared_physical_split_scan = true;
+        ASSERT_OK(seed->prepare());
+        ASSERT_OK(seed->open(params));
+        seed->get_split_tasks(&queue);
+        // The seed stands for the whole tablet, so it alone counts the tablet's single rowset.
+        EXPECT_EQ(1, seed->stats().phy_rowsets_count);
+        EXPECT_EQ(0, seed->stats().segments_read_count);
+        seed->close();
+    }
+    ASSERT_GT(queue.size(), 0u);
+
+    // Drive the children the way the connector does: an INITIAL_COARSE child reads its coarse range and
+    // refines (appending REFINED tasks); a REFINED child just reads its range.
+    std::multiset<Row> actual;
+    int64_t refined_segments = 0;
+    int64_t refined_scan_rows = 0;
+    int64_t segments_read = 0;
+    int64_t phy_segments = 0;
+    int64_t phy_rowsets = 0;
+    int guard = 0;
+    for (size_t head = 0; head < queue.size(); ++head) {
+        ASSERT_LT(guard++, 10000) << "runaway split loop";
+        auto* ctx = dynamic_cast<pipeline::LakeSplitContext*>(queue[head].get());
+        ASSERT_NE(nullptr, ctx);
+        ASSERT_TRUE(ctx->is_prepared_physical_split());
+        const bool is_initial = ctx->rowid_range_source == pipeline::LakeSplitContext::RowidRangeSource::INITIAL_COARSE;
+
+        auto child = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                    /*need_split=*/false, /*could_split_physically=*/true);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.rowid_range_option = ctx->rowid_range;
+        params.prepared_tablet_read_state = ctx->prepared_tablet_read_state;
+        params.prepared_segment_read_state = ctx->prepared_segment_read_state;
+        params.prepared_rowset_index = ctx->rowset_index;
+        params.prepared_segment_index = ctx->segment_index;
+        params.refine_initial_coarse_split_and_append_refined_tasks = is_initial;
+
+        ASSERT_OK(child->prepare());
+        ASSERT_OK(child->open(params));
+        collect(child.get(), &actual);
+        // Only the INITIAL_COARSE children refine; each bumps the per-segment prune counters once for the
+        // single segment it owns. Accumulate across children to confirm the counters track refine.
+        refined_segments += child->stats().lake_prepared_segments;
+        refined_scan_rows += child->stats().lake_prepared_scan_rows;
+        segments_read += child->stats().segments_read_count;
+        phy_segments += child->stats().phy_segments_count;
+        phy_rowsets += child->stats().phy_rowsets_count;
+
+        std::vector<pipeline::ScanSplitContextPtr> refined;
+        child->get_split_tasks(&refined);
+        for (auto& t : refined) {
+            queue.emplace_back(std::move(t));
+        }
+        child->close();
+    }
+
+    EXPECT_EQ(expected, actual) << "prepared-split children must reproduce the full scan exactly";
+
+    // Each of the 4 segments is refined exactly once; with no predicates the pruned range keeps every row,
+    // so the per-segment scan-row counter sums to the full row count.
+    EXPECT_EQ(4, refined_segments);
+    EXPECT_EQ(static_cast<int64_t>(expected.size()), refined_scan_rows);
+    // Every child opens its segment, but each of the 4 segments is counted once as a physical segment.
+    EXPECT_GT(queue.size(), 4u);
+    EXPECT_GT(segments_read, 4);
+    EXPECT_EQ(4, phy_segments);
+    EXPECT_EQ(0, phy_rowsets);
+}
+
+TEST_F(LakeTabletReaderSpit, test_prepared_split_seed_statistics_and_eager_coarse_reads) {
+    ConfigResetGuard<bool> metadata_filter(&config::enable_lake_segment_metadata_filter, false);
+    std::vector<int> keys(22);
+    std::vector<int> vals(22);
+    for (int i = 0; i < 22; ++i) {
+        keys[i] = i + 1;
+        vals[i] = (i + 1) * 2;
+    }
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(keys.data(), keys.size() * sizeof(int));
+    c1->append_numbers(vals.data(), vals.size() * sizeof(int));
+    Chunk chunk({std::move(c0), std::move(c1)}, _schema);
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(chunk));
+    ASSERT_OK(writer->finish());
+    ASSERT_EQ(1u, writer->segments().size());
+    auto* rowset_meta = _tablet_metadata->add_rowsets();
+    rowset_meta->set_id(1);
+    rowset_meta->set_num_rows(chunk.num_rows());
+    auto* segment_meta = rowset_meta->add_segment_metas();
+    segment_meta->set_filename(writer->segments()[0].path);
+    segment_meta->set_size(writer->segments()[0].size.value());
+    writer->close();
+    _tablet_metadata->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto collect = [&](TabletReader* reader, std::multiset<int>* result) {
+        auto out = ChunkFactory::new_chunk(*_schema, 1024);
+        while (true) {
+            out->reset();
+            auto st = reader->get_next(out.get());
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (size_t i = 0; i < out->num_rows(); ++i) {
+                result->insert(out->get(i)[0].get_int32());
+            }
+        }
+    };
+
+    for (int mode = 0; mode < 5; ++mode) {
+        SCOPED_TRACE(mode);
+        // 0: seed is cut away, sibling survives. 1: seed survives. 2: the
+        // non-key predicate removes the entire segment. 3: seed is cut away
+        // without a coarse sibling. 4: coarse siblings cover all surviving rows,
+        // leaving no refined tasks. In every nonempty case the seed owns statistics.
+        std::unique_ptr<ColumnPredicate> pred;
+        auto make_params = [&] {
+            auto params = generate_tablet_reader_params(&scan_range);
+            if (mode == 0 || mode == 3 || mode == 4) {
+                params.range = TabletReaderParams::RangeStartOperation::GE;
+                params.end_range = TabletReaderParams::RangeEndOperation::LE;
+                params.start_key = {OlapTuple({"5"})};
+                params.end_key = {OlapTuple({"22"})};
+            } else if (mode == 2) {
+                PredicateAndNode root;
+                root.add_child(PredicateColumnNode(pred.get()));
+                params.pred_tree = PredicateTree::create(std::move(root));
+            }
+            return params;
+        };
+        if (mode == 2) {
+            pred.reset(new_column_eq_predicate(get_type_info(TYPE_INT), 1, "999"));
+        }
+
+        std::multiset<int> expected;
+        auto baseline = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        ASSERT_OK(baseline->prepare());
+        ASSERT_OK(baseline->open(make_params()));
+        collect(baseline.get(), &expected);
+        baseline->close();
+
+        auto planner = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                      /*need_split=*/true, /*could_split_physically=*/true);
+        auto planner_params = make_params();
+        planner_params.enable_prepared_physical_split_scan = true;
+        ASSERT_OK(planner->prepare());
+        ASSERT_OK(planner->open(planner_params));
+        std::vector<pipeline::ScanSplitContextPtr> tasks;
+        planner->get_split_tasks(&tasks);
+        ASSERT_EQ(1u, tasks.size());
+        auto* seed_ctx = down_cast<pipeline::LakeSplitContext*>(tasks[0].get());
+        const auto& state = seed_ctx->prepared_segment_read_state;
+        const auto& rowset = seed_ctx->prepared_tablet_read_state->rowsets[0];
+        const auto& segment = seed_ctx->prepared_tablet_read_state->rowset_segments[0][0];
+
+        // Model coarse siblings already issued by LakePreparedPhysicalSplitMorselQueue.
+        std::vector<RowidRangeOptionPtr> sibling_options;
+        if (mode != 3) {
+            std::lock_guard<std::mutex> guard(state->coarse_range_lock);
+            for (int i = 0; i < (mode == 4 ? 2 : 1); ++i) {
+                SparseRange<> sibling_range;
+                state->coarse_scan_range_iter.next_range(i == 0 ? 4 : 22, &sibling_range);
+                state->allocated_coarse_ranges |= sibling_range;
+                ASSERT_GT(sibling_range.span_size(), 0);
+                auto option = std::make_shared<RowidRangeOption>();
+                option->add(rowset.get(), segment.get(), std::make_shared<SparseRange<>>(sibling_range), false);
+                sibling_options.push_back(std::move(option));
+            }
+        }
+
+        auto open_child = [&](const RowidRangeOptionPtr& range, bool refine, std::shared_ptr<TabletReader>* child) {
+            *child = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                    /*need_split=*/false, /*could_split_physically=*/true);
+            auto params = make_params();
+            params.rowid_range_option = range;
+            // Match LakeDataSource: early coarse siblings scan independently until
+            // the seed has published reusable bounds, while refined children reuse them.
+            if (refine || state->has_rowid_bounds_cache()) {
+                params.prepared_tablet_read_state = seed_ctx->prepared_tablet_read_state;
+                params.prepared_segment_read_state = state;
+                params.prepared_rowset_index = 0;
+                params.prepared_segment_index = 0;
+            }
+            params.refine_initial_coarse_split_and_append_refined_tasks = refine;
+            RETURN_IF_ERROR((*child)->prepare());
+            return (*child)->open(params);
+        };
+
+        std::shared_ptr<TabletReader> seed_child;
+        std::vector<std::shared_ptr<TabletReader>> siblings(sibling_options.size());
+        std::vector<std::multiset<int>> sibling_results(siblings.size());
+        const bool scan_siblings_early = mode == 0 || mode == 2 || mode == 4;
+        if (scan_siblings_early) {
+            // Pause seed page pruning. Spare coarse siblings must open and read to EOF
+            // before it resumes, including when all surviving rows are already allocated.
+            std::promise<void> seed_started;
+            auto seed_started_future = seed_started.get_future();
+            std::promise<void> resume_seed;
+            auto resume_seed_future = resume_seed.get_future();
+            auto* sync_point = SyncPoint::GetInstance();
+            sync_point->SetCallBack("TabletReader::refine_initial_coarse_split::before_pruning", [&](void*) {
+                seed_started.set_value();
+                resume_seed_future.wait();
+            });
+            sync_point->EnableProcessing();
+            DeferOp clear_sync_point([&] {
+                sync_point->ClearAllCallBacks();
+                sync_point->DisableProcessing();
+            });
+            auto seed_open = std::async(std::launch::async,
+                                        [&] { return open_child(seed_ctx->rowid_range, true, &seed_child); });
+            EXPECT_EQ(std::future_status::ready, seed_started_future.wait_for(std::chrono::seconds(5)));
+            std::vector<std::future<Status>> sibling_scans;
+            for (size_t i = 0; i < siblings.size(); ++i) {
+                sibling_scans.emplace_back(std::async(std::launch::async, [&, i]() -> Status {
+                    RETURN_IF_ERROR(open_child(sibling_options[i], false, &siblings[i]));
+                    collect(siblings[i].get(), &sibling_results[i]);
+                    return Status::OK();
+                }));
+            }
+            for (auto& scan : sibling_scans) {
+                EXPECT_EQ(std::future_status::ready, scan.wait_for(std::chrono::seconds(5)));
+            }
+            // Release the seed before fatal assertions, so a regressed waiter cannot
+            // deadlock the test while its async future is destroyed.
+            resume_seed.set_value();
+            ASSERT_OK(seed_open.get());
+            for (auto& scan : sibling_scans) {
+                ASSERT_OK(scan.get());
+            }
+        } else {
+            ASSERT_OK(open_child(seed_ctx->rowid_range, true, &seed_child));
+            for (size_t i = 0; i < siblings.size(); ++i) {
+                ASSERT_OK(open_child(sibling_options[i], false, &siblings[i]));
+                collect(siblings[i].get(), &sibling_results[i]);
+            }
+        }
+
+        std::multiset<int> actual;
+        collect(seed_child.get(), &actual);
+        int64_t phy_segments = seed_child->stats().phy_segments_count;
+        int64_t key_range_filtered = seed_child->stats().rows_key_range_filtered;
+        for (size_t i = 0; i < siblings.size(); ++i) {
+            actual.insert(sibling_results[i].begin(), sibling_results[i].end());
+            phy_segments += siblings[i]->stats().phy_segments_count;
+            key_range_filtered += siblings[i]->stats().rows_key_range_filtered;
+            EXPECT_EQ(0, siblings[i]->stats().phy_segments_count);
+        }
+        std::vector<pipeline::ScanSplitContextPtr> refined;
+        seed_child->get_split_tasks(&refined);
+        for (const auto& task : refined) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            std::shared_ptr<TabletReader> child;
+            ASSERT_OK(open_child(ctx->rowid_range, false, &child));
+            collect(child.get(), &actual);
+            phy_segments += child->stats().phy_segments_count;
+            key_range_filtered += child->stats().rows_key_range_filtered;
+            EXPECT_EQ(0, child->stats().phy_segments_count);
+            child->close();
+        }
+        EXPECT_EQ(expected, actual);
+        EXPECT_EQ(mode == 2 ? 0 : 1, phy_segments);
+        EXPECT_EQ(mode == 2 ? 0 : 1, seed_child->stats().phy_segments_count);
+        if (mode != 1) {
+            // An empty seed accounts for statistics only. Preparation reads are reported
+            // separately; no read iterator or additional column I/O is needed here.
+            const auto& stats = seed_child->stats();
+            EXPECT_EQ(0, stats.segments_read_count);
+            EXPECT_EQ(0, stats.lake_reusable_segment_iter_created);
+            EXPECT_EQ(0, stats.segment_init_ns);
+            EXPECT_EQ(0, stats.column_iterator_init_ns);
+            EXPECT_EQ(0, stats.io_count);
+            EXPECT_EQ(0, stats.compressed_bytes_read);
+        }
+        if (mode != 2) {
+            EXPECT_EQ(baseline->stats().rows_key_range_filtered, key_range_filtered);
+        }
+        if (mode == 3) {
+            EXPECT_FALSE(refined.empty());
+        } else if (mode == 4) {
+            EXPECT_TRUE(refined.empty());
+        }
+        seed_child->close();
+        for (auto& sibling : siblings) sibling->close();
+        planner->close();
+    }
+}
+
+// A split tablet opens its segments once per split child: SegmentsReadCount / RowsetsReadCount count those
+// opens, while PhySegmentsCount / PhyRowsetsCount must still match the unsplit scan.
+TEST_F(LakeTabletReaderSpit, test_split_counts_reads_and_phy_segments) {
+    constexpr int64_t kNumRowsets = 2;
+    constexpr int64_t kNumSegments = 3;
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(TabletReaderParams{}));
+        EXPECT_EQ(kNumRowsets, reader->stats().rowsets_read_count);
+        EXPECT_EQ(kNumSegments, reader->stats().segments_read_count);
+        EXPECT_EQ(kNumRowsets, reader->stats().phy_rowsets_count);
+        EXPECT_EQ(kNumSegments, reader->stats().phy_segments_count);
+        reader->close();
+    }
+
+    auto get_split_tasks = [&](bool physical, std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                     /*need_split=*/true, physical);
+        auto params = generate_tablet_reader_params(&scan_range);
+        ASSERT_OK(reader->prepare());
+        ASSERT_OK(reader->open(params));
+        reader->get_split_tasks(split_tasks);
+        // The planning reader stands for the whole tablet and opens no segment itself.
+        EXPECT_EQ(kNumRowsets, reader->stats().phy_rowsets_count);
+        EXPECT_EQ(0, reader->stats().rowsets_read_count);
+        EXPECT_EQ(0, reader->stats().segments_read_count);
+        reader->close();
+    };
+    auto read_split = [&](bool physical, const RowidRangeOptionPtr& rowid_range,
+                          const ShortKeyRangesOptionPtr& short_key_ranges, OlapReaderStatistics* total) {
+        auto child = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                    /*need_split=*/false, physical);
+        auto params = generate_tablet_reader_params(&scan_range);
+        params.rowid_range_option = rowid_range;
+        params.short_key_ranges_option = short_key_ranges;
+        ASSERT_OK(child->prepare());
+        ASSERT_OK(child->open(params));
+        total->rowsets_read_count += child->stats().rowsets_read_count;
+        total->segments_read_count += child->stats().segments_read_count;
+        total->phy_rowsets_count += child->stats().phy_rowsets_count;
+        total->phy_segments_count += child->stats().phy_segments_count;
+        child->close();
+    };
+
+    // Physical split: several children per segment, each opening only the segments its rowid range covers.
+    {
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        get_split_tasks(/*physical=*/true, &split_tasks);
+        ASSERT_GT(split_tasks.size(), static_cast<size_t>(kNumSegments));
+        OlapReaderStatistics total;
+        for (const auto& task : split_tasks) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            read_split(/*physical=*/true, ctx->rowid_range, nullptr, &total);
+        }
+        EXPECT_GE(total.rowsets_read_count, static_cast<int64_t>(split_tasks.size()));
+        EXPECT_GE(total.segments_read_count, static_cast<int64_t>(split_tasks.size()));
+        EXPECT_EQ(0, total.phy_rowsets_count);
+        EXPECT_EQ(kNumSegments, total.phy_segments_count);
+    }
+
+    // Logical split: every child opens every segment. These segments share one short key, so the queue
+    // hands out a single split; a copy that is not the tablet's first split stands in for its siblings.
+    {
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        get_split_tasks(/*physical=*/false, &split_tasks);
+        ASSERT_GE(split_tasks.size(), 1u);
+        OlapReaderStatistics total;
+        for (const auto& task : split_tasks) {
+            auto* ctx = down_cast<pipeline::LakeSplitContext*>(task.get());
+            ASSERT_NE(nullptr, ctx->short_key_range);
+            read_split(/*physical=*/false, nullptr, ctx->short_key_range, &total);
+        }
+        auto* first = down_cast<pipeline::LakeSplitContext*>(split_tasks.front().get());
+        auto sibling_ranges = first->short_key_range->short_key_ranges;
+        auto sibling = std::make_shared<ShortKeyRangesOption>(std::move(sibling_ranges),
+                                                              /*is_first_split_of_tablet=*/false);
+        read_split(/*physical=*/false, nullptr, sibling, &total);
+        const auto num_children = static_cast<int64_t>(split_tasks.size() + 1);
+        EXPECT_EQ(kNumRowsets * num_children, total.rowsets_read_count);
+        EXPECT_EQ(kNumSegments * num_children, total.segments_read_count);
+        EXPECT_EQ(0, total.phy_rowsets_count);
+        EXPECT_EQ(kNumSegments, total.phy_segments_count);
+    }
+}
+
+// The prepared split reads the segment files before it scans: the tablet prepare opens every segment and
+// loads the short key indexes to build the coarse splits, and the seed resolves the key range on the key
+// columns. Those reads must reach the lake_prepared_tablet_* and lake_prepared_seed_* statistics.
+TEST_F(LakeTabletReaderSpit, test_prepared_physical_split_reports_prepare_reads) {
+    constexpr int64_t kNumSegments = 3;
+    write_two_rowsets_with_three_segments();
+    for (bool parallel_load : {false, true}) {
+        SCOPED_TRACE(parallel_load);
+        ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, parallel_load);
+        // Close what the writes left open, so that the first prepare has to read every footer.
+        _tablet_mgr->metacache()->prune();
+
+        TInternalScanRange internal_scan_range;
+        internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+        internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+        TScanRange scan_range;
+        scan_range.__set_internal_scan_range(internal_scan_range);
+        auto make_params = [&]() {
+            auto params = generate_tablet_reader_params(&scan_range);
+            params.enable_prepared_physical_split_scan = true;
+            // Keep the opened segments for the second prepare below.
+            params.lake_io_opts.fill_metadata_cache = true;
+            // Each seed must read its key pages even after the serial case populated the page cache.
+            params.lake_io_opts.use_page_cache = false;
+            // A key range makes the prepare load the short key indexes and the seed resolve the range.
+            params.range = TabletReaderParams::RangeStartOperation::GE;
+            params.end_range = TabletReaderParams::RangeEndOperation::LE;
+            params.start_key = {OlapTuple({"1"})};
+            params.end_key = {OlapTuple({"100"})};
+            return params;
+        };
+
+        std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+        {
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                         /*need_split=*/true, /*could_split_physically=*/true);
+            ASSERT_OK(reader->prepare());
+            ASSERT_OK(reader->open(make_params()));
+            const auto& stats = reader->stats();
+            EXPECT_GT(stats.lake_prepared_tablet_prepare_ns, 0);
+            EXPECT_GT(stats.lake_prepared_tablet_segment_open_ns, 0);
+            EXPECT_LE(stats.lake_prepared_tablet_segment_open_ns, stats.lake_prepared_tablet_prepare_ns);
+            EXPECT_EQ(kNumSegments, stats.lake_prepared_tablet_segments);
+            EXPECT_EQ(kNumSegments, stats.lake_prepared_tablet_segments_opened);
+            EXPECT_GT(stats.lake_prepared_tablet_io_ns, 0);
+            // The local file system has no remote reads to report.
+            EXPECT_EQ(0, stats.lake_prepared_tablet_io_count);
+            EXPECT_EQ(0, stats.lake_prepared_tablet_io_remote_ns);
+            EXPECT_EQ(0, stats.lake_prepared_tablet_io_count_remote);
+            EXPECT_EQ(0, stats.lake_prepared_tablet_bytes_read_remote);
+            reader->get_split_tasks(&split_tasks);
+            reader->close();
+        }
+        ASSERT_FALSE(split_tasks.empty());
+
+        // The segments are open now: the next prepare finds every one of them and reads no footer.
+        {
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                         /*need_split=*/true, /*could_split_physically=*/true);
+            ASSERT_OK(reader->prepare());
+            ASSERT_OK(reader->open(make_params()));
+            EXPECT_EQ(kNumSegments, reader->stats().lake_prepared_tablet_segments);
+            EXPECT_EQ(0, reader->stats().lake_prepared_tablet_segments_opened);
+            EXPECT_EQ(0, reader->stats().lake_prepared_tablet_io_ns);
+            EXPECT_EQ(0, reader->stats().lake_prepared_tablet_io_count);
+            reader->close();
+        }
+
+        // The seed of the first segment resolves the key range by reading its key column.
+        auto* ctx = down_cast<pipeline::LakeSplitContext*>(split_tasks.front().get());
+        ASSERT_EQ(pipeline::LakeSplitContext::RowidRangeSource::INITIAL_COARSE, ctx->rowid_range_source);
+        auto seed = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                   /*need_split=*/false, /*could_split_physically=*/true);
+        auto params = make_params();
+        params.rowid_range_option = ctx->rowid_range;
+        params.prepared_tablet_read_state = ctx->prepared_tablet_read_state;
+        params.prepared_segment_read_state = ctx->prepared_segment_read_state;
+        params.prepared_rowset_index = ctx->rowset_index;
+        params.prepared_segment_index = ctx->segment_index;
+        params.refine_initial_coarse_split_and_append_refined_tasks = true;
+        ASSERT_OK(seed->prepare());
+        ASSERT_OK(seed->open(params));
+        EXPECT_GT(seed->stats().lake_prepared_seed_ns, 0);
+        EXPECT_GT(seed->stats().lake_prepared_seed_io_ns, 0);
+        EXPECT_LE(seed->stats().lake_prepared_seed_io_ns, seed->stats().lake_prepared_seed_ns);
+        EXPECT_EQ(0, seed->stats().lake_prepared_seed_io_remote_ns);
+        EXPECT_EQ(0, seed->stats().lake_prepared_seed_io_count_remote);
+        EXPECT_EQ(0, seed->stats().lake_prepared_seed_bytes_read_remote);
+        seed->close();
+    }
+}
+
+TEST_F(LakeTabletReaderSpit, test_failed_tablet_preparation_preserves_reads) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    ConfigResetGuard<bool> ignore_lost(&config::experimental_lake_ignore_lost_segment, false);
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    for (bool parallel_load : {false, true}) {
+        ConfigResetGuard<bool> parallel(&config::enable_load_segment_parallel, parallel_load);
+        for (bool missing_segment : {true, false}) {
+            SCOPED_TRACE(::testing::Message() << "parallel=" << parallel_load << " missing=" << missing_segment);
+            _tablet_mgr->metacache()->prune();
+            auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
+            auto params = generate_tablet_reader_params(&scan_range);
+            params.enable_prepared_physical_split_scan = true;
+            params.lake_io_opts.use_page_cache = false;
+            if (missing_segment) {
+                // Serial: read one footer before the error. Parallel: the first future fails,
+                // but the second task still reads a footer and must be accounted for when joined.
+                int missing_idx = parallel_load ? 0 : 1;
+                metadata->mutable_rowsets(0)->mutable_segment_metas(missing_idx)->set_filename("missing_segment.dat");
+            } else {
+                // All three footers are read before coarse-split preparation validates the range.
+                // An upper bound without its inclusion flag is rejected by get_seek_range().
+                metadata->mutable_rowsets(0)->mutable_range()->mutable_upper_bound();
+            }
+            auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema,
+                                                         /*need_split=*/true, /*could_split_physically=*/true);
+            ASSERT_OK(reader->prepare());
+            auto status = reader->open(params);
+            ASSERT_FALSE(status.ok());
+            if (missing_segment) {
+                EXPECT_TRUE(status.is_not_found()) << status;
+            } else {
+                EXPECT_TRUE(status.is_corruption()) << status;
+                EXPECT_NE(std::string::npos, status.to_string().find("upper_bound_included is required"));
+            }
+            const auto& stats = reader->stats();
+            // A segment-load error reaches only the first (two-segment) rowset. A coarse-range
+            // error happens after both rowsets (three segments) have been loaded successfully.
+            EXPECT_EQ(missing_segment ? 2 : 3, stats.lake_prepared_tablet_segments);
+            EXPECT_EQ(missing_segment ? 1 : 3, stats.lake_prepared_tablet_segments_opened);
+            EXPECT_GE(stats.lake_prepared_tablet_segments, stats.lake_prepared_tablet_segments_opened);
+            EXPECT_GT(stats.lake_prepared_tablet_io_ns, 0);
+            EXPECT_GT(stats.lake_prepared_tablet_prepare_ns, 0);
+            EXPECT_GT(stats.lake_prepared_tablet_segment_open_ns, 0);
+            reader->close();
+        }
+    }
+}
+
+TEST_F(LakeTabletReaderSpit, test_failed_seed_preparation_preserves_reads) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+    auto params = generate_tablet_reader_params(&scan_range);
+    params.enable_prepared_physical_split_scan = true;
+    params.lake_io_opts.use_page_cache = false;
+    params.range = TabletReaderParams::RangeStartOperation::GE;
+    params.end_range = TabletReaderParams::RangeEndOperation::LE;
+    params.start_key = {OlapTuple({"1"})};
+    params.end_key = {OlapTuple({"100"})};
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                                 /*need_split=*/true, /*could_split_physically=*/true);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+    std::vector<pipeline::ScanSplitContextPtr> split_tasks;
+    reader->get_split_tasks(&split_tasks);
+    ASSERT_FALSE(split_tasks.empty());
+    auto* ctx = down_cast<pipeline::LakeSplitContext*>(split_tasks.front().get());
+    params.rowid_range_option = ctx->rowid_range;
+    params.prepared_tablet_read_state = ctx->prepared_tablet_read_state;
+    params.prepared_segment_read_state = ctx->prepared_segment_read_state;
+    params.prepared_rowset_index = ctx->rowset_index;
+    params.prepared_segment_index = ctx->segment_index;
+    params.refine_initial_coarse_split_and_append_refined_tasks = true;
+    // Sampling validation fails after the seed has resolved the key range by reading key pages.
+    params.sample_options.__set_enable_sampling(true);
+    params.sample_options.__set_probability_percent(0);
+    auto seed = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema,
+                                               /*need_split=*/false, /*could_split_physically=*/true);
+    ASSERT_OK(seed->prepare());
+    auto status = seed->open(params);
+    ASSERT_TRUE(status.is_invalid_argument()) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("probability_percent must > 0"));
+    EXPECT_GT(seed->stats().lake_prepared_seed_ns, 0);
+    EXPECT_GT(seed->stats().lake_prepared_seed_io_ns, 0);
+    // Preserve the coarse-allocation error handling as well as the statistics.
+    EXPECT_TRUE(ctx->prepared_segment_read_state->coarse_split_allocation_closed);
+    EXPECT_EQ(nullptr, ctx->prepared_segment_read_state->pruned_scan_range);
+    seed->close();
+    reader->close();
+}
+
+TEST_F(LakeTabletReaderSpit, test_parallel_rowset_stats_survive_iterator_reads) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, true);
+
+    auto* rowset_pool = RuntimeEnv::GetInstance()->load_rowset_thread_pool();
+    const int old_max_threads = rowset_pool->max_threads();
+    ASSERT_OK(rowset_pool->update_max_threads(std::max(2, old_max_threads)));
+    DeferOp restore_pool([&]() { CHECK_OK(rowset_pool->update_max_threads(old_max_threads)); });
+
+    std::atomic<int> entered{0};
+    std::atomic<int> active{0};
+    std::atomic<bool> overlapped{false};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        sync_point->ClearAllCallBacks();
+        sync_point->DisableProcessing();
+    });
+    sync_point->SetCallBack("TabletReader::get_segment_iterators::parallel_read", [&](void*) {
+        if (active.fetch_add(1) + 1 == 2) {
+            overlapped.store(true);
+        }
+        entered.fetch_add(1);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (entered.load() < 2 && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::yield();
+        }
+        active.fetch_sub(1);
+    });
+    sync_point->SetCallBack("Rowset::read::seg_options", [](void* arg) {
+        auto* stats = static_cast<SegmentReadOptions*>(arg)->stats;
+        stats->sample_build_histogram_count++;
+        stats->flat_json_hits["parallel-test"]++;
+    });
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams{}));
+    ASSERT_TRUE(overlapped.load());
+    EXPECT_EQ(2, reader->stats().rowsets_read_count);
+    EXPECT_EQ(3, reader->stats().segments_read_count);
+    EXPECT_EQ(2, reader->stats().phy_rowsets_count);
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+    EXPECT_EQ(2, reader->stats().sample_build_histogram_count);
+    EXPECT_EQ(2, reader->stats().flat_json_hits.at("parallel-test"));
+
+    auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+    int64_t total_rows = 0;
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        total_rows += chunk->num_rows();
+    }
+    EXPECT_EQ(66, total_rows);
+    EXPECT_EQ(66, reader->stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().raw_rows_read, reader->realtime_stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().raw_rows_read, reader->compaction_stats().raw_rows_read);
+    EXPECT_EQ(reader->stats().compressed_bytes_read, reader->compaction_stats().compressed_bytes_read);
+    EXPECT_TRUE(reader->compaction_stats().flat_json_hits.empty());
+
+    // Profile reporting for a reused reader resets every private accumulator while its old
+    // iterators are still alive. The next open must not report the first scan twice.
+    reader->reset_stats();
+    EXPECT_EQ(0, reader->stats().phy_segments_count);
+    EXPECT_EQ(0, reader->stats().raw_rows_read);
+    ASSERT_OK(reader->open(TabletReaderParams{}));
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+    EXPECT_EQ(2, reader->stats().sample_build_histogram_count);
+    EXPECT_EQ(2, reader->stats().flat_json_hits.at("parallel-test"));
+    reader->close();
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+}
+
+TEST_F(LakeTabletReaderSpit, test_parallel_rowset_submit_failure_keeps_stats) {
+    ASSERT_NO_FATAL_FAILURE(write_two_rowsets_with_three_segments());
+    ConfigResetGuard<bool> parallel_guard(&config::enable_load_segment_parallel, true);
+
+    std::atomic<int> submits{0};
+    auto* sync_point = SyncPoint::GetInstance();
+    sync_point->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        sync_point->ClearAllCallBacks();
+        sync_point->DisableProcessing();
+    });
+    sync_point->SetCallBack("TabletReader::get_segment_iterators::submit", [&](void* arg) {
+        if (submits.fetch_add(1) == 1) {
+            *static_cast<Status*>(arg) = Status::ServiceUnavailable("injected rowset submission failure");
+        }
+    });
+    sync_point->SetCallBack("Rowset::read::seg_options", [](void* arg) {
+        static_cast<SegmentReadOptions*>(arg)->stats->sample_build_histogram_count++;
+    });
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams{}));
+    EXPECT_EQ(2, submits.load());
+    EXPECT_EQ(2, reader->stats().rowsets_read_count);
+    EXPECT_EQ(3, reader->stats().segments_read_count);
+    EXPECT_EQ(3, reader->stats().phy_segments_count);
+    EXPECT_EQ(2, reader->stats().sample_build_histogram_count);
+
+    auto chunk = ChunkFactory::new_chunk(*_schema, 1024);
+    int64_t total_rows = 0;
+    while (true) {
+        chunk->reset();
+        auto st = reader->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(st);
+        total_rows += chunk->num_rows();
+    }
+    EXPECT_EQ(66, total_rows);
+    EXPECT_EQ(66, reader->stats().raw_rows_read);
+    reader->close();
+}
+
+// parse_seek_range() is parsed once and cached in _cached_seek_ranges, then reused on every subsequent
+// init_rowset_read_options (a reader's per-split reopens re-run it). Prove the second call reuses the
+// cache instead of re-parsing: open() populates the cache, then we overwrite it with a size-1 sentinel;
+// a reused cache yields the size-1 sentinel, while a re-parse of these (empty-key) params would yield an
+// empty range list and overwrite the sentinel.
+TEST_F(LakeTabletReaderSpit, test_seek_range_cached_across_reopen) {
+    std::vector<int> keys{1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    std::vector<int> vals{2, 4, 6, 8, 10, 12, 14, 16, 18, 20};
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    build_split_test_tablet(tablet, _schema, _tablet_metadata, keys, vals);
+    _tablet_metadata->set_version(2);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    ASSERT_OK(reader->prepare());
+    auto params = generate_tablet_reader_params(&scan_range);
+
+    // open() runs init_rowset_read_options once, which parses the seek range and engages the cache.
+    ASSERT_FALSE(reader->_cached_seek_ranges.has_value());
+    ASSERT_OK(reader->open(params));
+    ASSERT_TRUE(reader->_cached_seek_ranges.has_value());
+
+    // Overwrite the cache with a size-1 sentinel; the reader is fully set up now, so a second
+    // init_rowset_read_options is safe. A reused cache yields size 1; a re-parse of the empty-key params
+    // would yield size 0 and overwrite the sentinel.
+    reader->_cached_seek_ranges = std::vector<SeekRange>(1);
+    RowsetReadOptions opts;
+    ASSERT_OK(reader->init_rowset_read_options(params, &opts));
+    EXPECT_EQ(1u, opts.ranges.size()) << "init_rowset_read_options re-parsed instead of reusing the cache";
+    ASSERT_TRUE(reader->_cached_seek_ranges.has_value());
+    EXPECT_EQ(1u, reader->_cached_seek_ranges->size());
+
+    reader->close();
+}
+
+TEST(LakeDeletePredicateColumnIdsTest, CollectsAllThreePredicateKinds) {
+    auto metadata = generate_simple_tablet_metadata(DUP_KEYS, 4);
+    auto schema = TabletSchema::create(metadata->schema());
+
+    // c1 via a binary predicate, c2 via IS NULL, c3 via IN: the reader evaluates all three kinds.
+    auto* binary_pred = metadata->add_rowsets()->mutable_delete_predicate()->add_binary_predicates();
+    binary_pred->set_column_name("c1");
+    binary_pred->set_op("=");
+    binary_pred->set_value("1");
+
+    auto* is_null_pred = metadata->add_rowsets()->mutable_delete_predicate()->add_is_null_predicates();
+    is_null_pred->set_column_name("c2");
+    is_null_pred->set_is_not_null(false);
+
+    auto* in_pred = metadata->add_rowsets()->mutable_delete_predicate()->add_in_predicates();
+    in_pred->set_column_name("c3");
+    in_pred->set_is_not_in(false);
+    in_pred->add_values("7");
+
+    // A rowset without a delete predicate contributes nothing.
+    metadata->add_rowsets();
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(delete_predicate_column_ids(*metadata, *schema, &cids));
+    ASSERT_EQ((std::set<ColumnId>{1, 2, 3}), cids);
+}
+
+TEST(LakeDeletePredicateColumnIdsTest, KeepsNonKeyColumnsAndIgnoresUnknownOnes) {
+    // Unlike the shared-nothing reader, the lake reader filters neither by key column nor by version.
+    auto metadata = generate_simple_tablet_metadata(AGG_KEYS, 2);
+    auto schema = TabletSchema::create(metadata->schema());
+
+    auto* pred = metadata->add_rowsets()->mutable_delete_predicate();
+    auto* binary_pred = pred->add_binary_predicates();
+    binary_pred->set_column_name("c1");
+    binary_pred->set_op("=");
+    binary_pred->set_value("1");
+    auto* missing = pred->add_binary_predicates();
+    missing->set_column_name("nosuchcol");
+    missing->set_op("=");
+    missing->set_value("1");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(delete_predicate_column_ids(*metadata, *schema, &cids));
+    ASSERT_EQ((std::set<ColumnId>{1}), cids);
+}
+
 } // namespace starrocks::lake

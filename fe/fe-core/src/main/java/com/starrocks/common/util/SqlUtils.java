@@ -56,6 +56,24 @@ public class SqlUtils {
     }
 
     /**
+     * Escape a value so it can be safely embedded as the body of a single-quoted SQL string literal.
+     *
+     * <p>The StarRocks lexer decodes both backslash escape sequences ({@code \'}) and doubled quotes
+     * ({@code ''}) inside string literals (see {@code StarRocksLex.g4} SINGLE_QUOTED_TEXT and
+     * {@code AstBuilder.escapeBackSlash}). Doubling single quotes alone (e.g.
+     * {@code StringEscapeUtils.escapeSql}) is therefore insufficient: a value carrying a backslash can
+     * neutralize the doubling and re-open the literal, enabling SQL injection. Escape backslashes first,
+     * then single quotes.
+     *
+     * <p>This returns only the escaped body; callers must wrap it in single quotes, e.g.
+     * {@code "'" + escapeSqlString(value) + "'"}. For SQL identifiers (db/table/column names) use
+     * {@link #getIdentSql(String)} instead.
+     */
+    public static String escapeSqlString(String value) {
+        return value.replace("\\", "\\\\").replace("'", "''");
+    }
+
+    /**
      * Return the prefix of a sql if it's too long
      */
     public static String sqlPrefix(String sql) {

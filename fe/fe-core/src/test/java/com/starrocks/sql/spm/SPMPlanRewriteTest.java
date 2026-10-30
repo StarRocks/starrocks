@@ -15,15 +15,23 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.metric.Metric;
+import com.starrocks.metric.MetricLabel;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.AIProviderTestUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.Mockito;
 
 import java.util.List;
 
@@ -47,6 +55,63 @@ public class SPMPlanRewriteTest extends PlanTestBase {
         Preconditions.checkState(statements.size() == 1);
         Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
         return (CreateBaselinePlanStmt) statements.get(0);
+    }
+
+    private long getMetricValue(String name, String result) {
+        for (Metric<?> metric : MetricRepo.getMetricsByName(name)) {
+            for (MetricLabel label : metric.getLabels()) {
+                if ("result".equals(label.getKey()) && result.equals(label.getValue())) {
+                    return (Long) metric.getValue();
+                }
+            }
+        }
+        return 0L;
+    }
+
+    @ParameterizedTest(name = "{index}: {0}")
+    @ValueSource(strings = {
+            "select ai_complete(cast(v2 as varchar)) from t0",
+            "select 'a' x union all select 'b' x order by ai_complete(x)",
+            "select x from (values (concat(ai_complete('p'), '!'))) v(x)"
+    })
+    public void testAIFunctionRewriteReturnsOriginalAsMiss(String sql) {
+        assertAIFunctionRewriteReturnsOriginalAsMiss(sql);
+    }
+
+    private void assertAIFunctionRewriteReturnsOriginalAsMiss(String sql) {
+        String oldEndpoint = AIProviderTestUtil.chatProperty("endpoint");
+        String oldModel = AIProviderTestUtil.chatProperty("model");
+        String oldProvider = AIProviderTestUtil.chatProperty("protocol");
+        SQLPlanStorage originalStorage = connectContext.getSqlPlanStorage();
+        SQLPlanStorage spyStorage = Mockito.spy(originalStorage);
+        try {
+            AIProviderTestUtil.setChatProperty("endpoint", "https://models.example.test/v1/chat/completions");
+            AIProviderTestUtil.setChatProperty("model", "default-model");
+            AIProviderTestUtil.setChatProperty("protocol", "openai");
+            Deencapsulation.setField(connectContext, "sqlPlanStorage", spyStorage);
+
+            StatementBase original = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+            long hitBefore = getMetricValue("spm_rewrite_total", "hit");
+            long missBefore = getMetricValue("spm_rewrite_total", "miss");
+            long errorBefore = getMetricValue("spm_rewrite_total", "error");
+
+            SPMPlanner planner = new SPMPlanner(connectContext);
+            StatementBase rewritten = planner.plan(original);
+
+            Assertions.assertSame(original, rewritten);
+            Assertions.assertNull(planner.getBaseline());
+            Assertions.assertEquals(hitBefore, getMetricValue("spm_rewrite_total", "hit"));
+            Assertions.assertEquals(missBefore + 1, getMetricValue("spm_rewrite_total", "miss"));
+            Assertions.assertEquals(errorBefore, getMetricValue("spm_rewrite_total", "error"));
+            Mockito.verify(spyStorage, Mockito.never()).findBaselinePlan(
+                    Mockito.anyString(), Mockito.anyLong());
+        } finally {
+            Deencapsulation.setField(connectContext, "sqlPlanStorage", originalStorage);
+            AIProviderTestUtil.setChatProperty("endpoint", oldEndpoint);
+            AIProviderTestUtil.setChatProperty("model", oldModel);
+            AIProviderTestUtil.setChatProperty("protocol", oldProvider);
+        }
     }
 
     @Test
@@ -86,6 +151,62 @@ public class SPMPlanRewriteTest extends PlanTestBase {
                 + "FROM (SELECT *\n"
                 + "FROM `t0`\n"
                 + "WHERE `v2` = 2) `t_0` INNER JOIN [SHUFFLE] `t1` ON `v3` = `v6`) `t2`");
+    }
+
+    @Test
+    public void testSPMRewriteMetrics() {
+        long hitBefore = getMetricValue("spm_rewrite_total", "hit");
+        long missBefore = getMetricValue("spm_rewrite_total", "miss");
+        long errorBefore = getMetricValue("spm_rewrite_total", "error");
+
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt("select * from t0 where v2 = 1");
+        BaselinePlan baseline = SPMStmtExecutor.execute(connectContext, stmt);
+
+        SPMPlanner planner = new SPMPlanner(connectContext);
+        StatementBase hitStmt =
+                SqlParser.parse("select * from t0 where v2 = 20", connectContext.getSessionVariable()).get(0);
+        planner.plan(hitStmt);
+        Assertions.assertEquals(hitBefore + 1, getMetricValue("spm_rewrite_total", "hit"));
+
+        StatementBase missStmt =
+                SqlParser.parse("select * from t0 where v3 = 20", connectContext.getSessionVariable()).get(0);
+        planner = new SPMPlanner(connectContext);
+        planner.plan(missStmt);
+        Assertions.assertEquals(missBefore + 1, getMetricValue("spm_rewrite_total", "miss"));
+
+        BaselinePlan invalidBaseline = new BaselinePlan("select invalid from", baseline.getBindSqlDigest(),
+                baseline.getBindSqlHash(), baseline.getPlanSql(), baseline.getCosts());
+        invalidBaseline.setEnable(true);
+        connectContext.getSqlPlanStorage().dropAllBaselinePlans();
+        connectContext.getSqlPlanStorage().storeBaselinePlan(List.of(invalidBaseline));
+
+        planner = new SPMPlanner(connectContext);
+        StatementBase errorStmt =
+                SqlParser.parse("select * from t0 where v2 = 30", connectContext.getSessionVariable()).get(0);
+        planner.plan(errorStmt);
+        Assertions.assertEquals(errorBefore + 1, getMetricValue("spm_rewrite_total", "error"));
+    }
+
+    @Test
+    public void testSPMRewriteMetricIgnoresNonAttemptedQueries() {
+        long hitBefore = getMetricValue("spm_rewrite_total", "hit");
+        long missBefore = getMetricValue("spm_rewrite_total", "miss");
+        long errorBefore = getMetricValue("spm_rewrite_total", "error");
+
+        boolean enableSPMRewrite = connectContext.getSessionVariable().isEnableSPMRewrite();
+        try {
+            connectContext.getSessionVariable().setEnableSPMRewrite(false);
+            SPMPlanner planner = new SPMPlanner(connectContext);
+            StatementBase stmt =
+                    SqlParser.parse("select * from t0 where v2 = 1", connectContext.getSessionVariable()).get(0);
+            planner.plan(stmt);
+        } finally {
+            connectContext.getSessionVariable().setEnableSPMRewrite(enableSPMRewrite);
+        }
+
+        Assertions.assertEquals(hitBefore, getMetricValue("spm_rewrite_total", "hit"));
+        Assertions.assertEquals(missBefore, getMetricValue("spm_rewrite_total", "miss"));
+        Assertions.assertEquals(errorBefore, getMetricValue("spm_rewrite_total", "error"));
     }
 
     @Test

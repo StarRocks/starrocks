@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "x をそのままの値として返します。"
 ---
 
 # positive

@@ -31,11 +31,18 @@ jobs:
           echo $workdir
           sed -i "s|\/root\/starrocks|$workdir|g" be/build-wrapper/build-wrapper-dump.json
 
+      - name: Set up JDK 21
+        if: steps.changes.outputs.be == 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: 21
+          distribution: 'temurin'
+
       - name: Run sonar-scanner
         if: steps.changes.outputs.be == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           sonar-scanner -Dsonar.organization=starrocks -Dsonar.projectKey=Starrocks_be -Dsonar.cfamily.build-wrapper-output="be/build-wrapper" -Dsonar.host.url="https://sonarcloud.io" -Dsonar.sources="be/src" -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.projectBaseDir=. -Dsonar.pullrequest.github.repository=StarRocks/starrocks
 

@@ -23,8 +23,10 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -43,6 +45,48 @@ public class NativeAccessController implements AccessController {
             throws AccessDeniedException {
         checkObjectTypeAction(context, privilegeType, ObjectType.SYSTEM,
                 null);
+    }
+
+    @Override
+    public void checkAIFunctionAction(ConnectContext context, String family, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        if (!PrivilegeType.USAGE.equals(privilegeType) || family == null || "*".equals(family)) {
+            throw new AccessDeniedException();
+        }
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            // Resolve a concrete family before checking wildcard grants; unknown AI metadata must fail closed.
+            PEntryObject object = manager.provider.generateObject(ObjectType.AI_FUNCTION, List.of(family));
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
+            if (!manager.provider.check(ObjectType.AI_FUNCTION, privilegeType, object, collection)) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to check action[{}] on AI FUNCTION {}", privilegeType, family, e);
+            throw new AccessDeniedException();
+        }
+    }
+
+    @Override
+    public void checkAIProviderAction(ConnectContext context, AIProvider provider, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        if (!PrivilegeType.USAGE.equals(privilegeType) || provider == null) {
+            throw new AccessDeniedException();
+        }
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            PrivilegeCollectionV2 collection = manager.mergePrivilegeCollection(
+                    context.getCurrentUserIdentity(), context.getGroups(), context.getCurrentRoleIds());
+            // Authorize the resolved incarnation, never a second lookup by its reusable name.
+            PEntryObject object = new AIProviderPEntryObject(provider.getId());
+            if (!manager.provider.check(ObjectType.AI_PROVIDER, privilegeType, object, collection)) {
+                throw new AccessDeniedException();
+            }
+        } catch (PrivilegeException e) {
+            LOG.warn("Failed to check action[{}] on AI PROVIDER {}", privilegeType, provider.getName(), e);
+            throw new AccessDeniedException();
+        }
     }
 
     @Override
@@ -414,5 +458,21 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkAnyActionOnWarehouse(ConnectContext context, String name) throws AccessDeniedException {
         checkAnyActionOnObject(context, ObjectType.WAREHOUSE, Collections.singletonList(name));
+    }
+
+    /**
+     * Built-in row access policy for the {@code _statistics_.rejected_records}
+     * system table. Delegates to
+     * {@link RejectedRecordsRowAccessPolicy} so the same rules apply
+     * regardless of whether the cluster runs the native access controller,
+     * Ranger-StarRocks, or Ranger-Hive. Returns {@code null} for tables
+     * that are not the system table so user-defined RLS is unaffected.
+     */
+    @Override
+    public Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
+        if (!RejectedRecordsRowAccessPolicy.matches(tableName)) {
+            return null;
+        }
+        return RejectedRecordsRowAccessPolicy.buildPolicy(currentUser, tableName);
     }
 }

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ARRAY_CONTAINS_ALL関数はarr1がarr2のすべての要素を含むかどうか確認します。"
 ---
 
 # array_contains_all
@@ -16,7 +17,7 @@ BOOLEAN array_contains_all(arr1, arr2)
 
 `arr`: 比較する2つの配列。この構文は `arr2` が `arr1` の部分集合であるかどうかを確認します。
 
-2つの配列内の要素のデータ型は同じでなければなりません。StarRocks がサポートする配列要素のデータ型については、[ARRAY](../../../sql-reference/data-types/semi_structured/Array.md) を参照してください。
+2つの配列内の要素のデータ型は同じでなければなりません。StarRocks がサポートする配列要素のデータ型については、[ARRAY](../../data-types/semi_structured/Array.md) を参照してください。
 
 ## 戻り値
 

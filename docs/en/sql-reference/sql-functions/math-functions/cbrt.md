@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Computes the cube root of the argument."
 ---
 
 # cbrt

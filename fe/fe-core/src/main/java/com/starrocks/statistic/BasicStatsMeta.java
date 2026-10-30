@@ -166,7 +166,7 @@ public class BasicStatsMeta implements Writable {
         } else if (metrics.unhealthyPartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
             updateRatio = (metrics.updatePartitionRowCountForCalc * 1.0) / metrics.tableRowCount;
         } else {
-            double rowUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.tableRowCount;
+            double rowUpdateRatio = (metrics.updatePartitionRowCountForCalc * 1.0) / metrics.tableRowCount;
             double partitionUpdateRatio = (metrics.unhealthyPartitionCount * 1.0) / metrics.totalPartitionCount;
             updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
         }
@@ -217,6 +217,16 @@ public class BasicStatsMeta implements Writable {
     public void increaseDeltaRows(Long delta) {
         totalRows += delta;
         deltaRows += delta;
+    }
+
+    // Records rows changed without growing the table, e.g. a delete. Only the health check uses deltaRows,
+    // so the row count used by the optimizer is not inflated.
+    public void increaseChangedRows(long changed) {
+        deltaRows += changed;
+    }
+
+    public long getDeltaRows() {
+        return deltaRows;
     }
 
     public void increaseStatsCollectionCount(AnalyzeStatus status) {

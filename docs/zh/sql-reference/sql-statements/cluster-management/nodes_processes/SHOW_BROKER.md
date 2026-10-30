@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW BROKER 查看已添加到 StarRocks 集群的所有 Broker 信息。"
 ---
 
 # SHOW BROKER

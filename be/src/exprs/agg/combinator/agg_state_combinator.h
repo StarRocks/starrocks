@@ -30,7 +30,7 @@ public:
         VLOG_ROW << "AggStateCombinator constructor:" << _agg_state_desc.debug_string();
     }
 
-    ~AggStateCombinator() = default;
+    ~AggStateCombinator() override = default;
 
     bool support_nullable_immediate_input() const override { return _function->support_nullable_immediate_input(); }
 
@@ -42,6 +42,13 @@ public:
 
     // destroy the agg state
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { _function->destroy(ctx, ptr); }
+
+    // The states belong to the wrapped function. The inherited version would judge them by the combinator's own
+    // empty State, find it trivially destructible and destroy nothing.
+    void batch_destroy_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
+                                      size_t state_offset, const Filter& selection) const override {
+        _function->batch_destroy_with_selection(ctx, chunk_size, states, state_offset, selection);
+    }
 
     // get the size of the agg state
     size_t size() const override { return _function->size(); }

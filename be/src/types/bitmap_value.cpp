@@ -37,6 +37,7 @@
 #include "base/container/raw_container.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
+#include "common/config_expr_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "types/bitmap_value_detail.h"
 
@@ -1152,8 +1153,8 @@ void BitmapValue::add_many(size_t n_args, const uint32_t* vals) {
 }
 
 uint64_t BitmapValueIter::next_batch(uint64_t* values, uint64_t count) {
-    uint64_t remain_rows = _remain_rows();
-    uint64_t read_count = std::min(count, remain_rows);
+    const uint64_t remaining = remain_rows();
+    uint64_t read_count = std::min(count, remaining);
     if (read_count <= 0) {
         return 0;
     }

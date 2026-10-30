@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -57,7 +58,13 @@ public:
 
     void get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const;
 
+    // Check whether this fileset contains an SST with the given filename.
+    // Cheaper than get_all_sstable_pbs: no protobuf copy, just string comparison.
+    bool contains_sst(const std::string& filename) const;
+
     size_t memory_usage() const;
+
+    void for_each_sstable(const std::function<void(const PersistentIndexSstable&)>& fn) const;
 
     void print_debug_info(std::stringstream& ss);
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "現在のデータベース内のすべてのパイプのメタデータを返します。"
 ---
 
 # inspect_all_pipes

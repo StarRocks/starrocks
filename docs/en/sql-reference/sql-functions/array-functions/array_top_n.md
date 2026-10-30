@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Sorts the elements of a given array in their natural descending order, and returns the top-n elements in an array."
 ---
 
 # array_top_n

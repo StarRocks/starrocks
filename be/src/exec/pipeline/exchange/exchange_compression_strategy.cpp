@@ -1,0 +1,61 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "exec/pipeline/exchange/exchange_compression_strategy.h"
+
+#include <cmath>
+#include <random>
+
+#include "common/config_compression_fwd.h"
+
+namespace starrocks::pipeline {
+
+ExchangeCompressionStrategy::ExchangeCompressionStrategy() : _gen(std::random_device()()) {}
+
+void ExchangeCompressionStrategy::feedback(uint64_t uncompressed_bytes, uint64_t compressed_bytes,
+                                           uint64_t serialization_time_ns, uint64_t compression_time_ns) {
+    if (uncompressed_bytes == 0 || compressed_bytes == 0 || compression_time_ns == 0) {
+        return;
+    }
+    // Both divisions are between uint64_t operands, so they have to be widened before dividing:
+    // integer division truncates the very range the reward is meant to discriminate on.  lz4 on
+    // analytic data lands around 1.3x at roughly 1 GB/s, which truncates to a ratio of 1 and -- once
+    // compression runs slower than one byte per nanosecond -- a speed of 0.  The reward then never
+    // clears 1.0, _beta grows monotonically, and the Thompson sampler turns compression off for the
+    // rest of the query.  Measured on TPC-DS Q67 (SF1000): the exchange serialized 16.9 GB but only
+    // 85.8 MB (0.5%) ever reached the codec.
+    double compress_speed = static_cast<double>(uncompressed_bytes) / static_cast<double>(compression_time_ns) *
+                            (1e9 / 1024 / 1024); // MB/s
+    double compress_ratio = static_cast<double>(uncompressed_bytes) / static_cast<double>(compressed_bytes);
+    double reward_ratio = (compress_ratio / config::lz4_expected_compression_ratio) *
+                          (compress_speed / config::lz4_expected_compression_speed_mbps);
+    if (reward_ratio > 1.0) {
+        _alpha += 1;
+    } else {
+        _beta += 1;
+    }
+}
+
+bool ExchangeCompressionStrategy::decide() {
+    std::gamma_distribution<double> gamma_alpha(_alpha, 1.0);
+    std::gamma_distribution<double> gamma_beta(_beta, 1.0);
+
+    double sample_alpha = gamma_alpha(_gen);
+    double sample_beta = gamma_beta(_gen);
+
+    double theta = sample_alpha / (sample_alpha + sample_beta);
+    return theta > 0.5;
+}
+
+} // namespace starrocks::pipeline

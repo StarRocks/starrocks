@@ -1,0 +1,108 @@
+-- name: test_iceberg_update_partitioned
+
+create external catalog iceberg_upd_part_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+
+create database iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_update_partitioned/${uuid0}/iceberg_update_db_${uuid0}"
+);
+
+-- ================================================
+-- SECTION 1: DATE-PARTITIONED TABLE
+-- ================================================
+
+create table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders (
+    id INT,
+    product STRING,
+    amount DECIMAL(10,2),
+    status STRING,
+    order_date DATE
+) PARTITION BY (order_date) PROPERTIES ("format-version" = "2");
+
+INSERT INTO iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders VALUES
+    (1, 'Widget', 100.00, 'PENDING', '2024-01-01'),
+    (2, 'Gadget', 200.00, 'PENDING', '2024-01-01'),
+    (3, 'Widget', 150.00, 'SHIPPED', '2024-01-02'),
+    (4, 'Gadget', 300.00, 'PENDING', '2024-01-02'),
+    (5, 'Widget', 250.00, 'PENDING', '2024-01-03');
+
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders ORDER BY id;
+
+-- Test 1.1: UPDATE within a single partition
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET status = 'CANCELLED' WHERE order_date = '2024-01-01' AND status = 'PENDING';
+
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders ORDER BY id;
+
+-- Test 1.2: UPDATE across multiple partitions
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET status = 'DELIVERED' WHERE product = 'Widget';
+
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders ORDER BY id;
+
+-- Test 1.3: UPDATE with partition filter (should benefit from partition pruning)
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET amount = amount * 1.1 WHERE order_date = '2024-01-02';
+
+SELECT id, amount FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders WHERE order_date = '2024-01-02' ORDER BY id;
+
+-- Test 1.4: Verify data in unaffected partitions is unchanged
+SELECT id, amount FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders WHERE order_date = '2024-01-01' ORDER BY id;
+
+-- ================================================
+-- SECTION 2: ERROR CASES
+-- ================================================
+
+-- Test 2.1: UPDATE on partition column should fail
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET order_date = '2099-01-01' WHERE id = 1;
+
+-- ================================================
+-- SECTION 3: STRING-PARTITIONED TABLE
+-- ================================================
+
+create table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events (
+    id INT,
+    message STRING,
+    level STRING,
+    region STRING
+) PARTITION BY (region) PROPERTIES ("format-version" = "2");
+
+INSERT INTO iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events VALUES
+    (1, 'Login failed', 'ERROR', 'US'),
+    (2, 'Disk full', 'WARN', 'US'),
+    (3, 'Login OK', 'INFO', 'EU'),
+    (4, 'Timeout', 'ERROR', 'EU'),
+    (5, 'OOM', 'ERROR', 'APAC');
+
+-- Test 3.1: UPDATE within one partition
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events SET level = 'RESOLVED' WHERE region = 'US' AND level = 'ERROR';
+
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events ORDER BY id;
+
+-- Test 3.2: UPDATE across all partitions
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events SET message = concat(message, ' [acked]') WHERE level = 'ERROR';
+
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events WHERE level = 'ERROR' ORDER BY id;
+
+-- ================================================
+-- SECTION 4: UPDATE + INSERT + SELECT interleaved
+-- ================================================
+
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET status = 'ARCHIVED' WHERE order_date = '2024-01-01';
+
+INSERT INTO iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders VALUES
+    (6, 'Gizmo', 500.00, 'PENDING', '2024-01-01');
+
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders WHERE order_date = '2024-01-01' ORDER BY id;
+
+-- Cleanup
+drop table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events force;
+drop table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders force;
+drop database iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_upd_part_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_update_partitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null

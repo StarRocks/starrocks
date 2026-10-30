@@ -14,11 +14,13 @@
 
 #include "chunks_sorter_full_sort.h"
 
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "common/runtime_profile.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sort_permute.h"
-#include "exec/sorting/sorting.h"
+#include "compute_env/sorting/data_segment.h"
+#include "compute_env/sorting/merge.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -61,7 +63,7 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
 // Accumulate unsorted input chunks into a larger chunk
 Status ChunksSorterFullSort::_merge_unsorted(RuntimeState* state, const ChunkPtr& chunk) {
     SCOPED_TIMER(_build_timer);
-    _staging_unsorted_chunks.push_back(std::move(chunk));
+    _staging_unsorted_chunks.push_back(chunk);
     _staging_unsorted_rows += chunk->num_rows();
     _staging_unsorted_bytes += chunk->bytes_usage();
     return Status::OK();
@@ -90,8 +92,6 @@ static void concat_chunks(ChunkPtr& dst_chunk, const std::vector<ChunkPtr>& src_
         // Reserve memory room for bytes array in BinaryColumn here.
         if (dst_data_col->is_binary()) {
             reserve_memory<BinaryColumn>(dst_data_col, src_chunks, i);
-        } else if (dst_col->is_large_binary()) {
-            reserve_memory<LargeBinaryColumn>(dst_data_col, src_chunks, i);
         }
     }
     for (const auto& src_chk : src_chunks) {
@@ -111,7 +111,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         COUNTER_UPDATE(_profiler->input_required_memory, _staging_unsorted_bytes);
         concat_chunks(_unsorted_chunk, _staging_unsorted_chunks, _staging_unsorted_rows);
         _staging_unsorted_chunks.clear();
-        RETURN_IF_ERROR(_unsorted_chunk->upgrade_if_overflow());
+        RETURN_IF_ERROR(_unsorted_chunk->capacity_limit_reached());
 
         SCOPED_TIMER(_sort_timer);
         DataSegment segment(_sort_exprs, _unsorted_chunk);
@@ -120,7 +120,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
                 sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, permutation));
         auto sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
         materialize_by_permutation_single(sorted_chunk.get(), _unsorted_chunk, permutation);
-        RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
+        RETURN_IF_ERROR(sorted_chunk->capacity_limit_reached());
 
         _sorted_chunks.emplace_back(std::move(sorted_chunk));
         _total_rows += _unsorted_chunk->num_rows();
@@ -282,7 +282,6 @@ Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
         if (!_early_materialized_slots.empty()) {
             *chunk = _late_materialize(*chunk);
         }
-        RETURN_IF_ERROR((*chunk)->downgrade());
     }
     if (run.empty()) {
         _merged_runs.pop_front();

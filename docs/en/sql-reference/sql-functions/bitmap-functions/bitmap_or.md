@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Calculates the union of two input bitmaps and return a new bitmap."
 ---
 
 # bitmap_or

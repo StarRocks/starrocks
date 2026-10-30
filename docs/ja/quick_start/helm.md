@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 description: StarRocks をデプロイするために Helm を使用する
 displayed_sidebar: docs
 ---
@@ -53,7 +54,7 @@ Kubernetes 環境で提供される SQL クライアントを使用するか、�
 
 ### curl
 
-`curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS プロンプトで `curl` または `curl.exe` を実行して、インストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を入手してください](https://curl.se/dlwiz/?type=bin)。
+`curl` は StarRocks にデータロードジョブを発行し、データセットをダウンロードするために使用されます。OS プロンプトで `curl` または `curl.exe` を実行して、インストールされているか確認してください。curl がインストールされていない場合は、[こちらから curl を入手してください](https://curl.se/)。
 
 ---
 

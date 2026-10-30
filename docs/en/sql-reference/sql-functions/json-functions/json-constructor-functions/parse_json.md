@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Converts a string to a JSON value."
 ---
 
 # parse_json

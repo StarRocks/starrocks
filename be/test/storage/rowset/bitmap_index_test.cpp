@@ -39,16 +39,18 @@
 
 #include "base/string/utf8.h"
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/column_viewer.h"
+#include "exec/exec_env.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
+#include "storage_primitive/key_coder.h"
 
 namespace starrocks {
 
@@ -69,7 +71,7 @@ protected:
     void TearDown() override {}
 
     void get_bitmap_reader_iter(RandomAccessFile* rfile, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
-                                BitmapIndexIterator** iter, int32_t gram_num = -1) {
+                                SegmentBitmapIndexIterator** iter, int32_t gram_num = -1) {
         _opts.read_file = rfile;
         *reader = new BitmapIndexReader(gram_num);
         ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bitmap_index()));
@@ -129,7 +131,7 @@ TEST_F(BitmapIndexTest, test_invert) {
     write_index_file<TYPE_INT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -184,7 +186,7 @@ TEST_F(BitmapIndexTest, test_invert_2) {
 
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -219,7 +221,7 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
     write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -251,7 +253,7 @@ TEST_F(BitmapIndexTest, test_null) {
     write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -302,7 +304,7 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
     }
     ASSERT_EQ(1, loads.load());
 
-    BitmapIndexIterator* iter = nullptr;
+    SegmentBitmapIndexIterator* iter = nullptr;
     ASSERT_OK(reader->new_iterator(opts, &iter));
 
     Roaring bitmap;
@@ -357,7 +359,7 @@ TEST_F(BitmapIndexTest, test_add_value_with_current_rowid) {
     }
 
     BitmapIndexReader* reader = nullptr;
-    BitmapIndexIterator* iter = nullptr;
+    SegmentBitmapIndexIterator* iter = nullptr;
     ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
     get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -403,7 +405,7 @@ TEST_F(BitmapIndexTest, test_read_union_variants) {
     write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -447,7 +449,7 @@ TEST_F(BitmapIndexTest, test_seek_dictionary_by_predicate) {
     write_index_file<TYPE_VARCHAR>(file_name, slices.data(), values.size(), 0, &meta);
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter);
 
@@ -455,7 +457,7 @@ TEST_F(BitmapIndexTest, test_seek_dictionary_by_predicate) {
             auto res = BooleanColumn::create();
             const auto& binary_col = down_cast<const BinaryColumn&>(value_column);
             for (size_t i = 0; i < binary_col.size(); ++i) {
-                Slice s = binary_col.get_data()[i];
+                Slice s = binary_col.get_slice(i);
                 res->append(s.to_string().find('a') != std::string::npos);
             }
             return res;
@@ -530,7 +532,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
 
     {
         BitmapIndexReader* reader = nullptr;
-        BitmapIndexIterator* iter = nullptr;
+        SegmentBitmapIndexIterator* iter = nullptr;
         ASSIGN_OR_ABORT(const auto rfile, _fs->new_random_access_file(file_name));
         get_bitmap_reader_iter(rfile.get(), meta, &reader, &iter, 3);
 
@@ -541,7 +543,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
         ASSERT_EQ(ngram_num, ngram.size());
 
         size_t to_read = ngram_num;
-        const auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+        const auto col = ChunkFactory::column_from_field_type(TYPE_VARCHAR, false);
         ASSERT_TRUE(iter->next_batch_ngram(0, &to_read, col.get()).ok());
         ASSERT_EQ(ngram_num, to_read);
 
@@ -569,6 +571,120 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
         delete reader;
         delete iter;
     }
+}
+
+// Verify that BitmapIndexReader with owned_mem_tracker=false does NOT affect the
+// bitmap_index_mem_tracker during construction, load, or destruction.
+TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    size_t num_rows = 10;
+    int val[10];
+    for (int i = 0; i < 10; ++i) val[i] = i;
+
+    std::string file_name = kTestDir + "/owned_false";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+
+    {
+        // Create with owned_mem_tracker=false.
+        BitmapIndexReader reader(-1, false);
+
+        // Construction should NOT change the tracker.
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption(), baseline);
+        }
+
+        // Load should succeed.
+        ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+        ASSERT_TRUE(first_load);
+
+        // After load, tracker should still be unchanged because owned_mem_tracker=false.
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption(), baseline);
+        }
+
+        // Verify the reader is functional.
+        ASSERT_GT(reader.mem_usage(), sizeof(BitmapIndexReader));
+    }
+    // After destruction, tracker should remain at baseline.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that BitmapIndexReader with owned_mem_tracker=true (default) properly tracks
+// memory via bitmap_index_mem_tracker during construction, load, and destruction.
+TEST_F(BitmapIndexTest, test_owned_mem_tracker_true_tracks_memory) {
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
+    int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
+
+    size_t num_rows = 10;
+    int val[10];
+    for (int i = 0; i < 10; ++i) val[i] = i;
+
+    std::string file_name = kTestDir + "/owned_true";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+
+    {
+        // Create with default owned_mem_tracker=true.
+        BitmapIndexReader reader;
+
+        // Construction should consume sizeof(BitmapIndexReader).
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BitmapIndexReader)));
+        }
+
+        // Load should succeed.
+        ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+        ASSERT_TRUE(first_load);
+
+        // After load, tracker should have consumed the full mem_usage.
+        if (tracker != nullptr) {
+            ASSERT_EQ(tracker->consumption() - baseline, static_cast<int64_t>(reader.mem_usage()));
+            ASSERT_GT(tracker->consumption() - baseline, static_cast<int64_t>(sizeof(BitmapIndexReader)));
+        }
+    }
+    // After destruction, tracker should return to baseline.
+    if (tracker != nullptr) {
+        ASSERT_EQ(tracker->consumption(), baseline);
+    }
+}
+
+// Verify that BitmapIndexReader's mem_usage() returns sizeof(BitmapIndexReader) before load
+// and includes IndexedColumnReader memory after load.
+TEST_F(BitmapIndexTest, test_mem_usage_before_and_after_load) {
+    size_t num_rows = 10;
+    int val[10];
+    for (int i = 0; i < 10; ++i) val[i] = i;
+
+    std::string file_name = kTestDir + "/mem_usage_check";
+    ColumnIndexMetaPB meta;
+    write_index_file<TYPE_INT>(file_name, val, num_rows, 0, &meta);
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+
+    BitmapIndexReader reader;
+
+    // Before load: mem_usage should be sizeof(BitmapIndexReader) since internal readers are null.
+    ASSERT_EQ(reader.mem_usage(), sizeof(BitmapIndexReader));
+    ASSERT_FALSE(reader.loaded());
+
+    ASSIGN_OR_ABORT(auto first_load, reader.load(_opts, meta.bitmap_index()));
+    ASSERT_TRUE(first_load);
+    ASSERT_TRUE(reader.loaded());
+
+    // After load: mem_usage should be larger (includes dict and bitmap column readers).
+    ASSERT_GT(reader.mem_usage(), sizeof(BitmapIndexReader));
 }
 
 } // namespace starrocks

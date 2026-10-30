@@ -254,6 +254,10 @@ public:
 
     // seconds since julian date epoch to 1970.01.01
     static const Timestamp UNIX_EPOCH_SECONDS = (210866803200LL);
+
+    // Unix seconds of 0001-01-01 00:00:00 and 9999-12-31 23:59:59 UTC.
+    static constexpr int64_t MIN_CIVIL_UNIX_SECOND = -62135596800LL;
+    static constexpr int64_t MAX_CIVIL_UNIX_SECOND = 253402300799LL;
 };
 
 // ========================== date inline function ===============================
@@ -391,7 +395,7 @@ int timestamp::get_timezone_offset_by_epoch_seconds(int64_t seconds_from_epoch, 
     static constexpr int64_t MAX_SECONDS = 9223372036;
     seconds_from_epoch = std::max(MIN_SECONDS, std::min(MAX_SECONDS, seconds_from_epoch));
     std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
-    return ctz.lookup(tp).offset;
+    return ctz.lookup_offset(tp).offset;
 }
 
 inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "计算一段时间内用户的留存率，接收1到31个条件并返回由0和1组成的数组。"
 ---
 
 # retention

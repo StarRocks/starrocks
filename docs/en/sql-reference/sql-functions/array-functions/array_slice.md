@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns a slice of an array."
 ---
 
 # array_slice

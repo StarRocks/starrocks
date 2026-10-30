@@ -20,6 +20,8 @@ import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.DeleteFileIndexCache;
+import org.apache.iceberg.Schema;
 
 import java.util.Map;
 import java.util.Set;
@@ -32,6 +34,7 @@ public class StarRocksIcebergTableScanContext {
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
+    private DeleteFileIndexCache deleteFileIndexCache;
     private Map<IcebergTableName, Set<String>> metaFileCacheMap;
     private boolean onlyReadCache;
     private int localParallelism;
@@ -39,6 +42,10 @@ public class StarRocksIcebergTableScanContext {
     private boolean enableCacheDataFileIdentifierColumnMetrics;
     private long fileSplitSize;
     private ConnectContext connectContext;
+    // The schema the scan reads with: the targeted snapshot's schema for a time-travel read, or the
+    // current table schema for an ordinary read (so a metadata-only ADD COLUMN, which advances the
+    // schema without a new snapshot, is visible). Null means keep Iceberg's default per-snapshot schema.
+    private Schema readSchema;
 
     public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
         this(catalogName, dbName, tableName, planMode, null);
@@ -78,6 +85,14 @@ public class StarRocksIcebergTableScanContext {
 
     public Cache<String, Set<DeleteFile>> getDeleteFileCache() {
         return deleteFileCache;
+    }
+
+    public DeleteFileIndexCache getDeleteFileIndexCache() {
+        return deleteFileIndexCache;
+    }
+
+    public void setDeleteFileIndexCache(DeleteFileIndexCache deleteFileIndexCache) {
+        this.deleteFileIndexCache = deleteFileIndexCache;
     }
 
     public Map<IcebergTableName, Set<String>> getMetaFileCacheMap() {
@@ -142,5 +157,13 @@ public class StarRocksIcebergTableScanContext {
 
     public long getFileSplitSize() {
         return fileSplitSize;
+    }
+
+    public Schema getReadSchema() {
+        return readSchema;
+    }
+
+    public void setReadSchema(Schema readSchema) {
+        this.readSchema = readSchema;
     }
 }

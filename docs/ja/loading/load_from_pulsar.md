@@ -1,5 +1,7 @@
 ---
+sidebar_position: 130
 displayed_sidebar: docs
+description: "Routine Load を使用して Apache Pulsar トピックから CSV および JSON 形式でデータを継続的にロードする方法。"
 ---
 import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 

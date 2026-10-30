@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "STDDEV関数は母集団標準偏差を返し、v2.5.10以降はウィンドウ関数としても使用できます。"
 ---
 
 # stddev,stddev_pop,std

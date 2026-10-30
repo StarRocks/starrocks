@@ -33,10 +33,12 @@ import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.proc.TransProcDir;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.sql.ast.AdminShowAutomatedSnapshotStmt;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.AdminShowTabletStatusStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -61,6 +63,7 @@ import com.starrocks.sql.ast.ShowComputeNodeBlackListStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreateFunctionStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
@@ -131,6 +134,7 @@ import com.starrocks.sql.ast.warehouse.ShowNodesStmt;
 import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.TypeFactory;
 
 import java.util.List;
@@ -354,6 +358,7 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     public ShowResultSetMetaData visitShowProfilelistStatement(ShowProfilelistStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("QueryId", TypeFactory.createVarcharType(48)))
+                .addColumn(new Column("CustomQueryId", TypeFactory.createVarcharType(128)))
                 .addColumn(new Column("StartTime", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("Time", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("State", TypeFactory.createVarcharType(16)))
@@ -393,6 +398,29 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .addColumn(new Column("IsSetBadForce", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("State", TypeFactory.createVarcharType(30)))
                 .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminShowTabletStatusStatement(AdminShowTabletStatusStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("TabletId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Version", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("Status", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFileCount", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("MissingDataFiles", StringType.STRING))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitAdminRepairTableStatement(AdminRepairTableStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("PartitionId", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("VisibleVersion", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("RepairStatus", TypeFactory.createVarcharType(30)))
+                .addColumn(new Column("TabletRecoverInfo", StringType.STRING))
+                .addColumn(new Column("ErrorMsg", StringType.STRING))
                 .build();
     }
 
@@ -488,6 +516,13 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Table", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Create Table", TypeFactory.createVarcharType(30)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitShowCreateFunctionStatement(ShowCreateFunctionStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Create Function", TypeFactory.createVarcharType(30)))
                 .build();
     }
 
@@ -659,7 +694,12 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Level", TypeFactory.createVarcharType(20)))
                 .addColumn(new Column("Code", TypeFactory.createVarcharType(20)))
-                .addColumn(new Column("Message", TypeFactory.createVarcharType(20)))
+                // MysqlCodec.writeField derives the ColumnDefinition41 column length from the
+                // declared type, so a short VARCHAR would advertise far less room than the values
+                // actually sent: a filtered-rows warning carries a load tracking URL and an
+                // analysis error carries the full message. Declared like the other message columns
+                // in this file (see visitAdminRepairTableStatement).
+                .addColumn(new Column("Message", StringType.STRING))
                 .build();
     }
 
@@ -843,6 +883,15 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
                 .column("creator", TypeFactory.createVarcharType(64))
                 .column("last_refresh_process_time", DATETIME)
                 .column("last_refresh_job_id", TypeFactory.createVarcharType(64))
+                .column("last_refresh_time", DATETIME)
+                .column("warehouse", TypeFactory.createVarcharType(128))
+                .column("refresh_mode", TypeFactory.createVarcharType(16))
+                .column("refresh_trigger", TypeFactory.createVarcharType(24))
+                .column("refresh_policy", TypeFactory.createVarcharType(256))
+                .column("resource_group", TypeFactory.createVarcharType(128))
+                .column("query_rewrite_status_reason", TypeFactory.createVarcharType(32))
+                .column("last_freshness_confirmed_at", DATETIME)
+                .column("base_table_refresh_version_times", TypeFactory.createVarcharType(1024))
                 .build();
     }
 
@@ -1278,12 +1327,43 @@ public class ShowResultMetaFactory implements AstVisitorExtendInterface<ShowResu
     }
 
     @Override
+    public ShowResultSetMetaData visitShowAIProvidersStatement(
+            com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Type", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Protocol", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("IsDefault", TypeFactory.createVarcharType(8)))
+                .addColumn(new Column("Endpoint", TypeFactory.createVarcharType(512)))
+                .addColumn(new Column("Model", TypeFactory.createVarcharType(128)))
+                .addColumn(new Column("Dimensions", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("MaxDocuments", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("TimeoutMs", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("ApiKey", TypeFactory.createVarcharType(32)))
+                .addColumn(new Column("Comment", TypeFactory.createVarcharType(1024)))
+                .build();
+    }
+
+    @Override
+    public ShowResultSetMetaData visitDescAIProviderStatement(
+            com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, Void context) {
+        return ShowResultSetMetaData.builder()
+                .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
+                .addColumn(new Column("Value", TypeFactory.createVarcharType(1024)))
+                .build();
+    }
+
+    @Override
     public ShowResultSetMetaData visitShowFailPointStatement(ShowFailPointStatement statement, Void context) {
+        // TriggerCount / PausedThreads are appended AFTER Host on purpose: the QA harness parses
+        // this result positionally, so inserting them earlier would shift the existing columns.
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("Name", TypeFactory.createVarcharType(256)))
                 .addColumn(new Column("TriggerMode", TypeFactory.createVarcharType(32)))
                 .addColumn(new Column("Times/Probability", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("Host", TypeFactory.createVarcharType(64)))
+                .addColumn(new Column("TriggerCount", TypeFactory.createVarcharType(20)))
+                .addColumn(new Column("PausedThreads", TypeFactory.createVarcharType(20)))
                 .build();
     }
 

@@ -17,6 +17,8 @@
 #include "common/statusor.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/utils.h"
+#include "formats/scan_context.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -80,10 +82,15 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
         std::vector<std::unique_ptr<ORCColumnReader>> child_readers;
         for (size_t i = 0; i < type.children.size(); i++) {
             const TypeDescriptor& child_type = type.children[i];
-            ASSIGN_OR_RETURN(
-                    std::unique_ptr<ORCColumnReader> child_reader,
-                    ORCColumnReader::create(child_type, orc_mapping->get_orc_type_child_mapping(i).orc_type, true,
-                                            orc_mapping->get_orc_type_child_mapping(i).orc_mapping, reader));
+            const OrcMappingOrcType& child = orc_mapping->get_orc_type_child_mapping(i);
+            std::unique_ptr<ORCColumnReader> child_reader;
+            if (child.orc_type == nullptr) {
+                ASSIGN_OR_RETURN(child_reader,
+                                 create_default_column_reader(child_type, true, reader, child.initial_default));
+            } else {
+                ASSIGN_OR_RETURN(child_reader,
+                                 ORCColumnReader::create(child_type, child.orc_type, true, child.orc_mapping, reader));
+            }
             child_readers.emplace_back(std::move(child_reader));
         }
         return std::make_unique<StructColumnReader>(type, orc_type, nullable, reader, std::move(child_readers));
@@ -128,14 +135,28 @@ StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create(const TypeDes
     }
 }
 
-StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(const TypeDescriptor& type,
-                                                                                         bool nullable,
-                                                                                         OrcChunkReader* reader) {
-    return std::make_unique<DefaultColumnReader>(type, nullable, reader);
+StatusOr<std::unique_ptr<ORCColumnReader>> ORCColumnReader::create_default_column_reader(
+        const TypeDescriptor& type, bool nullable, OrcChunkReader* reader,
+        const std::optional<std::string>& initial_default) {
+    ColumnPtr default_column = nullptr;
+    if (initial_default.has_value()) {
+        auto column = FormatScanContext::create_initial_default_column(type, nullable, *initial_default);
+        // A type the default parser does not support keeps reading NULL; any other failure fails the scan.
+        if (column.ok()) {
+            default_column = std::move(column).value();
+        } else if (!column.status().is_not_supported()) {
+            return column.status();
+        }
+    }
+    return std::make_unique<DefaultColumnReader>(type, nullable, reader, std::move(default_column));
 }
 
 Status DefaultColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, size_t from, size_t size) {
-    col->append_default(size);
+    if (_default_column != nullptr) {
+        col->append_value_multiple_times(*_default_column, 0, size);
+    } else {
+        col->append_default(size);
+    }
     return Status::OK();
 }
 
@@ -233,8 +254,8 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
             for (size_t i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < std::numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                                      value > std::numeric_limits<RunTimeCppType<Type>>::max())) {
                     filter[i] = 0;
                     if (!reported) {
                         reported = true;
@@ -250,8 +271,8 @@ Status IntColumnReader<Type>::_fill_int_column_with_null_from_cvb(OrcColumnVecto
             for (int i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (nulls[i] == 0 && (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
-                                      value > numeric_limits<RunTimeCppType<Type>>::max())) {
+                if (nulls[i] == 0 && (value < std::numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                                      value > std::numeric_limits<RunTimeCppType<Type>>::max())) {
                     nulls[i] = 1;
                 }
             }
@@ -290,8 +311,8 @@ Status IntColumnReader<Type>::_fill_int_column_from_cvb(OrcColumnVectorBatch* da
             for (size_t i = 0; i < size; i++) {
                 int64_t value = cvbd[i];
                 // overflow.
-                if (value < numeric_limits<RunTimeCppType<Type>>::lowest() ||
-                    value > numeric_limits<RunTimeCppType<Type>>::max()) {
+                if (value < std::numeric_limits<RunTimeCppType<Type>>::lowest() ||
+                    value > std::numeric_limits<RunTimeCppType<Type>>::max()) {
                     // can not accept null, so we have to discard it.
                     filter[i] = 0;
                     if (!reported) {
@@ -519,11 +540,11 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
 
     auto& vb = values->get_bytes();
     // Need to resize after insert, because of padding char existed
-    vb.reserve(vb.size() + len);
+    TRY_CATCH_BAD_ALLOC(vb.reserve(vb.size() + len));
 
     auto& vo = values->get_offset();
     // We can resize directly
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    vo.resize_uninitialized(vo.size() + size, vb.size() + len);
 
     size_t write_pos = vb.size();
     if (cvb->hasNulls) {
@@ -535,10 +556,10 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                     strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], str_size);
                     write_pos += str_size;
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 } else {
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 }
             }
         } else {
@@ -547,10 +568,10 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                     strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                     write_pos += data->length[cvb_pos];
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 } else {
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 }
             }
         }
@@ -562,15 +583,18 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                 strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], str_size);
                 write_pos += str_size;
                 // Need plus 1 for offset
-                vo[i + 1] = write_pos;
+                vo.set(i + 1, write_pos);
             }
         } else {
-            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
-                strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
-                write_pos += data->length[cvb_pos];
-                // Need plus 1 for offset
-                vo[i + 1] = write_pos;
-            }
+            vo.visit_storage([&](auto& offsets) {
+                using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
+                for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+                    strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
+                    write_pos += data->length[cvb_pos];
+                    // Need plus 1 for offset
+                    offsets[i + 1] = static_cast<OffsetValue>(write_pos);
+                }
+            });
         }
     }
 
@@ -668,28 +692,31 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
     size_t write_pos = vb.size();
 
     // vb is using RawVectorPad16, resize will not initialize vector
-    vb.resize(vb.size() + len);
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    TRY_CATCH_BAD_ALLOC(vb.resize(vb.size() + len));
+    vo.resize_uninitialized(vo.size() + size, vb.size());
 
     if (cvb->hasNulls) {
-        for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
-            if (cvb->notNull[cvb_pos]) {
+        vo.visit_storage([&](auto& offsets) {
+            using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
+            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
+                if (cvb->notNull[cvb_pos]) {
+                    strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
+                    write_pos += data->length[cvb_pos];
+                }
+                // Plus 1 for offset
+                offsets[i + 1] = static_cast<OffsetValue>(write_pos);
+            }
+        });
+    } else {
+        vo.visit_storage([&](auto& offsets) {
+            using OffsetValue = typename std::decay_t<decltype(offsets)>::value_type;
+            for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
                 strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                 write_pos += data->length[cvb_pos];
                 // Plus 1 for offset
-                vo[i + 1] = write_pos;
-            } else {
-                // Plus 1 for offset
-                vo[i + 1] = write_pos;
+                offsets[i + 1] = static_cast<OffsetValue>(write_pos);
             }
-        }
-    } else {
-        for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
-            strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
-            write_pos += data->length[cvb_pos];
-            // Plus 1 for offset
-            vo[i + 1] = write_pos;
-        }
+        });
     }
     return Status::OK();
 }
@@ -734,18 +761,33 @@ Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, C
     auto* values = ColumnHelper::cast_to_raw<TYPE_DATETIME>(data_column)->get_data().data();
     bool use_ns = _reader->use_nanoseconds_in_datetime();
 
+    if constexpr (IsInstant) {
+        const uint8_t* is_null = nullptr;
+        if (cvb->hasNulls) {
+            _is_null.resize(size);
+            for (size_t i = 0; i < size; i++) {
+                _is_null[i] = !cvb->notNull[from + i];
+            }
+            is_null = _is_null.data();
+        }
+        OrcTimestampHelper::orc_instants_to_native_ts(
+                values + column_start, _reader->tzinfo(), data->data.data() + from,
+                use_ns ? data->nanoseconds.data() + from : nullptr, is_null, size, &_offset_cache, &_offsets);
+        return Status::OK();
+    }
+
     if (cvb->hasNulls) {
         for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
              column_pos++, vb_pos++) {
-            if (!cvb->notNull[column_pos]) {
+            if (!cvb->notNull[vb_pos]) {
                 continue;
             }
             int64_t ns = 0;
             if (use_ns) {
                 ns = data->nanoseconds[vb_pos];
             }
-            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(),
-                                                    _reader->tzoffset_in_seconds(), data->data[vb_pos], ns, IsInstant);
+            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(), data->data[vb_pos], ns,
+                                                    /*is_instant=*/false);
         }
     } else {
         for (size_t column_pos = column_start, vb_pos = from; column_pos < column_start + size;
@@ -754,8 +796,8 @@ Status TimestampColumnReader<IsInstant>::get_next(orc::ColumnVectorBatch* cvb, C
             if (use_ns) {
                 ns = data->nanoseconds[vb_pos];
             }
-            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(),
-                                                    _reader->tzoffset_in_seconds(), data->data[vb_pos], ns, IsInstant);
+            OrcTimestampHelper::orc_ts_to_native_ts(&(values[column_pos]), _reader->tzinfo(), data->data[vb_pos], ns,
+                                                    /*is_instant=*/false);
         }
     }
     return Status::OK();
@@ -965,8 +1007,10 @@ Status StructColumnReader::_fill_struct_column(orc::ColumnVectorBatch* cvb, Colu
 
     auto field_columns = col_struct->fields();
     for (size_t i = 0; i < _type.children.size(); i++) {
-        size_t column_id = _child_readers[i]->get_orc_type()->getColumnId();
-        orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
+        const orc::Type* field_orc_type = _child_readers[i]->get_orc_type();
+        // nullptr for a subfield missing from the file (DefaultColumnReader)
+        orc::ColumnVectorBatch* field_cvb =
+                field_orc_type == nullptr ? nullptr : orc_struct->fieldsColumnIdMap[field_orc_type->getColumnId()];
         auto* field_column = field_columns[i]->as_mutable_raw_ptr();
         RETURN_IF_ERROR(_child_readers[i]->get_next(field_cvb, field_column, from, size));
     }

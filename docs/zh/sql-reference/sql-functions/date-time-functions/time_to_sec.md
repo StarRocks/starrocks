@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将TIME时间值转换为秒数。"
 ---
 
 # time_to_sec

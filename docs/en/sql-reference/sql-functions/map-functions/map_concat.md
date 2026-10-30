@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the union of the input maps."
 ---
 
 # map_concat

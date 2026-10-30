@@ -17,13 +17,19 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.StringType;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.thrift.PlanNodesConstants.DYNAMIC_RSS_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.ROWSET_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.ROW_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.RSS_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.SEGMENT_ID_COLUMN_NAME;
+import static com.starrocks.thrift.PlanNodesConstants.SOURCE_ID_COLUMN_NAME;
 import static com.starrocks.thrift.PlanNodesConstants.TABLET_ID_COLUMN_NAME;
 
 /**
@@ -52,9 +58,32 @@ public class VirtualColumnRegistry {
                     "Tablet ID of the data block containing this row"
             ),
             new VirtualColumnDefinition(
+                    ROWSET_ID_COLUMN_NAME,
+                    StringType.STRING,
+                    "RowSet ID of the data block containing this row",
+                    false
+            ),
+            new VirtualColumnDefinition(
                     SEGMENT_ID_COLUMN_NAME,
                     IntegerType.BIGINT,
                     "Segment id"
+            ),
+            new VirtualColumnDefinition(
+                    RSS_ID_COLUMN_NAME,
+                    IntegerType.INT,
+                    "RowSet Segment id"
+            ),
+            new VirtualColumnDefinition(
+                    SOURCE_ID_COLUMN_NAME,
+                    IntegerType.INT,
+                    "Source id",
+                    false
+            ),
+            new VirtualColumnDefinition(
+                    DYNAMIC_RSS_ID_COLUMN_NAME,
+                    IntegerType.INT,
+                    "Dynamic RowSet Segment id",
+                    false
             ),
             new VirtualColumnDefinition(
                     ROW_ID_COLUMN_NAME,
@@ -69,9 +98,7 @@ public class VirtualColumnRegistry {
     static {
         NAME_TO_DEFINITION = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (VirtualColumnDefinition def : VIRTUAL_COLUMNS) {
-            if (def.isEnabled()) {
-                NAME_TO_DEFINITION.put(def.getName(), def);
-            }
+            NAME_TO_DEFINITION.put(def.getName(), def);
         }
     }
     
@@ -99,9 +126,7 @@ public class VirtualColumnRegistry {
      * @return List of enabled virtual column definitions
      */
     public static List<VirtualColumnDefinition> getAllDefinitions() {
-        return VIRTUAL_COLUMNS.stream()
-                .filter(VirtualColumnDefinition::isEnabled)
-                .collect(Collectors.toList());
+        return new ArrayList<>(VIRTUAL_COLUMNS);
     }
     
     /**

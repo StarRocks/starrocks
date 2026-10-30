@@ -24,7 +24,7 @@
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
-#include "common/config.h"
+#include "common/config_avro_fwd.h"
 #include "exec/avro_test.h"
 #include "types/type_descriptor.h"
 
@@ -58,7 +58,6 @@ static void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {
 
 TEST_F(AvroAddBinaryColumnTest, test_add_string) {
     auto column = BinaryColumn::create();
-    TypeDescriptor t = TypeDescriptor::create_varchar_type(20);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_string_schema.json";
     AvroHelper avro_helper;
@@ -71,7 +70,7 @@ TEST_F(AvroAddBinaryColumnTest, test_add_string) {
 
     avro_value_set_string(&avro_helper.avro_val, "3.14");
 
-    auto st = add_binary_column(column.get(), t, "f_string", avro_helper.avro_val);
+    auto st = add_binary_column(column.get(), TYPE_VARCHAR_DESC, "f_string", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("['3.14']", column->debug_string());
@@ -79,7 +78,6 @@ TEST_F(AvroAddBinaryColumnTest, test_add_string) {
 
 TEST_F(AvroAddBinaryColumnTest, test_add_enum) {
     auto column = BinaryColumn::create();
-    TypeDescriptor t = TypeDescriptor::create_varchar_type(20);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_enum_schema.json";
     AvroHelper avro_helper;
@@ -92,7 +90,7 @@ TEST_F(AvroAddBinaryColumnTest, test_add_enum) {
 
     avro_value_set_enum(&avro_helper.avro_val, 2);
 
-    auto st = add_binary_column(column.get(), t, "f_enum", avro_helper.avro_val);
+    auto st = add_binary_column(column.get(), TYPE_VARCHAR_DESC, "f_enum", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("['DIAMONDS']", column->debug_string());
@@ -100,7 +98,6 @@ TEST_F(AvroAddBinaryColumnTest, test_add_enum) {
 
 TEST_F(AvroAddBinaryColumnTest, test_add_number) {
     auto column = BinaryColumn::create();
-    TypeDescriptor t = TypeDescriptor::create_varchar_type(20);
     std::string schema_path = "./be/test/formats/test_data/avro/single_float_schema.json";
     AvroHelper avro_helper;
     init_avro_value(schema_path, avro_helper);
@@ -112,7 +109,7 @@ TEST_F(AvroAddBinaryColumnTest, test_add_number) {
 
     avro_value_set_float(&avro_helper.avro_val, 3.14);
 
-    auto st = add_binary_column(column.get(), t, "f_float", avro_helper.avro_val);
+    auto st = add_binary_column(column.get(), TYPE_VARCHAR_DESC, "f_float", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("['3.140000']", column->debug_string());
@@ -120,7 +117,6 @@ TEST_F(AvroAddBinaryColumnTest, test_add_number) {
 
 TEST_F(AvroAddBinaryColumnTest, test_add_boolean) {
     auto column = BinaryColumn::create();
-    TypeDescriptor t = TypeDescriptor::create_varchar_type(20);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_boolean_schema.json";
     AvroHelper avro_helper;
@@ -133,7 +129,7 @@ TEST_F(AvroAddBinaryColumnTest, test_add_boolean) {
 
     avro_value_set_boolean(&avro_helper.avro_val, 1);
 
-    auto st = add_binary_column(column.get(), t, "f_boolean", avro_helper.avro_val);
+    auto st = add_binary_column(column.get(), TYPE_VARCHAR_DESC, "f_boolean", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
 
     ASSERT_EQ("['1']", column->debug_string());
@@ -141,7 +137,6 @@ TEST_F(AvroAddBinaryColumnTest, test_add_boolean) {
 
 TEST_F(AvroAddBinaryColumnTest, test_add_object) {
     auto column = BinaryColumn::create();
-    TypeDescriptor t = TypeDescriptor::create_varchar_type(200);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_record_schema.json";
     AvroHelper avro_helper;
@@ -167,7 +162,7 @@ TEST_F(AvroAddBinaryColumnTest, test_add_object) {
         avro_value_set_double(&double_value, 1.234567);
     }
 
-    auto st = add_binary_column(column.get(), t, "f_object", avro_helper.avro_val);
+    auto st = add_binary_column(column.get(), TYPE_VARCHAR_DESC, "f_object", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
     if (config::avro_ignore_union_type_tag) {
         ASSERT_EQ(R"(['{"boolean_type":true,"long_type":4294967296,"double_type":1.234567}'])", column->debug_string());
@@ -179,7 +174,6 @@ TEST_F(AvroAddBinaryColumnTest, test_add_object) {
 
 TEST_F(AvroAddBinaryColumnTest, test_add_array) {
     auto column = BinaryColumn::create();
-    TypeDescriptor t = TypeDescriptor::create_varchar_type(200);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_array_schema.json";
     AvroHelper avro_helper;
@@ -198,7 +192,7 @@ TEST_F(AvroAddBinaryColumnTest, test_add_array) {
     avro_value_append(&avro_helper.avro_val, &ele2, NULL);
     avro_value_set_long(&ele2, 4294967298);
 
-    auto st = add_binary_column(column.get(), t, "f_array", avro_helper.avro_val);
+    auto st = add_binary_column(column.get(), TYPE_VARCHAR_DESC, "f_array", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
     if (config::avro_ignore_union_type_tag) {
         ASSERT_EQ(R"(['[4294967297,4294967298]'])", column->debug_string());
@@ -209,7 +203,6 @@ TEST_F(AvroAddBinaryColumnTest, test_add_array) {
 
 TEST_F(AvroAddBinaryColumnTest, test_add_map) {
     auto column = BinaryColumn::create();
-    TypeDescriptor t = TypeDescriptor::create_varchar_type(200);
 
     std::string schema_path = "./be/test/formats/test_data/avro/single_map_schema.json";
     AvroHelper avro_helper;
@@ -228,7 +221,7 @@ TEST_F(AvroAddBinaryColumnTest, test_add_map) {
     avro_value_add(&avro_helper.avro_val, "ele2", &ele2, NULL, NULL);
     avro_value_set_long(&ele2, 4294967298);
 
-    auto st = add_binary_column(column.get(), t, "f_map", avro_helper.avro_val);
+    auto st = add_binary_column(column.get(), TYPE_VARCHAR_DESC, "f_map", avro_helper.avro_val);
     ASSERT_TRUE(st.ok());
     if (config::avro_ignore_union_type_tag) {
         ASSERT_EQ(R"(['{"ele1":4294967297,"ele2":4294967298}'])", column->debug_string());

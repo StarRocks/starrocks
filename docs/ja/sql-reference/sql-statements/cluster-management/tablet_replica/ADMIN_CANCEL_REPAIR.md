@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ADMIN CANCEL REPAIR は、指定されたテーブルまたはパーティションに対する修復操作の優先スケジュールをキャンセルします。"
 ---
 
 # ADMIN CANCEL REPAIR
@@ -9,8 +10,6 @@ displayed_sidebar: docs
 指定されたテーブルまたはパーティションに対する修復操作の優先スケジュールをキャンセルします。このステートメントは、指定されたテーブルまたはパーティションのシャーディングレプリカを高優先度で修復しないことを示すだけです。これらのコピーは、デフォルトのスケジューリングによって修復され続けます。
 
 ADMIN CANCEL REPAIR は、共有なしクラスタ内のネイティブテーブルにのみ適用されます。
-
-詳細な手順については、[レプリカの管理](../../../../administration/management/resource_management/Replica.md) を参照してください。
 
 :::tip
 

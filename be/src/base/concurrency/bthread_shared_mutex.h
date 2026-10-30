@@ -30,7 +30,7 @@ private:
     typedef bthread::ConditionVariable _cv_type;
 
 public:
-    BThreadSharedMutex() : _state(0) {}
+    BThreadSharedMutex() = default;
     ~BThreadSharedMutex() { assert(_state == 0); }
 
     BThreadSharedMutex(const BThreadSharedMutex&) = delete;
@@ -69,6 +69,25 @@ public:
             _gate1_cv.wait(lk);
         }
         ++_state;
+    }
+
+    int lock_shared_until(const timespec& deadline) {
+        int rc = bthread_mutex_timedlock(_mutex.native_handler(), &deadline);
+        if (rc != 0) {
+            return rc;
+        }
+        std::unique_lock<_mutex_type> lk(_mutex, std::adopt_lock);
+        while (_state >= _n_readers) {
+            rc = bthread_cond_timedwait(_gate1_cv.native_handler(), _mutex.native_handler(), &deadline);
+            if (rc != 0) {
+                if (_state < _n_readers) {
+                    _gate1_cv.notify_one();
+                }
+                return rc;
+            }
+        }
+        ++_state;
+        return 0;
     }
 
     bool try_lock_shared() {
@@ -111,7 +130,7 @@ private:
     _mutex_type _mutex;
     _cv_type _gate1_cv;
     _cv_type _gate2_cv;
-    unsigned _state;
+    unsigned _state{0};
 };
 
 } // namespace starrocks::bthreads

@@ -23,10 +23,10 @@ alter materialized view mv3 inactive;
 create materialized view mv4 refresh manual as select c1, count(*) from t1 group by c1 limit 5;
 -- result:
 -- !result
-select table_name, query_rewrite_status from information_schema.materialized_views where TABLE_SCHEMA = 'db_${uuid0}' order by table_name;
+select table_name, query_rewrite_status, query_rewrite_status_reason from information_schema.materialized_views where TABLE_SCHEMA = 'db_${uuid0}' order by table_name;
 -- result:
-mv1	VALID
-mv2	INVALID: enable_query_rewrite=FALSE
-mv3	INVALID: MV is not active
-mv4	INVALID: no valid plan: MV contains non-SPJG operators(no view rewrite): LOGICAL_LIMIT
+mv1	VALID	OK
+mv2	INVALID	QUERY_REWRITE_DISABLED
+mv3	INVALID	MV_INACTIVE
+mv4	INVALID	UNSUPPORTED_DEFINITION
 -- !result

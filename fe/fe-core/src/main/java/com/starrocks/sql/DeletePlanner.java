@@ -26,18 +26,15 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.iceberg.IcebergMetadata;
-import com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.IcebergMetadataDeleteNode;
-import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
-import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
@@ -54,9 +51,6 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.DistributionProperty;
-import com.starrocks.sql.optimizer.base.DistributionSpec;
-import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -68,11 +62,9 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
-import org.apache.iceberg.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -107,8 +99,13 @@ public class DeletePlanner {
         if (table instanceof IcebergTable icebergTable) {
             Optional<ConnectorMetadata> connectorMetadata = GlobalStateMgr.getCurrentState()
                     .getMetadataMgr().getOptionalMetadata(table.getCatalogName());
-            // Extract predicate from logical plan
-            ScalarOperator predicate = extractPredicateFromOptExpression(logicalPlan.getRoot());
+            // Extract predicate from logical plan. A metadata delete commits to the main branch. The first filter is
+            // the predicate on the target only when the target is the only relation: with USING or WITH it can be a
+            // join condition or a filter inside a CTE.
+            boolean singleRelation = deleteStatement.getUsingRelations() == null
+                    && deleteStatement.getCommonTableExpressions() == null;
+            ScalarOperator predicate = singleRelation && deleteStatement.getTargetBranch() == null
+                    ? extractPredicateFromOptExpression(logicalPlan.getRoot()) : null;
             if (predicate != null && connectorMetadata.isPresent()) {
                 ConnectorMetadata metadata = connectorMetadata.get();
                 if (metadata.canDeleteUsingMetadata(icebergTable, predicate)) {
@@ -119,7 +116,7 @@ public class DeletePlanner {
 
             // For Iceberg, create shuffled property based on partitioning
             List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
-            requiredProperty = createShuffleProperty(icebergTable, outputColumns);
+            requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns);
         } else {
             // For other tables, use default empty property
             requiredProperty = new PhysicalPropertySet();
@@ -199,7 +196,8 @@ public class DeletePlanner {
 
             // Create sink based on table type
             if (table instanceof IcebergTable) {
-                setupIcebergDeleteSink(execPlan, colNames, (IcebergTable) table, session);
+                setupIcebergDeleteSink(execPlan, colNames, (IcebergTable) table, deleteStatement.getTargetBranch(),
+                        session);
                 configureIcebergTableSinkPipeline(execPlan, session, canUsePipeline);
             } else if (table instanceof OlapTable) {
                 setupOlapTableSink(execPlan, deleteStatement, session);
@@ -285,6 +283,7 @@ public class DeletePlanner {
                 .getDb(session, catalogDbTable.getCatalog(), catalogDbTable.getDb());
         try {
             olapTableSink.init(session.getExecutionId(), deleteStatement.getTxnId(), db.getId(), session.getExecTimeout());
+            olapTableSink.setEstimatedWriteBytes(DmlWriteEstimates.fromExecPlan(execPlan));
             olapTableSink.complete();
         } catch (StarRocksException e) {
             throw new SemanticException(e.getMessage());
@@ -295,7 +294,7 @@ public class DeletePlanner {
      * Sets up Iceberg delete sink for delete operations
      */
     private void setupIcebergDeleteSink(ExecPlan execPlan, List<String> colNames,
-                                        IcebergTable icebergTable, ConnectContext session) {
+                                        IcebergTable icebergTable, String targetBranch, ConnectContext session) {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor deleteTuple = descriptorTable.createTupleDescriptor();
 
@@ -319,13 +318,20 @@ public class DeletePlanner {
                 session.getSessionVariable()
         );
         dataSink.init();
+        dataSink.setTargetBranch(targetBranch);
         // Create IcebergSinkExtra for DELETE operations
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
-        // Build Iceberg filter expression from scan node for conflict detection
-        org.apache.iceberg.expressions.Expression filterExpr = buildIcebergFilterExpr(execPlan);
+        // The BE partitions the output by the spec of the table descriptor built now.
+        icebergSinkExtra.setWriteSpecId(icebergTable.getReadSpec().specId());
+        // Build Iceberg filter expression from scan node for conflict detection.
+        // Both helpers filter by the target table so subqueries over other Iceberg tables
+        // don't leak their scan's predicate / snapshot id into the target's commit.
+        org.apache.iceberg.expressions.Expression filterExpr =
+                IcebergPlannerUtils.buildIcebergFilterExpr(execPlan, icebergTable);
         if (filterExpr != null) {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);
         }
+        icebergSinkExtra.setBaseSnapshotId(IcebergPlannerUtils.extractBaseSnapshotId(execPlan, icebergTable));
         // Set the sink extra info to be used during commit
         dataSink.setSinkExtraInfo(icebergSinkExtra);
 
@@ -398,76 +404,4 @@ public class DeletePlanner {
     }
 
 
-    /**
-     *
-     * @param icebergTable  The Iceberg table
-     * @param outputColumns Output columns from the logical plan (includes virtual columns + partition columns)
-     * @return PhysicalPropertySet with shuffle requirement or empty property
-     */
-    private PhysicalPropertySet createShuffleProperty(IcebergTable icebergTable,
-                                                      List<ColumnRefOperator> outputColumns) {
-        // Check if table is partitioned
-        if (!icebergTable.isPartitioned()) {
-            // No shuffle for non-partitioned tables
-            return new PhysicalPropertySet();
-        }
-
-        List<String> partitionColNames = icebergTable.getPartitionColumnNames();
-        List<Integer> partitionColumnIds = Lists.newArrayList();
-        for (String partCol : partitionColNames) {
-            for (ColumnRefOperator outputCol : outputColumns) {
-                if (outputCol.getName().equalsIgnoreCase(partCol)) {
-                    partitionColumnIds.add(outputCol.getId());
-                    break;
-                }
-            }
-        }
-
-        if (partitionColumnIds.isEmpty()) {
-            // Partition column not in output, cannot shuffle
-            return new PhysicalPropertySet();
-        }
-
-        // Create HASH distribution spec
-        HashDistributionDesc distributionDesc = new HashDistributionDesc(
-                partitionColumnIds,
-                HashDistributionDesc.SourceType.SHUFFLE_AGG
-        );
-
-        DistributionProperty distributionProperty = DistributionProperty.createProperty(
-                DistributionSpec.createHashDistributionSpec(distributionDesc));
-
-        return new PhysicalPropertySet(distributionProperty);
-    }
-
-    /**
-     * Build Iceberg filter expression from scan node for conflict detection
-     */
-    private org.apache.iceberg.expressions.Expression buildIcebergFilterExpr(
-            ExecPlan execPlan) {
-        if (execPlan == null || execPlan.getScanNodes() == null) {
-            return null;
-        }
-
-        // Find IcebergScanNode and get its predicate
-        ScalarOperator predicate = null;
-        Schema nativeSchema = null;
-
-        for (PlanNode node : execPlan.getScanNodes()) {
-            if (node instanceof IcebergScanNode scanNode) {
-                predicate = scanNode.getIcebergJobPlanningPredicate();
-                nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
-                break;
-            }
-        }
-
-        if (predicate == null || nativeSchema == null) {
-            return null;
-        }
-
-        // Convert ScalarOperator to Iceberg Expression
-        ScalarOperatorToIcebergExpr.IcebergContext icebergContext =
-                new ScalarOperatorToIcebergExpr.IcebergContext(nativeSchema.asStruct());
-        return new ScalarOperatorToIcebergExpr().convert(Collections.singletonList(predicate), icebergContext);
-    }
 }

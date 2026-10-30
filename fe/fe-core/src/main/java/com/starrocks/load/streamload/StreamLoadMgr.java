@@ -181,7 +181,6 @@ public class StreamLoadMgr implements MemoryTrackable {
                                           TransactionResult resp, ComputeResource computeResource) throws StarRocksException {
         AbstractStreamLoadTask task = null;
         Database db = checkDbName(dbName);
-        long dbId = db.getId();
         // if task is already created, return directly
         readLock();
         try {
@@ -223,7 +222,6 @@ public class StreamLoadMgr implements MemoryTrackable {
             throws StarRocksException {
         AbstractStreamLoadTask task = null;
         Database db = checkDbName(dbName);
-        long dbId = db.getId();
         Table table = checkMeta(db, tableName);
 
         writeLock();
@@ -582,6 +580,19 @@ public class StreamLoadMgr implements MemoryTrackable {
             }
         }
 
+        // Unregister the txn-state callback that was registered in addLoadTask(), otherwise the task
+        // leaks in TxnStateCallbackFactory forever.
+        // - For an ordinary StreamLoadTask the callback is already removed in afterVisible/afterAborted,
+        //   so this is an idempotent no-op.
+        // - For a StreamLoadMultiStmtTask the explicit transaction carries no callback id, so the parent
+        //   task's afterCommitted/afterVisible/afterAborted are never dispatched and its callback is never
+        //   removed. Without this call every multi-statement stream load would leave one dangling entry
+        //   (and the StreamLoadTask sub-task shells it references) in the callback map permanently.
+        // This is only reached after the task has reached a final state (see checkNeedRemove /
+        // isFinalState in the callers), so the callback is guaranteed to be unneeded here.
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory()
+                .removeCallback(streamLoadTask.getId());
+
         if (streamLoadTask instanceof StreamLoadTask) {
             warehouseLoadStatusInfoBuilder.withRemovedJob((StreamLoadTask) streamLoadTask);
         }
@@ -686,10 +697,21 @@ public class StreamLoadMgr implements MemoryTrackable {
     public AbstractStreamLoadTask getTaskById(long id) {
         readLock();
         try {
-            List<AbstractStreamLoadTask> taskList =
-                    idToStreamLoadTask.values().stream().filter(streamLoadTask -> id == streamLoadTask.getId())
-                            .toList();
-            return taskList.isEmpty() ? null : taskList.get(0);
+            for (AbstractStreamLoadTask task : idToStreamLoadTask.values()) {
+                if (id == task.getId()) {
+                    return task;
+                }
+                // Multi-table load views and their tracking SQL expose each sub-task's id.
+                // Only the parent is registered in this manager, so also resolve its children.
+                if (task instanceof StreamLoadMultiStmtTask multiTask) {
+                    for (StreamLoadTask child : multiTask.getTasks()) {
+                        if (id == child.getId()) {
+                            return child;
+                        }
+                    }
+                }
+            }
+            return null;
         } finally {
             readUnlock();
         }
@@ -768,8 +790,6 @@ public class StreamLoadMgr implements MemoryTrackable {
         long currentMs = System.currentTimeMillis();
         for (Class<? extends AbstractStreamLoadTask> clazz : PERSISTENT_TASK_TYPES) {
             reader.readCollection(clazz, loadTask -> {
-                loadTask.init();
-                // discard expired task right away
                 if (loadTask.checkNeedRemove(currentMs, false)) {
                     LOG.info("discard expired task, type: {}, label: {}", clazz.getSimpleName(), loadTask.getLabel());
                     return;

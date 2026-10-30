@@ -20,7 +20,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -64,7 +64,7 @@ public class MVRewriteWithSchemaChangeTest extends MVTestBase {
                 "                );");
         String sql = "CREATE MATERIALIZED VIEW sync_mv1 AS select a, b*10 as col2, c+1 as col3 from sync_tbl_t1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView((CreateMaterializedViewStmt) statementBase);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView((CreateSyncMVStmt) statementBase);
         waitingRollupJobV2Finish();
         String query = "select a, b*10 as col2, c+1 as col3 from sync_tbl_t1 order by a;";
         String plan = getFragmentPlan(query);

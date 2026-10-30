@@ -1,5 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
+description: "FE/BE パラメータ設定によるデータベース削除後のゴミ箱管理とリカバリー方法を紹介します。"
 ---
 
 # 運用とメンテナンス
@@ -82,7 +84,7 @@ SET GLOBAL wait_timeout = 3600;
 ## StarRocks はネストされたサブクエリを使用した DELETE をサポートしていますか？
 
 バージョン 2.3 以降、主キーテーブルは完全な DELETE WHERE 構文をサポートしています。
-詳細は [Reference - DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/DELETE/) を参照してください。
+詳細は [Reference - DELETE](../sql-reference/sql-statements/table_bucket_part_index/DELETE.md) を参照してください。
 
 ## 動的パーティションで古いパーティションを自動的にクリーンアップしたくない場合、dynamic_partition.start を省略するだけでよいですか？
 
@@ -114,7 +116,7 @@ BE を [Decommission](../sql-reference/sql-statements/cluster-management/nodes_p
 
 ## この BE ログは何を意味しますか？"tcmalloc: large alloc xxxxxxxx bytes"
 
-大きなメモリ割り当て要求が発生しました。これは通常、大きなクエリによって引き起こされます。対応する `query_id` を `be.INFO` で確認して SQL を特定してください。
+これは以前のアロケータによる大きなメモリ割り当ての診断ログです。大きなメモリ割り当て要求が発生しており、通常は大きなクエリによって引き起こされます。対応する `query_id` を `be.INFO` で確認して SQL を特定し、`/mem_tracker` と `/memz` で現在のメモリ使用量を確認してください。
 
 ## ノードを追加した後のタブレット移行はディスク I/O の変動を引き起こしますか？
 
@@ -186,7 +188,7 @@ OS のファイルディスクリプタ制限を確認し、`cat /proc/$pid/limi
 ## パーティションとバケットの数に制限はありますか？
 
 - パーティションのデフォルト制限は `4096` です（FE 設定 `max_partitions_in_one_batch` で設定可能）。
-- バケットには制限がありません。各バケットの推奨サイズは 1 GB です。
+- バケットには制限がありません。各バケットの推奨サイズは 1 GB です。大容量タブレットをサポートする v4.1 以降の共有データクラスタでは、推奨サイズは 10 GB から 50 GB で、100 GB を超えないようにします。
 
 ## FE リーダーを手動で切り替えるにはどうすればよいですか？
 

@@ -38,17 +38,18 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "format_utils.h"
+#include "fs/fs_factory.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
 #include "options.h"
 #include "runtime/descriptors.h"
 #include "starrocks_format/starrocks_lib.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_predicate.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
+#include "storage_primitive/column_predicate.h"
 #include "storage/tablet_schema.h"
 #include "util/thrift_util.h"
 #include "util/url_coding.h"
@@ -90,7 +91,8 @@ public:
         auto fs_options = filter_map_by_key_prefix(_options, "fs.");
         auto provider = std::make_shared<FixedLocationProvider>(_tablet_root_path);
         auto metadata_location = provider->tablet_metadata_location(_tablet_id, _version);
-        FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs, FileSystem::Create(metadata_location, FSOptions(fs_options)));
+        FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto fs,
+                                            FileSystemFactory::Create(metadata_location, FSOptions(fs_options)));
         FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto metadata,
                                             _lake_tablet_manager->get_tablet_metadata(metadata_location, true, 0, fs));
 

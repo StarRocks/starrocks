@@ -166,7 +166,7 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
                         ((InvocationTargetException) cause).getTargetException() instanceof NoSuchObjectException) {
                     LOG.error("Failed to refresh table {}.{}: table does not exist", dbName, tblName, e);
                     invalidateTable(dbName, tblName);
-                    throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.");
+                    throw new StarRocksConnectorException(e.getMessage() + ", invalidated cache.", e);
                 } else {
                     LOG.error("Failed to refresh table {}.{}", dbName, tblName, e);
                     throw e;

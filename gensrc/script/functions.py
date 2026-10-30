@@ -29,6 +29,18 @@
 # example round functions: 1               013             0       = 10130
 #                          ^                ^              ^
 #                   {math function} {function group} {sub-function}
+def ai_metadata(capability, prompt_kind, result_kind, *, inputs, null_as_empty=(), blank_as_null=()):
+    # Inputs and NULL policies refer to named_args; fixed roles are inferred by name.
+    return {
+        'capability': capability,
+        'prompt_kind': prompt_kind,
+        'result_kind': result_kind,
+        'inputs': list(inputs),
+        'null_as_empty': list(null_as_empty),
+        'blank_as_null': list(blank_as_null),
+    }
+
+
 vectorized_functions = [
     # 10xxx: math functions
     [10010, "pi", True, False, "DOUBLE", [], "MathFunctions::pi"],
@@ -61,6 +73,8 @@ vectorized_functions = [
     #   cosine function
     [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
     [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+    [10104, "inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
+    [10105, "approx_inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
     [10106, "approx_cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
 
     [10110, "ceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
@@ -189,6 +203,7 @@ vectorized_functions = [
     [10323, "hex", True, False, "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
+    [10318, "blake3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::blake3"],
     [10316, "hex_decode_binary", True, False, "VARBINARY", ['VARCHAR'], "StringFunctions::unhex"],
     [10317, "hex_decode_string", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
 
@@ -212,6 +227,8 @@ vectorized_functions = [
     [10351, '__iceberg_transform_bucket', True, False, 'INT', ['BIGINT', 'INT'], 'MathFunctions::iceberg_bucket_int<TYPE_BIGINT>'],
     [10352, '__iceberg_transform_bucket', True, False, 'INT', ['DATE', 'INT'], 'MathFunctions::iceberg_bucket_date'],
     [10353, '__iceberg_transform_bucket', True, False, 'INT', ['DATETIME', 'INT'], 'MathFunctions::iceberg_bucket_datetime'],
+    [10359, '__iceberg_transform_timestamptz_bucket', True, False, 'INT', ['DATETIME', 'INT'],
+     'MathFunctions::iceberg_bucket_timestamptz_datetime'],
     [10354, '__iceberg_transform_bucket', True, False, 'INT', ['VARCHAR', 'INT'], 'MathFunctions::iceberg_bucket_string'],
     [10355, '__iceberg_transform_bucket', True, False, 'INT', ['VARBINARY', 'INT'], 'MathFunctions::iceberg_bucket_string'],
     [10356, '__iceberg_transform_bucket', True, False, 'INT', ['DECIMAL32', 'INT'], 'MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>'],
@@ -338,6 +355,14 @@ vectorized_functions = [
     [30191, 'rtrim', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
      'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
 
+    # MySQL TRIM(... FROM ...) substring semantics: remstr removed as a whole unit, repeatedly.
+    [30172, 'trim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30182, 'ltrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+    [30192, 'rtrim_string', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim_string',
+     'StringFunctions::trim_string_prepare', 'StringFunctions::trim_close'],
+
     [30200, 'ascii', True, False, 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', True, False, 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', True, False, 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -442,6 +467,30 @@ vectorized_functions = [
 
     [30460, 'format_bytes', True, False, 'VARCHAR', ['BIGINT'], 'StringFunctions::format_bytes'],
 
+    # raise_error always throws a RuntimeException at runtime for non-null input.
+    # BOOLEAN is used as a placeholder return type (consistent with Trino); the function
+    # returns NULL for NULL input and never produces a non-null BOOLEAN value.
+    [30461, 'raise_error', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::raise_error'],
+
+    # HTTP Request function - HTTP/HTTPS request scalar function with Named Parameters
+    # http_request(url, method, body, headers, timeout_ms, ssl_verify, username, password)
+    [30470, 'http_request', True, False, 'VARCHAR',
+     ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'INT', 'BOOLEAN', 'VARCHAR', 'VARCHAR'],
+     'HttpRequestFunctions::http_request',
+     'HttpRequestFunctions::http_request_prepare', 'HttpRequestFunctions::http_request_close',
+     {
+         'named_args': [
+             {'name': 'url'},
+             {'name': 'method', 'default': 'GET'},
+             {'name': 'body', 'default': ''},
+             {'name': 'headers', 'default': '{}'},
+             {'name': 'timeout_ms', 'default': 30000},
+             {'name': 'ssl_verify', 'default': True},
+             {'name': 'username', 'default': ''},
+             {'name': 'password', 'default': ''}
+         ]
+     }],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
@@ -453,6 +502,11 @@ vectorized_functions = [
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
     [30603, 'from_binary', True, True, 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+
+    # dict_encode(value, dict_slot_id): translate a constant to its global dictionary code (resolved
+    # once from BE runtime state), so a dict-aware comparison can run on codes. BE-only.
+    [30700, 'dict_encode', True, False, 'INT', ['VARCHAR', 'INT'], 'DictFunctions::dict_encode',
+     'DictFunctions::dict_encode_prepare', 'DictFunctions::dict_encode_close'],
 
     # 50xxx: timestamp functions
     [50008, 'year', True, False, 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
@@ -654,11 +708,19 @@ vectorized_functions = [
 
     [50620, '__iceberg_transform_year', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_years_since_epoch_date'],
     [50621, '__iceberg_transform_year', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_years_since_epoch_datetime'],
+    [50622, '__iceberg_transform_timestamptz_year', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_years_since_epoch_datetime'],
     [50630, '__iceberg_transform_month', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_months_since_epoch_date'],
     [50631, '__iceberg_transform_month', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_months_since_epoch_datetime'],
+    [50632, '__iceberg_transform_timestamptz_month', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_months_since_epoch_datetime'],
     [50640, '__iceberg_transform_day', True, False, 'BIGINT', ['DATE'], 'TimeFunctions::iceberg_days_since_epoch_date'],
     [50641, '__iceberg_transform_day', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_days_since_epoch_datetime'],
+    [50642, '__iceberg_transform_timestamptz_day', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_days_since_epoch_datetime'],
     [50650, '__iceberg_transform_hour', True, False, 'BIGINT', ['DATETIME'], 'TimeFunctions::iceberg_hours_since_epoch_datetime'],
+    [50651, '__iceberg_transform_timestamptz_hour', True, False, 'BIGINT', ['DATETIME'],
+     'TimeFunctions::iceberg_timestamptz_hours_since_epoch_datetime'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -697,6 +759,7 @@ vectorized_functions = [
     [70117, 'if', True, False, 'ANY_MAP', ['BOOLEAN', 'ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70118, 'if', True, False, 'ANY_STRUCT', ['BOOLEAN', 'ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70119, 'if', True, False, 'JSON', ['BOOLEAN', 'JSON', 'JSON'], 'nullptr'],
+    [70120, 'if', True, False, 'VARIANT', ['BOOLEAN', 'VARIANT', 'VARIANT'], 'nullptr'],
 
     [70200, 'ifnull', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70201, 'ifnull', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -721,6 +784,7 @@ vectorized_functions = [
     [70217, 'ifnull', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70218, 'ifnull', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70219, 'ifnull', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70220, 'ifnull', True, False, 'VARIANT', ['VARIANT', 'VARIANT'], 'nullptr'],
 
     [70300, 'nullif', True, False, 'BOOLEAN', ['BOOLEAN', 'BOOLEAN'], 'nullptr'],
     [70301, 'nullif', True, False, 'TINYINT', ['TINYINT', 'TINYINT'], 'nullptr'],
@@ -745,6 +809,7 @@ vectorized_functions = [
     [70317, 'nullif', True, False, 'ANY_MAP', ['ANY_MAP', 'ANY_MAP'], 'nullptr'],
     [70318, 'nullif', True, False, 'ANY_STRUCT', ['ANY_STRUCT', 'ANY_STRUCT'], 'nullptr'],
     [70319, 'nullif', True, False, 'JSON', ['JSON', 'JSON'], 'nullptr'],
+    [70320, 'nullif', True, False, 'VARIANT', ['VARIANT', 'VARIANT'], 'nullptr'],
 
     [70400, 'coalesce', True, False, 'BOOLEAN', ['BOOLEAN', '...'], 'nullptr'],
     [70409, 'coalesce', True, False, 'DATE', ['DATE', '...'], 'nullptr'],
@@ -769,6 +834,7 @@ vectorized_functions = [
     [70418, 'coalesce', True, False, 'ANY_MAP', ['ANY_MAP', '...'], 'nullptr'],
     [70419, 'coalesce', True, False, 'ANY_STRUCT', ['ANY_STRUCT', '...'], 'nullptr'],
     [70420, 'coalesce', True, False, 'JSON', ['JSON', '...'], 'nullptr'],
+    [70421, 'coalesce', True, False, 'VARIANT', ['VARIANT', '...'], 'nullptr'],
 
     [70415, 'esquery', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'ESFunctions::match'],
 
@@ -805,7 +871,8 @@ vectorized_functions = [
     [90500, 'bitmap_to_array', False, False, 'ARRAY_BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_to_array'],
     [90600, 'bitmap_max', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_max'],
     [90700, 'bitmap_min', False, False, 'LARGEINT', ['BITMAP'], 'BitmapFunctions::bitmap_min'],
-    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap'],
+    [90800, 'base64_to_bitmap', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::base64_to_bitmap',
+     'BitmapFunctions::base64_to_bitmap_prepare', 'BitmapFunctions::base64_to_bitmap_close'],
     [90801, 'bitmap_to_base64', False, True, 'VARCHAR', ['BITMAP'], 'BitmapFunctions::bitmap_to_base64'],
     [90900, 'array_to_bitmap', False, False, 'BITMAP', ['ARRAY_BIGINT'], 'BitmapFunctions::array_to_bitmap'],
     [91000, 'sub_bitmap', False, False, 'BITMAP', ['BITMAP', 'BIGINT', 'BIGINT'], 'BitmapFunctions::sub_bitmap'],
@@ -816,8 +883,16 @@ vectorized_functions = [
     [91003, 'bitmap_to_binary', False, True, 'VARBINARY', ['BITMAP'], 'BitmapFunctions::bitmap_to_binary'],
     [91004, 'bitmap_from_binary', False, False, 'BITMAP', ['VARBINARY'], 'BitmapFunctions::bitmap_from_binary'],
 
+    # data sketches theta scalar functions
+    [91100, 'ds_theta_union', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_union'],
+    [91101, 'ds_theta_intersect', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_intersect'],
+    [91102, 'ds_theta_a_not_b', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_a_not_b'],
+    [91103, 'ds_theta_estimate', False, False, 'DOUBLE', ['VARBINARY'], 'DsThetaFunctions::ds_theta_estimate'],
+
     # hash function
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
+    [100028, 'xx_hash32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::xx_hash32'],
+    [100029, 'xx_hash64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash64'],
     [100021, 'xx_hash3_64', True, False, 'BIGINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_64'],
     [100022, 'xx_hash3_128', True, False, 'LARGEINT', ['VARCHAR', '...'], 'HashFunctions::xx_hash3_128'],
     [100023, 'crc32_hash', True, False, 'BIGINT', ['ANY_ARRAY'], 'HashFunctions::crc32_hash'],
@@ -837,6 +912,29 @@ vectorized_functions = [
     [100024, 'encode_sort_key', True, False, 'VARBINARY', ['ANY_ELEMENT', '...'], 'UtilityFunctions::encode_sort_key'],
     [100025, 'uuid_v7', True, False, 'VARCHAR', [], "UtilityFunctions::uuid_v7"],
     [100026, 'uuid_v7_numeric', True, False, 'LARGEINT', [], "UtilityFunctions::uuid_v7_numeric"],
+    [100027, 'query_id', True, False, 'VARCHAR', [], "UtilityFunctions::query_id"],
+
+    # materialize: identity function that acts as an optimization barrier.
+    # Returns the input unchanged but is opaque to the FE optimizer,
+    # preventing constant folding, partition pruning, and other rewrites.
+    [100030, 'materialize', True, False, 'BOOLEAN', ['BOOLEAN'], "UtilityFunctions::materialize"],
+    [100031, 'materialize', True, False, 'TINYINT', ['TINYINT'], "UtilityFunctions::materialize"],
+    [100032, 'materialize', True, False, 'SMALLINT', ['SMALLINT'], "UtilityFunctions::materialize"],
+    [100033, 'materialize', True, False, 'INT', ['INT'], "UtilityFunctions::materialize"],
+    [100034, 'materialize', True, False, 'BIGINT', ['BIGINT'], "UtilityFunctions::materialize"],
+    [100035, 'materialize', True, False, 'LARGEINT', ['LARGEINT'], "UtilityFunctions::materialize"],
+    [100036, 'materialize', True, False, 'FLOAT', ['FLOAT'], "UtilityFunctions::materialize"],
+    [100037, 'materialize', True, False, 'DOUBLE', ['DOUBLE'], "UtilityFunctions::materialize"],
+    [100038, 'materialize', True, False, 'VARCHAR', ['VARCHAR'], "UtilityFunctions::materialize"],
+    [100039, 'materialize', True, False, 'DATE', ['DATE'], "UtilityFunctions::materialize"],
+    [100040, 'materialize', True, False, 'DATETIME', ['DATETIME'], "UtilityFunctions::materialize"],
+    [100041, 'materialize', True, False, 'DECIMALV2', ['DECIMALV2'], "UtilityFunctions::materialize"],
+    [100042, 'materialize', True, False, 'DECIMAL32', ['DECIMAL32'], "UtilityFunctions::materialize"],
+    [100043, 'materialize', True, False, 'DECIMAL64', ['DECIMAL64'], "UtilityFunctions::materialize"],
+    [100044, 'materialize', True, False, 'DECIMAL128', ['DECIMAL128'], "UtilityFunctions::materialize"],
+    [100045, 'materialize', True, False, 'DECIMAL256', ['DECIMAL256'], "UtilityFunctions::materialize"],
+    [100046, 'materialize', True, False, 'JSON', ['JSON'], "UtilityFunctions::materialize"],
+    [100047, 'materialize', True, False, 'VARBINARY', ['VARBINARY'], "UtilityFunctions::materialize"],
 
     # json string function
     [110022, "get_json_int", False, False, "BIGINT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_bigint",
@@ -888,6 +986,10 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110025, "json_set", False, False, "JSON", ["JSON", "JSON", "..."], "JsonFunctions::json_set"],
     [110026, "json_pretty", False, True, "VARCHAR", ["JSON"], "JsonFunctions::json_pretty"],
+    [110027, "get_json_scalar", False, True,  "VARCHAR", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_scalar_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
+    [110028, "get_json_scalar", False, True,  "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_scalar_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close"],
     [110100, "to_json", False, False, "JSON", ["ANY_MAP"], "JsonFunctions::to_json"],
     [110101, "to_json", False, False, "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json"],
     [110112, "json_contains", False, False, "BOOLEAN", ["JSON", "JSON"], "JsonFunctions::json_contains"],
@@ -917,6 +1019,7 @@ vectorized_functions = [
      "VariantFunctions::get_variant_time",
      "VariantFunctions::variant_segments_prepare", "VariantFunctions::variant_segments_close"],
     [110205, "variant_typeof", False, False, "VARCHAR", ["VARIANT"], "VariantFunctions::variant_typeof"],
+    [110209, "is_variant_null", False, False, "BOOLEAN", ["VARIANT"], "VariantFunctions::is_variant_null"],
 
     # aes and base64 function
     # aes_encrypt: 2-parameter version (data, key) for backward compatibility with old FE
@@ -946,6 +1049,7 @@ vectorized_functions = [
      "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close"],
     [120161, "to_base64", False, True, "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64"],
     [120162, "encode_fingerprint_sha256", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256"],
+    [120163, "encode_fingerprint_sha256_v2", False, False, "VARBINARY", ["ANY_ELEMENT", "..."], "EncryptionFunctions::encode_fingerprint_sha256_v2"],
 
 
     # geo function
@@ -974,6 +1078,175 @@ vectorized_functions = [
      "GeoFunctions::st_circle_prepare", "GeoFunctions::st_from_wkt_close"],
     [120014, "ST_Contains", False, False, "BOOLEAN", ["VARCHAR", "VARCHAR"], "GeoFunctions::st_contains",
      "GeoFunctions::st_contains_prepare", "GeoFunctions::st_contains_close"],
+    [120020, "ST_GeogFromText", False, False, "GEOGRAPHY", ["VARCHAR"],
+     "GeoFunctions::st_geog_from_text"],
+    [120021, "ST_GeogFromText", False, False, "GEOGRAPHY", ["VARCHAR", "INT"],
+     "GeoFunctions::st_geog_from_text"],
+    [120022, "ST_GeomFromText", False, False, "GEOMETRY", ["VARCHAR", "VARCHAR"],
+     "GeoFunctions::st_geom_from_text"],
+    [120030, "ST_GeogFromWKB", False, False, "GEOGRAPHY", ["VARBINARY"],
+     "GeoFunctions::st_geog_from_wkb"],
+    [120031, "ST_GeogFromWKB", False, False, "GEOGRAPHY", ["VARBINARY", "INT"],
+     "GeoFunctions::st_geog_from_wkb"],
+    [120032, "ST_GeomFromWKB", False, False, "GEOMETRY", ["VARBINARY", "VARCHAR"],
+     "GeoFunctions::st_geom_from_wkb"],
+    [120040, "ST_AsText", False, False, "VARCHAR", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_text"],
+    [120041, "ST_AsText", False, False, "VARCHAR", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_as_text"],
+    [120050, "ST_AsWKT", False, False, "VARCHAR", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_text"],
+    [120051, "ST_AsWKT", False, False, "VARCHAR", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_as_text"],
+    [120060, "ST_AsBinary", False, False, "VARBINARY", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_wkb"],
+    [120061, "ST_AsBinary", False, False, "VARBINARY", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_as_wkb"],
+    [120070, "ST_AsWKB", False, False, "VARBINARY", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_wkb"],
+    [120071, "ST_AsWKB", False, False, "VARBINARY", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_as_wkb"],
+    [120080, "ST_X", False, False, "DOUBLE", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_x"],
+    # Historical GEOGRAPHY IDs 120081/120082/120083 are handled in function_call_expr.cpp.
+    # Do not allocate 120082 or 120083 again. 120081 is disambiguated by native argument type.
+    [120081, "ST_X", False, False, "DOUBLE", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_x"],
+    [120090, "ST_Y", False, False, "DOUBLE", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_y"],
+    [120091, "ST_Y", False, False, "DOUBLE", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_y"],
+    [120170, "ST_GeometryType", False, False, "VARCHAR", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_type"],
+    [120171, "ST_GeometryType", False, False, "VARCHAR", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_type"],
+    [120180, "ST_Distance", False, False, "DOUBLE", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_distance", "GeoFunctions::native_geo_distance_prepare",
+     "GeoFunctions::native_geo_distance_close"],
+    [120181, "ST_Distance", False, False, "DOUBLE", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_distance", "GeoFunctions::native_geo_distance_prepare",
+     "GeoFunctions::native_geo_distance_close"],
+    [120190, "ST_Contains", False, False, "BOOLEAN", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_contains", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120191, "ST_Contains", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_contains", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120200, "ST_Within", False, False, "BOOLEAN", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_within", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120201, "ST_Within", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_within", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120210, "ST_Covers", False, False, "BOOLEAN", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_covers", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120211, "ST_Covers", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_covers", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120220, "ST_CoveredBy", False, False, "BOOLEAN", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_covered_by", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120221, "ST_CoveredBy", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_covered_by", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120230, "ST_DWithin", False, False, "BOOLEAN", ["GEOGRAPHY", "GEOGRAPHY", "DOUBLE"],
+     "GeoFunctions::st_geography_dwithin", "GeoFunctions::native_geo_distance_prepare",
+     "GeoFunctions::native_geo_distance_close"],
+    [120231, "ST_DWithin", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_dwithin", "GeoFunctions::native_geo_distance_prepare",
+     "GeoFunctions::native_geo_distance_close"],
+    [120240, "ST_Intersects", False, False, "BOOLEAN", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_intersects", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120241, "ST_Intersects", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_intersects", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120250, "ST_Area", False, False, "DOUBLE", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_area", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120251, "ST_Area", False, False, "DOUBLE", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_area", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120260, "ST_Length", False, False, "DOUBLE", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_length", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120261, "ST_Length", False, False, "DOUBLE", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_length", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120270, "ST_Perimeter", False, False, "DOUBLE", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_perimeter", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120271, "ST_Perimeter", False, False, "DOUBLE", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_perimeter", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120280, "ST_Centroid", False, False, "GEOGRAPHY", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_centroid", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120281, "ST_Centroid", False, False, "GEOMETRY", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_centroid", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120290, "ST_IsValid", False, False, "BOOLEAN", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_is_valid", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+    [120291, "ST_IsValid", False, False, "BOOLEAN", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_is_valid", "GeoFunctions::native_geo_unary_prepare",
+     "GeoFunctions::native_geo_unary_close"],
+
+    [120300, "ST_SRID", False, False, "INT", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_srid"],
+    # reserve 120301-120304 for future ST_SRID overloads
+    [120305, "ST_SetSRID", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_set_srid", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+    # reserve 120306-120309 for future ST_SetSRID overloads
+    [120310, "ST_Transform", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_transform", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+
+    # reserve 120311-120314 for future ST_Transform overloads
+    # Contract 5.3 polygon overlays: base slot reserved for future GEOGRAPHY overloads.
+    # Reserved 120340: ST_Intersection(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120341, "ST_Intersection", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_intersection", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120350: ST_Union(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120351, "ST_Union", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_union", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120360: ST_Difference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120361, "ST_Difference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+    # Reserved 120370: ST_SymDifference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
+    [120371, "ST_SymDifference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_sym_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
+
+    # Contract 5.4 scalar ID reservations; comments do not register overloads.
+    # Reserved 120400: ST_Buffer / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    [120401, "ST_Buffer", False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_buffer", "GeoFunctions::native_geo_buffer_prepare", "GeoFunctions::native_geo_buffer_close"],
+    # Reserved 120410: ST_SimplifyPreserveTopology / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    [120411, "ST_SimplifyPreserveTopology", False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_simplify_preserve_topology", "GeoFunctions::native_geo_simplify_prepare",
+     "GeoFunctions::native_geo_simplify_close"],
+    # Window ST_CoverageSimplify reservations belong to FunctionSet's analytic section.
+
+
+    # Contract 5.6: H3 cells are signed SQL BIGINT values.
+    # Start H3 IDs at 120500 to leave room for future ST_ functions.
+    [120500, "H3_FromGeo", False, False, "BIGINT", ["GEOGRAPHY", "INT"],
+     "GeoFunctions::h3_from_geo"],
+    [120501, "H3_GridDisk", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_grid_disk"],
+    [120502, "H3_ToParent", False, False, "BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_to_parent"],
+    [120503, "H3_ToChildren", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+     "GeoFunctions::h3_to_children"],
+    [120504, "H3_Resolution", False, False, "INT", ["BIGINT"],
+     "GeoFunctions::h3_resolution"],
+    [120505, "H3_ToBoundary", False, False, "GEOGRAPHY", ["BIGINT"],
+     "GeoFunctions::h3_to_boundary"],
+    [120506, "H3_PolygonToCells", False, False, "ARRAY_BIGINT", ["GEOGRAPHY", "INT"],
+     "GeoFunctions::h3_polygon_to_cells", "GeoFunctions::h3_polygon_to_cells_prepare",
+     "GeoFunctions::h3_polygon_to_cells_close"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
@@ -1504,5 +1777,137 @@ vectorized_functions = [
     [190000, 'tokenize', True, False, 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'GinFunctions::tokenize', 'GinFunctions::tokenize_prepare', 'GinFunctions::tokenize_close'],
 
     # ai functions
-    [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
+    # AIProject functions keep the standard declaration layout. The backend symbol is nullptr
+    # because AIProject executes them asynchronously using AI metadata, not scalar function pointers.
+    [200000, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'prompt'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
+     }],
+    [200001, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'prompt'},
+             {'name': 'file'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', inputs=('prompt',))
+     }],
+    [200002, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', inputs=('input',))
+     }],
+    [200003, 'ai_embed', True, False, 'ARRAY_FLOAT', ['FILE', 'VARCHAR', 'VARCHAR', 'JSON'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+             {'name': 'options', 'default': {}},
+         ],
+         'ai': ai_metadata('EMBEDDING', 'NONE', 'EMBEDDING', inputs=())
+     }],
+    [200004, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', inputs=('input',))
+     }],
+    [200005, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'categories'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'CLASSIFY', 'JSON', inputs=('input', 'categories'))
+     }],
+    [200006, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'labels'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'EXTRACT', 'JSON', inputs=('input', 'labels'))
+     }],
+    [200007, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', inputs=('input',))
+     }],
+    [200008, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'categories'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'REDACT', 'STRING', inputs=('input', 'categories'))
+     }],
+    [200009, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'source_language'},
+             {'name': 'target_language'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'TRANSLATE', 'STRING', inputs=('input', 'source_language', 'target_language'),
+                           null_as_empty=('source_language',),
+                           blank_as_null=('target_language',))
+     }],
+    [200010, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'other'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', inputs=('input', 'other'))
+     }],
+    [200011, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'SUMMARIZE', 'STRING', inputs=('input',))
+     }],
+    [200012, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'input'},
+             {'name': 'condition'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('CHAT', 'FILTER', 'BOOLEAN', inputs=('input', 'condition'))
+     }],
 ]

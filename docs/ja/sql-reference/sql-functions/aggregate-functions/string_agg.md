@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "STRING_AGG関数はグループ内の非NULL値を1つの文字列に連結します。"
 ---
 
 # string_agg

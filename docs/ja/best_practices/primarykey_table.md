@@ -1,5 +1,6 @@
 ---
 sidebar_position: 40
+description: "主キーテーブルを使用して、StarRocks でリアルタイムデータ更新と効率的なアドホッククエリを実現する方法。"
 ---
 
 # 主キーテーブル
@@ -89,7 +90,6 @@ http://be_ip:be_http_port/mem_tracker?type=update&upper_level=4
 be.conf
 
 l0_max_mem_usage = (104857600 より小さい値、デフォルトは 104857600)
-skip_pk_preload = true
 
 // 共有なしクラスタ
 transaction_apply_worker_count = (CPU コア数より小さい値、デフォルトは CPU コア数)

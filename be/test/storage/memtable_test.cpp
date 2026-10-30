@@ -23,14 +23,16 @@
 #include <unordered_set>
 
 #include "base/testutil/assert.h"
+#include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
+#include "runtime/chunk_helper.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
@@ -38,6 +40,7 @@
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
+#include "storage/storage_metrics.h"
 
 namespace starrocks {
 
@@ -169,10 +172,10 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
 }
 
 static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, size_t size) {
-    shared_ptr<Chunk> ret = ChunkHelper::new_chunk(slots, size);
-    auto cols = ret->mutable_columns();
+    shared_ptr<Chunk> ret = RuntimeChunkHelper::new_chunk(slots, size);
+    auto cols = ret->columns();
     for (int ci = 0; ci < cols.size(); ci++) {
-        MutableColumnPtr& c = cols[ci];
+        MutableColumnPtr c = cols[ci]->as_mutable_ptr();
         Datum v;
         string strv;
         for (size_t i = 0; i < size; i++) {
@@ -186,7 +189,7 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
             } else if (type == TYPE_INT) {
                 v.set_int32(i + 3);
             } else if (type == TYPE_BIGINT) {
-                v.set_int16(i * 3);
+                v.set_int64(i * 3);
             } else if (type == TYPE_FLOAT) {
                 v.set_float(i * 4);
             } else if (type == TYPE_DOUBLE) {
@@ -274,7 +277,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
     ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkFactory::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -322,7 +325,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    ChunkPtr chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+    ChunkPtr chunk = ChunkFactory::new_chunk(*read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(chunk.get());
@@ -346,7 +349,7 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     const string path = "./MemTableTest_testPrimaryKeysWithDeletes";
     MySetUp(create_tablet_schema("pk bigint,v1 int", 1, KeysType::PRIMARY_KEYS), "pk bigint,v1 int,__op tinyint", path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
         Datum v;
         v.set_int64(i);
@@ -378,7 +381,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     auto tablet_schema = create_tablet_schema("pk bigint,v1 int, v2 tinyint null", 1, KeysType::PRIMARY_KEYS, {2});
     MySetUp(tablet_schema, "pk bigint,v1 int, v2 tinyint null", path);
     const size_t n = 10;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n; i++) {
         chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(i)));
         chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - i)));
@@ -403,7 +406,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     ASSERT_OK(_mem_table->flush());
     RowsetSharedPtr rowset = *_writer->build();
 
-    shared_ptr<Chunk> expected_chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> expected_chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     for (int i = 0; i < n / 2; i++) {
         expected_chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int64_t>(2 * i)));
         expected_chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(static_cast<int32_t>(n - 1 - 2 * i)));
@@ -423,7 +426,7 @@ TEST_F(MemTableTest, testPrimaryKeysNullableSortKey) {
     rs_opts.use_page_cache = false;
     rs_opts.stats = &stats;
     auto itr = rowset->new_iterator(read_schema, rs_opts);
-    ChunkPtr read_chunk = ChunkHelper::new_chunk(read_schema, 4096);
+    ChunkPtr read_chunk = ChunkFactory::new_chunk(read_schema, 4096);
     size_t pkey_read = 0;
     while (true) {
         Status st = (*itr)->get_next(read_chunk.get());
@@ -444,7 +447,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
     MySetUp(create_tablet_schema("pk varchar,v1 int", 1, KeysType::PRIMARY_KEYS), "pk varchar,v1 int,__op tinyint",
             path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     string tmpstr(128, 's');
     tmpstr[tmpstr.size() - 1] = '\0';
     for (int i = 0; i < n; i++) {
@@ -475,7 +478,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     MySetUp(create_tablet_schema("pk int, pk varchar, pk smallint, pk boolean,v1 int", 4, KeysType::PRIMARY_KEYS),
             "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", path);
     const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
+    shared_ptr<Chunk> chunk = RuntimeChunkHelper::new_chunk(*_slots, n);
     string tmpstr(121, 's');
     tmpstr[tmpstr.size() - 1] = '\0';
     for (int i = 0; i < n; i++) {
@@ -507,6 +510,38 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     ASSERT_FALSE(_mem_table->finalize().ok());
 }
 
+TEST_F(MemTableTest, testWriteBufferRowLimit) {
+    const string path = "./MemTableTest_testWriteBufferRowLimit";
+    MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::PRIMARY_KEYS), "pk int,name varchar,pv int",
+            path);
+    // A load passes the same chunk to every tablet it covers and picks each tablet's rows with a window
+    // of `indexes`. Lay the indexes out that way for 4 tablets and feed all 4 windows to one memtable, so
+    // it holds every row exactly once and the row count it reports can be checked exactly.
+    const uint32_t n = 1000;
+    const uint32_t num_windows = 4;
+    const uint32_t window_rows = n / num_windows;
+    auto pchunk = gen_chunk(*_slots, n);
+    vector<uint32_t> indexes;
+    indexes.reserve(n);
+    for (uint32_t w = 0; w < num_windows; w++) {
+        for (uint32_t i = w; i < n; i += num_windows) {
+            indexes.emplace_back(i);
+        }
+    }
+    _mem_table->set_write_buffer_row(n);
+    struct Expected {
+        size_t buffered_rows;
+        bool full;
+    };
+    const Expected expected[num_windows] = {{250, false}, {500, false}, {750, false}, {1000, true}};
+    for (uint32_t w = 0; w < num_windows; w++) {
+        auto res = _mem_table->insert(*pchunk, indexes.data(), w * window_rows, window_rows);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(expected[w].buffered_rows, _mem_table->write_buffer_rows()) << "window " << w;
+        ASSERT_EQ(expected[w].full, res.value()) << "window " << w;
+    }
+}
+
 TEST_F(MemTableTest, test_metrics) {
     const string path = "./MemTableTest_test_metrics";
     MySetUp(create_tablet_schema("pk int,name varchar,pv int", 1, KeysType::DUP_KEYS), "pk int,name varchar,pv int",
@@ -526,9 +561,9 @@ TEST_F(MemTableTest, test_metrics) {
     // just verify the metrics have value, rather than verify it accurately
     // because other test cases may also update the metrics concurrently if
     // run tests in parallel, and it's hard to get the accurate value
-    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_total.value() > 0);
-    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_memory_bytes_total.value() > 0);
-    ASSERT_TRUE(StarRocksMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_memory_bytes_total.value() > 0);
+    ASSERT_TRUE(StorageMetrics::instance()->memtable_flush_disk_bytes_total.value() > 0);
 }
 
 } // namespace starrocks

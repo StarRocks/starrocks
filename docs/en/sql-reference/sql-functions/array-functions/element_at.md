@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the element at the specified position (index) from a given array."
 ---
 
 # element_at

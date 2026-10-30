@@ -15,11 +15,11 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 #include "exprs/expr.h"
 #include "exprs/table_function/table_function_factory.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 class TableFunctionOperator final : public Operator {
@@ -52,6 +52,9 @@ private:
     ChunkPtr _build_chunk(const Columns& output_columns);
     Status _process_table_function(RuntimeState* state);
     void _copy_result(Columns& columns, uint32_t max_column_size);
+    // Whether the current table-function result still owes rows. Single source of truth shared by
+    // has_output(), pull_chunk() and _copy_result() - see the definition for why that matters.
+    bool _result_has_output() const;
 
     const TPlanNode& _tnode;
     const TableFunction* _table_function = nullptr;

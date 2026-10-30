@@ -47,6 +47,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.DmlType;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryWarning;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.RpcException;
@@ -101,19 +102,28 @@ public class TransactionStmtExecutor {
         if (context.getTxnId() != 0) {
             // Repeated begin does not create a new transaction
             ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-            String existingLabel = explicitTxnState.getTransactionState().getLabel();
-            long transactionId = explicitTxnState.getTransactionState().getTransactionId();
+            if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
+                // Transaction state was lost (e.g., FE leader switch), reset and start fresh
+                if (explicitTxnState != null) {
+                    // Clear stale explicit transaction state to avoid leaving an orphaned entry
+                    globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+                }
+                context.setTxnId(0);
+            } else {
+                String existingLabel = explicitTxnState.getTransactionState().getLabel();
+                long transactionId = explicitTxnState.getTransactionState().getTransactionId();
 
-            // If user explicitly specifies a different label, throw an error
-            String requestedLabel = stmt.getLabel();
-            if (requestedLabel != null && !requestedLabel.isEmpty() && !requestedLabel.equals(existingLabel)) {
-                throw new SemanticException("Transaction already exists with label '" + existingLabel +
-                        "', cannot begin with different label '" + requestedLabel + "'");
+                // If user explicitly specifies a different label, throw an error
+                String requestedLabel = stmt.getLabel();
+                if (requestedLabel != null && !requestedLabel.isEmpty() && !requestedLabel.equals(existingLabel)) {
+                    throw new SemanticException("Transaction already exists with label '" + existingLabel +
+                            "', cannot begin with different label '" + requestedLabel + "'");
+                }
+
+                context.getState().setOk(0, 0,
+                        buildMessage(existingLabel, TransactionStatus.PREPARE, transactionId, -1));
+                return;
             }
-
-            context.getState().setOk(0, 0,
-                    buildMessage(existingLabel, TransactionStatus.PREPARE, transactionId, -1));
-            return;
         }
 
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
@@ -121,14 +131,12 @@ public class TransactionStmtExecutor {
         // Label priority: 1. stmt.getLabel() 2. labelOverride 3. executionId
         String stmtLabel = stmt.getLabel();
         String label;
+        // A user-specified label must be unique in the cluster, align with INSERT statement behavior. The check
+        // is deferred to the registration below so that checking and publishing happen atomically.
+        boolean checkLabelConflict = false;
         if (stmtLabel != null && !stmtLabel.isEmpty()) {
             FeNameFormat.checkLabel(stmtLabel);
-            // Check if label is already used in any database, align with INSERT statement behavior
-            try {
-                globalTransactionMgr.checkLabelUsedInAnyDatabase(stmtLabel);
-            } catch (LabelAlreadyUsedException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            checkLabelConflict = true;
             label = stmtLabel;
         } else if (labelOverride != null && !labelOverride.isEmpty()) {
             label = labelOverride;
@@ -151,7 +159,15 @@ public class TransactionStmtExecutor {
 
         ExplicitTxnState explicitTxnState = new ExplicitTxnState();
         explicitTxnState.setTransactionState(transactionState);
-        globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        if (checkLabelConflict) {
+            try {
+                globalTransactionMgr.addTransactionStateWithLabelCheck(transactionId, explicitTxnState);
+            } catch (LabelAlreadyUsedException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        } else {
+            globalTransactionMgr.addTransactionState(transactionId, explicitTxnState);
+        }
 
         context.setTxnId(transactionId);
         context.getState().setOk(0, 0,
@@ -168,31 +184,22 @@ public class TransactionStmtExecutor {
                 context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
-
         try {
-            if (transactionState.getDbId() == 0) {
-                transactionState.setDbId(database.getId());
-                DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .getDatabaseTransactionMgr(database.getId());
-                databaseTransactionMgr.upsertTransactionState(transactionState);
-            }
-
-            if (database.getId() != transactionState.getDbId()) {
-                throw ErrorReportException.report(ErrorCode.ERR_TXN_FORBID_CROSS_DB);
-            }
+            TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                    context.getTxnId(), database.getId());
 
             Map<TableName, Table> m = AnalyzerUtils.collectAllTable(dmlStmt);
             for (Table table : m.values()) {
+                // Cloud Native tables (Lake tables) support multiple DMLs on the same table within a
+                // single transaction because their storage layer handles concurrent writes natively.
+                // Non-Cloud-Native (OLAP) tables do not support this due to tablet version conflicts.
                 if (transactionState.getTableIdList().contains(table.getId()) && !table.isCloudNativeTableOrMaterializedView()) {
                     throw ErrorReportException.report(ErrorCode.ERR_TXN_IMPORT_SAME_TABLE);
                 }
             }
 
-            if (!transactionState.getTableIdList().contains(targetTable.getId())) {
-                transactionState.addTableIdList(targetTable.getId());
-            }
+            ExplicitTxnState explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                    context.getTxnId(), database.getId(), targetTable.getId());
             // record modified table id in explicit txn state for later SELECT validation
             explicitTxnState.addModifiedTableId(targetTable.getId());
 
@@ -209,6 +216,15 @@ public class TransactionStmtExecutor {
                     load(database, targetTable, execPlan, dmlStmt, originStmt, context, coordinator);
             explicitTxnState.addTransactionItem(item);
 
+            if (item.getFilteredRows() > 0) {
+                // Mirror the autocommit path (StmtExecutor.handleDMLStmt): the OK packet below
+                // reports the filtered-row count, so record the matching session warning for
+                // SHOW WARNINGS. COMMIT and other no-table statements preserve the diagnostics
+                // area (see StmtExecutor.execute), so the warning stays readable both inside the
+                // transaction and right after COMMIT, until the next data statement.
+                context.addWarning(QueryWarning.filteredRowsWarning(item.getFilteredRows(),
+                        coordinator.getTrackingUrl()));
+            }
             context.getState().setOk(item.getLoadedRows(), Ints.saturatedCast(item.getFilteredRows()),
                     buildMessage(transactionState.getLabel(), TransactionStatus.PREPARE,
                             transactionState.getTransactionId(), database.getId()));
@@ -220,17 +236,10 @@ public class TransactionStmtExecutor {
     public static void loadData(long dbId, long tableId, ExplicitTxnState.ExplicitTxnStateItem item,
             ConnectContext context) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
-        TransactionState transactionState = explicitTxnState.getTransactionState();
-
-        if (transactionState.getDbId() == 0) {
-            transactionState.setDbId(dbId);
-            DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getDatabaseTransactionMgr(dbId);
-            databaseTransactionMgr.upsertTransactionState(transactionState);
-        }
-
-        transactionState.addTableIdList(tableId);
+        TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                context.getTxnId(), dbId);
+        ExplicitTxnState explicitTxnState = globalTransactionMgr.activateExplicitTransactionTable(
+                context.getTxnId(), dbId, tableId);
 
         // record modified table id in explicit txn state for later SELECT validation
         explicitTxnState.addModifiedTableId(tableId);
@@ -243,18 +252,59 @@ public class TransactionStmtExecutor {
         LOG.info("load database {} table {} item {} txn {}", dbId, tableId, item, context.getTxnId());
     }
 
+    /**
+     * Register the explicit transaction with the database transaction manager and add {@code tableId} to it.
+     * This is the registration the INSERT path above performs before it executes, and a load must perform it
+     * before its coordinator starts as well: while the data is being written, the BE looks the transaction up
+     * through DatabaseTransactionMgr (createPartition for automatic partitioning, updateImmutablePartition for
+     * automatic bucketing), and an abort of the load has to find it there too. A transaction that only lives in
+     * the explicit transaction map until commit fails those lookups with "txn %d not exist". The registration is
+     * idempotent, so the commit-time {@link #loadData(long, long, ExplicitTxnState.ExplicitTxnStateItem,
+     * ConnectContext)} may repeat it.
+     */
+    public static TransactionState activateTable(long dbId, long tableId, ConnectContext context)
+            throws StarRocksException {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState transactionState = globalTransactionMgr.registerExplicitTransactionState(
+                context.getTxnId(), dbId);
+        globalTransactionMgr.activateExplicitTransactionTable(context.getTxnId(), dbId, tableId);
+        return transactionState;
+    }
+
     public static void commitStmt(ConnectContext context, CommitStmt stmt) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
-            //commit statement not in after begin, do nothing
+            if (context.getTxnId() != 0) {
+                // Transaction state was lost (e.g., FE leader switch). Report error instead of silent success.
+                LOG.warn("explicit transaction state not found for txn {}, possibly lost due to FE leader switch",
+                        context.getTxnId());
+                context.setTxnId(0);
+                context.getState().setError("Transaction state not found, possibly lost due to FE leader switch");
+                return;
+            }
+            // commit statement not after begin, do nothing
             return;
         }
 
         if (explicitTxnState.getTransactionStateItems().isEmpty()) {
             TransactionState transactionState = explicitTxnState.getTransactionState();
-            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
-            context.setTxnId(0);
+            // The INSERT path registers the transaction with DatabaseTransactionMgr before it
+            // executes, so a transaction whose statements all failed is registered without any
+            // item. Abort it there; otherwise it stays PREPARE until the transaction timeout,
+            // holding a running-transaction slot, its label and its tables against schema changes.
+            String abortError = null;
+            try {
+                abortError = abortRegisteredTransaction(transactionState,
+                        "no data loaded in the explicit transaction before commit");
+            } finally {
+                globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+                context.setTxnId(0);
+            }
+            if (abortError != null) {
+                context.getState().setError(abortError);
+                return;
+            }
             context.getState().setOk(0, 0, buildMessage(transactionState.getLabel(),
                     TransactionStatus.VISIBLE, transactionState.getTransactionId(), -1));
             return;
@@ -292,7 +342,14 @@ public class TransactionStmtExecutor {
                     commitInfos,
                     failInfos,
                     txnCommitAttachment,
-                    timeout);
+                    timeout * 1000L);
+
+            // Re-fetch transactionState after commit because the COW pattern in DatabaseTransactionMgr
+            // replaces the in-memory state with a deep copy, making the original reference stale.
+            TransactionState freshTxnState = transactionMgr.getTransactionState(databaseId, transactionId);
+            if (freshTxnState != null) {
+                transactionState = freshTxnState;
+            }
 
             long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
                     context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
@@ -339,7 +396,7 @@ public class TransactionStmtExecutor {
             context.getState().setOk(0, 0,
                     buildMessage(transactionState.getLabel(), txnStatus, transactionId, database.getId()));
         } catch (StarRocksException | LockTimeoutException e) {
-            LOG.warn("errors when abort txn", e);
+            LOG.warn("errors when commit txn {}", transactionId, e);
             context.getState().setError(e.getMessage());
         } finally {
             //clean global explicit transaction state
@@ -352,14 +409,38 @@ public class TransactionStmtExecutor {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         if (explicitTxnState == null) {
-            //rollback statement not in after begin, do nothing
+            if (context.getTxnId() != 0) {
+                // Transaction state was lost (e.g., FE leader switch). Report error instead of silent success.
+                LOG.warn("explicit transaction state not found for txn {}, possibly lost due to FE leader switch",
+                        context.getTxnId());
+                context.setTxnId(0);
+                context.getState().setError("Transaction state not found, possibly lost due to FE leader switch");
+                return;
+            }
+            // rollback statement not after begin, do nothing
             return;
         }
 
         if (explicitTxnState.getTransactionStateItems().isEmpty()) {
             TransactionState transactionState = explicitTxnState.getTransactionState();
-            globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
-            context.setTxnId(0);
+            // A load registers the transaction with DatabaseTransactionMgr before it runs (see
+            // activateTable), so the transaction may be registered although no load produced an
+            // item (every load failed or was cancelled). Abort it there as well; otherwise it stays
+            // PREPARE until the transaction timeout and keeps its tables against schema changes.
+            String abortError = null;
+            try {
+                abortError = abortRegisteredTransaction(transactionState, "rollback transaction by user");
+            } finally {
+                // Same contract as the branch below: the explicit state is gone whatever the abort
+                // did, a failure is reported to the user, and the transaction timeout checker bounds
+                // the remainder.
+                globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
+                context.setTxnId(0);
+            }
+            if (abortError != null) {
+                context.getState().setError(abortError);
+                return;
+            }
             context.getState().setOk(0, 0, buildMessage(transactionState.getLabel(),
                     TransactionStatus.ABORTED, transactionState.getTransactionId(), -1));
             return;
@@ -414,6 +495,29 @@ public class TransactionStmtExecutor {
             globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
             context.setTxnId(0);
         }
+    }
+
+    /**
+     * Abort the transaction in the database transaction manager it was registered with, if any. A transaction
+     * that already reached a final state (aborted by a failed load or by the timeout checker) is left alone.
+     *
+     * @return null when the transaction is aborted, was never registered or is already final; otherwise the
+     *         error message of the failed abort
+     */
+    private static String abortRegisteredTransaction(TransactionState transactionState, String reason) {
+        if (transactionState.getDbId() == 0 || !transactionState.isRunning()) {
+            return null;
+        }
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                    transactionState.getDbId(), transactionState.getTransactionId(), reason);
+        } catch (TransactionNotFoundException e) {
+            LOG.debug("txn {} already reached a final state before rollback", transactionState.getTransactionId());
+        } catch (StarRocksException e) {
+            LOG.warn("errors when abort txn {} without items", transactionState.getTransactionId(), e);
+            return e.getMessage();
+        }
+        return null;
     }
 
     public static String buildMessage(String label, TransactionStatus txnStatus, long transactionId, long databaseId) {

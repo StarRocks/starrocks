@@ -52,18 +52,25 @@ import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.staros.StarOSBDBJEJournalSystem;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.junit.jupiter.api.Assertions;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.lang.management.LockInfo;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.locks.Lock;
@@ -99,6 +106,8 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  */
 public class MockedFrontend {
+    private static final Logger LOG = LogManager.getLogger(MockedFrontend.class);
+
     public static final String FE_PROCESS = "fe";
 
     // the running dir of this mocked frontend.
@@ -215,6 +224,8 @@ public class MockedFrontend {
         private final boolean startBDB;
         private final RunMode runMode;
         private volatile boolean isReady = false;
+        // set if the fe thread exits before it is ready
+        private volatile Throwable startFailure = null;
 
         public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, String[] args) {
             this.frontend = frontend;
@@ -227,10 +238,15 @@ public class MockedFrontend {
             return isReady;
         }
 
+        public Throwable getStartFailure() {
+            return startFailure;
+        }
+
         @Override
         public void run() {
             if (Strings.isNullOrEmpty(frontend.getRunningDir())) {
                 System.err.println("env STARROCKS_HOME is not set.");
+                startFailure = new IllegalStateException("env STARROCKS_HOME is not set");
                 return;
             }
 
@@ -266,12 +282,18 @@ public class MockedFrontend {
                 GlobalStateMgr.getCurrentState().initialize(null);
 
                 if (RunMode.isSharedDataMode()) {
-                    // setup and start StarManager service
-                    Journal journal = GlobalStateMgr.getCurrentState().getJournal();
-                    // TODO: support MockJournal in StarMgrServer
-                    Preconditions.checkState(journal instanceof BDBJEJournal);
-                    BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
+                    if (startBDB) {
+                        // setup and start StarManager service
+                        Journal journal = GlobalStateMgr.getCurrentState().getJournal();
+                        Preconditions.checkState(journal instanceof BDBJEJournal);
+                        BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
+                        StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
+                    } else {
+                        // setup mock journal and start StarManager service
+                        Journal journal = new MockJournal();
+                        StarOSBDBJEJournalSystem journalSystem = StarOSBDBJEJournalSystem.forTest(journal);
+                        StarMgrServer.getCurrentState().initializeForTest(journalSystem, GlobalStateMgr.getImageDirPath());
+                    }
                     StateChangeExecutor.getInstance().registerStateChangeExecution(
                             StarMgrServer.getCurrentState().getStateChangeExecution());
                 }
@@ -288,6 +310,9 @@ public class MockedFrontend {
                     Thread.sleep(2000);
                 }
             } catch (Throwable e) {
+                if (!isReady) {
+                    startFailure = e;
+                }
                 e.printStackTrace();
             }
         }
@@ -311,27 +336,76 @@ public class MockedFrontend {
 
     private void waitForCatalogReady(FERunnable fe) throws FeStartException {
         int tryCount = 0;
-        while (!fe.isReady() && tryCount < 6000) {
+        // stop waiting as soon as the fe thread has failed, it never becomes ready then
+        while (!fe.isReady() && fe.getStartFailure() == null && tryCount < 6000) {
             try {
                 tryCount++;
                 Thread.sleep(100);
                 if (tryCount % 10 == 0) {
-                    System.out.println("globalStateMgr is not ready, wait for 1 second");
+                    LOG.warn("globalStateMgr is not ready, wait for 1 second");
                 }
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                // usually the test timeout fired, dump threads to show where the fe start is stuck
+                LOG.error("interrupted while waiting for fe to be ready, thread dump:\n{}", dumpAllThreads());
+                // the caller is giving up, so stop waiting and keep the interrupt status for it
+                Thread.currentThread().interrupt();
+                break;
             }
         }
 
+        if (fe.getStartFailure() != null) {
+            throw new FeStartException("fe start failed", fe.getStartFailure());
+        }
+
+        // dump before calling GlobalStateMgr.getCurrentState(), which may block if the fe thread
+        // is stuck in constructing GlobalStateMgr
+        if (!fe.isReady()) {
+            LOG.error("fe is not ready after {} tries, thread dump:\n{}", tryCount, dumpAllThreads());
+            throw new FeStartException("fe is not ready after " + tryCount + " tries");
+        }
+
         if (!GlobalStateMgr.getCurrentState().isReady()) {
-            System.err.println("globalStateMgr is not ready");
+            LOG.error("globalStateMgr is not ready");
             throw new FeStartException("fe start failed");
         }
+    }
+
+    // ThreadInfo.toString() keeps only the top 8 frames, so print the full stacks here.
+    static String dumpAllThreads() {
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        StringBuilder sb = new StringBuilder();
+        long[] deadlockedThreadIds = threadMXBean.findDeadlockedThreads();
+        if (deadlockedThreadIds != null) {
+            sb.append("deadlocked thread ids: ").append(Arrays.toString(deadlockedThreadIds)).append('\n');
+        }
+        for (ThreadInfo info : threadMXBean.dumpAllThreads(true, true)) {
+            sb.append('"').append(info.getThreadName()).append("\" id=").append(info.getThreadId())
+                    .append(' ').append(info.getThreadState());
+            if (info.getLockName() != null) {
+                sb.append(" on ").append(info.getLockName());
+            }
+            if (info.getLockOwnerName() != null) {
+                sb.append(" owned by \"").append(info.getLockOwnerName()).append("\" id=").append(info.getLockOwnerId());
+            }
+            sb.append('\n');
+            for (StackTraceElement element : info.getStackTrace()) {
+                sb.append("\tat ").append(element).append('\n');
+            }
+            for (LockInfo lock : info.getLockedSynchronizers()) {
+                sb.append("\tlocked synchronizer ").append(lock).append('\n');
+            }
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     public static class FeStartException extends Exception {
         public FeStartException(String msg) {
             super(msg);
+        }
+
+        public FeStartException(String msg, Throwable cause) {
+            super(msg, cause);
         }
     }
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回指定日期之后的那个指定星期几所对应的日期。"
 ---
 
 # next_day

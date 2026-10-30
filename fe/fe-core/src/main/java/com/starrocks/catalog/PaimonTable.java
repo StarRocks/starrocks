@@ -23,8 +23,12 @@ import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.paimon.table.DataTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.utils.JsonSerdeUtil;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -36,6 +40,8 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class PaimonTable extends Table {
+    private static final Logger LOG = LogManager.getLogger(PaimonTable.class);
+
     private String catalogName;
     private String databaseName;
     private String tableName;
@@ -51,7 +57,7 @@ public class PaimonTable extends Table {
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable) {
-        super(CONNECTOR_ID_GENERATOR.getNextId().asInt(), tblName, TableType.PAIMON, schema);
+        super(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, TableType.PAIMON, schema);
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
@@ -107,12 +113,13 @@ public class PaimonTable extends Table {
     public Map<String, String> getProperties() {
         if (properties == null) {
             this.properties = new HashMap<>();
-            if (!paimonNativeTable.primaryKeys().isEmpty()) {
-                properties.put("primary-key", String.join(",", paimonNativeTable.primaryKeys()));
-            }
             this.properties.putAll(paimonNativeTable.options());
         }
         return properties;
+    }
+
+    public List<String> getPrimaryKeyColumnNames() {
+        return paimonNativeTable.primaryKeys();
     }
 
     @Override
@@ -152,6 +159,15 @@ public class PaimonTable extends Table {
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         tPaimonTable.setPaimon_schema(PaimonUtils.getTPaimonSchema(this.paimonNativeTable.rowType()));
+
+        if (paimonNativeTable instanceof FileStoreTable fileStoreTable) {
+            tPaimonTable.setPaimon_table_path(fileStoreTable.location().toString());
+            try {
+                tPaimonTable.setPaimon_table_schema_json(JsonSerdeUtil.toJson(fileStoreTable.schema()));
+            } catch (RuntimeException e) {
+                LOG.warn("Failed to serialize Paimon table schema for {}", tableName, e);
+            }
+        }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);

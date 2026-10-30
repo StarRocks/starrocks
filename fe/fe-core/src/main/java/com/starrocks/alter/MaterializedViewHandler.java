@@ -45,6 +45,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SyncMaterializedViewDefinition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -75,7 +76,7 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CancelStmt;
-import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.KeysType;
@@ -83,6 +84,7 @@ import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -93,6 +95,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +124,21 @@ public class MaterializedViewHandler extends AlterHandler {
     // keep table's running job,used for concurrency limit
     // table id -> set of running job ids
     private final Map<Long, Set<Long>> tableRunningJobMap = new ConcurrentHashMap<>();
+
+    @Override
+    protected void onStopped() {
+        super.onStopped();
+        // Leader-only concurrency gate, fully repopulated by runAlterJobV2 on the next
+        // leadership. Clearing it also fixes a slot leak: a job that finished and was
+        // expiry-removed by another leader while this node was a follower is removed from
+        // alterJobsV2 by replay but never from this map, permanently consuming a per-table
+        // slot and suspending new rollups on that table.
+        // tableNotFinalStateJobMap is deliberately NOT cleared: replay maintains it, and it
+        // drives the ROLLUP -> NORMAL table-state restore for jobs finished via replay.
+        synchronized (tableRunningJobMap) {
+            tableRunningJobMap.clear();
+        }
+    }
 
     @Override
     public void addAlterJobV2(AlterJobV2 alterJob) {
@@ -191,7 +209,7 @@ public class MaterializedViewHandler extends AlterHandler {
      * @param olapTable
      * @throws DdlException
      */
-    public void processCreateMaterializedView(CreateMaterializedViewStmt addMVClause, Database db, OlapTable olapTable)
+    public void processCreateMaterializedView(CreateSyncMVStmt addMVClause, Database db, OlapTable olapTable)
             throws DdlException, AnalysisException {
 
         if (olapTable.existTempPartitions()) {
@@ -216,9 +234,11 @@ public class MaterializedViewHandler extends AlterHandler {
         List<Column> mvColumns = checkAndPrepareMaterializedView(addMVClause, db, olapTable);
 
         // Step2: create mv job
-        AlterJobV2 rollupJobV2 = createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns,
-                addMVClause.getWhereClause(), addMVClause.getProperties(), olapTable, db, baseIndexMetaId,
-                addMVClause.getMVKeysType(), addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
+        AlterJobV2 rollupJobV2 = isRangeRollupRoutable(olapTable)
+                ? createRangeMaterializedViewJob(addMVClause, olapTable, db, baseIndexMetaId, mvColumns)
+                : createMaterializedViewJob(mvIndexName, baseIndexName, mvColumns,
+                        addMVClause.getWhereClause(), addMVClause.getProperties(), olapTable, db, baseIndexMetaId,
+                        addMVClause.getMVKeysType(), addMVClause.getOrigStmt(), addMVClause.getQueryStatement());
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(rollupJobV2, wal -> {
             olapTable.setState(OlapTableState.ROLLUP);
@@ -247,6 +267,20 @@ public class MaterializedViewHandler extends AlterHandler {
         // save job id for log
         Set<Long> logJobIdSet = new HashSet<>();
 
+        // A routable range rollup promotes its shadow to NORMAL directly, so it cannot share the
+        // multi-job ROLLUP-state batch the existing rollup path uses; reject more than one in one
+        // statement before any job is built.
+        boolean rangeRoutable = isRangeRollupRoutable(olapTable);
+        if (rangeRoutable) {
+            long rollupClauseCount = alterClauses.stream()
+                    .filter(clause -> clause instanceof AddRollupClause)
+                    .count();
+            if (rollupClauseCount > 1) {
+                throw new DdlException(
+                        "A range-distribution table supports at most one rollup per ALTER TABLE statement");
+            }
+        }
+
         try {
             // 1 check and make rollup job
             for (AlterClause alterClause : alterClauses) {
@@ -269,15 +303,33 @@ public class MaterializedViewHandler extends AlterHandler {
                 // step 2.1 check whether base index already exists in globalStateMgr
                 long baseIndexMetaId = checkAndGetBaseIndex(baseIndexName, olapTable);
 
+                // A range-distribution rollup is always derived from the base index (the K-tablet
+                // sampling and the version-pinned rewrite read the base). ADD ROLLUP ... FROM <rollup>
+                // is not supported. Checked here, before schema validation, so a FROM whose columns
+                // differ from the base reports this precise error rather than "column does not exist".
+                if (rangeRoutable && baseIndexMetaId != olapTable.getBaseIndexMetaId()) {
+                    throw new DdlException("A range-distribution rollup must be derived from the base index; "
+                            + "FROM <rollup> is not supported");
+                }
+
                 // step 2.2  check rollup schema
                 List<Column> rollupSchema =
                         checkAndPrepareMaterializedView(addRollupClause, olapTable, baseIndexMetaId);
 
                 // step 3 create rollup job
-                AlterJobV2 alterJobV2 = createMaterializedViewJob(rollupIndexName, baseIndexName, rollupSchema,
-                        null, addRollupClause.getProperties(),
-                        olapTable, db, baseIndexMetaId, olapTable.getKeysType(), null,
-                        null);
+                AlterJobV2 alterJobV2;
+                if (rangeRoutable) {
+                    // Shared-data range table: build the additive K-tablet range-rollup job directly.
+                    // Any range table that is NOT routable (shared-nothing, colocate,
+                    // primary-key) keeps the existing rejection in createMaterializedViewJob.
+                    alterJobV2 = createRangeRollupJob(addRollupClause, olapTable, db, baseIndexMetaId,
+                            rollupIndexName, rollupSchema);
+                } else {
+                    alterJobV2 = createMaterializedViewJob(rollupIndexName, baseIndexName, rollupSchema,
+                            null, addRollupClause.getProperties(),
+                            olapTable, db, baseIndexMetaId, olapTable.getKeysType(), null,
+                            null);
+                }
 
                 rollupNameJobMap.put(addRollupClause.getRollupName(), alterJobV2);
                 logJobIdSet.add(alterJobV2.getJobId());
@@ -310,6 +362,211 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     /**
+     * Whether an {@code ADD ROLLUP} or synchronous MV on a range-distribution table is routed to the additive
+     * {@link LakeRangeRollupJob} (instead of being rejected by {@code createMaterializedViewJob}).
+     * Only a shared-data, non-colocate, non-primary-key range table qualifies.
+     */
+    public static boolean isRangeRollupRoutable(OlapTable olapTable) {
+        // A cloud-native, non-colocate, non-primary-key range-distribution table
+        // admits an additive rollup. A table that already carries one or more rollups is still routable:
+        // each additive job is serialized by the table's OlapTableState (a new ADD ROLLUP requires the
+        // table to be NORMAL) and operates only on its own shadow index meta id, so a completed rollup
+        // does not interfere. Synchronous MVs use the same eligibility constraints.
+        return olapTable.isRangeDistribution()
+                && olapTable.isCloudNativeTable()
+                && !olapTable.hasColocateGroup()
+                && olapTable.getKeysType() != KeysType.PRIMARY_KEYS;
+    }
+
+    /**
+     * Build the additive range-rollup job for a shared-data range table. The rollup schema is stored
+     * in SORT-KEY order ({@code [ORDER BY columns in declared order, then the remaining selected
+     * columns]}) so the leading prefix is the sort key: the optimizer's prefix-index scorer scores
+     * candidates by schema column order, so storing the schema in sort-key order makes the rollup
+     * selectable for {@code WHERE <sort-key-prefix> = ...} with no optimizer-rule change. Column order
+     * is an internal layout detail (queries reference columns by name), so the reorder is safe.
+     *
+     * <p>The model key rules are validated on this FINAL order; for AGG/UNIQUE the ORDER BY column set
+     * must equal the rollup key-column set (mirrors {@code CreateTableAnalyzer} for range base tables).
+     */
+    private AlterJobV2 createRangeRollupJob(AddRollupClause addRollupClause, OlapTable olapTable, Database db,
+                                            long baseIndexMetaId, String rollupIndexName,
+                                            List<Column> rollupSchema) throws DdlException, AnalysisException {
+        List<String> sortKeyNames = addRollupClause.getSortKeys();
+        if (sortKeyNames == null || sortKeyNames.isEmpty()) {
+            throw new DdlException("A range-distribution rollup requires an explicit ORDER BY (sort key)");
+        }
+
+        // Index the validated rollup columns by name (case-insensitive). These already carry the base
+        // column identities (uniqueId / type / aggregation) from checkAndPrepareMaterializedView.
+        Map<String, Column> rollupColumnByName = new LinkedHashMap<>();
+        for (Column column : rollupSchema) {
+            rollupColumnByName.put(column.getName().toLowerCase(), column);
+        }
+
+        // Resolve the ORDER BY columns and validate they are a subset of the rollup columns
+        // (defense-in-depth beyond the analyzer's same check).
+        List<Column> sortKeyColumns = new ArrayList<>(sortKeyNames.size());
+        Set<String> sortKeyNameSet = new HashSet<>();
+        for (String sortKeyName : sortKeyNames) {
+            Column column = rollupColumnByName.get(sortKeyName.toLowerCase());
+            if (column == null) {
+                throw new DdlException("ORDER BY column[" + sortKeyName + "] is not in the rollup column list");
+            }
+            sortKeyNameSet.add(column.getName().toLowerCase());
+            sortKeyColumns.add(column);
+        }
+
+        KeysType keysType = olapTable.getKeysType();
+        // For DUP, the number of leading ORDER BY columns that are keys. A range DUP rollup may declare
+        // a DUPLICATE KEY that is a strict prefix of its sort key (mirrors CreateTableAnalyzer, which
+        // exempts DUP_KEYS from the keys==sort-key rule); without an explicit DUPLICATE KEY every ORDER
+        // BY column is a key. Unused for AGG/UNIQUE (their key flags are validated against the sort key).
+        int dupKeyCount = sortKeyNames.size();
+        if (keysType.isAggregationFamily()) {
+            // AGG / UNIQUE range rule: the sort-key set must equal the rollup key-column set.
+            Set<String> keyColumnNames = new HashSet<>();
+            for (Column column : rollupSchema) {
+                if (column.isKey()) {
+                    keyColumnNames.add(column.getName().toLowerCase());
+                }
+            }
+            if (!sortKeyNameSet.equals(keyColumnNames)) {
+                throw new DdlException("The ORDER BY columns must be the same as the rollup key columns "
+                        + "for an aggregate / unique range rollup");
+            }
+        } else {
+            // DUP: an explicit DUPLICATE KEY (...) must equal the ORDER BY prefix of the final schema.
+            List<String> dupKeys = addRollupClause.getDupKeys();
+            if (dupKeys != null && !dupKeys.isEmpty()) {
+                if (dupKeys.size() > sortKeyNames.size()) {
+                    throw new DdlException("DUPLICATE KEY columns must be a prefix of the ORDER BY columns");
+                }
+                for (int i = 0; i < dupKeys.size(); i++) {
+                    if (!dupKeys.get(i).equalsIgnoreCase(sortKeyNames.get(i))) {
+                        throw new DdlException("DUPLICATE KEY columns must be a prefix of the ORDER BY columns");
+                    }
+                }
+                dupKeyCount = dupKeys.size();
+            }
+        }
+
+        // Build the final schema in sort-key order: ORDER BY columns first (declared order), then the
+        // remaining selected columns in their selection order. Assign key flags on this final order:
+        // for DUP the leading dupKeyCount sort-key columns are the keys (a DUPLICATE KEY may be a strict
+        // prefix of the sort key); for AGG/UNIQUE the existing key flags already match the sort-key set
+        // (validated above), so they are preserved by reordering.
+        List<Column> finalSchema = new ArrayList<>(rollupSchema.size());
+        for (int i = 0; i < sortKeyColumns.size(); i++) {
+            Column column = new Column(sortKeyColumns.get(i));
+            if (!keysType.isAggregationFamily()) {
+                boolean isKey = i < dupKeyCount;
+                column.setIsKey(isKey);
+                column.setAggregationType(isKey ? null : AggregateType.NONE, !isKey);
+            }
+            finalSchema.add(column);
+        }
+        for (Column column : rollupSchema) {
+            if (sortKeyNameSet.contains(column.getName().toLowerCase())) {
+                continue;
+            }
+            Column copy = new Column(column);
+            if (!keysType.isAggregationFamily()) {
+                copy.setIsKey(false);
+                copy.setAggregationType(AggregateType.NONE, true);
+            }
+            finalSchema.add(copy);
+        }
+
+        // The sort key is the leading prefix of the final schema.
+        List<Integer> sortKeyIdxes = new ArrayList<>(sortKeyColumns.size());
+        for (int i = 0; i < sortKeyColumns.size(); i++) {
+            sortKeyIdxes.add(i);
+        }
+        return buildRangeRollupJob(olapTable, db, baseIndexMetaId, rollupIndexName,
+                finalSchema, keysType, sortKeyIdxes, addRollupClause.getProperties());
+    }
+
+    private AlterJobV2 createRangeMaterializedViewJob(CreateSyncMVStmt stmt, OlapTable table, Database db,
+                                                     long baseIndexMetaId, List<Column> mvColumns)
+            throws DdlException, AnalysisException {
+        boolean isColocateMv = PropertyAnalyzer.analyzeBooleanProp(stmt.getProperties(),
+                PropertyAnalyzer.PROPERTIES_COLOCATE_MV, false) && stmt.getWhereClause() == null;
+        if (isColocateMv && Strings.isNullOrEmpty(table.getColocateGroup())) {
+            throw new AnalysisException(String.format("Please ensure table %s is in colocate group if you want to use "
+                    + "mv colocate optimization.", table.getName()));
+        }
+        for (com.starrocks.catalog.Partition partition : table.getPartitions()) {
+            if (partition.getSubPartitions().size() != 1) {
+                throw new DdlException("range-rewrite requires a 1:1 logical-to-physical partition mapping, but logical "
+                        + "partition " + partition.getId() + " has " + partition.getSubPartitions().size()
+                        + " physical partitions");
+            }
+        }
+        List<Integer> sortKeyIdxes = new ArrayList<>();
+        for (int i = 0; i < mvColumns.size() && mvColumns.get(i).isKey(); i++) {
+            sortKeyIdxes.add(i);
+        }
+        Preconditions.checkState(!sortKeyIdxes.isEmpty(), "synchronous MV has no key columns");
+        LakeRangeRollupJob job = buildRangeRollupJob(table, db, baseIndexMetaId, stmt.getMVName(),
+                mvColumns, stmt.getMVKeysType(), sortKeyIdxes, stmt.getProperties());
+        job.setSyncMaterializedView(stmt.getOrigStmt(), AstToSQLBuilder.toSQL(stmt.getQueryStatement()),
+                SyncMaterializedViewDefinition.capture(mvColumns, stmt.getWhereClause()));
+        return job;
+    }
+
+    private LakeRangeRollupJob buildRangeRollupJob(OlapTable olapTable, Database db, long baseIndexMetaId,
+                                                  String indexName, List<Column> schema, KeysType keysType,
+                                                  List<Integer> sortKeyIdxes, Map<String, String> properties)
+            throws DdlException, AnalysisException {
+        // sortKeyUniqueIds: the uniqueId of each sort-key column. The rollup reuses base column
+        // identities. A routable range rollup is cloud-native only, where every column is assigned a
+        // real uniqueId at createTable, so the list is always fully populated; assert that invariant
+        // loudly rather than emit a sort key whose uniqueIds the sink cannot resolve.
+        List<Integer> sortKeyUniqueIds = new ArrayList<>(sortKeyIdxes.size());
+        for (int idx : sortKeyIdxes) {
+            Column column = schema.get(idx);
+            Preconditions.checkState(column.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE,
+                    "range rollup sort-key column %s has no uniqueId", column.getName());
+            sortKeyUniqueIds.add(column.getUniqueId());
+        }
+
+        // Short key count must be computed with the sort-key-aware path (the sort key is the leading
+        // prefix), not the plain key-prefix default.
+        short rollupShortKeyColumnCount =
+                GlobalStateMgr.calcShortKeyColumnCount(schema, properties, sortKeyIdxes);
+        List<Column> rollupSortKeyColumns = new ArrayList<>(sortKeyIdxes.size());
+        for (int idx : sortKeyIdxes) {
+            rollupSortKeyColumns.add(schema.get(idx));
+        }
+
+        long timeoutMs = PropertyAnalyzer.analyzeTimeout(properties,
+                Config.alter_table_timeout_second) * 1000;
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        final ConnectContext connectContext = ConnectContext.get();
+        ComputeResource computeResource = connectContext != null
+                ? connectContext.getCurrentComputeResource() : WarehouseManager.DEFAULT_RESOURCE;
+        final WarehouseManager warehouseManager = globalStateMgr.getWarehouseMgr();
+        if (!warehouseManager.isResourceAvailable(computeResource)) {
+            Warehouse warehouse = warehouseManager.getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+        }
+
+        long shadowIndexMetaId = globalStateMgr.getNextId();
+        LakeRangeRollupJob job = new LakeRangeRollupJob(
+                globalStateMgr.getNextId(), db.getId(), olapTable.getId(), olapTable.getName(), timeoutMs);
+        job.setRollupSchema(schema);
+        job.setRollupKeysType(keysType);
+        job.setRollupSortKeyColumns(rollupSortKeyColumns);
+        job.setRollupSortKeyIdxes(sortKeyIdxes);
+        job.setRollupSortKeyUniqueIds(sortKeyUniqueIds);
+        job.setShadowIndex(shadowIndexMetaId, baseIndexMetaId, indexName, rollupShortKeyColumnCount);
+        job.setComputeResource(computeResource);
+        return job;
+    }
+
+    /**
      * Step1: All replicas of the materialized view index will be created in meta and added to TabletInvertedIndex
      * Step2: Set table's state to ROLLUP.
      *
@@ -329,6 +586,23 @@ public class MaterializedViewHandler extends AlterHandler {
                                                   KeysType mvKeysType, OriginStatement origStmt,
                                                   QueryStatement queryStatement)
             throws DdlException, AnalysisException {
+        if (olapTable.isRangeDistribution()) {
+            // A shared-data range-distribution rollup that satisfies isRangeRollupRoutable is
+            // intercepted in processBatchAddRollup and routed to LakeRangeRollupJob before reaching
+            // this method. Ineligible shared-nothing, colocate and primary-key range tables are
+            // rejected here.
+            if (queryStatement != null) {
+                throw new DdlException(
+                    "Synchronous materialized view with range distribution requires a shared-data, " +
+                    "non-colocate, non-primary-key table. " +
+                    "Use an asynchronous materialized view instead: declare it with an explicit " +
+                    "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, " +
+                    "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...");
+            }
+            throw new DdlException(
+                "ADD ROLLUP is not supported on this table with range distribution. A range distribution " +
+                "rollup is supported only on a shared-data, non-colocate, non-primary-key range table.");
+        }
         if (mvKeysType == null) {
             // assign rollup index's key type, same as base index's
             mvKeysType = olapTable.getKeysType();
@@ -397,7 +671,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
     }
 
-    private List<Column> checkAndPrepareMaterializedView(CreateMaterializedViewStmt addMVClause, Database db,
+    private List<Column> checkAndPrepareMaterializedView(CreateSyncMVStmt addMVClause, Database db,
                                                          OlapTable olapTable)
             throws DdlException {
         String mvName = addMVClause.getMVName();
@@ -435,6 +709,35 @@ public class MaterializedViewHandler extends AlterHandler {
         //     1. Columns resolved by semantics are legal
         // update mv columns
         List<MVColumnItem> mvColumnItemList = addMVClause.getMVColumnItemList();
+        if (isRangeRollupRoutable(olapTable)) {
+            // toMVColumn copies a same-named base column, discarding the analyzed expression and
+            // reusing its uniqueId. Reject generated-name collisions before converting ANY column.
+            for (MVColumnItem item : mvColumnItemList) {
+                if (olapTable.getBaseColumn(item.getName()) == null) {
+                    continue;
+                }
+                Expr expr = item.getDefineExpr();
+                if (!(expr instanceof SlotRef) ||
+                        !item.getName().equalsIgnoreCase(((SlotRef) expr).getColumnName())) {
+                    throw new DdlException("Generated column[" + item.getName() + "] of range synchronous materialized "
+                            + "view[" + mvName + "] conflicts with base column[" + item.getName() + "]");
+                }
+            }
+            // A computed column is evaluated in the load plan before the sink assigns the AUTO_INCREMENT
+            // value, so a load that omits the AUTO_INCREMENT column would compute the view column from NULL.
+            String autoIncrementColumnName = olapTable.getBaseSchema().stream()
+                    .filter(Column::isAutoIncrement).map(Column::getName).findFirst().orElse(null);
+            if (autoIncrementColumnName != null) {
+                for (MVColumnItem item : mvColumnItemList) {
+                    if (olapTable.getBaseColumn(item.getName()) == null
+                            && item.getBaseColumnNames().stream().anyMatch(autoIncrementColumnName::equalsIgnoreCase)) {
+                        throw new DdlException("Column[" + item.getName() + "] of range synchronous materialized view["
+                                + mvName + "] cannot be computed from AUTO_INCREMENT column[" + autoIncrementColumnName
+                                + "]");
+                    }
+                }
+            }
+        }
         List<Column> newMVColumns = Lists.newArrayList();
         int numOfKeys = 0;
         if (olapTable.getKeysType().isAggregationFamily()) {
@@ -583,7 +886,9 @@ public class MaterializedViewHandler extends AlterHandler {
                         }
                         break;
                     }
-                    if (column.getType().isFloatingPointType() || column.getType().isComplexType()) {
+                    if (!column.getType().canDistributedBy()) {
+                        // JSON and other non-sortable types must not become rollup sort-key
+                        // columns (mirrors base-table key derivation in CreateTableAnalyzer).
                         break;
                     }
                     if (column.getType().isVarchar()) {
@@ -647,6 +952,12 @@ public class MaterializedViewHandler extends AlterHandler {
 
                     Column oneColumn = new Column(baseColumn);
                     if (isKey) {
+                        if (!baseColumn.getType().canDistributedBy()) {
+                            // JSON and other non-sortable types cannot be rollup key columns
+                            // (mirrors base-table key validation in ColumnDefAnalyzer).
+                            throw new DdlException(String.format(
+                                    "Invalid data type of key column '%s': '%s'", rollupColName, baseColumn.getType()));
+                        }
                         hasKey = true;
                         oneColumn.setIsKey(true);
                         oneColumn.setAggregationType(null, false);
@@ -688,27 +999,25 @@ public class MaterializedViewHandler extends AlterHandler {
     public void processBatchDropRollup(List<AlterClause> dropRollupClauses, Database db, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
         // check drop rollup index operation
-        for (AlterClause alterClause : dropRollupClauses) {
-            DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-            checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
-        }
-
-        // drop data in memory
         Set<Long> indexMetaIdSet = new HashSet<>();
         Set<String> rollupNameSet = new HashSet<>();
         for (AlterClause alterClause : dropRollupClauses) {
             DropRollupClause dropRollupClause = (DropRollupClause) alterClause;
-            String rollupIndexName = dropRollupClause.getRollupName();
-            long rollupIndexMetaId = dropMaterializedView(rollupIndexName, olapTable);
-            indexMetaIdSet.add(rollupIndexMetaId);
-            rollupNameSet.add(rollupIndexName);
+            long indexMetaId = checkDropMaterializedView(dropRollupClause.getRollupName(), olapTable);
+            indexMetaIdSet.add(indexMetaId);
+            rollupNameSet.add(dropRollupClause.getRollupName());
         }
 
         // batch log drop rollup operation
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
         long dbId = db.getId();
         long tableId = olapTable.getId();
-        editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexMetaIdSet));
+        editLog.logBatchDropRollup(new BatchDropInfo(dbId, tableId, indexMetaIdSet), wal -> {
+            // drop data in memory
+            for (String rollupName : rollupNameSet) {
+                dropMaterializedView(rollupName, olapTable);
+            }
+        });
         LOG.info("finished drop rollup index[{}] in table[{}]", String.join("", rollupNameSet),
                 olapTable.getName());
     }
@@ -719,13 +1028,20 @@ public class MaterializedViewHandler extends AlterHandler {
         Preconditions.checkState(locker.isDbWriteLockHeldByCurrentThread(db));
         try {
             String mvName = dropMaterializedViewStmt.getMvName();
-            // Step1: check drop mv index operation
-            checkDropMaterializedView(mvName, olapTable);
-            // Step2; drop data in memory
-            long mvIndexMetaId = dropMaterializedView(mvName, olapTable);
-            // Step3: log drop mv operation
+            final long mvIndexMetaId;
+            if (dropMaterializedViewStmt.isForceDrop()) {
+                mvIndexMetaId = getMvIndexMetaIdForForceDrop(mvName, olapTable);
+            } else {
+                mvIndexMetaId = checkDropMaterializedView(mvName, olapTable);
+            }
+            boolean forceDrop = dropMaterializedViewStmt.isForceDrop();
+            // log drop mv operation
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, false));
+            editLog.logDropRollup(new DropInfo(db.getId(), olapTable.getId(), mvIndexMetaId, forceDrop),
+                    wal -> {
+                        // drop mv data in memory
+                        dropMaterializedView(mvName, olapTable);
+                    });
             LOG.info("finished drop materialized view [{}] in table [{}]", mvName, olapTable.getName());
         } catch (MetaNotFoundException e) {
             if (dropMaterializedViewStmt.isSetIfExists()) {
@@ -737,13 +1053,31 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     /**
+     * When force dropping, skip table state and partition checks. Only validate mv name and existence.
+     * Caller must hold db write lock.
+     */
+    private long getMvIndexMetaIdForForceDrop(String mvName, OlapTable olapTable)
+            throws DdlException, MetaNotFoundException {
+        if (mvName.equals(olapTable.getName())) {
+            throw new DdlException("Cannot drop base index by using DROP ROLLUP or DROP MATERIALIZED VIEW.");
+        }
+        if (!olapTable.hasMaterializedIndex(mvName)) {
+            throw new MetaNotFoundException(
+                    "Materialized view [" + mvName + "] does not exist in table [" + olapTable.getName() + "]");
+        }
+        Long indexMetaId = olapTable.getIndexMetaIdByName(mvName);
+        Preconditions.checkState(indexMetaId != null, "index meta id for mv " + mvName);
+        return indexMetaId;
+    }
+
+    /**
      * Make sure we got db write lock before using this method.
      * Up to here, table's state can only be NORMAL.
      *
      * @param mvName
      * @param olapTable
      */
-    private void checkDropMaterializedView(String mvName, OlapTable olapTable)
+    private long checkDropMaterializedView(String mvName, OlapTable olapTable)
             throws DdlException, MetaNotFoundException {
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
         if (mvName.equals(olapTable.getName())) {
@@ -763,6 +1097,8 @@ public class MaterializedViewHandler extends AlterHandler {
             MaterializedIndex materializedIndex = partition.getLatestIndex(mvIndexMetaId);
             Preconditions.checkNotNull(materializedIndex);
         }
+
+        return mvIndexMetaId;
     }
 
     /**
@@ -819,8 +1155,8 @@ public class MaterializedViewHandler extends AlterHandler {
     }
 
     @Override
-    protected void runAfterCatalogReady() {
-        super.runAfterCatalogReady();
+    protected void runAfterLeaseValid() {
+        super.runAfterLeaseValid();
         runAlterJobV2();
     }
 
@@ -888,7 +1224,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
         if (rollupJobV2.isTimeout()) {
             // in run(), the timeout job will be cancelled.
-            rollupJobV2.run();
+            runAlterJobV2Safely(rollupJobV2);
             return;
         }
 
@@ -914,7 +1250,7 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         if (shouldJobRun) {
-            rollupJobV2.run();
+            runAlterJobV2Safely(rollupJobV2);
         }
     }
 
@@ -1032,14 +1368,16 @@ public class MaterializedViewHandler extends AlterHandler {
                         + "Use 'ALTER TABLE DROP ROLLUP' if you want to.");
             }
 
-            // find from new alter jobs first
-            if (cancelAlterTableStmt.getAlterJobIdList() != null) {
-                for (Long jobId : cancelAlterTableStmt.getAlterJobIdList()) {
+            // find from new alter jobs first; no job ids means all unfinished jobs of the table
+            List<Long> alterJobIdList = cancelAlterTableStmt.getAlterJobIdList();
+            if (alterJobIdList != null && !alterJobIdList.isEmpty()) {
+                // a repeated job id must be cancelled once, or the second attempt is reported as refused
+                for (Long jobId : new LinkedHashSet<>(alterJobIdList)) {
                     AlterJobV2 alterJobV2 = getUnfinishedAlterJobV2ByJobId(jobId);
                     if (alterJobV2 == null) {
                         continue;
                     }
-                    rollupJobV2List.add(getUnfinishedAlterJobV2ByJobId(jobId));
+                    rollupJobV2List.add(alterJobV2);
                 }
             } else {
                 rollupJobV2List = getUnfinishedAlterJobV2ByTableId(olapTable.getId());
@@ -1052,11 +1390,19 @@ public class MaterializedViewHandler extends AlterHandler {
         }
 
         // alter job v2's cancel must be called outside the database lock
+        List<String> notCancelledJobs = new ArrayList<>();
         for (AlterJobV2 alterJobV2 : rollupJobV2List) {
-            alterJobV2.cancel(reason);
+            // e.g. a lake rollup job in FINISHED_REWRITING refuses to be cancelled. A job the scheduler
+            // cancelled meanwhile (e.g. on timeout) also returns false, but it ended as the user asked.
+            if (!alterJobV2.cancel(reason) && alterJobV2.getJobState() != AlterJobV2.JobState.CANCELLED) {
+                notCancelledJobs.add("JobId: " + alterJobV2.getJobId() + ", State: " + alterJobV2.getJobState());
+            }
             if (alterJobV2.isDone()) {
                 onJobDone(alterJobV2);
             }
+        }
+        if (!notCancelledJobs.isEmpty()) {
+            throw new DdlException("Job can not be cancelled. " + String.join("; ", notCancelledJobs));
         }
     }
 
@@ -1092,6 +1438,10 @@ public class MaterializedViewHandler extends AlterHandler {
                             if (((LakeRollupJob) alterJobV2).getRollupIndexName().equals(tableName)) {
                                 materializedViewJob = alterJobV2;
                             }
+                        } else if (alterJobV2 instanceof LakeRangeRollupJob) {
+                            if (((LakeRangeRollupJob) alterJobV2).getRollupIndexName().equals(tableName)) {
+                                materializedViewJob = alterJobV2;
+                            }
                         }
                     }
                 }
@@ -1110,6 +1460,39 @@ public class MaterializedViewHandler extends AlterHandler {
                 onJobDone(materializedViewJob);
             }
         }
+    }
+
+    /**
+     * Cancel unfinished rollup jobs for a specific MV name on one table.
+     * Returns true if at least one matching unfinished job is found.
+     */
+    public boolean cancelRollupJobsForForceDrop(long tableId, String mvName, String reason) {
+        boolean foundMatchingJob = false;
+        List<AlterJobV2> rollupJobs = getUnfinishedAlterJobV2ByTableId(tableId);
+        for (AlterJobV2 alterJob : rollupJobs) {
+            if (alterJob instanceof RollupJobV2) {
+                if (!((RollupJobV2) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else if (alterJob instanceof LakeRollupJob) {
+                if (!((LakeRollupJob) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else if (alterJob instanceof LakeRangeRollupJob) {
+                if (!((LakeRangeRollupJob) alterJob).getRollupIndexName().equals(mvName)) {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+
+            foundMatchingJob = true;
+            alterJob.cancel(reason);
+            if (alterJob.isDone()) {
+                onJobDone(alterJob);
+            }
+        }
+        return foundMatchingJob;
     }
 
     // just for ut

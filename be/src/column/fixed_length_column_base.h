@@ -76,9 +76,10 @@ public:
 
     bool is_timestamp() const override { return IsTimestamp<ValueType>; }
 
-    const uint8_t* raw_data() const override { return reinterpret_cast<const uint8_t*>(immutable_data().data()); }
+    const uint8_t* raw_data() const { return reinterpret_cast<const uint8_t*>(immutable_data().data()); }
+    const uint8_t* raw_bytes() const { return raw_data(); }
 
-    uint8_t* mutable_raw_data() override {
+    uint8_t* mutable_raw_data() {
         get_data();
         return reinterpret_cast<uint8_t*>(_data.data());
     }
@@ -187,14 +188,6 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    // The `_data` support one size(> 2^32), but some interface such as update_rows() will use uint32_t to
-    // access the item, so we should use 2^32 as the limit
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override;
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
-    bool has_large_column() const override { return false; }
-
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
     uint32_t serialize_default(uint8_t* pos) const override;
@@ -203,6 +196,24 @@ public:
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) const override;
+
+    uint32_t serialize_batch_fixed_row_size() const override { return sizeof(T); }
+
+    void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const override {
+        uint64_t* __restrict s = sizes.data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            s[i] += sizeof(T);
+        }
+    }
+
+    void serialize_size_compact_batch_with_null_masks(Buffer<uint64_t>& sizes, size_t chunk_size,
+                                                      const uint8_t* null_masks) const override {
+        uint64_t* __restrict s = sizes.data();
+        const uint8_t* __restrict nulls = null_masks;
+        for (size_t i = 0; i < chunk_size; ++i) {
+            s[i] += sizeof(bool) + (nulls[i] ? 0 : sizeof(T));
+        }
+    }
 
     void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                          uint32_t max_one_row_size, const uint8_t* null_masks,
@@ -239,7 +250,6 @@ public:
 
     const ImmContainer get_data() const { return immutable_data(); }
 
-    // TODO: remove this function
     const ImmContainer immutable_data() const {
         if (!_resource.empty()) {
             return _resource.span<T>();

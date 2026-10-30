@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -32,6 +34,7 @@ import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -79,6 +82,34 @@ public class CatalogUtils {
         }
     }
 
+    /**
+     * Format partition values from an existing partition for log comparison.
+     */
+    private static String formatExistedPartitionValues(OlapTable olapTable, Partition partition) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        long partitionId = partition.getId();
+        if (partitionInfo instanceof ListPartitionInfo) {
+            ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
+            List<String> values = listInfo.getIdToValues().get(partitionId);
+            List<List<String>> multiValues = listInfo.getIdToMultiValues().get(partitionId);
+            if (values != null && !values.isEmpty()) {
+                return "VALUES IN (" + values.stream().map(v -> "'" + v + "'")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+            if (multiValues != null && !multiValues.isEmpty()) {
+                return "VALUES IN (" + multiValues.stream()
+                        .map(row -> "(" + row.stream().map(v -> "'" + v + "'")
+                                .collect(Collectors.joining(",")) + ")")
+                        .collect(Collectors.joining(",")) + ")";
+            }
+        } else if (partitionInfo instanceof RangePartitionInfo) {
+            RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
+            Range<PartitionKey> range = rangeInfo.getRange(partitionId);
+            return range != null ? range.toString() : "null";
+        }
+        return "unknown";
+    }
+
     public static Set<String> checkPartitionNameExistForAddPartitions(OlapTable olapTable,
                                                                       List<PartitionDesc> partitionDescs)
             throws DdlException {
@@ -90,9 +121,16 @@ public class CatalogUtils {
                     existPartitionNameSet.add(partitionName);
                 } else {
                     // add more information for user
+                    // checkPartitionNameExist checks both normal and temp partitions, so fall back to temp lookup
                     Partition existedPartition = olapTable.getPartition(partitionName);
-                    LOG.warn("Duplicate partition name {}, existed partition:{}, current partition:{}", partitionName,
-                            existedPartition, partitionDesc);
+                    if (existedPartition == null) {
+                        existedPartition = olapTable.getPartition(partitionName, true);
+                    }
+                    String existedValues = existedPartition != null
+                            ? formatExistedPartitionValues(olapTable, existedPartition) : "unknown";
+                    String currentValues = partitionDesc.toString();
+                    LOG.warn("Duplicate partition name {}, existed values: {}, current values: {}", partitionName,
+                            existedValues, currentValues);
                     ErrorReport.reportDdlException(ErrorCode.ERR_SAME_NAME_PARTITION, partitionName);
                 }
             }
@@ -451,21 +489,52 @@ public class CatalogUtils {
         return backendNum;
     }
 
-    public static int calPhysicalPartitionBucketNum() {
-        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
+    // Count compute nodes for bucket sizing. Light-weight tablet creation can succeed
+    // without any alive CN, so when invoked from that path (useTotalNodes = true) we
+    // include configured-but-offline CNs so auto-bucket still produces a sensible value.
+    // Regular CREATE TABLE keeps the original "only count alive CNs" behavior.
+    private static int computeNodeCountForBucketSizing(boolean useTotalNodes) {
+        return useTotalNodes
+                ? GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalComputeNodeNumber()
+                : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+    }
+
+    private static int backendNumForBucketSizing(OlapTable olapTable, short replicationNum) {
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Multimap<String, String> location = olapTable.getLocation();
+        // No location constraint → size against the whole cluster.
+        if (location == null || location.isEmpty()) {
+            return clusterInfo.getTotalBackendNumber();
+        }
+        int backendNum = clusterInfo.getLocationMatchedBackendIds(location).size();
+        boolean enoughMatchedBackends = GlobalStateMgr.getCurrentState().getTabletChecker()
+                .preCheckEnoughLocationMatchedBackends(location, replicationNum);
+        if (backendNum == 0 || !enoughMatchedBackends) {
+            backendNum = clusterInfo.getTotalBackendNumber();
+        }
+
+        return backendNum;
+    }
+
+    public static int calPhysicalPartitionBucketNum(OlapTable olapTable, short replicationNum) {
+        int backendNum = backendNumForBucketSizing(olapTable, replicationNum);
 
         if (RunMode.isSharedDataMode()) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+            backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());
         }
 
         return divisibleBucketNum(backendNum);
     }
 
-    public static int calBucketNumAccordingToBackends() {
-        int backendNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().size();
+    public static int calBucketNumAccordingToBackends(OlapTable olapTable) {
+        return calBucketNumAccordingToBackends(olapTable, olapTable.getDefaultReplicationNum());
+    }
+
+    public static int calBucketNumAccordingToBackends(OlapTable olapTable, short replicationNum) {
+        int backendNum = backendNumForBucketSizing(olapTable, replicationNum);
 
         if (RunMode.isSharedDataMode()) {
-            backendNum = backendNum + GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveComputeNodeNumber();
+            backendNum = backendNum + computeNodeCountForBucketSizing(olapTable.isLightWeightTabletCreation());
         }
 
         // When POC, the backends is not greater than three most of the time.
@@ -485,15 +554,20 @@ public class CatalogUtils {
 
     public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
                                                         boolean enableAutoTabletDistribution) {
+        return calAvgBucketNumOfRecentPartitions(olapTable, recentPartitionNum, enableAutoTabletDistribution,
+                olapTable.getDefaultReplicationNum());
+    }
+
+    public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                        boolean enableAutoTabletDistribution, short replicationNum) {
         // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
         //    Or the Config.enable_auto_tablet_distribution is disabled
         int bucketNum = 0;
         if (olapTable.getPartitions().size() < recentPartitionNum || !enableAutoTabletDistribution) {
-            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable, replicationNum);
             // If table is not partitioned, the bucketNum should be at least DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM
             if (!olapTable.getPartitionInfo().isPartitioned()) {
-                bucketNum = bucketNum > FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM ?
-                        bucketNum : FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM;
+                bucketNum = Math.max(bucketNum, FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM);
             }
             return bucketNum;
         }
@@ -508,7 +582,7 @@ public class CatalogUtils {
             }
         }
 
-        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+        bucketNum = CatalogUtils.calBucketNumAccordingToBackends(olapTable, replicationNum);
         if (!dataImported) {
             return bucketNum;
         }

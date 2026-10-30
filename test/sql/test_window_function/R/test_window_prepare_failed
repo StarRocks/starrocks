@@ -1,0 +1,39 @@
+-- name: test_window_prepare_failed @sequential
+CREATE TABLE `t0` (
+  `k` int(11) NULL,
+  `v` int(11) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 values (1, 1), (1, 2), (2, 3);
+-- result:
+-- !result
+admin enable failpoint 'analytor_prepare_failed';
+-- result:
+-- !result
+[UC]select k, sum(v) over(partition by k) from t0;
+[UC]select k, sum(v) over(partition by k order by v rows between 1 preceding and current row) from t0;
+[UC]select k, sum(v) over(partition by k), max(v) over(partition by k) from t0;
+admin disable failpoint 'analytor_prepare_failed';
+-- result:
+-- !result
+select k, sum(v) over(partition by k order by v) as s from t0 order by k, v;
+-- result:
+1	1
+1	3
+2	3
+-- !result
+select k, row_number() over(partition by k order by v) as rn from t0 order by k, v;
+-- result:
+1	1
+1	2
+2	1
+-- !result
+CLEANUP {
+  admin disable failpoint 'analytor_prepare_failed';
+} END CLEANUP

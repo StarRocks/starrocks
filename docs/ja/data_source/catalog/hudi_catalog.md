@@ -1,5 +1,7 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
+description: "Hudi catalog は Apache Hudi からデータをインジェストせずにクエリおよび変換ロード。"
 toc_max_heading_level: 5
 ---
 
@@ -40,7 +42,7 @@ Hudi クラスターが AWS S3 をストレージとして使用する場合、�
 
 上記の3つの認証方法の中で、インスタンスプロファイルが最も広く使用されています。
 
-詳細については、[AWS IAM での認証準備](../../integrations/authenticate_to_aws_resources.md#preparations)を参照してください。
+詳細については、[AWS IAM での認証準備](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparations)を参照してください。
 
 ### HDFS
 
@@ -162,7 +164,7 @@ StarRocks がデータソースのメタストアと統合する方法に関す�
 | aws.glue.access_key           | No       | AWS IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.glue.secret_key           | No       | AWS IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS Glue にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS Glue にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue へのアクセスのための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
+AWS Glue にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS Glue へのアクセスのための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
 
 #### StorageCredentialParams
 
@@ -210,7 +212,7 @@ Hudi クラスターのストレージとして AWS S3 を選択した場合、�
 | aws.s3.access_key           | No       | IAM ユーザーのアクセスキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | No       | IAM ユーザーのシークレットキーです。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS S3 にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法や AWS IAM コンソールでのアクセス制御ポリシーの設定方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
 
 ##### S3 互換ストレージシステム
 
@@ -323,6 +325,22 @@ Data Lake Storage Gen2 を Hudi クラスターのストレージとして選択
   | azure.adls2.oauth2_client_id       | Yes          | サービスプリンシパルのクライアント (アプリケーション) ID です。        |
   | azure.adls2.oauth2_client_secret   | Yes          | 作成された新しいクライアント (アプリケーション) シークレットの値です。    |
   | azure.adls2.oauth2_client_endpoint | Yes          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント (v1) です。 |
+
+- ワークロード ID 認証方法を選択する場合、`StorageCredentialParams` を次のように構成します:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  次の表は、`StorageCredentialParams` で構成する必要があるパラメータを説明しています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。                    |
+  | azure.adls2.oauth2_client_id            | Yes          | ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -696,6 +714,21 @@ PROPERTIES
   );
   ```
 
+- ワークロード ID 認証方法を選択する場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - VM ベースの認証方法を選択する場合、次のようなコマンドを実行します。
@@ -826,7 +859,7 @@ Hudi テーブルのスキーマを表示するには、次のいずれかの構
 
 2. [Hudi Catalog とその中のデータベースに切り替える](#switch-to-a-hudi-catalog-and-a-database-in-it)。
 
-3. 指定されたデータベース内の宛先テーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用します。
+3. 指定されたデータベース内の宛先テーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用します。
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

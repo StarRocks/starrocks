@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "查看当前已创建的仓库。"
 ---
 
 # SHOW REPOSITORIES

@@ -105,6 +105,29 @@ public class MetaHelperTest {
         }
     }
 
+    @Test
+    public void testFreeDiskSizeIsConfigurable() throws IOException, InvalidMetaDirException {
+        Config.start_with_incomplete_meta = false;
+        Config.meta_dir = testDir + "/meta";
+        mkdir(Config.meta_dir + "/bdb");
+        File file = new File(Config.meta_dir + "/bdb/EF889.jdb");
+        Assertions.assertTrue(file.createNewFile());
+
+        long originalFreeDiskSize = Config.bdbje_free_disk_size;
+        try {
+            // No volume can satisfy this, so the startup gate must reject the meta dir.
+            Config.bdbje_free_disk_size = Long.MAX_VALUE;
+            assertThrows(InvalidMetaDirException.class, MetaHelper::checkMetaDir);
+
+            // Lowering the config is the recovery path: the same meta dir now passes.
+            Config.bdbje_free_disk_size = 0;
+            MetaHelper.checkMetaDir();
+        } finally {
+            Config.bdbje_free_disk_size = originalFreeDiskSize;
+            deleteDir(new File(testDir + "/"));
+        }
+    }
+
     private void mkdir(String targetDir) {
         File dir = new File(targetDir);
         if (dir.exists()) {

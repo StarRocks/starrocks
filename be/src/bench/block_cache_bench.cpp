@@ -27,8 +27,8 @@
 #include "base/random/random.h"
 #include "base/time/time.h"
 #include "cache/disk_cache/starcache_engine.h"
+#include "common/glog_init.h"
 #include "starcache/common/types.h"
-#include "util/logging.h"
 
 namespace starrocks {
 

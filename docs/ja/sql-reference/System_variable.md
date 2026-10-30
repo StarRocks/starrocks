@@ -1,10 +1,12 @@
 ---
 displayed_sidebar: docs
+description: "StarRocks が提供する多くのシステム変数の設定と変更について説明。"
 ---
 
 # システム変数
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks は、多くのシステム変数を提供しており、要件に応じて設定や変更が可能です。このセクションでは、StarRocks がサポートする変数について説明します。これらの変数の設定を確認するには、MySQL クライアントで [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) コマンドを実行します。また、[SET](sql-statements/cluster-management/config_vars/SET.md) コマンドを使用して、変数を動的に設定または変更することもできます。これらの変数は、システム全体でグローバルに、現在のセッションのみで、または単一のクエリ文でのみ有効にすることができます。
 
@@ -72,6 +74,8 @@ SET GLOBAL query_mem_limit = 137438953472;
 * cngroup_resource_usage_fresh_ratio
 * cngroup_schedule_mode
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -162,7 +166,7 @@ SELECT /*+ SET_VAR
 
 ### ユーザーのプロパティとして変数を設定
 
-[ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
+[ALTER USER](./sql-statements/account-management/ALTER_USER.md) を使用して、セッション変数をユーザーのプロパティとして設定できます。この機能は v3.3.3 からサポートされています。
 
 例：
 
@@ -185,10 +189,27 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### ai_topn_pushdown_max_global_limit
+
+* **説明**: 適用条件を満たす AI projection の下でグローバル候補 TopN を使用する SQL `LIMIT` の最大値です。しきい値を超える場合は、フラグメントインスタンスごとにローカル候補 TopN でプルーニングします。`0` はローカルのみのプルーニングを選択し、最適化自体は無効にしません。
+* **デフォルト**: 1000
+* **データ型**: long
+* **範囲**: [0, 9223372036854775807]
+* **スコープ**: Session、Global
+
+`SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定でき、再起動は不要です。戦略の説明と例については、[AI 入力行数の削減](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows) を参照してください。
+
+### ann_params
+
+* **説明**: 近似最近傍（ANN）ベクターインデックス検索のクエリパラメータを指定します。値は、キーと値がともに文字列である JSON オブジェクト文字列です。HNSW は `efsearch`、IVFPQ は `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht`、`range_search_confidence` をサポートします。セッションまたは単一ステートメントに設定できます。例：`SET ann_params = '{"efsearch":"256"}'` または `SET_VAR (ann_params='{"efsearch":"256"}')`。
+* **デフォルト**: `""`
+* **データ型**: String
+* **スコープ**: Session
+
 ### array_low_cardinality_optimize
 
 * **スコープ**: Session
-* **説明**: オプティマイザが array&lt;varchar&gt; カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array&lt;varchar&gt;` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array&lt;varchar&gt;` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
+* **説明**: オプティマイザが `array<varchar>` カラムを low-cardinality（辞書ベース）のデコードおよび関連最適化の対象として検討するかどうかを制御します。有効にすると、オプティマイザの low-cardinality ルール（例: `DecodeCollector`）は辞書カラムを定義し、型が `varchar` または `array<varchar>` の式に対して辞書デコードを適用することがあります。無効にすると、スカラーの `varchar` カラムのみが対象となり、`array<varchar>` 型はこれらの low-cardinality 最適化によって無視されます。この変数は配列サポートの判定に `DecodeCollector.supportAndEnabledLowCardinality(...)` によって読み取られ、`SessionVariable` の getter/setter を介して公開されます。
 * **デフォルト**: `true`
 * **タイプ**: boolean
 * **導入バージョン**: v3.3.0, v3.4.0, v3.5.0
@@ -196,6 +217,34 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### auto_increment_increment
 
 MySQL クライアント互換性のために使用されます。実際の用途はありません。
+
+### avro_use_jni_reader
+
+* **スコープ**: Session
+* **説明**: Hive などの外部 Catalog にある Avro データをスキャンする際に、JNI ベースの Avro Reader を使用するかどうかを制御します。有効にすると（`true`）、StarRocks は JNI Reader を使用します。無効にすると（`false`）、StarRocks はネイティブ Avro Reader を使用します。現在この変数は主に互換性確保のためのフォールバックとして利用されます。デフォルト値は `false` のため、既定ではネイティブ Avro Reader が使用されます。
+
+  現在の注意点:
+  - ネイティブ Avro Reader と JNI Reader は、`CHAR(n)` の挙動について現在は整合しています。この整合は [#73579](https://github.com/StarRocks/starrocks/pull/73579) で反映されており、この点では native と JNI の動作は一致しています。
+  - ネイティブ Avro Reader は現在 `null`、`deflate`、`snappy` のみをサポートしており、`bzip2` などその他の codec はサポートしていません。ネイティブ Reader がサポートしていない codec を扱う必要がある場合は、JNI Reader を手動で有効にしてください。
+* **デフォルト**: `false`
+* **データ型**: boolean
+* **導入バージョン**: v4.1.1
+
+### binary_encoding_format
+
+* **スコープ**: Session
+* **説明**: StarRocks が MySQL テキスト結果で `BINARY` / `VARBINARY` の値をどのようにエンコードするかを制御します。指定可能な値は `raw`、`hex`、`base64` で、デフォルトは `hex` です。この変数は `binary_encoding_level` と組み合わせて動作します。トップレベルのバイナリ値は MySQL クライアントがそのまま扱える場合がありますが、`ARRAY`、`MAP`、`STRUCT` などのネストした型の中にあるバイナリ値は JSON ライクな文字列として返されるため、表示可能で整った形式を保つには追加のエンコードが必要になることがあります。よりコンパクトな表現が必要な場合は `base64` を、追加エンコードを無効にしたい場合は `raw` を使用します。
+* **デフォルト**: `hex`
+* **データ型**: String
+* **導入バージョン**: v4.1
+
+### binary_encoding_level
+
+* **スコープ**: Session
+* **説明**: MySQL テキスト結果でどのバイナリ値をエンコードするかを制御します。指定可能な値は `nested` と `all` で、デフォルトは `nested` です。`nested` は既存互換性のための設定で、`ARRAY`、`MAP`、`STRUCT` などのネストした型の中にあるバイナリ値のみをエンコードし、トップレベルのバイナリ列の挙動は従来のまま維持します。すべてのバイナリ出力を統一した形式にしたい場合は `all` を使用すると、トップレベルのバイナリ値もエンコードされます。`binary_encoding_format = raw` の場合は、ここで `nested` または `all` を指定していても追加のバイナリエンコードは行われないため、ネスト結果の可読性が下がることがあります。
+* **デフォルト**: `nested`
+* **データ型**: String
+* **導入バージョン**: v4.1
 
 ### big_query_profile_threshold
 
@@ -206,6 +255,39 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: 秒
 * **データ型**: 文字列
 * **導入バージョン**: v3.1
+
+### blacklist_backup_routing
+
+* **スコープ**: Session
+* **説明**: 共有データ（shared-data）モードでは、スキャンに対してプランが優先する compute node が、現在のクエリで利用可能なワーカーに含まれない場合（例：ノードがダウンしている、またはホストの blocklist に載っているなど）、プランナーはバックアップ用の compute node を選ぶ必要があります。この変数は、（プライマリ以外の）候補ノードのうち、バックアップをどのように選ぶかを設定します。`RANDOM` は候補集合から一様乱択でサンプリングします。`CIRCULAR` はプライマリからソート済みの compute node ID のリング上を走査し、最初に見つかった候補ノードを選びます（決定的）。`TABLET_HASH` は tablet とノードのハッシュ（rendezvous hashing）が最大となる候補ノードを選びます。利用できないノードの tablet は他のノードに均等に分散され、同じ tablet はクエリをまたいで常に同じバックアップに送られるため、そのデータは 1 つのバックアップノードにだけキャッシュされます。Colocate スキャンでは、tablet の代わりに Colocation Group とバケットでハッシュを計算するため、グループ内のすべてのテーブルで同じバケットが同じバックアップに送られます。FE 間でも、候補ノードの集合が同じであれば同じ tablet に対して同じバックアップが選ばれます。ロード（例：`INSERT`）が書き込む tablet の compute node が利用できない場合にも、この変数に従ってバックアップが選ばれます。バックアップとして選べるノードは `skip_black_list` にも依存します。デフォルトではホスト blocklist 上のノードは除外されます。`skip_black_list` が `true` の場合、blocklist に載っていても、（例：生存しておりウェアハウスで利用可能など）他の条件を満たせばバックアップとして選ばれることがあります。
+* **デフォルト**: `TABLET_HASH`
+* **データ型**: String
+* **有効な値**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
+* **導入バージョン**: -
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **説明**: 各 BE/CN のビルド側の推定サイズがブロードキャストのメモリしきい値を超えた場合に、CPU、メモリ、ネットワークコストへ適用する倍率。`1.0` に設定すると、このペナルティを無効にします。
+* **スコープ**: Session, Global
+* **デフォルト**: `1000.0`
+* **データ型**: Double
+* **有効な値**: `[1.0, 1000000.0]` の範囲内の有限数値。この範囲外の値、数値でない値、`NaN`、無限大は拒否されます。
+
+`SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定できます。例：
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **説明**: オプティマイザがブロードキャストプランにペナルティを適用するビルド側の推定サイズのしきい値。このしきい値は各 BE に送信される推定バイト数に適用され、その値がしきい値を超えるとペナルティを適用します。推定サイズがしきい値と等しい場合はペナルティを適用しません。これはオプティマイザのしきい値であり、実行時のメモリ制限ではありません。`exec_mem_limit` とは独立しており、`broadcast_row_limit` は引き続きブロードキャスト選択の行数チェックを制御します。`0` に設定すると、推定サイズが正のすべてのブロードキャストにペナルティを適用します。
+* **スコープ**: Session, Global
+* **デフォルト**: `2147483648`（2 GiB）
+* **単位**: バイト
+* **データ型**: long
+* **有効な値**: [0, 9223372036854775807]
 
 ### catalog
 
@@ -284,6 +366,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データタイプ**: long
 * **導入バージョン**: v3.4.0, v3.5.0
 
+### cbo_push_down_count_aggregate
+
+* **説明**: `count(*)`/`count(col)` 集約が、既に下方プッシュ可能な `sum`/`max`/`min`/`hll_union`/`bitmap_union`/`percentile_union` と同様に、`PushDownAggregateRule` の Join 配下へのプッシュダウン最適化に参加するかどうかを制御します。有効（デフォルト）の場合、オプティマイザは `count` を `INNER`/`CROSS` Join の片側（Join を跨ぐ count は本質的に直積であり、両側の部分結果の合計からは復元できないため、左側/child-0 側のみ）にある、Join キーのみでグループ化されたより狭い集約へプッシュダウンし、その後既存の `COUNT -> SUM` rollup ロジックで最上位の集約を再構築します。実際に特定のクエリでプッシュダウンが適用されるかどうかは、他のプッシュダウン可能な関数と同様に `cbo_push_down_aggregate_mode` のコストヒューリスティックに依存します。`col` が `CASE WHEN`/`IF()` 分岐に由来する場合、`count(col)` はプッシュダウンされません。これは、`count` にとっては一度も実行されない分岐は `NULL`（`sum` の場合）ではなく `0` に集約される必要があるためです。この変数を無効にすると、`count` を常に Join の上に留める従来の動作に戻ります。
+* **スコープ**: Session
+* **デフォルト**: `true`
+* **データタイプ**: boolean
+
 ### cbo_use_correlated_predicate_estimate
 
 * **説明**: セッションフラグ。オプティマイザが、複数列にまたがる結合された等価述語の選択率を推定する際に相関を考慮したヒューリスティックを適用するかを制御します。有効（デフォルト）の場合、推定器はプライマリのマルチカラム統計や最も選択的な述語を除く追加列に対して指数減衰重みを適用し、追加述語の乗算的影響を軽減します（重み：追加最大3列に対して 0.5、0.25、0.125）。無効の場合、減衰は適用されず（減衰係数 = 1）、これらの列の完全な選択率を乗算します（より強い独立仮定）。このフラグは StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity により確認され、マルチカラム統計経路とフォールバック経路の両方で減衰係数を選択するため、CBO が使用するカーディナリティ推定に影響します。
@@ -349,6 +438,33 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 1024
 * **導入バージョン**: v2.5
 
+### count_distinct_implementation
+
+* **説明**: `COUNT(DISTINCT expr)` にパラメータが 1 つだけ含まれる場合の関数実装を制御します。使用できる値（大文字と小文字は区別されません）:
+  * `default`: `COUNT(DISTINCT expr)` の実装をデフォルトのままにします。オプティマイザは、クエリ形式、統計情報、およびコストに基づいて適切な集計プランを選択します。
+  * `multi_count_distinct`: `COUNT(DISTINCT expr)` の実装を `multi_distinct_count` に変更し、正確なカウントを行います。カーディナリティが低い列または中程度の列をカウントする場合、この実装によってシャッフルおよび重複排除のフェーズを 1 つ削減でき、クエリの速度を向上させられる場合があります。ただし、distinct 値を HashSet に保持するため、カーディナリティが高い列を重複排除するとメモリ使用量が過剰になり、OOM が発生する可能性があります。代表的なワークロードで事前に検証せず、この値をグローバルに設定しないでください。
+  * `ndv`: `COUNT(DISTINCT expr)` の実装を `ndv(expr)` に変更します。この関数は HyperLogLog を使用するため、メモリ使用量を抑えながら近似結果を返します。
+* **デフォルト**: `default`
+* **導入バージョン**: v3.3.6、v3.4.0
+
+:::note[`multi_distinct_count` の使用上の注意事項]
+`multi_distinct_count()` は正確な結果を返します。
+
+ほとんどのクエリでは、`COUNT(DISTINCT expr)` の使用を推奨します。オプティマイザが適切な集計プランを選択できるように、`count_distinct_implementation` を `default` に設定してください。
+
+カーディナリティが低い列または中程度の列を重複排除する場合は、`multi_distinct_count()` をテストして使用できます。この関数は 2 フェーズの集計を使用するため、シャッフルおよび重複排除のフェーズを 1 つ削減し、パフォーマンスを向上させられる場合があります。ただし、HashSet の状態保持と最終マージによってメモリ使用量が過剰になり、カーディナリティが高い列を重複排除すると OOM が発生する可能性があります。
+
+セッション全体ではなく、特定の `COUNT(DISTINCT expr)` に対してこの実装をテストする場合は、クエリヒントで `count_distinct_implementation` を設定できます。
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+この値をヒントで設定した場合、適用対象はパラメータが 1 つの `COUNT(DISTINCT)` のみに限定されます。`COUNT(DISTINCT expr1, expr2)` のような複数列の重複排除式には影響しません。
+:::
+
 ### custom_query_id (session)
 
 * **説明**: 現在のクエリに外部識別子をバインドするために使用されます。クエリ実行前に `SET SESSION custom_query_id = 'my-query-id';` のように設定できます。クエリ終了後に値はリセットされます。この値は `KILL QUERY 'my-query-id'` に渡すことができます。値は監査ログの `customQueryId` フィールドで確認できます。
@@ -391,6 +507,15 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: `InnoDB`
 * **データタイプ**: String
 * **導入バージョン**: v3.4.2, v3.5.0
+
+### default_view_sql_security
+
+* **説明**: `CREATE VIEW` ステートメントで `SECURITY` 句が指定されていない場合に適用される、デフォルトの SQL SECURITY 特性です。`NONE`（明示的な `SECURITY NONE` 句と同等）はビューを参照する際に実行ユーザーがそのビュー自体に対する `SELECT` 権限を持っていればよく、ビューが参照するテーブルは実行ユーザーに対してチェックされないことを意味します。`INVOKER`（`SECURITY INVOKER` と同等）は実行ユーザーがビューの参照するテーブルに対する `SELECT` 権限も持っている必要があることを意味します。ステートメント内で明示的に指定された `SECURITY NONE` または `SECURITY INVOKER` 句は、常にこの変数より優先されます。この変数は `CREATE VIEW` にのみ影響し、`ALTER VIEW` には影響しません。
+* **スコープ**: Session
+* **デフォルト**: `NONE`
+* **データタイプ**: String
+* **有効な値**: `NONE`, `INVOKER`
+* **導入バージョン**: v4.1.1
 
 ### disable_colocate_join
 
@@ -504,11 +629,23 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v2.5
 
+### enable_exchange_sink_buffer_flush
+
+* **説明**: Exchange Sink がシャッフル時に送信前の行をバッファリングするために使用するメモリを制限するかどうか。Exchange Sink は宛先のパイプラインドライバーごとに未満のチャンクを 1 つ保持し、通常はチャンクが満杯になった時点でのみ送信します。この変数が `true` で、1 つのドライバーのこれらのチャンクが BE 設定項目 `exchange_sink_buffer_flush_threshold_bytes` を超えるメモリを保持している場合、直ちに送信されます。`false` に設定すると、そのセッションでは以前の動作に戻ります。
+* **デフォルト**: true
+* **導入バージョン**: -
+
 ### enable_force_rule_based_mv_rewrite
 
 * **説明**: オプティマイザのルールベース最適化フェーズで複数テーブルに対するクエリの書き換えを有効にするかどうか。この機能を有効にすると、クエリ書き換えの堅牢性が向上します。ただし、クエリがマテリアライズドビューを見逃した場合、時間消費が増加します。
 * **デフォルト**: true
 * **導入バージョン**: v3.3.0
+
+### enable_gather_fragment_child_affinity
+
+* **説明**: Gather Fragment（`DataPartition = UNPARTITIONED` の単一インスタンスの結果 Fragment）を、全 BE からのグローバルなラウンドロビンで選択する代わりに、その子 Fragment がすでに使用している BE に配置するかどうか。`labels.location` を使用する共有なしクラスタでは、有効にすると Gather Fragment がクエリの他の部分で使用されていない BE に配置されることを防ぎます。ただし、このパラメータ自体はラベル分離を保証しません。クエリの他の Fragment がラベル範囲外で実行される場合、Gather Fragment もそこで実行される可能性があります。既知のケースには、外部カタログテーブル（Hive や Iceberg など）のスキャン、`LOCALITY` 以外の `choose_execute_instances_mode`、`prefer_compute_node=true`、およびバケットプルーニングを伴う Right/Full Bucket Shuffle Join が含まれます。Gather Fragment に子 Fragment のインスタンスがない場合は、ラウンドロビンにフォールバックします。
+* **デフォルト**: false
+* **導入バージョン**: v4.2
 
 ### enable_gin_filter
 
@@ -542,6 +679,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: false、つまりこの機能は無効です。
 * **導入バージョン**: v3.1.4
 
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* **説明**: Runtime Filter で Iceberg テーブルの Equality Delete ファイルをスキップできるかどうか。テーブルのパーティション仕様（Partition Spec）が一度も変更されておらず、すべてのパーティションフィールドがクエリで読み取る INT、DATE、または STRING 列の identity 変換である場合に適用されます。この場合、Join がこれらの列に対して生成する Runtime Filter は、除外したパーティションの Equality Delete ファイルをスキップします。`false` に設定すると、すべての Equality Delete ファイルを適用します。たとえば、この変数名を含むエラーでクエリが失敗した場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.2
+
 ### enable_incremental_mv
 
 * **説明**: セッションフラグで、サーバーが増分リフレッシュを使用するマテリアライズドビューに対してプランを生成し、インメモリのプランを保持するかを制御します。有効にすると、`MaterializedViewAnalyzer.planMVQuery` はリフレッシュスキームが `IncrementalRefreshSchemeDesc` である create-MV ステートメントに対して処理を行います：ビュークエリの論理・物理プランを構築し、セッションの `enableMVPlanner` フラグを設定します（`setMVPlanner(true)`）。無効にすると、増分リフレッシュ MV のプラン作成はスキップされます。`SessionVariable` の `isEnableIncrementalRefreshMV()` および `setEnableIncrementalRefreshMv(boolean)` からアクセス可能です。
@@ -552,13 +695,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 ### enable_insert_partial_update
 
-* **説明**：主キーテーブルに対するINSERTステートメントの部分更新を有効化するかどうか。この項目が `true`（デフォルト）に設定されている場合、INSERT ステートメントで指定された列がサブセット（テーブル内のすべての非生成列の数より少ない）であるとき、システムは部分更新を実行し、指定された列のみを更新しながら他の列の既存値を保持します。`false` に設定すると、システムは既存の値を保持する代わりに、指定されていない列に対してデフォルト値を使用します。この機能は、主キーテーブルの特定の列を更新する際に他の列の値に影響を与えない場合に特に有用です。
+* **説明**：主キーテーブルに対するINSERTステートメントの部分更新を有効化するかどうか。この項目が `true`（デフォルト）に設定されている場合、INSERT ステートメントで指定された列がサブセット（テーブル内のすべての非生成列の数より少ない）であるとき、システムは部分更新を実行し、指定された列のみを更新しながら他の列の既存値を保持します。`false` に設定すると、システムは既存の値を保持する代わりに、指定されていない列に対してデフォルト値を使用します。この機能は、主キーテーブルの特定の列を更新する際に他の列の値に影響を与えない場合に特に有用です。対象パーティションにこれまで一度もトランザクションがコミットされていない場合、保持すべき既存値が存在しないため、INSERT は未指定の列にデフォルト値を埋める通常の挿入として実行され、部分更新の処理をスキップします。これは未指定の列がすべてそのように埋められる場合（NULL 許容またはデフォルト値があり、AUTO_INCREMENT 列でない）に限られ、INSERT OVERWRITE および明示的トランザクション（`BEGIN ... COMMIT`）内の INSERT には適用されず、部分更新のまま実行されます。他の書き込みが先にそれらのパーティションに到達した場合、その INSERT は再試行を促すメッセージとともに失敗し、再試行時は部分更新として実行されます。
 * **デフォルト値**：true
 * **導入バージョン**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
 ### enable_insert_strict
 
-* **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/load_concept/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
+* **説明**: Files() からの INSERT を使用してデータをロードする際に厳密モードを有効にするかどうか。有効な値: `true` および `false`（デフォルト）。厳密モードが有効な場合、システムは資格のある行のみをロードします。不適格な行をフィルタリングし、不適格な行の詳細を返します。詳細は [Strict mode](../loading/strict_mode.md) を参照してください。v3.4.0 より前のバージョンでは、`enable_insert_strict` が `true` に設定されている場合、不適格な行があると INSERT ジョブが失敗します。
 * **デフォルト**: true
 
 ### max_unknown_string_meta_length (global)
@@ -566,7 +709,42 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **説明**: 文字列列の最大長が不明な場合にメタデータで使用するフォールバック長。メタデータの長さが実際より小さいと、一部の BI ツールで空値や切り詰めが発生する可能性があります。`0` 以下は `64` にフォールバックします。有効範囲は `1` ～ `1048576`。
 * **デフォルト**: 64
 * **データ型**: Int
-* **導入バージョン**: v3.5.12
+* **導入バージョン**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* **説明**: `ReduceCastRule` が同一型の `VARCHAR -> VARCHAR` cast を削除する際に、ターゲットの `VARCHAR(N)` 長を保持するかどうかを制御します。これを有効にすると、`CAST(col AS VARCHAR(N))` のような文で prepare と execute の結果セットメタデータを一致させることができます。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* **説明**: `ReduceCastRule` が同一型の `VARCHAR -> VARCHAR` cast を削除した後、再利用される planner `Expr` の `type` と `originType` を書き換え後の `VARCHAR(N)` に同期するかどうかを制御します。
+* **デフォルト**: true
+* **データ型**: Boolean
+* **導入バージョン**: v3.5.16, v4.0.9
+
+### enable_lake_prepared_physical_split_scan
+
+* **説明**: 共有データクラスタ内のクラウドネイティブ（レイク）テーブルに対して Prepared Physical Split Scan を有効にするかどうか。有効にすると、各セグメントは一度だけプルーニングされ、その Prepared Read State が同一タブレットの Split 子タスク間で共有されるため、大きい、またはデータが偏ったタブレットのスキャンを高速化できます。この最適化はスキャンノードごとに判断され、さらにクラウドネイティブテーブルであることと Query Cache が無効であることを必要とします。共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
+
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **説明**: Prepared Physical Split scan において、Scan Range 数がすでに Pipeline DOP に達している場合でも、単一の巨大な Lake タブレットを分割できるようにするデータ偏りのしきい値。あるタブレットの行数が、この比率に Driver あたりの理想的な分担（総行数を有効 DOP で割った値）を掛けた値を超えると、そのタブレットは偏ったストラグラーとみなされて分割されます。値が大きいほど分割にはより極端な偏りが必要になり、値が小さいほど積極的に分割します。正の有限な数値である必要があります。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: 1.5
+* **データ型**: Double
+* **導入バージョン**: v4.2
+
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **説明**: 同一クエリ内で 2 つ以上の Scan オペレータによってスキャンされるクラウドネイティブ（レイク）テーブル（セルフジョインや、複数回参照されるテーブルなど）に対して、Prepared Physical Split Scan を許可するかどうか。`false`（デフォルト）の場合、そのような重複スキャンは通常のスキャンにフォールバックします。この最適化が Scan ごとに再利用する Prepared Read State を、同一テーブルの兄弟 Scan 間で共有することは安全ではないためです。`true` に設定すると、それらのスキャンを最適化に再度組み込みます。`enable_lake_prepared_physical_split_scan` が有効なスキャンにのみ影響し、共有データクラスタでのみ有効です。
+* **デフォルト**: false
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
 
 ### enable_lake_tablet_internal_parallel
 
@@ -719,6 +897,15 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 * **デフォルト**: false
 
+### enable_explain_in_profile
+
+* **スコープ**: Session
+* **説明**: この変数が `true` で、かつクエリに対してプロファイルが生成される場合、実行された計画の `EXPLAIN COSTS` テキストがプロファイルの `Summary` セクション内に `ExplainPlan` というキーで埋め込まれます。これにより、稼働中のクラスターにアクセスできない状態で保存済みのプロファイル成果物だけを使ってスロークエリを切り分ける際に、ランタイムメトリクスと並べてオプティマイザーの基数推定、列統計、述語、ランタイムフィルター宣言、および全体の計画コストを確認できます。
+
+  プロファイルに埋め込まれる計画は、他の永続化される SQL 成果物と同じ非機密化制御に従います。`FILES(...)` などに含まれる資格情報リテラルは常に編集され、述語や射影のリテラルは、クラスター全体の FE 設定 `enable_sql_desensitize_in_log` またはセッション変数 `enable_desensitize_explain` のいずれかが有効な場合にダイジェスト形式で表示されます。
+* **デフォルト**: false
+* **データ型**: boolean
+
 ### profile_log_latency_threshold_ms
 
 * **スコープ**: Session
@@ -784,7 +971,7 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 
 ### enable_scan_datacache
 
-* **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
+* **説明**: Data Cache 機能を有効にするかどうかを指定します。この機能が有効になると、StarRocks は外部ストレージシステムから読み取ったホットデータをブロックにキャッシュし、クエリと分析を加速します。詳細については、[Data Cache](../data_source/data_cache/data_cache.md) を参照してください。バージョン 3.2 より前では、この変数は `enable_scan_block_cache` として名前が付けられていました。
 * **デフォルト**: true
 * **導入バージョン**: v2.5
 
@@ -842,6 +1029,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v2.3
 
+### enable_tablet_pre_split
+
+* **説明**: サンプリングベースのタブレット事前分割（Sample-Based Tablet Pre-Split）に対するセッション単位のオプトアウト。FE Config ゲート（`enable_tablet_pre_split_for_*`）を主たるオン／オフスイッチとして機能させるため、既定値は `true` です。特定のセッションの取り込みに干渉させたくない場合は `false` に設定してください。事前分割が実行されるには、対応する Config フラグとこのセッション変数の両方が `true` である必要があります。
+* **デフォルト**: true
+* **導入バージョン**: v4.1.0
+
 ### enable_topn_runtime_filter
 
 * **説明**: TopN Runtime Filter を有効にするかどうか。この機能を有効にすると、ORDER BY LIMIT クエリに対して動的に Runtime Filter が構築され、Scan 段階にプッシュダウンされてフィルタリングに利用されます。
@@ -855,6 +1048,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **スコープ**: セッション
 * **データタイプ**: boolean
 * **導入バージョン**: v3.2.4
+
+### enable_vector_index_refine
+
+* **説明**: 量子化ベクターインデックスが返した候補について、元のベクトルから正確な距離を再計算し、再順位付けするかどうかを指定します。IVFPQ、および `sq4`、`sq8`、`pq` 量子化器を使用する HNSW インデックスに適用されます。量子化されていない HNSW インデックス（`quantizer = flat`）には影響しません。有効にすると結果の精度が向上する可能性がありますが、I/O と計算コストが増加します。`EXPLAIN` の `Refine: ON/OFF` で有効かどうかを確認できます。
+* **デフォルト**: `false`
+* **データ型**: Boolean
+* **スコープ**: Session
 
 ### enable_view_based_mv_rewrite
 
@@ -977,6 +1177,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データ型**: Int
 * **導入バージョン**: -
 
+### k_factor
+
+* **説明**: クエリの `LIMIT` にこの値を掛け、各 Segment が返すベクターインデックス候補数を決定します。`1` より大きい値は、複数 Segment の候補をマージした後の再現率を向上させる可能性がありますが、インデックス検索、メモリ、および後続処理のコストが増加します。最終的な候補数は少なくとも `1` に調整されます。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
+
 ### lake_bucket_assign_mode
 
 * **説明**: データレイク内のテーブルに対するクエリにおけるバケット割り当てモード。この変数は、クエリ実行中に Bucket-aware 実行が有効になった際に、バケットがワーカーノードにどのように割り当てられるかを制御します。有効な値:
@@ -1056,6 +1263,14 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **単位**: バイト
 * **データ型**: Int
 
+### max_array_length
+
+* **スコープ**: Session
+* **説明**: 配列関数が生成する配列に含まれる要素の最大数です。関数がこの上限を超える配列を生成した場合、巨大な配列を返す代わりにクエリが失敗します。`0` または負の値を指定すると制限なしになります。この上限は配列を生成するすべての関数を対象としていますが、現時点では [array_agg](sql-functions/array-functions/array_agg.md) のみがチェックします。
+* **デフォルト**: 0
+* **タイプ**: Long
+* **導入バージョン**: v4.2
+
 ### max_pipeline_dop
 
 * **スコープ**: Session
@@ -1111,6 +1326,13 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **デフォルト**: 3000
 * **単位**: ms
 
+### one_tablet_opt_max_tablet_rows
+
+* **説明**: Tablet のサイズに基づいて単一 Tablet 最適化を制御します。クエリが単一の Tablet に絞り込まれると、StarRocks は集計を 1 フェーズで実行し、結果を単一ノードに集約して Shuffle を省略できます。小さな Tablet には効率的ですが、Tablet が大きい場合はクエリ全体を単一ノードで直列化します。選択された単一 Tablet の行数がこのしきい値を超える場合、この最適化は無効になり、通常の分散（Shuffle）プランが使用されます。`-1` に設定すると、このゲートが無効になり、Tablet のサイズに関係なく常に単一 Tablet 最適化が適用されます。
+* **デフォルト**: 10000000
+* **データ型**: Long
+* **導入バージョン**: v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * **説明**: マテリアライズドビューの書き換えルールが消費できる最大時間を指定します。しきい値に達すると、このルールはクエリ書き換えに使用されません。
@@ -1123,6 +1345,18 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **説明**: StarRocks が Hive から ORC ファイルを読み取る際に列がどのように一致するかを指定するために使用されます。デフォルト値は `false` で、ORC ファイル内の列は Hive テーブル定義内の順序位置に基づいて読み取られます。この変数が `true` に設定されている場合、列は名前に基づいて読み取られます。
 * **デフォルト**: false
 * **導入バージョン**: v3.1.10
+
+### paimon_reader_mode
+
+* **説明**: Paimon テーブルで使用する Reader を制御します。有効な値は `AUTO`、`JNI`、`NATIVE` で、大文字と小文字は区別されません。
+
+  * `AUTO`: StarRocks が適切な Reader を自動的に選択します。
+  * `JNI`: JNI 経由で Paimon Java Reader を使用します。
+  * `NATIVE`: 対応可能な場合は StarRocks ファイル Reader を使用し、それ以外は対応可能な paimon-cpp Reader を必要とします。JNI にフォールバックせず、対応できない場合はエラーになります。
+  * `paimon_force_jni_reader=true` は `JNI` の選択と同等で、この変数の設定より優先されます。
+* **デフォルト**: AUTO
+* **データ型**: String
+* **導入バージョン**: v4.2
 
 ### parallel_exchange_instance_num
 
@@ -1196,11 +1430,11 @@ MySQL JDBC バージョン 8.0.16 以降との互換性のために使用され�
 
 ### plan_mode
 
-* **説明**: Iceberg Catalog のメタデータ取得戦略。詳細は [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy) を参照してください。有効な値:
+* **説明**: Iceberg Catalog のメタデータ取得戦略。詳細は [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg.md#appendix-periodic-metadata-refresh-strategy) を参照してください。有効な値:
   * `auto`: システムが自動的に取得プランを選択します。
-  * `local`: ローカルキャッシュプランを使用します。
-  * `distributed`: 分散プランを使用します。
-* **デフォルト**: auto
+  * `local`: FE がローカルで Iceberg manifest ファイルを解析し、解析しながら scan range を段階的に BE に配信します。すべての manifest の解析完了を待つ必要がなく、メモリ使用量と初回レイテンシを削減できます。
+  * `distributed`: manifest の解析を複数の BE に分散して並列処理しますが、FE はすべての BE の結果が揃うまで scan range を配信できません。manifest ファイルが多い大規模テーブルでは、メモリ使用量の増大と待ち時間の長期化を招く可能性があります。FE の CPU がボトルネックになっている場合にのみ推奨します。
+* **デフォルト**: local（v3.5 より `auto` から変更。v3.5 以降、増分 scan range 配信がデフォルトで有効になったため、`local` モードはほとんどのワークロードで `distributed` より低メモリ・低レイテンシで動作します）
 * **導入バージョン**: v3.3.3
 
 ### populate_datacache_mode
@@ -1212,13 +1446,12 @@ MySQL JDBC バージョン 8.0.16 以降との互換性のために使用され�
 * **デフォルト**: auto
 * **導入バージョン**: v3.3.2
 
-### prefer_compute_node
+### pq_refine_factor
 
-* **説明**: FEs がクエリ実行プランを CN ノードに配布するかどうかを指定します。有効な値:
-  * `true`: FEs がクエリ実行プランを CN ノードに配布することを示します。
-  * `false`: FEs がクエリ実行プランを CN ノードに配布しないことを示します。
-* **デフォルト**: false
-* **導入バージョン**: v2.4
+* **説明**: `enable_vector_index_refine` を有効にしたベクター範囲検索で使用する追加の候補倍率です。`k_factor` の後に適用されます。値を大きくすると、正確な距離による再順位付け前の再現率が向上する可能性がありますが、インデックス検索、I/O、および距離計算のコストが増加します。
+* **デフォルト**: `1`
+* **データ型**: Double
+* **スコープ**: Session
 
 ### query_cache_agg_cardinality_limit
 
@@ -1274,7 +1507,7 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **説明**: BE 上のメモリ使用率の上限。`0` より大きい値に設定された場合にのみ有効です。`0` に設定すると、制限が課されないことを示します。
+* **説明**: BE 上のメモリ使用率の上限。`0` より大きい値に設定された場合にのみ有効です。`0` に設定すると、制限が課されないことを示します。Query Queue v1 では、クラスター内のすべての BE および CN ノードに適用されます。Query Queue v2 では、いずれかの稼働中のノードが上限に達している間、新しいクエリは待機します。[メモリアドミッション](../administration/management/resource_management/query_queues.md#メモリアドミッション) を参照してください。
 * **値の範囲**: [0, 1]
 * **デフォルト**: 0
 
@@ -1297,6 +1530,18 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **説明**: 範囲パーティションプルーニングに使用できる IN 述語の最大数。デフォルト値: 100。100 より大きい値は、システムがすべてのタブレットをスキャンする可能性があり、クエリパフォーマンスを損なう可能性があります。
 * **デフォルト**: 100
 * **導入バージョン**: v3.0
+
+### range_scan_execution_mode
+
+* 説明: ネイティブの共有データ型範囲 Colocate テーブルに対する、読み取り専用の単一テーブル集計の実験的な実行モードです。`colocate` は範囲 Colocate 実行を維持します。`parallel` はスキャンの有効な分布を ANY にし、正確な `COUNT DISTINCT` を含む集計を Hash/Gather Exchange でマージします。値は大文字と小文字を区別せず、`auto` はサポートしません。
+* スコープ: Session
+* デフォルト: `colocate`
+* データ型: String
+* 有効な値: `colocate`, `parallel`
+
+空でない並列スキャンは、少なくとも 2 つの論理パーティションと 2 つの実 Tablet を選択する必要があり、選択した計算リソースに少なくとも 2 つの利用可能な CN が必要です。DISTINCT 修飾子を使う集計では、`COUNT DISTINCT` のみをサポートします。Pipeline 実行と `parallel_fragment_exec_instance_num = 1` が必要です。並列モードはネットワークと集計状態の転送コストを増やし、非所有ノードからのリモート読み取りを増やす可能性があります。高速化や全計算ノードの使用は保証されません。パーティションと Tablet のプルーニングは維持されます。
+
+書き込み/更新、JOIN、集合演算、CTE、サブクエリ、ウィンドウ関数、Grouping Sets、特殊/履歴/メタデータ/キャッシュ統計スキャン、サンプリングやスキャンヒント、MV/Rollup によるソース置換、複数の最終スキャン、Query Cache、段階的スケジューリング、事前準備物理分割スキャン、単一ノードプラン、および非 Pipeline 実行はサポートしません。入力が完全にプルーニングされた場合、通常の空入力集計の動作を維持します。未対応のリクエストは他のセッション設定を変更せずにエラーになります。
 
 ### resource_group 
 
@@ -1332,6 +1577,22 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * **説明**: 実行プランで単一のテーブルに対してスキャンされるパーティションの数。
 * **デフォルト**: 0（制限なし）
 * **導入バージョン**: v3.3.9
+
+### allow_lake_without_partition_filter
+
+* **説明**: レイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してパーティションフィルターなしのクエリを許可するかどうか。`false` に設定すると、有効なパーティションフィルターを含まないクエリは拒否され、意図しないフルテーブルスキャンを防止します。
+* **スコープ**: セッション
+* **デフォルト**: `true`
+* **タイプ**: Boolean
+* **エイリアス**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **説明**: 単一のレイクテーブル（Hive、Iceberg、Delta Lake、Paimon など）に対してスキャンできるパーティションの最大数。`0` に設定すると制限なし。上限を超えるとクエリはエラーを返します。なお、増分的にスプリットを列挙するカタログタイプ（Iceberg、Delta Lake）では、制限チェックはスキャンレンジのディスパッチ時に行われ、クエリが即座に拒否されるのではなく、実行途中で失敗する場合があります。
+* **スコープ**: セッション
+* **デフォルト**: `0`（制限なし）
+* **タイプ**: Int
+* **エイリアス**: `scan_hive_partition_num_limit`
 
 ### skip_local_disk_cache
 
@@ -1392,6 +1653,8 @@ JDBC 接続プール C3P0 との互換性のために使用されます。実際
 * `SORT_NULLS_LAST`: ソート後に NULL 値を最後に配置します。
 * `ERROR_IF_OVERFLOW`: 算術オーバーフローが発生した場合に NULL の代わりにエラーを返します。現在、このオプションは DECIMAL データ型にのみ対応しています。
 * `GROUP_CONCAT_LEGACY`: v2.5 およびそれ以前の `group_concat` 構文を使用します。このオプションは v3.0.9 および v3.1.6 からサポートされています。
+* `FORBID_INVALID_IMPLICIT_CAST`: プラン時に Trino 風の厳格な型チェックを有効にします。暗黙的に許可されるのは同一型ファミリ内の拡張（widening）変換のみです（例: `TINYINT`→`INT`→`BIGINT`→`DECIMAL`→`DOUBLE`、`DATE`→`DATETIME`）。`VARCHAR`/`CHAR` 間の暗黙的キャストは宣言された長さを問わず許可されます。型ファミリをまたぐキャスト（`string`↔`numeric`、`string`↔`date`、`numeric`↔`date`、`boolean` と他の型など）や数値の縮小（narrowing）キャスト（`BIGINT`→`INT`、`DOUBLE`→`FLOAT` など）はセマンティックエラーとして拒否されます。これらの変換が必要な場合は、明示的な `CAST` を使用してください。
+* `STRUCT_CAST_BY_NAME`: STRUCT 型間のキャストにおいて、デフォルトの位置ベースのマッチングではなく、名前ベースのフィールドマッチングを有効にします。このモードが有効になっている場合、ソース構造体のフィールドは、宣言順序に関係なく、フィールド名（大文字小文字を区別しない）に基づいてターゲット構造体のフィールドと照合されます。ソース側には存在するがターゲット側には存在しないフィールドは無視され、ターゲット側には存在するがソース側には存在しないフィールドは NULL で埋められます。このモードは、FE型の解決（UNION ALL における共通のスーパータイプの計算やキャスト可能性のチェック）と、BEキャストの評価（CastStructExpr における実行時のフィールドの順序変更）の両方に影響します。これは、分岐間でフィールドの定義順序が異なるSTRUCT列に対して UNION ALL を実行する場合に特に有用です。
 
 1 つの SQL モードのみを設定できます。例：
 
@@ -1440,6 +1703,37 @@ GROUP BY の最初のフェーズの事前集計モードを指定するため�
 
 現在のシステムのタイムゾーンを表示するために使用されます。変更できません。
 
+### lake_multi_node_tablet_write_mode
+
+* **説明**: 共有データモードでのみ有効です。ロードが 1 つの Tablet の書き込みを複数のコンピュートノードに分散できるかどうかを制御します。分散しない場合、すべての行はその Tablet が割り当てられた単一のノードへ送られます。3 つの値があります:
+  * `off` — 決して分散しません。本機能が導入される前の動作です。
+  * `auto` (デフォルト) — **range bucket** 分布のテーブルで、そのパーティションの Tablet 数が、このロードに見合う書き込みノード数 (`lake_multi_node_write_bytes_per_node` を参照) より少ない場合に分散します。pre-split はステートメントの計画前に実行され、その完了を待ってから進むため、ここで読まれる Tablet 数は pre-split の**結果**です: 十分に分割できていれば `auto` は介入せず、スキップされた場合や待機がタイムアウトして現在見えているレイアウトのままロードが続行された場合は `auto` が有効になります。**すべての key タイプに適用されます**: 同じ key を持つ行は key 列のハッシュでルーティングされるため 1 つのノードに到達し、結果はどのノードがどの行を書いたかに依存しません。ハッシュバケットのテーブルは、バケット数を増やせばクラスタを埋められるため対象外です。
+  * `force` — 残りの前提条件が満たされる限り分散します。ハッシュバケット分布も含みます。`auto` が引き受けないテーブルでも分散させたい場合に使用します。
+* モードにかかわらず、次の条件も必要です: `file_bundling` が有効なクラウドネイティブテーブル、combined txn log を使用するトランザクション、およびパーティションの Tablet 数が、このロードが実際に分散されるノード数より少ないこと。その幅は次の 3 つのうち最小のものです: ロードのサイズから求めたノード数 (`lake_multi_node_write_bytes_per_node` を参照)、`lake_multi_node_write_max_nodes`、稼働中のコンピュートノード数。すでにその数の Tablet を持つパーティションは `force` を指定しても単一ノードの書き込みのままです。6 ノードの Warehouse で Tablet が 5 つある場合、ロードのサイズが 3 ノード分の価値しかなければ分散しません。Stream Load と Routine Load は対象外です。どちらもプラン作成時にサイズが分からず、そこで未知のサイズを大きなサイズとして扱うと、最も小さく最も頻繁なバッチが最も広く分散されてしまうためです。部分更新 (行モードと列モード)、条件付き更新、自動インクリメント列を省略したロード、スキーマ変更中のロードはいずれもサポートされます。
+* ロードの実行中に自動パーティション機能が作成したパーティションも分散されます。このパーティションはプランに含まれないため、その Tablet は後から create-partition RPC でロードへ渡されます。分散する幅はそのロードが計画時に決定したノード数をそのまま用い、ノード自体はパーティションが作成された時点で稼働しているコンピュートノードから選ばれます。長時間のロードは、計画時のノードリストより長く生き残ることがあるためです。新しいパーティションは分割の根拠となるデータ境界がまだ現れておらず、通常 Tablet を 1 つしか持ちません。つまり、まさにこの設定が対象とする形です。
+* ロードの実行中に自動バケット（`bucket_size`）が追加したサブパーティションも同様に分散されます。自動バケットは `RANDOM` 分散にのみ適用されるため、これが有効になるのは `force` の場合だけです。
+* **デフォルト値**: auto
+* **型**: String
+* **スコープ**: Session
+* **導入バージョン**: v4.2
+
+### lake_multi_node_write_max_nodes
+
+* **説明**: **1 つの Tablet** を並列に書き込めるコンピュートノード数の上限です。Tablet のノードリストにある各ノードはそれぞれ自身の delta writer を開き、自身の segment を生成します。そのため非常に広い Warehouse では、通常規模のロードがその数だけ小さな segment に分割されてしまいます。この上限を超えたノードも自身の sink インスタンスは実行し、その行はネットワーク経由でリスト内のノードへ送られます。これは本機能が導入される前の動作であり、上限は局所性を犠牲にするだけで正しさには影響しません。これは上限であって並列度そのものではありません: 実際に使用される値は、この変数、ロードの推定サイズから算出されたノード数 (`lake_multi_node_write_bytes_per_node`)、稼働中コンピュートノード数の最小値です。`0` 以下に設定すると上限なしになります。
+* **デフォルト値**: 6
+* **型**: Int
+* **スコープ**: Session
+* **導入バージョン**: v4.2
+
+### lake_multi_node_write_bytes_per_node
+
+* **説明**: 共有データモードでのみ有効で、`lake_multi_node_tablet_write_mode` が有効な場合にのみ作用します。Tablet の書き込み集合に次のノードを追加する前に、1 つのコンピュートノードへ割り当てるロードのバイト数です。ノード数はロードの推定サイズをこの値で割ったもので (整数除算のため、1 ノード分がまるごと確保できて初めてノードが追加されます)、最終的に使用される並列度は、その値、セッション変数 `lake_multi_node_write_max_nodes`、および稼働中コンピュートノード数の最小値になります。例えば 10 GB のロードはデフォルトの 2 GB で 5 ノードとなり、3 ノードの Warehouse ではさらに 3 に制限されます。書き込みの分散は無償ではありません: Tablet のノードリストにある各ノードはそれぞれ自身の segment を書き出し、自身の部分トランザクションログを生成します。さらに open/close は、そのノードが最終的に行を保持するかどうかにかかわらずリスト内のすべてのノードに到達します。したがって小さなロードを広く分散させると、ノードごとに segment とログが余分に増えるだけで得るものはわずかです。サイズは、`INSERT` ではオプティマイザの推定値から、Broker Load では解決済みのファイルリストから取得します。主キーテーブルの `UPDATE` と `DELETE` は、推定出力行数と実際に書き込む列の幅からサイズを推定します。部分更新では主キーと更新対象または生成された列、削除では主キー、必要な生成パーティション列、操作列を計算に含めます。ソースのスキャンサイズは使用しません。行数が信頼できても列幅が不明な場合は型のサイズを使用します。行数が取得できないか不正確な場合はサイズを不明のままとし、既存のノード数上限と稼働中ノード数の制限を適用します。Stream Load と Routine Load は例外で、そもそも分散しません。これらの経路でサイズが不明であることは、推定できなかった大きなロードではなく、マイクロバッチであることを意味するからです。サイズが不明であることは、サイズが小さいことを意味しないためです。0 に設定すると、サイズに基づく算出を無効にします。
+* **デフォルト値**: 2147483648 (2 GB)
+* **単位**: バイト
+* **型**: Long
+* **スコープ**: Session
+* **導入バージョン**: v4.2
+
 ### time_zone
 
 現在のセッションのタイムゾーンを設定するために使用されます。タイムゾーンは、特定の時間関数の結果に影響を与える可能性があります。
@@ -1462,16 +1756,6 @@ MySQL クライアント互換性のために使用されます。実際の用�
 * **データ型**: long
 * **導入バージョン**: v3.2.0
 
-### use_compute_nodes
-
-* **説明**: 使用できる CN ノードの最大数。この変数は `prefer_compute_node=true` の場合に有効です。有効な値：
-
-  * `-1`: すべての CN ノードが使用されることを示します。
-  * `0`: CN ノードが使用されないことを示します。
-* **デフォルト**: -1
-* **データ型**: Int
-* **導入バージョン**: v2.4
-
 ### version (global)
 
 クライアントに返される MySQL サーバーバージョン。値は FE パラメータ `mysql_server_version` と同じです。
@@ -1486,5 +1770,7 @@ StarRocks のバージョン。変更できません。
 * **デフォルト**: 28800（8 時間）。
 * **単位**: 秒
 * **データ型**: Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

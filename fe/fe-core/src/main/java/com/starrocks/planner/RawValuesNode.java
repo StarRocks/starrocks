@@ -151,4 +151,11 @@ public class RawValuesNode extends PlanNode {
         
         super.toNormalForm(planNode, normalizer);
     }
+
+    @Override
+    public boolean canEvaluateRuntimeFilter() {
+        // Decomposes into a raw-values source operator, which never calls
+        // Operator::eval_runtime_bloom_filters(): a filter parked here is silently never applied.
+        return false;
+    }
 }

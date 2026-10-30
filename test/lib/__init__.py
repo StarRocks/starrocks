@@ -32,6 +32,7 @@ FUNCTION_FLAG = "function: "
 NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
+UNORDERED_FLAG = "[UNORDERED]"
 REGEX_FLAG = "[REGEX]"
 
 # loop -- end loop
@@ -47,6 +48,10 @@ END_CONCURRENCY_FLAG = "END CONCURRENCY"
 # cleanup -- end cleanup
 CLEANUP_FLAG = "CLEANUP"
 END_CLEANUP_FLAG = "END CLEANUP"
+
+# set_var -- end set_var
+SET_VAR_FLAG = "SET_VAR"
+END_SET_VAR_FLAG = "END SET_VAR"
 
 
 def close_conn(conn, conn_type):

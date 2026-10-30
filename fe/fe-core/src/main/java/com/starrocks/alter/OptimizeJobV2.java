@@ -35,6 +35,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -87,7 +88,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private Map<String, String> properties = Maps.newHashMap();
 
     @SerializedName(value = "rewriteTasks")
-    private List<OptimizeTask> rewriteTasks = Lists.newArrayList();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    List<OptimizeTask> rewriteTasks = Lists.newArrayList();
     private int progress = 0;
 
     @SerializedName(value = "sourcePartitionNames")
@@ -133,6 +135,35 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         this.allPartitionOptimized = job.allPartitionOptimized;
         this.distributionInfo = job.distributionInfo;
         this.optimizeOperation = job.optimizeOperation;
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-enters runWaitingTxnJob (rebuild + re-register the rewrite tasks).
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Restore serialized-but-diverged fields to their durable WAITING_TXN snapshot: the
+        // journal copy was written before any rewrite task or finish bookkeeping existed, and
+        // runWaitingTxnJob APPENDS to rewriteTasks (a stale list would double the tasks).
+        rewriteTasks.clear();
+        sourcePartitionNames.clear();
+        tmpPartitionNames.clear();
+        allPartitionOptimized = false;
+        distributionInfo = null;
+        progress = 0;
+        if (jobState == JobState.PENDING) {
+            // Undo a partially executed runPendingJob: a fenced attempt may have appended tmp
+            // partition ids that the durable PENDING image does not have; re-running with the
+            // stale list would pair 2N tmp partitions against N sources.
+            tmpPartitionIds.clear();
+            watershedTxnId = -1;
+        }
+        // optimizeClause is deliberately KEPT: a real reload nulls it and self-cancels the
+        // job; keeping it is safe (every derived value is recomputed on re-run) and strictly
+        // better. A mid-RUNNING handoff still ends in a clean cancel via the TaskManager task
+        // name collision - identical to genuine-restart behavior.
     }
 
     public List<Long> getTmpPartitionIds() {
@@ -286,7 +317,8 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             String tmpPartitionName = tmpPartitionNames.get(i);
             String partitionName = partitionNames.get(i);
             String rewriteSql = "insert into " + ParseUtil.backquote(tableName) + " TEMPORARY PARTITION ("
-                    + ParseUtil.backquote(tmpPartitionName) + ") select " + Joiner.on(", ").join(tableColumnNames)
+                    + ParseUtil.backquote(tmpPartitionName) + ") (" + Joiner.on(", ").join(tableColumnNames)
+                    + ") select " + Joiner.on(", ").join(tableColumnNames)
                     + " from " + ParseUtil.backquote(tableName) + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
             OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName, warehouseId);
@@ -295,6 +327,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             rewriteTask.setLastVersion(partitionLastVersion.get(i));
             // use half of the alter timeout as rewrite task timeout
             rewriteTask.getProperties().put(SessionVariable.INSERT_TIMEOUT, String.valueOf(timeoutMs / 2000));
+            // A re-run of this job after a leader change cancels itself on the task name collision, so the task must
+            // stay registered while the job can still run. It expires no earlier than one task TTL after the job
+            // deadline, and TaskManager removes it then.
+            rewriteTask.setExpireTime(rewriteTask.getCreateTime() + timeoutMs + Config.task_ttl_second * 1000L);
             rewriteTasks.add(rewriteTask);
         }
 
@@ -568,17 +604,23 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
             PartitionInfo partitionInfo = targetTable.getPartitionInfo();
             if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
-                targetTable.replaceTempPartitions(db.getId(), sourcePartitionNames, tmpPartitionNames, true, false);
+                targetTable.checkReplaceTempPartitions(sourcePartitionNames, tmpPartitionNames, true);
             } else if (partitionInfo instanceof SinglePartitionInfo) {
                 Preconditions.checkState(sourcePartitionNames.size() == 1 && tmpPartitionNames.size() == 1);
-                targetTable.replacePartition(db.getId(), sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             } else {
                 throw new AlterCancelException("partition type " + partitionInfo.getType() + " is not supported");
             }
             // write log
             ReplacePartitionOperationLog info = new ReplacePartitionOperationLog(db.getId(), targetTable.getId(),
                     sourcePartitionNames, tmpPartitionNames, true, false, partitionInfo instanceof SinglePartitionInfo);
-            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info);
+            GlobalStateMgr.getCurrentState().getEditLog().logReplaceTempPartition(info, wal -> {
+                if (partitionInfo.isRangePartition() || partitionInfo.getType() == PartitionType.LIST) {
+                    targetTable.replaceTempPartitionsWithoutCheck(
+                            db.getId(), sourcePartitionNames, tmpPartitionNames, false);
+                } else {
+                    targetTable.replacePartition(db.getId(), sourcePartitionNames.get(0), tmpPartitionNames.get(0));
+                }
+            });
             // mark all source tablet ids force delete to drop it directly on BE,
             // not to move it to trash
             sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
@@ -662,6 +704,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             Set<Tablet> sourceTablets = Sets.newHashSet();
             if (getTmpPartitionIds() != null) {
                 for (long pid : getTmpPartitionIds()) {
+                    // A temp partition that was already swapped in keeps its id and is live now, so leave it alone.
+                    if (!targetTable.isTempPartition(pid)) {
+                        continue;
+                    }
                     LOG.info("optimize job {} drop temp partition:{}", jobId, pid);
 
                     Partition partition = targetTable.getPartition(pid);
@@ -758,6 +804,10 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
         Set<Tablet> sourceTablets = Sets.newHashSet();
         for (long id : replayedJob.getTmpPartitionIds()) {
+            // The swap was replayed before this entry and kept the temp partition id, which is live now.
+            if (!targetTable.isTempPartition(id)) {
+                continue;
+            }
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
                 for (MaterializedIndex index
@@ -769,7 +819,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         }
         sourceTablets.forEach(GlobalStateMgr.getCurrentState().getTabletInvertedIndex()::markTabletForceDelete);
 
-        if (allPartitionOptimized) {
+        if (allPartitionOptimized && replayedJob.distributionInfo != null) {
             this.distributionInfo = replayedJob.distributionInfo;
             LOG.debug("set distribution info to table: {}", distributionInfo);
             targetTable.setDefaultDistributionInfo(distributionInfo);
@@ -833,6 +883,21 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             default:
                 break;
         }
+    }
+
+    /**
+     * Drops the per-partition data of a done job, which stays in memory only for SHOW ALTER: the rewrite tasks, the
+     * temp and source partition lists and the optimize clause. getInfo reads none of them, and a done job never runs
+     * again (the leader handoff reset skips it too), so nothing reads the clause either. The lists are replaced, not
+     * cleared: replay shares them with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        rewriteTasks = Lists.newArrayList();
+        tmpPartitionIds = Lists.newArrayList();
+        sourcePartitionNames = Lists.newArrayList();
+        tmpPartitionNames = Lists.newArrayList();
+        optimizeClause = null;
     }
 
     @Override

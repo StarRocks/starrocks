@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "covar_pop 返回两个表达式的总体协方差，支持作为窗口函数使用。"
 ---
 
 # covar_pop
@@ -27,10 +28,6 @@ COVAR_POP(expr1, expr2)
 返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
 
 ![covar_pop_formula](../../../_assets/covar_pop_formula.png)
-
-<!--$$
-\frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{n}
-$$ -->
 
 ## 使用说明
 

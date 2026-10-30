@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "向日期或日期时间增加指定的分钟数。"
 ---
 
 # minutes_add

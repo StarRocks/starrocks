@@ -237,6 +237,11 @@ public class LoadJobTest {
     public void testExecute(@Mocked GlobalTransactionMgr globalTransactionMgr,
                             @Mocked LeaderTaskExecutor leaderTaskExecutor)
             throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
+        // BrokerLoadJob now defers beginTxn + the PENDING -> LOADING transition
+        // out of unprotectedExecute and into createLoadingTask (after the
+        // pre-split hook returns). execute() only submits the BrokerLoadPendingTask;
+        // state stays PENDING and transactionId stays 0 until the pending task
+        // finishes and createLoadingTask opens the load txn under the write lock.
         LoadJob loadJob = new BrokerLoadJob();
         new Expectations() {
             {
@@ -264,9 +269,11 @@ public class LoadJobTest {
         } catch (LoadException e) {
             Assertions.fail(e.getMessage());
         }
-        Assertions.assertEquals(JobState.LOADING, loadJob.getState());
-        Assertions.assertEquals(1, loadJob.getTransactionId());
-
+        Assertions.assertEquals(JobState.PENDING, loadJob.getState());
+        Assertions.assertEquals(0L, loadJob.getTransactionId());
+        Map<Long, LoadTask> idToTasks = Deencapsulation.getField(loadJob, "idToTasks");
+        Assertions.assertEquals(1, idToTasks.size(),
+                "execute() submits a BrokerLoadPendingTask before deferring beginTxn");
     }
 
     @Test
@@ -489,5 +496,79 @@ public class LoadJobTest {
 
         loadInfo = loadJob.toThrift();
         Assertions.assertEquals("", loadInfo.getWarehouse());
+    }
+
+    @Test
+    public void testToThrift_timestampMsFields() {
+        // Regression coverage: BE materializes information_schema.loads DATETIME
+        // columns from the *_ms fields. If a future change ever drops a setter,
+        // the column silently falls back to the legacy UTC+8 string and loads in
+        // non-Asia/Shanghai sessions go missing again.
+        long createMs = 1_700_000_000_000L;
+        long startMs = createMs + 1_000;
+        long commitMs = createMs + 2_000;
+        long finishMs = createMs + 3_000;
+
+        LoadJob loadJob = new BrokerLoadJob();
+        Deencapsulation.setField(loadJob, "createTimestamp", createMs);
+        Deencapsulation.setField(loadJob, "loadStartTimestamp", startMs);
+        Deencapsulation.setField(loadJob, "loadCommittedTimestamp", commitMs);
+        Deencapsulation.setField(loadJob, "finishTimestamp", finishMs);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
+                globalStateMgr.getWarehouseMgr();
+                minTimes = 0;
+                result = warehouseManager;
+
+                warehouseManager.getWarehouseAllowNull(anyLong);
+                minTimes = 0;
+                result = null;
+            }
+        };
+
+        TLoadInfo info = loadJob.toThrift();
+        Assertions.assertEquals(createMs, info.getCreate_time_ms());
+        Assertions.assertEquals(startMs, info.getLoad_start_time_ms());
+        Assertions.assertEquals(commitMs, info.getLoad_commit_time_ms());
+        Assertions.assertEquals(finishMs, info.getLoad_finish_time_ms());
+        // Legacy strings must still be set so old BEs in a rolling upgrade keep working.
+        Assertions.assertEquals(TimeUtils.longToTimeString(createMs), info.getCreate_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(startMs), info.getLoad_start_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(commitMs), info.getLoad_commit_time());
+        Assertions.assertEquals(TimeUtils.longToTimeString(finishMs), info.getLoad_finish_time());
+
+        // Sentinel path: unset timestamps must leave both the string and the ms
+        // field unset so BE can fall back to NULL via its !__isset branch
+        // instead of materializing the epoch.
+        LoadJob unset = new BrokerLoadJob();
+        TLoadInfo unsetInfo = unset.toThrift();
+        Assertions.assertFalse(unsetInfo.isSetCreate_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_start_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_commit_time_ms());
+        Assertions.assertFalse(unsetInfo.isSetLoad_finish_time_ms());
+    }
+
+    @Test
+    public void testJsonOptionsEnvelope() throws DdlException {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.ENVELOPE, LoadStmt.ENVELOPE_DEBEZIUM);
+
+        LoadJob loadJob = new BrokerLoadJob();
+        loadJob.setJobProperties(properties);
+        Assertions.assertEquals(LoadStmt.ENVELOPE_DEBEZIUM, loadJob.jsonOptions.envelope);
+
+        // Mutually exclusive: json_root and envelope
+        properties.put(LoadStmt.JSONROOT, "$.root");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
+
+        // Mutually exclusive: strip_outer_array and envelope
+        properties.remove(LoadStmt.JSONROOT);
+        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
+        Assertions.assertThrows(DdlException.class, () -> loadJob.setJobProperties(properties));
     }
 }

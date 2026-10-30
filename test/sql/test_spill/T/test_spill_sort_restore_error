@@ -1,0 +1,44 @@
+-- name: test_spill_sort_restore_error @sequential
+
+-- Reproduces a hang scenario where a non-EOF error from a spill restore IO
+-- task (such as ColumnarSerde::deserialize hitting a short/corrupt block)
+-- used to be silently dropped by the sort merge providers, leaving the
+-- source operator polling forever. With the fix, the error is forwarded to
+-- the fragment context so the query fails quickly instead of hanging.
+
+set enable_spill=true;
+set spill_mode="force";
+set pipeline_dop=4;
+
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(100))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+insert into t1 SELECT generate_series, 100000 - generate_series FROM TABLE(generate_series(1, 300000));
+
+admin enable failpoint 'spill_restore_error';
+
+-- Parallel merge path (LocalParallelMergeSortSourceOperator): the leaf
+-- chunk_provider used to drop chunks_sorter->get_next status with (void).
+set enable_parallel_merge=true;
+[UC] select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+[UC] select sum(k1) from (select k1, k2 from t1 order by k1, k2 limit 270000, 10) t;
+
+-- Non-parallel merge path (LocalMergeSortSourceOperator via SortContext):
+-- the partition provider used to only break on !st.ok() without reporting it.
+set enable_parallel_merge=false;
+[UC] select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+[UC] select sum(k1) from (select k1, k2 from t1 order by k1, k2 limit 270000, 10) t;
+
+admin disable failpoint 'spill_restore_error';
+
+-- Sanity: with the failpoint off, sort spill works as expected on both paths.
+set enable_parallel_merge=true;
+select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+set enable_parallel_merge=false;
+select count(*) from (select k1, k2 from t1 order by k1, k2) t;
+
+CLEANUP {
+    admin disable failpoint 'spill_restore_error';
+} END CLEANUP

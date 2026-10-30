@@ -30,8 +30,6 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -43,19 +41,18 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.Utils;
-import com.starrocks.planner.DescriptorTable;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -72,6 +69,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -82,7 +80,6 @@ import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -96,13 +93,12 @@ import org.apache.logging.log4j.Logger;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -139,6 +135,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     @SerializedName(value = "bfFpp")
     private double bfFpp = 0;
 
+    // compression dict info
+    @SerializedName(value = "hasZstdCompressionChange")
+    private boolean hasZstdCompressionChange;
+    @SerializedName(value = "zstdCompressionColumns")
+    private Set<ColumnId> zstdCompressionColumns = null;
+    @SerializedName(value = "zstdCompressionPageSizes")
+    private Map<ColumnId, Integer> zstdCompressionPageSizes = null;
+
     // alter index info
     @SerializedName(value = "indexChange")
     private boolean indexChange = false;
@@ -158,12 +162,19 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private List<Integer> sortKeyUniqueIds;
 
     // save all schema change tasks
-    private AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
-    // runtime variable for synchronization between cancel and runPendingJob
+    // Leader-session transients of the PENDING phase. The CreateReplicaTasks are dispatched in one
+    // scheduler round and polled in the following ones, so the batch task, its latch and the deadline
+    // have to outlive a single runPendingJob() call. Reset by resetTransientState().
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
-    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
-    private AtomicBoolean isCancelling = new AtomicBoolean(false);
+    private AgentBatchTask createReplicaBatchTask = null;
+    private long createReplicaDeadlineMs = -1;
+    // Node id -> that node's lastStartTime read at dispatch. Null until the tasks are handed to the
+    // RPC pool, and a node missing from it was never dispatched - either way findNodeThatLostItsTasks
+    // refuses to judge, because only a restart that happened AFTER the send can have killed a task.
+    private Map<Long, Long> createReplicaNodeStartTime = null;
     private boolean isFileBundling = false;
 
     final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -171,6 +182,23 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     // for deserialization
     public LakeTableSchemaChangeJob() {
         super(JobType.SCHEMA_CHANGE);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-verifies the watershed and re-sends every AlterReplicaTask.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // Start from an empty batch: the WAITING_TXN handler APPENDS to it (double-add hazard),
+        // and getInfo dereferences the field, so fresh-empty rather than null. No AgentTaskQueue
+        // cleanup needed - the demotion drain (abandonInFlightAgentTasks) already emptied the
+        // queue before this hook runs, which is also why abandonCreateReplicaTasks() below just
+        // clears the PENDING-phase transients. watershedTxnId/Gtid stay - they are durable with
+        // the WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
+        schemaChangeBatchTask = new AgentBatchTask();
+        abandonCreateReplicaTasks();
     }
 
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
@@ -212,6 +240,15 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.hasBfChange = job.hasBfChange;
         this.bfColumns = job.bfColumns == null ? null : Sets.newHashSet(job.bfColumns);
         this.bfFpp = job.bfFpp;
+        // This constructor produces what copyForPersist() writes to the edit log, so a field
+        // missing here is a field the followers and the next leader never see: the job would
+        // finish there without applying the property, and its shadow tablets would be created
+        // without it.
+        this.hasZstdCompressionChange = job.hasZstdCompressionChange;
+        this.zstdCompressionColumns =
+                job.zstdCompressionColumns == null ? null : Sets.newHashSet(job.zstdCompressionColumns);
+        this.zstdCompressionPageSizes =
+                job.zstdCompressionPageSizes == null ? null : Maps.newHashMap(job.zstdCompressionPageSizes);
         this.indexChange = job.indexChange;
         this.indexes = job.indexes == null ? null : new ArrayList<>(job.indexes);
         this.startTime = job.startTime;
@@ -229,6 +266,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         this.hasBfChange = hasBfChange;
         this.bfColumns = bfColumns;
         this.bfFpp = bfFpp;
+    }
+
+    void setZstdCompressionInfo(boolean hasZstdCompressionChange, Set<ColumnId> zstdCompressionColumns,
+                                Map<ColumnId, Integer> zstdCompressionPageSizes) {
+        this.hasZstdCompressionChange = hasZstdCompressionChange;
+        this.zstdCompressionColumns = zstdCompressionColumns;
+        this.zstdCompressionPageSizes = zstdCompressionPageSizes;
     }
 
     void setAlterIndexInfo(boolean indexChange, List<Index> indexes) {
@@ -270,7 +314,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         indexMetaIdToSchema.put(shadowIdxMetaId, shadowIdxSchema);
     }
 
-    // REQUIRE: has acquired the exclusive lock of database
+    // REQUIRE: has acquired the exclusive (WRITE) lock of the table
     void addShadowIndexToCatalog(@NotNull OlapTable table, long visibleTxnId) {
         Preconditions.checkState(visibleTxnId != -1);
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -279,6 +323,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
             for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                 shadowIndex.setVisibleTxnId(visibleTxnId);
+                shadowIndex.setShadowWatershedTxnId(visibleTxnId);
                 Preconditions.checkState(shadowIndex.getState() == MaterializedIndex.IndexState.SHADOW,
                         shadowIndex.getState());
                 physicalPartition.createRollupIndex(shadowIndex);
@@ -325,102 +370,230 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @VisibleForTesting
-    public static void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                            long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
-                                            AtomicBoolean isCancelling) throws AlterCancelException {
+    public void sendCreateReplicaTasks(AgentBatchTask batchTask) {
+        recordDispatchEpochs(batchTask);
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
-        long timeout = 1000L * Math.min(timeoutSeconds, Config.max_create_table_timeout_second);
-        boolean ok = false;
+    }
+
+    /**
+     * Snapshot each target node's restart epoch at the moment the batch goes out. Building the batch
+     * walks every shadow tablet under the table lock, so reading the epoch there could capture a
+     * value that is already stale by the time the tasks are actually sent: the node would have
+     * restarted before the send, received the tasks in its new process, and still been reported as
+     * having lost them. Reading here narrows that to the pool hand-off.
+     *
+     * <p>It does not close the window completely - lastStartTime trails the real restart by up to one
+     * heartbeat - so treat this as a heuristic whose safe direction is the deadline, never a silent
+     * wait. A wrong call cancels the job with the same retryable message the timeout produces.
+     */
+    @VisibleForTesting
+    void recordDispatchEpochs(AgentBatchTask batchTask) {
+        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Map<Long, Long> nodeStartTime = new HashMap<>();
+        for (AgentTask task : batchTask.getAllTasks()) {
+            ComputeNode node = systemInfo.getBackendOrComputeNode(task.getBackendId());
+            if (node != null) {
+                nodeStartTime.put(task.getBackendId(), node.getLastStartTime());
+            }
+        }
+        createReplicaNodeStartTime = nodeStartTime;
+    }
+
+    /**
+     * Poll the dispatched CreateReplicaTasks. Never blocks: the schema change scheduler is a single
+     * LeaderDaemon thread shared by every alter job in the cluster, so waiting here for the tablets
+     * to appear stalls every sibling job as well.
+     *
+     * @return true once every shadow tablet has been created
+     * @throws AlterCancelException if a task reported an error, if a node that still owes a report
+     *                              has restarted, or if the creation deadline has passed
+     */
+    private boolean createReplicaTasksDone() throws AlterCancelException {
+        if (createReplicaLatch.getCount() == 0 && createReplicaLatch.getStatus().ok()) {
+            return true;
+        }
+
+        String errMsg = null;
+        if (!createReplicaLatch.getStatus().ok()) {
+            errMsg = createReplicaLatch.getStatus().getErrorMsg();
+        } else {
+            List<Map.Entry<Long, Long>> unfinishedMarks = createReplicaLatch.getLeftMarks();
+            long lostNodeId = findNodeThatLostItsTasks(unfinishedMarks);
+            if (lostNodeId != -1) {
+                errMsg = "node " + lostNodeId + " restarted or was removed, its create tablet tasks are lost. "
+                        + errorTabletsMessage(unfinishedMarks);
+            } else if (System.currentTimeMillis() >= createReplicaDeadlineMs) {
+                errMsg = errorTabletsMessage(unfinishedMarks);
+            }
+        }
+
+        if (errMsg == null) {
+            return false;
+        }
+        abandonCreateReplicaTasks();
+        throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
+    }
+
+    private static String errorTabletsMessage(List<Map.Entry<Long, Long>> unfinishedMarks) {
+        // only show at most 3 results
+        List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+        return "Error tablets:" + Joiner.on(", ").join(subList);
+    }
+
+    /**
+     * A node that restarted after its CreateReplicaTask was dispatched will never report that task
+     * back: the task died with the process and ReportHandler.taskReport deliberately excludes
+     * TTaskType.CREATE from the diff-task resend. Without this check the latch could only be
+     * released by the deadline, which is what made a one-second BE restart cost the job the full
+     * min(tablet_create_timeout_second * numTablets, max_create_table_timeout_second).
+     *
+     * <p>The comparison is against the lastStartTime read at dispatch (see recordDispatchEpochs)
+     * rather than against wall clock now, so FE/BE clock skew cannot turn a node that booted long ago
+     * into a false positive, and a restart that predates the send is not mistaken for one that
+     * killed the tasks.
+     *
+     * @return the id of the first such node, or -1 if every unfinished mark still has a live node
+     */
+    private long findNodeThatLostItsTasks(List<Map.Entry<Long, Long>> unfinishedMarks) {
+        if (createReplicaNodeStartTime == null) {
+            return -1; // nothing dispatched yet, so nothing can have been lost
+        }
+        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Map.Entry<Long, Long> mark : unfinishedMarks) {
+            long nodeId = mark.getKey();
+            Long startTimeAtDispatch = createReplicaNodeStartTime.get(nodeId);
+            if (startTimeAtDispatch == null || startTimeAtDispatch <= 0) {
+                // No usable reading at dispatch (the node had not reported a reboot time yet), so a
+                // later reading cannot prove a restart. Leave this one to the deadline.
+                continue;
+            }
+            ComputeNode node = systemInfo.getBackendOrComputeNode(nodeId);
+            if (node == null || node.getLastStartTime() != startTimeAtDispatch) {
+                return nodeId;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Drop whatever CreateReplicaTasks are still queued for this job. Before the PENDING phase was
+     * made non-blocking this cleanup lived inside the wait, which cancel() reached by force-releasing
+     * the latch from outside the job monitor.
+     */
+    private void abandonCreateReplicaTasks() {
+        if (createReplicaBatchTask != null) {
+            AgentTaskQueue.removeBatchTask(createReplicaBatchTask, TTaskType.CREATE);
+        }
+        createReplicaBatchTask = null;
+        createReplicaLatch = null;
+        createReplicaDeadlineMs = -1;
+        createReplicaNodeStartTime = null;
+    }
+
+    /**
+     * Creating the shadow tablets is this job's only phase that waits on a deadline of its own, and
+     * polling the latch needs no compute resource, so honour it here too.
+     */
+    @Override
+    protected void onComputeResourceUnavailable() {
+        if (jobState != JobState.PENDING || createReplicaLatch == null) {
+            return;
+        }
         try {
-            waitingCreatingReplica.set(true);
-            if (isCancelling.get()) {
-                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-                return;
-            }
-            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
-        } catch (InterruptedException e) {
-            LOG.warn("InterruptedException: ", e);
-            ok = false;
-        } finally {
-            waitingCreatingReplica.set(false);
+            createReplicaTasksDone();
+        } catch (AlterCancelException e) {
+            cancelInternal(e.getMessage());
         }
-
-        if (!ok) {
-            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-            String errMsg;
-            if (!countDownLatch.getStatus().ok()) {
-                errMsg = countDownLatch.getStatus().getErrorMsg();
-            } else {
-                // only show at most 3 results
-                List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
-                List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                errMsg = "Error tablets:" + Joiner.on(", ").join(subList);
-            }
-            throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
-        }
-    }
-
-    @VisibleForTesting
-    public static long getNextTransactionId() {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-    }
-
-    @VisibleForTesting
-    public static long peekNextTransactionId() {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
-    }
-
-    public static long getNextGtid() {
-        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
-    }
-
-    @VisibleForTesting
-    public void setIsCancelling(boolean isCancelling) {
-        this.isCancelling.set(isCancelling);
-    }
-
-    @VisibleForTesting
-    public boolean isCancelling() {
-        return this.isCancelling.get();
-    }
-
-    @VisibleForTesting
-    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
-        this.waitingCreatingReplica.set(waitingCreatingReplica);
-    }
-
-    @VisibleForTesting
-    public boolean waitingCreatingReplica() {
-        return this.waitingCreatingReplica.get();
     }
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
-        boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
+        if (createReplicaLatch != null) {
+            // The CreateReplicaTasks went out in an earlier scheduler round.
+            if (!createReplicaTasksDone()) {
+                return; // Still creating. Poll again next round; do not hold up the sibling jobs.
+            }
+        } else if (createShadowTablets()) {
+            // Just dispatched. Hand the scheduler thread back so it can serve the other alter jobs;
+            // this job resumes at the poll above on the next round.
+            return;
+        }
+
+        // Add shadow indexes to table.
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTableOrThrow();
+            Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
+            watershedTxnId = getNextTransactionId();
+            watershedGtid = getNextGtid();
+            addShadowIndexToCatalog(table, watershedTxnId);
+        }
+
+        // Getting the `watershedTxnId` and adding the shadow index are not atomic, and the id generator is
+        // shared by the whole cluster, so other ids are routinely drawn in between. That is safe without a
+        // check here: a writer that begins its transaction before resolving tablets does so under the table
+        // READ lock, which the WRITE lock above excludes, so any such transaction with an id above the
+        // watershed sees the shadow index and writes it. A writer that resolves tablets first (replication,
+        // a bypass-write client with cached metadata) is rejected at commit by
+        // LakeTableTxnStateListener#checkShadowIndexesLoaded if it misses a shadow index it had to write and
+        // commits before this job makes the index NORMAL.
+        // The next id is kept only as a breadcrumb for the log line below.
+        long nextTxnId = peekNextTransactionId();
+
+        if (span != null) {
+            span.setAttribute("watershedTxnId", this.watershedTxnId);
+            span.addEvent("setWaitingTxn");
+        }
+
+        // The shadow index is added to the catalog above rather than in the applier; addShadowIndexToCatalog
+        // is replayed from the journaled watershed, so it's ok to re-add if Leader transferred.
+        persistStateChange(this, JobState.WAITING_TXN);
+
+        // The shadow tablets exist and the state change is durable, so runPendingJob cannot need the
+        // CreateReplicaTasks again. Release them rather than carry one task per shadow tablet (each
+        // holding a full TTabletSchema) for the hours the rewrite may run.
+        abandonCreateReplicaTasks();
+
+        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}, next txn_id after adding"
+                + " shadow index: {}", jobId, this.jobState, watershedTxnId, nextTxnId);
+    }
+
+    /**
+     * Build the shadow tablets' CreateReplicaTasks and dispatch them without waiting.
+     *
+     * @return true if tasks were dispatched and the job now has to wait for them, false when the
+     *         light-weight path turned tablet creation into a no-op and the job can go straight on
+     */
+    private boolean createShadowTablets() throws AlterCancelException {
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
         MarkedCountDownLatch<Long, Long> countDownLatch;
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        boolean lightWeight;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
+            // Light-weight's on-demand shadow schema reads the table's index/BF/ZSTD-column set,
+            // written back only at job finish. Light-weight creation skips CreateReplicaTask, which
+            // is the only carrier of this job's new sets, so the CN builds the shadow tablet's
+            // version 1 metadata from the table as it stands -- still the OLD sets. The conversion
+            // would then rewrite every segment with the old setting while the job reports success
+            // and FE goes on to show the new one.
+            lightWeight = table.isLightWeightTabletCreation() && !indexChange && !hasBfChange
+                    && !hasZstdCompressionChange;
 
-            // disable tablet creation optimaization to avoid overwriting files with the same name.
-            if (table.isFileBundling()) {
-                enableTabletCreationOptimization = false;
-            }
-            if (enableTabletCreationOptimization) {
-                numTablets = physicalPartitionIndexMap.size();
-            } else {
-                numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
-                        .mapToLong(List::size).sum();
-            }
+            numTablets = physicalPartitionIndexMap.values().stream().map(MaterializedIndex::getTablets)
+                    .mapToLong(List::size).sum();
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
-            createReplicaLatch = countDownLatch;
             long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            // Light-weight tablet creation skips CreateReplicaTask; the shadow tablet's
+            // version 1 metadata is materialized on demand by the CN-side fallback when
+            // the first read or publish hits it.
+            Set<Long> shadowPhysicalPartitionIds = lightWeight
+                    ? Collections.<Long>emptySet()
+                    : physicalPartitionIndexMap.rowKeySet();
+            for (long physicalPartitionId : shadowPhysicalPartitionIds) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkState(physicalPartition != null);
                 TStorageMedium storageMedium = table.getPartitionInfo()
@@ -445,6 +618,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
+                            .setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes)
                             .setStorageType(TStorageType.COLUMN)
                             .addColumns(shadowSchema)
                             .setSchemaHash(0)
@@ -480,7 +654,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setCompressionLevel(table.getCompressionLevel())
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
-                                .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                                // Never the partition-shared version-1 object: it is named after tablet id 0, so the
+                                // shadow index would overwrite the base index's one in the same partition path, and
+                                // it carries a single range where each tablet of a range-distribution table has its own.
+                                .setEnableTabletCreationOptimization(false)
                                 .setGtid(gtid)
                                 .setCompactionStrategy(table.getCompactionStrategy())
                                 .setRange(table.isRangeDistribution() ? shadowTablet.getRange() : null)
@@ -488,10 +665,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
                         batchTask.addTask(task);
-
-                        if (enableTabletCreationOptimization) {
-                            break;
-                        }
                     }
                 }
             }
@@ -499,43 +672,19 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             throw new AlterCancelException(e.getMessage());
         }
 
-        sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
-                             waitingCreatingReplica, isCancelling);
-
-        // Add shadow indexes to table.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
-            Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
-            addShadowIndexToCatalog(table, watershedTxnId);
+        if (lightWeight) {
+            return false;
         }
 
-        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
-        // transaction A begins between these operations. This is safe as long as A gets the tablet
-        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
-        // writes to it. All current import transactions do this (beginTransaction first), so even
-        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
-        // is just a convention not a requirement. If violated, transactions with IDs greater than
-        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
-        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
-        long nextTxnId = peekNextTransactionId();
-        if (nextTxnId != watershedTxnId + 1) {
-            throw new AlterCancelException(
-                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-        }
-
-        if (span != null) {
-            span.setAttribute("watershedTxnId", this.watershedTxnId);
-            span.addEvent("setWaitingTxn");
-        }
-
-        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
-        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
-        persistStateChange(this, JobState.WAITING_TXN);
-
-        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
-                watershedTxnId);
+        createReplicaLatch = countDownLatch;
+        createReplicaBatchTask = batchTask;
+        long timeoutSeconds = Math.min(Config.tablet_create_timeout_second * numTablets,
+                Config.max_create_table_timeout_second);
+        createReplicaDeadlineMs = System.currentTimeMillis() + 1000L * timeoutSeconds;
+        sendCreateReplicaTasks(batchTask);
+        LOG.info("Sent create shadow tablet tasks for schema change job {}, table {}, tablet num: {}, timeout: {}s",
+                jobId, tableName, numTablets, timeoutSeconds);
+        return true;
     }
 
     @Override
@@ -553,8 +702,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         LOG.info("previous transactions are all finished, begin to send schema change tasks. job: {}", jobId);
 
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             Map<Long, TTabletSchema> indexToBaseTabletReadSchema = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
@@ -594,24 +744,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     Map<Integer, TExpr> mcExprs = new HashMap<>();
                     TAlterTabletMaterializedColumnReq generatedColumnReq = null;
                     if (hasNewGeneratedColumn) {
-                        DescriptorTable descTbl = new DescriptorTable();
-                        TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
-                        Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
-
-                        /*
-                         * The expression substitution is needed here, because all slotRefs in
-                         * GeneratedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
-                         * if it is init by SlotDescriptor. The slot information will be used by be to indentify
-                         * the column location in a chunk.
-                         */
-                        for (Column col : table.getFullSchema()) {
-                            SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
-                            slotDesc.setType(col.getType());
-                            slotDesc.setColumn(new Column(col));
-                            slotDesc.setIsMaterialized(true);
-                            slotDesc.setIsNullable(col.isAllowNull());
-
-                            slotDescByName.put(col.getName(), slotDesc);
+                        // Build slotId mapping from fullSchema (slot ids = positional index)
+                        Map<String, Integer> slotIdByName = new HashMap<>();
+                        for (int i = 0; i < table.getFullSchema().size(); i++) {
+                            slotIdByName.put(table.getFullSchema().get(i).getName(), i);
                         }
 
                         for (Column generatedColumn : diffGeneratedColumnSchema) {
@@ -619,19 +755,17 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             List<Expr> outputExprs = Lists.newArrayList();
 
                             for (Column col : table.getBaseSchema()) {
-                                SlotDescriptor slotDesc = slotDescByName.get(col.getName());
-
-                                if (slotDesc == null) {
-                                    throw new AlterCancelException("Expression for generated column can not find " +
-                                            "the ref column");
+                                Integer slotId = slotIdByName.get(col.getName());
+                                if (slotId == null) {
+                                    throw new AlterCancelException(
+                                            "Expression for generated column can not find the ref column: "
+                                                    + col.getName());
                                 }
-
-                                SlotRef slotRef = new SlotRef(slotDesc);
-                                slotRef.setColumnName(col.getName());
-                                outputExprs.add(slotRef);
+                                outputExprs.add(SlotRef.createAnalyzed(slotId,
+                                        col.getName(), col.getType(), col.isAllowNull()));
                             }
 
-                            TableName tableName = new TableName(db.getFullName(), table.getName());
+                            TableName tableName = new TableName(database.getFullName(), table.getName());
 
                             // sourceScope must be set null tableName for its Field in RelationFields
                             // because we hope slotRef can not be resolved in sourceScope but can be
@@ -649,7 +783,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             if (ConnectContext.get() == null) {
                                 LOG.warn("Connect Context is null when add/modify generated column");
                             } else {
-                                ConnectContext.get().setDatabase(db.getFullName());
+                                ConnectContext.get().setDatabase(database.getFullName());
                             }
 
                             RewriteAliasVisitor visitor =
@@ -754,8 +888,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTableOrThrow();
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -794,8 +928,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         // Replace the current index with shadow index.
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
             if (table == null) {
                 LOG.info("database or table been dropped while doing schema change job {}", jobId);
                 return;
@@ -808,10 +942,15 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             persistStateChange(this, JobState.FINISHED, () -> {
                 // Below this point, all query and load jobs will use the new schema.
                 visualiseShadowIndex(table);
-                // inactivate related mv
-                inactiveRelatedMv(modifiedColumns, table);
+                // Inactivate and journal every MV that reads a modified column, in any database, and the MVs above them.
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table, modifiedColumns);
                 table.onReload();
             });
+        }
+
+        if (jobState == JobState.FINISHED) {
+            AlterMetricRegistry.getInstance().updateAlterDuration(
+                    AlterMetricRegistry.AlterExecutionMode.REWRITE, finishedTimeMs - createTimeMs);
         }
 
         if (span != null) {
@@ -822,8 +961,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     // Note: throws AlterCancelException iff the database or table has been dropped.
     boolean readyToPublishVersion() throws AlterCancelException {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = getTableOrThrow(db, tableId);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            OlapTable table = getTableOrThrow();
             isFileBundling = table.isFileBundling();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -874,8 +1013,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 // For indexes whose schema have not changed, we still need to upgrade the version
                 List<MaterializedIndex> originMaterializedIndices;
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
-                try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-                    OlapTable table = getTableOrThrow(db, tableId);
+                try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                    OlapTable table = getTableOrThrow();
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     originMaterializedIndices = physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE);
                 }
@@ -893,7 +1032,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 if (isFileBundling) {
-                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+                    List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null,
+                            vectorIndexBuildInfos);
+                    VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
             }
             return true;
@@ -901,6 +1043,68 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             LOG.error("Fail to publish version for schema change job {}: {}", jobId, e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * No-op publish for the FORCE-cancel escape hatch. Sends a publish_version
+     * RPC with TxnInfoPB.no_op_publish=true ONLY for the partition's regular
+     * (visible, non-shadow) indices at the alter's reserved commitVersion. BE
+     * short-circuits the txn-log apply path and writes a no-op metadata file
+     * (V-1 content tagged with version V), so the partition version chain
+     * advances past the cancelled alter without including any of its changes.
+     *
+     * <p>We deliberately skip the shadow indices here: they're about to be
+     * dropped by removeShadowIndex() inside persistStateChange, so publishing
+     * them would just produce metadata files that are orphans the moment the
+     * cancel commits. The visible (regular) indices are what subsequent loads'
+     * publish chains depend on, so those are the ones whose version must
+     * advance.
+     *
+     * <p>Returns false if any RPC fails or throws; caller leaves the job at
+     * FINISHED_REWRITING so the operator can retry CANCEL ALTER ... FORCE.
+     */
+    protected boolean lakePublishVersionWithSkip(String reason) {
+        // Heavy schema change publishes the partition's VISIBLE (original)
+        // indices and deliberately SKIPS its shadow indices: the shadows are
+        // about to be dropped by removeShadowIndex() inside persistStateChange,
+        // so publishing them would just produce orphan metadata. The visible
+        // indices are what subsequent loads' publish chains depend on.
+        //
+        // Dispatch must key off the table's CURRENT file_bundling format read
+        // fresh here, NOT the cached isFileBundling field: that field is not
+        // serialized and is only populated by readyToPublishVersion() in the
+        // normal publish path. After an FE restart/leader change a replayed job
+        // sits in FINISHED_REWRITING with isFileBundling=false; if the operator
+        // force-cancels before the publish daemon runs, the cached field would
+        // wrongly route a file_bundling table to per-tablet publish. This
+        // mirrors the alter-meta force path and lakePublishVersion().
+        boolean useAggregatePublish = false;
+        Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
+        for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
+            List<Tablet> regularTablets = new ArrayList<>();
+            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                // Use the null-returning getTable() (not getTableOrThrow) so a
+                // concurrent db/table drop is a benign skip rather than a
+                // checked AlterCancelException — there is nothing to advance if
+                // the table is gone.
+                OlapTable table = getTable();
+                if (table == null) {
+                    continue;
+                }
+                useAggregatePublish = table.isFileBundling();
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition == null) {
+                    // partition gone (concurrent drop); nothing to advance, skip.
+                    continue;
+                }
+                for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    regularTablets.addAll(index.getTablets());
+                }
+            }
+            tabletsByPartition.put(physicalPartitionId, regularTablets);
+        }
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
+                tabletsByPartition, computeResource, useAggregatePublish);
     }
 
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull OlapTable tbl) {
@@ -918,41 +1122,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         return modifiedColumns;
     }
 
-    private void inactiveRelatedMv(Set<String> modifiedColumns, @NotNull OlapTable tbl) {
-        if (modifiedColumns.isEmpty()) {
-            return;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                        .getTable(db.getId(), mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-            }
-            for (Column mvColumn : mv.getColumns()) {
-                if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            mvColumn.getName(), tbl.getName());
-                    mv.setInactiveAndReason(
-                            MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                    // clear version map to make sure the MV will be refreshed
-                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
-                    return;
-                }
-            }
-        }
-    }
-
     boolean tableHasBeenDropped() {
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            return db == null || db.getTable(tableId) == null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+            return getTable() == null;
         }
     }
 
     // Update each Partition's nextVersion.
-    // The caller must have acquired the database's exclusive lock.
+    // The caller must have acquired the table's exclusive (WRITE) lock.
     void updateNextVersion(@NotNull OlapTable table) {
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -990,6 +1167,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.hasBfChange = other.hasBfChange;
             this.bfColumns = other.bfColumns;
             this.bfFpp = other.bfFpp;
+            this.hasZstdCompressionChange = other.hasZstdCompressionChange;
+            this.zstdCompressionColumns = other.zstdCompressionColumns;
+            this.zstdCompressionPageSizes = other.zstdCompressionPageSizes;
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
@@ -997,10 +1177,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
+            // FORCE-cancel audit marker. Must be copied here so the
+            // CANCELLED branch below (which reads `this.forceSkippedAtCommitted`)
+            // sees the persisted value when replaying onto an in-memory job
+            // loaded from a pre-cancel image. Without this copy the bump is
+            // silently skipped on recovery — defeating the whole replay fix.
+            this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
         }
 
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
             if (table == null) {
                 return; // do nothing if the table has been dropped.
             }
@@ -1016,6 +1202,15 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 table.onReload();
                 visualiseShadowIndex(table);
             } else if (jobState == JobState.CANCELLED) {
+                // FORCE-cancel left BE with no-op tablet_metadata at commitVersion
+                // and the live path bumped partition.VisibleVersion to match.
+                // Replay must do the same; otherwise an FE recovering from a
+                // pre-cancel image keeps VisibleVersion=commitVersion-1 and
+                // subsequent load publishes compute base from the wrong version,
+                // re-applying the cancelled alter's txn_log on top.
+                if (forceSkippedAtCommitted) {
+                    advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                }
                 removeShadowIndex(table);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
@@ -1076,6 +1271,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 IDictManager.getInstance().removeGlobalDict(table, column.getColumnId());
             }
         }
+
+        // Lock-free plans share these physical partitions; invalidate them before the first origin index is dropped,
+        // so a plan that hits the half-swapped partitions retries instead of failing.
+        table.lastSchemaUpdateTime.set(System.nanoTime());
 
         // replace the origin index with shadow index, set index state as NORMAL
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
@@ -1147,6 +1346,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         if (hasBfChange) {
             table.setBloomFilterInfo(bfColumns, bfFpp);
         }
+        // update compression dict columns
+        if (hasZstdCompressionChange) {
+            table.setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes);
+        }
         // update index
         if (indexChange) {
             table.setIndexes(indexes);
@@ -1158,45 +1361,69 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @Override
-    public final boolean cancel(String errMsg) {
-        isCancelling.set(true);
-        try {
-            // If waitingCreatingReplica == false, we will assume that
-            // cancel thread will get the object lock very quickly.
-            if (waitingCreatingReplica.get()) {
-                Preconditions.checkState(createReplicaLatch != null);
-                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
-            }
-            synchronized (this) {
-                return cancelInternal(errMsg);
-            }
-        } finally {
-            isCancelling.set(false);
-        }
+    protected boolean cancelImpl(String errMsg) {
+        return cancelImpl(errMsg, false);
     }
 
     @Override
-    protected boolean cancelImpl(String errMsg) {
+    protected boolean cancelImpl(String errMsg, boolean force) {
         if (jobState == JobState.CANCELLED || jobState == JobState.FINISHED) {
             return false;
         }
 
-        // Cancel a job of state `FINISHED_REWRITING` only when the database or table has been dropped.
-        if (jobState == JobState.FINISHED_REWRITING && tableExists()) {
+        // Cancel a job of state `FINISHED_REWRITING` only when the database or
+        // table has been dropped, OR when an operator explicitly opts in via
+        // ADMIN SKIP COMMITTED TRANSACTION (force=true). The escape hatch is
+        // needed to unblock a heavy schema change whose publish RPC is
+        // permanently stuck. removeShadowIndex() inside persistStateChange
+        // below already drops the shadow tablets, which is what unblocks the
+        // publish_log_version path (FE stops scheduling vtxn copies once the
+        // shadow index is gone).
+        if (jobState == JobState.FINISHED_REWRITING && tableExists() && !force) {
             return false;
+        }
+
+        // Force-cancel from FINISHED_REWRITING: advance the partition version
+        // chain past the alter's reserved commit version BEFORE cancel cleanup
+        // (which sets OlapTable.state back to NORMAL) — otherwise new loads
+        // race in while the version chain is still broken and queue up forever
+        // waiting for the cancelled alter's missing tablet_metadata_<V>.
+        // See LakeTableAlterMetaJobBase.cancelImpl for the same pattern.
+        boolean advanceVersionForForce = force && jobState == JobState.FINISHED_REWRITING && tableExists();
+        if (advanceVersionForForce) {
+            if (!lakePublishVersionWithSkip(errMsg)) {
+                return false;
+            }
+            // Mark the job force-skipped ONLY now that the no-op publish has
+            // actually advanced the partition version on BE. Set before the
+            // persistStateChange below so copyForPersist snapshots it into the
+            // edit log, and so replay knows to re-apply the VisibleVersion bump.
+            // A force-cancel that did NOT reach FINISHED_REWRITING never gets
+            // here, so the marker stays false and replay won't bump versions.
+            forceSkippedAtCommitted = true;
         }
 
         if (schemaChangeBatchTask != null) {
             AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         }
+        abandonCreateReplicaTasks();
 
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();
 
         persistStateChange(this, JobState.CANCELLED, () -> {
-            try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-                OlapTable table = (db != null) ? db.getTable(tableId) : null;
+            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+                OlapTable table = getTable();
                 if (table != null) {
+                    if (advanceVersionForForce) {
+                        // We just no-op published tablet_metadata at commitVersion
+                        // on BE. FE-side partition.VisibleVersion must follow so
+                        // subsequent loads' publish base matches the BE state.
+                        // Shared with the meta-alter path and replay via the
+                        // AlterJobV2 helper so all lake alter types and both the
+                        // live and replay paths bump identically.
+                        advanceVisibleVersionForForceSkip(table, commitVersionMap);
+                    }
                     removeShadowIndex(table);
                 }
             }
@@ -1224,12 +1451,27 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         return new LakeTableSchemaChangeJob(this);
     }
 
+    /**
+     * Drops the per-tablet data of a done job, which stays in memory only for SHOW ALTER. getInfo reads none of it.
+     * The maps are replaced, not cleared: replay shares them with the journal entry they came from.
+     */
+    @Override
+    public void pruneMeta() {
+        physicalPartitionIndexTabletMap = HashBasedTable.create();
+        physicalPartitionIndexMap = HashBasedTable.create();
+        indexMetaIdToSchema = Maps.newHashMap();
+        indexMetaIdToShortKey = Maps.newHashMap();
+        schemaChangeBatchTask = new AgentBatchTask();
+    }
+
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
+        // Read once: this runs without the job lock, and pruning the done job replaces the batch.
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && schemaChangeBatchTask.getTaskNum() > 0) {
-            progress = schemaChangeBatchTask.getFinishedTaskNum() + "/" + schemaChangeBatchTask.getTaskNum();
+        AgentBatchTask batchTask = schemaChangeBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            progress = batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum();
         }
 
         // one line for one shadow index

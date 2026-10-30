@@ -18,11 +18,13 @@
 
 #include "base/testutil/assert.h"
 #include "exec/chunk_buffer_memory_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -34,14 +36,15 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_exec_env(_exec_env);
-        _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
+        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
+        _query_context->init_mem_tracker(-1, RuntimeEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         query_options.batch_size = 4096;
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
-        _runtime_state->set_query_ctx(_query_context.get());
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
+                                                        &_exec_env->query_execution_services(), _exec_env);
+        _query_context->attach_to_runtime_state(_runtime_state.get());
         _runtime_state->init_instance_mem_tracker();
 
         _chunk_buffer_memory_manager = std::make_shared<ChunkBufferMemoryManager>(4, 1024 * 1024);
@@ -104,13 +107,7 @@ TEST_F(LocalBucketShuffleTest, test_local_bucket_shuffle) {
                                             partition_exprs, bucket_properies);
     auto chunk = std::make_shared<Chunk>();
 
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
-    col->append_datum(Datum(1));
-    col->append_datum(Datum(2));
-    col->append_datum(Datum(3));
-    col->append_nulls(1);
-    col->append_datum(Datum(4));
-    col->append_nulls(1);
+    auto col = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3, 0, 4, 0}, {0, 0, 0, 1, 0, 1});
     chunk->append_column(std::move(col), 1);
 
     auto col_s = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Sorts elements in an array according to the ascending order of elements in another array or array converted from a lambda expression."
 ---
 
 # array_sortby

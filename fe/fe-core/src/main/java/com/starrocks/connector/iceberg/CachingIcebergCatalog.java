@@ -17,13 +17,14 @@ package com.starrocks.connector.iceberg;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.RemovalCause;
 import com.github.benmanes.caffeine.cache.Weigher;
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -32,15 +33,17 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.DeleteFileIndexCache;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
@@ -54,6 +57,7 @@ import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -63,6 +67,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.stream.Collectors;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -71,6 +76,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(CachingIcebergCatalog.class);
     public static final long NEVER_CACHE = 0;
     public static final long DEFAULT_CACHE_NUM = 100000;
+    // Only emit the partition-load INFO line when a refresh exceeds this many partitions, so the log
+    // remains useful for diagnosing slow loads on large tables without flooding for normal-sized ones.
+    private static final int PARTITION_LOAD_LOG_THRESHOLD = 10000;
+    // REST tables embed short-lived vended credentials (~1h) in their FileIO; cap the table-cache TTL so an
+    // idle entry can't outlive its token. Provider-agnostic: bounds cache lifetime, no per-cloud expiry parse.
+    private static final long REST_TABLE_CACHE_MAX_TTL_SEC = 3000;
     private static final ThreadLocal<ConnectContext> TABLE_LOAD_CONTEXT = new ThreadLocal<>();
     private final String catalogName;
     private final IcebergCatalog delegate;
@@ -81,9 +92,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private final IcebergCatalogProperties icebergProperties;
     private final com.github.benmanes.caffeine.cache.Cache<String, Set<DataFile>> dataFileCache;
     private final com.github.benmanes.caffeine.cache.Cache<String, Set<DeleteFile>> deleteFileCache;
+    private final DeleteFileIndexCache deleteFileIndexCache;
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap = new ConcurrentHashMap<>(); // table -> metadata file paths
     private final Map<IcebergTableName, Long> tableLatestAccessTime = new ConcurrentHashMap<>();
     private final Map<IcebergTableName, Long> tableLatestRefreshTime = new ConcurrentHashMap<>();
+    // Per-table lock strings: avoids catalog-wide serialization during concurrent refresh of different tables.
+    private final ConcurrentHashMap<String, String> tableRefreshLockMap = new ConcurrentHashMap<>();
 
     private final com.github.benmanes.caffeine.cache.LoadingCache<IcebergTableName, Map<String, Partition>> partitionCache;
 
@@ -99,8 +113,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         this.databases = newCacheBuilderWithMaximumSize(
                 icebergProperties.getIcebergMetaCacheTtlSec(),
                 NEVER_CACHE, DEFAULT_CACHE_NUM).build();
+        long tableCacheTtlSec = icebergProperties.getIcebergMetaCacheTtlSec();
+        if (delegate instanceof IcebergRESTCatalog) {
+            tableCacheTtlSec = Math.min(tableCacheTtlSec, REST_TABLE_CACHE_MAX_TTL_SEC);
+        }
         this.tables = newCacheBuilder(
-                icebergProperties.getIcebergMetaCacheTtlSec(),
+                tableCacheTtlSec,
                 icebergProperties.getIcebergTableCacheRefreshIntervalSec())
                 .executor(executorService)
                 .maximumWeight(tableCacheSize)
@@ -125,22 +143,20 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            BaseTable updateTable = 
-                                    (BaseTable) delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
-                            TableOperations newOps = updateTable.operations();
-                            TableOperations oldOps = ((BaseTable) oldValue).operations();
-                            if (oldOps.current().metadataFileLocation().equals(newOps.current().metadataFileLocation())) {
-                                return oldValue;
-                            }
-                            return updateTable;
+                            return delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
                             return oldValue;
                         }
                     }
                 });
-        this.partitionCache = newCacheBuilderWithMaximumSize(
-                icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE, DEFAULT_CACHE_NUM).build(
+        long partitionCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
+                icebergProperties.getIcebergPartitionCacheMemoryUsageRatio());
+        this.partitionCache = newCacheBuilder(icebergProperties.getIcebergMetaCacheTtlSec(), NEVER_CACHE)
+                .executor(executorService)
+                .maximumWeight(partitionCacheSize)
+                .weigher((Weigher<IcebergTableName, Map<String, Partition>>) this::weighPartitionEntry)
+                .build(
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
@@ -153,7 +169,28 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                                             .setSrTableName(key.tableName)
                                             .setCatalogTableName(key.tableName)
                                             .setNativeTable(nativeTable).build();
-                            return delegate.getPartitions(icebergTable, key.snapshotId, null);
+                            Map<String, Partition> partitions =
+                                    delegate.getPartitions(icebergTable, key.snapshotId, null);
+                            if (partitions.size() > PARTITION_LOAD_LOG_THRESHOLD) {
+                                // -1 is used by callers as "use current snapshot" (see IcebergCatalog#getPartitions);
+                                // resolve it here so the summary and logged snapshot id reflect the snapshot actually scanned.
+                                Snapshot snapshot = key.snapshotId == -1
+                                        ? nativeTable.currentSnapshot() : nativeTable.snapshot(key.snapshotId);
+                                long loggedSnapshotId = snapshot != null ? snapshot.snapshotId() : key.snapshotId;
+                                Map<String, String> summary =
+                                        (snapshot != null && snapshot.summary() != null)
+                                                ? snapshot.summary() : Collections.emptyMap();
+                                LOG.info("Loaded large iceberg partition set: catalog={}, table={}.{}, snapshot={}, "
+                                                + "partitions={}, dataFiles={}, deleteFiles={}, specs={}, "
+                                                + "partitionFields={}",
+                                        catalogName, key.dbName, key.tableName, loggedSnapshotId,
+                                        partitions.size(),
+                                        summary.getOrDefault(SnapshotSummary.TOTAL_DATA_FILES_PROP, "?"),
+                                        summary.getOrDefault(SnapshotSummary.TOTAL_DELETE_FILES_PROP, "?"),
+                                        nativeTable.specs().size(),
+                                        nativeTable.spec().fields().size());
+                            }
+                            return partitions;
                         }
                     });
         long dataFileCacheSize = Math.round(Runtime.getRuntime().maxMemory() *
@@ -185,6 +222,10 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                             cause));
                 })
                 .build();
+        // Same budget as the delete file cache: an index references the cached delete files, and is weighed by
+        // what it would keep alive after the delete file cache evicts them.
+        this.deleteFileIndexCache = new DeleteFileIndexCache(icebergProperties.getIcebergMetaCacheTtlSec(),
+                deleteFileCacheSize, executorService, this::estimateContentFilesSize);
 
         this.backgroundExecutor = executorService;
     }
@@ -235,10 +276,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
 
         // do not cache if jwt or oauth2 is used AND it is a REST Catalog.
-        // do not cache if vended credentials are enabled, because credentials may expire before cache TTL.
         boolean cacheAllowed = icebergProperties.isEnableIcebergTableCache() &&
-                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog)) &&
-                !delegate.isVendedCredentialsEnabled();
+                (Strings.isNullOrEmpty(connectContext.getAuthToken()) || !(delegate instanceof IcebergRESTCatalog));
         if (!cacheAllowed) {
             return delegate.getTable(connectContext, dbName, tableName);
         }
@@ -257,10 +296,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         } catch (NoSuchTableException e) {
             throw e;
         } catch (Exception e) {
-            Throwable ce = ExceptionUtils.getRootCause(e);
-            String errMsg = ce != null ? ce.getMessage() : e.getMessage();
-            throw new StarRocksConnectorException(String.format("Failed to get iceberg table %s.%s.%s. %s",
-                    catalogName, dbName, tableName, errMsg), e);
+            throw new StarRocksConnectorException(
+                    String.format("Failed to get iceberg table %s.%s.%s", catalogName, dbName, tableName), e);
         } finally {
             TABLE_LOAD_CONTEXT.remove();
         }
@@ -334,7 +371,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public List<String> listPartitionNames(IcebergTable icebergTable, ConnectorMetadatRequestContext requestContext,
+    public List<String> listPartitionNames(IcebergTable icebergTable, ConnectorMetadataRequestContext requestContext,
                                            ExecutorService executorService) {
         SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
         // optimization for query mv rewrite, we can optionally return null to bypass it.
@@ -346,8 +383,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new IcebergTableName(icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName(), snapshotId);
             Map<String, Partition> cacheValue = partitionCache.getIfPresent(key);
             if (cacheValue == null) {
-                backgroundExecutor.submit(() -> partitionCache.refresh(key));
-                return null;
+                try {
+                    backgroundExecutor.submit(() -> partitionCache.refresh(key));
+                    return null;
+                } catch (RejectedExecutionException e) {
+                    // The connector was shut down while this query was in flight; load synchronously instead.
+                }
             }
         }
         return IcebergCatalog.super.listPartitionNames(icebergTable, requestContext, executorService);
@@ -359,7 +400,16 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public synchronized void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+    public void refreshTable(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+        String lockKey = dbName.toLowerCase(Locale.ROOT) + "." + tableName.toLowerCase(Locale.ROOT);
+        tableRefreshLockMap.putIfAbsent(lockKey, lockKey);
+        String lock = tableRefreshLockMap.get(lockKey);
+        synchronized (lock) {
+            refreshTableUnderLock(dbName, tableName, ctx, executorService);
+        }
+    }
+
+    private void refreshTableUnderLock(String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         Table cachedTable = tables.getIfPresent(icebergTableName);
         if (cachedTable == null) {
@@ -395,14 +445,37 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             if (!currentLocation.equals(updateLocation)) {
                 LOG.info("Refresh iceberg caching catalog table {}.{} from {} to {}",
                         dbName, tableName, currentLocation, updateLocation);
-                refreshTable(currentTable, updateTable, dbName, tableName, ctx, executorService);
-                LOG.info("Finished to refresh iceberg table {}.{}", dbName, tableName);
+                if (refreshTable(currentTable, updateTable, dbName, tableName, ctx, executorService)) {
+                    LOG.info("Finished to refresh iceberg table {}.{}", dbName, tableName);
+                }
+            } else {
+                // Metadata unchanged keeps the partition/file caches valid; still swap in the reloaded
+                // table so the cache stops serving the old (expiring) vended FileIO token.
+                replaceCachedTable(icebergTableName, currentTable, updateTable);
             }
         }
     }
 
-    private void refreshTable(BaseTable currentTable, BaseTable updatedTable,
-                              String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+    /**
+     * Swap the reloaded table into the cache only if the entry still holds the table this refresh started
+     * from. `updatedTable` was loaded from the remote catalog before this call, so if the entry was
+     * invalidated meanwhile (e.g. by a commit on this FE) or replaced by a concurrent load, writing it back
+     * could resurrect metadata older than what the cache already moved past.
+     * On a lost race the entry is invalidated instead: a concurrently loaded table may itself be older than
+     * `updatedTable`, and the next access then loads metadata at least as new as what this refresh saw.
+     */
+    private boolean replaceCachedTable(IcebergTableName key, Table currentTable, Table updatedTable) {
+        if (tables.asMap().replace(key, currentTable, updatedTable)) {
+            return true;
+        }
+        tables.invalidate(key);
+        LOG.info("Skip refreshing iceberg caching catalog table {}.{}: cache entry was invalidated or " +
+                "replaced concurrently, invalidate it to reload on next access", key.dbName, key.tableName);
+        return false;
+    }
+
+    private boolean refreshTable(BaseTable currentTable, BaseTable updatedTable,
+                                 String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
         long baseSnapshotId = currentTable.currentSnapshot().snapshotId();
         long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
@@ -413,8 +486,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         // update tables before refresh partition cache
         // so when refreshing partition cache, `getTables` can return the latest one.
         // another way to fix is to call `delegate.getTables` when refreshing partition cache.
-        synchronized (this) {
-            tables.put(keyWithoutSnap, updatedTable);
+        if (!replaceCachedTable(keyWithoutSnap, currentTable, updatedTable)) {
+            return false;
         }
 
         partitionCache.invalidate(baseIcebergTableName);
@@ -431,7 +504,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         if (manifestFiles.isEmpty()) {
             tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
-            return;
+            return true;
         }
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
@@ -443,6 +516,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
         LOG.info("Refreshed {} iceberg manifests on the table [{}.{}]", manifestFiles.size(), dbName, tableName);
+        return true;
     }
 
     public void refreshCatalog() {
@@ -479,6 +553,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void shutdown() {
+        delegate.shutdown();
+    }
+
+    @Override
     public void invalidateCache(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
         invalidateCache(key);
@@ -496,12 +575,19 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             dataFileCache.invalidateAll(paths);
             deleteFileCache.invalidateAll(paths);
         }
+        deleteFileIndexCache.invalidate(key);
+    }
+
+    @VisibleForTesting
+    DeleteFileIndexCache getDeleteFileIndexCache() {
+        return deleteFileIndexCache;
     }
 
     @Override
     public StarRocksIcebergTableScan getTableScan(Table table, StarRocksIcebergTableScanContext scanContext) {
         scanContext.setDataFileCache(dataFileCache);
         scanContext.setDeleteFileCache(deleteFileCache);
+        scanContext.setDeleteFileIndexCache(deleteFileIndexCache);
         scanContext.setMetaFileCacheMap(metaFileCacheMap);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
         scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
@@ -526,6 +612,27 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private Caffeine<Object, Object> newCacheBuilderWithMaximumSize(long expiresAfterWriteSec, long refreshInterval,
                                                                     long maximumSize) {
         return newCacheBuilder(expiresAfterWriteSec, refreshInterval).maximumSize(maximumSize);
+    }
+
+    // Returns the cached data files of this manifest whose locations are in `locations`, or null unless the
+    // manifest is cached completely (its live file count is known and matches the cached entry).
+    public Map<String, DataFile> findCachedDataFiles(ManifestFile manifest, Set<String> locations) {
+        Set<DataFile> files = dataFileCache.getIfPresent(manifest.path());
+        Integer added = manifest.addedFilesCount();
+        Integer existing = manifest.existingFilesCount();
+        if (files == null || added == null || existing == null || files.size() != added + existing) {
+            return null;
+        }
+        Map<String, DataFile> found = new HashMap<>();
+        for (DataFile file : files) {
+            if (locations.contains(file.location())) {
+                if (file.specId() != manifest.partitionSpecId()) {
+                    return null;
+                }
+                found.put(file.location(), file);
+            }
+        }
+        return found;
     }
 
     // We still allow reads from caches, but skip populating or refreshing them when this flag is set.
@@ -612,6 +719,17 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return (int) size;
     }
 
+    // Each entry holds a whole table's partition map, which is unbounded in bytes (a table can have
+    // millions of partitions). Sample the partition values so weighing stays cheap on large maps.
+    private int weighPartitionEntry(IcebergTableName key, Map<String, Partition> partitions) {
+        long size = Estimator.estimate(key) + Estimator.estimate(partitions, 3);
+        if (size > Integer.MAX_VALUE) {
+            LOG.warn("Partition cache entry size for key {} is too large: {} bytes", key, size);
+            return Integer.MAX_VALUE;
+        }
+        return (int) size;
+    }
+
     private long estimateContentFilesSize(Set<? extends ContentFile<?>> files) {
         if (files == null || files.isEmpty()) {
             return 0L;
@@ -656,7 +774,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return Estimator.estimate(tables.asMap(), 10) +
                 Estimator.estimate(databases.asMap(), 10) +
                 estimateDataFileCacheSize() +
-                estimateDeleteFileCacheSize() + Estimator.estimate(metaFileCacheMap, 10);
+                estimateDeleteFileCacheSize() +
+                Estimator.estimate(partitionCache.asMap(), 10) +
+                Estimator.estimate(metaFileCacheMap, 10) +
+                Estimator.estimate(tableLatestAccessTime, 10) +
+                Estimator.estimate(tableLatestRefreshTime, 10) +
+                Estimator.estimate(tableRefreshLockMap, 10);
     }
 
     private long estimateDataFileCacheSize() {

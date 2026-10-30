@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SQL の記述から実行詳細の解釈まで、StarRocks でのクエリパフォーマンス分析と最適化の完全ガイド。"
 sidebar_position: 10
 ---
 

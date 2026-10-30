@@ -1,0 +1,11 @@
+Package: starrocks-fe
+Version: 0.0.0
+Section: database
+Priority: optional
+Architecture: amd64
+Depends: openjdk-17-jre-headless, bash, procps
+Maintainer: StarRocks Team <dev@starrocks.io>
+Description: StarRocks Frontend (FE)
+ StarRocks is a next-generation real-time analytical warehouse.
+ This package contains the Frontend (FE) nodes responsible for
+ metadata management and query planning.

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "In addition to native password-based authentication, StarRocks supports LDAP authentication for enterprise user directory integration."
 sidebar_position: 30
 ---
 
@@ -28,18 +29,42 @@ authentication_ldap_simple_ssl_conn_trust_store_path =
 authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 
-如果希望通过 StarRocks 直接在 LDAP 系统中检索用户进行认证，您需要**添加以下额外的配置项**。
+如果希望通过 StarRocks 直接在 LDAP 系统中检索用户进行认证（搜索绑定模式），您需要**添加以下额外的配置项**。
 
 ```Properties
 # 添加用户的 Base DN，指定用户的检索范围。
 authentication_ldap_simple_bind_base_dn =
-# 添加在 LDAP 对象中标识用户的属性名称。默认：uid。
+# 添加承载登录名的属性名。默认：uid（OpenLDAP 的惯例）。
+# Active Directory 上请用 sAMAccountName。
 authentication_ldap_simple_user_search_attr =
 # 添加用于检索用户的 Admin DN。
 authentication_ldap_simple_bind_root_dn =
 # 添加用于检索用户的 Admin 密码。
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+如果希望使用**直接绑定模式**（跳过搜索步骤，直接使用构造的 DN 进行绑定），可以配置 DN 模式（pattern）。当用户 DN 结构可预测时，此模式非常有用。
+
+```Properties
+# 直接绑定认证的 DN 模式。
+# 使用 ${USER} 作为用户名的占位符。
+# 多个模式之间用分号 ';' 分隔。
+authentication_ldap_simple_bind_dn_pattern =
+```
+
+例如：`uid=${USER},ou=People,dc=example,dc=com`
+
+如果用户分布在多个 OU 中，可以指定多个模式，用分号分隔：
+
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
+
+系统将按顺序尝试每个模式，并返回第一个成功绑定的结果。
+
+:::note
+
+模式必须生成合法的 LDAP Distinguished Name（DN），不支持 UPN 格式的模式（如 `${USER}@corp.example.com`），因为其结果不是 DN，会导致下游组查找失败。如果 DN 中的属性值包含 `@`（如 `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`），这是合法的。
+
+:::
 
 ## DN 匹配机制
 
@@ -61,30 +86,77 @@ authentication_ldap_simple_bind_root_pwd =
 - **Microsoft AD 环境**：组成员可能缺少用户名属性，无法配置 `ldap_user_search_attr` 参数，则直接使用 DN 匹配。
 - **混合环境**：支持两种匹配方式的灵活切换。
 
+## 认证优先级
+
+当用户使用 LDAP 认证登录时，StarRocks 按以下优先级确定用户的 DN：
+
+1. **用户指定 DN**：如果创建用户时指定了明确的 DN（`CREATE USER ... AS 'dn'`），则直接使用该 DN。
+2. **通过 DN 模式直接绑定**：如果配置了 `authentication_ldap_simple_bind_dn_pattern`，系统将根据模式构造 DN 并尝试直接绑定。多个模式按顺序尝试。
+3. **搜索绑定**：如果以上两种均不适用，系统将使用管理员账户在 LDAP 中搜索用户，然后使用找到的 DN 进行绑定。
+
+## 从用户条目解析用户组（memberOf）
+
+自 v4.2 起，LDAP 用户的用户组可以从用户自身条目上的组成员属性读取，不再需要在配置里声明要看哪些用户组。此时目录中新建的用户组会在用户下次登录时生效，无需改动任何配置。
+
+由两个 FE 配置项控制，均可动态修改：
+
+```Properties
+# 用户组从哪里来：group_provider（默认）| memberof | both
+authentication_ldap_simple_group_source = group_provider
+# 用户条目上承载组成员关系的属性名
+authentication_ldap_simple_memberof_attr = memberOf
+```
+
+- `group_provider`（默认）与低版本行为一致：只使用 Group Provider。
+- `memberof` 只使用用户自身条目上的该属性。已配置的 Group Provider 被忽略，但配置保留。
+- `both` 返回两者的并集。
+
+`memberOf` 适用于 Active Directory 以及安装了 `memberof` overlay 的 OpenLDAP。Oracle Directory Server 与 389 Directory Server 使用 `isMemberOf`。
+
+以上是集群级默认值。Security Integration 可以用同名属性覆盖这两项，也是按 LDAP 服务分别配置的推荐方式——完整行为（包括两种认证模式各自如何读取该属性，以及哪些情况不覆盖：嵌套组、Active Directory 的 primary group、跨域用户组）见 [Security Integration](./security_integration.md)。
+
+:::note
+
+使用显式 DN 创建的用户（`CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS '<dn>'`）**不支持**该功能：那种写法是待废弃的单用户老机制，其组解析行为保持不变。请在创建用户时省略 `AS '<dn>'`，或改用 Security Integration。
+
+:::
+
+## 大小写敏感性
+
+LDAP 这一族配置没有统一答案——有的值由 FE 比较，有的由目录比较，所以下表逐项说明。
+
+| 项 | 在哪里比较 | 是否区分大小写 |
+| --- | --- | --- |
+| 属性名：`authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_memberof_attr` | 目录，以及 FE 读回结果时 | **不区分。** LDAP 属性名（attribute description）本身就是不区分大小写的，`memberof` 和 `memberOf` 是同一个属性。 |
+| `authentication_ldap_simple_group_source` | FE | **不区分**，两端空白也会忽略。取值无法识别时：`CREATE` / `ALTER SECURITY INTEGRATION` 直接报错；如果是从 FE 配置项传进来的，则回落到 `group_provider` 并打印 ERROR 日志。 |
+| DN 类取值：`authentication_ldap_simple_bind_root_dn`、`..._bind_base_dn`、`..._bind_dn_pattern` | 目录 | **由目录决定。** DN 里的属性类型（`cn=`、`ou=`、`dc=`）一律不区分大小写；属性值是否区分取决于该属性的匹配规则，常用的 `cn` / `ou` / `dc` 都是不区分的。 |
+| 登录名 | FE，在发给目录之前 | **不区分。** 拼进搜索过滤器、或代入 bind DN 模板之前会先转成小写，与 Active Directory 对账号名的处理一致。 |
+| 用户组名 | FE | **匹配时不区分，显示时保留原样。** `GRANT ... TO EXTERNAL GROUP` 与 `permitted_groups` 默认按忽略大小写匹配（FE 配置项 `authentication_group_case_insensitive`，设为 `false` 则精确匹配），但组名字符串本身绝不改写：`current_group()` 和交给 Apache Ranger 的组集合保持目录返回的原始大小写。Ranger 匹配组名是区分大小写的，所以它的策略必须按目录里的写法来写。 |
+
 ## 使用 LDAP 创建用户
 
 创建用户时，通过 `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'` 指定认证方式为 LDAP 认证。xxx 是用户在 LDAP 中的 DN（Distinguished Name）。
 
-示例 1：
+示例 1：创建用户并指定明确的 DN。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ```
 
-可以在不指定用户在 LDAP 中的 DN 的情况下创建用户。当用户登录时，StarRocks 将到 LDAP 系统中检索用户信息。如果只有一个匹配项，认证成功。
-
-示例 2：
+示例 2：创建用户但不指定 DN。系统将根据配置在登录时通过 DN 模式（直接绑定）或搜索绑定来解析 DN。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple
 ```
 
-在这种情况下，需要在 FE 中添加额外的配置
+如果使用**搜索绑定**模式，需要在 FE 中添加以下额外配置：
 
 - `authentication_ldap_simple_bind_base_dn`: 用户的 Base DN，指定用户的检索范围。
 - `authentication_ldap_simple_user_search_attr`: 在 LDAP 对象中标识用户的属性名称，默认为 uid。
 - `authentication_ldap_simple_bind_root_dn`: 用于检索用户信息的管理员账户的 DN。
 - `authentication_ldap_simple_bind_root_pwd`: 用于检索用户信息的管理员账户的密码。
+
+如果使用**直接绑定**模式，只需配置 `authentication_ldap_simple_bind_dn_pattern`，无需管理员账户。
 
 ## 认证用户
 
@@ -125,3 +197,13 @@ properties.put("disabledAuthenticationPlugins", "com.mysql.cj.protocol.a.authent
 - **ODBC**
 
 在 ODBC 的 DSN 中添加 `default\_auth=mysql_clear_password` 和 `ENABLE_CLEARTEXT\_PLUGIN=1`，以及用户名和密码。
+
+### 使用 LDAP 通过 HTTP 或 Arrow Flight 连接
+
+HTTP API 与 Arrow Flight SQL 本来就是发送明文密码，所以 LDAP 用户在这两个入口上不需要任何额外设置：HTTP Basic 认证和 Arrow Flight 的用户名密码最终都走同一次 LDAP bind。用 `IDENTIFIED WITH authentication_ldap_simple` 创建的用户，以及 LDAP [安全集成](./security_integration.md)的用户，在这里的行为一致。参见[各认证方式在哪些入口可用](./authentication.mdx#各认证方式在哪些入口可用)。
+
+```Bash
+curl -u tom:<password> -H 'Content-Type: application/json' -XPOST \
+    http://<fe_host>:<fe_http_port>/api/v1/catalogs/default_catalog/databases/<db>/sql \
+    -d '{"query": "select current_user()"}'
+```

@@ -158,6 +158,9 @@ MetricRegistry::~MetricRegistry() noexcept {
         }
         for (auto metric : metrics) {
             _deregister_locked(metric);
+            if (metric->_registry == this) {
+                metric->_registry = nullptr;
+            }
         }
     }
     {

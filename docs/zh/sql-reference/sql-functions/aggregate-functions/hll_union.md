@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "hll_union 返回一组 HLL 值的并集。"
 ---
 
 

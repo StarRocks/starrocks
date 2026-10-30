@@ -40,29 +40,34 @@
 #include <string_view>
 
 #include "base/coding.h"
+#include "base/compression/block_compression.h"
 #include "base/hash/crc32c.h"
 #include "base/string/faststring.h"
 #include "base/utility/scoped_cleanup.h"
 #include "cache/mem_cache/page_cache.h"
+#include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column.h"
+#include "common/config_compression_fwd.h"
+#include "common/config_starlet_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/staros/starlet_filesystem.h"
 #include "fs/fs.h"
-#include "fs/fs_starlet.h"
+#include "fs/fs_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/raw_container_checked.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
 using strings::Substitute;
 
 Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
-                                  const std::vector<Slice>& body, faststring* compressed_body) {
+                                  const std::vector<Slice>& body, faststring* compressed_body,
+                                  const compression::ZstdCDict* cdict) {
     size_t uncompressed_size = Slice::compute_total_size(body);
     auto cleanup = MakeScopedCleanup([&]() { compressed_body->clear(); });
     if (codec != nullptr && codec->exceed_max_input_size(uncompressed_size)) {
@@ -70,14 +75,24 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         return Status::OK();
     }
     if (codec != nullptr && uncompressed_size > 0) {
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            RETURN_IF_ERROR(
-                    codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr));
+            // ZSTD always uses the compression pool, so the dictionary write path lives here.
+            // A non-null cdict takes the dictionary overload; ZstdBlockCompression ignores
+            // BlockCompressionOptions, so nothing is lost by not passing them.
+            if (cdict != nullptr) {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, cdict));
+            } else {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, compression_options));
+            }
         } else {
             compressed_body->resize(codec->max_compressed_len(uncompressed_size));
             Slice compressed_slice(*compressed_body);
-            RETURN_IF_ERROR(codec->compress(body, &compressed_slice));
+            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, compression_options));
             compressed_body->resize(compressed_slice.get_size());
         }
         double space_saving = 1.0 - static_cast<double>(compressed_body->size()) / uncompressed_size;
@@ -135,20 +150,6 @@ Status PageIO::write_page(WritableFile* wfile, const std::vector<Slice>& body, c
     return Status::OK();
 }
 
-// The unique key identifying entries in the page cache.
-// Each cached page corresponds to a specific offset within
-// a file.
-//
-// TODO(zc): Now we use file name(std::string) as a part of key,
-//  which is not efficient. We should make it better later
-std::string encode_cache_key(const std::string& fname, int64_t offset) {
-    std::string str;
-    str.reserve(fname.size() + sizeof(offset));
-    str.append(fname);
-    str.append((char*)&offset, sizeof(offset));
-    return str;
-}
-
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
 Status drop_local_cache_data(const std::string& fname) {
     if (!config::lake_clear_corrupted_cache_data) {
@@ -157,7 +158,7 @@ Status drop_local_cache_data(const std::string& fname) {
     if (!is_starlet_uri(fname)) {
         return Status::NotSupported("only support starlet file");
     }
-    auto fs_or = FileSystem::CreateSharedFromString(fname);
+    auto fs_or = FileSystemFactory::CreateSharedFromString(fname);
     if (!fs_or.ok()) {
         LOG(INFO) << "clear corrupted cache for " << fname << ", error:" << fs_or.status();
         return fs_or.status();
@@ -204,8 +205,23 @@ static Status read_page_from_file(const PageReadOptions& opts, std::unique_ptr<s
 
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
+        // Attribute this page from what this read actually did, not from a per-file flag: a starlet
+        // file's is_cache_hit() is fixed at open time and fslib never sets it, so it is always false.
+        // The cache stream adds exactly the requested bytes to bytes_read_local_disk for every block
+        // that hits, on the calling thread. So the page counts as local disk only when the local
+        // delta covers the whole page. A page that spans a hit block and a missed block counts as
+        // remote, because it had to wait for a remote fetch. bytes_read_remote is not consulted:
+        // an async prefetch on another thread can bump it in the middle of a read that fully hit.
+        // Streams without IO stats (posix, memory) report no local bytes, so their pages stay remote
+        // as before. A coalescing stream fills a whole merged range on the first page read in it, so
+        // its delta also covers other pages and says nothing about this page's own bytes; its pages
+        // stay remote as before too.
+        const int64_t local_bytes_before = opts.read_file->get_io_stats_snapshot().bytes_read_local_disk;
         RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, slice.data, slice.size));
-        if (opts.read_file->is_cache_hit()) {
+        const int64_t local_bytes_read =
+                opts.read_file->get_io_stats_snapshot().bytes_read_local_disk - local_bytes_before;
+        if (local_bytes_read >= static_cast<int64_t>(page_size) &&
+            dynamic_cast<SharedBufferedInputStream*>(opts.read_file) == nullptr) {
             ++opts.stats->pages_from_local_disk;
         }
         opts.stats->compressed_bytes_read_request += page_size;
@@ -268,7 +284,14 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 
     Slice compressed_body(page_slice->data, body_size);
     Slice decompressed_body(decompressed->data(), decompressed_size);
-    RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    // Reference the per-column dictionary when the page has one. A frame that does
+    // not reference a dictionary decodes the same either way, so this is safe for
+    // plain pages and for value-dictionary pages in the same column.
+    if (opts.dict != nullptr) {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict));
+    } else {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    }
 
     if (decompressed_body.size != decompressed_size) {
         return Status::Corruption(strings::Substitute("Bad page: uncompressed size mismatch ($0 vs $1), file=$2",
@@ -321,7 +344,11 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
     bool page_cache_available = (cache != nullptr) && cache->available();
 #endif
     PageCacheHandle cache_handle;
-    std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_pointer.offset);
+    // Let the stream produce its own page-cache key for opts.page_pointer.offset. For non-bundled
+    // streams this is just (filename, offset); for bundle slices the override folds in the slice
+    // base offset so two slices of the same physical file never collide at equal stream-relative
+    // offsets. Callers do not need to know whether the stream is a slice.
+    std::string cache_key = opts.read_file->page_cache_key(opts.page_pointer.offset);
     if (opts.use_page_cache && page_cache_available && cache->lookup(cache_key, &cache_handle)) {
         return parse_page_from_cache(handle, body, footer, &cache_handle, opts);
     }

@@ -17,16 +17,17 @@ package com.starrocks.sql.optimizer.statistics;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.connector.statistics.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorHistogramColumnStatsCacheLoader;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
@@ -37,6 +38,7 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.logging.log4j.LogManager;
@@ -50,17 +52,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static com.starrocks.metric.MetricRepo.SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL;
 
 public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CachedStatisticStorage.class);
 
-    private final Executor statsCacheRefresherExecutor = Executors.newFixedThreadPool(Config.statistic_cache_thread_pool_size,
-            new ThreadFactoryBuilder().setDaemon(true).setNameFormat("stats-cache-refresher-%d").build());
+    private final Executor statsCacheRefresherExecutor =
+            ThreadPoolManager.newDaemonFixedThreadPoolWithUnboundedQueue(Config.statistic_cache_thread_pool_size,
+                    "stats-cache-refresher", true);
 
     AsyncLoadingCache<TableStatsCacheKey, Optional<Long>> tableStatsCache =
             createAsyncLoadingCache(new TableStatsCacheLoader());
@@ -95,6 +101,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> result = tableStatsCache.getAll(keys);
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s".formatted(tableId));
             if (result.isDone()) {
                 Map<TableStatsCacheKey, Optional<Long>> data = result.get();
                 return keys.stream().collect(Collectors.toMap(TableStatsCacheKey::getPartitionId,
@@ -109,6 +116,27 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         return partitions.stream().collect(Collectors.toMap(Partition::getId, p -> Optional.empty()));
     }
 
+    /**
+     * Applies an explicit refresh to {@code cache}. The loaded values replace the old ones; a requested key that is
+     * missing from the result (the loader could not load it, e.g. before the FE is ready) or a failed load invalidates
+     * the old value instead of leaving it in place as if it were current, so the next access loads it again.
+     */
+    private static <K, V> CompletableFuture<Void> applyRefresh(AsyncLoadingCache<K, V> cache, List<K> keys,
+                                                               CompletableFuture<Map<K, V>> future) {
+        return future.handle((result, e) -> {
+            if (e != null || result == null) {
+                cache.synchronous().invalidateAll(keys);
+                return null;
+            }
+            cache.synchronous().putAll(result);
+            if (result.size() < keys.size()) {
+                cache.synchronous().invalidateAll(
+                        keys.stream().filter(key -> !result.containsKey(key)).collect(Collectors.toList()));
+            }
+            return null;
+        });
+    }
+
     @Override
     public void refreshTableStatistic(Table table, boolean isSync) {
         List<TableStatsCacheKey> statsCacheKeyList = new ArrayList<>();
@@ -120,11 +148,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             TableStatsCacheLoader loader = new TableStatsCacheLoader();
             CompletableFuture<Map<TableStatsCacheKey, Optional<Long>>> future = loader.asyncLoadAll(statsCacheKeyList,
                     statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(tableStatsCache, statsCacheKeyList, future);
             if (isSync) {
-                Map<TableStatsCacheKey, Optional<Long>> result = future.get();
-                tableStatsCache.synchronous().putAll(result);
-            } else {
-                future.whenComplete((result, e) -> tableStatsCache.synchronous().putAll(result));
+                applied.get();
             }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute refreshTableStatistic", e);
@@ -154,11 +180,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             ColumnBasicStatsCacheLoader loader = new ColumnBasicStatsCacheLoader();
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> future =
                     loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(columnStatistics, cacheKeys, future);
             if (isSync) {
-                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = future.get();
-                columnStatistics.synchronous().putAll(result);
-            } else {
-                future.whenComplete((res, e) -> columnStatistics.synchronous().putAll(res));
+                applied.get();
             }
         } catch (Exception e) {
             LOG.warn("Failed to refresh getColumnStatistics", e);
@@ -184,11 +208,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             ColumnHistogramStatsCacheLoader loader = new ColumnHistogramStatsCacheLoader();
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> future =
                     loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(histogramCache, cacheKeys, future);
             if (isSync) {
-                Map<ColumnStatsCacheKey, Optional<Histogram>> result = future.get();
-                histogramCache.synchronous().putAll(result);
-            } else {
-                future.whenComplete((res, e) -> histogramCache.synchronous().putAll(res));
+                applied.get();
             }
         } catch (Exception e) {
             LOG.warn("Failed to refresh histogram", e);
@@ -233,13 +255,21 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 List<ConnectorTableColumnStats> columnStatistics = new ArrayList<>();
                 Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> realResult;
                 realResult = result.get();
+                // Looked up on the first column that has statistics and shared by the rest: it rebuilds the
+                // table, so doing it per column made planning quadratic in the column count.
+                ExternalBasicStatsMeta basicStatsMeta = null;
+                boolean basicStatsMetaResolved = false;
                 for (String column : columns) {
                     Optional<ConnectorTableColumnStats> columnStatistic =
                             realResult.getOrDefault(new ConnectorTableColumnKey(table.getUUID(), column),
                                     Optional.empty());
                     if (columnStatistic.isPresent()) {
-                        columnStatistics.add(
-                                StatisticsUtils.estimateColumnStatistics(table, column, columnStatistic.get()));
+                        if (!basicStatsMetaResolved) {
+                            basicStatsMeta = StatisticsUtils.getExternalBasicStatsMeta(table);
+                            basicStatsMetaResolved = true;
+                        }
+                        columnStatistics.add(StatisticsUtils.estimateColumnStatistics(table, column,
+                                columnStatistic.get(), basicStatsMeta));
                     } else {
                         columnStatistics.add(ConnectorTableColumnStats.unknown());
                     }
@@ -250,6 +280,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute connectorTableCachedStatistics.getAll", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return getDefaultConnectorTableStatistics(columns);
         }
     }
@@ -302,26 +335,42 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
-    public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
-        Preconditions.checkState(table != null);
-        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+    public void invalidateConnectorTableColumnStatistics(String tableUUID, List<String> columns) {
+        if (tableUUID == null || tableUUID.isEmpty() || columns == null) {
             return;
         }
+        List<ConnectorTableColumnKey> allKeys = columns.stream()
+                .map(column -> new ConnectorTableColumnKey(tableUUID, column))
+                .collect(Collectors.toList());
+        connectorTableCachedStatistics.synchronous().invalidateAll(allKeys);
+    }
 
+    @Override
+    public void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
+        Preconditions.checkState(table != null);
         List<ConnectorTableColumnKey> cacheKeys = new ArrayList<>();
         for (String column : columns) {
             cacheKeys.add(new ConnectorTableColumnKey(table.getUUID(), column));
+        }
+
+        if (!GlobalStateMgr.getCurrentState().isReady()) {
+            // The loader cannot query before ready (e.g. journal replay at startup, or a lagging follower).
+            // Drop the old values so they are not served as current, and let the next access reload them.
+            connectorTableCachedStatistics.synchronous().invalidateAll(cacheKeys);
+            return;
+        }
+
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return;
         }
 
         try {
             ConnectorColumnStatsCacheLoader loader = new ConnectorColumnStatsCacheLoader();
             CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
                     loader.asyncLoadAll(cacheKeys, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = applyRefresh(connectorTableCachedStatistics, cacheKeys, future);
             if (isSync) {
-                Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
-                connectorTableCachedStatistics.synchronous().putAll(result);
-            } else {
-                future.whenComplete((res, e) -> connectorTableCachedStatistics.synchronous().putAll(res));
+                applied.get();
             }
         } catch (Exception e) {
             LOG.warn("Failed to refresh getConnectorTableStatistics", e);
@@ -342,7 +391,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         }
         try {
             CompletableFuture<Optional<ColumnStatistic>> result =
-                        columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+                    columnStatistics.get(new ColumnStatsCacheKey(table.getId(), column));
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, column: %s".formatted(table.getId(), column));
             if (result.isDone()) {
                 Optional<ColumnStatistic> realResult;
                 realResult = result.get();
@@ -352,6 +402,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getColumnStatistic", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return ColumnStatistic.unknown();
         }
     }
@@ -379,6 +432,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<ColumnStatistic>>> result =
                     columnStatistics.getAll(cacheKeys);
+
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, columns: [%s]".formatted(table.getId(),
+                    stringifyColumnCacheKeys(cacheKeys)));
             if (result.isDone()) {
                 List<ColumnStatistic> columnStatistics = new ArrayList<>();
                 Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> realResult;
@@ -398,6 +454,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getColumnStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return getDefaultColumnStatisticList(columns);
         }
     }
@@ -414,9 +473,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<PartitionStats>>> resultFuture =
                     partitionStatistics.getAll(cacheKeys);
-            if (Config.enable_sync_statistics_load) {
-                resultFuture.get();
-            }
+            waitForStatsFutureIfWaitEnabled(resultFuture, () -> "tableId: %s, columns: [%s]".formatted(table.getId(),
+                    stringifyColumnCacheKeys(cacheKeys)));
 
             if (resultFuture.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<PartitionStats>> result = resultFuture.get();
@@ -513,8 +571,27 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
+    public void addHistogramStatistics(Table table, String column, Histogram histogram) {
+        this.histogramCache.synchronous()
+                .put(new ColumnStatsCacheKey(table.getId(), column), Optional.of(histogram));
+    }
+
+    @Override
     public Map<String, Histogram> getHistogramStatistics(Table table, List<String> columns) {
         Preconditions.checkState(table != null);
+
+        // Skip loading histogram statistics when we are inside a statistics-collect connection
+        // (recursion guard) or when the target is a statistics-internal table, or when the
+        // statistics tables are not in a healthy state. Without this guard a histogram-collect
+        // INSERT that holds the histogram_statistics READ lock would synchronously load the
+        // histogram of its own source table, and that loader re-acquires the histogram_statistics
+        // READ lock -> self-deadlock. This mirrors the guard already present in getColumnStatistics.
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return Maps.newHashMap();
+        }
+        if (!StatisticUtils.checkStatisticTableStateNormal()) {
+            return Maps.newHashMap();
+        }
 
         List<String> columnHasHistogram = new ArrayList<>();
         for (String columnName : columns) {
@@ -532,6 +609,8 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Map<ColumnStatsCacheKey, Optional<Histogram>>> result = histogramCache.getAll(cacheKeys);
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s, columns: [%s]".formatted(tableId,
+                    stringifyColumnCacheKeys(cacheKeys)));
             if (result.isDone()) {
                 Map<ColumnStatsCacheKey, Optional<Histogram>> realResult;
                 realResult = result.get();
@@ -548,6 +627,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getHistogramStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return Maps.newHashMap();
         }
     }
@@ -579,6 +661,9 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             }
         } catch (Exception e) {
             LOG.warn("Failed to execute getConnectorHistogramStatistics", e);
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             return Maps.newHashMap();
         }
     }
@@ -595,7 +680,6 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
         histogramCache.synchronous().invalidateAll(allKeys);
     }
 
-
     @Override
     public void expireConnectorHistogramStatistics(Table table, List<String> columns) {
         if (table == null || columns == null) {
@@ -606,6 +690,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             ConnectorTableColumnKey key = new ConnectorTableColumnKey(table.getUUID(), column);
             allKeys.add(key);
         }
+        connectorHistogramCache.synchronous().invalidateAll(allKeys);
+    }
+
+    @Override
+    public void invalidateConnectorHistogramStatistics(String tableUUID, List<String> columns) {
+        if (tableUUID == null || tableUUID.isEmpty() || columns == null) {
+            return;
+        }
+        List<ConnectorTableColumnKey> allKeys = columns.stream()
+                .map(column -> new ConnectorTableColumnKey(tableUUID, column))
+                .collect(Collectors.toList());
         connectorHistogramCache.synchronous().invalidateAll(allKeys);
     }
 
@@ -633,6 +728,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
 
         try {
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> result = multiColumnStats.get(tableId);
+            waitForStatsFutureIfWaitEnabled(result, () -> "tableId: %s".formatted(tableId));
             if (result.isDone()) {
                 Optional<MultiColumnCombinedStatistics> data = result.get();
                 return data.orElse(MultiColumnCombinedStatistics.EMPTY);
@@ -647,7 +743,7 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
     }
 
     @Override
-    public void refreshMultiColumnStatistics(Long tableId,  boolean isSync) {
+    public void refreshMultiColumnStatistics(Long tableId, boolean isSync) {
         try {
             if (StatisticUtils.statisticTableBlackListCheck(tableId) ||
                     !StatisticUtils.checkStatisticTableStateNormal()) {
@@ -657,12 +753,17 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
             MultiColumnCombinedStatsCacheLoader loader = new MultiColumnCombinedStatsCacheLoader();
             CompletableFuture<Optional<MultiColumnCombinedStatistics>> future =
                     loader.asyncLoad(tableId, statsCacheRefresherExecutor);
+            CompletableFuture<Void> applied = future.handle((res, e) -> {
+                // A failed refresh must not leave the old value in place as if it were current.
+                if (e != null || res == null) {
+                    multiColumnStats.synchronous().invalidate(tableId);
+                } else {
+                    multiColumnStats.synchronous().put(tableId, res);
+                }
+                return null;
+            });
             if (isSync) {
-                Optional<MultiColumnCombinedStatistics> result = future.get();
-                multiColumnStats.synchronous().put(tableId, result);
-            } else {
-                future.whenComplete((res, e) ->
-                        multiColumnStats.synchronous().put(tableId, res));
+                applied.get();
             }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute refresh multi-column combined statistics", e);
@@ -701,17 +802,91 @@ public class CachedStatisticStorage implements StatisticStorage, MemoryTrackable
                 .build();
     }
 
+    public Map<String, LoadingCache<?, ?>> getNamedCacheMap() {
+        return ImmutableMap.<String, LoadingCache<?, ?>>builder()
+                .put("table_stats", tableStatsCache.synchronous())
+                .put("column_stats", columnStatistics.synchronous())
+                .put("partition_stats", partitionStatistics.synchronous())
+                .put("connector_table_stats", connectorTableCachedStatistics.synchronous())
+                .put("histogram_stats", histogramCache.synchronous())
+                .put("connector_histogram_stats", connectorHistogramCache.synchronous())
+                .put("multi_column_stats", multiColumnStats.synchronous())
+                .build();
+    }
+
     private <K, V> AsyncLoadingCache<K, V> createAsyncLoadingCache(AsyncCacheLoader<K, V> cacheLoader) {
         Caffeine<Object, Object> cacheBuilder = Caffeine.newBuilder()
                 .expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
                 .maximumSize(Config.statistic_cache_columns)
                 .executor(statsCacheRefresherExecutor);
-        
+
         // Only enable refreshAfterWrite if the config is enabled
         if (Config.enable_statistic_cache_refresh_after_write) {
             cacheBuilder.refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS);
         }
-        
+
+        if (Config.enable_statistic_cache_metrics) {
+            cacheBuilder.recordStats();
+        }
+
         return cacheBuilder.buildAsync(cacheLoader);
+    }
+
+    private <T> void waitForStatsFutureIfWaitEnabled(CompletableFuture<T> future, Supplier<String> contextSupplier)
+            throws InterruptedException, ExecutionException {
+        if (!Config.enable_sync_statistics_load) {
+            return;
+        }
+
+        final var desiredTimeoutMs = Config.sync_statistics_load_timeout_ms;
+        if (desiredTimeoutMs <= 0) {
+            return;
+        }
+
+        final var statisticsLoadBudget = getStatisticsLoadBudget();
+        final var hasStatisticsLoadBudget = statisticsLoadBudget != null;
+        final var timeoutMs = hasStatisticsLoadBudget ?
+                statisticsLoadBudget.getRemainingTimeoutMs(desiredTimeoutMs) : desiredTimeoutMs;
+        if (timeoutMs <= 0) {
+            increaseSyncStatsBudgetExceededIfBudgetExhausted(statisticsLoadBudget);
+            return;
+        }
+
+        long startNanos = System.nanoTime();
+        boolean isTimeout = false;
+        try {
+            future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            isTimeout = true;
+            LOG.warn("Timeout waiting for stats to be loaded into the cache. (timeout: {}ms, context: {})",
+                    timeoutMs, contextSupplier.get());
+        } finally {
+            if (hasStatisticsLoadBudget) {
+                statisticsLoadBudget.recordWait(System.nanoTime() - startNanos);
+            }
+        }
+        if (isTimeout) {
+            increaseSyncStatsBudgetExceededIfBudgetExhausted(statisticsLoadBudget);
+        }
+    }
+
+    private void increaseSyncStatsBudgetExceededIfBudgetExhausted(StatisticsLoadBudget statisticsLoadBudget) {
+        if (statisticsLoadBudget != null && statisticsLoadBudget.getRemainingBudgetMs() <= 0) {
+            SYNC_STATS_LOAD_BUDGET_EXHAUSTED_TOTAL.increase(1L);
+        }
+    }
+
+    private StatisticsLoadBudget getStatisticsLoadBudget() {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null) {
+            return null;
+        }
+        return connectContext.getStatisticsLoadBudget();
+    }
+
+    private static String stringifyColumnCacheKeys(Collection<ColumnStatsCacheKey> columnStatsCacheKeys) {
+        return columnStatsCacheKeys.stream() //
+                .map(ColumnStatsCacheKey::toString) //
+                .collect(Collectors.joining(", "));
     }
 }

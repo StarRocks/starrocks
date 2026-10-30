@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
@@ -152,12 +153,17 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         EquationRewriter queryExprToMvExprRewriter =
                 buildEquationRewriter(mvProjection, rewriteContext, false);
 
+        if (isRollup && !canRewriteRollupWithMvAggregatePredicate(rewriteContext, mvAggOp, queryAggOp,
+                mvGroupingKeys, queryGroupingKeys, queryRangePredicate, queryExprToMvExprRewriter, columnRewriter)) {
+            return null;
+        }
+
         if (isRollup) {
             return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                     rewriteContext, mvOptExpr);
         } else {
             Pair<OptExpression, Boolean> result =
-                    rewriteProjection(rewriteContext, queryAggOp, queryExprToMvExprRewriter, mvOptExpr);
+                    rewriteProjection(rewriteContext, mvAggOp, queryAggOp, queryExprToMvExprRewriter, mvOptExpr);
             // even if query and mv's group-by keys are the same, it may still need rollup
             // eg:
             // example1:
@@ -171,6 +177,19 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
             if (result.first != null && !result.second) {
                 return result.first;
             } else if (result.second) {
+                if (!canRewriteRollupWithMvAggregatePredicate(rewriteContext, mvAggOp, queryAggOp,
+                        mvGroupingKeys, queryGroupingKeys, queryRangePredicate,
+                        queryExprToMvExprRewriter, columnRewriter)) {
+                    return null;
+                }
+                // Everything below reads the rollup decision back off the context -- EquationRewriter
+                // hands rewriteContext.isRollup() to the shuttle, which is what makes
+                // AggregateFunctionRewriter build a rollup avg (column refs over sum/count added to
+                // the aggregation) instead of the plain expansion divide(sum(x), count(x)). Taking
+                // the rollup path while the context still says "not a rollup" produced an aggregation
+                // node with no aggregate functions and left the sum/count in the projection above it,
+                // which is exactly the invalid plan this retry exists to avoid.
+                rewriteContext.setRollup(true);
                 return rewriteForRollup(queryAggOp, queryGroupingKeys, columnRewriter, queryExprToMvExprRewriter,
                         rewriteContext, mvOptExpr);
             } else {
@@ -179,18 +198,35 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         }
     }
 
+    /**
+     * Whether the rewritten expression still contains an aggregate function ANYWHERE in its tree.
+     *
+     * <p>A non-rollup rewrite drops the query's aggregation node, so whatever it returns becomes a
+     * scalar projection over the mv scan. An aggregate that survives into that projection has no
+     * aggregation node left to evaluate it, and the BE has no factory for an AGG_EXPR inside an
+     * expression tree -- it fails the query with
+     * "Vectorized engine does not support the operator, node_type: 0".
+     *
+     * <p>Looking at the root operator alone missed every aggregate the rewrite wraps in a scalar.
+     * `avg(k)` is expanded to divide(cast(sum(k)), cast(count(k))), whose root is the division, and
+     * a query like hll_cardinality(hll_union(...)) keeps its aggregate under a scalar call. Both
+     * were accepted as "not an aggregate" and reached the BE as a projection over the mv.
+     */
     private boolean isAggregate(ScalarOperator rewritten) {
-        if (rewritten == null || !(rewritten instanceof CallOperator)) {
+        if (rewritten == null) {
             return false;
         }
-        CallOperator callOp = (CallOperator) rewritten;
-        return callOp.isAggregate();
+        if (rewritten instanceof CallOperator && ((CallOperator) rewritten).isAggregate()) {
+            return true;
+        }
+        return rewritten.getChildren().stream().anyMatch(this::isAggregate);
     }
 
     /**
      * If rewritten aggregate expr contains aggregate functions, we can still try rollup rewrite again.
      */
     protected Pair<OptExpression, Boolean> rewriteProjection(RewriteContext rewriteContext,
+                                                             LogicalAggregationOperator mvAggregationOperator,
                                                              LogicalAggregationOperator queryAggregationOperator,
                                                              EquationRewriter queryExprToMvExprRewriter,
                                                              OptExpression mvOptExpr) {
@@ -231,41 +267,27 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         Projection newProjection = new Projection(newQueryProjection);
         mvOptExpr.getOp().setProjection(newProjection);
 
+        Map<ColumnRefOperator, ScalarOperator> queryColumnRefToScalarMap = null;
+        if (queryAggregationOperator.getPredicate() != null || mvAggregationOperator.getPredicate() != null) {
+            Pair<Map<ColumnRefOperator, ScalarOperator>, Boolean> result =
+                    rewriteAggregatePredicateColumns(rewriteContext, queryAggregationOperator,
+                            queryExprToMvExprRewriter, columnRewriter, originalColumnSet, aggregateFunctionRewriter);
+            if (result.first == null) {
+                return Pair.create(null, result.second);
+            }
+            queryColumnRefToScalarMap = result.first;
+        }
+        ReplaceColumnRefRewriter rewriter = queryColumnRefToScalarMap == null ? null :
+                new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
+
+        if (mvAggregationOperator.getPredicate() != null &&
+                !canCompensateMvAggregatePredicate(rewriteContext, mvAggregationOperator,
+                        queryAggregationOperator, rewriter)) {
+            return Pair.create(null, false);
+        }
+
         // rewrite aggregate having expr: add aggregate's predicate compensation after group by.
         if (queryAggregationOperator.getPredicate() != null) {
-            // NOTE: If there are having expr in agg, ensure all aggregate functions should put into new projections
-            Map<ColumnRefOperator, ScalarOperator> queryColumnRefToScalarMap = Maps.newHashMap();
-            for (Map.Entry<ColumnRefOperator, CallOperator> entry : oldAggregations.entrySet()) {
-                ScalarOperator scalarOp = entry.getValue();
-                ScalarOperator mapped = rewriteContext.getQueryColumnRefRewriter().rewrite(scalarOp.clone());
-                ScalarOperator swapped = columnRewriter.rewriteByQueryEc(mapped);
-                ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, swapped,
-                        queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
-                        originalColumnSet, aggregateFunctionRewriter);
-                // for non-rollup rewrite, the rewritten result should not contain aggregate functions.
-                boolean isAggregate = isAggregate(rewritten);
-                if (rewritten == null || isAggregate) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
-                            "Rewrite aggregate with having expr failed: {}", scalarOp.toString());
-                    return Pair.create(null, isAggregate);
-                }
-                queryColumnRefToScalarMap.put(entry.getKey(), rewritten);
-            }
-            for (ColumnRefOperator groupKey : queryAggregationOperator.getGroupingKeys()) {
-                ScalarOperator mapped = rewriteContext.getQueryColumnRefRewriter().rewrite(groupKey.clone());
-                ScalarOperator swapped = columnRewriter.rewriteByQueryEc(mapped);
-                ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, swapped,
-                        queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
-                        originalColumnSet, aggregateFunctionRewriter);
-                boolean isAggregate = isAggregate(rewritten);
-                if (rewritten == null || isAggregate) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
-                            "Mapping grouping key failed: {}", groupKey.toString());
-                    return Pair.create(null, isAggregate);
-                }
-                queryColumnRefToScalarMap.put(groupKey, rewritten);
-            }
-            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(queryColumnRefToScalarMap);
             ScalarOperator aggPredicate = queryAggregationOperator.getPredicate();
             ScalarOperator rewrittenPred = rewriter.rewrite(aggPredicate);
             if (rewrittenPred == null) {
@@ -281,6 +303,190 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
         }
 
         return Pair.create(mvOptExpr, false);
+    }
+
+    private Pair<Map<ColumnRefOperator, ScalarOperator>, Boolean> rewriteAggregatePredicateColumns(
+            RewriteContext rewriteContext,
+            LogicalAggregationOperator queryAggregationOperator,
+            EquationRewriter queryExprToMvExprRewriter,
+            ColumnRewriter columnRewriter,
+            ColumnRefSet originalColumnSet,
+            AggregateFunctionRewriter aggregateFunctionRewriter) {
+        // NOTE: If there are having expr in agg, ensure all aggregate functions should put into new projections
+        Map<ColumnRefOperator, ScalarOperator> queryColumnRefToScalarMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : queryAggregationOperator.getAggregations().entrySet()) {
+            ScalarOperator scalarOp = entry.getValue();
+            ScalarOperator mapped = rewriteContext.getQueryColumnRefRewriter().rewrite(scalarOp.clone());
+            ScalarOperator swapped = columnRewriter.rewriteByQueryEc(mapped);
+            ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, swapped,
+                    queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
+                    originalColumnSet, aggregateFunctionRewriter);
+            // for non-rollup rewrite, the rewritten result should not contain aggregate functions.
+            boolean isAggregate = isAggregate(rewritten);
+            if (rewritten == null || isAggregate) {
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                        "Rewrite aggregate with having expr failed: {}", scalarOp.toString());
+                return Pair.create(null, isAggregate);
+            }
+            queryColumnRefToScalarMap.put(entry.getKey(), rewritten);
+        }
+        for (ColumnRefOperator groupKey : queryAggregationOperator.getGroupingKeys()) {
+            ScalarOperator mapped = rewriteContext.getQueryColumnRefRewriter().rewrite(groupKey.clone());
+            ScalarOperator swapped = columnRewriter.rewriteByQueryEc(mapped);
+            ScalarOperator rewritten = rewriteScalarOperator(rewriteContext, swapped,
+                    queryExprToMvExprRewriter, rewriteContext.getOutputMapping(),
+                    originalColumnSet, aggregateFunctionRewriter);
+            boolean isAggregate = isAggregate(rewritten);
+            if (rewritten == null || isAggregate) {
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                        "Mapping grouping key failed: {}", groupKey.toString());
+                return Pair.create(null, isAggregate);
+            }
+            queryColumnRefToScalarMap.put(groupKey, rewritten);
+        }
+        return Pair.create(queryColumnRefToScalarMap, false);
+    }
+
+    private boolean canCompensateMvAggregatePredicate(RewriteContext rewriteContext,
+                                                      LogicalAggregationOperator mvAggregationOperator,
+                                                      LogicalAggregationOperator queryAggregationOperator,
+                                                      ReplaceColumnRefRewriter queryPredicateRewriter) {
+        ScalarOperator mvPredicate = mvAggregationOperator.getPredicate();
+        ScalarOperator queryPredicate = queryAggregationOperator.getPredicate();
+        if (queryPredicate == null) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "Rewrite aggregate with MV HAVING predicate failed because query has no HAVING predicate: {}",
+                    mvPredicate);
+            return false;
+        }
+
+        ScalarOperator rewrittenQueryPredicate = queryPredicateRewriter.rewrite(queryPredicate.clone());
+        ScalarOperator rewrittenMvPredicate = rewriteMvAggregatePredicate(rewriteContext, mvPredicate);
+        if (rewrittenQueryPredicate == null || rewrittenMvPredicate == null) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "Rewrite aggregate with MV HAVING predicate failed, query predicate: {}, mv predicate: {}",
+                    queryPredicate, mvPredicate);
+            return false;
+        }
+
+        if (!canCompensateAggregatePredicate(rewrittenQueryPredicate, rewrittenMvPredicate)) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "Rewrite aggregate with MV HAVING predicate failed, query HAVING does not imply MV HAVING, " +
+                            "query: {}, mv: {}", rewrittenQueryPredicate, rewrittenMvPredicate);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean canRewriteRollupWithMvAggregatePredicate(RewriteContext rewriteContext,
+                                                             LogicalAggregationOperator mvAggregationOperator,
+                                                             LogicalAggregationOperator queryAggregationOperator,
+                                                             List<ScalarOperator> mvGroupingKeys,
+                                                             List<ScalarOperator> queryGroupingKeys,
+                                                             ScalarOperator queryRangePredicate,
+                                                             EquationRewriter queryExprToMvExprRewriter,
+                                                             ColumnRewriter columnRewriter) {
+        if (mvAggregationOperator.getPredicate() == null) {
+            return true;
+        }
+        if (requiresGroupingRollup(mvGroupingKeys, queryGroupingKeys, queryRangePredicate)) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "Rollup aggregate with MV HAVING predicate is unsafe when MV grouping keys are finer " +
+                            "than query grouping keys, mv grouping keys:{}, query grouping keys:{}",
+                    mvGroupingKeys, queryGroupingKeys);
+            return false;
+        }
+        return canCompensateMvAggregatePredicateForRollup(rewriteContext, mvAggregationOperator,
+                queryAggregationOperator, queryExprToMvExprRewriter, columnRewriter);
+    }
+
+    private boolean canCompensateMvAggregatePredicateForRollup(RewriteContext rewriteContext,
+                                                               LogicalAggregationOperator mvAggregationOperator,
+                                                               LogicalAggregationOperator queryAggregationOperator,
+                                                               EquationRewriter queryExprToMvExprRewriter,
+                                                               ColumnRewriter columnRewriter) {
+        AggregateFunctionRewriter aggregateFunctionRewriter =
+                new AggregateFunctionRewriter(queryExprToMvExprRewriter,
+                        rewriteContext.getQueryRefFactory(), queryAggregationOperator.getAggregations());
+        Pair<Map<ColumnRefOperator, ScalarOperator>, Boolean> result =
+                rewriteAggregatePredicateColumns(rewriteContext, queryAggregationOperator,
+                        queryExprToMvExprRewriter, columnRewriter,
+                        new ColumnRefSet(rewriteContext.getQueryColumnSet()), aggregateFunctionRewriter);
+        if (result.first == null || result.second) {
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
+                    "Rewrite rollup aggregate with MV HAVING predicate failed: cannot rewrite aggregate predicate");
+            return false;
+        }
+        return canCompensateMvAggregatePredicate(rewriteContext, mvAggregationOperator,
+                queryAggregationOperator, new ReplaceColumnRefRewriter(result.first));
+    }
+
+    private ScalarOperator rewriteMvAggregatePredicate(RewriteContext rewriteContext, ScalarOperator mvPredicate) {
+        ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteContext.getOutputMapping());
+        ScalarOperator rewritten = rewriter.rewrite(mvPredicate.clone());
+        ColumnRefSet mvScanOutputColumnSet = new ColumnRefSet(rewriteContext.getOutputMapping().values());
+        if (!mvScanOutputColumnSet.containsAll(rewritten.getUsedColumns())) {
+            return null;
+        }
+        return rewritten;
+    }
+
+    private boolean canCompensateAggregatePredicate(ScalarOperator queryPredicate, ScalarOperator mvPredicate) {
+        PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+        PredicateSplit mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
+
+        ScalarOperator rangeCompensation = getAggregatePredicateCompensation(
+                queryPredicateSplit.getRangePredicates(), mvPredicateSplit.getRangePredicates(), true);
+        if (rangeCompensation == null) {
+            return false;
+        }
+
+        ScalarOperator queryResidualPredicate = Utils.compoundAnd(queryPredicateSplit.getEqualPredicates(),
+                queryPredicateSplit.getResidualPredicates());
+        ScalarOperator mvResidualPredicate = Utils.compoundAnd(mvPredicateSplit.getEqualPredicates(),
+                mvPredicateSplit.getResidualPredicates());
+        return getAggregatePredicateCompensation(queryResidualPredicate, mvResidualPredicate, false) != null;
+    }
+
+    private ScalarOperator getAggregatePredicateCompensation(ScalarOperator queryPredicate,
+                                                             ScalarOperator mvPredicate,
+                                                             boolean isRangePredicate) {
+        if (queryPredicate == null && mvPredicate == null) {
+            return ConstantOperator.TRUE;
+        } else if (queryPredicate == null) {
+            return null;
+        } else if (mvPredicate == null) {
+            return MvUtils.canonizePredicate(queryPredicate);
+        }
+
+        ScalarOperator canonizedQueryPredicate =
+                MvUtils.canonizePredicateForRewrite(queryMaterializationContext, queryPredicate);
+        ScalarOperator canonizedMvPredicate =
+                MvUtils.canonizePredicateForRewrite(queryMaterializationContext, mvPredicate);
+        ScalarOperator compensation;
+        if (isRangePredicate) {
+            RangeSimplifier simplifier = new RangeSimplifier(canonizedQueryPredicate);
+            compensation = simplifier.simplify(canonizedMvPredicate);
+        } else {
+            compensation = MvUtils.getCompensationPredicateForDisjunctive(
+                    canonizedQueryPredicate, canonizedMvPredicate);
+            if (compensation == null) {
+                compensation = getAggregateResidualPredicateCompensation(
+                        canonizedQueryPredicate, canonizedMvPredicate);
+            }
+        }
+        return compensation == null ? null : MvUtils.canonizePredicate(compensation);
+    }
+
+    private ScalarOperator getAggregateResidualPredicateCompensation(ScalarOperator queryPredicate,
+                                                                     ScalarOperator mvPredicate) {
+        List<ScalarOperator> queryConjuncts = Utils.extractConjuncts(queryPredicate);
+        List<ScalarOperator> mvConjuncts = Utils.extractConjuncts(mvPredicate);
+        if (new HashSet<>(queryConjuncts).containsAll(mvConjuncts)) {
+            queryConjuncts.removeAll(mvConjuncts);
+            return queryConjuncts.isEmpty() ? ConstantOperator.TRUE : Utils.compoundAnd(queryConjuncts);
+        }
+        return null;
     }
 
     private ScalarOperator rewriteScalarOperator(RewriteContext rewriteContext,
@@ -318,9 +524,17 @@ public final class AggregatedMaterializedViewRewriter extends MaterializedViewRe
                                       List<ScalarOperator> queryGroupingKeys,
                                       ScalarOperator queryRangePredicate) {
         MaterializedView mv = mvRewriteContext.getMaterializationContext().getMv();
-        if (mv.getRefreshScheme().isSync() && mv.getDefaultDistributionInfo() instanceof RandomDistributionInfo) {
+        // Range synchronous indexes can contain the same group in different logical partitions.
+        if (mv.getRefreshScheme().isSync() &&
+                (mv.getDefaultDistributionInfo() instanceof RandomDistributionInfo || mv.isRangeDistribution())) {
             return true;
         }
+        return requiresGroupingRollup(mvGroupingKeys, queryGroupingKeys, queryRangePredicate);
+    }
+
+    private boolean requiresGroupingRollup(List<ScalarOperator> mvGroupingKeys,
+                                           List<ScalarOperator> queryGroupingKeys,
+                                           ScalarOperator queryRangePredicate) {
         // after equivalence class rewrite, there may be same group keys, so here just get the distinct grouping keys
         List<ScalarOperator> distinctMvKeys = mvGroupingKeys.stream().distinct().collect(Collectors.toList());
         BitSet matchedGroupByKeySet = new BitSet(distinctMvKeys.size());

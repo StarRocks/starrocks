@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Adds a BE or CN node to the BE and CN Blacklist."
 ---
 
 # ADD BACKEND/COMPUTE NOTE BLACKLIST

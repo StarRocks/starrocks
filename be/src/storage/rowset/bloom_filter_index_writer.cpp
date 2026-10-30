@@ -41,16 +41,16 @@
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
 #include "base/string/utf8.h"
+#include "common/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "fs/fs.h"
-#include "storage/olap_type_infra.h"
-#include "storage/rowset/common.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
-#include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/logical_type.h"
-#include "types/type_traits.h"
-#include "util/bloom_filter.h" // for BloomFilterOptions, BloomFilter
+#include "types/olap_type_infra.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -78,10 +78,9 @@ constexpr bool is_int128() {
 }
 
 template <LogicalType type>
-inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTraits<type>::CppType* v,
-                                                       const TypeInfoPtr& type_info,
-                                                       const TypeInfoAllocator* allocator) {
-    using CppType = typename CppTypeTraits<type>::CppType;
+inline StorageCppType<type> get_value(const StorageCppType<type>* v, const TypeInfoPtr& type_info,
+                                      const TypeInfoAllocator* allocator) {
+    using CppType = StorageCppType<type>;
     if constexpr (is_slice_type<type>()) {
         CppType new_value;
         type_info->deep_copy(&new_value, v, allocator);
@@ -92,8 +91,8 @@ inline typename CppTypeTraits<type>::CppType get_value(const typename CppTypeTra
 }
 
 template <LogicalType type>
-inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppType& v) {
-    using CppType = typename CppTypeTraits<type>::CppType;
+inline void update_bf(BloomFilter* bf, const StorageCppType<type>& v) {
+    using CppType = StorageCppType<type>;
     if constexpr (is_slice_type<type>()) {
         const auto* s = reinterpret_cast<const Slice*>(&v);
         bf->add_bytes(s->data, s->size);
@@ -106,12 +105,12 @@ inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppTy
 // high cardinality key columns and none-agg value columns for high selectivity and storage
 // efficiency.
 // This builder builds a bloom filter page by every data page, with a page id index.
-// Meanswhile, It adds an ordinal index to load bloom filter index according to requirement.
+// Meanwhile, it adds an ordinal index to load bloom filter index according to requirement.
 //
 template <LogicalType field_type>
 class OriginalBloomFilterIndexWriterImpl : public BloomFilterIndexWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
     explicit OriginalBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
@@ -194,11 +193,11 @@ private:
 template <LogicalType field_type, typename Enable = void>
 class NgramBloomFilterIndexWriterImpl : public OriginalBloomFilterIndexWriterImpl<field_type> {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
 
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, typeinfo) {}
+            : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
 
     void add_values(const void* values, size_t count) override { return; }
 };
@@ -207,7 +206,7 @@ template <LogicalType field_type>
 class NgramBloomFilterIndexWriterImpl<field_type, std::enable_if_t<is_slice_type<field_type>()>>
         : public OriginalBloomFilterIndexWriterImpl<field_type> {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using OriginalBloomFilterIndexWriterImpl<field_type>::_values;
     explicit NgramBloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
             : OriginalBloomFilterIndexWriterImpl<field_type>(bf_options, std::move(typeinfo)) {}
@@ -216,27 +215,33 @@ public:
         size_t gram_num = this->_bf_options.gram_num;
         const auto* cur_slice = reinterpret_cast<const Slice*>(values);
         for (int i = 0; i < count; ++i) {
-            std::vector<size_t> index;
-            size_t slice_gram_num = get_utf8_index(*cur_slice, &index);
+            // For a case-insensitive index, lowercase the whole value once and build ngrams from the
+            // folded copy. The reader lowercases the whole needle before splitting it, so the writer
+            // must split in the same order: folding each ngram after slicing would disagree with the
+            // reader for context-dependent or length-changing case mappings (e.g. Turkish 'İ').
+            Slice value = *cur_slice;
+            std::string lower_buf;
+            if (!this->_bf_options.case_sensitive) {
+                if (validate_ascii_fast(value.get_data(), value.get_size())) {
+                    value.tolower(lower_buf);
+                } else {
+                    utf8_tolower(value.get_data(), value.get_size(), lower_buf);
+                }
+                value = Slice(lower_buf.data(), lower_buf.size());
+            }
 
-            size_t j;
-            for (j = 0; j + gram_num <= slice_gram_num; j++) {
+            std::vector<size_t> index;
+            size_t slice_gram_num = get_utf8_index(value, &index);
+
+            for (size_t j = 0; j + gram_num <= slice_gram_num; j++) {
                 // find next ngram
-                size_t cur_ngram_length = j + gram_num < slice_gram_num ? index[j + gram_num] - index[j]
-                                                                        : cur_slice->get_size() - index[j];
-                Slice cur_ngram = Slice(cur_slice->data + index[j], cur_ngram_length);
+                size_t cur_ngram_length =
+                        j + gram_num < slice_gram_num ? index[j + gram_num] - index[j] : value.get_size() - index[j];
+                Slice cur_ngram = Slice(value.get_data() + index[j], cur_ngram_length);
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    if (this->_bf_options.case_sensitive) {
-                        _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
-                    } else {
-                        // todo::exist two copy of ngram, need to optimize
-                        std::string lower_ngram;
-                        Slice lower_ngram_slice = cur_ngram.tolower(lower_ngram);
-                        _values.insert(get_value<field_type>(&lower_ngram_slice, this->_typeinfo,
-                                                             &this->_type_info_allocator));
-                    }
+                    _values.insert(get_value<field_type>(&cur_ngram, this->_typeinfo, &this->_type_info_allocator));
                 }
             }
             // move to next row
@@ -262,6 +267,9 @@ struct BloomFilterBuilderFunctor {
 // TODO currently we don't support bloom filter index for tinyint/hll/float/double
 Status BloomFilterIndexWriter::create(const BloomFilterOptions& bf_options, const TypeInfoPtr& typeinfo,
                                       std::unique_ptr<BloomFilterIndexWriter>* res) {
+    if (bf_options.use_ngram && bf_options.gram_num == 0) {
+        return Status::InvalidArgument("NGRAMBF index requires gram_num greater than zero");
+    }
     return field_type_dispatch_bloomfilter(typeinfo->type(), BloomFilterBuilderFunctor(), res, bf_options, typeinfo);
 }
 

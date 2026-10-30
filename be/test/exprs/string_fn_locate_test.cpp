@@ -145,6 +145,51 @@ TEST_F(StringFunctionLocateTest, locatePosTest) {
     }
 }
 
+TEST_F(StringFunctionLocateTest, locateStartBeyondLastUtf8CharTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto sub = BinaryColumn::create();
+    auto str = BinaryColumn::create();
+    auto pos = Int32Column::create();
+
+    // a start position past the last character leaves nothing to scan, so the result is 0;
+    // the walk has to step over the whole last character to reach that end
+    str->append("你a");
+    sub->append("a");
+    pos->append(3);
+
+    str->append("你好b");
+    sub->append("b");
+    pos->append(4);
+
+    // a start position on the last character still finds it
+    str->append("你好");
+    sub->append("好");
+    pos->append(2);
+
+    // the 0xF0 lead byte claims four bytes while only two are left, so the walk ends at the end
+    // of the value and the search is left with nothing to scan
+    str->append(
+            Slice("a\xF0"
+                  "b",
+                  3));
+    sub->append("b");
+    pos->append(3);
+
+    columns.emplace_back(std::move(sub));
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pos));
+
+    ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+    ASSERT_EQ(4, result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_INT>(result);
+    ASSERT_EQ(0, v->get_data()[0]);
+    ASSERT_EQ(0, v->get_data()[1]);
+    ASSERT_EQ(2, v->get_data()[2]);
+    ASSERT_EQ(0, v->get_data()[3]);
+}
+
 TEST_F(StringFunctionLocateTest, locateHayStackEqualNeedleTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
@@ -554,6 +599,71 @@ TEST_F(StringFunctionLocateTest, locatePosChineseTest) {
         } else {
             ASSERT_EQ(7, v->get_data()[j]);
         }
+    }
+}
+
+// Verify that the result NullableColumn does not share its NullColumn with any input column.
+// When haystack is nullable (needle is const), res_null must be a clone of haystack's null column.
+// When start_pos is nullable (needle is const), res_null must be a clone of start_pos's null column.
+TEST_F(StringFunctionLocateTest, locateNullColumnNotSharedTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // Case 1: nullable haystack, const needle → result's null_column must differ from haystack's
+    {
+        auto haystack_data = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        auto needle = BinaryColumn::create();
+        auto start_pos = Int32Column::create();
+
+        for (int i = 0; i < 20; ++i) {
+            haystack_data->append("abcd");
+            null_col->append(i % 2);
+            start_pos->append(1);
+        }
+        needle->append("bc");
+
+        Columns columns;
+        columns.emplace_back(ConstColumn::create(std::move(needle), 1));
+        columns.emplace_back(NullableColumn::create(std::move(haystack_data), std::move(null_col)));
+        columns.emplace_back(std::move(start_pos));
+
+        const NullableColumn* input_nullable = ColumnHelper::as_raw_column<NullableColumn>(columns[1]);
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_nullable());
+
+        const NullableColumn* result_nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_NE(result_nullable->null_column().get(), input_nullable->null_column().get())
+                << "result must not share null_column with haystack input";
+    }
+
+    // Case 2: non-nullable haystack, nullable start_pos, const needle → result's null_column must differ from start_pos's
+    {
+        auto haystack_data = BinaryColumn::create();
+        auto start_pos_data = Int32Column::create();
+        auto start_pos_null = NullColumn::create();
+        auto needle = BinaryColumn::create();
+
+        for (int i = 0; i < 20; ++i) {
+            haystack_data->append("abcd");
+            start_pos_data->append(1);
+            start_pos_null->append(i % 2);
+        }
+        needle->append("bc");
+
+        Columns columns;
+        columns.emplace_back(ConstColumn::create(std::move(needle), 1));
+        columns.emplace_back(std::move(haystack_data));
+        columns.emplace_back(NullableColumn::create(std::move(start_pos_data), std::move(start_pos_null)));
+
+        const NullableColumn* input_start_pos_nullable = ColumnHelper::as_raw_column<NullableColumn>(columns[2]);
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_nullable());
+
+        const NullableColumn* result_nullable = ColumnHelper::as_raw_column<NullableColumn>(result);
+        ASSERT_NE(result_nullable->null_column().get(), input_start_pos_nullable->null_column().get())
+                << "result must not share null_column with start_pos input";
     }
 }
 

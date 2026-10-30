@@ -1,0 +1,75 @@
+-- name: test_jdbc_catalog_native_query
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database if exists db_native_query_${uuid0}; create database db_native_query_${uuid0};'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_native_query_${uuid0}; CREATE TABLE native_query_base (id int not null, name varchar(20), score int, category varchar(20));'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_native_query_${uuid0}; INSERT INTO native_query_base VALUES (1,"alpha",10,"red"),(2,"beta",20,"blue"),(3,"gamma",30,"red"),(4,"delta",40,"blue");'
+-- result:
+0
+
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create external catalog jdbc_native_query_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="${udf_url}/starrocks-jdbc%2Fmysql-connector-java-5.1.37.jar",
+    "driver_class"="com.mysql.jdbc.Driver"
+);
+-- result:
+-- !result
+select id, name, doubled_score
+from table(jdbc_native_query_${uuid0}.native_query('/* native query */ select id, name, score * 2 as doubled_score from db_native_query_${uuid0}.native_query_base where score >= 20;')) q
+where doubled_score < 70
+order by id;
+-- result:
+2	beta	40
+3	gamma	60
+-- !result
+select category, sum(score) as total_score
+from table(jdbc_native_query_${uuid0}.native_query('select category, score from db_native_query_${uuid0}.native_query_base where id <= 4')) q
+group by category
+order by category;
+-- result:
+blue	60
+red	40
+-- !result
+select * from table(jdbc_native_query_${uuid0}.native_query('select id from db_native_query_${uuid0}.native_query_base')) q(id_alias);
+-- result:
+[REGEX].*column aliases are not supported for JDBC query table function.*
+-- !result
+select * from table(jdbc_native_query_${uuid0}.native_query(query => 'select id from db_native_query_${uuid0}.native_query_base'));
+-- result:
+[REGEX].*JDBC query table function only supports TABLE\(<catalog>\.native_query\('<sql>'\)\).*
+-- !result
+select * from table(jdbc_native_query_${uuid0}.system.query('select id from db_native_query_${uuid0}.native_query_base'));
+-- result:
+[REGEX].*JDBC query table function only supports TABLE\(<catalog>\.native_query\('<sql>'\)\).*
+-- !result
+select * from table(jdbc_native_query_${uuid0}.native_query('insert into db_native_query_${uuid0}.native_query_base values (5, "bad", 50, "red")'));
+-- result:
+[REGEX].*JDBC query table function only supports SELECT queries.*
+-- !result
+select * from table(jdbc_native_query_${uuid0}.native_query('with cte as (select id from db_native_query_${uuid0}.native_query_base) select * from cte'));
+-- result:
+[REGEX].*JDBC query table function only supports SELECT queries.*
+-- !result
+drop catalog jdbc_native_query_${uuid0};
+-- result:
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_native_query_${uuid0};'
+-- result:
+0
+
+-- !result

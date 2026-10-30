@@ -35,12 +35,15 @@
 package com.starrocks.http.rest;
 
 import com.google.gson.Gson;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -57,7 +60,9 @@ public class QueryDetailAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        requireOperateIfHttpAuthEnabled();
+
         String eventTimeStr = request.getSingleParameter("event_time");
         if (eventTimeStr == null) {
             response.getContent().append("not valid parameter");
@@ -65,7 +70,9 @@ public class QueryDetailAction extends RestBaseAction {
             return;
         }
         long eventTime = Long.parseLong(eventTimeStr.trim());
-        List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(eventTime);
+        // The records carry profile text, which follows the query-profile access rule.
+        List<QueryDetail> queryDetails = Authorizer.redactUnreadableProfiles(ConnectContext.get(),
+                QueryDetailQueue.getQueryDetailsAfterTime(eventTime));
         Gson gson = new Gson();
         String jsonString = gson.toJson(queryDetails);
         response.getContent().append(jsonString);

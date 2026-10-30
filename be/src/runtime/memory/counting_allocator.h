@@ -14,13 +14,14 @@
 
 #pragma once
 
+#include <cstdint>
 #include <iostream>
 #include <memory>
 
 #include "common/compiler_util.h"
+#include "common/logging.h"
 #include "common/memory/allocator.h"
 #include "common/memory/mem_hook_allocator.h"
-#include "exprs/expr_context.h"
 
 namespace starrocks {
 
@@ -109,7 +110,7 @@ public:
     };
     STLCountingAllocator() = default;
     explicit STLCountingAllocator(int64_t* counter) : _counter(counter) {}
-    explicit STLCountingAllocator(const STLCountingAllocator& rhs) : _counter(rhs._counter) {}
+    explicit STLCountingAllocator(const STLCountingAllocator& rhs) = default;
     template <class U>
     STLCountingAllocator(const STLCountingAllocator<U>& other) : _counter(other._counter) {}
 
@@ -152,10 +153,7 @@ public:
 #endif
     }
 
-    STLCountingAllocator& operator=(const STLCountingAllocator& rhs) {
-        _counter = rhs._counter;
-        return *this;
-    }
+    STLCountingAllocator& operator=(const STLCountingAllocator& rhs) = default;
 
     template <class U>
     STLCountingAllocator& operator=(const STLCountingAllocator<U>& rhs) {

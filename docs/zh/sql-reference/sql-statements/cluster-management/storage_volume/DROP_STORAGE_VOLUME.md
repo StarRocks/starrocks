@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP STORAGE VOLUME removes a storage volume from the cluster."
 ---
 
 # DROP STORAGE VOLUME

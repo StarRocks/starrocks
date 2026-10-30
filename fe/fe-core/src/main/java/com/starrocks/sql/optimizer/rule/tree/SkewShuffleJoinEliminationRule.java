@@ -119,7 +119,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             this.columnRefFactory = columnRefFactory;
         }
 
-        private record OutputExchangeTemplate(DistributionSpec distributionSpec, ColumnRefSet usedColumns) {
+        private record OutputExchangeTemplate(DistributionSpec distributionSpec, ColumnRefSet usedColumns,
+                                              PhysicalDistributionOperator exchangeOp) {
         }
 
         @Override
@@ -208,11 +209,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     generateSplitProducerAndConsumer(leftChild, leftInputJoinKeyExpr, nonNullSkewValues,
                             includeNullSkew, skewOnLeft);
 
-            SplitProducerAndConsumer rightSplit;
-            if (nullOnlyLeftOuterJoinFastPath) {
-                // NULL-only skew: right side does not participate in the skew branch at all.
-                rightSplit = buildSplit(rightChild, ConstantOperator.FALSE, ConstantOperator.TRUE, false);
-            } else {
+            SplitProducerAndConsumer rightSplit = null;
+            // NULL-only skew on the preserved side does not need a skew branch on the non-preserved side.
+            // Reusing the original right input for the shuffle join avoids creating a dangling split branch
+            // that later materializes as a one-way SplitCastDataSink.
+            if (!nullOnlyLeftOuterJoinFastPath) {
                 rightSplit = generateSplitProducerAndConsumer(rightChild, rightInputJoinKeyExpr, nonNullSkewValues,
                         includeNullSkew, !skewOnLeft);
             }
@@ -224,12 +225,14 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
                             originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
+                            originalShuffleJoinOperator.getPredicateCommonOperators(),
                             projectionOnJoin, skewSideJoinKeyExpr, nonNullSkewValues);
 
             PhysicalHashJoinOperator newBroadcastJoinOpt =
                     new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
                             originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
                             originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
+                            originalShuffleJoinOperator.getPredicateCommonOperators(),
                             projectionOnJoin, skewSideJoinKeyExpr, nonNullSkewValues);
 
             // we have to let them know each other for runtime filter
@@ -255,9 +258,10 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalConcatenateOperator concatenateOperator = buildConcatenateOperator(outputColumns,
                     localExchangerType, originalShuffleJoinOperator.getLimit());
 
+            OptExpression rightInputOfShuffleJoin =
+                    nullOnlyLeftOuterJoinFastPath ? rightChild : rightSplit.splitConsumerOptForShuffleJoin;
             OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
-                            newArrayList(leftSplit.splitConsumerOptForShuffleJoin,
-                                    rightSplit.splitConsumerOptForShuffleJoin))
+                            newArrayList(leftSplit.splitConsumerOptForShuffleJoin, rightInputOfShuffleJoin))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(opt.getRequiredProperties()).setCost(opt.getCost()).build();
 
@@ -279,6 +283,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             if (requireOutputDistribution) {
                 PhysicalDistributionOperator newExchangeForBroadcastJoin =
                         new PhysicalDistributionOperator(outputExchangeTemplate.distributionSpec());
+                // the fragment above this exchange decodes the same dict columns as above the original
+                // join's exchanges, so it needs the same global dicts and derived-dict expressions
+                newExchangeForBroadcastJoin.setGlobalDicts(outputExchangeTemplate.exchangeOp().getGlobalDicts());
+                newExchangeForBroadcastJoin.setGlobalDictsExpr(
+                        outputExchangeTemplate.exchangeOp().getGlobalDictsExpr());
                 // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
                 rightChildOfConcatenate = OptExpression.builder().setOp(newExchangeForBroadcastJoin)
                         .setInputs(Collections.singletonList(skewBranch))
@@ -301,11 +310,14 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setCost(opt.getCost()).build();
 
-            OptExpression cteAnchorOptExp1 =
-                    OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(newArrayList(rightSplit.splitProducer, concatenateOptExp))
-                            .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
-                            .setCost(opt.getCost()).build();
+            OptExpression cteAnchorOptExp1 = concatenateOptExp;
+            if (!nullOnlyLeftOuterJoinFastPath) {
+                cteAnchorOptExp1 =
+                        OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
+                                .setInputs(newArrayList(rightSplit.splitProducer, concatenateOptExp))
+                                .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                                .setCost(opt.getCost()).build();
+            }
 
             // if hit once, we give up rewriting the following subtree
             return OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
@@ -353,6 +365,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalSplitConsumeOperator splitConsumerOptForBroadcastJoin =
                     new PhysicalSplitConsumeOperator(splitProduceOperator.getSplitId(), skewPredicate,
                             distributionSpecForBroadCastJoin, splitOutputColumns);
+            // Both consumers stand where the original exchange stood: the fragments built above them
+            // evaluate the same dict expressions the low-cardinality rewrite attached to that exchange.
+            for (PhysicalSplitConsumeOperator consumer : List.of(splitConsumerOptForShuffleJoin,
+                    splitConsumerOptForBroadcastJoin)) {
+                consumer.setGlobalDicts(exchangeOpOfOriginalShuffleJoin.getGlobalDicts());
+                consumer.setGlobalDictsExpr(exchangeOpOfOriginalShuffleJoin.getGlobalDictsExpr());
+            }
 
             OptExpression splitConsumerOptExpForShuffleJoin =
                     OptExpression.builder().setOp(splitConsumerOptForShuffleJoin).setInputs(Collections.emptyList())
@@ -426,7 +445,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             OptExpression template = joinOpt.inputAt(1 - skewSideChildIndex);
             PhysicalDistributionOperator exchangeOp = template.getOp().cast();
             ColumnRefSet used = exchangeOp.getRowOutputInfo(template.getInputs()).getUsedColumnRefSet();
-            return new OutputExchangeTemplate(exchangeOp.getDistributionSpec(), used);
+            return new OutputExchangeTemplate(exchangeOp.getDistributionSpec(), used, exchangeOp);
         }
 
         private void addIdentityColumnsToProjectionIfMissing(Projection projection,

@@ -1,0 +1,154 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include "common/status.h"
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService.h"
+#include "gen_cpp/FrontendService_types.h"
+#include "schema_scanner/schema_column_filler.h"
+
+namespace starrocks {
+
+class FrontendServiceClient;
+template <class T>
+class ClientConnection;
+
+// this class is a helper for getting schema info from FE
+class SchemaHelper {
+public:
+    static Status get_db_names(const SchemaScannerState& state, const TGetDbsParams& request, TGetDbsResult* result);
+
+    static Status get_table_names(const SchemaScannerState& state, const TGetTablesParams& table_params,
+                                  TGetTablesResult* table_result);
+
+    static Status list_table_status(const SchemaScannerState& state, const TGetTablesParams& table_params,
+                                    TListTableStatusResult* table_result);
+
+    static Status list_materialized_view_status(const SchemaScannerState& state, const TGetTablesParams& request,
+                                                TListMaterializedViewStatusResult* result);
+
+    static Status list_materialized_view_refresh_jobs(const SchemaScannerState& state, const TGetTasksParams& request,
+                                                      TListMaterializedViewRefreshJobsResult* result);
+
+    static Status list_pipes(const SchemaScannerState& state, const TListPipesParams& req, TListPipesResult* res);
+    static Status list_pipe_files(const SchemaScannerState& state, const TListPipeFilesParams& req,
+                                  TListPipeFilesResult* res);
+
+    static Status list_object_dependencies(const SchemaScannerState& state, const TObjectDependencyReq& req,
+                                           TObjectDependencyRes* res);
+    static Status list_fe_locks(const SchemaScannerState& state, const TFeLocksReq& req, TFeLocksRes* res);
+
+    static Status list_fe_memory_usage(const SchemaScannerState& state, const TFeMemoryReq& req, TFeMemoryRes* res);
+
+    static Status get_tables_info(const SchemaScannerState& state, const TGetTablesInfoRequest& request,
+                                  TGetTablesInfoResponse* response);
+
+    static Status get_temporary_tables_info(const SchemaScannerState& state,
+                                            const TGetTemporaryTablesInfoRequest& request,
+                                            TGetTemporaryTablesInfoResponse* response);
+
+    static Status describe_table(const SchemaScannerState& state, const TDescribeTableParams& desc_params,
+                                 TDescribeTableResult* desc_result);
+
+    static Status show_variables(const SchemaScannerState& state, const TShowVariableRequest& var_params,
+                                 TShowVariableResult* var_result);
+
+    static std::string extract_db_name(const std::string& full_name);
+
+    static Status get_user_privs(const SchemaScannerState& state, const TGetUserPrivsParams& var_params,
+                                 TGetUserPrivsResult* var_result);
+
+    static Status get_db_privs(const SchemaScannerState& state, const TGetDBPrivsParams& var_params,
+                               TGetDBPrivsResult* var_result);
+
+    static Status get_table_privs(const SchemaScannerState& state, const TGetTablePrivsParams& var_params,
+                                  TGetTablePrivsResult* var_result);
+
+    static Status get_tasks(const SchemaScannerState& state, const TGetTasksParams& var_params,
+                            TGetTaskInfoResult* var_result);
+
+    static Status get_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                            TGetLoadsResult* var_result);
+
+    static Status get_tracking_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                                     TGetTrackingLoadsResult* var_result);
+
+    static Status get_routine_load_jobs(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                                        TGetRoutineLoadJobsResult* var_result);
+
+    static Status get_stream_loads(const SchemaScannerState& state, const TGetLoadsParams& var_params,
+                                   TGetStreamLoadsResult* var_result);
+
+    static Status get_task_runs(const SchemaScannerState& state, const TGetTasksParams& var_params,
+                                TGetTaskRunInfoResult* var_result);
+
+    static Status get_tables_config(const SchemaScannerState& state, const TGetTablesConfigRequest& var_params,
+                                    TGetTablesConfigResponse* var_result);
+
+    static Status get_tablet_schedules(const SchemaScannerState& state, const TGetTabletScheduleRequest& request,
+                                       TGetTabletScheduleResponse* response);
+
+    static Status get_fe_threads(const SchemaScannerState& state, const TGetFeThreadsRequest& request,
+                                 TGetFeThreadsResponse* response);
+
+    static Status get_role_edges(const SchemaScannerState& state, const TGetRoleEdgesRequest& request,
+                                 TGetRoleEdgesResponse* response);
+
+    static Status get_grants_to(const SchemaScannerState& state, const TGetGrantsToRolesOrUserRequest& request,
+                                TGetGrantsToRolesOrUserResponse* response);
+
+    static Status get_partitions_meta(const SchemaScannerState& state, const TGetPartitionsMetaRequest& var_params,
+                                      TGetPartitionsMetaResponse* var_result);
+
+    static Status listRecycleBinCatalogs(const SchemaScannerState& state, const TListRecycleBinCatalogsParams& req,
+                                         TListRecycleBinCatalogsResult* res);
+
+    static Status get_column_stats_usage(const SchemaScannerState& state, const TColumnStatsUsageReq& var_params,
+                                         TColumnStatsUsageRes* var_result);
+
+    static Status get_analyze_status(const SchemaScannerState& state, const TAnalyzeStatusReq& var_params,
+                                     TAnalyzeStatusRes* var_result);
+
+    static Status get_cluster_snapshots_info(const SchemaScannerState& state, const TClusterSnapshotsRequest& req,
+                                             TClusterSnapshotsResponse* res);
+
+    static Status get_cluster_snapshot_jobs_info(const SchemaScannerState& state,
+                                                 const TClusterSnapshotJobsRequest& req,
+                                                 TClusterSnapshotJobsResponse* res);
+
+    static Status get_applicable_roles(const SchemaScannerState& state, const TGetApplicableRolesRequest& request,
+                                       TGetApplicableRolesResponse* response);
+
+    static Status get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
+                               TGetKeywordsResponse* response);
+
+    static Status get_warehouse_metrics(const SchemaScannerState& state, const TGetWarehouseMetricsRequest& request,
+                                        TGetWarehouseMetricsRespone* response);
+
+    static Status get_warehouse_queries(const SchemaScannerState& state, const TGetWarehouseQueriesRequest& request,
+                                        TGetWarehouseQueriesResponse* response);
+
+    static Status get_tablet_reshard_jobs_info(const SchemaScannerState& state, const TTabletReshardJobsRequest& req,
+                                               TTabletReshardJobsResponse* res);
+
+private:
+    static Status _call_rpc(const SchemaScannerState& state,
+                            const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback);
+};
+
+void fill_data_column_with_null(Column* data_column);
+
+} // namespace starrocks

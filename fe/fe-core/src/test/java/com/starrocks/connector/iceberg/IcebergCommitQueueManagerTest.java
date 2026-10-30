@@ -316,6 +316,23 @@ public class IcebergCommitQueueManagerTest {
     }
 
     @Test
+    public void testBlockWhenQueueFullPolicyStartsWorkerWhenPoolIsEmpty() throws Exception {
+        // the idle worker may time out while the handler is about to enqueue
+        RejectedExecutionHandler policy = newBlockWhenQueueFullPolicy(1);
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(
+                1, 1, 60L, TimeUnit.SECONDS, new LinkedBlockingQueue<>(1));
+        executor.allowCoreThreadTimeOut(true);
+        assertEquals(0, executor.getPoolSize());
+        CountDownLatch done = new CountDownLatch(1);
+        try {
+            policy.rejectedExecution(done::countDown, executor);
+            assertTrue(done.await(5, TimeUnit.SECONDS));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     public void testBlockWhenQueueFullPolicyWithInterrupted() throws Exception {
         RejectedExecutionHandler policy = newBlockWhenQueueFullPolicy(1);
         ThreadPoolExecutor executor = new ThreadPoolExecutor(
@@ -631,6 +648,27 @@ public class IcebergCommitQueueManagerTest {
             }
             disabledManager.shutdownAll();
         }
+    }
+
+    @Test
+    public void testIdleTableExecutorReleasesThread() throws Exception {
+        manager.submitCommit("catalog", "db", "table", () -> {});
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) getExecutorForKey(manager,
+                newTableCommitKey("catalog", "db", "table"));
+        assertEquals(1, executor.getPoolSize());
+
+        // shorten the idle timeout so the test does not wait for the production value
+        executor.setKeepAliveTime(50, TimeUnit.MILLISECONDS);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (executor.getPoolSize() > 0 && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        assertEquals(0, executor.getPoolSize());
+
+        // the executor stays usable after its thread exits
+        AtomicInteger counter = new AtomicInteger();
+        assertTrue(manager.submitCommit("catalog", "db", "table", counter::incrementAndGet).isSuccess());
+        assertEquals(1, counter.get());
     }
 
     @Test
@@ -997,7 +1035,6 @@ public class IcebergCommitQueueManagerTest {
             ExecutorService executor = Executors.newFixedThreadPool(numQueries);
 
             for (int query = 0; query < numQueries; query++) {
-                final int queryId = query;
 
                 for (int commit = 0; commit < commitsPerQuery; commit++) {
                     executor.submit(() -> {
@@ -1494,7 +1531,7 @@ public class IcebergCommitQueueManagerTest {
         try {
             CountDownLatch taskRunning = new CountDownLatch(1);
             CountDownLatch proceedWithFirst = new CountDownLatch(1);
-            Thread submitThread = Thread.currentThread();
+            Thread.currentThread();
 
             // Submit first task that blocks and occupies the worker thread
             ExecutorService executor = Executors.newSingleThreadExecutor();

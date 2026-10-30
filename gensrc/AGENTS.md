@@ -7,6 +7,8 @@
 
 This directory contains generated source code from Thrift and Protobuf definitions. These files are auto-generated during the build process.
 
+Read [`handbook/index.md`](../handbook/index.md) first and use [`handbook/domains/generated-and-extensions.md`](../handbook/domains/generated-and-extensions.md) for the generated-code and Java-extension workflow map.
+
 ## Directory Structure
 
 ```
@@ -23,6 +25,8 @@ gensrc/
 **NEVER manually edit files in `gensrc/build/`**
 
 These files are regenerated on every build. Any manual changes will be lost.
+The BE CMake build also generates thrift/protobuf C++ files under the active build directory
+(for example `be/build_Release/gensrc/gen_cpp`), and those generated files must not be edited either.
 
 ## When to Modify
 
@@ -38,14 +42,17 @@ Modify the **source definition files**, not the generated output:
 Code is regenerated automatically during build:
 
 ```bash
-# Full rebuild (regenerates all)
-./build.sh --fe --be --clean
+# BE build regenerates C++ thrift/proto during CMake configure/build
+./build.sh --be --clean
 
-# Regenerate Thrift only
-cd gensrc && ./gen_thrift.sh
+# Regenerate script-based shared outputs
+cd gensrc && make script
 
-# Regenerate Protobuf only
-cd gensrc && ./gen_proto.sh
+# Manual fallback for C++ protobuf generation into gensrc/build
+cd gensrc && make proto
+
+# Manual fallback for C++ thrift generation into gensrc/build
+cd gensrc && make thrift
 ```
 
 ## Thrift Guidelines
@@ -145,20 +152,23 @@ message MyMessagePB {
 ### Adding a New RPC Method
 
 1. Edit the `.thrift` file in `gensrc/thrift/`
-2. Run `./build.sh --fe --be` to regenerate
+2. Run `./build.sh --be` (or reconfigure the BE CMake build) to regenerate the C++ outputs
 3. Implement the handler in BE (`be/src/service/`)
 4. Implement the caller in FE (`fe/fe-core/.../rpc/`)
 
 ### Adding a New Storage Field
 
 1. Edit the `.proto` file in `gensrc/proto/`
-2. Run `./build.sh --be` to regenerate
+2. Run `./build.sh --be` (or reconfigure the BE CMake build) to regenerate the C++ outputs
 3. Update reading/writing code in storage layer
 
 ### Checking Generated Files
 
 After regenerating, verify:
 ```bash
+# Check schema compatibility against your branch base
+python3 build-support/check_gensrc_schema_compatibility.py --mode changed --base origin/main
+
 # Check generated C++ compiles
 ./build.sh --be
 

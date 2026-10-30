@@ -35,6 +35,8 @@ import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
+import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.OperationType;
@@ -44,7 +46,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -68,12 +72,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 
 public class AlterMVJobExecutorEditLogTest {
     private static ConnectContext connectContext;
@@ -93,6 +98,7 @@ public class AlterMVJobExecutorEditLogTest {
         UtFrameUtils.setUpForPersistTest();
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setDatabase(DB_NAME);
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
 
         // Create database and tables directly (no mincluster)
         LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
@@ -360,15 +366,19 @@ public class AlterMVJobExecutorEditLogTest {
         // Set ref base table partition columns for retention condition analysis
         // This is needed for analyzeMVRetentionCondition to work
         try {
-            java.lang.reflect.Field refBaseTablePartitionColumnsOptField = 
-                    MaterializedView.class.getDeclaredField("refBaseTablePartitionColumnsOpt");
-            refBaseTablePartitionColumnsOptField.setAccessible(true);
+            java.lang.reflect.Field refBaseTablePartitionInfoField =
+                    MaterializedView.class.getDeclaredField("refBaseTablePartitionInfo");
+            refBaseTablePartitionInfoField.setAccessible(true);
+            java.lang.reflect.Constructor<?> refBaseTablePartitionInfoCtor =
+                    refBaseTablePartitionInfoField.getType().getDeclaredConstructors()[0];
+            refBaseTablePartitionInfoCtor.setAccessible(true);
             Map<Table, List<Column>> refBaseTablePartitionColumns = new HashMap<>();
             // Get the partition column from base table (dt column)
             Column basePartitionCol = baseTable.getColumn("dt");
             if (basePartitionCol != null) {
                 refBaseTablePartitionColumns.put(baseTable, List.of(basePartitionCol));
-                refBaseTablePartitionColumnsOptField.set(mv, Optional.of(refBaseTablePartitionColumns));
+                refBaseTablePartitionInfoField.set(mv, refBaseTablePartitionInfoCtor.newInstance(
+                        Map.of(), Map.of(), refBaseTablePartitionColumns, Map.of()));
             }
         } catch (Exception e) {
             // If reflection fails, the test may still work if retention condition can be set without analyzeMVRetentionCondition
@@ -447,9 +457,9 @@ public class AlterMVJobExecutorEditLogTest {
 
     @Test
     public void testVisitModifyTablePropertiesClauseMvRefreshModeNormalCase() throws Exception {
-        // Test PROPERTIES_MV_REFRESH_MODE - valid values: AUTO, PCT, FULL, INCREMENTAL
-        // Use FULL as it doesn't have additional constraints like AUTO/INCREMENTAL
-        testPropertyNormalCase(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "FULL");
+        // Test PROPERTIES_MV_REFRESH_MODE - valid values: AUTO, PCT, INCREMENTAL
+        // Use PCT as it doesn't have additional constraints like AUTO/INCREMENTAL
+        testPropertyNormalCase(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE, "PCT");
     }
 
     @Test
@@ -1124,6 +1134,162 @@ public class AlterMVJobExecutorEditLogTest {
     }
 
     @Test
+    public void testVisitAlterMaterializedViewStatusClauseInactiveNormalCase() throws Exception {
+        connectContext.setDatabase(DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        Assertions.assertTrue(mv.isActive());
+
+        String sql = "alter materialized view " + DB_NAME + "." + MV_NAME + " inactive";
+        AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AlterMVJobExecutor executor = new AlterMVJobExecutor();
+        executor.process(stmt, connectContext);
+
+        mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        Assertions.assertFalse(mv.isActive());
+
+        AlterMaterializedViewStatusLog replayInfo = (AlterMaterializedViewStatusLog) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(mv.getId(), replayInfo.getTableId());
+        Assertions.assertEquals("inactive", replayInfo.getStatus().toLowerCase(Locale.ROOT));
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerBaseTable = createHashOlapTable(BASE_TABLE_ID, BASE_TABLE_NAME, 3);
+        followerDb.registerTableUnlocked(followerBaseTable);
+        MaterializedView followerMv = createMaterializedView(MV_ID, MV_NAME, followerBaseTable, 3);
+        followerDb.registerTableUnlocked(followerMv);
+        Assertions.assertTrue(followerMv.isActive());
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            AlterJobMgr followerAlterJobMgr = new AlterJobMgr(
+                    new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
+            followerAlterJobMgr.replayAlterMaterializedViewStatus(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        MaterializedView replayed = (MaterializedView) followerDb.getTable(MV_ID);
+        Assertions.assertNotNull(replayed);
+        Assertions.assertFalse(replayed.isActive());
+    }
+
+    @Test
+    public void testVisitAlterMaterializedViewStatusClauseInactiveEditLogException() throws Exception {
+        connectContext.setDatabase(DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        Assertions.assertTrue(mv.isActive());
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logAlterMvStatus(any(AlterMaterializedViewStatusLog.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            String sql = "alter materialized view " + DB_NAME + "." + MV_NAME + " inactive";
+            AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            AlterMVJobExecutor executor = new AlterMVJobExecutor();
+            RuntimeException exception = Assertions.assertThrows(
+                    RuntimeException.class, () -> executor.process(stmt, connectContext));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+            MaterializedView unchanged = (MaterializedView) db.getTable(MV_NAME);
+            Assertions.assertNotNull(unchanged);
+            Assertions.assertTrue(unchanged.isActive());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
+    public void testVisitRefreshSchemeClauseManualNormalCase() throws Exception {
+        connectContext.setDatabase(DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        Assertions.assertEquals(MaterializedViewRefreshType.ASYNC, mv.getRefreshScheme().getType());
+
+        String sql = "alter materialized view " + DB_NAME + "." + MV_NAME + " refresh manual";
+        AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AlterMVJobExecutor executor = new AlterMVJobExecutor();
+        executor.process(stmt, connectContext);
+
+        mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        Assertions.assertEquals(MaterializedViewRefreshType.MANUAL, mv.getRefreshScheme().getType());
+
+        ChangeMaterializedViewRefreshSchemeLog replayInfo = (ChangeMaterializedViewRefreshSchemeLog)
+                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME);
+        Assertions.assertNotNull(replayInfo);
+        Assertions.assertEquals(db.getId(), replayInfo.getDbId());
+        Assertions.assertEquals(mv.getId(), replayInfo.getId());
+        Assertions.assertEquals(MaterializedViewRefreshType.MANUAL, replayInfo.getRefreshType());
+
+        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
+        Database followerDb = new Database(DB_ID, DB_NAME);
+        followerMetastore.unprotectCreateDb(followerDb);
+        OlapTable followerBaseTable = createHashOlapTable(BASE_TABLE_ID, BASE_TABLE_NAME, 3);
+        followerDb.registerTableUnlocked(followerBaseTable);
+        MaterializedView followerMv = createMaterializedView(MV_ID, MV_NAME, followerBaseTable, 3);
+        followerDb.registerTableUnlocked(followerMv);
+        Assertions.assertEquals(MaterializedViewRefreshType.ASYNC, followerMv.getRefreshScheme().getType());
+
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
+        try {
+            AlterJobMgr followerAlterJobMgr = new AlterJobMgr(
+                    new SchemaChangeHandler(), new MaterializedViewHandler(), new SystemHandler());
+            followerAlterJobMgr.replayChangeMaterializedViewRefreshScheme(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
+
+        MaterializedView replayed = (MaterializedView) followerDb.getTable(MV_ID);
+        Assertions.assertNotNull(replayed);
+        Assertions.assertEquals(MaterializedViewRefreshType.MANUAL, replayed.getRefreshScheme().getType());
+    }
+
+    @Test
+    public void testVisitRefreshSchemeClauseManualEditLogException() throws Exception {
+        connectContext.setDatabase(DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        Assertions.assertNotNull(mv);
+        MaterializedViewRefreshType beforeType = mv.getRefreshScheme().getType();
+
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        EditLog spyEditLog = spy(originalEditLog);
+        doThrow(new RuntimeException("EditLog write failed"))
+                .when(spyEditLog).logMvChangeRefreshScheme(any(ChangeMaterializedViewRefreshSchemeLog.class), any());
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        try {
+            String sql = "alter materialized view " + DB_NAME + "." + MV_NAME + " refresh manual";
+            AlterMaterializedViewStmt stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            AlterMVJobExecutor executor = new AlterMVJobExecutor();
+            RuntimeException exception = Assertions.assertThrows(
+                    RuntimeException.class, () -> executor.process(stmt, connectContext));
+            Assertions.assertEquals("EditLog write failed", exception.getMessage());
+
+            MaterializedView unchanged = (MaterializedView) db.getTable(MV_NAME);
+            Assertions.assertNotNull(unchanged);
+            Assertions.assertEquals(beforeType, unchanged.getRefreshScheme().getType());
+        } finally {
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+        }
+    }
+
+    @Test
     public void testVisitTableRenameClauseNormalCase() throws Exception {
         // 1. Get materialized view
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
@@ -1180,13 +1346,17 @@ public class AlterMVJobExecutorEditLogTest {
         followerDb.registerTableUnlocked(followerMv);
 
         // Set follower metastore to GlobalStateMgr so replay can find it
+        LocalMetastore originalMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         GlobalStateMgr.getCurrentState().setLocalMetastore(followerMetastore);
-        
-        AlterJobMgr followerAlterJobMgr = new AlterJobMgr(
-                GlobalStateMgr.getCurrentState().getSchemaChangeHandler(),
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().getMaterializedViewHandler(),
-                GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler());
-        followerAlterJobMgr.replayRenameMaterializedView(replayInfo);
+        try {
+            AlterJobMgr followerAlterJobMgr = new AlterJobMgr(
+                    GlobalStateMgr.getCurrentState().getSchemaChangeHandler(),
+                    GlobalStateMgr.getCurrentState().getAlterJobMgr().getMaterializedViewHandler(),
+                    GlobalStateMgr.getCurrentState().getAlterJobMgr().getClusterHandler());
+            followerAlterJobMgr.replayRenameMaterializedView(replayInfo);
+        } finally {
+            GlobalStateMgr.getCurrentState().setLocalMetastore(originalMetastore);
+        }
 
         // 7. Verify follower state
         MaterializedView replayed = (MaterializedView) followerDb.getTable(newMvName);
@@ -1236,5 +1406,78 @@ public class AlterMVJobExecutorEditLogTest {
         MaterializedView unchangedMv = (MaterializedView) db.getTable(MV_NAME);
         Assertions.assertNotNull(unchangedMv);
         Assertions.assertEquals(oldMvName, unchangedMv.getName());
+    }
+
+    /**
+     * Drops the MV in the window between the unlocked lookup (plus resolveBeforeLock) and the lock, the way a
+     * concurrent DROP MATERIALIZED VIEW would, and expects the alter to fail without writing an editlog entry.
+     */
+    private static EditLog alterAfterConcurrentDrop(AlterTableClause clause) {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        EditLog spyEditLog = spy(new EditLog(null));
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+
+        AlterMVJobExecutor executor = new AlterMVJobExecutor() {
+            @Override
+            protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+                super.resolveBeforeLock(alterClause, context);
+                db.unRegisterTableUnlocked(mv);
+            }
+        };
+        AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
+                createTableRef(DB_NAME, MV_NAME), clause, NodePosition.ZERO);
+        AlterJobException e = Assertions.assertThrows(AlterJobException.class,
+                () -> executor.process(stmt, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("dropped concurrently"), e.getMessage());
+        Assertions.assertNull(db.getTable(MV_ID));
+        return spyEditLog;
+    }
+
+    @Test
+    public void testAlterPropertiesOfAnMvDroppedBeforeTheLockFails() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, "5");
+        EditLog editLog = alterAfterConcurrentDrop(new ModifyTablePropertiesClause(properties));
+        verify(editLog, never()).logAlterMaterializedViewProperties(any(), any());
+    }
+
+    @Test
+    public void testRenameOfAnMvDroppedBeforeTheLockFails() {
+        // RENAME takes the DB WRITE lock instead of the intensive table lock; the check covers both.
+        EditLog editLog = alterAfterConcurrentDrop(
+                new com.starrocks.sql.ast.TableRenameClause(MV_NAME + "_renamed", NodePosition.ZERO));
+        verify(editLog, never()).logMvRename(any(), any());
+    }
+
+    /**
+     * A constraint is analyzed before the lock and names the MV as it was then. A RENAME that gets in between
+     * would have the analysis persist a name that no longer resolves; the statement fails instead, unapplied.
+     */
+    @Test
+    public void testConstraintAnalyzedBeforeAConcurrentRenameIsNotApplied() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = (MaterializedView) db.getTable(MV_NAME);
+        EditLog spyEditLog = spy(new EditLog(null));
+        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
+        AlterMVJobExecutor executor = new AlterMVJobExecutor() {
+            @Override
+            protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+                super.resolveBeforeLock(alterClause, context);
+                // What RENAME changes under the MV's write lock.
+                mv.setName(MV_NAME + "_renamed");
+            }
+        };
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, "v1");
+        AlterMaterializedViewStmt stmt = new AlterMaterializedViewStmt(
+                createTableRef(DB_NAME, MV_NAME), new ModifyTablePropertiesClause(properties), NodePosition.ZERO);
+
+        AlterJobException e = Assertions.assertThrows(AlterJobException.class,
+                () -> executor.process(stmt, connectContext));
+        Assertions.assertTrue(e.getMessage().contains("altered concurrently"), e.getMessage());
+        Assertions.assertTrue(mv.getUniqueConstraints() == null || mv.getUniqueConstraints().isEmpty(),
+                String.valueOf(mv.getUniqueConstraints()));
+        verify(spyEditLog, never()).logAlterMaterializedViewProperties(any(), any());
     }
 }

@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <utility>
 
 namespace starrocks {
 
@@ -47,7 +48,7 @@ public:
 
     // when the condition is false during the check, the cb will be called if provided.
     Awaitility& interval_callback(interval_callback_t cb) {
-        _cb = cb;
+        _cb = std::move(cb);
         return *this;
     }
 

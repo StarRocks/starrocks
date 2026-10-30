@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回 ConnectorTblMetaInfoMgr 中从外部基表到物化视图的映射信息。"
 ---
 
 # inspect_mv_relationships

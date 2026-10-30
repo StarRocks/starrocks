@@ -1038,7 +1038,7 @@ public class RestoreJob extends AbstractJob {
         if (isColocate) {
             try {
                 isColocate = GlobalStateMgr.getCurrentState().getColocateTableIndex()
-                        .addTableToGroup(db, remoteOlapTbl, colocateGroup, false);
+                        .addTableToGroup(db, remoteOlapTbl, colocateGroup, false /* afterTabletCreation */);
             } catch (Exception e) {
                 return new Status(ErrCode.COMMON_ERROR,
                         "check colocate restore failed, errmsg: " + e.getMessage() +
@@ -1168,13 +1168,26 @@ public class RestoreJob extends AbstractJob {
 
     protected void addRestoredFunctions(Database db) {
         List<Function> functions = backupMeta.getFunctions();
-        for (Function fn : functions) {
-            try {
-                db.addFunction(fn, true, false);
-            } catch (StarRocksException e) {
-                status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + fn.signatureString() +
-                        " failed when restore");
+        // Hold the db write lock across the name read and the journal writes so a concurrent
+        // ALTER DATABASE RENAME cannot slip between getFullName() and addFunction(); otherwise a
+        // follower could replay the rename before an OP_ADD_FUNCTION_V2 that still names the old db.
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            for (Function function : functions) {
+                try {
+                    // Rewrite the function's db to the restore target so a renamed restore (RESTORE ... AS
+                    // <new_db>) works on followers, which replay OP_ADD_FUNCTION_V2 and route the function
+                    // by Database.replayCreateFunctionLog -> getDb(functionName.getDb()).
+                    function.getFunctionName().setDb(db.getFullName());
+                    db.addFunction(function, true, false);
+                } catch (StarRocksException e) {
+                    status = new Status(ErrCode.COMMON_ERROR, "Add Function: " + function.signatureString() +
+                            " failed when restore");
+                }
             }
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
@@ -1295,6 +1308,7 @@ public class RestoreJob extends AbstractJob {
     protected void createReplicas(OlapTable localTbl, Partition restorePart) {
         Set<ColumnId> bfColumns = localTbl.getBfColumnIds();
         double bfFpp = localTbl.getBfFpp();
+        Set<ColumnId> zstdCompressionColumns = localTbl.getZstdCompressionColumnIds();
         for (PhysicalPartition physicalPartition : restorePart.getSubPartitions()) {
             for (MaterializedIndex restoredIdx : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                 MaterializedIndexMeta indexMeta = localTbl.getIndexMetaByMetaId(restoredIdx.getMetaId());
@@ -1311,6 +1325,7 @@ public class RestoreJob extends AbstractJob {
                         .addColumns(indexMeta.getSchema())
                         .setBloomFilterColumnNames(bfColumns)
                         .setBloomFilterFpp(bfFpp)
+                        .setZstdCompressionColumns(zstdCompressionColumns, localTbl.getZstdCompressionPageSizes())
                         .setIndexes(localTbl.getCopiedIndexes())
                         .setPrimaryKeyEncodingType(localTbl.getPrimaryKeyEncodingType())
                         .build().toTabletSchema();
@@ -1907,7 +1922,11 @@ public class RestoreJob extends AbstractJob {
             finishedTime = System.currentTimeMillis();
             persistStateChange(RestoreJobState.FINISHED);
 
-            locker.lockDatabase(db.getId(), LockType.READ);
+            // WRITE (not READ): the post-restore actions below structurally mutate metadata in this db --
+            // doAfterRestore rewrites MV baseTableInfos/version maps and the failure branch calls
+            // mv.dropPartition (mutating the plain idToPartition/nameToPartition maps). A shared READ lets
+            // concurrent planners observe a torn map, so the whole walk must hold the exclusive db lock.
+            locker.lockDatabase(db.getId(), LockType.WRITE);
             try {
                 for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                     Table tbl = globalStateMgr.getLocalMetastore()
@@ -1958,7 +1977,7 @@ public class RestoreJob extends AbstractJob {
                                     mv.setInactiveAndReason(MaterializedViewExceptions
                                             .inactiveReasonForMetadataTableRestoreCorrupted(mv.getName()));
                                     // clear version map so can be refreshed later
-                                    mv.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+                                    mv.resetVisibleVersionMap();
                                     // drop all partitions
                                     Set<String> partitionNames = mv.getPartitionNames();
                                     for (String partitionName : partitionNames) {
@@ -1976,7 +1995,7 @@ public class RestoreJob extends AbstractJob {
                 LOG.warn("Do post actions after restore success failed: ", e);
                 throw e;
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
         }
 

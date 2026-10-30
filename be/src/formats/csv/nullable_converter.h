@@ -23,9 +23,9 @@ public:
     explicit NullableConverter(std::unique_ptr<Converter> base_converter)
             : _base_converter(std::move(base_converter)) {}
 
-    Status write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+    Status write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                         const Options& options) const override;
-    Status write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+    Status write_quoted_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                const Options& options) const override;
     bool read_string_for_adaptive_null_column(Column* column, Slice s, const Options& options) const override;
     bool read_string(Column* column, const Slice& s, const Options& options) const override;
@@ -33,6 +33,11 @@ public:
 
 private:
     std::unique_ptr<Converter> _base_converter;
+    // Scratch storage for unescaping `s` before delegating to `_base_converter`. Reused
+    // across calls (this converter instance is built once per column/nesting position and
+    // invoked once per row thereafter, never reentrantly), so this does not allocate
+    // per-row: the buffer's capacity settles after the first few calls.
+    mutable std::string _unescape_buf;
 };
 
 } // namespace starrocks::csv

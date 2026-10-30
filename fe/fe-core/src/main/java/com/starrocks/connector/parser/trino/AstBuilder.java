@@ -36,8 +36,8 @@ import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -180,6 +180,7 @@ import io.trino.sql.tree.NotExpression;
 import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Offset;
+import io.trino.sql.tree.Property;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
@@ -211,8 +212,10 @@ import io.trino.sql.tree.WithQuery;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.DateTimeException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -225,7 +228,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.FunctionSet.ARRAY_AGG_DISTINCT;
-import static com.starrocks.common.util.TimeUtils.parseDateTimeFromString;
+import static com.starrocks.common.util.TimeUtils.parseLocalDateTimeFromString;
 import static com.starrocks.common.util.TimeUtils.parseTimeZoneFromString;
 import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.connector.trino.TrinoParserUnsupportedException.trinoParserUnsupportedException;
@@ -324,32 +327,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExplain(Explain node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-
         Optional<ExplainType> explainType = node.getOptions().stream().filter(option -> option instanceof ExplainType).
                 map(type -> (ExplainType) type).findFirst();
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
         if (explainType.isPresent()) {
             ExplainType.Type type = explainType.get().getType();
             if (type == ExplainType.Type.LOGICAL) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
+                explainLevel = StatementBase.ExplainLevel.LOGICAL;
             } else if (type == ExplainType.Type.DISTRIBUTED) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
+                explainLevel = StatementBase.ExplainLevel.VERBOSE;
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
-            } else {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+                explainLevel = StatementBase.ExplainLevel.COSTS;
             }
-        } else {
-            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
         }
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), explainLevel);
     }
 
     @Override
     protected ParseNode visitExplainAnalyze(ExplainAnalyze node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-        queryStatement.setIsExplain(true, StatementBase.ExplainLevel.ANALYZE);
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), StatementBase.ExplainLevel.ANALYZE);
+    }
+
+    private StatementBase applyExplain(StatementBase statement, StatementBase.ExplainLevel explainLevel) {
+        if (statement instanceof QueryStatement) {
+            statement.setIsExplain(true, explainLevel);
+            return statement;
+        }
+        if (statement instanceof InsertStmt) {
+            ((InsertStmt) statement).getQueryStatement().setIsExplain(true, explainLevel);
+            return statement;
+        }
+        throw trinoParserUnsupportedException(String.format("Unsupported statement [%s] for EXPLAIN",
+                statement.getClass().getSimpleName()));
     }
 
     @Override
@@ -536,7 +545,32 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitTable(Table node, ParseTreeContext context) {
         TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getName()));
-        return new TableRelation(tableName);
+        TableRelation tableRelation = new TableRelation(tableName);
+        // Trino carries time travel (FOR VERSION/TIMESTAMP AS OF) on the table itself; without
+        // forwarding it the clause would be silently dropped and the query would read the latest snapshot.
+        node.getQueryPeriod().ifPresent(queryPeriod -> tableRelation.setQueryPeriod(toQueryPeriod(queryPeriod, context)));
+        return tableRelation;
+    }
+
+    // FOR TIMESTAMP/VERSION AS OF <expr>, mapped onto the same QueryPeriod the StarRocks parser builds
+    // in visitTableAtom, so analysis and planning of time travel stay dialect-independent.
+    private QueryPeriod toQueryPeriod(io.trino.sql.tree.QueryPeriod node, ParseTreeContext context) {
+        QueryPeriod.PeriodType periodType;
+        switch (node.getRangeType()) {
+            case TIMESTAMP:
+                periodType = QueryPeriod.PeriodType.TIMESTAMP;
+                break;
+            case VERSION:
+                periodType = QueryPeriod.PeriodType.VERSION;
+                break;
+            default:
+                throw trinoParserUnsupportedException("Unsupported query period type [" + node.getRangeType() + "]");
+        }
+        // Trino only builds an "AS OF" period today; anything else must not be dropped silently.
+        if (node.getEnd().isEmpty()) {
+            throw trinoParserUnsupportedException("Unsupported query period [" + node + "]");
+        }
+        return new QueryPeriod(periodType, (Expr) visit(node.getEnd().get(), context));
     }
 
     @Override
@@ -1054,23 +1088,42 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
         try {
             String value = node.getValue();
-            String formattedValue = value.length() <= 10 ? value + " 00:00:00" : value;
-            ZoneId zoneId = parseTimeZoneFromString(formattedValue);
-            String literalValue = parseDateTimeFromString(formattedValue);
+            ZoneId zoneId = parseTimeZoneFromString(value);
+            LocalDateTime dateTime = parseLocalDateTimeFromString(value);
             if (zoneId == null) {
-                LocalDateTime dateTime = DateUtils.parseStrictDateTime(literalValue);
                 return new DateLiteral(dateTime, DateType.DATETIME);
             } else {
-                LocalDateTime dateTime = DateUtils.parseStrictDateTime(literalValue);
+                // The literal is an instant given as a wall clock in `zoneId`. StarRocks has no
+                // TIMESTAMP WITH TIME ZONE, so represent it as the session-time-zone wall clock of
+                // that instant, the same way timestamptz columns are read.
+                // Resolve the offset here like Trino does: a wall clock skipped by a DST transition is
+                // invalid, and an ambiguous one takes the earlier offset. convert_tz then only converts from
+                // a fixed offset, which FE folding and BE evaluate the same way.
+                List<ZoneOffset> offsets = zoneId.getRules().getValidOffsets(dateTime);
+                if (offsets.isEmpty()) {
+                    throw new IllegalArgumentException("Invalid TIMESTAMP due to daylight savings transition");
+                }
                 return new FunctionCallExpr("convert_tz", List.of(
                         new DateLiteral(dateTime, DateType.DATETIME),
-                        new VariableExpr("time_zone"),
-                        new com.starrocks.sql.ast.expression.StringLiteral(zoneId.toString())
+                        new com.starrocks.sql.ast.expression.StringLiteral(toConvertTzZone(zoneId, offsets.get(0))),
+                        new VariableExpr("time_zone")
                 ));
             }
-        } catch (ParsingException e) {
+        } catch (IllegalArgumentException | DateTimeException e) {
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
+    }
+
+    // BE convert_tz takes `UTC` and `+hh:mm` from -12:59 to +14:59, but not ids such as `Z` or `UT`. Offsets it
+    // cannot parse (local mean time before ~1900, e.g. -14:21 or +05:41:16) keep the zone id, which has no DST
+    // ambiguity at those dates.
+    private static String toConvertTzZone(ZoneId zoneId, ZoneOffset offset) {
+        int seconds = offset.getTotalSeconds();
+        int hours = Math.abs(seconds) / 3600;
+        if (seconds % 60 != 0 || (seconds < 0 && hours > 12) || hours > 14) {
+            return zoneId.getId();
+        }
+        return offset.equals(ZoneOffset.UTC) ? "UTC" : offset.getId();
     }
 
     @Override
@@ -1348,11 +1401,42 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitProperty(Property node, ParseTreeContext context) {
+        String key = node.getName().getValue();
+        if (node.isSetToDefault()) {
+            // StarRocks' property map has no representation for "unset/use default"
+            // distinct from the empty string. Reject explicitly so callers don't get
+            // silently coerced to "" and bypass connector defaults.
+            throw trinoParserUnsupportedException(String.format(
+                    "SET DEFAULT is not supported for property [%s]; omit the property to use the default",
+                    key));
+        }
+        Expression valueExpr = node.getNonDefaultValue();
+        String value;
+        if (valueExpr instanceof StringLiteral) {
+            value = ((StringLiteral) valueExpr).getValue();
+        } else if (valueExpr instanceof Identifier) {
+            value = ((Identifier) valueExpr).getValue();
+        } else if (valueExpr instanceof LongLiteral) {
+            value = Long.toString(((LongLiteral) valueExpr).getValue());
+        } else if (valueExpr instanceof BooleanLiteral) {
+            value = Boolean.toString(((BooleanLiteral) valueExpr).getValue());
+        } else if (valueExpr instanceof DoubleLiteral) {
+            value = Double.toString(((DoubleLiteral) valueExpr).getValue());
+        } else {
+            throw trinoParserUnsupportedException(String.format(
+                    "Unsupported property value expression [%s] for property [%s]", valueExpr, key));
+        }
+        return new com.starrocks.sql.ast.Property(key, value);
+    }
+
+    @Override
     protected ParseNode visitCreateTableAsSelect(CreateTableAsSelect node, ParseTreeContext context) {
         Map<String, String> properties = new HashMap<>();
         if (node.getProperties() != null) {
-            List<Property> propertyList = visit(node.getProperties(), context, Property.class);
-            for (Property property : propertyList) {
+            List<com.starrocks.sql.ast.Property> propertyList =
+                    visit(node.getProperties(), context, com.starrocks.sql.ast.Property.class);
+            for (com.starrocks.sql.ast.Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
         }

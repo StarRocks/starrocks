@@ -14,22 +14,24 @@
 
 #pragma once
 
+#include <bthread/id.h>
 #include <bthread/mutex.h>
 
 #include <atomic>
+#include <functional>
 #include <list>
 #include <memory>
 #include <queue>
 #include <unordered_set>
 
+#include "base/brpc/disposable_closure.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/internal_service_recoverable_stub.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
-#include "util/disposable_closure.h"
-#include "util/internal_service_recoverable_stub.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks::pipeline {
 
@@ -97,14 +99,7 @@ public:
 
     void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
     void notify_observers() { _observable.notify_sink_observers(); }
-    auto defer_notify() {
-        return DeferOp([this]() {
-            _observable.notify_sink_observers();
-            if (bthread_self()) {
-                CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
-            }
-        });
-    }
+    DeferOp<std::function<void()>> defer_notify();
 
     int64_t get_sent_bytes() const { return _bytes_sent; }
 
@@ -153,6 +148,9 @@ private:
     /// because TUniqueId::hi is exactly the same in one query
 
     struct SinkContext {
+        SinkContext() { bthread_id_list_init(&in_flight_rpc_cids, 0, 0); }
+        ~SinkContext() { bthread_id_list_destroy(&in_flight_rpc_cids); }
+
         // num eos per instance
         int64_t num_sinker;
         int64_t request_seq;
@@ -176,6 +174,10 @@ private:
 
         Mutex mutex;
 
+        // call_ids of each in-flight RPC. Used to actively cancel outstanding RPCs when the fragment is cancelled.
+        bthread_id_list_t in_flight_rpc_cids;
+        Mutex in_flight_rpc_cids_mutex;
+
         TNetworkAddress dest_addrs;
     };
     phmap::flat_hash_map<int64_t, std::unique_ptr<SinkContext>, StdHash<int64_t>> _sink_ctxs;
@@ -183,6 +185,12 @@ private:
 
     std::atomic<int32_t> _total_in_flight_rpc = 0;
     std::atomic<int32_t> _num_remaining_eos = 0;
+
+    // Peak statistics exposed by update_profile() to explain where sink memory goes:
+    // requests waiting in the per-destination queues plus requests already in flight.
+    std::atomic<int32_t> _peak_in_flight_rpc = 0;
+    std::atomic<int64_t> _num_buffered_requests = 0;
+    std::atomic<int64_t> _peak_buffered_requests = 0;
 
     size_t _memory_limit = 0;
 

@@ -19,13 +19,14 @@
 #include "column/column_viewer.h"
 #include "column/datum_convert.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
+#include "runtime/type_info_allocator_adapter.h"
 #include "simdjson.h"
-#include "storage/types.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
@@ -37,16 +38,22 @@ struct Bucket {
     static Bucket from_json(simdjson::ondemand::array bucket_json, const FunctionContext::TypeDesc* type_desc,
                             MemPool* mem_pool) {
         TypeInfoPtr type_info = get_type_info(LT, type_desc->precision, type_desc->scale);
+        const TypeInfoAllocator* allocator = nullptr;
+        TypeInfoAllocator type_info_allocator;
+        if (mem_pool != nullptr) {
+            type_info_allocator = make_type_info_allocator(mem_pool);
+            allocator = &type_info_allocator;
+        }
         auto bucket_iter = bucket_json.begin();
 
         Datum lower_datum;
-        std::ignore =
-                datum_from_string(type_info.get(), &lower_datum, std::string{std::string_view{*bucket_iter}}, mem_pool);
+        std::ignore = datum_from_string(type_info.get(), &lower_datum, std::string{std::string_view{*bucket_iter}},
+                                        allocator);
         ++bucket_iter;
 
         Datum upper_datum;
-        std::ignore =
-                datum_from_string(type_info.get(), &upper_datum, std::string{std::string_view{*bucket_iter}}, mem_pool);
+        std::ignore = datum_from_string(type_info.get(), &upper_datum, std::string{std::string_view{*bucket_iter}},
+                                        allocator);
         ++bucket_iter;
 
         int64_t count = std::stoll(std::string{std::string_view{*bucket_iter}});
@@ -172,6 +179,9 @@ private:
         auto bucket_num = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(1));
         [[maybe_unused]] double sample_ratio =
                 1 / ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
+        // bucket_num is a user-supplied constant; FunctionAnalyzer rejects bucket_num <= 0 at FE
+        // analysis, so by the time we get here it is always positive. Assert the invariant.
+        DCHECK_GT(bucket_num, 0);
         int bucket_size = this->data(state).column->size() / bucket_num;
 
         // Build bucket
@@ -235,6 +245,9 @@ private:
         auto sample_ratio = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
         auto ndv_estimator_name = ColumnHelper::get_const_value<TYPE_VARCHAR>(ctx->get_constant_column(3)).to_string();
         [[maybe_unused]] double sample_factor = 1 / sample_ratio;
+        // bucket_num is a user-supplied constant; FunctionAnalyzer rejects bucket_num <= 0 at FE
+        // analysis, so by the time we get here it is always positive. Assert the invariant.
+        DCHECK_GT(bucket_num, 0);
         int bucket_size = this->data(state).column->size() / bucket_num;
 
         // prepare ndv estimation

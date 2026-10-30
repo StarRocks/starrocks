@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "根据分隔符拆分字符串，返回ARRAY格式的所有部分。"
 ---
 
 # split

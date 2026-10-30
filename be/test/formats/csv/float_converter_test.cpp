@@ -14,9 +14,11 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
-#include "io/formatted_output_stream_string.h"
+#include "formats/io/formatted_output_stream_string.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -87,6 +89,52 @@ TEST_F(FloatConverterTest, test_read_string_invalid_value) {
     EXPECT_EQ(0, col->size());
 }
 
+// A value that overflows the target type is rejected, so a load stores NULL for it in
+// non-strict mode and fails the row in strict mode. A value that underflows rounds to +-0,
+// which is the correctly rounded result rather than bad data, and is stored.
+// NOLINTNEXTLINE
+TEST_F(FloatConverterTest, test_read_string_out_of_range) {
+    TypeDescriptor float_type(TYPE_FLOAT);
+    auto float_conv = csv::get_converter(float_type, false);
+    auto float_col = ColumnHelper::create_column(float_type, false);
+
+    // Above FLT_MAX (~3.40282e+38), still representable as a double.
+    EXPECT_FALSE(float_conv->read_string(float_col.get(), "3.4e+39", Converter::Options()));
+    EXPECT_FALSE(float_conv->read_string(float_col.get(), "-3.4e+39", Converter::Options()));
+    // Above DBL_MAX as well.
+    EXPECT_FALSE(float_conv->read_string(float_col.get(), "1e+400", Converter::Options()));
+    EXPECT_EQ(0, float_col->size());
+
+    // Below FLT_TRUE_MIN (~1.4e-45).
+    EXPECT_TRUE(float_conv->read_string(float_col.get(), "1e-46", Converter::Options()));
+    EXPECT_TRUE(float_conv->read_string(float_col.get(), "-1e-46", Converter::Options()));
+    EXPECT_TRUE(float_conv->read_string(float_col.get(), "1.7e-294", Converter::Options()));
+    ASSERT_EQ(3, float_col->size());
+    EXPECT_EQ(0.0f, float_col->get(0).get_float());
+    EXPECT_EQ(0.0f, float_col->get(1).get_float());
+    EXPECT_TRUE(std::signbit(float_col->get(1).get_float()));
+    EXPECT_EQ(0.0f, float_col->get(2).get_float());
+
+    auto double_conv = csv::get_converter(_type, false);
+    auto double_col = ColumnHelper::create_column(_type, false);
+
+    // Above DBL_MAX (~1.79769e+308).
+    EXPECT_FALSE(double_conv->read_string(double_col.get(), "1e+400", Converter::Options()));
+    EXPECT_FALSE(double_conv->read_string(double_col.get(), "-1e+400", Converter::Options()));
+    EXPECT_EQ(0, double_col->size());
+
+    // 3.4e+39 overflows a float but fits in a double.
+    EXPECT_TRUE(double_conv->read_string(double_col.get(), "3.4e+39", Converter::Options()));
+    // Below DBL_TRUE_MIN (~4.9e-324).
+    EXPECT_TRUE(double_conv->read_string(double_col.get(), "1e-325", Converter::Options()));
+    EXPECT_TRUE(double_conv->read_string(double_col.get(), "-1e-325", Converter::Options()));
+    ASSERT_EQ(3, double_col->size());
+    EXPECT_DOUBLE_EQ(3.4e+39, double_col->get(0).get_double());
+    EXPECT_EQ(0.0, double_col->get(1).get_double());
+    EXPECT_EQ(0.0, double_col->get(2).get_double());
+    EXPECT_TRUE(std::signbit(double_col->get(2).get_double()));
+}
+
 // NOLINTNEXTLINE
 TEST_F(FloatConverterTest, test_double_write_string) {
     auto conv = csv::get_converter(_type, false);
@@ -94,7 +142,7 @@ TEST_F(FloatConverterTest, test_double_write_string) {
     col->append_datum((double)1.1);
     col->append_datum((double)-0.1);
 
-    io::FormattedOutputStreamString buff;
+    formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 1, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_quoted_string(&buff, *col, 0, Converter::Options()).ok());
@@ -102,7 +150,7 @@ TEST_F(FloatConverterTest, test_double_write_string) {
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("1.1-0.11.1-0.1", buff.as_string());
 
-    io::FormattedOutputStreamString buff2;
+    formats::FormattedOutputStreamString buff2;
     auto col2 = ColumnHelper::create_column(_type, false);
     col2->append_datum((double)1.12345678901234e+18);
     ASSERT_TRUE(conv->write_string(&buff2, *col2, 0, Converter::Options()).ok());
@@ -115,7 +163,7 @@ TEST_F(FloatConverterTest, test_float_write_string) {
     auto conv = csv::get_converter(type, false);
     auto col = ColumnHelper::create_column(type, false);
     col->append_datum((float)7.092579e+08);
-    io::FormattedOutputStreamString buff;
+    formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, Converter::Options()).ok());
     ASSERT_TRUE(buff.finalize().ok());
     ASSERT_EQ("7.092579e+08", buff.as_string());

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "RETENTION関数は指定された期間内のユーザーリテンション率を計算します。"
 ---
 
 # retention

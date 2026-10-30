@@ -21,7 +21,7 @@
 namespace starrocks::csv {
 
 template <typename T>
-Status DecimalV3Converter<T>::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
+Status DecimalV3Converter<T>::write_string(formats::FormattedOutputStream* os, const Column& column, size_t row_num,
                                            const Options& options) const {
     auto decimalv3_column = down_cast<const DecimalV3Column<T>*>(&column);
     const auto immutable_data = decimalv3_column->immutable_data();
@@ -31,8 +31,8 @@ Status DecimalV3Converter<T>::write_string(io::FormattedOutputStream* os, const 
 }
 
 template <typename T>
-Status DecimalV3Converter<T>::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
-                                                  const Options& options) const {
+Status DecimalV3Converter<T>::write_quoted_string(formats::FormattedOutputStream* os, const Column& column,
+                                                  size_t row_num, const Options& options) const {
     return write_string(os, column, row_num, options);
 }
 

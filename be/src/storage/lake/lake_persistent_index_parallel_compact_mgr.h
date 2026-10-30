@@ -17,6 +17,7 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
+#include <utility>
 #include <vector>
 
 #include "base/debug/trace.h"
@@ -69,15 +70,14 @@ using AsyncCompactCBPtr = std::unique_ptr<AsyncCompactCB>;
 class LakePersistentIndexParallelCompactTask : public Runnable {
 public:
     LakePersistentIndexParallelCompactTask(const std::vector<std::vector<PersistentIndexSstablePB>>& input_sstables,
-                                           TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                           bool merge_base_level, const UniqueId& fileset_id,
-                                           const SstSeekRange& seek_range)
+                                           TabletManager* tablet_mgr, TabletMetadataPtr metadata, bool merge_base_level,
+                                           const UniqueId& fileset_id, SstSeekRange seek_range)
             : _input_sstables(input_sstables),
               _tablet_mgr(tablet_mgr),
-              _metadata(metadata),
+              _metadata(std::move(metadata)),
               _merge_base_level(merge_base_level),
               _output_fileset_id(fileset_id),
-              _seek_range(seek_range) {}
+              _seek_range(std::move(seek_range)) {}
 
     void set_cb(AsyncCompactCB* cb) { _cb = cb; }
 
@@ -91,6 +91,10 @@ private:
     Status do_run();
 
     size_t input_sstable_file_cnt() const;
+
+    // Drop the local cache copy of every input sstable; called when do_run() fails
+    // with Corruption so the next compaction round re-reads from remote storage.
+    void drop_input_sstable_cache();
 
 private:
     // Input sstables to be compacted
@@ -144,6 +148,7 @@ public:
 
     // For UT
     void TEST_set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
+    TabletManager* TEST_tablet_mgr() const { return _tablet_mgr; }
 
 private:
     // generate compaction tasks using candidate filesets.

@@ -1,7 +1,4 @@
 -- name: test_vector_index_hnsw @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
--- result:
--- !result
 CREATE TABLE __row_util_base (
   k1 bigint NULL
 ) ENGINE=OLAP
@@ -333,9 +330,6 @@ order by dis, id limit 10;
 29	[9,9,9,9,9]	[9,9,9,9,9]	29	320.0
 30	[10,10,10,10,10]	[10,10,10,10,10]	30	405.0
 -- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
--- result:
--- !result
 with w1 as (
     select *, approx_l2_distance(v1, [1, 1, 1, 1, 1]) as dis from t2
 )
@@ -478,7 +472,4 @@ with w1 as (
 18	[10000,10001,10002,10003,10004]	[10000,10001,10002,10003,10004]	18	0.0
 19	[10000,10001,10002,10003,10004]	[10000,10001,10002,10003,10004]	19	0.0
 20	[10000,10001,10002,10003,10004]	[10000,10001,10002,10003,10004]	20	0.0
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
--- result:
 -- !result

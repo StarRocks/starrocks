@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "QUEUEING または LOADING 状態の Broker Load ジョブの優先度を変更します。"
 ---
 
 # ALTER LOAD

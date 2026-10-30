@@ -1,0 +1,38 @@
+-- name: test_json_subfield_case_collision_self_join
+drop database if exists test_json_subfield_case_collision_self_join;
+-- result:
+-- !result
+create database test_json_subfield_case_collision_self_join;
+-- result:
+-- !result
+use test_json_subfield_case_collision_self_join;
+-- result:
+-- !result
+CREATE TABLE t (
+  id bigint,
+  fields json
+) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t VALUES
+ (1, parse_json('{"Campaign":"CAP1","campaign":"low1"}')),
+ (2, parse_json('{"Campaign":"CAP2","campaign":"low2"}'));
+-- result:
+-- !result
+set cbo_json_v2_rewrite = true;
+-- result:
+-- !result
+SELECT t1.id AS id,
+       get_json_string(t1.fields, 'Campaign') AS caps,
+       get_json_string(t2.fields, 'campaign') AS low
+FROM t t1 JOIN t t2 ON t1.id = t2.id
+ORDER BY t1.id;
+-- result:
+1	CAP1	low1
+2	CAP2	low2
+-- !result
+drop database test_json_subfield_case_collision_self_join;
+-- result:
+-- !result

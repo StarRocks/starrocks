@@ -14,6 +14,7 @@
 
 package com.starrocks.meta;
 
+import com.starrocks.common.SqlBlacklistedException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.DeleteSqlDigestBlackLists;
 import com.starrocks.persist.SqlDigestBlackListPersistInfo;
@@ -38,6 +39,7 @@ import java.util.List;
 import java.util.Set;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.parseSql;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SqlDigestBlacklistTest {
     SqlDigestBlackList sqlDigestBlackList;
@@ -135,5 +137,11 @@ public class SqlDigestBlacklistTest {
         UtFrameUtils.PseudoJournalReplayer.replayJournalToEnd();
 
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getSqlDigestBlackList().getDigests().isEmpty());
+    }
+
+    @Test
+    public void testVerifyingSQLDigestExistsInBlackList() {
+        sqlDigestBlackList.addDigest("qwert");
+        assertThrows(SqlBlacklistedException.class, () -> sqlDigestBlackList.verifying("qwert"));
     }
 }

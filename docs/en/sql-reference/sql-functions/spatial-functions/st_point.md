@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the corresponding Point with the given X-coordinate and Y-coordinate."
 ---
 
 # ST_Point

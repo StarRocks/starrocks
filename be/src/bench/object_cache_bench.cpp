@@ -22,11 +22,13 @@
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
-#include "common/config.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_memory_allocator_fwd.h"
+#include "common/configbase.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
@@ -99,7 +101,7 @@ void ObjectCacheBench::init_env() {
         CpuInfo::init();
         DiskInfo::init();
         MemInfo::init();
-        GlobalEnv* env = GlobalEnv::GetInstance();
+        RuntimeEnv* env = RuntimeEnv::GetInstance();
         Status st = env->init();
         is_init = true;
         LOG(INFO) << "int env: " << st;

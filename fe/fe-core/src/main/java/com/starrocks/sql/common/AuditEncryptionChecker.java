@@ -125,8 +125,14 @@ public class AuditEncryptionChecker implements AstVisitorExtendInterface<Boolean
                 properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_ID) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_OAUTH2_CLIENT_SECRET) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CLIENT_ID) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)) {
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET)) {
             return true;
         }
         return false;

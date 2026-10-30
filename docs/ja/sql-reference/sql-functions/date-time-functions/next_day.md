@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "入力された日付より後に来る指定された曜日の最初の日を返します。"
 ---
 
 # next_day

@@ -1,0 +1,62 @@
+[
+  {
+    "category": "Fiction",
+    "author": "J.K. Rowling",
+    "title": "Harry Potter and the Philosopher's Stone",
+    "price": 29.99
+  },
+  {
+    "category": "Science Fiction",
+    "author": "Frank Herbert",
+    "title": "Dune",
+    "price": 34.95
+  },
+  {
+    "category": "Mystery",
+    "author": "Agatha Christie",
+    "title": "Murder on the Orient Express",
+    "price": 19.99
+  },
+  {
+    "category": "Fantasy",
+    "author": "J.R.R. Tolkien",
+    "title": "The Lord of the Rings",
+    "price": 49.99
+  },
+  {
+    "category": "Romance",
+    "author": "Jane Austen",
+    "title": "Pride and Prejudice",
+    "price": 15.99
+  },
+  {
+    "category": "Thriller",
+    "author": "Dan Brown",
+    "title": "The Da Vinci Code",
+    "price": 24.99
+  },
+  {
+    "category": "Biography",
+    "author": "Walter Isaacson",
+    "title": "Steve Jobs",
+    "price": 39.99
+  },
+  {
+    "category": "History",
+    "author": "Yuval Noah Harari",
+    "title": "Sapiens: A Brief History of Humankind",
+    "price": 27.99
+  },
+  {
+    "category": "Self-Help",
+    "author": "Dale Carnegie",
+    "title": "How to Win Friends and Influence People",
+    "price": 18.99
+  },
+  {
+    "category": "Technology",
+    "author": "Andrew Hunt",
+    "title": "The Pragmatic Programmer",
+    "price": 44.99
+  }
+]

@@ -46,11 +46,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.HiveUtils;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -134,6 +134,7 @@ public class HiveTable extends Table {
     private Map<String, String> hiveProperties = Maps.newHashMap();
     @SerializedName(value = "sp")
     private Map<String, String> serdeProperties = Maps.newHashMap();
+    @SerializedName(value = "asj") private String avroSchemaJson;
 
     private HiveTableType hiveTableType = HiveTableType.MANAGED_TABLE;
 
@@ -243,18 +244,28 @@ public class HiveTable extends Table {
 
     @Override
     public Map<String, String> getProperties() {
-        // The user may alter the resource properties
-        // So we do this to get the fresh properties
+        // The user may alter the resource properties, so the metastore URIs are read fresh from the resource.
+        // They are merged into a copy rather than into hiveProperties: a resource-mapping table is planned
+        // without the meta lock (see isMetaLockTarget), so this getter must not write to the shared object.
+        Map<String, String> properties = hiveProperties == null ? new HashMap<>() : new HashMap<>(hiveProperties);
         Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
         if (resource != null) {
             HiveResource hiveResource = (HiveResource) resource;
-            hiveProperties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
+            properties.put(HIVE_METASTORE_URIS, hiveResource.getHiveMetastoreURIs());
         }
-        return hiveProperties == null ? new HashMap<>() : hiveProperties;
+        return properties;
     }
 
     public Map<String, String> getSerdeProperties() {
         return serdeProperties;
+    }
+
+    public String getAvroSchemaJson() {
+        return avroSchemaJson;
+    }
+
+    public void setAvroSchemaJson(String avroSchemaJson) {
+        this.avroSchemaJson = avroSchemaJson;
     }
 
     public boolean hasBooleanTypePartitionColumn() {
@@ -298,15 +309,30 @@ public class HiveTable extends Table {
         }
     }
 
-    protected void modifyTableSchemaInternal(ImmutableList<Column> newFullSchema,
-                                           ImmutableList<String> newDataColumnNames) {
-        this.fullSchema.clear();
-        this.nameToColumn.clear();
-        this.dataColumnNames.clear();
+    /**
+     * Replays {@link #modifyTableSchema}. The edit log only carries the new full schema, so the data columns are
+     * derived from it the way the leader got them: every column that is not a partition column, in order.
+     */
+    public void replayModifyTableSchema(List<Column> newFullSchema) {
+        Set<String> partitionColumnNames = Sets.newHashSet(partColumnNames);
+        modifyTableSchemaInternal(ImmutableList.copyOf(newFullSchema), newFullSchema.stream()
+                .map(Column::getName)
+                .filter(name -> !partitionColumnNames.contains(name))
+                .collect(ImmutableList.toImmutableList()));
+    }
 
-        this.fullSchema.addAll(newFullSchema);
+    /**
+     * Swaps in new collections instead of refilling the current ones. A resource-mapping table is planned
+     * without the meta lock (see {@link #isMetaLockTarget}), so a query may still be iterating the old schema;
+     * it keeps seeing that one whole, where clearing it in place would show it an empty or half-filled list.
+     * The three fields are still replaced one by one, so the swap excludes {@link #copyForQuery}: a copy holds
+     * either the old schema or the new one, never a mix.
+     */
+    protected synchronized void modifyTableSchemaInternal(ImmutableList<Column> newFullSchema,
+                                                        ImmutableList<String> newDataColumnNames) {
+        this.fullSchema = new ArrayList<>(newFullSchema);
         updateSchemaIndex();
-        this.dataColumnNames.addAll(newDataColumnNames);
+        this.dataColumnNames = new ArrayList<>(newDataColumnNames);
     }
 
     @Override
@@ -342,13 +368,22 @@ public class HiveTable extends Table {
         for (ReferencedPartitionInfo partition : partitions) {
             partitionNames.add(PartitionUtil.toHivePartitionName(getPartitionColumnNames(), partition.getKey()));
         }
-        List<PartitionInfo> hivePartitions;
+        List<Partition> hivePartitions;
         try {
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getPartitions(this.getCatalogName(), this, partitionNames);
+                    .getPartitions(this.getCatalogName(), this, partitionNames)
+                    .stream()
+                    .map(partitionInfo -> {
+                        Preconditions.checkState(partitionInfo instanceof Partition,
+                                "partition info for hive table %s is not a hive partition: %s",
+                                name, partitionInfo.getClass());
+                        return (Partition) partitionInfo;
+                    })
+                    .collect(Collectors.toList());
         } catch (StarRocksConnectorException e) {
+            // Rethrown: a null descriptor surfaced as an NPE inside thrift serialization, hiding the cause.
             LOG.warn("table {} gets partition info failed.", name, e);
-            return null;
+            throw e;
         }
 
         for (int i = 0; i < hivePartitions.size(); i++) {
@@ -381,6 +416,9 @@ public class HiveTable extends Table {
         tHdfsTable.setHive_column_names(hiveProperties.get(HIVE_TABLE_COLUMN_NAMES));
         tHdfsTable.setHive_column_types(hiveProperties.get(HIVE_TABLE_COLUMN_TYPES));
         tHdfsTable.setSerde_properties(serdeProperties);
+        if (avroSchemaJson != null) {
+            tHdfsTable.setAvro_schema_json(avroSchemaJson);
+        }
         tHdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
@@ -408,6 +446,50 @@ public class HiveTable extends Table {
         if (isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetadataMgr().dropTable(getCatalogName(), db.getFullName(), name);
         }
+    }
+
+    /**
+     * Not a lock target, even when it lives in an internal database (ENGINE=HIVE from a resource). The data is
+     * in the metastore, and the definition held here is never written in place once published: ALTER TABLE
+     * rejects the table, and a schema refresh swaps in new collections ({@link #modifyTableSchemaInternal}).
+     * A query plans on a private copy taken in one step ({@link #forQueryPlanning}), so it sees one schema from
+     * analysis to the scan descriptor, and planning -- which reaches the metastore for statistics and
+     * partitions -- runs without the lock, as it does for a catalog table.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
+    /**
+     * A private copy of a table published in an internal database (ENGINE=HIVE from a resource), for one query
+     * to plan and run on. The published object is shared by every query and read without the meta lock, and a
+     * schema refresh replaces its fullSchema, column index and data column names one after the other. A query
+     * reading them from the published object could see the old full schema and the new base schema: the
+     * analyzer only exposes the columns found in both, so {@code SELECT *} silently lost a column whose type
+     * changed. The copy is taken under the same monitor as the swap, and the collections it shares are never
+     * written in place, so it is one generation of the schema. The related MVs and constraints are shared, since
+     * the planner only reads them.
+     */
+    public synchronized HiveTable copyForQuery() {
+        HiveTable table = new HiveTable(id, name, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
+                tableLocation, comment, createTime, partColumnNames, dataColumnNames, hiveProperties,
+                serdeProperties, storageFormat, hiveTableType);
+        table.avroSchemaJson = avroSchemaJson;
+        table.relatedMaterializedViews = relatedMaterializedViews;
+        table.setUniqueConstraints(getUniqueConstraints());
+        table.setForeignKeyConstraints(getForeignKeyConstraints());
+        return table;
+    }
+
+    /**
+     * A resource-mapping table is one object shared by every query, and it is planned without the meta lock
+     * ({@link #isMetaLockTarget}), so a query plans on a private copy ({@link #copyForQuery}). A catalog table is
+     * resolved per query already.
+     */
+    @Override
+    public Table forQueryPlanning() {
+        return isResourceMappingCatalog(getCatalogName()) ? copyForQuery() : this;
     }
 
     @Override

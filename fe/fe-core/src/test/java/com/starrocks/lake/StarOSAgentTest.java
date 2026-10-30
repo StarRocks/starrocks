@@ -25,6 +25,9 @@ import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.PlacementPolicy;
+import com.staros.proto.PlacementPreference;
+import com.staros.proto.PlacementRelationship;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
@@ -35,11 +38,13 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateShardGroupInfo;
+import com.staros.proto.UpdateShardInfo;
 import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
+import com.staros.util.Constant;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
@@ -50,6 +55,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -63,8 +69,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class StarOSAgentTest {
@@ -72,16 +80,19 @@ public class StarOSAgentTest {
 
     private StarOSAgent starosAgent;
     private StarClient client;
+    private int savedGetShardInfoBatchSize;
 
     @BeforeEach
     public void setUp() throws Exception {
         starosAgent = new StarOSAgent();
         client = starosAgent.initForTest();
         Config.cloud_native_storage_type = "S3";
+        savedGetShardInfoBatchSize = Config.star_client_get_shard_info_batch_size;
     }
 
     @AfterEach
     public void tearDown() {
+        Config.star_client_get_shard_info_batch_size = savedGetShardInfoBatchSize;
         if (client != null) {
             client.stop();
         }
@@ -356,7 +367,7 @@ public class StarOSAgentTest {
 
         new Expectations(client) {
             {
-                client.createShard("1", (List<CreateShardInfo>) any);
+                client.createShard("1", (List<CreateShardInfo>) any, anyLong);
                 result = shards;
                 client.createShardGroup("1", (List<CreateShardGroupInfo>) any);
                 result = groups;
@@ -390,6 +401,367 @@ public class StarOSAgentTest {
             Assertions.assertEquals(1, realGroupIds.size());
             Assertions.assertEquals(groupId, realGroupIds.get(0).getGroupId());
         });
+    }
+
+    /**
+     * Stubs client.createShard to record the CreateShardInfo payload the agent built, so a test can
+     * assert per-shard group ids / placement preferences. The returned list is refilled on each call.
+     */
+    private List<CreateShardInfo> installCreateShardCapture() throws StarClientException {
+        List<CreateShardInfo> captured = new ArrayList<>();
+        new Expectations(client) {
+            {
+                client.createShard("1", (List<CreateShardInfo>) any);
+                result = new Delegate<List<ShardInfo>>() {
+                    @SuppressWarnings("unused")
+                    List<ShardInfo> createShard(String sid, List<CreateShardInfo> infos) {
+                        captured.clear();
+                        captured.addAll(infos);
+                        List<ShardInfo> out = new ArrayList<>(infos.size());
+                        for (CreateShardInfo info : infos) {
+                            out.add(ShardInfo.newBuilder().setShardId(info.getShardId()).build());
+                        }
+                        return out;
+                    }
+                };
+            }
+        };
+        return captured;
+    }
+
+    @Test
+    public void testCreateShardsForSplitSpreadDropsWithShardPin() throws Exception {
+        // Capture the CreateShardInfo payload the agent builds for client.createShard so we can
+        // assert the per-shard placement preferences for both spreadNewShards modes.
+        List<CreateShardInfo> captured = installCreateShardCapture();
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        long spreadGroupId = 700L;
+        long oldShardId = 11L;
+        // Two new shards split out of the same old shard (the degenerate pre-split case).
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        newToOldShardId.put(101L, oldShardId);
+        newToOldShardId.put(102L, oldShardId);
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(101L, Lists.newArrayList(spreadGroupId));
+        newShardIdToGroupIds.put(102L, Lists.newArrayList(spreadGroupId));
+
+        // unpinPlacement = true (pre-split, or an ORDER BY != PK split of a small index): no
+        // WITH_SHARD pin, so StarOS spreads the new shards;
+        // the (SPREAD) group ids are still carried.
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, true);
+        Assertions.assertEquals(2, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertTrue(info.getPlacementPreferencesList().isEmpty(),
+                    "pre-split shard must not pin placement to the old shard");
+            Assertions.assertEquals(Lists.newArrayList(spreadGroupId), info.getGroupIdsList());
+        }
+
+        // unpinPlacement = false (ordinary online split): the WITH_SHARD pin to the old shard is kept so the
+        // split reuses the source worker's warm cache.
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, false);
+        Assertions.assertEquals(2, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertEquals(1, info.getPlacementPreferencesList().size());
+            PlacementPreference pref = info.getPlacementPreferences(0);
+            Assertions.assertEquals(PlacementPolicy.PACK, pref.getPlacementPolicy());
+            Assertions.assertEquals(PlacementRelationship.WITH_SHARD, pref.getPlacementRelationship());
+            Assertions.assertEquals(oldShardId, pref.getRelationshipTargetId());
+        }
+    }
+
+    /**
+     * A merge creates one shard per resharding tablet, and each must carry ITS OWN group list --
+     * the index SPREAD group plus the PACK shard group of the colocate range that shard's tablet
+     * belongs to. The three shards below deliberately carry three DIFFERENT PACK groups: the
+     * builder is reused across the loop, so without a per-iteration {@code clearGroupIds()} each
+     * shard would accumulate every previous shard's PACK group and this test goes red.
+     */
+    @Test
+    public void testCreateShardsForMergePerShardGroupIds() throws Exception {
+        List<CreateShardInfo> captured = installCreateShardCapture();
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        long spreadGroupId = 700L;
+        Map<Long, List<Long>> newToOldShardIds = new LinkedHashMap<>();
+        newToOldShardIds.put(201L, Lists.newArrayList(11L, 12L));
+        newToOldShardIds.put(202L, Lists.newArrayList(13L));
+        newToOldShardIds.put(203L, Lists.newArrayList(14L));
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(201L, Lists.newArrayList(spreadGroupId, 801L));
+        newShardIdToGroupIds.put(202L, Lists.newArrayList(spreadGroupId, 802L));
+        newShardIdToGroupIds.put(203L, Lists.newArrayList(spreadGroupId, 803L));
+
+        starosAgent.createShardsForMerge(newToOldShardIds, newShardIdToGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE);
+
+        Assertions.assertEquals(3, captured.size());
+        for (CreateShardInfo info : captured) {
+            Assertions.assertEquals(newShardIdToGroupIds.get(info.getShardId()), info.getGroupIdsList(),
+                    "shard " + info.getShardId() + " must carry exactly its own group ids");
+            // Every source shard of the merge is still pinned so the output reuses a warm cache.
+            Assertions.assertEquals(newToOldShardIds.get(info.getShardId()).size(),
+                    info.getPlacementPreferencesList().size());
+            for (PlacementPreference pref : info.getPlacementPreferencesList()) {
+                Assertions.assertEquals(PlacementPolicy.PACK, pref.getPlacementPolicy());
+                Assertions.assertEquals(PlacementRelationship.WITH_SHARD, pref.getPlacementRelationship());
+            }
+        }
+    }
+
+    /**
+     * A new shard with no group assignment is refused rather than silently created group-less.
+     * The guard sits inside the method's existing catch-all, so it surfaces as a DdlException --
+     * same shape as createShardsForSplit -- which MergeTabletJob turns into a clean job abort.
+     */
+    @Test
+    public void testCreateShardsForMergeRejectsMissingOrEmptyGroupIds() {
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        Map<Long, List<Long>> newToOldShardIds = new LinkedHashMap<>();
+        newToOldShardIds.put(201L, Lists.newArrayList(11L));
+
+        DdlException missing = Assertions.assertThrows(DdlException.class,
+                () -> starosAgent.createShardsForMerge(newToOldShardIds, new LinkedHashMap<>(), pathInfo,
+                        cacheInfo, Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE),
+                "a new shard with no group assignment must be rejected");
+        Assertions.assertTrue(missing.getMessage().contains("Missing group ids for new shard 201"),
+                "expected the missing-group-ids cause, got: " + missing.getMessage());
+
+        Map<Long, List<Long>> emptyGroupIds = new LinkedHashMap<>();
+        emptyGroupIds.put(201L, Lists.newArrayList());
+        DdlException empty = Assertions.assertThrows(DdlException.class,
+                () -> starosAgent.createShardsForMerge(newToOldShardIds, emptyGroupIds, pathInfo,
+                        cacheInfo, Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE),
+                "a new shard with an empty group list must be rejected");
+        Assertions.assertTrue(empty.getMessage().contains("Missing group ids for new shard 201"),
+                "expected the missing-group-ids cause, got: " + empty.getMessage());
+    }
+
+    /**
+     * Stubs both client.createShard overloads so that attempt {@code i} of a request fails with
+     * {@code failures[i]} and the first attempt past the array succeeds. Every attempt's payload is
+     * recorded; a test that issues several requests clears the list between them.
+     */
+    private List<List<CreateShardInfo>> installCreateShardAttempts(StatusCode... failures) {
+        List<List<CreateShardInfo>> attempts = new ArrayList<>();
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> createShard(String serviceId, List<CreateShardInfo> createShardInfos)
+                    throws StarClientException {
+                return answerCreateShardAttempt(attempts, createShardInfos, failures);
+            }
+
+            @Mock
+            public List<ShardInfo> createShard(String serviceId, List<CreateShardInfo> createShardInfos,
+                                               long metaGroupId) throws StarClientException {
+                return answerCreateShardAttempt(attempts, createShardInfos, failures);
+            }
+        };
+        return attempts;
+    }
+
+    private static List<ShardInfo> answerCreateShardAttempt(List<List<CreateShardInfo>> attempts,
+                                                            List<CreateShardInfo> createShardInfos,
+                                                            StatusCode[] failures) throws StarClientException {
+        attempts.add(new ArrayList<>(createShardInfos));
+        int attempt = attempts.size() - 1;
+        if (attempt < failures.length) {
+            throw new StarClientException(failures[attempt], "attempt " + attempt + " failed");
+        }
+        List<ShardInfo> shardInfos = new ArrayList<>(createShardInfos.size());
+        for (CreateShardInfo createShardInfo : createShardInfos) {
+            shardInfos.add(ShardInfo.newBuilder().setShardId(createShardInfo.getShardId()).build());
+        }
+        return shardInfos;
+    }
+
+    private static void assertReplayedOnce(List<List<CreateShardInfo>> attempts, String caller) {
+        Assertions.assertEquals(2, attempts.size(), caller + " must replay the request exactly once");
+        Assertions.assertEquals(attempts.get(0), attempts.get(1), caller + " must replay the identical request");
+    }
+
+    /**
+     * Create one split shard (new shard 101 out of old shard 11) through the agent.
+     */
+    private void createOneSplitShard() throws DdlException {
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        newToOldShardId.put(101L, 11L);
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(101L, Lists.newArrayList(700L));
+        starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds, FilePathInfo.newBuilder().build(),
+                FileCacheInfo.newBuilder().build(), Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE,
+                false);
+    }
+
+    /**
+     * Every createShard caller replays the identical request once on a transport-level failure; see
+     * StarOSAgent#createShardRetryOnTransportError for why that is safe.
+     */
+    @Test
+    public void testCreateShardRetriesOnceOnTransportError() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+
+        createOneSplitShard();
+        assertReplayedOnce(attempts, "split");
+
+        attempts.clear();
+        Map<Long, List<Long>> newToOldShardIds = new LinkedHashMap<>();
+        newToOldShardIds.put(201L, Lists.newArrayList(11L, 12L));
+        Map<Long, List<Long>> mergeGroupIds = new LinkedHashMap<>();
+        mergeGroupIds.put(201L, Lists.newArrayList(700L));
+        starosAgent.createShardsForMerge(newToOldShardIds, mergeGroupIds, pathInfo, cacheInfo,
+                Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE);
+        assertReplayedOnce(attempts, "merge");
+
+        attempts.clear();
+        starosAgent.createShardWithVirtualTabletId(pathInfo, cacheInfo, 700L, Collections.emptyMap(), 301L,
+                WarehouseManager.DEFAULT_RESOURCE);
+        assertReplayedOnce(attempts, "virtual shard creation");
+    }
+
+    /**
+     * createShards generates its shard ids itself, so the replay must reuse the ids of the first
+     * attempt; fresh ids would create a second set of shards next to the ones StarMgr may have
+     * committed.
+     */
+    @Test
+    public void testCreateShardsRetryReusesShardIds() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        AtomicLong counter = new AtomicLong(1024);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return counter.getAndAdd(10);
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        List<Long> shardIds = starosAgent.createShards(2, FilePathInfo.newBuilder().build(),
+                FileCacheInfo.newBuilder().build(), 333, null, Collections.emptyMap(),
+                WarehouseManager.DEFAULT_RESOURCE);
+
+        Assertions.assertEquals(Lists.newArrayList(1024L, 1034L), shardIds);
+        assertReplayedOnce(attempts, "createShards");
+    }
+
+    @Test
+    public void testCreateShardDoesNotRetryNonTransportError() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.INVALID_ARGUMENT);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed", this::createOneSplitShard);
+        Assertions.assertEquals(1, attempts.size(), "a definite StarMgr answer must not be retried");
+    }
+
+    @Test
+    public void testCreateShardReportsBothErrorsWhenRetryFails() throws Exception {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC, StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        DdlException exception =
+                ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed", this::createOneSplitShard);
+        assertReplayedOnce(attempts, "split");
+        Assertions.assertTrue(exception.getMessage().contains("attempt 1 failed"), exception.getMessage());
+        Assertions.assertTrue(exception.getMessage().contains("outcome of the first attempt is unknown"),
+                exception.getMessage());
+    }
+
+    /**
+     * The replay would still send the request even though the caller has been asked to stop, so an
+     * interrupted thread gets the first failure instead.
+     */
+    @Test
+    public void testCreateShardDoesNotReplayOnInterruptedThread() {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        Thread.currentThread().interrupt();
+        try {
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed", this::createOneSplitShard);
+        } finally {
+            Thread.interrupted();
+        }
+        Assertions.assertEquals(1, attempts.size(), "an interrupted caller must not start another request");
+    }
+
+    /**
+     * StarMgr assigns a fresh id to an entry that carries none, so replaying such a request would create a
+     * second shard; it gets the first failure instead.
+     */
+    @Test
+    public void testCreateShardDoesNotReplayEntryWithoutShardId() {
+        List<List<CreateShardInfo>> attempts = installCreateShardAttempts(StatusCode.GRPC);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Map<Long, Long> newToOldShardId = new LinkedHashMap<>();
+        newToOldShardId.put(101L, 11L);
+        newToOldShardId.put(Constant.DEFAULT_ID, 12L);
+        Map<Long, List<Long>> newShardIdToGroupIds = new LinkedHashMap<>();
+        newShardIdToGroupIds.put(101L, Lists.newArrayList(700L));
+        newShardIdToGroupIds.put(Constant.DEFAULT_ID, Lists.newArrayList(700L));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "attempt 0 failed",
+                () -> starosAgent.createShardsForSplit(newToOldShardId, newShardIdToGroupIds,
+                        FilePathInfo.newBuilder().build(), FileCacheInfo.newBuilder().build(),
+                        Collections.emptyMap(), WarehouseManager.DEFAULT_RESOURCE, false));
+        Assertions.assertEquals(1, attempts.size(), "a request with an id-less entry must not be replayed");
+    }
+
+    @Test
+    public void testClearPlacementPreference() throws StarClientException, DdlException {
+        List<List<Long>> captured = new ArrayList<>();
+        AtomicInteger calls = new AtomicInteger();
+        new Expectations(client) {
+            {
+                client.clearPlacementPreference("1", (List<List<Long>>) any);
+                result = new Delegate<Void>() {
+                    @SuppressWarnings("unused")
+                    void clearPlacementPreference(String sid, List<List<Long>> preferenceMembers) {
+                        // Capture only; assert outside the mock so a binding failure cannot hide a
+                        // failed assertion.
+                        calls.incrementAndGet();
+                        captured.clear();
+                        captured.addAll(preferenceMembers);
+                    }
+                };
+                minTimes = 0;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        starosAgent.clearPlacementPreference(List.of(List.of(10L, 11L)));
+        Assertions.assertEquals(1, calls.get());
+        Assertions.assertEquals(List.of(List.of(10L, 11L)), captured);
+
+        // Nothing to clear must short-circuit before the RPC.
+        starosAgent.clearPlacementPreference(List.of());
+        Assertions.assertEquals(1, calls.get(), "an empty request must not issue an RPC");
+    }
+
+    @Test
+    public void testClearPlacementPreferenceWrapsStarClientException() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.clearPlacementPreference("1", (List<List<Long>>) any);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        DdlException thrown = Assertions.assertThrows(DdlException.class,
+                () -> starosAgent.clearPlacementPreference(List.of(List.of(10L, 11L))));
+        Assertions.assertTrue(thrown.getMessage().contains("mocked exception"),
+                "expected the cause message, got: " + thrown.getMessage());
     }
 
     @Test
@@ -453,6 +825,79 @@ public class StarOSAgentTest {
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         // test delete shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.deleteShardGroup(Lists.newArrayList(1L, 2L)));
+    }
+
+    @Test
+    public void testReassignShardGroups() throws StarClientException {
+        UpdateShardInfo expected = UpdateShardInfo.newBuilder()
+                .setShardId(100L)
+                .addAllAddGroupIds(Lists.newArrayList(2L))
+                .addAllRemoveGroupIds(Lists.newArrayList(1L))
+                .build();
+        new Expectations(client) {
+            {
+                client.updateShard("1", Lists.newArrayList(expected));
+                result = null;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(2L), Lists.newArrayList(1L)));
+    }
+
+    @Test
+    public void testReassignShardGroupsNoOpWhenDeltaEmpty() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.updateShard(anyString, (List<UpdateShardInfo>) any);
+                times = 0;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(), Lists.newArrayList()));
+    }
+
+    @Test
+    public void testReassignShardGroupsWrapsClientException() throws StarClientException {
+        new Expectations(client) {
+            {
+                client.updateShard(anyString, (List<UpdateShardInfo>) any);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked failure");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assertions.assertThrows(DdlException.class, () ->
+                starosAgent.reassignShardGroups(100L, Lists.newArrayList(2L), Lists.newArrayList(1L)));
+    }
+
+    @Test
+    public void testQueryShardGroupStable() throws StarClientException {
+        List<Long> shardGroupIds = Lists.newArrayList(10L, 20L);
+        new Expectations(client) {
+            {
+                client.queryShardGroupStable("1", shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                result = Lists.newArrayList(true, false);
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        List<Boolean> stable =
+                starosAgent.queryShardGroupStable(shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(Lists.newArrayList(true, false), stable);
+    }
+
+    @Test
+    public void testQueryShardGroupStableThrows() throws StarClientException {
+        List<Long> shardGroupIds = Lists.newArrayList(10L);
+        new Expectations(client) {
+            {
+                client.queryShardGroupStable("1", shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "non-PACK group");
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Assertions.assertThrows(StarClientException.class,
+                () -> starosAgent.queryShardGroupStable(shardGroupIds, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
     }
 
     @Test
@@ -521,6 +966,117 @@ public class StarOSAgentTest {
             Assertions.assertEquals(Lists.newArrayList(10001L, 10002L, 10003L),
                     starosAgent.getAllNodeIdsByShard(10L, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         });
+    }
+
+    /**
+     * Stubs client.getShardInfo to answer every shard with one replica on worker 1 (node 10001), except that the
+     * calls whose 0-based index is in {@code failingCalls} fail. Records the shard ids of every call.
+     */
+    private List<List<Long>> installGetShardInfoBatches(Integer... failingCalls) {
+        List<List<Long>> calls = new ArrayList<>();
+        List<Integer> failing = Arrays.asList(failingCalls);
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> getShardInfo(String serviceId, List<Long> shardIds, long workerGroupId)
+                    throws StarClientException {
+                calls.add(new ArrayList<>(shardIds));
+                if (failing.contains(calls.size() - 1)) {
+                    throw new StarClientException(StatusCode.INTERNAL, "mocked error");
+                }
+                ReplicaInfo replica = ReplicaInfo.newBuilder()
+                        .setReplicaRole(ReplicaRole.PRIMARY)
+                        .setWorkerInfo(WorkerInfo.newBuilder().setWorkerId(1L).setWorkerState(WorkerState.ON).build())
+                        .build();
+                List<ShardInfo> shardInfos = new ArrayList<>();
+                for (long shardId : shardIds) {
+                    shardInfos.add(ShardInfo.newBuilder().setShardId(shardId).addReplicaInfo(replica).build());
+                }
+                return shardInfos;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Map<Long, Long> workerToNode = Maps.newHashMap();
+        workerToNode.put(1L, 10001L);
+        Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
+        return calls;
+    }
+
+    private static List<Long> shardIdRange(long from, long to) {
+        List<Long> shardIds = new ArrayList<>();
+        for (long shardId = from; shardId <= to; shardId++) {
+            shardIds.add(shardId);
+        }
+        return shardIds;
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsInBatches() throws StarRocksException {
+        Config.star_client_get_shard_info_batch_size = 3;
+        List<List<Long>> calls = installGetShardInfoBatches();
+
+        Map<Long, List<Long>> result =
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 8), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(Lists.newArrayList(shardIdRange(1, 3), shardIdRange(4, 6), shardIdRange(7, 8)),
+                calls);
+        Assertions.assertEquals(shardIdRange(1, 8), result.keySet().stream().sorted().toList());
+        result.values().forEach(nodeIds -> Assertions.assertEquals(List.of(10001L), nodeIds));
+
+        // exactly one batch
+        calls.clear();
+        Assertions.assertEquals(3,
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 3), StarOSAgent.DEFAULT_WORKER_GROUP_ID).size());
+        Assertions.assertEquals(List.of(shardIdRange(1, 3)), calls);
+
+        // one more than a batch
+        calls.clear();
+        Assertions.assertEquals(4,
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 4), StarOSAgent.DEFAULT_WORKER_GROUP_ID).size());
+        Assertions.assertEquals(List.of(shardIdRange(1, 3), List.of(4L)), calls);
+
+        // less than a batch goes out as it is
+        calls.clear();
+        Assertions.assertEquals(2,
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 2), StarOSAgent.DEFAULT_WORKER_GROUP_ID).size());
+        Assertions.assertEquals(List.of(shardIdRange(1, 2)), calls);
+
+        // no shard, no call
+        calls.clear();
+        Assertions.assertTrue(
+                starosAgent.getAllNodeIdsByShards(new ArrayList<>(), StarOSAgent.DEFAULT_WORKER_GROUP_ID).isEmpty());
+        Assertions.assertTrue(calls.isEmpty());
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsNonPositiveBatchSize() throws StarRocksException {
+        Config.star_client_get_shard_info_batch_size = 0;
+        List<List<Long>> calls = installGetShardInfoBatches();
+
+        Map<Long, List<Long>> result =
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 3), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(List.of(List.of(1L), List.of(2L), List.of(3L)), calls);
+        Assertions.assertEquals(3, result.size());
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsLaterBatchFails() throws StarRocksException {
+        Config.star_client_get_shard_info_batch_size = 3;
+        List<List<Long>> calls = installGetShardInfoBatches(1);
+
+        // the shards of the first batch come back, and the batch after the failed one is not tried
+        Map<Long, List<Long>> result =
+                starosAgent.getAllNodeIdsByShards(shardIdRange(1, 8), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        Assertions.assertEquals(List.of(shardIdRange(1, 3), shardIdRange(4, 6)), calls);
+        Assertions.assertEquals(shardIdRange(1, 3), result.keySet().stream().sorted().toList());
+    }
+
+    @Test
+    public void testGetAllNodeIdsByShardsFirstBatchFails() {
+        Config.star_client_get_shard_info_batch_size = 3;
+        List<List<Long>> calls = installGetShardInfoBatches(0);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class, "mocked error",
+                () -> starosAgent.getAllNodeIdsByShards(shardIdRange(1, 8), StarOSAgent.DEFAULT_WORKER_GROUP_ID));
+        Assertions.assertEquals(List.of(shardIdRange(1, 3)), calls);
     }
 
     @Test
@@ -861,6 +1417,21 @@ public class StarOSAgentTest {
     }
 
     @Test
+    public void testListShardPreservesClientException() throws StarClientException {
+        StarClientException expectedException = new StarClientException(StatusCode.NOT_EXIST, "arbitrary message");
+        new Expectations(client) {
+            {
+                client.listShard("1", Lists.newArrayList(999L), StarOSAgent.DEFAULT_WORKER_GROUP_ID, true);
+                result = expectedException;
+            }
+        };
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+
+        DdlException exception = Assertions.assertThrows(DdlException.class, () -> starosAgent.listShard(999L));
+        Assertions.assertSame(expectedException, exception.getCause());
+    }
+
+    @Test
     public void testUpdateWorkerGroupExcepted() throws StarClientException {
         long workerGroupId = 10086;
         Map<String, String> properties = new HashMap<>();
@@ -977,6 +1548,36 @@ public class StarOSAgentTest {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to create shard group. error: INTERNAL:Mocked error",
                 () -> starosAgent.createShardGroupForVirtualTablet());
+    }
+
+    @Test
+    public void testAllocateFilePathFromOtherService() throws StarClientException {
+        long dbId = 1000;
+        long tableId = 123;
+        String storageVolumeId = "test-sv";
+        String otherServiceId = "other-service-id";
+
+        new Expectations(client) {
+            {
+                client.allocateFilePath("1", storageVolumeId, anyString, otherServiceId);
+                result = FilePathInfo.newBuilder().setFullPath("s3://bucket/path").build();
+                client.allocateFilePath("2", storageVolumeId, anyString, otherServiceId);
+                result = new StarClientException(StatusCode.INVALID_ARGUMENT, "mocked exception");
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        ExceptionChecker.expectThrowsNoException(() -> {
+            FilePathInfo pathInfo = starosAgent.allocateFilePathFromOtherService(storageVolumeId, dbId, tableId,
+                    otherServiceId);
+            Assertions.assertNotNull(pathInfo);
+            Assertions.assertEquals("s3://bucket/path", pathInfo.getFullPath());
+        });
+
+        Deencapsulation.setField(starosAgent, "serviceId", "2");
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Failed to allocate file path from StarMgr, error: INVALID_ARGUMENT:mocked exception",
+                () -> starosAgent.allocateFilePathFromOtherService(storageVolumeId, dbId, tableId, otherServiceId));
     }
 
     @Test

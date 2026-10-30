@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.type.DecimalType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -137,6 +138,19 @@ public class IndexAnalyzerTest {
     }
     
     @Test
+    public void testCheckColumnBitmapRejectsDecimal256() {
+        Map<String, String> properties = new HashMap<>();
+        Column decimal256 = new Column("v", DecimalType.DEFAULT_DECIMAL256, false, null, true, NULL_DEFAULT_VALUE, "");
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkColumn(decimal256, IndexDef.IndexType.BITMAP, properties, KeysType.DUP_KEYS));
+        Assertions.assertTrue(e.getMessage().contains("DECIMAL256 is not supported in bitmap index. invalid column: v"),
+                e.getMessage());
+
+        Column decimal128 = new Column("v", DecimalType.DEFAULT_DECIMAL128, false, null, true, NULL_DEFAULT_VALUE, "");
+        IndexAnalyzer.checkColumn(decimal128, IndexDef.IndexType.BITMAP, properties, KeysType.DUP_KEYS);
+    }
+
+    @Test
     public void testCheckInvertedIndexNgram() {
         // Test case 1: Valid gram_num value
         Map<String, String> properties1 = new HashMap<>();
@@ -196,5 +210,45 @@ public class IndexAnalyzerTest {
         Assertions.assertThrows(SemanticException.class, () -> {
             IndexAnalyzer.checkInvertedIndexNgram(properties8);
         }, "INVERTED index dict gram num  should be greater than zero.");
+    }
+
+    @Test
+    public void testCheckInvertedIndexLowerCase() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("imp_lib", "builtin");
+        properties.put("parser", "english");
+
+        // case1: builtin english + not set -> ok
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+
+        // case2: builtin english + valid value -> ok
+        properties.put("lower_case", "true");
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        properties.put("lower_case", "false");
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+
+        // case3: builtin english + invalid value -> throw
+        properties.put("lower_case", "invalid");
+        SemanticException e1 = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        Assertions.assertEquals("INVERTED index lower_case should be true or false.", e1.getDetailMsg());
+
+        // case4: non-builtin + lowercase -> throw
+        properties.put("imp_lib", "clucene");
+        properties.put("lower_case", "false");
+        SemanticException e2 = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        Assertions.assertEquals(
+                "INVERTED index lower_case is only supported when imp_lib is builtin and parser is english.",
+                e2.getDetailMsg());
+
+        // case5: non-english parser + lowercase -> throw
+        properties.put("imp_lib", "builtin");
+        properties.put("parser", "chinese");
+        SemanticException e3 = Assertions.assertThrows(SemanticException.class,
+                () -> IndexAnalyzer.checkInvertedIndexLowerCase(properties));
+        Assertions.assertEquals(
+                "INVERTED index lower_case is only supported when imp_lib is builtin and parser is english.",
+                e3.getDetailMsg());
     }
 }

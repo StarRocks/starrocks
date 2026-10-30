@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Adds a time interval to a date value."
 ---
 
 # microseconds_add

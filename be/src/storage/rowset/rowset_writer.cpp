@@ -38,34 +38,43 @@
 #include <butil/reader_writer.h>
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <ctime>
 #include <memory>
 
 #include "base/utility/pretty_printer.h"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "column/chunk_factory.h"
+#include "column/chunk_schema_helper.h"
+#include "column/serde/column_array_serde.h"
+#include "common/config_compaction_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
+#include "common/storage_define.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
-#include "fs/key_cache.h"
-#include "io/core/io_error.h"
+#include "fs/fs_factory.h"
+#include "io/io_error.h"
+#include "platform/key_cache.h"
 #include "runtime/load_fail_point.h"
 #include "segment_options.h"
-#include "serde/column_array_serde.h"
-#include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
-#include "storage/empty_iterator.h"
 #include "storage/index/index_descriptor.h"
-#include "storage/merge_iterator.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/metadata_util.h"
-#include "storage/olap_define.h"
-#include "storage/row_source_mask.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "storage/type_utils.h"
+#include "storage_primitive/aggregate_iterator.h"
+#include "storage_primitive/empty_iterator.h"
+#include "storage_primitive/merge_iterator.h"
+#include "storage_primitive/primary_key_encoder.h"
+#include "storage_primitive/row_source_mask_buffer.h"
+#include "storage_primitive/type_utils.h"
 
 namespace starrocks {
 
@@ -130,7 +139,7 @@ Status RowsetWriter::init() {
         _rowset_txn_meta_pb = std::make_unique<RowsetTxnMetaPB>();
     }
 
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_context.rowset_path_prefix));
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateSharedFromString(_context.rowset_path_prefix));
 
     if (_context.is_pk_compaction) {
         TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_context.tablet_id);
@@ -151,6 +160,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     _rowset_meta_pb->set_total_disk_size(_total_data_size + _total_index_size);
     _rowset_meta_pb->set_data_disk_size(_total_data_size);
     _rowset_meta_pb->set_index_disk_size(_total_index_size);
+    _rowset_meta_pb->set_standalone_index_size(_total_standalone_index_size);
     // TODO write zonemap to meta
     _rowset_meta_pb->set_empty(_num_rows_written == 0);
     _rowset_meta_pb->set_creation_time(time(nullptr));
@@ -306,8 +316,21 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     // 3. update statistic
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_pb.data_size();
+        // segment_pb.data_size() is full segment file bytes (column data + embedded index pages).
+        // Subtract only the embedded index so _total_data_size holds the column data bytes:
+        // segment_pb.index_size() also counts standalone index files (vector index .vi) that
+        // are not inside the segment file, and subtracting those too would drive
+        // _total_data_size negative for segments whose .vi outweighs their data.
+        // standalone_index_size() defaults to 0 for messages from an older sender that does not
+        // set it (proto2), which reproduces the previous behaviour; clamp to index_size so a
+        // malformed message where standalone > embedded cannot inflate the data bytes instead.
+        // invariant: data_disk_size + index_disk_size == total_disk_size.
+        const uint64_t embedded_index_size =
+                segment_pb.index_size() -
+                std::min<uint64_t>(segment_pb.standalone_index_size(), segment_pb.index_size());
+        _total_data_size += segment_pb.data_size() - static_cast<int64_t>(embedded_index_size);
         _total_index_size += segment_pb.index_size();
+        _total_standalone_index_size += static_cast<int64_t>(segment_pb.index_size() - embedded_index_size);
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
         DCHECK(_segment_encryption_metas.size() == _num_segment);
@@ -544,6 +567,9 @@ HorizontalRowsetWriter::~HorizontalRowsetWriter() {
                 for (int i = 0; i < _num_segment; i++) {
                     for (const auto& index : indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);
@@ -685,6 +711,7 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             wopts.encryption_info = pair.info;
             encryption_meta = std::move(pair.encryption_meta);
         }
+        RETURN_IF_ERROR(PrimaryKeyEncoder::check_delete_file_binary_column_size(deletes));
         auto file_path = Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_delfile);
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(wopts, file_path));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
@@ -752,12 +779,13 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
     }
 }
 
-Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
+Status HorizontalRowsetWriter::add_rowset(const RowsetSharedPtr& rowset) {
     RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
     _total_data_size += static_cast<int64_t>(rowset->rowset_meta()->data_disk_size());
     _total_index_size += static_cast<int64_t>(rowset->rowset_meta()->index_disk_size());
+    _total_standalone_index_size += rowset->rowset_meta()->standalone_index_size();
     DCHECK(_segment_encryption_metas.size() == _num_segment);
     RETURN_IF_UNLIKELY(_segment_encryption_metas.size() != _num_segment,
                        Status::InternalError(fmt::format("encryption_metas size {} != num segments {}",
@@ -765,7 +793,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     auto& meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (meta_pb.segment_encryption_metas_size() == 0) {
         for (int i = 0; i < rowset->num_segments(); ++i) {
-            _segment_encryption_metas.emplace_back(string());
+            _segment_encryption_metas.emplace_back();
         }
     } else {
         DCHECK_EQ(meta_pb.segment_encryption_metas_size(), rowset->num_segments());
@@ -785,7 +813,7 @@ Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     return Status::OK();
 }
 
-Status HorizontalRowsetWriter::add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
+Status HorizontalRowsetWriter::add_rowset_for_linked_schema_change(const RowsetSharedPtr& rowset,
                                                                    const SchemaMapping& schema_mapping) {
     // TODO use schema_mapping to transfer zonemap
     return add_rowset(rowset);
@@ -907,7 +935,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _context.max_rows_per_segment = CompactionUtils::get_segment_max_rows(config::max_segment_file_size,
                                                                               _num_rows_written, _total_data_size);
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -919,6 +947,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _total_row_size = 0;
         _total_data_size = 0;
         _total_index_size = 0;
+        _total_standalone_index_size = 0;
 
         // If RowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
         // but this array already have old entries, should clear those entries before write new segments for final merge.
@@ -938,7 +967,7 @@ Status HorizontalRowsetWriter::_final_merge() {
             return Status::InternalError(ss.str());
         }
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -1004,10 +1033,10 @@ Status HorizontalRowsetWriter::_final_merge() {
             }
             RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-            auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+            auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
             auto chunk = chunk_shared_ptr.get();
 
-            auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+            auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
             while (true) {
                 chunk->reset();
@@ -1078,7 +1107,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         RETURN_IF_ERROR(itr->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
 
-        auto chunk_shared_ptr = ChunkHelper::new_chunk(schema, config::vector_chunk_size);
+        auto chunk_shared_ptr = ChunkFactory::new_chunk(schema, config::vector_chunk_size);
         auto chunk = chunk_shared_ptr.get();
 
         _segment_encryption_metas.clear();
@@ -1090,6 +1119,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         _total_row_size = 0;
         _total_data_size = 0;
         _total_index_size = 0;
+        _total_standalone_index_size = 0;
 
         // If RowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
         // but this array already have old entries, should clear those entries before write new segments for final merge.
@@ -1101,7 +1131,7 @@ Status HorizontalRowsetWriter::_final_merge() {
         // method to create segment data files, rather than temporary segment files.
         _context.segments_overlap = NONOVERLAPPING;
 
-        auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
+        auto char_field_indexes = ChunkSchemaHelper::get_char_field_indexes(schema);
 
         size_t total_rows = 0;
         size_t total_chunk = 0;
@@ -1167,10 +1197,19 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
             seg_info->set_partial_footer_size(footer_size);
         }
     }
+    // index_size counts the index pages embedded in the segment file plus any standalone
+    // index file (vector index .vi). Only the embedded part is inside segment_size, so only
+    // that part is subtracted to get the column data bytes; subtracting the standalone bytes
+    // as well makes data_disk_size negative once the .vi outweighs the data (small vectors,
+    // HNSW graph), which then poisons compaction scores and size estimates.
+    const uint64_t standalone_index_size = (*segment_writer)->standalone_index_size();
+    DCHECK_LE(standalone_index_size, index_size);
+    const uint64_t embedded_index_size = index_size - std::min(standalone_index_size, index_size);
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += static_cast<int64_t>(segment_size);
+        _total_data_size += static_cast<int64_t>(segment_size) - static_cast<int64_t>(embedded_index_size);
         _total_index_size += static_cast<int64_t>(index_size);
+        _total_standalone_index_size += static_cast<int64_t>(index_size - embedded_index_size);
     }
 
     // check global_dict efficacy
@@ -1179,6 +1218,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     if (seg_info) {
         seg_info->set_data_size(segment_size);
         seg_info->set_index_size(index_size);
+        seg_info->set_standalone_index_size(standalone_index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
         seg_info->set_path((*segment_writer)->segment_path());
         seg_info->set_encryption_meta((*segment_writer)->encryption_meta());
@@ -1236,6 +1276,9 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
                 if (!indexes->empty()) {
                     for (const auto& index : *indexes) {
                         if (index.index_type() == GIN) {
+                            if (is_builtin_inverted_index(index)) {
+                                continue;
+                            }
                             std::string index_path = IndexDescriptor::inverted_index_file_path(
                                     _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
                             auto index_st = _fs->delete_dir_recursive(index_path);
@@ -1344,6 +1387,8 @@ Status VerticalRowsetWriter::flush_columns() {
 }
 
 Status VerticalRowsetWriter::final_flush() {
+    int64_t total_segment_file_bytes = 0;
+    int64_t total_standalone_index_bytes = 0;
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -1351,20 +1396,34 @@ Status VerticalRowsetWriter::final_flush() {
             LOG(WARNING) << "Fail to finalize segment footer, " << st;
             return st;
         }
+        // The tail index region is written by finalize_footer(), after _flush_columns() has done
+        // its accounting, so its bytes reach _total_index_size only here. Zero unless that layout
+        // is in use.
+        if (const uint64_t deferred = segment_writer->unreported_index_size(); deferred > 0) {
+            std::lock_guard<std::mutex> l(_lock);
+            _total_index_size += static_cast<int64_t>(deferred);
+        }
         if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _context.is_partial_update) {
             auto* partial_rowset_footer = _rowset_txn_meta_pb->add_partial_rowset_footers();
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);
         }
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += static_cast<int64_t>(segment_size);
-        }
+        total_segment_file_bytes += static_cast<int64_t>(segment_size);
+        // Standalone index files (vector index .vi) are counted in _total_index_size but are
+        // not part of the segment files, so they must not be subtracted from the data bytes.
+        total_standalone_index_bytes += static_cast<int64_t>(segment_writer->standalone_index_size());
 
         // check global_dict efficacy
         _check_global_dict(segment_writer.get());
 
         segment_writer.reset();
+    }
+    {
+        // _total_index_size was accumulated in _flush_columns() via finalize_columns().
+        // Match horizontal RowsetWriter::flush: data_disk_size is column bytes only (segment file minus embedded index).
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += total_segment_file_bytes - (_total_index_size - total_standalone_index_bytes);
+        _total_standalone_index_size += total_standalone_index_bytes;
     }
     return Status::OK();
 }

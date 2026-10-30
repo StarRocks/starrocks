@@ -102,11 +102,29 @@ public interface StatisticStorage {
     default void expireConnectorTableColumnStatistics(Table table, List<String> columns) {
     }
 
+    /**
+     * Invalidate connector column statistics by the table UUID directly, without resolving the
+     * {@link Table} (and therefore without any external metadata I/O). Used during journal replay.
+     */
+    default void invalidateConnectorTableColumnStatistics(String tableUUID, List<String> columns) {
+    }
+
     default void refreshConnectorTableColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
     default void expireConnectorHistogramStatistics(Table table, List<String> columns) {
     }
 
+    /**
+     * Invalidate connector histogram statistics by the table UUID directly, without resolving the
+     * {@link Table} (and therefore without any external metadata I/O). Used during journal replay.
+     */
+    default void invalidateConnectorHistogramStatistics(String tableUUID, List<String> columns) {
+    }
+
     void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic);
+
+    // Inject a histogram into the cache for query-dump replay; no-op if histograms aren't cached.
+    default void addHistogramStatistics(Table table, String column, Histogram histogram) {
+    }
 }

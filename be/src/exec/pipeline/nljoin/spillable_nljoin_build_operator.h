@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "compute_env/spill/options.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/spill_process_channel.h"
-#include "exec/spill/options.h"
-#include "exec/spill/spiller_factory.h"
 
 namespace starrocks::pipeline {
 

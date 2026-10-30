@@ -32,6 +32,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.DataCacheInfo;
@@ -39,6 +40,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -66,10 +68,8 @@ import com.starrocks.type.Type;
 import org.apache.logging.log4j.util.Strings;
 import org.threeten.extra.PeriodDuration;
 
-import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -90,8 +90,14 @@ public class PartitionDescAnalyzer {
      */
     public static void analyze(PartitionDesc partitionDesc, List<ColumnDef> columnDefs, Map<String, String> otherProperties)
             throws AnalysisException {
+        analyze(partitionDesc, columnDefs, otherProperties, null);
+    }
+
+    public static void analyze(PartitionDesc partitionDesc, List<ColumnDef> columnDefs,
+                               Map<String, String> otherProperties, KeysType keysType)
+            throws AnalysisException {
         if (partitionDesc instanceof ListPartitionDesc) {
-            analyzeListPartitionDesc((ListPartitionDesc) partitionDesc, columnDefs, otherProperties);
+            analyzeListPartitionDesc((ListPartitionDesc) partitionDesc, columnDefs, otherProperties, keysType);
         } else if (partitionDesc instanceof RangePartitionDesc) {
             analyzeRangePartitionDesc((RangePartitionDesc) partitionDesc, columnDefs, otherProperties);
         } else if (partitionDesc instanceof ExpressionPartitionDesc) {
@@ -115,7 +121,7 @@ public class PartitionDescAnalyzer {
             TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(timeUnit);
             if (timeUnitType == null) {
                 throw new SemanticException("Batch build partition does not support time interval type.");
-            } else if (!MultiRangePartitionDesc.SUPPORTED_TIME_UNIT_TYPE.contains(timeUnitType)) {
+            } else if (!PartitionTimeUtils.BATCH_PARTITION_TIME_UNITS.contains(timeUnitType)) {
                 throw new SemanticException("Batch build partition does not support time interval type: " + timeUnit);
             }
         }
@@ -280,55 +286,26 @@ public class PartitionDescAnalyzer {
 
         TimestampArithmeticExpr.TimeUnit timeUnitType = TimestampArithmeticExpr.TimeUnit.fromName(partitionGranularity);
         Preconditions.checkNotNull(timeUnitType);
+        if (!PartitionTimeUtils.BATCH_PARTITION_TIME_UNITS.contains(timeUnitType)) {
+            throw new SemanticException("Batch build partition does not support time interval type: " +
+                    partitionGranularity);
+        }
 
-        LocalDateTime standardBeginTime;
-        LocalDateTime standardEndTime;
+        LocalDateTime standardBeginTime =
+                PartitionTimeUtils.alignToUnitStart(partitionBeginDateTime, timeUnitType, dayOfWeek, dayOfMonth);
+        LocalDateTime standardEndTime =
+                PartitionTimeUtils.alignToUnitStart(partitionEndDateTime, timeUnitType, dayOfWeek, dayOfMonth);
+        if (standardBeginTime.equals(standardEndTime)) {
+            standardEndTime = PartitionTimeUtils.plus(standardEndTime, timeUnitType, partitionStep);
+        }
         String extraMsg = "";
-        switch (timeUnitType) {
-            case HOUR:
-                standardBeginTime = partitionBeginDateTime.withMinute(0).withSecond(0).withNano(0);
-                standardEndTime = partitionEndDateTime.withMinute(0).withSecond(0).withNano(0);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusHours(partitionStep);
-                }
-                break;
-            case DAY:
-                standardBeginTime = partitionBeginDateTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                standardEndTime = partitionEndDateTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusDays(partitionStep);
-                }
-                break;
-            case WEEK:
-                standardBeginTime = partitionBeginDateTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
-                standardEndTime = partitionEndDateTime.with(TemporalAdjusters.previousOrSame(DayOfWeek.of(dayOfWeek)));
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusWeeks(partitionStep);
-                }
-                extraMsg = "with start day of week " + dayOfWeek;
-                break;
-            case MONTH:
-                standardBeginTime = partitionBeginDateTime.withDayOfMonth(dayOfMonth);
-                standardEndTime = partitionEndDateTime.withDayOfMonth(dayOfMonth);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusMonths(partitionStep);
-                }
-                extraMsg = "with start day of month " + dayOfMonth;
-                break;
-            case YEAR:
-                standardBeginTime = partitionBeginDateTime.withDayOfYear(1);
-                standardEndTime = partitionEndDateTime.withDayOfYear(1);
-                if (standardBeginTime.equals(standardEndTime)) {
-                    standardEndTime = standardEndTime.plusYears(partitionStep);
-                }
-                break;
-            default:
-                throw new SemanticException("Batch build partition does not support time interval type: " +
-                        partitionGranularity);
+        if (timeUnitType == TimestampArithmeticExpr.TimeUnit.WEEK) {
+            extraMsg = "with start day of week " + dayOfWeek;
+        } else if (timeUnitType == TimestampArithmeticExpr.TimeUnit.MONTH) {
+            extraMsg = "with start day of month " + dayOfMonth;
         }
         if (!(standardBeginTime.equals(partitionBeginDateTime) && standardEndTime.equals(partitionEndDateTime))) {
-            DateTimeFormatter outputDateFormat = partitionColumnType.isDate()
-                    ? DateUtils.DATE_FORMATTER_UNIX : DateUtils.DATE_TIME_FORMATTER_UNIX;
+            DateTimeFormatter outputDateFormat = PartitionTimeUtils.getPartitionBoundFormatter(partitionColumnType);
 
             String msg = "Batch build partition range [" +
                     partitionBeginDateTime.format(outputDateFormat) + "," +
@@ -345,11 +322,12 @@ public class PartitionDescAnalyzer {
     // Analyze methods for different partition types
 
     public static void analyzeListPartitionDesc(ListPartitionDesc desc, List<ColumnDef> columnDefs,
-                                                Map<String, String> tableProperties) throws AnalysisException {
+                                                Map<String, String> tableProperties, KeysType keysType)
+            throws AnalysisException {
         // analyze partition columns
         List<ColumnDef> columnDefList = analyzeListPartitionColumns(desc, columnDefs);
         // analyze partition expr
-        analyzeListPartitionExprs(desc, columnDefs);
+        analyzeListPartitionExprs(desc, columnDefs, keysType);
         // analyze single list property
         analyzeSingleListPartitions(desc, tableProperties, columnDefList);
         // analyze multi list partition
@@ -583,19 +561,48 @@ public class PartitionDescAnalyzer {
         return partitionColumns;
     }
 
-    private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs) throws AnalysisException {
-        if (desc.getPartitionExprs() == null) {
-            return;
+    private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs, KeysType keysType)
+            throws AnalysisException {
+        List<String> slotRefs = Lists.newArrayList();
+        if (desc.getPartitionExprs() != null) {
+            slotRefs.addAll(desc.getPartitionExprs().stream()
+                    .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
+                    .map(SlotRef::getColumnName)
+                    .collect(Collectors.toList()));
         }
-        List<String> slotRefs = desc.getPartitionExprs().stream()
-                .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
-                .map(SlotRef::getColumnName)
-                .collect(Collectors.toList());
-        
+        Map<String, ColumnDef> columnDefMap = columnDefs.stream()
+                .collect(Collectors.toMap(ColumnDef::getName, c -> c, (a, b) -> a,
+                        () -> Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER)));
+        for (String partitionCol : desc.getPartitionColNames()) {
+            ColumnDef partitionColumnDef = columnDefMap.get(partitionCol);
+            if (partitionColumnDef == null) {
+                continue;
+            }
+            if (partitionColumnDef.isGeneratedColumn()) {
+                slotRefs.addAll(ExprUtils.collectAllSlotRefs(partitionColumnDef.getGeneratedColumnExpr())
+                        .stream().map(SlotRef::getColumnName).collect(Collectors.toList()));
+            } else {
+                slotRefs.add(partitionColumnDef.getName());
+            }
+        }
+
         for (ColumnDef columnDef : columnDefs) {
-            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName())) && !columnDef.isKey()
+            if ((slotRefs.isEmpty() || slotRefs.contains(columnDef.getName()))
+                    && !columnDef.isKey()
                     && columnDef.getAggregateType() != AggregateType.NONE) {
                 throw new AnalysisException("The partition expr should base on key column");
+            }
+        }
+
+        if (keysType == KeysType.PRIMARY_KEYS) {
+            Set<String> keyColumnNames = columnDefs.stream()
+                    .filter(ColumnDef::isKey)
+                    .map(ColumnDef::getName)
+                    .collect(Collectors.toCollection(() -> Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER)));
+            for (String slotRef : slotRefs) {
+                if (!keyColumnNames.contains(slotRef)) {
+                    throw new AnalysisException("The partition expr should base on key column");
+                }
             }
         }
     }

@@ -24,6 +24,8 @@ select regexp_replace(NULL, '', 'xx');
 select regexp_replace('abc中文def', '中文', 'xx');
 select regexp_replace('abc中文def', '[\\p{Han}]+', 'xx');
 select regexp_replace('a b c', " ", "-");
+select regexp_replace('a b c', '(b)', '<\\1>');
+select regexp_replace('abcd', '^a.*$', 'xx');
 select regexp_replace('           XXXX', '       ', '');
 select regexp_replace('xxxx', "x", "-");
 select regexp_replace('xxxx', "xx", "-"); 
@@ -247,3 +249,11 @@ ORDER BY column_value;
 
 -- Clean up
 DROP TABLE test_regexp_replace_multirow;
+
+-- Issue 76417 regression tests
+SELECT * FROM (
+    SELECT '-- --------------------------------------------------------------------------------\n-- @Time     : 2026-05-07 17:02\n    ,track_path                 ARRAY<STRING> COMMENT' AS a
+) t
+WHERE t.a LIKE '%track_path%';
+
+SELECT regexp('gk|abc_0.054523_psc2.8.225|cba_0.060057', 'abc_[0-9]+[.][0-9]+') AS aa;

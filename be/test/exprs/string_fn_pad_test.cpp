@@ -18,10 +18,12 @@
 #include <random>
 #include <utility>
 
+#include "base/testutil/assert.h"
 #include "butil/time.h"
+#include "common/storage_define.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
-#include "storage/olap_define.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -249,11 +251,11 @@ void test_const_pad(size_t num_rows, TestCaseType& c) {
     columns.emplace_back(ColumnPtr(std::move(mut_columns[0])));
     columns.emplace_back(ColumnPtr(std::move(mut_columns[1])));
     columns.emplace_back(std::move(const_pad_col));
-    StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 
     auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
-    StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     ASSERT_EQ(lpad_result->size(), num_rows);
     ASSERT_EQ(rpad_result->size(), num_rows);
     auto lpad_actual = lpad_result->get(num_rows - 1);
@@ -333,11 +335,11 @@ void test_const_len_and_pad(size_t num_rows, TestCaseType& c) {
     columns.emplace_back(ColumnPtr(std::move(mut_columns[0])));
     columns.emplace_back(const_len_col);
     columns.emplace_back(std::move(const_pad_col));
-    StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
 
     auto lpad_result = StringFunctions::lpad(ctx.get(), columns).value();
     auto rpad_result = StringFunctions::rpad(ctx.get(), columns).value();
-    StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
+    ASSERT_OK(StringFunctions::pad_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
     if (lpad_result->is_constant()) {
         ASSERT_EQ(lpad_result->size(), 1);
         ASSERT_EQ(rpad_result->size(), 1);
@@ -444,26 +446,18 @@ TEST_F(StringFunctionPadTest, lpadNullTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
     ASSERT_FALSE(result->is_null(0));
-    ASSERT_EQ("1231test", v->get_data()[0].to_string());
+    ASSERT_EQ("1231test", v->get_slice(0).to_string());
 
     ASSERT_TRUE(result->is_null(1));
-    ASSERT_EQ("", v->get_data()[1].to_string());
+    ASSERT_EQ("", v->get_slice(1).to_string());
 }
 
 TEST_F(StringFunctionPadTest, rpadTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto len = Int32Column::create();
-    auto fill = BinaryColumn::create();
-
-    str->append("test");
-    len->append(11);
-    fill->append("123");
-
-    str->append("test");
-    len->append(0);
-    fill->append("123");
+    auto str = ColumnTestHelper::build_column<Slice>({"test", "test"});
+    auto len = ColumnTestHelper::build_column<int32_t>({11, 0});
+    auto fill = ColumnTestHelper::build_column<Slice>({"123", "123"});
 
     columns.emplace_back(std::move(str));
     columns.emplace_back(std::move(len));
@@ -475,24 +469,16 @@ TEST_F(StringFunctionPadTest, rpadTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    ASSERT_EQ("test1231231", v->get_data()[0].to_string());
-    ASSERT_EQ("", v->get_data()[1].to_string());
+    ASSERT_EQ("test1231231", v->get_slice(0).to_string());
+    ASSERT_EQ("", v->get_slice(1).to_string());
 }
 
 TEST_F(StringFunctionPadTest, rpadChineseTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto len = Int32Column::create();
-    auto fill = BinaryColumn::create();
-
-    str->append("我是中文字符串");
-    len->append(15);
-    fill->append("不，我不是");
-
-    str->append("我是中文字符串");
-    len->append(2);
-    fill->append("不，我没有");
+    auto str = ColumnTestHelper::build_column<Slice>({"我是中文字符串", "我是中文字符串"});
+    auto len = ColumnTestHelper::build_column<int32_t>({15, 2});
+    auto fill = ColumnTestHelper::build_column<Slice>({"不，我不是", "不，我没有"});
 
     columns.emplace_back(std::move(str));
     columns.emplace_back(std::move(len));
@@ -504,23 +490,16 @@ TEST_F(StringFunctionPadTest, rpadChineseTest) {
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
-    ASSERT_EQ(Slice("我是中文字符串不，我不是不，我"), v->get_data()[0]);
-    ASSERT_EQ(Slice("我是"), v->get_data()[1]);
+    ASSERT_EQ(Slice("我是中文字符串不，我不是不，我"), v->get_slice(0));
+    ASSERT_EQ(Slice("我是"), v->get_slice(1));
 }
 
 TEST_F(StringFunctionPadTest, rpadConstTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
-    auto str = BinaryColumn::create();
-    auto len = Int32Column::create();
-    auto fill = BinaryColumn::create();
-
-    str->append("test");
-    len->append(8);
-    fill->append("123");
-
-    str->append("test");
-    len->append(-1);
+    auto str = ColumnTestHelper::build_column<Slice>({"test", "test"});
+    auto len = ColumnTestHelper::build_column<int32_t>({8, -1});
+    auto fill = ColumnTestHelper::build_column<Slice>({"123"});
 
     columns.emplace_back(std::move(str));
     columns.emplace_back(std::move(len));
@@ -533,10 +512,10 @@ TEST_F(StringFunctionPadTest, rpadConstTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
 
     ASSERT_FALSE(result->is_null(0));
-    ASSERT_EQ("test1231", v->get_data()[0].to_string());
+    ASSERT_EQ("test1231", v->get_slice(0).to_string());
 
     ASSERT_TRUE(result->is_null(1));
-    ASSERT_EQ("", v->get_data()[1].to_string());
+    ASSERT_EQ("", v->get_slice(1).to_string());
 }
 
 struct PadNullableStrConstLenFillTestCase {
@@ -615,7 +594,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     for (int i = 0; i < num_rows; ++i) {
         ASSERT_EQ(c.rpad_expected_nulls[i], rpad_result->is_null(i)) << "Row#" << i;
         if (!c.rpad_expected_nulls[i]) {
-            ASSERT_EQ(c.rpad_expected_results[i], rpad_v->get_data()[i].to_string()) << "Row#" << i;
+            ASSERT_EQ(c.rpad_expected_results[i], rpad_v->get_slice(i).to_string()) << "Row#" << i;
         }
     }
 
@@ -633,7 +612,7 @@ TEST_P(PadNullableStrConstLenFillTestFixture, pad) {
     for (int i = 0; i < num_rows; ++i) {
         ASSERT_EQ(c.lpad_expected_nulls[i], lpad_result->is_null(i)) << "Row#" << i;
         if (!c.lpad_expected_nulls[i]) {
-            ASSERT_EQ(c.lpad_expected_results[i], lpad_v->get_data()[i].to_string()) << "Row#" << i;
+            ASSERT_EQ(c.lpad_expected_results[i], lpad_v->get_slice(i).to_string()) << "Row#" << i;
         }
     }
 }

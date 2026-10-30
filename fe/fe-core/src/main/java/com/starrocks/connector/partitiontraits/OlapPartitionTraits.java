@@ -23,8 +23,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.common.PCellSortedSet;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,19 +48,6 @@ public class OlapPartitionTraits extends DefaultTraits {
     @Override
     public boolean isSupportPCTRefresh() {
         return true;
-    }
-
-    @Override
-    public PCellSortedSet getPartitionKeyRange(Column partitionColumn, Expr partitionExpr) {
-        if (!((OlapTable) table).getPartitionInfo().isRangePartition()) {
-            throw new IllegalArgumentException("Must be range partitioned table");
-        }
-        return ((OlapTable) table).getRangePartitionMap();
-    }
-
-    @Override
-    public PCellSortedSet getPartitionCells(List<Column> partitionColumns) {
-        return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
     }
 
     @Override
@@ -113,7 +98,7 @@ public class OlapPartitionTraits extends DefaultTraits {
                 result.add(basePartitionName);
             } else {
                 // Ignore partitions if mv's partition is the same with the basic table.
-                if (!isBaseTableChanged(basePartition, mvRefreshedPartitionInfo)) {
+                if (!isBaseTableChanged(baseTable, basePartition, mvRefreshedPartitionInfo)) {
                     continue;
                 }
 
@@ -125,19 +110,24 @@ public class OlapPartitionTraits extends DefaultTraits {
     }
 
     /**
-     * Check whether the base table's partition has changed or not.
-     * </p>
-     * NOTE: If the base table is materialized view, partition is overwritten each time, so we need to compare
-     * version and modified time.
+     * The visible version time is FE-local and FEs can stamp the same version at different times, so it is not compared
+     * for a cloud-native partition with a single physical partition: its version is never set back, so id and version
+     * identify its data. Shared-nothing versions can be set back by ADMIN SET PARTITION VERSION or version recovery,
+     * and a newly added physical partition restarts at version 1, so the time still decides in those cases.
      */
-    public static boolean isBaseTableChanged(Partition partition,
+    public static boolean isBaseTableChanged(OlapTable baseTable, Partition partition,
                                              MaterializedView.BasePartitionInfo mvRefreshedPartitionInfo) {
         if (mvRefreshedPartitionInfo.getId() != partition.getId()) {
             return true;
         }
-        PhysicalPartition defaultPartition = partition.getLatestPhysicalPartition();
-        return defaultPartition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()
-                || defaultPartition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
+        PhysicalPartition latestPhysicalPartition = partition.getLatestPhysicalPartition();
+        if (latestPhysicalPartition.getVisibleVersion() != mvRefreshedPartitionInfo.getVersion()) {
+            return true;
+        }
+        if (baseTable.isCloudNativeTableOrMaterializedView() && partition.getSubPartitions().size() == 1) {
+            return false;
+        }
+        return latestPhysicalPartition.getVisibleVersionTime() > mvRefreshedPartitionInfo.getLastRefreshTime();
     }
 
     public List<Column> getPartitionColumns() {

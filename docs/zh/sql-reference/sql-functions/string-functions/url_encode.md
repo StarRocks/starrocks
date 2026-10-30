@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "将字符串根据 application/x-www-form-urlencoded 格式进行编码。"
 ---
 
 # url_encode

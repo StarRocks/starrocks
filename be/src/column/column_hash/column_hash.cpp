@@ -20,10 +20,12 @@
 #include <typeindex>
 
 #include "base/hash/hash_util.hpp"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
@@ -104,6 +106,17 @@ struct SelectorRange {
     }
 
     bool select(uint32_t idx) { return from <= idx && idx < to; }
+};
+
+// [from, to), but the hash of row i is written to hashes[i - origin] rather than hashes[i], so a
+// caller hashing a sub-range only has to provide a buffer covering that sub-range. `origin` is
+// deliberately a separate field from `from`: the nullable fast path below narrows [from, to) to a
+// run of equal null values and recurses with a copy of the selector, and the destination has to
+// stay anchored to the sub-range the caller asked for, not to the run.
+struct SelectorRangeRebased : SelectorRange {
+    SelectorRangeRebased(uint32_t from, uint32_t to) : SelectorRange(from, to), origin(from) {}
+
+    uint32_t origin;
 };
 
 // [sel[0], sel[1], ..., sel[sel_size - 1]]
@@ -231,22 +244,25 @@ public:
         }
     }
 
-    template <typename SizeT>
-    Status do_visit(const BinaryColumnBase<SizeT>& column) {
+    Status do_visit(const BinaryColumn& column) {
         const auto& offsets = column.get_offset();
         const auto& bytes = column.get_immutable_bytes();
         const auto column_size = column.size();
-        _selector.for_each([&](uint32_t idx) {
-            // Skip out-of-bounds indices (preserve hash seed)
-            if (idx >= column_size) {
-                return;
-            }
-            uint32_t* slot_ptr = slot(idx);
-            auto len = offsets[idx + 1] - offsets[idx];
-            // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)
-            if (len > 0) {
-                *slot_ptr = HashFunction::hash(bytes.data() + offsets[idx], static_cast<int32_t>(len), *slot_ptr);
-            }
+        offsets.visit_storage([&](const auto& offsets_buf) {
+            const auto* __restrict offset_data = offsets_buf.data();
+            _selector.for_each([&](uint32_t idx) {
+                // Skip out-of-bounds indices (preserve hash seed)
+                if (idx >= column_size) {
+                    return;
+                }
+                uint32_t* slot_ptr = slot(idx);
+                auto len = offset_data[idx + 1] - offset_data[idx];
+                // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)
+                if (len > 0) {
+                    *slot_ptr =
+                            HashFunction::hash(bytes.data() + offset_data[idx], static_cast<int32_t>(len), *slot_ptr);
+                }
+            });
         });
         return Status::OK();
     }
@@ -274,7 +290,9 @@ public:
 
         // TODO: optimize performance for sparse nulls
         // Fast path: no selection arrays involved, so we can work on continuous ranges.
-        if constexpr (std::is_same_v<SelectorType, SelectorRange> || std::is_same_v<SelectorType, SelectorSelection>) {
+        if constexpr (std::is_same_v<SelectorType, SelectorRange> ||
+                      std::is_same_v<SelectorType, SelectorRangeRebased> ||
+                      std::is_same_v<SelectorType, SelectorSelection>) {
             uint32_t cursor = _selector.from;
             while (cursor < _selector.to) {
                 uint32_t next = cursor + 1;
@@ -374,6 +392,13 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const FileColumn& column) {
+        for (const ColumnPtr& field : column.fields()) {
+            (void)field->accept(this);
+        }
+        return Status::OK();
+    }
+
     Status do_visit(const JsonColumn& column) {
         _selector.for_each([&](uint32_t idx) {
             int64_t h = column.get_object(idx)->hash();
@@ -384,6 +409,17 @@ public:
     }
 
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // AdaptiveNullableColumn brings its own accept() through ColumnFactory, so it lands here
+        // rather than on the NullableColumn overload. Returning NotSupported meant every entry
+        // point below -- all of which discard the status -- left the caller's seeds untouched, so
+        // an adaptive column hashed to whatever was already in the buffer. Materialize it and hash
+        // the nullable representation, which is what its own fnv_hash()/crc32_hash() overrides
+        // were already trying to reach.
+        column.materialized_nullable();
+        return do_visit(static_cast<const NullableColumn&>(column));
+    }
 
     template <typename ObjectType>
     Status do_visit(const ObjectColumn<ObjectType>& column) {
@@ -402,6 +438,8 @@ private:
     [[always_inline]] uint32_t* slot(uint32_t idx) const {
         if constexpr (std::is_same_v<SelectorType, SelectorSingle>) {
             return _hashes;
+        } else if constexpr (std::is_same_v<SelectorType, SelectorRangeRebased>) {
+            return _hashes + (idx - _selector.origin);
         } else {
             return _hashes + idx;
         }
@@ -416,6 +454,11 @@ private:
 // FNV Hash
 void fnv_hash_column(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
     ColumnHashVisitor<FNVHash, SelectorRange> visitor(hashes, SelectorRange(from, to));
+    (void)column.accept(&visitor);
+}
+
+void fnv_hash_column_rebased(const Column& column, uint32_t* hashes, uint32_t from, uint32_t to) {
+    ColumnHashVisitor<FNVHash, SelectorRangeRebased> visitor(hashes, SelectorRangeRebased(from, to));
     (void)column.accept(&visitor);
 }
 

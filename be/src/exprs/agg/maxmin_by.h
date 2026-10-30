@@ -18,9 +18,10 @@
 #include <type_traits>
 
 #include "base/container/raw_container.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
@@ -517,7 +518,7 @@ public:
         size_t new_size = old_size;
         for (size_t i = 0; i < chunk_size; ++i) {
             if (src[1]->is_null(i)) {
-                result->get_offset()[i + 1] = old_size;
+                result->get_offset().set(i + 1, old_size);
                 DCHECK(dst->is_nullable());
                 down_cast<NullableColumn*>(dst.get())->set_has_null(true);
             } else {
@@ -571,7 +572,7 @@ public:
                         data_column->serialize(i, p);
                     }
                 }
-                result->get_offset()[i + 1] = new_size;
+                result->get_offset().set(i + 1, new_size);
                 old_size = new_size;
             }
         }
@@ -653,13 +654,7 @@ public:
         if (columns[1]->only_null() || columns[1]->is_null(row_num)) {
             return;
         }
-        Slice rhs;
-        auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(columns[1]));
-        if (columns[1]->is_constant()) {
-            rhs = binary_column->get_slice(0);
-        } else {
-            rhs = binary_column->get_slice(row_num);
-        }
+        Slice rhs = GetContainer<LT>::get_data(columns[1], row_num);
         OP()(this->data(state), (Column*)columns[0], row_num, rhs);
     }
 
@@ -775,7 +770,7 @@ public:
             if (src[1]->is_null(i)) {
                 auto* dst_nullable_column = down_cast<NullableColumn*>(dst.get());
                 dst_nullable_column->set_has_null(true);
-                result->get_offset()[i + 1] = old_size;
+                result->get_offset().set(i + 1, old_size);
             } else {
                 size_t new_size = old_size;
                 auto is_null = src[0]->only_null() || src[0]->is_null(i);
@@ -820,7 +815,7 @@ public:
                     p += sizeof(size_t);
                     data_column->serialize(i, p);
                 }
-                result->get_offset()[i + 1] = new_size;
+                result->get_offset().set(i + 1, new_size);
                 old_size = new_size;
             }
         }

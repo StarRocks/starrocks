@@ -27,10 +27,12 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class EsShardProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
@@ -55,12 +57,18 @@ public class EsShardProcDir implements ProcDirInterface {
 
         List<List<Comparable>> shardInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        long tableId = esTable.getId();
+        locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             // get infos
-            EsShardPartitions esShardPartitions = esTable.getEsTablePartitions().getEsShardPartitions(indexName);
-            for (int shardId : esShardPartitions.getShardRoutings().keySet()) {
-                List<EsShardRouting> shardRoutings = esShardPartitions.getShardRoutings().get(shardId);
+            // Read once: a sync swaps it at any time, and it is null until one succeeds and after one fails.
+            EsTablePartitions esTablePartitions = esTable.getEsTablePartitions();
+            EsShardPartitions esShardPartitions =
+                    esTablePartitions == null ? null : esTablePartitions.getEsShardPartitions(indexName);
+            Map<Integer, List<EsShardRouting>> shardRoutingsById =
+                    esShardPartitions == null ? Map.of() : esShardPartitions.getShardRoutings();
+            for (int shardId : shardRoutingsById.keySet()) {
+                List<EsShardRouting> shardRoutings = shardRoutingsById.get(shardId);
                 if (shardRoutings != null && shardRoutings.size() > 0) {
                     for (EsShardRouting esShardRouting : shardRoutings) {
                         List<Comparable> shardInfo = new ArrayList<Comparable>();
@@ -78,7 +86,7 @@ public class EsShardProcDir implements ProcDirInterface {
                 }
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
 
         // sort by tabletId, replicaId

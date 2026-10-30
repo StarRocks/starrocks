@@ -21,6 +21,7 @@
 #include <sstream>
 
 #include "base/crypto/md5.h"
+#include "fs/fs_factory.h"
 
 namespace starrocks::fs {
 
@@ -46,12 +47,12 @@ Status list_dirs_files(FileSystem* fs, const std::string& path, std::set<std::st
 }
 
 Status list_dirs_files(const std::string& path, std::set<std::string>* dirs, std::set<std::string>* files) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return list_dirs_files(fs.get(), path, dirs, files);
 }
 
 StatusOr<std::string> md5sum(const std::string& path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     ASSIGN_OR_RETURN(auto file, fs->new_random_access_file(path));
     ASSIGN_OR_RETURN(auto length, file->get_size());
     std::unique_ptr<unsigned char[]> buf(new (std::nothrow) unsigned char[length]);
@@ -60,7 +61,14 @@ StatusOr<std::string> md5sum(const std::string& path) {
     }
     RETURN_IF_ERROR(file->read_fully(buf.get(), length));
     unsigned char result[MD5_DIGEST_LENGTH];
+    // TODO: MD5() is deprecated since OpenSSL 3.0. Replace it with
+    // EVP_Digest(buf, length, result, nullptr, EVP_md5(), nullptr) once that has been tested
+    // enough on the clone/snapshot/replication checksum paths. Until then keep MD5() and only
+    // silence the deprecation warning here.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     MD5(buf.get(), length, result);
+#pragma GCC diagnostic pop
     std::stringstream ss;
     for (unsigned char i : result) {
         ss << std::setfill('0') << std::setw(2) << std::hex << (int)i;

@@ -20,8 +20,9 @@
 
 #include "base/concurrency/race_detect.h"
 #include "exec/aggregator.h"
-#include "exec/pipeline/operator.h"
-#include "runtime/runtime_state.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 class AggregateBlockingSinkOperatorFactory;

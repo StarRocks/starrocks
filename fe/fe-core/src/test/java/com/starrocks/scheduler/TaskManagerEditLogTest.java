@@ -31,6 +31,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -991,7 +992,8 @@ public class TaskManagerEditLogTest {
         Task createdTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(createdTask);
         Assertions.assertEquals(Constants.TaskState.ACTIVE, createdTask.getState());
-        Assertions.assertNotNull(masterTaskManager.getPeriodFutureMap().get(createdTask.getId()));
+        ScheduledFuture<?> scheduledFuture = masterTaskManager.getPeriodFutureMap().get(createdTask.getId());
+        Assertions.assertNotNull(scheduledFuture);
 
         // 2. Execute suspendTask operation (master side)
         masterTaskManager.suspendTask(createdTask, false);
@@ -1000,6 +1002,8 @@ public class TaskManagerEditLogTest {
         Task suspendedTask = masterTaskManager.getTask(taskName);
         Assertions.assertNotNull(suspendedTask);
         Assertions.assertEquals(Constants.TaskState.PAUSE, suspendedTask.getState());
+        Assertions.assertTrue(scheduledFuture.isCancelled(),
+                "Suspending a periodical task should cancel the registered scheduler future");
 
         // 4. Test follower replay functionality
         TaskManager followerTaskManager = new TaskManager();

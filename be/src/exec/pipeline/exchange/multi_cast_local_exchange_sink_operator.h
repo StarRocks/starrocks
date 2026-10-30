@@ -16,7 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
-#include "exec/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 
@@ -38,6 +38,8 @@ public:
 
     bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
 
+    bool pending_finish() const override { return _exchanger->has_pending_io_tasks(); }
+
     Status set_finishing(RuntimeState* state) override;
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
@@ -48,7 +50,7 @@ public:
 
     void set_execute_mode(int performance_level) override { return _exchanger->enter_release_memory_mode(); }
 
-    void update_exec_stats(RuntimeState* state) override {}
+    OperatorExecStatsSnapshot exec_stats_snapshot() const override { return OperatorExecStatsSnapshot::ignored(); }
 
 protected:
     bool _is_finished = false;

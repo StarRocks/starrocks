@@ -40,6 +40,8 @@ const AWSCloudConfiguration CloudConfigurationFactory::create_aws(const TCloudCo
     aws_cloud_credential.use_aws_sdk_default_behavior =
             get_or_default(properties, AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, false);
     aws_cloud_credential.use_instance_profile = get_or_default(properties, AWS_S3_USE_INSTANCE_PROFILE, false);
+    aws_cloud_credential.use_web_identity_profile =
+            get_or_default(properties, AWS_S3_USE_WEB_IDENTITY_TOKEN_FILE, false);
     aws_cloud_credential.access_key = get_or_default(properties, AWS_S3_ACCESS_KEY, std::string());
     aws_cloud_credential.secret_key = get_or_default(properties, AWS_S3_SECRET_KEY, std::string());
     aws_cloud_credential.session_token = get_or_default(properties, AWS_S3_SESSION_TOKEN, std::string());

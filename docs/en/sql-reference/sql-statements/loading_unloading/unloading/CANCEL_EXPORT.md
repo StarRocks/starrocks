@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "CANCEL EXPORT cancels a given data unloading job."
 ---
 
 # CANCEL EXPORT

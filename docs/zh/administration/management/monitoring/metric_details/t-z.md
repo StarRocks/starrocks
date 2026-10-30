@@ -1,0 +1,282 @@
+---
+displayed_sidebar: docs
+hide_table_of_contents: true
+description: "Alphabetical t - z"
+---
+
+# 指标 t 到 z
+
+## `tablet_base_max_compaction_score`
+
+- 单位: -
+- 描述: 此BE中tablet的最高基础合并分数。
+
+## `tablet_cumulative_max_compaction_score`
+
+- 单位: -
+- 描述: 此BE中tablet的最高累积合并分数。
+
+## `tablet_metadata_mem_bytes`
+
+- 单位: 字节
+- 描述: tablet元数据使用的内存。
+
+## `tablet_pre_split_data_tier_file_selection`
+
+- 单位: 计数
+- 类型: 累计
+- 标签: `mode` — `subset`（只扫描了部分文件，扫描量由 `tablet_pre_split_data_tier_scan_byte_limit` 控制）、`under_limit`（输入未超过上限，扫描了全部文件）、`disabled`（上限为 `0`，扫描了全部文件）、`all_selected`（输入超过上限，但以整个文件为单位选取、每个分区至少一个文件并满足最少文件数后，仍选中了全部文件）、`partition_from_file_data`（输入超过上限，但分区列来自文件数据而非路径，或同时包含来自路径和来自常量的分区列，取子集可能漏掉整个分区，因此扫描了全部文件）、`path_not_expressible`（仅 `INSERT INTO ... SELECT FROM FILES()`：选中文件的路径含有 FILES 无法作为精确路径处理的字符，即 `,`、`*`、`?`、`[`、`{`、`\`、主机名之后路径中的 `:` 或首尾空白，因此改用语句自身的 `path` 扫描全部文件）。
+- 描述: Broker Load 与 `INSERT INTO ... SELECT FROM FILES()` 导入在 data tier 的采样总次数，按扫描文件的选取方式细分。
+
+## `tablet_pre_split_data_tier_scanned_bytes_percent`
+
+- 单位: -
+- 类型: 直方图
+- 描述: Broker Load 与 `INSERT INTO ... SELECT FROM FILES()` 导入每次在 data tier 采样时扫描的字节数占输入总字节数的百分比，向下取整，因此 `100` 表示扫描了全部文件。
+
+## `tablet_reshard_merge_candidate_blocked`
+
+- 单位: 计数
+- 描述: 该指标统计的是合并规划过程中 Tablet 被排除事件的累计次数，而不是当前仍被阻塞的 Tablet 数量：只要某次规划把一个原本符合条件的 Tablet 判定为排除，计数就会加一，且不会随后回退，只有 FE 重启才会清零。因此应关注该值的增长速率，而非其绝对大小。一个 Tablet 被排除，原因要么是它仍持有 Tablet 分裂遗留下来、会阻塞合并的共享数据文件，要么是尚未被证实不含这类文件——后一种情况通常意味着 compaction 还没追上，但也可能是该 Tablet 所在 BE 版本过旧、不支持这项检查，或者该 Tablet 还未被观测到。清掉分裂遗留的共享文件需要一次重写它们的 compaction：非主键表可以用 `ALTER TABLE ... COMPACT` 按需触发；主键表执行同样的语句时，只有当该 Tablet 存在未清理的删除时才会触发 base compaction，而刚分裂出来的 Tablet 通常没有删除，因此对它无效，只能等常规 compaction 自行重写到那些 rowset。仅 Leader FE 会递增该计数器。
+
+## `tablet_reshard_merge_rejected_total`
+
+- 单位: 计数
+- 描述: 本 BE 在写入任何文件之前拒绝执行的 tablet 合并累计次数。拒绝的原因是待合并的 tablet 不满足合并的前提条件，常见情形有：某个 tablet 仍持有 split 后与其他 tablet 共享的数据文件、两个 tablet 声明了同一个文件，或者各 tablet 的表级配置不一致。被拒绝的 publish 返回的错误信息以 `MERGE_REJECTED` 开头，BE 同时输出一条 WARNING 日志，列出源 tablet 与目标 tablet。
+
+## `tablet_schema_mem_bytes`
+
+- 单位: 字节
+- 描述: tablet schema使用的内存。
+
+## `tablet_update_max_compaction_score`
+
+- 单位: -
+- 描述: 当前BE中主键表tablet的最高合并分数。
+
+## `threadpool_task_exception_total`
+
+- 单位: 计数
+- 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
+
+## `thrift_client_retries_total`
+
+- 单位: 计数
+- 类型: 累积
+- 描述: FE 发起的 Thrift RPC 因连接断开而重试的累计次数。每次重试前，FE 会先随机等待一段时间（指数退避：第一次重试前等待 100 到 200 毫秒，之后每次重试的等待区间上下限都翻倍，直到 500 到 1000 毫秒为止），再重新建立连接并重发请求。调用超时不会重试，也不计入该指标。单次调用的重试次数受 `thrift_rpc_retry_times` 限制。该值持续上升说明 FE 与其他节点之间的 Thrift 连接频繁断开，常见原因是对端（例如 Leader FE）的 Thrift 工作线程池已饱和，正在直接关闭新连接，可结合对端的 `thrift_server_rejected_connections_total` 一起判断。
+
+## `thrift_connections_total`
+
+- 单位: 计数
+- 描述: thrift连接的总数量（包括已完成的连接）。
+
+## `thrift_current_connections (Deprecated)`
+
+## `thrift_opened_clients`
+
+- 单位: 计数
+- 描述: 当前打开的thrift客户端数量。
+
+## `thrift_server_acceptor_stall_ms`
+
+- 单位: 毫秒
+- 类型: 瞬时
+- 描述: FE Thrift 接收循环（accept loop）上次返回连接至今的时长（毫秒）。接收循环卡住会使该值上升，但没有 Thrift 流量的 FE 同样会上升，因此应结合连接到达速率一起判断，不要仅凭该指标告警。此外，当接收循环根本没有运行时（Thrift 服务器启动之前、停止之后）该值同样为 `0`，因此基于阈值的告警无法区分 Thrift 服务已停止与服务健康这两种情况。
+
+## `thrift_server_expired_connections_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：因在等待队列中的滞留时间超过 `thrift_server_queue_timeout_ms` 而被 FE Thrift 服务器直接关闭、未予处理的连接总数。该检查默认关闭，因此在运维人员启用该超时之前，本指标恒为 0。该值上升表示 FE 当时正在处理一批调用方几乎肯定已经放弃的积压连接；可结合 `thrift_server_queue_wait_ms` 判断队列落后的程度。
+
+## `thrift_server_queue_wait_ms`
+
+- 单位：毫秒
+- 类型：瞬时
+- 描述：连接在被工作线程取走之前，在 FE Thrift 服务器等待队列中滞留时长的分位数。每个出队连接都会采样，包括随后因超时而被丢弃的连接，因此该分布不会被 `thrift_server_queue_timeout_ms` 截断。这是 Thrift 饱和的先行指标：在工作线程池尚能跟上时它就会上升，远早于 `thrift_server_rejected_connections_total` 开始变化。
+
+## `thrift_server_rejected_connections_total`
+
+- 单位: 计数
+- 类型: 累积
+- 描述: FE Thrift 服务器因工作线程池饱和而立即关闭的连接总数。每次拒绝都会计数，包括因日志限流而未打印告警的那些。该值上升表示客户端正在被拒绝；请结合 `thrift-server-pool` 的 `thread_pool` 指标一起查看，其增长速率可反映工作线程容量的缺口。
+
+## `thrift_used_clients`
+
+- 单位: 计数
+- 描述: 当前正在使用的thrift客户端数量。
+
+## `total_column_pool_bytes (Deprecated)`
+
+## `transaction_streaming_load_bytes`
+
+- 单位: 字节
+- 描述: 事务加载的总加载字节数。
+
+## `transaction_streaming_load_current_processing`
+
+- 单位: 计数
+- 描述: 当前正在运行的事务性Stream Load任务数量。
+
+## `transaction_streaming_load_duration_ms`
+
+- 单位: 毫秒
+- 描述: Stream Load事务接口的总耗时。
+
+## `transaction_streaming_load_requests_total`
+
+- 单位: 计数
+- 描述: 事务加载请求的总数量。
+
+## `txn_request`
+
+- 单位: -
+- 描述: BEGIN、COMMIT、ROLLBACK和EXEC的事务请求。
+
+## `uint8_column_pool_bytes`
+
+- 单位: 字节
+- 描述: UINT8列池使用的字节数。
+
+## `unused_rowsets_count`
+
+- 单位: 计数
+- 描述: 未使用的rowset总数量。请注意，这些rowset稍后将被回收。
+
+## `update_apply_queue_count`
+
+- 单位: 计数
+- 描述: 主键表事务APPLY线程池中排队的任务数量。
+
+## `update_compaction_duration_us`
+
+- 单位: 微秒
+- 描述：主键表压缩所花费的总时间。
+
+## `update_compaction_outputs_bytes_total`
+
+- 单位：字节
+- 描述：主键表压缩写入的总字节数。
+
+## `update_compaction_outputs_total`
+
+- 单位：计数
+- 描述：主键表压缩的总次数。
+
+## `update_compaction_task_byte_per_second`
+
+- 单位：字节/秒
+- 描述：主键表压缩的估计速率。
+
+## `update_compaction_task_cost_time_ns`
+
+- 单位：纳秒
+- 描述：主键表压缩所花费的总时间。
+
+## `update_del_vector_bytes_total`
+
+- 单位：字节
+- 描述：主键表中用于缓存 DELETE 向量的总内存。
+
+## `update_del_vector_deletes_new`
+
+- 单位：计数
+- 描述：主键表中使用的最新生成的 DELETE 向量总数。
+
+## `update_del_vector_deletes_total (Deprecated)`
+
+## `update_del_vector_dels_num (Deprecated)`
+
+## `update_del_vector_num`
+
+- 单位：计数
+- 描述：主键表中 DELETE 向量缓存项的数量。
+
+## `update_mem_bytes`
+
+- 单位：字节
+- 描述：主键表 APPLY 任务和主键索引使用的内存。
+
+## `update_primary_index_bytes_total`
+
+- 单位：字节
+- 描述：主键索引的总内存开销。
+
+## `update_primary_index_num`
+
+- 单位：计数
+- 描述：内存中缓存的主键索引数量。
+
+## `update_rowset_commit_apply_duration_us`
+
+- 单位：微秒
+- 描述：主键表 APPLY 任务所花费的总时间。
+
+## `update_rowset_commit_apply_total`
+
+- 单位：计数
+- 描述：主键表的 COMMIT 和 APPLY 总数。
+
+## `update_rowset_commit_request_failed`
+
+- 单位：计数
+- 描述：主键表中失败的行集 COMMIT 请求总数。
+
+## `update_rowset_commit_request_total`
+
+- 单位：计数
+- 描述：主键表中行集 COMMIT 请求总数。
+
+## `vector_index_cache_async_load_failure`
+
+- 类型：累计
+- 单位：计数
+- 描述：已经开始执行、但在加载或写入缓存过程中失败的向量索引缓存后台加载任务累计数。不包括执行前被取消的任务。
+
+## `vector_index_cache_async_load_inflight`
+
+- 类型：瞬时
+- 单位：计数
+- 描述：当前正在后台 worker 中运行的向量索引缓存加载任务数。
+
+## `vector_index_cache_async_load_ns`
+
+- 类型：累计
+- 单位：纳秒
+- 描述：已经开始执行的向量索引缓存后台加载任务累计执行时间，包括成功和失败的任务，不包括队列等待时间和被拒绝的任务。
+
+## `vector_index_cache_async_load_queued`
+
+- 类型：瞬时
+- 单位：计数
+- 描述：后台线程池已经接受、但尚未开始运行的向量索引缓存加载任务数。
+
+## `vector_index_cache_async_load_rejected`
+
+- 类型：累计
+- 单位：计数
+- 描述：执行前被拒绝的向量索引缓存后台加载请求累计数。例如，缓存容量为零、线程池已经停止或任务队列无法接受任务时，该指标会增加。
+
+## `vector_index_cache_async_load_success`
+
+- 类型：累计
+- 单位：计数
+- 描述：成功加载索引并将其写入缓存的后台任务累计数。如果缓存无法继续保留该条目，容量淘汰可能会立即移除已经成功写入的索引。
+
+## `vector_index_cache_loading_wait_timeout`
+
+- 类型：累计
+- 单位：计数
+- 描述：同步缓存调用方等待正在进行的向量索引加载达到 `vector_index_cache_loading_wait_timeout_ms` 的累计次数。该指标按调用方而不是唯一索引计数；等待超时后，已经开始的 loader 会继续执行。
+
+## `wait_base_compaction_task_num`
+
+- 单位：计数
+- 描述：等待执行的基础压缩任务数量。
+
+## `wait_cumulative_compaction_task_num`
+
+- 单位：计数
+- 描述：等待执行的累积压缩任务数量。
+
+## `writable_blocks_total (Deprecated)`

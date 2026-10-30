@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "SHOW GRANTS displays all the privileges that have been granted to a user or role."
 ---
 
 # SHOW GRANTS
@@ -7,6 +8,8 @@ displayed_sidebar: docs
 SHOW GRANTS displays all the privileges that have been granted to a user or role.
 
 For more information about roles and privileges, see [Overview of privileges](../../../administration/user_privs/authorization/user_privs.md).
+
+AI grants use the same output: `USAGE ON AI FUNCTION`, `USAGE ON ALL AI FUNCTIONS`, `USAGE ON AI PROVIDER`, and `USAGE ON ALL AI PROVIDERS`. Provider names are quoted, and grants on a deleted provider are omitted. Provider grants refer to UUIDs, so recreating a provider with the same name does not restore its old grants.
 
 :::tip
 All roles and users can view the privileges granted to them or the roles assigned to them. Only users with the `user_admin` role can view the privileges of a specified user or role.
@@ -16,12 +19,14 @@ All roles and users can view the privileges granted to them or the roles assigne
 
 ```SQL
 SHOW GRANTS; -- View the privileges of the current user.
+SHOW GRANTS FOR CURRENT_USER[()]; -- View the privileges of the current user (MySQL-compatible syntax).
 SHOW GRANTS FOR ROLE <role_name>; -- View the privileges of a specific role.
 SHOW GRANTS FOR <user_identity>; -- View the privileges of a specific user.
 ```
 
 ## Parameters
 
+- `CURRENT_USER[()]`: Returns the privileges of the current session user. The parentheses are optional. This form is equivalent to `SHOW GRANTS` and is provided for compatibility with MySQL clients (such as Metabase and DBeaver) that issue this statement automatically during connection initialization.
 - role_name
 - user_identity
 
@@ -50,6 +55,13 @@ Return fields:
 
 ```SQL
 mysql> SHOW GRANTS;
++--------------+---------+----------------------------------------+
+| UserIdentity | Catalog | Grants                                 |
++--------------+---------+----------------------------------------+
+| 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
++--------------+---------+----------------------------------------+
+
+mysql> SHOW GRANTS FOR CURRENT_USER();
 +--------------+---------+----------------------------------------+
 | UserIdentity | Catalog | Grants                                 |
 +--------------+---------+----------------------------------------+

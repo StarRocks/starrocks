@@ -117,8 +117,55 @@ static Status decode_date_min_max(const orc::proto::ColumnStatistics& colStats, 
 // It's quite odd that, timestamp statistics stores milliseconds since unix epoch time.
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
+//
+// ORC serializes a TIMESTAMP min/max as whole milliseconds since the Unix epoch (minimumUtc /
+// maximumUtc) plus a sub-millisecond nanos remainder in [0, 999999] (minimumNanos / maximumNanos).
+// The nanos field is stored with a +1 offset and is omitted when equal to its default (0 for the
+// minimum, 999999 for the maximum). StarRocks timestamps are microsecond precision, so each bound
+// is rounded conservatively -- the minimum floored, the maximum ceiled -- to keep [min, max] a
+// superset of the true value range. For a TIMESTAMP_INSTANT the reader timezone offset is folded
+// into the seconds and the value is decoded as plain UTC, matching the after-epoch instant path.
+//
+// Note: without reader_tz the folded offset is the scalar reader-minus-writer offset looked up at the epoch, which
+// is approximate for an instant in a named zone whose offset differs from its epoch offset. With reader_tz the
+// instant is converted as the row-load path does, with the reader zone's offset at each instant (daylight saving
+// time included), no writer part; local times are not monotonic across a backward shift, so the minimum takes the
+// least and the maximum the greatest offset in force between them, keeping the bounds a superset of the loaded values.
+
+// Splits a bound into whole seconds and nanos-of-second, rounded outward.
+static void split_orc_timestamp_bound(int64_t utc_ms, bool has_nanos, int32_t raw_nanos, bool is_max, int64_t* secs_out,
+                                      int64_t* nanos_out) {
+    // The sub-millisecond nanos remainder is in [0, 999999]; a present field is the value + 1 (so
+    // in [1, 1000000]). Undo the offset, falling back to the conservative default when the field is
+    // absent or -- for untrusted external files -- malformed.
+    constexpr int64_t kMaxSubNanos = 999999;
+    int64_t sub_nanos = (has_nanos && raw_nanos >= 1 && raw_nanos <= kMaxSubNanos + 1) ? (raw_nanos - 1)
+                                                                                       : (is_max ? kMaxSubNanos : 0);
+    // Floor the millisecond split toward -inf so the remainder (and nanos) stay non-negative.
+    int64_t secs = utc_ms / 1000;
+    int64_t rem_ms = utc_ms - secs * 1000;
+    if (rem_ms < 0) {
+        secs -= 1;
+        rem_ms += 1000;
+    }
+    int64_t nanos = rem_ms * NANOSECS_PER_MILLIS + sub_nanos; // nanos-of-second in [0, NANOSECS_PER_SEC)
+    if (is_max) {
+        // Ceil to microsecond so the upper bound never understates the true maximum.
+        int64_t us = (nanos + NANOSECS_PER_USEC - 1) / NANOSECS_PER_USEC;
+        if (us == USECS_PER_SEC) {
+            secs += 1;
+            nanos = 0;
+        } else {
+            nanos = us * NANOSECS_PER_USEC;
+        }
+    }
+    *secs_out = secs;
+    *nanos_out = nanos;
+}
+
 static Status decode_datetime_min_max(const orc::Type* orc_type, const orc::proto::ColumnStatistics& colStats,
-                                      int64_t tz_offset_in_seconds, Column* min_col, Column* max_col) {
+                                      int64_t tz_offset_in_seconds, const cctz::time_zone* reader_tz, Column* min_col,
+                                      Column* max_col) {
     if (orc_type->getKind() != orc::TypeKind::TIMESTAMP && orc_type->getKind() != orc::TypeKind::TIMESTAMP_INSTANT) {
         return Status::InvalidArgument("OrcMinMaxFilter: Invalid ORC timestamp kind");
     }
@@ -127,37 +174,37 @@ static Status decode_datetime_min_max(const orc::Type* orc_type, const orc::prot
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();
+        int64_t min_secs, min_nanos, max_secs, max_nanos;
+        split_orc_timestamp_bound(stats.minimumutc(), stats.has_minimumnanos(), stats.minimumnanos(),
+                                  /*is_max=*/false, &min_secs, &min_nanos);
+        split_orc_timestamp_bound(stats.maximumutc(), stats.has_maximumnanos(), stats.maximumnanos(),
+                                  /*is_max=*/true, &max_secs, &max_nanos);
+        if (is_instant) {
+            if (reader_tz != nullptr) {
+                TzOffsetCache offset_cache;
+                int64_t min_offset, max_offset;
+                if (!offset_cache.offset_range_for_unix(min_secs, max_secs, *reader_tz, &min_offset, &max_offset)) {
+                    return Status::NotSupported("OrcMinMaxFilter: no time zone offset bounds for the range");
+                }
+                min_secs += min_offset;
+                max_secs += max_offset;
+            } else {
+                min_secs += tz_offset_in_seconds;
+                max_secs += tz_offset_in_seconds;
+            }
+        }
+        // The offset is already folded in, so decode as plain UTC.
         TimestampValue min, max;
-        const cctz::time_zone utc_tzinfo = cctz::utc_time_zone();
-        {
-            int64_t ms = stats.minimumutc();
-            int64_t ns = 0;
-            if (stats.has_minimumnanos()) {
-                ns = stats.minimumnanos();
-            }
-            int64_t secs = ms / 1000;
-            ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
-        }
-
-        {
-            int64_t ms = stats.maximumutc();
-            int64_t ns = 0;
-            if (stats.has_maximumnanos()) {
-                ns = stats.maximumnanos();
-            }
-            int64_t secs = ms / 1000;
-            ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
-        }
-
+        OrcTimestampHelper::orc_ts_to_native_ts(&min, cctz::utc_time_zone(), min_secs, min_nanos, /*is_instant=*/false);
+        OrcTimestampHelper::orc_ts_to_native_ts(&max, cctz::utc_time_zone(), max_secs, max_nanos, /*is_instant=*/false);
         DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_DATETIME);
     }
     return Status::NotFound("OrcMinMaxFilter: date column stats not found");
 }
 
 Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::Type* type, const orc::proto::ColumnStatistics& stats,
-                                Column* min_col, Column* max_col, int64_t tz_offset_in_seconds) {
+                                Column* min_col, Column* max_col, int64_t tz_offset_in_seconds,
+                                const cctz::time_zone* reader_tz) {
     if (slot->is_nullable()) {
         auto* a = ColumnHelper::as_raw_column<NullableColumn>(min_col);
         auto* b = ColumnHelper::as_raw_column<NullableColumn>(max_col);
@@ -187,7 +234,7 @@ Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::Type* type, con
         return decode_date_min_max(stats, min_col, max_col);
 
     case LogicalType::TYPE_DATETIME:
-        return decode_datetime_min_max(type, stats, tz_offset_in_seconds, min_col, max_col);
+        return decode_datetime_min_max(type, stats, tz_offset_in_seconds, reader_tz, min_col, max_col);
     default:
         return Status::NotSupported("Not support to decode min/max from orc column stats. type = " +
                                     std::to_string(ltype));

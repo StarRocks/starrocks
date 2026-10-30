@@ -1,0 +1,34 @@
+-- name: test_bar_negative_width
+CREATE DATABASE IF NOT EXISTS test_bar_negative_width_db;
+-- result:
+-- !result
+USE test_bar_negative_width_db;
+-- result:
+-- !result
+CREATE TABLE t_bar (v INT) DUPLICATE KEY(v)
+DISTRIBUTED BY HASH(v) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t_bar VALUES (0), (50), (100);
+-- result:
+-- !result
+SELECT length(bar(v, 0, 100, -1)) FROM t_bar;
+-- result:
+[REGEX].*requirement.*
+-- !result
+SELECT length(bar(v, 0, 100, 0)) FROM t_bar;
+-- result:
+[REGEX].*requirement.*
+-- !result
+SELECT length(bar(v, 0, 100, 100000000000)) FROM t_bar;
+-- result:
+[REGEX].*requirement.*
+-- !result
+SELECT bar(5, 0, 10, 20);
+-- result:
+▓▓▓▓▓▓▓▓▓▓
+-- !result
+SELECT length(bar(-5, -10, 0, 20));
+-- result:
+30
+-- !result

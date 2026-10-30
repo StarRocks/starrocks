@@ -1,0 +1,37 @@
+-- name: test_lake_lightweight_add_index @cloud
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+set low_cardinality_optimize_v2 = false;
+set cbo_enable_low_cardinality_optimize = false;
+CREATE TABLE `t_lw_gin` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 3
+PROPERTIES (
+"light_weight_tablet_creation" = "true"
+);
+
+INSERT INTO t_lw_gin
+SELECT generate_series,
+       CASE WHEN generate_series < 100 THEN 'alpha needleold gamma'
+            ELSE concat('alpha hay gamma ', cast(generate_series as string))
+       END
+FROM TABLE(generate_series(0, 99999));
+
+ALTER TABLE t_lw_gin ADD INDEX gin_v1 (v1) USING GIN ('parser' = 'english');
+function: wait_alter_table_finish()
+
+-- MATCH errors out instead of returning 100 when the shadow rewrite loses the new index.
+SELECT count(*) FROM t_lw_gin WHERE v1 MATCH 'needleold';
+SELECT count(*) FROM t_lw_gin WHERE v1 LIKE '%needleold%';
+
+INSERT INTO t_lw_gin
+SELECT generate_series,
+       CASE WHEN generate_series < 100100 THEN 'alpha needlenew gamma'
+            ELSE concat('alpha hay gamma ', cast(generate_series as string))
+       END
+FROM TABLE(generate_series(100000, 199999));
+
+SELECT count(*) FROM t_lw_gin WHERE v1 MATCH 'needlenew';
+SELECT count(*) FROM t_lw_gin WHERE v1 MATCH 'needleold';

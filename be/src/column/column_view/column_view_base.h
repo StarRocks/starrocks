@@ -40,12 +40,6 @@ public:
     using LocationType = uint32_t;
     using Locations = std::vector<LocationType>;
 
-    StatusOr<MutableColumnPtr> upgrade_if_overflow() override { return nullptr; };
-
-    StatusOr<MutableColumnPtr> downgrade() override { return nullptr; }
-
-    bool has_large_column() const override { return false; }
-
     size_t size() const override { return _num_rows; }
 
     size_t container_memory_usage() const override;
@@ -73,9 +67,6 @@ public:
 
     void append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const override;
 
-    const uint8_t* raw_data() const override { NOT_SUPPORT(); }
-
-    uint8_t* mutable_raw_data() override { NOT_SUPPORT(); }
     size_t capacity() const override { NOT_SUPPORT(); }
     size_t byte_size() const override { NOT_SUPPORT(); }
     size_t type_size() const override { NOT_SUPPORT(); }
@@ -116,7 +107,7 @@ public:
     std::string get_name() const override { NOT_SUPPORT(); }
     Datum get(size_t n) const override { NOT_SUPPORT(); }
     void swap_column(Column& rhs) override { NOT_SUPPORT(); }
-    Status capacity_limit_reached() const override { NOT_SUPPORT(); }
+    Status capacity_limit_reached() const override;
     void check_or_die() const override {}
     Status accept(ColumnVisitor* visitor) const override { NOT_SUPPORT(); }
     Status accept_mutable(ColumnVisitorMutable* visitor) override { NOT_SUPPORT(); }

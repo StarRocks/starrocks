@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DROP PIPE drops a pipe and the related jobs and metadata."
 ---
 
 # DROP PIPE

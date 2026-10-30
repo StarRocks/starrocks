@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 keywords: ['CTAS']
+description: "CREATE TABLE AS SELECT (CTAS) creates a new table and populates it with query results, supporting synchronous and asynchronous modes."
 ---
 
 # CREATE TABLE AS SELECT
@@ -48,7 +49,7 @@ You can submit an asynchronous CTAS task using [SUBMIT TASK](../loading_unloadin
 | **Parameter**     | **Required** | **Description**                                              |
 | ----------------- | ------------ | ------------------------------------------------------------ |
 | TEMPORARY         | No           | Creates a temporary table. From v3.3.1, StarRocks supports creating temporary tables in the Default Catalog. For more information, see [Temporary Table](../../../table_design/StarRocks_table_design.md#temporary-table). Currently, StarRocks does not support creating temporary tables with asynchronous tasks by using SUBMIT TASK. |
-| column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column. StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR(65533) data. |
+| column_name       | No          | The name of a column in the new table. You do not need to specify the data type for the column. StarRocks automatically specifies an appropriate data type for the column. StarRocks converts FLOAT and DOUBLE data into DECIMAL(38,9) data. StarRocks also converts CHAR, VARCHAR, and STRING data into VARCHAR data that keeps the declared length (STRING is equivalent to VARCHAR(65533)). String expressions without a declared length, such as the result of `concat()`, are converted into VARCHAR(1048576). |
 | index_definition| No          | Since v3.1.8, a bitmap index can be created for the new table. The syntax is `INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'`. For more information about parameter descriptions and usage notes, see [Bitmap indexes](../../../table_design/indexes/Bitmap_index.md). |
 | key_desc          | No           | The syntax is `key_type ( <col_name1> [, <col_name2> , ...])`.<br />**Parameters**:<ul><li>`key_type`: [the key type of the new table](../../../table_design/table_types/table_types.md). Valid values: `DUPLICATE KEY` and `PRIMARY KEY`. Default value: `DUPLICATE KEY`.</li><li> `col_name`: the column to form the key.</li></ul> |
 | COMMENT           | No           | The comment of the new table.                                |
@@ -84,21 +85,21 @@ Example 1: Synchronously query a table `order` and create a new table `order_new
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT * FROM order;
+AS SELECT * FROM `order`;
 ```
 
 Example 2: Synchronously query the `k1`, `k2`, and `k3` columns in the table `order` and create a new table `order_new` based on the query result, and then insert the query result into the new table. Additionally, set the column names of the new table to `a`, `b`, and `c`.
 
 ```SQL
 CREATE TABLE order_new (a, b, c)
-AS SELECT k1, k2, k3 FROM order;
+AS SELECT k1, k2, k3 FROM `order`;
 ```
 
 or
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
+AS SELECT k1 AS a, k2 AS b, k3 AS c FROM `order`;
 ```
 
 Example 3: Synchronously query the largest value of the `salary` column in the table `employee` and create a new table `employee_new` based on the query result, and then insert the query result into the new table. Additionally, set the column name of the new table to `salary_max`.

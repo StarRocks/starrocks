@@ -52,3 +52,60 @@ index fcc5b35fa..1883fec05 100644
  endif()
  
  target_include_directories(
+
+diff --git a/sdk/storage/azure-storage-files-datalake/src/datalake_file_system_client.cpp b/sdk/storage/azure-storage-files-datalake/src/datalake_file_system_client.cpp
+index e82c1d6..06394dc 100644
+--- a/sdk/storage/azure-storage-files-datalake/src/datalake_file_system_client.cpp
++++ b/sdk/storage/azure-storage-files-datalake/src/datalake_file_system_client.cpp
+@@ -299,12 +299,18 @@ namespace Azure { namespace Storage { namespace Files { namespace DataLake {
+       item.EncryptionScope = std::move(path.EncryptionScope);
+       item.EncryptionContext = std::move(path.EncryptionContext);
+       item.ETag = std::move(path.ETag);
+-      if (path.CreatedOn.HasValue())
++      // StarRocks patch (issue #74961): on non-HNS accounts creationTime/expiryTime
++      // are returned as RFC1123 date strings, not Win32 FILETIME ticks, so std::stoll
++      // throws std::invalid_argument. Only convert when the value is numeric ticks;
++      // otherwise leave it unset.
++      if (path.CreatedOn.HasValue() && !path.CreatedOn.Value().empty()
++          && path.CreatedOn.Value().find_first_not_of("0123456789") == std::string::npos)
+       {
+         item.CreatedOn = _detail::Win32FileTimeConverter::Win32FileTimeToDateTime(
+             std::stoll(path.CreatedOn.Value()));
+       }
+-      if (path.ExpiresOn.HasValue() && path.ExpiresOn.Value() != "0")
++      if (path.ExpiresOn.HasValue() && path.ExpiresOn.Value() != "0"
++          && path.ExpiresOn.Value().find_first_not_of("0123456789") == std::string::npos)
+       {
+         item.ExpiresOn = _detail::Win32FileTimeConverter::Win32FileTimeToDateTime(
+             std::stoll(path.ExpiresOn.Value()));
+diff --git a/sdk/storage/azure-storage-files-datalake/src/rest_client.cpp b/sdk/storage/azure-storage-files-datalake/src/rest_client.cpp
+index 8b24eb0..cbae724 100644
+--- a/sdk/storage/azure-storage-files-datalake/src/rest_client.cpp
++++ b/sdk/storage/azure-storage-files-datalake/src/rest_client.cpp
+@@ -110,9 +110,23 @@ namespace Azure { namespace Storage { namespace Files { namespace DataLake {
+           vectorElement2.FileSize = var0["contentLength"].is_number_integer()
+               ? var0["contentLength"].get<std::int64_t>()
+               : std::stoll(var0["contentLength"].get<std::string>());
+-          vectorElement2.Owner = var0["owner"].get<std::string>();
+-          vectorElement2.Group = var0["group"].get<std::string>();
+-          vectorElement2.Permissions = var0["permissions"].get<std::string>();
++          // StarRocks patch (issue #74961): owner/group/permissions are POSIX
++          // fields only returned for HNS-enabled accounts. On a flat (non-HNS)
++          // account accessed via the DFS endpoint they are absent; the const
++          // operator[] on a missing key is UB (-> json type_error.302 / SIGSEGV).
++          // Guard them, mirroring the optional fields handled just below.
++          if (var0.count("owner") != 0 && var0["owner"].is_string())
++          {
++            vectorElement2.Owner = var0["owner"].get<std::string>();
++          }
++          if (var0.count("group") != 0 && var0["group"].is_string())
++          {
++            vectorElement2.Group = var0["group"].get<std::string>();
++          }
++          if (var0.count("permissions") != 0 && var0["permissions"].is_string())
++          {
++            vectorElement2.Permissions = var0["permissions"].get<std::string>();
++          }
+           if (var0.count("EncryptionScope") != 0)
+           {
+             vectorElement2.EncryptionScope = var0["EncryptionScope"].get<std::string>();

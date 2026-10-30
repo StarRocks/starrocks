@@ -34,6 +34,7 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.math.LongMath;
 import com.starrocks.thrift.TCounterAggregateType;
 import com.starrocks.thrift.TCounterMergeType;
 import com.starrocks.thrift.TCounterMinMaxType;
@@ -186,6 +187,7 @@ public class Counter {
         long mergedValue = 0;
         long minValue = Long.MAX_VALUE;
         long maxValue = Long.MIN_VALUE;
+        boolean saturatingSum = counters.get(0).isSum() && counters.get(0).getStrategy().isSaturating_sum();
 
         for (Counter counter : counters) {
             if (counter.getValue() < minValue) {
@@ -202,7 +204,8 @@ public class Counter {
                 maxValue = counter.getMaxValue().get();
             }
 
-            mergedValue += counter.getValue();
+            mergedValue = saturatingSum ? LongMath.saturatedAdd(mergedValue, counter.getValue())
+                    : mergedValue + counter.getValue();
         }
 
         if (counters.get(0).isAvg()) {

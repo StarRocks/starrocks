@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/sum.h"
@@ -30,7 +30,7 @@ struct SumDispatcher {
         } else if constexpr (lt_is_numeric<lt> || lt_is_decimalv2<lt>) {
             using SumState = SumAggregateState<RunTimeCppType<SumResultLT<lt>>>;
             resolver->add_aggregate_mapping<lt, SumResultLT<lt>, SumState>(
-                    "sum", true, AggregateFactory::MakeSumAggregateFunction<lt>());
+                    "sum", kWithWindow, AggregateFactory::MakeSumAggregateFunction<lt>());
         }
     }
 };
@@ -45,7 +45,7 @@ struct StorageSumDispatcher {
         if constexpr (lt_is_sum_in_storage<lt>) {
             using SumState = SumAggregateState<RunTimeCppType<lt>>;
             resolver->add_aggregate_mapping<lt, lt, SumState>(
-                    "sum", true, new SumAggregateFunction<lt, RunTimeCppType<lt>, lt, RunTimeCppType<lt>>());
+                    "sum", kWithWindow, new SumAggregateFunction<lt, RunTimeCppType<lt>, lt, RunTimeCppType<lt>>());
         }
     }
 };

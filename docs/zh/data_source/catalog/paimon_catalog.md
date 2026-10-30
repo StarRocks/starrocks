@@ -1,5 +1,7 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
+description: "StarRocks 从 v3.1 起支持 Paimon catalog，无导入直接查询 Apache Paimon 数据及转换导入。"
 toc_max_heading_level: 5
 ---
 
@@ -22,7 +24,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-您只能使用 Paimon catalog 查询数据。您不能使用 Paimon catalog 删除、删除或插入数据到您的 Paimon 集群中。
+Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
 
 ## Paimon to StarRocks data types
 
@@ -47,6 +49,11 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 | `ARRAY`               | `ARRAY<element_type>`       |
 | `MAP`                 | `MAP<key_type, value_type>` |
 | `ROW/STRUCT`          | `STRUCT<field1:type1, ...>` |
+| `VARIANT`             | `VARIANT`                   |
+
+:::note
+`VARIANT` 从 v4.2 版本起支持，且仅支持由 Native Reader 读取的 split（Append-Only 表以及 Primary Key 表中已完成 Compaction 的数据）。从尚未 Compaction 的 Primary Key 数据中读取 `VARIANT` 需要使用 JNI Reader，目前尚不支持，此类查询会在 Plan 阶段报错并被拒绝执行。
+:::
 
 ## 集成准备
 
@@ -64,7 +71,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 在上述三种身份验证方法中，实例配置文件是最广泛使用的。
 
-有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
@@ -180,7 +187,7 @@ Paimon catalog 的描述。此参数是可选的。
 | aws.s3.access_key           | 否       | 您的 IAM 用户的访问密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 | aws.s3.secret_key           | 否       | 您的 IAM 用户的秘密密钥。如果您使用基于 IAM 用户的身份验证方法访问 AWS S3，您必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ##### 兼容 S3 的存储系统
 
@@ -290,6 +297,22 @@ Paimon catalog 的描述。此参数是可选的。
   | azure.adls2.oauth2_client_secret   | 是       | 创建的新客户端（应用程序）密钥的值。                          |
   | azure.adls2.oauth2_client_endpoint | 是       | 服务主体或应用程序的 OAuth 2.0 令牌端点（v1）。               |
 
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
+
 ###### Azure Data Lake Storage Gen1
 
 如果您选择 Data Lake Storage Gen1 作为 Paimon 集群的存储，请采取以下操作之一：
@@ -387,6 +410,15 @@ Paimon catalog 的描述。此参数是可选的。
     | gcp.gcs.service_account_private_key_id | ""            | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 在创建元服务账户时生成的 JSON 文件中的私钥 ID。              |
     | gcp.gcs.service_account_private_key    | ""            | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建元服务账户时生成的 JSON 文件中的私钥。                 |
     | gcp.gcs.impersonation_service_account  | ""            | "hello"                                                      | 您要模拟的数据服务账户。                                     |
+
+#### MetadataCacheParams（可选）
+
+StarRocks 会缓存 Paimon 元数据并在后台刷新，以下可选属性用于调整该缓存。
+
+| 参数                                     | 默认值   | 说明                                                         |
+| ---------------------------------------- | -------- | ------------------------------------------------------------ |
+| paimon_meta_cache_ttl_sec                | 86400    | 缓存条目的存活时间，单位为秒。 |
+| paimon_table_cache_refresh_interval_sec  | 60       | 同一张表由查询触发的两次刷新之间的最小间隔，单位为秒。当查询读到比上次刷新更新的 Snapshot 时触发，刷新在后台执行，查询不会等待。设置为 `0` 表示只依赖周期性后台刷新。自 v4.2.0 起支持。 |
 
 ### 示例
 
@@ -567,6 +599,21 @@ PROPERTIES
   );
   ```
 
+- 如果您选择 Workload Identity 身份验证方法，请运行如下命令：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG paimon_catalog_fs
+  PROPERTIES
+  (
+      "type" = "paimon",
+      "paimon.catalog.type" = "filesystem",
+      "paimon.catalog.warehouse" = "<adls2_paimon_warehouse_path>",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - 如果您选择基于 VM 的身份验证方法，请运行如下命令：
@@ -695,7 +742,7 @@ DROP Catalog paimon_catalog_fs;
    USE <catalog_name>.<db_name>;
    ```
 
-3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询指定数据库中的目标表：
+3. 使用 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询指定数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

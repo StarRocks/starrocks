@@ -14,10 +14,10 @@
 
 package com.starrocks.lake.qe.scheduler;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,6 +40,17 @@ public class SkipBlacklistSharedDataWorkerProvider extends DefaultSharedDataWork
     private static final Logger LOG = LogManager.getLogger(SkipBlacklistSharedDataWorkerProvider.class);
 
     public static class Factory implements WorkerProvider.Factory {
+        private final BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy;
+
+        public Factory() {
+            // use default blacklist backup routing policy
+            this(BlacklistBackupRoutingPolicy.getDefault());
+        }
+
+        public Factory(BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy) {
+            this.blacklistBackupRoutingPolicy = blacklistBackupRoutingPolicy;
+        }
+
         @Override
         public SkipBlacklistSharedDataWorkerProvider captureAvailableWorkers(
                 SystemInfoService systemInfoService,
@@ -64,7 +75,8 @@ public class SkipBlacklistSharedDataWorkerProvider extends DefaultSharedDataWork
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
             }
 
-            return new SkipBlacklistSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, computeResource);
+            return new SkipBlacklistSharedDataWorkerProvider(idToComputeNode, availableComputeNodes, computeResource,
+                    blacklistBackupRoutingPolicy);
         }
 
         private static ImmutableMap<Long, ComputeNode> filterAvailableWorkersSkipBlacklist(
@@ -82,35 +94,17 @@ public class SkipBlacklistSharedDataWorkerProvider extends DefaultSharedDataWork
 
     protected SkipBlacklistSharedDataWorkerProvider(ImmutableMap<Long, ComputeNode> id2ComputeNode,
                                              ImmutableMap<Long, ComputeNode> availableID2ComputeNode,
-                                             ComputeResource computeResource) {
-        super(id2ComputeNode, availableID2ComputeNode, computeResource);
+                                             ComputeResource computeResource,
+                                             BlacklistBackupRoutingPolicy blacklistBackupRoutingPolicy) {
+        super(id2ComputeNode, availableID2ComputeNode, computeResource, blacklistBackupRoutingPolicy);
     }
 
     /**
-     * Override selectBackupWorker to skip blacklist verification.
-     * This ensures consistent behavior with initial worker selection when skip_black_list is enabled.
+     * Same as {@link DefaultSharedDataWorkerProvider} but blocklist is not consulted for buddy eligibility,
+     * consistent with initial worker selection when {@code skip_black_list} is enabled.
      */
     @Override
-    public long selectBackupWorker(long workerId) {
-        if (availableID2ComputeNode.isEmpty() || !id2ComputeNode.containsKey(workerId)) {
-            return -1;
-        }
-        if (allComputeNodeIds == null) {
-            createAvailableIdList();
-        }
-        Preconditions.checkNotNull(allComputeNodeIds);
-        Preconditions.checkState(allComputeNodeIds.contains(workerId));
-
-        int startPos = allComputeNodeIds.indexOf(workerId);
-        int attempts = allComputeNodeIds.size();
-        while (attempts-- > 0) {
-            startPos = (startPos + 1) % allComputeNodeIds.size();
-            long buddyId = allComputeNodeIds.get(startPos);
-            // Skip SimpleScheduler.isInBlocklist(buddyId) check - only verify buddyId != workerId and is in availableID2ComputeNode
-            if (buddyId != workerId && availableID2ComputeNode.containsKey(buddyId)) {
-                return buddyId;
-            }
-        }
-        return -1;
+    protected boolean isBuddyEligibleForBackup(long buddyId, long workerId) {
+        return buddyId != workerId && availableID2ComputeNode.containsKey(buddyId);
     }
 }

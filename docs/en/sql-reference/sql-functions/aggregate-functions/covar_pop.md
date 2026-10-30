@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Returns the population covariance of two expressions."
 ---
 
 # covar_pop
@@ -25,10 +26,6 @@ If `expr1` and `expr2` are table columns, this function calculates the populatio
 Returns a DOUBLE value. The formula is as follows, where `n` represents the row count of the table:
 
 ![covar_pop formula](../../../_assets/covar_pop_formula.png)
-
-<!--$$
-\frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{n}
-$$-->
 
 ## Usage notes
 

@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "DATE または DATETIME の値をあるタイムゾーンから別のタイムゾーンに変換します。"
 ---
 
 # curdate,current_date

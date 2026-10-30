@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "Computes the cosine of the argument."
 ---
 
 # cos

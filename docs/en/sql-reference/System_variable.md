@@ -1,11 +1,13 @@
 ---
 displayed_sidebar: docs
 keywords: ['session variable']
+description: "StarRocks provides many system variables that can be set and modified to suit your requirements."
 ---
 
 # System variables
 
 import VariableWarehouse from '../_assets/commonMarkdown/variable_warehouse.mdx'
+import EditionSpecificVariable from '../_assets/commonMarkdown/Edition_Specific_Variable.mdx'
 
 StarRocks provides many system variables that can be set and modified to suit your requirements. This section describes the variables supported by StarRocks. You can view the settings of these variables by running the [SHOW VARIABLES](sql-statements/cluster-management/config_vars/SHOW_VARIABLES.md) command on your MySQL client. You can also use the [SET](sql-statements/cluster-management/config_vars/SET.md) command to dynamically set or modify variables. You can make these variables take effect globally on the entire system, only in the current session, or only in a single query statement.
 
@@ -73,6 +75,8 @@ The following variables only take effect globally. They cannot take effect for a
 * cngroup_resource_usage_fresh_ratio
 * cngroup_schedule_mode
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -163,7 +167,7 @@ SELECT /*+ SET_VAR
 
 ### Set variables as user properties
 
-You can set session variables as user properties using the [ALTER USER](../sql-reference/sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
+You can set session variables as user properties using the [ALTER USER](./sql-statements/account-management/ALTER_USER.md). This feature is supported from v3.3.3.
 
 Example:
 
@@ -186,10 +190,27 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### ai_topn_pushdown_max_global_limit
+
+* **Description**: The largest SQL `LIMIT` that uses a global candidate TopN below an eligible AI projection. Larger limits use local candidate TopN pruning per fragment instance. `0` selects local-only pruning; it does not disable the optimization.
+* **Default**: 1000
+* **Data type**: long
+* **Range**: [0, 9223372036854775807]
+* **Scope**: Session, Global
+
+Supports `SET`, `SET GLOBAL`, and statement-level `SET_VAR` hints without restarting. For strategy details and examples, see [Reducing AI input rows](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows).
+
+### ann_params
+
+* **Description**: Specifies query-time parameters for approximate nearest neighbor (ANN) vector index searches. The value is a JSON object string whose keys and values are strings. HNSW supports `efsearch`; IVFPQ supports `nprobe`, `max_codes`, `scan_table_threshold`, `polysemous_ht`, and `range_search_confidence`. You can set the variable for a session or a single statement, for example `SET ann_params = '{"efsearch":"256"}'` or `SET_VAR (ann_params='{"efsearch":"256"}')`.
+* **Default**: `""`
+* **Data type**: String
+* **Scope**: Session
+
 ### array_low_cardinality_optimize
 
 * **Scope**: Session
-* **Description**: Controls whether the optimizer will consider ARRAY&lt;VARCHAR&gt; columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or ARRAY&lt;VARCHAR&gt;. When disabled, only scalar VARCHAR columns are eligible and ARRAY&lt;VARCHAR&gt; types are ignored by those low-cardinality optimizations.
+* **Description**: Controls whether the optimizer will consider `ARRAY<VARCHAR>` columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or `ARRAY<VARCHAR>`. When disabled, only scalar VARCHAR columns are eligible and `ARRAY<VARCHAR>` types are ignored by those low-cardinality optimizations.
 * **Default**: true
 * **Data Type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
@@ -202,9 +223,37 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 * **Data Type**: String
 * **Introduced in**: -
 
+### binary_encoding_format
+
+* **Scope**: Session
+* **Description**: Controls how `BINARY` / `VARBINARY` values are encoded when StarRocks serializes MySQL text results. Valid values are `raw`, `hex`, and `base64`. The default is `hex`. This variable works together with `binary_encoding_level`. MySQL clients can already handle top-level binary values, but nested binary values inside `ARRAY`, `MAP`, or `STRUCT` are returned through JSON-like strings, so they may need extra encoding to stay printable and well-formed. Set this variable to `base64` if you prefer a denser printable representation, or `raw` to disable extra encoding entirely.
+* **Default**: `hex`
+* **Data Type**: String
+* **Introduced in**: v4.1
+
+### binary_encoding_level
+
+* **Scope**: Session
+* **Description**: Controls which binary values are encoded for MySQL text results. Valid values are `nested` and `all`. The default is `nested`, which preserves historical behavior for top-level binary columns while still encoding nested binary values inside `ARRAY`, `MAP`, or `STRUCT`, where the result is rendered as a JSON-like string. Set this variable to `all` if your team wants a uniform convention and prefers top-level binary values to be encoded as well. If `binary_encoding_format = raw`, no additional binary encoding is applied even when this variable is set to `nested` or `all`, which may make nested output less readable.
+* **Default**: `nested`
+* **Data Type**: String
+* **Introduced in**: v4.1
+
 ### auto_increment_increment
 
 Used for MySQL client compatibility. No practical usage.
+
+### avro_use_jni_reader
+
+* **Scope**: Session
+* **Description**: Controls whether StarRocks uses the JNI-based Avro reader when scanning Avro data from external catalogs such as Hive. When enabled (`true`), StarRocks uses the JNI reader. When disabled (`false`), StarRocks uses the native Avro reader. This option is mainly used as a compatibility fallback. Because the default value is `false`, StarRocks uses the native Avro reader by default.
+
+  Current notes:
+  - The native Avro reader and the JNI reader are now aligned for `CHAR(n)` semantics. See [#73579](https://github.com/StarRocks/starrocks/pull/73579) for the alignment change, so the native and JNI behaviors are currently consistent on this point.
+  - The native Avro reader currently supports only `null`, `deflate`, and `snappy`, and does not support other codecs such as `bzip2`. If you need to process a codec that is unsupported by the native reader, manually enable the JNI reader.
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v4.1.1
 
 ### big_query_profile_threshold
 
@@ -215,6 +264,39 @@ Used for MySQL client compatibility. No practical usage.
 * **Unit**: Second
 * **Data type**: String
 * **Introduced in**: v3.1
+
+### blacklist_backup_routing
+
+* **Scope**: Session
+* **Description**: In shared-data mode, if the compute node the plan prefers for a scan is not among the workers available to the current query (for example, the node is down or appears on the host blocklist), the planner must choose a backup compute node. This variable sets how that backup is chosen among eligible nodes (other than the primary). `RANDOM` samples uniformly at random from the eligible set. `CIRCULAR` walks the sorted compute node id ring from the primary and takes the first eligible node (deterministic). `TABLET_HASH` takes the eligible node with the highest hash of the tablet and the node (rendezvous hashing): the tablets of an unavailable node spread evenly over the other nodes, while each tablet keeps going to the same backup across queries, so its data is cached on only one backup node. For a colocated scan, the hash uses the colocation group and the bucket instead of the tablet, so every table in the group sends the same bucket to the same backup. FEs choose the same backup for a tablet as long as they see the same set of eligible nodes. The variable also applies when a load (for example, `INSERT`) writes to a tablet whose compute node is unavailable. Which nodes are eligible for backup also depends on `skip_black_list`: by default, nodes on the host blocklist are excluded; if `skip_black_list` is `true`, a node that is on the blocklist may still be chosen as a backup when it is otherwise available (for example, alive and in the warehouse).
+* **Default**: `TABLET_HASH`
+* **Data type**: String
+* **Valid values**: `CIRCULAR`, `RANDOM`, `TABLET_HASH`
+* **Introduced in**: -
+
+### broadcast_mem_exceeded_penalty_factor
+
+* **Description**: Multiplier for broadcast CPU, memory, and network costs when the estimated build-side size per BE/CN exceeds the broadcast memory threshold. Set to `1.0` to disable this penalty.
+* **Scope**: Session, Global
+* **Default**: `1000.0`
+* **Data Type**: Double
+* **Valid Values**: Finite numbers in `[1.0, 1000000.0]`. Values outside this range, non-numeric values, `NaN`, and infinity are rejected.
+
+You can use `SET`, `SET GLOBAL`, or a statement-level `SET_VAR` hint. For example:
+
+```sql
+SET broadcast_mem_exceeded_penalty_factor = 10.0;
+SET GLOBAL broadcast_mem_exceeded_penalty_factor = 10.0;
+```
+
+### broadcast_mem_threshold
+
+* **Description**: Sets the estimated build-side size threshold above which the optimizer penalizes broadcast plans. The threshold applies to the estimated bytes sent to each backend. An estimate equal to the threshold receives no penalty. This is an optimizer threshold, not a runtime memory limit. It is independent of `exec_mem_limit`; `broadcast_row_limit` still controls the row-count check for broadcast selection. Setting this variable to `0` penalizes every broadcast with a positive estimated size.
+* **Scope**: Session, Global
+* **Default**: `2147483648` (2 GiB)
+* **Unit**: Byte
+* **Data Type**: long
+* **Valid Values**: [0, 9223372036854775807]
 
 ### broadcast_row_limit
 
@@ -320,6 +402,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
 
+### cbo_push_down_count_aggregate
+
+* **Description**: Controls whether `count(*)`/`count(col)` aggregates participate in `PushDownAggregateRule`'s push-down-below-join optimization, alongside the already-pushable `sum`/`max`/`min`/`hll_union`/`bitmap_union`/`percentile_union` functions. When enabled (default), the optimizer may push a `count` down to a narrower, join-key-only group-by on one side of an `INNER`/`CROSS` join (only the left/child-0 side, since count over a join is a cross product and cannot be recovered by summing partials from both sides) before rebuilding the top-level aggregate via the existing `COUNT -> SUM` rollup; whether the push-down is actually applied to a given query still depends on the `cbo_push_down_aggregate_mode` cost heuristic, exactly as for the other pushable functions. `count(col)` is never pushed when `col` comes from a `CASE WHEN`/`IF()` branch, because a never-firing branch must roll up to `0` for `count` (not `NULL`, as for `sum`). Disable this to fall back to the prior behavior of leaving `count` above the join.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: Boolean
+
 ### cbo_use_correlated_predicate_estimate
 
 * **Description**: Session flag that controls whether the optimizer applies a correlation-aware heuristic when estimating selectivity for conjunctive equality predicates across multiple columns. When enabled (default), the estimator applies exponential-decay weights to the selectivities of additional columns beyond the primary multi-column stats or most selective predicate, reducing the multiplicative impact of further predicates (weights: 0.5, 0.25, 0.125 for up to three additional columns). When disabled, no decay is applied (decay factor = 1) and the estimator multiplies full selectivities for those columns (stronger independence assumption). This flag is checked by StatisticsEstimateUtils.estimateConjunctiveEqualitySelectivity to choose the decay factor in both the multi-column-statistics path and the fallback path, thereby affecting cardinality estimates used by the CBO.
@@ -401,6 +490,33 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 1024
 * **Introduced in**: v2.5
 
+### count_distinct_implementation
+
+* **Description**: Controls the function implementation when `COUNT(DISTINCT expr)` contains only one parameter. Valid values (case-insensitive):
+  * `default`: Reserves the `COUNT(DISTINCT expr)` implementation. The optimizer chooses the suitable aggregation plan based on query form, statistics, and costs.
+  * `multi_count_distinct`: Changes the `COUNT(DISTINCT expr)` implementation to `multi_distinct_count` for precise counting. For counting on low- and medium-cardinality columns, this implementation can reduce a shuffle and deduplication phase, and thereby increase the speed. However, it will reserve the distinct values in HashSet, causing excessive memory consumption and even OOM when deduplicating high-cardinality columns. Do not set this value globally without first verifying it using representative loads.
+  * `ndv`:Changes the `COUNT(DISTINCT expr)` implementation to `ndv(expr)`. This function uses HyperLogLog, which returns approximate results with lower memory overhead.
+* **Default**: `default`
+* **Introduced in**: v3.3.6、v3.4.0
+
+:::note[Usage Notes for `multi_distinct_count`]
+`multi_distinct_count()` returns precise results.
+
+For most queries, `COUNT(DISTINCT expr)` is recommended. Set `count_distinct_implementation` to `default` to allow the optimizer to choose a suitable aggregation plan.
+
+When deduplicating low- and medium-cardinality columns, you can test and use `multi_distinct_count()`. This function uses two phases of aggregation, and can reduce a shuffle and deduplication phase for better performance. However, its HashSet status and final merging can cause excessive memory consumption and even OOM when deduplicating high-cardinality columns.
+
+If you want to test this implementation on one `COUNT(DISTINCT expr)` instead of changing the whole session, you can set `count_distinct_implementation` in a query hint:
+
+```SQL
+SELECT /*+ SET_VAR(count_distinct_implementation = multi_count_distinct) */
+       COUNT(DISTINCT category)
+FROM test;
+```
+
+Setting this value with hints applies only to `COUNT(DISTINCT)` with a single parameter. It will not affect multi-column deduplication expressions such as `COUNT(DISTINCT expr1, expr2)`.
+:::
+
 ### custom_query_id (session)
 
 * **Description**: Used to bind some external identifier to a current query. Can be set using `SET SESSION custom_query_id = 'my-query-id';` before executing a query. The value is reset after query is finished. This value can be passed to `KILL QUERY 'my-query-id'`. Value can be found in audit logs as a `customQueryId` field.
@@ -466,6 +582,15 @@ Used to set the default storage format used by the storage engine of the computi
 * **Default**: `InnoDB`
 * **Data Type**: String
 * **Introduced in**: v3.4.2, v3.5.0
+
+### default_view_sql_security
+
+* **Description**: The default SQL SECURITY characteristic applied when a `CREATE VIEW` statement does not specify a `SECURITY` clause. `NONE` (equivalent to an explicit `SECURITY NONE` clause) means querying the view only requires the invoker to have the `SELECT` privilege on the view itself; the tables the view references are not checked against the invoker. `INVOKER` (equivalent to `SECURITY INVOKER`) means the invoker must additionally have the `SELECT` privilege on the tables the view references. An explicit `SECURITY NONE` or `SECURITY INVOKER` clause in the statement always overrides this variable. This variable only affects `CREATE VIEW`; `ALTER VIEW` is unaffected.
+* **Scope**: Session
+* **Default**: `NONE`
+* **Data Type**: String
+* **Valid values**: `NONE`, `INVOKER`
+* **Introduced in**: v4.1.1
 
 ### disable_colocate_join
 
@@ -534,6 +659,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: `false`
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
+
+### enable_cache_udaf
+
+* **Description**: When set to `true`, enables in-memory caching of the class-level Java UDAF initialization (class loading, method introspection, and batch-update stub generation). The cache is populated on first use and reused across all aggregator/analytor instances within the same BE process, eliminating the repeated per-instance initialization overhead that is otherwise proportional to pipeline DOP. Caching only applies to UDAFs and window functions that were created with `"isolation" = "shared"`. Functions created with `"isolation" = "private"` always go through the uncached path regardless of this setting. Default is `false`; enable after verifying that shared-isolation UDAFs are safe to share their class-level state across concurrent queries. The runtime profile exposes `UdafCacheHitCount`, `UdafCachePopulateCount`, and `UdafLoadTime` counters to observe cache behavior.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.4.0
 
 ### enable_color_explain_output
 
@@ -607,6 +740,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: v3.3.8, v3.4.0, v3.5.0
 
+### enable_exchange_sink_buffer_flush
+
+* **Description**: Whether to limit the memory that an exchange sink uses to buffer rows for a shuffle before they are sent. The exchange sink keeps one partial chunk per destination pipeline driver and normally sends it only when the chunk is full; when this variable is `true` and the partial chunks of a driver retain more memory than the BE configuration item `exchange_sink_buffer_flush_threshold_bytes`, they are sent immediately. Set it to `false` to restore the previous behavior for a session.
+* **Default**: true
+* **Introduced in**: -
+
 ### enable_filter_unused_columns_in_scan_stage
 
 * **Description**: Controls pruning of columns produced by Scan nodes so the scan stage only outputs columns that are actually needed downstream (either as outputs or for non-pushable predicates). When enabled, PlanFragmentBuilder.setUnUsedOutputColumns will mark scan output columns that are exclusively used in pushdownable predicates and not required later, allowing the scan to trim those columns and reduce I/O and network transfer. The pruning is guarded: it will not apply for aggregation-family indexes in the non-skip-aggregation (non-skip-aggr) scan stage (keys/value columns must be retained to merge/aggregate), and the planner always ensures at least one column is returned from a scan. See `isEnableFilterUnusedColumnsInScanStage()` and the enable/disable helpers `enableTrimOnlyFilteredColumnsInScanStage()` / `disableTrimOnlyFilteredColumnsInScanStage()` in SessionVariable.
@@ -620,6 +759,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Whether to enable query rewrite for queries against multiple tables in the optimizer's rule-based optimization phase. Enabling this feature will improve the robustness of the query rewrite. However, it will also increase the time consumption if the query misses the materialized view.
 * **Default**: true
 * **Introduced in**: v3.3.0
+
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to schedule the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) on a BE that already runs one of its child fragments, instead of selecting a BE via global round-robin. In shared-nothing clusters that use `labels.location`, this prevents the gather fragment from being placed on a BE that the rest of the query does not use. It does not guarantee label isolation by itself: if any other fragment of the query runs outside the label, the gather fragment may also run there. Known cases include scans of external catalog tables (such as Hive or Iceberg), `choose_execute_instances_mode` values other than `LOCALITY`, `prefer_compute_node=true`, and right or full bucket-shuffle joins with pruned buckets. If the gather fragment has no child instances, it falls back to round-robin.
+* **Default**: false
+* **Introduced in**: v4.2
 
 ### enable_gin_filter
 
@@ -653,6 +798,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: false, which means this feature is disabled.
 * **Introduced in**: v3.1.4
 
+### enable_iceberg_eq_delete_runtime_filter_pruning
+
+* **Description**: Whether runtime filters can skip the equality delete files of an Iceberg table. It applies when the table has never changed its partition spec and every partition field is an identity transform of an INT, DATE, or STRING column that the query reads. A runtime filter that a join builds on such a column then skips the equality delete files of the partitions it rejects. Set it to `false` to apply every equality delete file, for example when a query fails with an error that names this variable.
+* **Default**: true
+* **Introduced in**: v26.2
+
 ### enable_incremental_mv
 
 * **Description**: Session flag that controls whether the server will plan and keep an in-memory plan for materialized views that use incremental refresh. When enabled, `MaterializedViewAnalyzer.planMVQuery` will proceed for create-MV statements whose refresh scheme is an `IncrementalRefreshSchemeDesc`: it builds the logical and physical plan for the view query and sets the session `enableMVPlanner` flag (`setMVPlanner(true)`). When disabled, planning for incremental-refresh MVs is skipped. Accessible via `isEnableIncrementalRefreshMV()` and `setEnableIncrementalRefreshMv(boolean)` in `SessionVariable`.
@@ -663,14 +814,35 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 
 ### enable_insert_partial_update
 
-* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values.
+* **Description**: Whether to enable Partial Update for INSERT statements on Primary Key tables. When this item is set to `true` (default), if an INSERT statement specifies only a subset of columns (fewer than the number of all non-generated columns in the table), the system performs a Partial Update to update only the specified columns while preserving existing values in other columns. When set to `false`, the system uses default values for unspecified columns instead of preserving existing values. This feature is particularly useful for updating specific columns in Primary Key tables without affecting other column values. If no transaction has ever committed to the target partitions, there are no existing values to preserve, so the INSERT runs as a plain insert that fills the unspecified columns with default values and skips the Partial Update processing. This applies only when every unspecified column can be filled that way (it is nullable or has a default value, and is not an AUTO_INCREMENT column), and not to INSERT OVERWRITE or to an INSERT inside an explicit transaction (`BEGIN ... COMMIT`), which keep the Partial Update. If another write reaches those partitions first, the INSERT fails with a message asking you to retry it, and the retry runs as a Partial Update.
 * **Default**: true
 * **Introduced in**: v3.3.20, v3.4.9, v3.5.8, v4.0.2
 
 ### enable_insert_strict
 
-* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/load_concept/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
+* **Description**: Whether to enable strict mode while loading data using INSERT from files(). Valid values: `true` and `false` (Default). When strict mode is enabled, the system loads only qualified rows. It filters out unqualified rows and returns details about the unqualified rows. For more information, see [Strict mode](../loading/strict_mode.md). In versions earlier than v3.4.0, when `enable_insert_strict` is set to `true`, the INSERT jobs fails when there is an unqualified rows.
 * **Default**: true
+
+### enable_lake_prepared_physical_split_scan
+
+* **Description**: Whether to enable the Prepared Physical Split scan for Cloud-native (lake) tables in a shared-data cluster. When enabled, each segment is pruned once and the resulting prepared read state is shared across the tablet's split children, which can speed up scans of large or skewed tablets. The optimization is decided per scan node and additionally requires a Cloud-native table with Query Cache disabled. Takes effect only in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v4.2
+
+### lake_tablet_internal_parallel_skew_split_ratio
+
+* **Description**: The skew threshold that lets a single oversized lake tablet be split under the Prepared Physical Split scan even when the scan-range count already reaches the pipeline DOP. A tablet is treated as a skewed straggler and split when its row count exceeds this ratio times the per-driver ideal share (total rows divided by the effective DOP). A larger value requires more extreme skew before splitting; a smaller value splits more eagerly. Must be a positive, finite number. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
+* **Default**: 1.5
+* **Data type**: Double
+* **Introduced in**: v4.2
+
+### enable_lake_prepared_split_on_dup_table_scan
+
+* **Description**: Whether to allow the prepared-physical-split scan on a Cloud-native (lake) table that is scanned by two or more scan operators in the same query (for example, a self-join, or a table referenced multiple times). When `false` (default), such duplicated scans fall back to the regular scan, because the prepared read state that the optimization reuses per scan is unsafe to share across sibling scans of the same table. Set it to `true` to opt those scans back into the optimization. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
+* **Default**: false
+* **Data type**: Boolean
+* **Introduced in**: v4.2
 
 ### enable_lake_tablet_internal_parallel
 
@@ -700,7 +872,21 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
 * **Default**: 64
 * **Data Type**: int
-* **Introduced in**: v3.5.12
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* **Description**: Whether to preserve the target `VARCHAR(N)` length when `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast. Enable this variable to keep prepare and execute result-set metadata consistent for statements such as `CAST(col AS VARCHAR(N))`.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* **Description**: Whether to synchronize the reused planner `Expr` type and origin type with the rewritten `VARCHAR(N)` type after `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast.
+* **Default**: true
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
 
 ### enable_load_profile
 
@@ -862,6 +1048,15 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 * **Default**: false
 
+### enable_explain_in_profile
+
+* **Scope**: Session
+* **Description**: When set to `true` and a profile is built for the query, the `EXPLAIN COSTS` text of the executed plan is embedded in the profile's `Summary` section under the `ExplainPlan` key. This lets the optimizer's cardinality estimates, column statistics, predicates, runtime-filter declarations, and overall plan cost be inspected offline alongside the runtime metrics, which is useful when triaging slow queries from a saved profile artifact without access to the live cluster.
+
+  The embedded plan honors the same desensitization controls as other persisted SQL artifacts: credential literals (e.g. in `FILES(...)`) are always redacted, and predicate / projection literals are rendered as digests when either the cluster-wide FE config `enable_sql_desensitize_in_log` or the session variable `enable_desensitize_explain` is enabled.
+* **Default**: false
+* **Data type**: boolean
+
 ### profile_log_latency_threshold_ms
 
 * **Scope**: Session
@@ -942,8 +1137,8 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 ### enable_scan_datacache
 
-* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
-* **Default**: true 
+* **Description**: Specifies whether to enable the Data Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Data Cache](../data_source/data_cache/data_cache.md). In versions prior to 3.2, this variable was named as `enable_scan_block_cache`.
+* **Default**: true
 * **Introduced in**: v2.5
 
 ### enable_shared_scan
@@ -1035,6 +1230,28 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Default**: true
 * **Introduced in**: v2.3
 
+### enable_tablet_pre_split
+
+* **Description**: Per-session opt-out for Sample-Based Tablet Pre-Split. Defaults to `true` so the FE Config gates (`enable_tablet_pre_split_for_*`) remain the primary on/off switch. Set this to `false` for a session whose load you want to leave undisturbed. Both the matching Config flag and this session variable must be `true` for pre-split to run.
+* **Default**: true
+* **Introduced in**: v4.1.0
+
+### enable_topn_filter_back_pressure
+
+* **Description**: Whether a scan self-enables TopN runtime-filter (RF) back-pressure. When a TopN/stream-build RF (from an `ORDER BY ... LIMIT` query, or an aggregate runtime in-filter) targets a scan, back-pressure clamps the scan's read-ahead to a small number of IO tasks until the RF actually arrives. This prevents a burst of concurrent readers from overshooting the (non-concurrency-aware) row budget and flooding the downstream aggregation before the RF can prune. Applies to both shared-nothing (OLAP) and shared-data (lake/connector) scans. When set to `false`, a scan only back-pressures if the FE `topn_filter_back_pressure_mode` is enabled.
+* **Default**: true
+* **Introduced in**: v4.1
+
+The following variables tune the back-pressure behavior and only take effect when `enable_topn_filter_back_pressure` is `true`:
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `topn_filter_back_pressure_io_tasks` | 1 | Read-ahead IO-task cap applied while the TopN RF is still pending. Set it to `<= 0` to disable the clamp (the scan uses the full `io_tasks_per_scan_operator`). |
+| `topn_back_pressure_num_rows` | 1024 | Number of rows a scan may read in the first throttle round before back-pressure starts throttling. The allowance doubles each subsequent round. |
+| `topn_back_pressure_throttle_time_ms` | 8 | Duration (in milliseconds) of the first throttle window. The window doubles each subsequent round. |
+| `topn_back_pressure_throttle_time_upper_bound_ms` | 100 | Upper bound (in milliseconds) on the total time back-pressure throttles a scan before giving up and letting it proceed at full read-ahead, even if the RF never arrived. |
+| `topn_back_pressure_max_rounds` | 8 | Maximum number of throttle rounds before back-pressure gives up. |
+
 ### enable_topn_runtime_filter
 
 * **Description**: Whether to enable TopN Runtime Filter. If this feature is enabled, a runtime filter will be dynamically constructed for ORDER BY LIMIT queries and pushed down to the scan for filtering.
@@ -1061,6 +1278,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Scope**: Session
 * **Data Type**: boolean
 * **Introduced in**: v3.2.4
+
+### enable_vector_index_refine
+
+* **Description**: Whether to recompute exact distances from the original vectors and rerank candidates returned by a quantized vector index. This variable applies to IVFPQ and HNSW indexes using the `sq4`, `sq8`, or `pq` quantizer. It has no effect on unquantized HNSW indexes (`quantizer = flat`). Enabling it can improve result accuracy but increases I/O and computation. Use `EXPLAIN` and check `Refine: ON/OFF` to confirm whether refinement is active.
+* **Default**: `false`
+* **Data type**: Boolean
+* **Scope**: Session
 
 ### enable_view_based_mv_rewrite
 
@@ -1199,6 +1423,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: v3.3.0, v3.4.0, v3.5.0
 
+### k_factor
+
+* **Description**: Multiplies the query `LIMIT` to determine how many vector index candidates each Segment returns. Values greater than `1` can improve recall after candidates from multiple Segments are merged, but increase index, memory, and downstream processing costs. The final candidate count is clamped to at least `1`.
+* **Default**: `1`
+* **Data type**: Double
+* **Scope**: Session
+
 ### lake_bucket_assign_mode
 
 * **Description**: The bucket assignment mode for queries against tables in data lakes. This variable controls how buckets are distributed among worker nodes when bucket-aware execution takes effect during query execution. Valid values:
@@ -1286,6 +1517,14 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Unit**: Byte
 * **Data type**: Int
 
+### max_array_length
+
+* **Scope**: Session
+* **Description**: The maximum number of elements in an array produced by an array function. If a function produces a larger array, the query fails instead of returning an oversized array. `0` or a negative value means no limit. This limit is intended for all functions that build arrays, but only [array_agg](sql-functions/array-functions/array_agg.md) enforces it so far.
+* **Default**: 0
+* **Data type**: Long
+* **Introduced in**: v4.2
+
 ### max_parallel_scan_instance_num
 
 * **Scope**: Session
@@ -1363,6 +1602,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: 3000
 * **Unit**: ms
 
+### one_tablet_opt_max_tablet_rows
+
+* **Description**: Controls the single-tablet optimization by tablet size. When a query is pruned to a single tablet, StarRocks can run the aggregation in a single phase and gather the result on a single node, skipping the shuffle. This is efficient for a small tablet, but will serialize the whole query on one node when the tablet is large. If the row count of the selected single tablet exceeds this threshold, the optimization is disabled and a normal distributed (shuffled) plan is used instead. Set it to `-1` to disable this gate and always apply the single-tablet optimization regardless of tablet size.
+* **Default**: 10000000
+* **Data type**: Long
+* **Introduced in**: v4.2
+
 ### optimizer_materialized_view_timelimit
 
 * **Description**: Specifies the maximum time that one materialized view rewrite rule can consume. When the threshold is reached, this rule will not be used for query rewrite.
@@ -1375,6 +1621,18 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Used to specify how columns are matched when StarRocks reads ORC files from Hive. The default value is `false`, which means columns in ORC files are read based on their ordinal positions in the Hive table definition. If this variable is set to `true`, columns are read based on their names.
 * **Default**: false
 * **Introduced in**: v3.1.10
+
+### paimon_reader_mode
+
+* **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive).
+
+  * `AUTO`: StarRocks automatically selects an appropriate reader.
+  * `JNI`: Forces the Paimon Java reader through JNI.
+  * `NATIVE`: Uses the StarRocks file reader when compatible; otherwise requires a compatible paimon-cpp read. The query fails instead of falling back to JNI.
+  * Setting `paimon_force_jni_reader=true` is equivalent to selecting `JNI` and takes precedence over this variable.
+* **Default**: AUTO
+* **Data type**: String
+* **Introduced in**: v4.2
 
 ### parallel_exchange_instance_num
 
@@ -1448,11 +1706,11 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 
 ### plan_mode
 
-* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg_catalog.md#appendix-periodic-metadata-refresh-strategy). Valid values:
+* **Description**: The metadata retrieval strategy of Iceberg Catalog. For more information, see [Iceberg Catalog metadata retrieval strategy](../data_source/catalog/iceberg/iceberg.md#appendix-a-periodic-metadata-refresh-strategy). Valid values:
   * `auto`: The system will automatically select the retrieval plan.
-  * `local`: Use the local cache plan.
-  * `distributed`: Use the distributed plan.
-* **Default**: auto
+  * `local`: The FE parses Iceberg manifest files locally and streams scan ranges to BEs incrementally as manifests are processed. This avoids collecting all splits before execution begins, reducing memory usage and first-byte latency.
+  * `distributed`: Manifest parsing is offloaded to multiple BEs in parallel. The FE must wait for all BEs to finish before delivering any scan ranges, which can cause high memory usage and long wait times on large tables with many manifest files. Prefer this only if FE CPU is a bottleneck and the table has a very large number of manifests.
+* **Default**: local (changed from `auto` in v3.5; with incremental scan range delivery enabled by default since v3.5, `local` mode provides lower memory usage and lower latency than `distributed` for most workloads)
 * **Introduced in**: v3.3.3
 
 #### enable_iceberg_column_statistics
@@ -1470,13 +1728,12 @@ Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical u
 * **Default**: auto
 * **Introduced in**: v3.3.2
 
-### prefer_compute_node
+### pq_refine_factor
 
-* **Description**: Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
-  * `true`: indicates that the FEs distribute query execution plans to CN nodes.
-  * `false`: indicates that the FEs do not distribute query execution plans to CN nodes.
-* **Default**: false
-* **Introduced in**: v2.4
+* **Description**: Additional candidate multiplier for a vector range search when `enable_vector_index_refine` is enabled. It is applied after `k_factor`. Increasing it can improve recall before exact-distance reranking, but increases index, I/O, and distance-computation costs.
+* **Default**: `1`
+* **Data type**: Double
+* **Scope**: Session
 
 ### query_cache_agg_cardinality_limit
 
@@ -1540,7 +1797,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_queue_mem_used_pct_limit (global)
 
-* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed.
+* **Description**: The upper limit of memory usage percentage on a BE. It takes effect only after being set greater than `0`. Setting it to `0` indicates no limit is imposed. Under Query Queue v1, it applies to every BE and CN node of the cluster. Under Query Queue v2, new queries wait while any alive node reaches the limit. See [Memory admission](../administration/management/resource_management/query_queues.md#memory-admission).
 * **Value range**: [0, 1]
 * **Default**: 0
 
@@ -1564,7 +1821,19 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Default**: 100
 * **Introduced in**: v3.0
 
-### resource_group 
+### range_scan_execution_mode
+
+* **Description**: Experimental execution mode for read-only single-table aggregates on native shared-data range-colocate tables. `colocate` preserves range colocation. `parallel` gives the scan effective ANY distribution and requires Hash/Gather Exchanges to merge aggregates, including exact `COUNT DISTINCT`. Values are case-insensitive; `auto` is unsupported.
+* **Scope**: Session
+* **Default**: `colocate`
+* **Data type**: String
+* **Valid values**: `colocate`, `parallel`
+
+A nonempty parallel scan must select at least two logical partitions and two real tablets, and the selected compute resource must contain at least two eligible CNs. Among aggregates with the DISTINCT modifier, only `COUNT DISTINCT` is supported. Pipeline execution and `parallel_fragment_exec_instance_num = 1` are required. Parallel mode adds network and aggregate-state transfer costs and can increase non-owner remote reads; it does not guarantee a speedup or use of every compute node. Partition and tablet pruning remain unchanged.
+
+Parallel mode rejects writes/refreshes, joins, set operations, CTEs, subqueries, analytic functions, grouping sets, special/historical/metadata/cache-stat or sampled/hinted scans, MV/rollup source replacement, multiple final scans, Query Cache, phased scheduling, prepared physical split scans, single-node plans, and nonpipeline execution. Fully pruned input retains normal empty-aggregate semantics. Unsupported requests fail explicitly without changing other session settings.
+
+### resource_group
 
         * **Description**: The specified resource group of this session
         * **Default**: ""
@@ -1598,6 +1867,22 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 * **Description**: The number of partitions allowed to be scanned for a single table in the execution plan.
 * **Default**: 0 (No limit)
 * **Introduced in**: v3.3.9
+
+### allow_lake_without_partition_filter
+
+* **Description**: Whether to allow queries on lake tables (Hive, Iceberg, Delta Lake, Paimon, etc.) without a partition filter predicate. When set to `false`, queries that do not contain a valid partition predicate on these tables will be rejected to prevent accidental full-table scans.
+* **Scope**: Session
+* **Default**: `true`
+* **Data type**: Boolean
+* **Alias**: `allow_hive_without_partition_filter`
+
+### scan_lake_partition_num_limit
+
+* **Description**: The maximum number of partitions allowed to be scanned for a single lake table (Hive, Iceberg, Delta Lake, Paimon, etc.). When set to `0`, no limit is applied. When exceeded, the query will return an error. Note that for catalog types that enumerate splits incrementally (Iceberg, Delta Lake), the limit check is performed during scan-range dispatch and the query may fail mid-execution rather than being rejected upfront.
+* **Scope**: Session
+* **Default**: `0` (No limit)
+* **Data type**: Int
+* **Alias**: `scan_hive_partition_num_limit`
 
 ### skip_local_disk_cache
 
@@ -1682,6 +1967,8 @@ Used to specify the SQL mode to accommodate certain SQL dialects. Valid values i
 * `SORT_NULLS_LAST`: places NULL values at the end after sorting.
 * `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
 * `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
+* `FORBID_INVALID_IMPLICIT_CAST`: enforces Trino-style strict type checking at plan time. Only widening coercions within the same type family are allowed implicitly (for example, `TINYINT`→`INT`→`BIGINT`→`DECIMAL`→`DOUBLE`, `DATE`→`DATETIME`). Casts within the `VARCHAR`/`CHAR` family are allowed regardless of declared length. Cross-family casts (such as `string`↔`numeric`, `string`↔`date`, `numeric`↔`date`, `boolean`↔other types) and narrowing numeric casts (such as `BIGINT`→`INT` or `DOUBLE`→`FLOAT`) are rejected with a semantic error. Use an explicit `CAST` to perform those conversions.
+* `STRUCT_CAST_BY_NAME`: enables name-based field matching when casting between STRUCT types, rather than the default position-based matching. When this mode is enabled, fields in the source struct are matched to fields in the target struct by field name (case-insensitively), regardless of the order in which they are declared. Fields present in the source but absent in the target are ignored; fields present in the target but absent in the source are filled with NULL. This mode affects both the FE type resolution (common supertype computation for UNION ALL and castability checks) and the BE cast evaluation (runtime field reordering in CastStructExpr). This is particularly useful when performing UNION ALL on STRUCT columns whose fields are defined in different orders across branches.
 
 You can set only one SQL mode, for example:
 
@@ -1730,6 +2017,37 @@ Used to specify the preaggregation mode for the first phase of GROUP BY. If the 
 
 Used to display the time zone of the current system. Cannot be changed.
 
+### lake_multi_node_tablet_write_mode
+
+* **Description**: Only applies in shared-data mode. Controls whether a load may spread one tablet's write across several compute nodes instead of sending every row to the single node the tablet is assigned to. Three values:
+  * `off` -- never spreads; the behavior that existed before this feature.
+  * `auto` (default) -- spreads for a table on a **range-bucket** distribution whose partition still holds fewer tablets than the number of writers this load is worth (see `lake_multi_node_write_bytes_per_node`). Pre-split runs and is waited on before the statement is planned, so that tablet count is pre-split's result: if it split the partition wide enough, `auto` declines; if it was skipped, or its wait timed out and the load fell back to the layout it can see, `auto` engages. Applies to every key type -- rows sharing a key are routed by a hash of the key columns and therefore all reach one node, so the result does not depend on which node wrote which row and nothing has to be asked of the user first. Hash-bucket tables are excluded because they can simply be given more buckets to fill the cluster.
+  * `force` -- spreads whenever the remaining preconditions allow, including hash-bucket distributions. Use it when you want the spread on a table `auto` declines to take.
+* Regardless of the mode, the feature also requires a cloud-native table with `file_bundling` enabled, a transaction on combined txn logs, and a partition with fewer tablets than the number of nodes this load is actually spread over. That width is the smallest of three: the node count derived from the load's size (`lake_multi_node_write_bytes_per_node`), `lake_multi_node_write_max_nodes`, and the alive compute nodes. A partition that already holds that many tablets stays on the single-node path even under `force` -- five tablets on a six-node warehouse do not spread if the load's size is only worth three writers. Stream load and routine load are excluded outright: neither can be sized at planning time, and treating an unknown size as a large one there would give the smallest and most frequent batches the widest spread. Partial updates (row and column mode), condition updates, loads omitting an auto-increment column, and loads during a schema change are all supported.
+* A partition that automatic partitioning creates during the load itself is spread too. It is not in the plan, so its tablets are handed to the load afterwards, over the create-partition RPC: they are spread over the same number of nodes the load resolved when it was planned, picked from the compute nodes alive at the moment the partition is created -- a long load can outlive the node list it was planned against. Such a partition normally starts with a single tablet, because the data boundaries that would have split it have not been seen yet, so it is exactly the shape this setting exists for.
+* Sub-partitions that automatic bucketing (`bucket_size`) adds during the load are spread as well. Automatic bucketing applies only to `RANDOM` distribution, so this takes effect only under `force`.
+* **Default**: auto
+* **Type**: String
+* **Scope**: Session
+* **Introduced in**: v4.2
+
+### lake_multi_node_write_max_nodes
+
+* **Description**: Upper bound on how many compute nodes may write **one tablet** in parallel. Every node in a tablet's node list opens its own delta writer and produces its own segments, so on a very wide warehouse an otherwise ordinary load would be cut into that many small segments. Nodes beyond this bound still run their sink instance -- their rows simply travel over the network to a node inside the list, which is the behavior that existed before this feature, so the bound costs locality but never correctness. This is an upper bound, not the parallelism itself: the number actually used is the smallest of this, the node count derived from the load's estimated size (`lake_multi_node_write_bytes_per_node`), and the number of alive compute nodes. Set to `0` or less for no bound.
+* **Default**: 6
+* **Type**: Int
+* **Scope**: Session
+* **Introduced in**: v4.2
+
+### lake_multi_node_write_bytes_per_node
+
+* **Description**: Only applies in shared-data mode, and only when `lake_multi_node_tablet_write_mode` is enabled. How many bytes of a load one compute node is given before another node is added to a tablet's write set. The node count is the load's estimated size divided by this value (integer division, so a node joins only once there is a whole share for it), and the parallelism finally used is the smallest of that number, the session variable `lake_multi_node_write_max_nodes`, and the number of alive compute nodes. For example, a 10 GB load at the default 2 GB gives 5 nodes, which a 3-node warehouse then clamps to 3. Spreading a load is not free: every node in a tablet's node list writes its own segments and emits its own partial transaction log, and the open/close round trips reach every node in that list whether or not it ends up holding any rows -- so a small load spread wide pays an extra segment and an extra log per node for little gain. The size comes from the optimizer's estimate for an `INSERT`, and from the resolved file list for a Broker Load. Primary Key `UPDATE` and `DELETE` use the estimated output row count and widths of the columns actually written. A partial update counts the key and updated/generated columns; a delete counts the key, any required generated partition columns, and the operation column. These estimates do not use the source scan size. If the row count is reliable but column widths are unknown, type sizes are used. Missing or inaccurate row counts keep the size unknown; the existing node and alive-node bounds then apply. Stream load and routine load are the exception and do not spread at all -- there an unknown size means a micro-batch, not an unmeasured bulk load. Set to 0 to disable size-based sizing.
+* **Default**: 2147483648 (2 GB)
+* **Unit**: Bytes
+* **Type**: Long
+* **Scope**: Session
+* **Introduced in**: v4.2
+
 ### time_zone
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
@@ -1768,16 +2086,6 @@ Used for MySQL client compatibility. No practical usage. The alias is `transacti
 * **Data Type**: long
 * **Introduced in**: v3.2.0
 
-### use_compute_nodes
-
-* **Description**: The maximum number of CN nodes that can be used. This variable is valid when `prefer_compute_node=true`. Valid values:
-
-  * `-1`: indicates that all CN nodes are used.
-  * `0`: indicates that no CN nodes are used.
-* **Default**: -1
-* **Data type**: Int
-* **Introduced in**: v2.4
-
 ### use_page_cache
 
 * **Description**: Session-scoped boolean that controls whether a query should use the backend page cache. If not explicitly set by FE, the query follows the BE's page-cache policy; if set in the session, FE enforces the session value. The session variable is propagated to the execution layer (e.g., `tResult.setUse_page_cache`) so BE execution honors the decision. Commonly disabled (`false`) for internal/background jobs (statistics collection, hyper queries, online optimize) to avoid polluting the shared page cache with non-user data — see usages in `StatisticsCollectJob`, `HyperQueryJob`, and `OnlineOptimizeJobV2`.
@@ -1800,5 +2108,7 @@ The StarRocks version. Cannot be changed.
 * **Default**: 28800 (8 hours).
 * **Unit**: Second
 * **Data type**: Int
+
+<EditionSpecificVariable />
 
 <VariableWarehouse />

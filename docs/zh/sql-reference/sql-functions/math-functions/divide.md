@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "返回x除以y的商，y为0时返回NULL。"
 ---
 
 # divide

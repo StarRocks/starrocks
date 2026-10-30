@@ -1,0 +1,152 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.alter.reshard.presplit;
+
+import com.starrocks.catalog.Column;
+import com.starrocks.common.StarRocksException;
+import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.load.Load;
+import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.thrift.TBrokerFileStatus;
+import org.apache.hadoop.conf.Configuration;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Production meta-tier {@link RowGroupStatisticsProvider} for the Broker Load
+ * path. Mirrors {@link InsertFromFilesRowGroupStatisticsProvider} but
+ * consumes the file-status snapshot the load already resolved (carried on
+ * {@link BrokerLoadScanContext#fileStatusesPerGroup()}); re-globbing here
+ * would race with the load's own enumeration and risk planning quantile
+ * cuts from a different file set than the one actually loaded.
+ *
+ * <p>Format detection follows Broker Load's own rule
+ * ({@link Load#getFormatType}): the file group's declared
+ * {@code FileFormat} takes precedence; when absent we fall back to the
+ * file-extension inference the load uses at scan time. The resolved format is
+ * dispatched to the matching {@link MetaTierFormat} reader (Parquet or ORC);
+ * any other format makes the provider throw {@link MetaTierUnavailableException}
+ * so the pipeline falls back to data tier.
+ *
+ * <p>Only direct HDFS-style loads (no broker) are supported today. When
+ * {@code brokerDesc.hasBroker()} is true the real load reads through the
+ * broker, whose filesystem and auth semantics may differ from the FE-local
+ * Hadoop {@code FileSystem} this provider uses to read footers — we fall
+ * back to data tier rather than risk a credentialed-via-broker source that
+ * FE-local access cannot reach. Routing footer reads through a
+ * broker-backed seekable input is a deliberate follow-up.
+ *
+ * <p>A file group whose column mapping would perturb a sampled key column is
+ * rejected before any footer read, reusing the data tier's
+ * {@code rejectKeyPerturbingFileGroups} guard so both tiers agree: a per-group
+ * {@code WHERE}, a negative load, a legacy hadoop function, a {@code SET} /
+ * derived column, a key column supplied by {@code COLUMNS FROM PATH} (its value
+ * is in the directory name, not the footer), or a {@code COLUMNS} list that
+ * omits a key column. An all-identity {@code COLUMNS} list and path columns
+ * disjoint from the key are accepted — the footer still carries the key columns
+ * verbatim under the names the load reads them by.
+ *
+ * <p>Hadoop-side wiring (configuration build, broker → Hadoop file-status
+ * conversion, concurrent footer reads) is shared with the INSERT-from-FILES
+ * provider via {@link PreSplitHadoopAccess}.
+ */
+final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsProvider {
+
+    @Override
+    public List<RowGroupStatistics> fetch(SampleRequest request) throws StarRocksException {
+        BrokerLoadScanContext context = requireBrokerLoadContext(request);
+        BrokerDesc brokerDesc = requireBrokerDesc(context);
+        rejectIfBrokerBacked(brokerDesc);
+        // No footer describes a generated column, and a file column that merely shares its name is not the
+        // value the load computes; the data tier evaluates the column's definition instead.
+        for (Column column : BrokerLoadSampleSubqueryExecutor.sampledKeyColumns(request)) {
+            if (column.isGeneratedColumn()) {
+                throw new MetaTierUnavailableException("sort-key column \"" + column.getName()
+                        + "\" is a generated column, which no file footer describes; falling back to data tier");
+            }
+        }
+        List<BrokerFileGroup> fileGroups = context.fileGroups();
+        List<List<TBrokerFileStatus>> fileStatusesPerGroup = context.fileStatusesPerGroup();
+        List<Column> sortKeyColumns = request.getSortKey();
+
+        // A file group whose mapping perturbs a sampled key column (per-group WHERE / SET / negative
+        // load / hadoop function), supplies one from the path, or never names one, makes the raw
+        // footer column diverge from the value the load actually inserts, so footer-derived
+        // boundaries would be skewed. Reuse the data tier's guard as the single source of truth;
+        // on rejection defer to the data tier, which applies the same test.
+        try {
+            BrokerLoadSampleSubqueryExecutor.rejectKeyPerturbingFileGroups(
+                    fileGroups, BrokerLoadSampleSubqueryExecutor.sampledKeyColumns(request));
+        } catch (StarRocksException nonIdentity) {
+            throw new MetaTierUnavailableException(nonIdentity.getMessage());
+        }
+
+        Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(brokerDesc.getProperties());
+
+        // Resolve every non-directory file's reader across all file groups. The pipeline picks K
+        // from total file bytes, so partial enumeration would bias the planner's quantile cuts.
+        // Format resolution runs first for every file: it touches no storage, so an unsupported
+        // format defers to the data tier without having paid for a single footer read.
+        List<PreSplitHadoopAccess.FooterRead> footerReads = new ArrayList<>();
+        for (int groupIndex = 0; groupIndex < fileGroups.size(); groupIndex++) {
+            BrokerFileGroup fileGroup = fileGroups.get(groupIndex);
+            String declaredFormat = fileGroup.getFileFormat();
+            for (TBrokerFileStatus brokerFileStatus : fileStatusesPerGroup.get(groupIndex)) {
+                if (brokerFileStatus.isDir) {
+                    continue;
+                }
+                // Follow Broker Load's own scan-time decision (declared FileFormat
+                // wins; otherwise the file extension), then pick the reader.
+                MetaTierFormat format = MetaTierFormat.fromBrokerFormatType(
+                        Load.getFormatType(declaredFormat, brokerFileStatus.path), brokerFileStatus.path);
+                footerReads.add(new PreSplitHadoopAccess.FooterRead(
+                        format, PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus)));
+            }
+        }
+        return PreSplitHadoopAccess.readFooters(footerReads, hadoopConfig, sortKeyColumns, context.loadTimeZone());
+    }
+
+    private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request)
+            throws MetaTierUnavailableException {
+        ScanContext scanContext = request.getScanContext();
+        if (!(scanContext instanceof BrokerLoadScanContext brokerLoadContext)) {
+            throw new MetaTierUnavailableException(
+                    "BrokerLoadRowGroupStatisticsProvider received a " + scanContext.getClass().getSimpleName()
+                            + " — wire only the Broker Load load kind here");
+        }
+        return brokerLoadContext;
+    }
+
+    private static void rejectIfBrokerBacked(BrokerDesc brokerDesc) throws MetaTierUnavailableException {
+        if (brokerDesc.hasBroker()) {
+            throw new MetaTierUnavailableException(
+                    "Broker-backed Broker Load is not yet supported by meta tier — FE-local Hadoop access "
+                            + "would not honor the broker's filesystem/auth; falling back to data tier");
+        }
+    }
+
+    private static BrokerDesc requireBrokerDesc(BrokerLoadScanContext context) throws MetaTierUnavailableException {
+        BrokerDesc brokerDesc = context.brokerDesc();
+        if (brokerDesc == null) {
+            // Broker Load always has a BrokerDesc in practice (BrokerLoadJob's
+            // construction requires it); we surface this as a meta-tier fallback
+            // rather than NPE if a future caller violates the invariant.
+            throw new MetaTierUnavailableException(
+                    "Broker Load pre-split sample request is missing BrokerDesc");
+        }
+        return brokerDesc;
+    }
+}

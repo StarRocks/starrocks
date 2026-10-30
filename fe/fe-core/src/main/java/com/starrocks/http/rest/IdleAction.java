@@ -49,8 +49,16 @@ public class IdleAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/idle_status", new IdleAction(controller));
     }
 
+    // K8s idle probe. Historically anonymous; gated for backward compatibility so it
+    // requires Basic auth (AuthN-only, no privilege check) only when the operator opts
+    // in via `enable_http_auth`.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         String showDetails = request.getSingleParameter("show_details");
         if (Config.warehouse_idle_check_enable) {
             IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker()

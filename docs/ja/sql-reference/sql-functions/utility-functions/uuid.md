@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+description: "ランダムなUUIDをVARCHAR型で返します。"
 ---
 
 # uuid
