@@ -468,7 +468,8 @@ static Status collect_protected_file_paths(const TabletMetadataPB& metadata, std
 
 static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::vector<TabletInfoPB>& tablet_infos,
                                          int64_t version, int64_t max_empty_walk_versions, std::string_view root_dir,
-                                         int64_t anchor_tablet_id, AsyncSharedFileDeleter* deleter, int64_t deadline_ms) {
+                                         int64_t anchor_tablet_id, AsyncSharedFileDeleter* deleter,
+                                         int64_t deadline_ms) {
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     for (const auto& tablet_info : tablet_infos) {
         RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
