@@ -208,7 +208,7 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc_with_nullable(SlotDesc* des
 
 static SlotDesc default_parquet_descs[] = {{"c1", TYPE_INT_DESC},
                                            {"c2", TYPE_BIGINT_DESC},
-                                           {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                           {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                            {"col_varchar", TYPE_DATETIME_DESC},
                                            {""}};
 
@@ -2076,7 +2076,7 @@ c3:            BINARY SNAPPY DO:2764882 FPO:2803392 SZ:43059/586643/13.62 VC:272
 TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
     SlotDesc parquet_descs[] = {{"c1", TYPE_BIGINT_DESC},
                                 {"c2", TYPE_BIGINT_DESC},
-                                {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
@@ -2101,7 +2101,7 @@ TEST_F(HdfsScannerTest, TestParquetCoalesceReadAcrossRowGroup) {
 TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
     SlotDesc parquet_descs[] = {{"c1", TYPE_BIGINT_DESC},
                                 {"c2", TYPE_BIGINT_DESC},
-                                {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"c3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/small_row_group_data.parquet";
@@ -2192,11 +2192,11 @@ is_original:           REQUIRED INT32 R:0 D:0
 */
 
 TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
-    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                 {"is_cloud", TYPE_VARCHAR_DESC},
                                 {""}};
 
-    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc min_max_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_decode_min_max.parquet";
 
@@ -2246,8 +2246,8 @@ UID99,ACTION99
 */
 
 TEST_F(HdfsScannerTest, TestCSVCompressed) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {""}};
 
     const std::string uncompressed_file = "./be/test/exec/test_data/csv_scanner/compressed.csv";
@@ -2359,8 +2359,8 @@ TEST_F(HdfsScannerTest, TestCSVCompressed) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {""}};
 
     const std::string end_with_r = "./be/test/exec/test_data/csv_scanner/line_delimiter_end_with_r.csv";
@@ -2415,9 +2415,9 @@ TEST_F(HdfsScannerTest, TestCSVWithDifferentLineDelimiter) {
 // OpenCSVSerde (enclose/escape set): separators inside quoted fields must NOT be
 // treated as column delimiters, and doubled quotes ("") must be de-escaped.
 TEST_F(HdfsScannerTest, TestCSVOpenCSVSerdeQuote) {
-    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"name", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 50)},
-                            {"status", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"name", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"status", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {""}};
 
     const std::string quote_file = "./be/test/exec/test_data/csv_scanner/quote_escape.csv";
@@ -2574,13 +2574,13 @@ m,\N,,
 //   empty field is an EMPTY collection ({} / []) while a raw "\N" field is NULL.
 TEST_F(HdfsScannerTest, TestCSVLazySimpleCompat) {
     TypeDescriptor map_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP);
-    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
-    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    map_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
     TypeDescriptor arr_col = TypeDescriptor::from_logical_type(LogicalType::TYPE_ARRAY);
-    arr_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+    arr_col.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
 
-    SlotDesc csv_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {"arr", arr_col},
                             {"m", map_col},
                             {""}};
@@ -2669,8 +2669,8 @@ UID1,ACTION1
 // there is no newline at EOF.
 
 TEST_F(HdfsScannerTest, TestCSVSmall) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"action", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/small.csv";
@@ -2722,8 +2722,8 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
-    SlotDesc csv_descs[] = {{"USER_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"ACTION", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"USER_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"ACTION", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/small.csv";
@@ -2777,7 +2777,7 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
-    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
 
     const std::string windows_file = "./be/test/exec/test_data/csv_scanner/windows.csv";
     Status status;
@@ -2809,7 +2809,7 @@ TEST_F(HdfsScannerTest, TestCSVWithWindowsEndDelemeter) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
-    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc csv_descs[] = {{"uuid", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
 
     const std::string bom_file = "./be/test/exec/test_data/csv_scanner/bom.csv";
     Status status;
@@ -2890,10 +2890,10 @@ TEST_F(HdfsScannerTest, TestCSVWithUTFBOM) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
-    SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"name2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"newly", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"name2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"newly", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/newly_add_column.csv";
@@ -2926,10 +2926,10 @@ TEST_F(HdfsScannerTest, TestCSVNewlyAddColumn) {
 }
 
 TEST_F(HdfsScannerTest, TestCSVDifferentOrderColumn) {
-    SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"name2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                            {"newly", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc csv_descs[] = {{"name1", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"age", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"name2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                            {"newly", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                             {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/newly_add_column.csv";
@@ -3217,8 +3217,8 @@ is_original:            INT64 SNAPPY DO:11263 FPO:11287 SZ:99/95/0.96 VC:100 ENC
 */
 
 TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
-    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
-                                {"collection_time", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+    SlotDesc parquet_descs[] = {{"vin", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                {"collection_time", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                 {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_int96_string.parquet";
@@ -3246,7 +3246,7 @@ abc
 // there is no newline at EOF.
 
 TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
-    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
 
     const std::string small_file = "./be/test/exec/test_data/csv_scanner/single_column_null_and_empty.csv";
     Status status;
@@ -3288,7 +3288,7 @@ A:            BINARY SNAPPY DO:693 FPO:1139 SZ:581/749/1.29 VC:100 ENC:PLAIN,RLE
 
 TEST_F(HdfsScannerTest, TestParquetUppercaseFiledPredicate) {
     SlotDesc parquet_descs[] = {
-            {"id", TYPE_INT_DESC}, {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+            {"id", TYPE_INT_DESC}, {"a", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/upcase_field.parquet";
 
@@ -3453,7 +3453,7 @@ def dict2_parquet():
 */
 
 TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
-    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)}, {""}};
+    SlotDesc parquet_descs[] = {{"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)}, {""}};
 
     const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/dict_two_page.parquet";
 
@@ -3601,7 +3601,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
     C.children.push_back(C1); // array<array<int>>
 
     TypeDescriptor D(LogicalType::TYPE_MAP);
-    D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+    D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
     D.children.push_back(C1); // map<string, array<int>>
 
     TypeDescriptor E(LogicalType::TYPE_STRUCT);
@@ -3610,7 +3610,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
         E.field_names.emplace_back("a");
 
         TypeDescriptor B0(LogicalType::TYPE_MAP);
-        B0.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        B0.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
         B0.children.push_back(TYPE_INT_DESC);
         E.children.push_back(B0);
         E.field_names.emplace_back("b");
@@ -3623,7 +3623,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
             TypeDescriptor B1(LogicalType::TYPE_STRUCT);
             B1.children.push_back(TYPE_INT_DESC);
             B1.field_names.emplace_back("a");
-            B1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+            B1.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
             B1.field_names.emplace_back("b");
             C0.children.push_back(B1);
             C0.field_names.emplace_back("b");
@@ -3634,7 +3634,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
     }
 
     SlotDesc parquet_descs[] = {{"a", TYPE_INT_DESC},
-                                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                 {"c", C},
                                 {"d", D},
                                 {"e", E},
@@ -3739,17 +3739,17 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
 
         // d: map<string, int>
         TypeDescriptor D(LogicalType::TYPE_MAP);
-        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
         D.children.push_back(TYPE_INT_DESC);
 
         TypeDescriptor E(LogicalType::TYPE_STRUCT);
         E.children.push_back(TYPE_INT_DESC);
         E.field_names.emplace_back("a");
-        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
         E.field_names.emplace_back("b");
 
         SlotDesc parquet_descs[] = {{"a", TYPE_INT_DESC},
-                                    {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+                                    {"b", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
                                     {"c", C},
                                     {"d", D},
                                     {"e", E},
@@ -3774,7 +3774,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
     // select e but as <b:string, a:int>
     {
         TypeDescriptor E(LogicalType::TYPE_STRUCT);
-        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
         E.field_names.emplace_back("b");
         E.children.push_back(TYPE_INT_DESC);
         E.field_names.emplace_back("a");
@@ -3802,7 +3802,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
     // select e but as <B:string, a:int>
     {
         TypeDescriptor E(LogicalType::TYPE_STRUCT);
-        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        E.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
         E.field_names.emplace_back("B");
         E.children.push_back(TYPE_INT_DESC);
         E.field_names.emplace_back("a");
@@ -3857,7 +3857,7 @@ TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
     {
         // d: map<string, int>
         TypeDescriptor D(LogicalType::TYPE_MAP);
-        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
         D.children.push_back(TYPE_UNKNOWN_DESC);
 
         SlotDesc parquet_descs[] = {{"d", D}, {""}};
@@ -4013,7 +4013,7 @@ TEST_F(HdfsScannerTest, TestParquetLZOFormat) {
 static SlotDesc corrupted_datacache_parquet_descs[] = {
         {"col1", TYPE_INT_DESC},
         {"col2", TYPE_BIGINT_DESC},
-        {"col3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR, 22)},
+        {"col3", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
         {"col4", TYPE_DATETIME_DESC},
         {""}};
 
