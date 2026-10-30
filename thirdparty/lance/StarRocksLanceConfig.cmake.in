@@ -1,0 +1,40 @@
+# Copyright 2021-present StarRocks, Inc. All rights reserved.
+# Licensed under the Apache License, Version 2.0.
+# Relocatable package produced by thirdparty/build-lance.sh. Never builds Rust.
+set(StarRocksLance_VERSION "@VERSION@")
+string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _lance_machine)
+if (_lance_machine STREQUAL "arm64")
+    set(_lance_machine "aarch64")
+endif()
+if (NOT CMAKE_SYSTEM_NAME STREQUAL "@SYSTEM@" OR NOT _lance_machine STREQUAL "@MACHINE@")
+    message(FATAL_ERROR "Lance thirdparty package targets @SYSTEM@/@MACHINE@; rebuild it for this platform")
+endif()
+get_filename_component(_lance_prefix "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+set(_lance_library "${_lance_prefix}/lib/@LIBRARY@")
+set(_lance_header "${_lance_prefix}/include/lance_rs_ffi.h")
+foreach (_lance_file IN ITEMS "${_lance_library}" "${_lance_header}")
+    if (NOT EXISTS "${_lance_file}")
+        message(FATAL_ERROR "Incomplete Lance thirdparty installation: ${_lance_file}")
+    endif()
+endforeach()
+file(SHA256 "${_lance_library}" _lance_library_sha256)
+file(SHA256 "${_lance_header}" _lance_header_sha256)
+if (NOT _lance_library_sha256 STREQUAL "@LIBRARY_SHA256@" OR
+    NOT _lance_header_sha256 STREQUAL "@HEADER_SHA256@")
+    message(FATAL_ERROR "Lance thirdparty library/header checksum mismatch; rebuild the dependency")
+endif()
+if (NOT TARGET lance_rust)
+    add_library(lance_rust SHARED IMPORTED GLOBAL)
+    set_target_properties(lance_rust PROPERTIES
+        IMPORTED_LOCATION "${_lance_library}"
+        IMPORTED_NO_SONAME TRUE
+        INTERFACE_INCLUDE_DIRECTORIES "${_lance_prefix}/include"
+        STARROCKS_LANCE_TEST_DATASET "${_lance_prefix}/share/lance/testdata/rows.lance")
+    if (APPLE)
+        target_link_options(lance_rust INTERFACE "LINKER:-rpath,@loader_path")
+    elseif (UNIX)
+        target_link_options(lance_rust INTERFACE "LINKER:-rpath,$ORIGIN")
+    endif()
+endif()
+set(StarRocksLance_LIBRARY "${_lance_library}")
+set(StarRocksLance_TEST_DATASET "${_lance_prefix}/share/lance/testdata/rows.lance")
