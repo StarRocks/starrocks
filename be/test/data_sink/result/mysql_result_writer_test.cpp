@@ -210,7 +210,7 @@ TEST_F(MysqlResultWriterTest, geography_matches_varbinary_output) {
                 return rows;
             };
             const auto actual = run(geo_type, geo_col);
-            EXPECT_EQ(run(TypeDescriptor::from_logical_type(TYPE_VARBINARY), bytes_col), actual);
+            EXPECT_EQ(run(TYPE_VARBINARY_DESC, bytes_col), actual);
             ASSERT_EQ(2, actual.size());
             if (shape == 0 || shape == 2) {
                 for (size_t row = 0; row < actual.size(); ++row) {
