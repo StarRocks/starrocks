@@ -17,14 +17,9 @@ separate I/O adaptation when the connector interface is agreed.
 ## Build and install the optional thirdparty package
 
 Build this dependency **before** configuring the BE. The normal StarRocks build
-does not invoke Cargo or install Rust. Like paimon-cpp, the dependency has a
-`build-thirdparty.sh` target and its own installation prefix. Lance remains an
-explicit target locally; the Ubuntu and Rocky9 dependency images build it in a
-separate stage. The existing dependencies are reused from a pinned, verified
-dev-env image when their build inputs match; otherwise they are rebuilt. The
-Lance stage then reuses the installed protoc and builds only Lance with
-`./thirdparty/build-thirdparty.sh -j2 lance`. It does not download or rebuild
-zlib, protobuf or googletest separately.
+does not invoke Cargo or install Rust. Use the standalone `build-lance.sh` entrypoint
+to install the optional library under its own prefix. Existing development images
+and the generic thirdparty build are unchanged.
 
 Install Rust >= 1.96.1, a native C/C++ toolchain, and protobuf/protoc first:
 
@@ -35,8 +30,6 @@ ls thirdparty/installed/lance/lib/libstarrocks_lance.so
 # Custom thirdparty installation or prepopulated Cargo cache:
 ./thirdparty/build-lance.sh --prefix /opt/starrocks-thirdparty/lance \
   --protoc /opt/starrocks-thirdparty/bin/protoc --offline
-# Standard Linux thirdparty entrypoint, after protobuf is installed:
-./thirdparty/build-thirdparty.sh -j2 lance
 ```
 
 The default installation is `thirdparty/installed/lance` (or
@@ -47,37 +40,9 @@ nor changes rustup settings. It runs all native tests and generates the BE
 integration fixture before replacing a previous installation. Frame pointers
 remain enabled for Rust and native dependencies.
 
-`docker/dockerfiles/dev-env/dev-env.Dockerfile` copies the preinstalled Rust/Cargo
-1.96.1 toolchain from the official `rust:1.96.1-slim-bookworm` image, pinned by
-its multi-platform digest. Image builds do not run a Rust installer or download
-a toolchain from `static.rust-lang.org`. Only the Rust distribution is copied;
-Debian system libraries are not copied. The `lance-builder` stage
-still compiles in the selected StarRocks Ubuntu or Rocky9 toolchain environment,
-so the resulting library uses that platform's system ABI. It builds Lance
-with two Cargo jobs to limit peak memory, then copies the installed package
-into the final image; the Rust toolchain and Cargo cache are not copied. The
-legacy CentOS7 image skips Lance because the official Rust toolchain requires
-glibc 2.28 or newer. macOS developers use `build-lance.sh` directly with a native
-Rust toolchain.
-
-To validate just the Lance producer in the same toolchain image as CI, run from
-the repository root (requires Docker with BuildKit):
-
-```sh
-DOCKER_BUILDKIT=1 docker build --target lance-builder \
-  --build-arg distro=ubuntu \
-  -f docker/dockerfiles/dev-env/dev-env.Dockerfile -t starrocks-lance-build:ubuntu .
-# Repeat with distro=rocky9 and a corresponding image tag.
-```
-
-This target first obtains the validated dependency installation, then runs the
-native tests and installs the package at `/var/local/thirdparty/installed/lance`.
-With matching prebuilt inputs, it reuses protoc without downloading C++ source
-archives or rebuilding existing libraries. A full build or invalidated baseline
-builds the existing dependencies first. The final `dev-env` target requires both
-the dependency installation and Lance build to succeed; this does not skip the
-existing thirdparty image checks. See [dependency reuse](../README.md#reusing-dependencies-in-dev-env-images)
-for the input validation and `thirdparty_source=full` override.
+Build in the target platform's existing development environment using its installed
+protoc and C/C++ toolchain. Install Rust >= 1.96.1 separately if it is not available.
+The optional package does not require changes to the shared development image.
 
 The installed package contains:
 
