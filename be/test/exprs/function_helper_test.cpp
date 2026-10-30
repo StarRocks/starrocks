@@ -293,6 +293,7 @@ protected:
                 const auto expected = check_geo_leaf(source.get(), *type.geo_type)->descriptor();
                 auto state = ManagedAggrState::create(ctx.get(), &function);
                 auto* data = reinterpret_cast<State*>(state->state());
+                EXPECT_FALSE(data->use_datum);
                 const Column* columns[] = {keys.get(), source.get()};
                 if (path == 0) {
                     for (size_t i = 0; i < source->size(); ++i) function.update(ctx.get(), columns, state->state(), i);

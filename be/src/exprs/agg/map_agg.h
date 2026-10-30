@@ -90,7 +90,9 @@ public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
         auto* state = new (ptr) MapAggAggregateFunctionState<KT, MyHashMap>;
         state->value_column = FunctionHelper::create_column(*ctx->get_arg_type(1), true);
-        state->use_datum = get_size_of_fixed_length_type(ctx->get_arg_type(1)->type) != 0;
+        const LogicalType value_type = ctx->get_arg_type(1)->type;
+        state->use_datum = get_size_of_fixed_length_type(value_type) != 0 || is_string_type(value_type) ||
+                           is_binary_type(value_type);
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
