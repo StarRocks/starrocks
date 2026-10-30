@@ -57,6 +57,8 @@ enum TFunctionVersion {
 enum TArrowFlightSQLVersion {
   V0 = 0,
   V1 = 1,
+  // DATETIME is sent as a timestamp without time zone instead of a UTC timestamp.
+  V2 = 2,
 }
 
 enum TQueryType {

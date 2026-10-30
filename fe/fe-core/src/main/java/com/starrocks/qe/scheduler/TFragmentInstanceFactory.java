@@ -150,7 +150,7 @@ public class TFragmentInstanceFactory {
         result.setFragment(sharedFragment != null ? sharedFragment : fragment.toThrift());
         result.setDesc_tbl(descTable);
         result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
-        result.setArrow_flight_sql_version(TArrowFlightSQLVersion.V1.getValue());
+        result.setArrow_flight_sql_version(TArrowFlightSQLVersion.V2.getValue());
         result.setCoord(coordAddress);
 
         result.setParams(new TPlanFragmentExecParams());
