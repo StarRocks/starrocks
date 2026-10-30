@@ -26,3 +26,9 @@ scan:
     - "**/parquet-hadoop-bundle-1.18.1.jar"
     # from fe and java extension
     - "**/parquet-jackson-1.18.1.jar"
+    # temporary: bundled Guava (CVE-2026-102554); remove after upstream upgrades
+    - "**/gcs-connector-3.0.13-shaded.jar"
+    - "**/hadoop-shaded-guava-1.5.0.jar"
+    - "**/hbase-shaded-miscellaneous-4.1.10.jar"
+    - "**/iceberg-bundled-guava-1.11.0.jar"
+    - "**/spark-network-common_2.12-3.5.7.jar"
