@@ -33,6 +33,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.RangeUtils;
 import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -149,15 +150,12 @@ public class SyncPartitionUtils {
     }
 
     /**
-     * Whether the existing MV partitions still contain a coarse partition that the current mapping
-     * splits into two or more finer partitions, i.e. the coarse-to-fine half of a shape change.
-     * This happens when the mirror mapper is disabled after the MV has been refreshed with it.
+     * Whether an existing MV partition still contains one or more mapped ranges with different
+     * bounds, i.e. the coarse-to-fine half of a shape change. This happens when the mirror mapper
+     * is disabled after the MV has been refreshed with it.
      */
     private static boolean hasCoarseToFineReplacement(PCellSortedSet mappedRanges, PCellSortedSet mvRangeMap) {
         List<PCellWithName> mapped = Lists.newArrayList(mappedRanges.getPartitions());
-        if (mapped.size() < 2) {
-            return false;
-        }
         // Both sets are sorted and contain non-overlapping ranges, so one monotonic scan suffices.
         int mappedIndex = 0;
         for (PCellWithName mvEntry : mvRangeMap.getPartitions()) {
@@ -167,13 +165,15 @@ public class SyncPartitionUtils {
                             .compareTo(mvRange.lowerEndpoint()) <= 0) {
                 mappedIndex++;
             }
-            int contained = 0;
             for (int i = mappedIndex; i < mapped.size(); i++) {
                 Range<PartitionKey> mappedRange = ((PRangeCell) mapped.get(i).cell()).getRange();
                 if (mappedRange.lowerEndpoint().compareTo(mvRange.upperEndpoint()) >= 0) {
                     break;
                 }
-                if (mvRange.encloses(mappedRange) && ++contained >= 2) {
+                // A single differing range is enough: the eager mapper keeps the raw upper bound of a
+                // partition whose lower bound is MIN while the mirror mapper snapped it, so a coarse
+                // mirror partition can be replaced by exactly one range with different bounds.
+                if (mvRange.encloses(mappedRange) && !RangeUtils.isRangeEqual(mvRange, mappedRange)) {
                     return true;
                 }
             }

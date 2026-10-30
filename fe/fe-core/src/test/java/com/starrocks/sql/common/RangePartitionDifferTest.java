@@ -25,6 +25,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.RangeUtils;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -78,6 +79,16 @@ public class RangePartitionDifferTest extends MVTestBase {
         PartitionKey hi = PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(upper)),
                 Collections.singletonList(PARTITION_COLUMN));
         return Range.closedOpen(lo, hi);
+    }
+
+    /** A range starting at MIN, like a range-partitioned table's first partition. */
+    private static Range<PartitionKey> minToRange(String upper) throws AnalysisException {
+        PartitionKey minKey = PartitionKey.createInfinityPartitionKey(
+                Collections.singletonList(PARTITION_COLUMN), false);
+        PartitionKey upperKey = PartitionKey.createPartitionKey(
+                Collections.singletonList(new PartitionValue(upper)),
+                Collections.singletonList(PARTITION_COLUMN));
+        return Range.closedOpen(minKey, upperKey);
     }
 
     private static PCellSortedSet cells(Map<String, Range<PartitionKey>> ranges) {
@@ -194,6 +205,60 @@ public class RangePartitionDifferTest extends MVTestBase {
             // the whole replacement component is left untouched: no day created, month not dropped
             Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty(), "adds: " + diff.getAdds());
             Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty(), "deletes: " + diff.getDeletes());
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * The mirror-era coarse partition can be replaced by exactly one eager range with different bounds:
+     * the first base partition keeps its MIN lower bound, so the eager mapper does not snap the raw
+     * upper bound while the mirror mapper snapped it to the week boundary. A bounded refresh outside
+     * that range must not delete the mirror-era partition while its replacement is pruned away.
+     */
+    @Test
+    public void testSingleFineReplacementKeepsOutOfRangeHistory() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            // base table's first partition: VALUES LESS THAN ('2020-05-13')
+            PCellSortedSet base = cells(Map.of("base_p0", minToRange("2020-05-13")));
+            // mv holds the mirror-era partition snapped to the week boundary: [MIN, 2020-05-18)
+            PCellSortedSet mv = cells(Map.of("mv_p0", minToRange("2020-05-18")));
+
+            PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(
+                    base, mv, dateTrunc("week"), differ(range("2020-06-01", "2020-07-01")));
+
+            // the whole replacement component is left untouched: no replacement created, history kept
+            Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty(), "adds: " + diff.getAdds());
+            Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty(), "deletes: " + diff.getDeletes());
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /** The same single-range replacement still migrates when the refresh range covers it entirely. */
+    @Test
+    public void testSingleFineReplacementMigratesWhenFullyInRange() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            PCellSortedSet base = cells(Map.of("base_p0", minToRange("2020-05-13")));
+            PCellSortedSet mv = cells(Map.of("mv_p0", minToRange("2020-05-18")));
+
+            // the component starts at MIN, so the refresh range must start at MIN as well; 2021-01-01
+            // covers the whole old partition range
+            PartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(
+                    base, mv, dateTrunc("week"), differ(minToRange("2021-01-01")));
+
+            List<PCellWithName> adds = new ArrayList<>(diff.getAdds().getPartitions());
+            List<PCellWithName> deletes = new ArrayList<>(diff.getDeletes().getPartitions());
+            Assertions.assertEquals(1, adds.size(), "adds: " + diff.getAdds());
+            Assertions.assertEquals(1, deletes.size(), "deletes: " + diff.getDeletes());
+            Assertions.assertTrue(RangeUtils.isRangeEqual(minToRange("2020-05-13"),
+                    ((PRangeCell) adds.get(0).cell()).getRange()), "adds: " + diff.getAdds());
+            Assertions.assertTrue(RangeUtils.isRangeEqual(minToRange("2020-05-18"),
+                    ((PRangeCell) deletes.get(0).cell()).getRange()), "deletes: " + diff.getDeletes());
         } finally {
             Config.enable_mv_mirror_base_partition = original;
         }
