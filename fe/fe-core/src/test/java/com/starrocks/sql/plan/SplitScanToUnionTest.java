@@ -85,6 +85,31 @@ class SplitScanToUnionTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    void testForceSplitWithSyncMV() throws Exception {
+        double selectRatio = connectContext.getSessionVariable().getSelectRatioThreshold();
+        boolean syncRewrite = connectContext.getSessionVariable().isEnableSyncMaterializedViewRewrite();
+        try {
+            starRocksAssert.withTable("CREATE TABLE split_mv_base (k1 INT, k2 INT, v BIGINT) " +
+                    "DUPLICATE KEY(k1, k2) DISTRIBUTED BY HASH(k1) BUCKETS 1 " +
+                    "PROPERTIES('replication_num'='1')");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW split_mv_rollup AS " +
+                    "SELECT k2, k1, v FROM split_mv_base ORDER BY k2, k1");
+            connectContext.getSessionVariable().setSelectRatioThreshold(-1);
+            connectContext.getSessionVariable().setEnableSyncMaterializedViewRewrite(true);
+            for (String predicate : List.of("k1 = 1 OR k2 >= 2", "k1 = 1 OR k2 = 2")) {
+                for (String projection : List.of("k1, k2, v", "k1 + 1, k2, coalesce(v, 0)")) {
+                    assertContains(getFragmentPlan("SELECT " + projection + " FROM split_mv_base WHERE " + predicate),
+                            "UNION", "rollup: split_mv_base", "rollup: split_mv_rollup");
+                }
+            }
+        } finally {
+            connectContext.getSessionVariable().setSelectRatioThreshold(selectRatio);
+            connectContext.getSessionVariable().setEnableSyncMaterializedViewRewrite(syncRewrite);
+            starRocksAssert.dropTable("split_mv_base");
+        }
+    }
+
+    @Test
     void testCheckPruneColumn() throws Exception {
         connectContext.getSessionVariable().setSelectRatioThreshold(-1);
         String sql = "select v2 from t0 where v1 > 1 and v1 < 3 or v1 >100000 and v1 < 100010 or v1 >200000 and v1 < 200010 " +
