@@ -350,6 +350,19 @@ public class TransactionGraphTest {
     }
 
     @Test
+    public void testMultiTableBatchFollowsCommitOrder() {
+        // Txn ids are assigned at begin, nodes are added at commit: txn 20 began before txn 30 but
+        // committed after it. The walk from txn 10 must pick its successors in commit order, so a
+        // batch [10, 30] built before txn 20 committed is built the same way after it.
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(10, Lists.newArrayList(1L, 2L));
+        graph.add(30, Lists.newArrayList(1L));
+        assertEquals(Lists.newArrayList(10L, 30L), graph.getTxnsWithTxnDependencyBatchMultiTable(1, 2, 10));
+        graph.add(20, Lists.newArrayList(2L));
+        assertEquals(Lists.newArrayList(10L, 30L), graph.getTxnsWithTxnDependencyBatchMultiTable(1, 2, 10));
+    }
+
+    @Test
     public void testPrintGraph() {
         TransactionGraph graph = new TransactionGraph();
         graph.add(1, Lists.newArrayList(1L));

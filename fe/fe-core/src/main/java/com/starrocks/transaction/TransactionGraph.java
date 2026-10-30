@@ -283,6 +283,10 @@ public class TransactionGraph {
      * The returned list is in chain (hence topological) order, so any prefix cut downstream
      * stays dependency-closed and per-partition commit versions appear in consecutive order.
      *
+     * Successors are tried in commit (add) order, not txn id order. A txn that commits later
+     * then never displaces one already in a batch, so a batch rebuilt from the same head with
+     * the same size cap (a retry of a failed batch) has the same txns.
+     *
      * The size of ins of node with txnId must be zero.
      */
     public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int minBatchSize, int maxBatchSize, long txnId) {
@@ -298,7 +302,7 @@ public class TransactionGraph {
         while (txns.size() < maxBatchSize && current.outs != null) {
             Node nextInChain = null;
             List<Node> successors = current.outs.stream()
-                    .sorted(Comparator.comparingLong(n -> n.txnId))
+                    .sorted(Comparator.comparingLong(n -> n.seq))
                     .collect(Collectors.toList());
             for (Node next : successors) {
                 // A successor of the tail depends on the tail, and joins only when it has
