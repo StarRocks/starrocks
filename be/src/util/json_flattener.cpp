@@ -634,6 +634,9 @@ size_t JsonPathDeriver::_drop_singleton_paths(JsonFlatPath* node, size_t current
         if (child->hits < 2 && child->last_row != current_row) {
             _add_remain_key(iter->first);
             node->remain = true;
+            // Unlike a path _clean_sparsity_path drops, this one can still reach the sparsity threshold if it
+            // shows up again; it then comes back without the values seen so far. See _visit_json_paths().
+            node->partial_children = true;
             iter = node->children.erase(iter);
             dropped++;
         } else {
@@ -673,6 +676,13 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
             }
             iter = root->children.emplace(k, std::make_unique<JsonFlatPath>()).first;
             _num_nodes++;
+            if (root->partial_children) {
+                // This may be a path _drop_singleton_paths() dropped. Its stats miss the values seen before, and
+                // JsonFlattener writes a value its column type cannot hold as NULL without keeping it in the
+                // remain, so a type taken from the later values alone would lose the earlier ones: type it JSON.
+                iter->second->partial_children = true;
+                iter->second->json_type = flat_json::JSON_BASE_TYPE_BITS;
+            }
         }
         auto child = iter->second.get();
         child->hits++;
