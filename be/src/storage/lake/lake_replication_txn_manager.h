@@ -104,7 +104,7 @@ public:
             std::unordered_map<std::string, size_t>& segment_name_to_size_map,
             std::map<std::string, std::string>& file_locations,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
-            SourceEncryptionMetaMap& source_encryption_metas);
+            SourceEncryptionMetaMap& source_encryption_metas, bool rewrite_all_segments = false);
 
     // Helper functions for filename conversion and building file mappings
     StatusOr<bool> determine_final_filename(

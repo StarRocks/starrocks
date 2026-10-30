@@ -742,14 +742,15 @@ FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
         const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
         std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete,
-        SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding, PrimaryKeyEncodingType target_pk_encoding) {
+        SchemaPtr pkey_schema, PrimaryKeyEncodingType source_pk_encoding, PrimaryKeyEncodingType target_pk_encoding,
+        bool strict_column_uid_map, const std::unordered_set<uint32_t>* dropped_column_uids) {
     const bool need_del_transcode =
             pkey_schema != nullptr &&
             requires_v1_to_v2_del_transcode(source_pk_encoding, target_pk_encoding, *pkey_schema);
     auto file_converters = [tablet_manager, request, filename_map, &column_unique_id_map, &files_to_delete, pkey_schema,
-                            source_pk_encoding, target_pk_encoding,
-                            need_del_transcode](const std::string& file_name,
-                                                uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+                            source_pk_encoding, target_pk_encoding, need_del_transcode, strict_column_uid_map,
+                            dropped_column_uids](const std::string& file_name,
+                                                 uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
         if (request.transaction_id < get_master_info().min_active_txn_id) {
             LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
                          << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
@@ -779,7 +780,8 @@ FileConverterCreatorFunc ReplicationTxnManager::build_file_converters(
         }
         if ((is_segment(file_name) || is_cols(file_name)) && !column_unique_id_map.empty()) {
             return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
-                                                            &column_unique_id_map);
+                                                            &column_unique_id_map, strict_column_uid_map,
+                                                            dropped_column_uids);
         }
         return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output_file));
     };
