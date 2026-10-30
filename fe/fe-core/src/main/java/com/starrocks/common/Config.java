@@ -4709,6 +4709,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
 
+    @ConfField(mutable = true, comment = "How long an incremental refresh waits for the materialized view's " +
+            "committed transactions to become visible before it reads the view. The refresh fails when they " +
+            "are still not visible by then, and the next refresh tries again")
+    public static long mv_incremental_refresh_wait_visible_timeout_ms = 300 * 1000L;
+
     @ConfField(mutable = true, comment = "materialized view can refresh at most 64 partition at a time")
     public static int mv_max_partitions_num_per_refresh = 64;
 
