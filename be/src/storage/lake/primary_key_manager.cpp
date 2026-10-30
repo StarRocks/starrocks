@@ -1935,7 +1935,7 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
             // Take the cache path only while this publish's own base segments can fit in it. A publish
             // reads every base segment holding a row it updates, so once that set exceeds the cache
             // there is nothing to gain: entries are evicted as fast as they are filled, the hit rate
-            // stays at zero, and the tablet metadata and schemas sharing the cache get flushed out
+            // stays at zero, and the delete vectors and schemas sharing the cache get flushed out
             // with it. Going through TabletManager::load_segment anyway would also be strictly more
             // expensive than the static open, because it hands the Segment a TabletManager and every
             // column index load then calls update_cache_size(), which walks all of the segment's
@@ -1944,7 +1944,7 @@ Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& param
             //
             // Comparing the cache's own usage against its capacity does NOT work as a signal -- an LRU
             // evicts to stay under capacity, so it reports room even while it thrashes.
-            const size_t cache_capacity = tablet_mgr->metacache()->capacity();
+            const size_t cache_capacity = tablet_mgr->metacache()->segment_metadata_capacity();
             const size_t shard_capacity = cache_capacity / kNumShards + (cache_capacity % kNumShards != 0);
             // Even a single segment can fit the aggregate capacity yet exceed its shard's budget.
             // Such an entry evicts itself as its charge grows and cannot be reused by later publishes.

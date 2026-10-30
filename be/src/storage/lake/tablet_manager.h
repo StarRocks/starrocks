@@ -69,12 +69,14 @@ class TabletManager {
 public:
     // Does NOT take the ownership of |location_provider| and |location_provider| must outlive
     // this TabletManager.
-    // |cache_capacity| is the max number of bytes can be used by the
-    // metadata cache.
+    // |tablet_metadata_cache_capacity| and |segment_metadata_cache_capacity| are the max number of
+    // bytes that can be used by the two LRU caches of the metacache, see Metacache.
     explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
-                           int64_t cache_capacity, const StorePathRegistry* store_path_registry = nullptr);
+                           int64_t tablet_metadata_cache_capacity, int64_t segment_metadata_cache_capacity,
+                           const StorePathRegistry* store_path_registry = nullptr);
 
-    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
+    explicit TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t tablet_metadata_cache_capacity,
+                           int64_t segment_metadata_cache_capacity,
                            const StorePathRegistry* store_path_registry = nullptr);
 
     ~TabletManager();
@@ -402,8 +404,6 @@ public:
     PrimaryKeyManager* primary_key_mgr();
 
     CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
-
-    void update_metacache_limit(size_t limit);
 
     TableSchemaService* table_schema_service() { return _table_schema_service.get(); }
 

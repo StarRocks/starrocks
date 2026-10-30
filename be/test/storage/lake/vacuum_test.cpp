@@ -3633,7 +3633,7 @@ TEST_P(LakeVacuumTest, test_vacuum_snapshot_tablets_and_failure_before_deletion)
         }
     };
     auto location_provider = std::make_shared<AliasedLocationProvider>(kTestDir);
-    TabletManager snapshot_tablet_mgr(location_provider, _primary_key_mgr.get(), 1024 * 1024);
+    TabletManager snapshot_tablet_mgr(location_provider, _primary_key_mgr.get(), 1024 * 1024, 1024 * 1024);
     for (bool incremental : {false, true}) {
         // Success, missing snapshot, I/O failure, deadline expires during the snapshot read.
         for (int failure = 0; failure < 4; ++failure) {

@@ -125,21 +125,23 @@ static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet:
 #endif
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, PrimaryKeyManager* primary_key_mgr,
-                             int64_t cache_capacity, const StorePathRegistry* store_path_registry)
+                             int64_t tablet_metadata_cache_capacity, int64_t segment_metadata_cache_capacity,
+                             const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
           _store_path_registry(store_path_registry),
-          _metacache(std::make_unique<Metacache>(cache_capacity)),
+          _metacache(std::make_unique<Metacache>(tablet_metadata_cache_capacity, segment_metadata_cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _primary_key_mgr(primary_key_mgr),
           _table_schema_service(std::make_unique<TableSchemaService>(this)) {
     _primary_key_mgr->set_tablet_mgr(this);
 }
 
-TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity,
+TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider,
+                             int64_t tablet_metadata_cache_capacity, int64_t segment_metadata_cache_capacity,
                              const StorePathRegistry* store_path_registry)
         : _location_provider(std::move(location_provider)),
           _store_path_registry(store_path_registry),
-          _metacache(std::make_unique<Metacache>(cache_capacity)),
+          _metacache(std::make_unique<Metacache>(tablet_metadata_cache_capacity, segment_metadata_cache_capacity)),
           _table_schema_service(std::make_unique<TableSchemaService>(this)) {}
 
 TabletManager::~TabletManager() = default;
@@ -1880,10 +1882,6 @@ StatusOr<TabletSchemaPtr> TabletManager::load_and_parse_schema_file(const std::s
         return Status::InternalError("failed to emplace the schema hash map");
     }
     return std::move(schema);
-}
-
-void TabletManager::update_metacache_limit(size_t new_capacity) {
-    _metacache->update_capacity(new_capacity);
 }
 
 int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
