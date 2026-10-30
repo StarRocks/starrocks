@@ -228,4 +228,303 @@ TEST_F(FunctionHelperTest, testCreateGeoColumnPlaceholder) {
     }
 }
 
+<<<<<<< HEAD
+=======
+class GeoFunctionHelperTest : public FunctionHelperTest, public ::testing::WithParamInterface<LogicalType> {
+protected:
+    TypeDescriptor geo_type() const {
+        const bool geography = GetParam() == TYPE_GEOGRAPHY;
+        return TypeDescriptor::create_geo_type(
+                GetParam(),
+                {geography ? GEO_LOGICAL_TYPE_GEOGRAPHY : GEO_LOGICAL_TYPE_GEOMETRY,
+                 geography ? GEO_COORDINATE_SYSTEM_SPHERICAL : GEO_COORDINATE_SYSTEM_CARTESIAN,
+                 geography ? GEO_EDGE_ALGORITHM_SPHERICAL : GEO_EDGE_ALGORITHM_PLANAR,
+                 geography ? "OGC:CRS84" : "EPSG:3857", geography ? std::nullopt : std::optional<int32_t>(3857)});
+    }
+    auto context(const TypeDescriptor& result, const std::vector<TypeDescriptor>& args) {
+        return std::unique_ptr<FunctionContext>(FunctionContext::create_context(nullptr, pool.get(), result, args));
+    }
+    MutableColumnPtr input(const TypeDescriptor& arg, bool nullable = false) {
+        auto column = ColumnHelper::create_column(arg, nullable);
+        column->append_datum(arg.type == TYPE_ARRAY ? Datum(DatumArray{Datum(Slice(point)), Datum()})
+                                                    : Datum(Slice(point)));
+        return column;
+    }
+    MutableColumnPtr physical_input(const TypeDescriptor& arg, int mode) {
+        auto geo = GeoColumn::create(GeoColumnDescriptor{
+                *type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+        geo->append_wkb(Slice(point));
+        auto column = ColumnHelper::create_column(arg, true);
+        if (mode == 4) return column; // Empty, with the factory's physical placeholder.
+        if (mode == 3 && arg.type == TYPE_ARRAY) {
+            column->append_nulls(3); // No geo elements: retain the factory's physical placeholder.
+            return column;
+        }
+        if (arg.type == TYPE_ARRAY) {
+            auto* array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column.get()));
+            array->elements_column_raw_ptr()->append(*geo, 0, 1);
+            array->offsets_column_raw_ptr()->append(1);
+            down_cast<NullableColumn*>(column.get())->null_column_data().push_back(0);
+        } else {
+            column->append(*geo, 0, 1);
+        }
+        if (mode == 3) {
+            column->resize(0);
+            column->append_nulls(3);
+        } else if (mode == 2) {
+            return ConstColumn::create(std::move(column), 3);
+        } else {
+            auto copy = column->clone();
+            if (mode == 1)
+                column->append_nulls(1);
+            else
+                column->append(*copy, 0, 1);
+            column->append(*copy, 0, 1);
+        }
+        if (mode == 0) return down_cast<NullableColumn*>(column.get())->data_column()->as_mutable_ptr();
+        return column;
+    }
+    void check_array_conversion() {
+        for (const auto& arg : {type, array_type}) {
+            auto result_type = TypeDescriptor::create_array_type(arg);
+            auto intermediate_type = TypeDescriptor::create_struct_type({"g"}, {result_type});
+            auto ctx = context(result_type, {arg});
+            auto* function = get_aggregate_function("array_agg2", arg.type, TYPE_ARRAY, false);
+            ASSERT_NE(nullptr, function);
+            for (int mode : {0, 1, 2, 3, 4}) {
+                SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
+                auto source = physical_input(arg, mode);
+                auto result = ColumnHelper::create_column(intermediate_type, true);
+                function->convert_to_serialize_format(ctx.get(), {source}, source->size(), result);
+                EXPECT_EQ(check_geo_leaf(source.get(), *type.geo_type)->descriptor(),
+                          check_geo_leaf(result.get(), *type.geo_type)->descriptor());
+                auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(
+                        down_cast<const StructColumn*>(ColumnHelper::get_data_column(result.get()))
+                                ->field_column_raw_ptr(0)));
+                EXPECT_EQ(source->size(), result->size());
+                EXPECT_EQ(source->size(), array->elements().size());
+                for (size_t i = 0; i < source->size(); ++i) {
+                    EXPECT_EQ(i + 1, array->offsets().get(i + 1).get_uint32());
+                    EXPECT_EQ(source->is_null(i), array->elements().is_null(i));
+                }
+                if (mode < 3) {
+                    EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(0).to_string());
+                }
+                result->check_or_die();
+                auto merged = ManagedAggrState::create(ctx.get(), function);
+                for (size_t i = 0; i < result->size(); ++i)
+                    function->merge(ctx.get(), result.get(), merged->state(), i);
+                auto finalized = ColumnHelper::create_column(result_type, false);
+                function->finalize_to_column(ctx.get(), merged->state(), finalized.get());
+                EXPECT_EQ(check_geo_leaf(source.get(), *type.geo_type)->descriptor(),
+                          check_geo_leaf(finalized.get(), *type.geo_type)->descriptor());
+                finalized->check_or_die();
+            }
+            auto wrong_type = intermediate_type;
+            auto* leaf = &wrong_type;
+            while (!leaf->children.empty()) leaf = &leaf->children[0];
+            leaf->geo_type->crs = "custom:incompatible";
+            auto wrong = ColumnHelper::create_column(wrong_type, true);
+            auto source = physical_input(arg, 0);
+            EXPECT_THROW(function->convert_to_serialize_format(ctx.get(), {source}, source->size(), wrong),
+                         std::invalid_argument);
+        }
+    }
+    void check_aggregate(const char* name) {
+        const bool array_agg = name == std::string_view("array_agg2");
+        auto result_type = array_agg ? TypeDescriptor::create_array_type(array_type) : array_type;
+        auto ctx = context(result_type, {array_type});
+        auto source = input(array_type);
+        const Column* columns[] = {source.get()};
+        auto* function = get_aggregate_function(name, TYPE_ARRAY, result_type.type, false);
+        ASSERT_NE(nullptr, function);
+        auto state = ManagedAggrState::create(ctx.get(), function);
+        function->update(ctx.get(), columns, state->state(), 0);
+        auto intermediate = ColumnHelper::create_column(
+                array_agg ? TypeDescriptor::create_struct_type({"g"}, {result_type}) : result_type, false);
+        function->serialize_to_column(ctx.get(), state->state(), intermediate.get());
+        auto merged = ManagedAggrState::create(ctx.get(), function);
+        function->merge(ctx.get(), intermediate.get(), merged->state(), 0);
+        auto result = ColumnHelper::create_column(result_type, false);
+        function->finalize_to_column(ctx.get(), merged->state(), result.get());
+        ASSERT_FALSE(ctx->has_error());
+        ASSERT_EQ(1, result->size());
+        const auto* geo = check_geo_leaf(result.get(), *type.geo_type);
+        EXPECT_EQ(point, geo->get_wkb(0).to_string());
+        EXPECT_EQ(2, geo->size());
+        auto* array = down_cast<ArrayColumn*>(result.get());
+        if (array_agg) array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(array->elements_column_raw_ptr()));
+        EXPECT_TRUE(array->elements().is_null(1));
+        result->check_or_die();
+    }
+    const TypeDescriptor type = geo_type();
+    const TypeDescriptor array_type = TypeDescriptor::create_array_type(type);
+    std::unique_ptr<MemPool> pool = std::make_unique<MemPool>();
+    // ISO WKB, little-endian POINT(1 2).
+    const std::string point{
+            "\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x3f"
+            "\x00\x00\x00\x00\x00\x00\x00\x40",
+            21};
+};
+
+TEST_P(GeoFunctionHelperTest, CreateColumns) {
+    for (const auto& nested :
+         {type, array_type, TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), type),
+          TypeDescriptor::create_struct_type({"g"}, {type}), TypeDescriptor::create_array_type(array_type)}) {
+        for (bool nullable : {false, true}) {
+            auto column = FunctionHelper::create_column(nested, nullable);
+            EXPECT_EQ(nullable, column->is_nullable());
+            EXPECT_EQ(0, column->size());
+            const auto* geo = check_geo_leaf(column.get(), *type.geo_type);
+            EXPECT_EQ((GeoStorageDescriptor{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}),
+                      geo->descriptor().storage);
+            column->check_or_die();
+        }
+    }
+    auto source = GeoColumn::create(GeoColumnDescriptor{
+            *type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+    source->append_wkb(Slice(point));
+    auto result = FunctionHelper::create_column(type, false);
+    result->append(*source);
+    EXPECT_EQ(source->descriptor(), check_geo_leaf(result.get(), *type.geo_type)->descriptor());
+    EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(0).to_string());
+    auto other = type;
+    other.geo_type->crs = "custom:incompatible";
+    auto incompatible = ColumnHelper::create_column(other, false);
+    EXPECT_THROW(incompatible->append(*result), std::invalid_argument);
+}
+
+TEST_P(GeoFunctionHelperTest, ArrayAgg) {
+    check_aggregate("array_agg2");
+}
+TEST_P(GeoFunctionHelperTest, ArrayV2ConvertCopy) {
+    check_array_conversion();
+}
+TEST_P(GeoFunctionHelperTest, AnyValue) {
+    check_aggregate("any_value");
+}
+
+TEST_P(GeoFunctionHelperTest, ArrayAggWindow) {
+    auto ctx = context(array_type, {type});
+    auto function = std::make_unique<ArrayAggAggregateFunctionV2<ArrayAggWindowStateV2>>();
+    auto state = ManagedAggrState::create(ctx.get(), function.get());
+    check_geo_leaf(reinterpret_cast<ArrayAggWindowStateV2*>(state->state())->result_column.get(), *type.geo_type);
+    auto source = input(type);
+    const Column* columns[] = {source.get()};
+    function->update(ctx.get(), columns, state->state(), 0);
+    auto result = ColumnHelper::create_column(array_type, true);
+    function->get_values(ctx.get(), state->state(), result.get(), 0, 2);
+    ASSERT_EQ(2, result->size());
+    const auto* geo = check_geo_leaf(result.get(), *type.geo_type);
+    EXPECT_EQ(point, geo->get_wkb(0).to_string());
+    EXPECT_EQ(point, geo->get_wkb(1).to_string());
+    result->check_or_die();
+}
+
+TEST_P(GeoFunctionHelperTest, MapAgg) {
+    auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), type);
+    auto ctx = context(map_type, {TypeDescriptor(TYPE_INT), type});
+    auto function = std::make_unique<MapAggAggregateFunction<TYPE_INT>>();
+    auto state = ManagedAggrState::create(ctx.get(), function.get());
+    auto* value_column = reinterpret_cast<MapAggAggregateFunctionState<TYPE_INT>*>(state->state())->value_column.get();
+    check_geo_leaf(value_column, *type.geo_type);
+    auto keys = Int32Column::create();
+    keys->append(7);
+    keys->append(8);
+    auto values = input(type, true);
+    values->append_nulls(1);
+    const Column* columns[] = {keys.get(), values.get()};
+    function->update(ctx.get(), columns, state->state(), 0);
+    function->update(ctx.get(), columns, state->state(), 1);
+    auto result = ColumnHelper::create_column(map_type, false);
+    function->finalize_to_column(ctx.get(), state->state(), result.get());
+    ASSERT_EQ(1, result->size());
+    EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(0).to_string());
+    EXPECT_EQ(7, down_cast<MapColumn*>(result.get())->keys().get(0).get_int32());
+    EXPECT_TRUE(down_cast<MapColumn*>(result.get())->values().is_null(1));
+    result->check_or_die();
+}
+
+TEST_P(GeoFunctionHelperTest, StructCallers) {
+    auto result_type = TypeDescriptor::create_struct_type({"g"}, {array_type});
+    // Varying, nullable, constant, all-NULL, zero rows.
+    for (int mode : {0, 1, 2, 3, 4}) {
+        auto source = mode >= 3 ? ColumnHelper::create_column(array_type, true) : input(array_type, mode == 1);
+        if (mode == 0) source->append_datum(DatumArray{});
+        if (mode == 1 || mode == 3) source->append_nulls(mode == 3 ? 2 : 1);
+        if (mode == 2) source = ConstColumn::create(std::move(source), 2);
+        for (bool named : {false, true}) {
+            auto ctx =
+                    context(result_type, named ? std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARCHAR), array_type}
+                                               : std::vector<TypeDescriptor>{array_type});
+            auto name = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("g"), source->size());
+            auto result = named ? StructFunctions::named_struct(ctx.get(), {name, source})
+                                : StructFunctions::new_struct(ctx.get(), {source});
+            ASSERT_TRUE(result.ok()) << result.status();
+            EXPECT_EQ(source->size(), result.value()->size());
+            const auto* geo = check_geo_leaf(result.value().get(), *type.geo_type);
+            if (mode < 3) {
+                EXPECT_EQ(point, geo->get_wkb(0).to_string());
+            }
+            if (mode == 2) {
+                EXPECT_EQ(point, geo->get_wkb(2).to_string());
+            }
+            auto* field = down_cast<const StructColumn*>(result.value().get())->field_column_raw_ptr(0);
+            if (mode == 1) {
+                EXPECT_TRUE(field->is_null(1));
+            }
+            if (mode == 3) {
+                EXPECT_EQ(2, down_cast<const NullableColumn*>(field)->null_count());
+            }
+            result.value()->check_or_die();
+        }
+    }
+}
+
+TEST_F(FunctionHelperTest, ArrayV2ColumnCopyControls) {
+    MemPool pool;
+    ArrayAggAggregateFunctionV2<ArrayAggAggregateStateV2> current;
+    for (const auto& arg : {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))}) {
+        for (int mode : {0, 1, 2, 3, 4, 5}) {
+            SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
+            auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
+            if (mode < 3) {
+                for (int i = 11; i <= (mode == 2 ? 11 : 33); i += 11) {
+                    Datum value = arg.type == TYPE_INT
+                                          ? Datum(i)
+                                          : arg.type == TYPE_VARCHAR
+                                                    ? Datum(Slice(i == 11 ? "one" : i == 22 ? "two" : "three"))
+                                                    : Datum(DatumArray{Datum(i)});
+                    if (mode == 1 && i == 22)
+                        source->append_nulls(1);
+                    else
+                        source->append_datum(value);
+                }
+            } else if (mode == 3)
+                source->append_nulls(3);
+            else if (mode == 4)
+                source = ColumnHelper::create_const_null_column(3);
+            if (mode == 2) source = ConstColumn::create(std::move(source), 3);
+            auto expected = [&](size_t i) {
+                return source->is_constant() ? down_cast<const ConstColumn*>(source.get())->data_column()->debug_item(0)
+                                             : source->debug_item(i);
+            };
+            auto array_type = TypeDescriptor::create_array_type(arg);
+            auto intermediate =
+                    ColumnHelper::create_column(TypeDescriptor::create_struct_type({"v"}, {array_type}), false);
+            auto array_ctx = std::unique_ptr<FunctionContext>(
+                    FunctionContext::create_context(nullptr, &pool, array_type, {arg}));
+            current.convert_to_serialize_format(array_ctx.get(), {source}, source->size(), intermediate);
+            const auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(
+                    down_cast<const StructColumn*>(intermediate.get())->field_column_raw_ptr(0)));
+            ASSERT_EQ(source->size(), array->size());
+            for (size_t i = 0; i < source->size(); ++i) EXPECT_EQ(expected(i), array->elements().debug_item(i));
+            intermediate->check_or_die();
+        }
+    }
+}
+INSTANTIATE_TEST_SUITE_P(FunctionHelper, GeoFunctionHelperTest, ::testing::Values(TYPE_GEOGRAPHY, TYPE_GEOMETRY));
+
+>>>>>>> ec1712f ([Enhancement] Copy geo values in array_agg V2 states as columns (#81932))
 } // namespace starrocks
