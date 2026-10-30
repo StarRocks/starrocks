@@ -149,22 +149,6 @@ public class StatisticsUtils {
             return connectorTableColumnStats;
         }
 
-<<<<<<< HEAD
-            double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
-            // Round once, at the end. Truncating the average first - (long) avg * total - throws away
-            // everything below a whole row per partition before it is multiplied back up, so a column
-            // whose sampled partitions hold less than one row each scales to zero however large the
-            // table is. The result also feeds the distinct-value ceiling below, so a zero row count
-            // takes the distinct count down with it.
-            long totalRowCount = Math.round(avgPartitionRowCount * totalPartitionSize);
-
-            ColumnStatistic columnStatistic = scaleNdv(connectorTableColumnStats, sampledPartitionSize,
-                    totalPartitionSize, totalRowCount);
-            return new ConnectorTableColumnStats(columnStatistic, totalRowCount,
-                    connectorTableColumnStats.getUpdateTime(),
-                    connectorTableColumnStats.getCollectedPartitionCount(),
-                    connectorTableColumnStats.getPerPartitionNdvSum());
-=======
         // The column statistics analyze type is sample, so scale it up to the whole table.
         //
         // The denominator comes from the rows themselves - how many partitions actually contributed
@@ -180,7 +164,6 @@ public class StatisticsUtils {
                 (int) Math.min(Integer.MAX_VALUE, connectorTableColumnStats.getCollectedPartitionCount());
         if (sampledPartitionSize <= 0) {
             sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
->>>>>>> 4368cd6a0ad... [Enhancement][RB-855] Cut planning and read cost on wide and nested Iceberg tables (#67466)
         }
         int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
 
@@ -205,11 +188,7 @@ public class StatisticsUtils {
         return new ConnectorTableColumnStats(columnStatistic, totalRowCount,
                 connectorTableColumnStats.getUpdateTime(),
                 connectorTableColumnStats.getCollectedPartitionCount(),
-                connectorTableColumnStats.getPerPartitionNdvSum(),
-                connectorTableColumnStats.getThirdNdv(),
-                connectorTableColumnStats.getTwoThirdsNdv(),
-                connectorTableColumnStats.getThirdPartitionCount(),
-                connectorTableColumnStats.getTwoThirdsPartitionCount());
+                connectorTableColumnStats.getPerPartitionNdvSum());
     }
 
     /**
