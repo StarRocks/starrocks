@@ -145,12 +145,7 @@ public:
         read_range.add(Range<>(4, 7));
         status = page_decoder.next_batch(read_range, column.get());
         ASSERT_TRUE(status.ok());
-        ASSERT_EQ(5, column->size());
-        ASSERT_EQ("Individual", column->get(0).get_slice().to_string());
-        ASSERT_EQ("Lifetime", column->get(1).get_slice().to_string());
-        ASSERT_EQ("Evolution", column->get(2).get_slice().to_string());
-        ASSERT_EQ("Nature", column->get(3).get_slice().to_string());
-        ASSERT_EQ("Captain", column->get(4).get_slice().to_string());
+        ASSERT_EQ("['Individual', 'Lifetime', 'Evolution', 'Nature', 'Captain']", column->debug_string());
     }
 
     void test_with_large_data_size(const std::vector<Slice>& contents) {
@@ -368,10 +363,7 @@ TEST_F(BinaryDictPageTest, TestNextBatchWithFilter) {
         ASSERT_EQ(1, selection[3]);
         ASSERT_EQ(1, selection[4]);
 
-        ASSERT_EQ(3, column->size());
-        ASSERT_EQ("c_300", column->get(0).get_slice().to_string());
-        ASSERT_EQ("d_400", column->get(1).get_slice().to_string());
-        ASSERT_EQ("e_500", column->get(2).get_slice().to_string());
+        ASSERT_EQ("['c_300', 'd_400', 'e_500']", column->debug_string());
     }
 
     // Reset decoder state
@@ -529,12 +521,7 @@ TEST_F(BinaryDictPageTest, TestReadByRowids) {
     st = page_decoder.read_by_rowids(0, rowids, &num_read, column.get());
     ASSERT_TRUE(st.ok());
     ASSERT_EQ(4, num_read);
-    ASSERT_EQ(4, column->size());
-
-    ASSERT_EQ("val_1", column->get(0).get_slice().to_string());
-    ASSERT_EQ("val_3", column->get(1).get_slice().to_string());
-    ASSERT_EQ("val_5", column->get(2).get_slice().to_string());
-    ASSERT_EQ("val_8", column->get(3).get_slice().to_string());
+    ASSERT_EQ("['val_1', 'val_3', 'val_5', 'val_8']", column->debug_string());
 }
 
 // A predicate that rejects every dictionary entry used to make next_batch_with_filter return before consuming the
