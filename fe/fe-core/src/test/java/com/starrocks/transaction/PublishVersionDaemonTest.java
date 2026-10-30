@@ -1004,7 +1004,8 @@ public class PublishVersionDaemonTest {
             PartitionCommitInfo failed = new PartitionCommitInfo(100L, 2, 0);
             failed.markPublishFailed(System.currentTimeMillis());
             PartitionCommitInfo ready = new PartitionCommitInfo(200L, 2, 0);
-            TransactionState state = txnOn(1L, 10L, 20L);
+            TransactionState state = new TransactionState(1000L, Lists.newArrayList(10L, 20L), 1L, "label",
+                    null, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 0, 60_000);
             state.putIdToTableCommitInfo(10L, stateWith(1L, 10L, failed).getTableCommitInfo(10L));
             state.putIdToTableCommitInfo(20L, stateWith(1L, 20L, ready).getTableCommitInfo(20L));
             List<TransactionStateBatch> batches = Lists.newArrayList(
