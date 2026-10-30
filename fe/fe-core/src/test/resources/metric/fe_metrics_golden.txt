@@ -1,0 +1,286 @@
+# StarRocks FE metric-name contract (golden snapshot)
+# =====================================================
+# This file is the authoritative inventory of FE (fe-core) metric entries, one per
+# line as "<name> <type> <unit>". It is generated and verified by:
+#   com.starrocks.metric.FeMetricsContractGuardTest
+#
+# WHY THIS EXISTS
+# ---------------
+# FE metrics are part of an EXTERNAL contract. Downstream consumers (dashboards,
+# alerting rules, and external monitoring tooling) scrape them from the metrics
+# endpoint with the `starrocks_fe_` prefix. Renaming, removing, silently adding a
+# metric, or flipping its type/unit breaks those consumers:
+#   - name : the exported series name.
+#   - type : counter | gauge | summary. Drives the Prometheus `# TYPE` line
+#            (PrometheusMetricVisitor emits metric.getType().name().toLowerCase();
+#            histograms are emitted as `summary`).
+#   - unit : the MetricUnit (lowercased) exported on the JSON metrics endpoint
+#            (JsonMetricVisitor emits metric.getUnit().name().toLowerCase()).
+# This guard makes any such change show up as a failing test, so it is reviewed
+# deliberately instead of slipping through.
+#
+# WHEN THIS TEST FAILS
+# --------------------
+# The failure message lists the ADDED / REMOVED lines. Because the type and unit are
+# part of each line, a counter<->gauge flip or a unit change shows up as one removed +
+# one added line for the same name, exactly like a rename. For any REMOVED or RENAMED
+# or RETYPED line you MUST notify downstream metric consumers before merging. After
+# confirming the change is intended:
+#   1. Regenerate this file:
+#        cd fe && mvn -pl fe-core test \
+#          -Dtest=FeMetricsContractGuardTest \
+#          -Dmetrics.guard.regenerate=true
+#      (or set the system property in your IDE run config), then re-run normally.
+#   2. Update docs/en|zh/administration/management/monitoring/metrics(_details)
+#      if the change is user-facing.
+#   3. Notify downstream metric consumers for any removal/rename/retype so dashboards,
+#      alerts, and external collectors can be updated before the change ships.
+#
+# HOW ENTRIES ARE EXTRACTED (must stay identical to the Java scanner)
+# -------------------------------------------------------------------
+# Scope : every *.java under fe/fe-core/src/main/java/com/starrocks whose raw
+#         text contains the substring "Metric".
+# Per file:
+#   1. strip block comments /* ... */ then line comments // ...
+#   2. build a per-file constant map: [static] final String IDENT = "literal";
+#   3. metric ctors  new <ALLOWLISTED_CLASS>[<...>](<firstArg> [, MetricUnit.X] ...)
+#        name : literal first-arg, else identifier resolved via the per-file
+#               constant map, else the global UPPER_SNAKE constant map (when
+#               unambiguous), else SKIP (dynamic).
+#        type : derived from the ctor CLASS (see allowlist below).
+#        unit : the second MetricUnit.<X> argument lowercased; `-` when the ctor
+#               declares no unit (the histogram families) or when the name is a
+#               runtime-concatenated fragment so the unit cannot bind statically
+#               (e.g. brpc_pool_).
+#   4. codahale  MetricRegistry.name("a","b", dynArg) -> join leading string
+#      literals with "." (here: "a.b"), stop at the first non-literal arg;
+#      type=summary, unit=-.
+# Allowlisted metric classes and their exported type:
+#   counter : LongCounterMetric, DoubleCounterMetric,
+#             LeaderAwareCounterMetricExternalLong, LeaderAwareCounterMetricLong
+#   gauge   : GaugeMetricImpl, GaugeMetric, LeaderAwareGaugeMetricLong,
+#             LeaderAwareGaugeMetricInteger
+#   summary : HistogramMetric, LeaderAwareHistogramMetric (and codahale name(...))
+#
+# NOTES ON ENTRY SHAPES
+# ---------------------
+# - A few names are prefixes/fragments rather than complete exported names
+#   (e.g. `brpc_pool_`, `thread_pool`, `snmp`) because the source builds the
+#   full name by concatenation at runtime; the literal prefix is still the
+#   contract anchor and changing it is still a breaking change. A fragment whose
+#   surrounding expression is not a plain literal carries unit `-`.
+# - Dotted names (e.g. `query.latency.ms`, `journal.write.bytes`) are codahale
+#   histogram base names assembled by MetricRegistry.name(...); they are `summary -`.
+#
+# KNOWN DYNAMIC EXCLUSIONS (intentionally NOT in this golden; v1 scope)
+# ---------------------------------------------------------------------
+# These metric families build their names from runtime variables, so a static
+# literal scan cannot enumerate them. They are covered by a follow-up:
+#   - ResourceGroupMetricMgr  (metricName / metricsName params; literal prefixes
+#       query_resource_group, query_resource_group_err,
+#       query_resource_group_latency, resource_group_query_queue_total/
+#       pending/timeout)
+#   - ConnectorMetricsMgr     (connectorType param; e.g. iceberg, hive)
+#   - TransactionMetricRegistry (group-name param; e.g. txn_total_latency_ms)
+#
+# DO NOT hand-sort or hand-edit the entry list below — regenerate it with the
+# command above so it stays byte-identical to the scanner output.
+# -----------------------------------------------------------------------------
+brpc_backend_service counter requests
+brpc_exec_plan_fragment counter requests
+brpc_exec_plan_fragment_error counter requests
+brpc_lake_service counter requests
+brpc_pool_ gauge -
+brpc_total gauge requests
+cache_miss_ratio gauge nounit
+catalog_query.latency.ms summary -
+catalog_query_analysis_err counter requests
+catalog_query_analysis_err_rate gauge nounit
+catalog_query_err counter requests
+catalog_query_err_rate gauge nounit
+catalog_query_internal_err counter requests
+catalog_query_internal_err_rate gauge nounit
+catalog_query_latency_ms summary -
+catalog_query_success counter requests
+catalog_query_timeout counter requests
+catalog_query_timeout_rate gauge nounit
+catalog_query_total counter requests
+catalog_slow_query counter requests
+clone_task_copy_bytes counter bytes
+clone_task_copy_duration_ms counter milliseconds
+clone_task_success counter requests
+clone_task_total counter requests
+connection_total gauge connections
+database_num gauge operations
+db_size_bytes gauge bytes
+deploy_plan_fragments.latency.ms summary -
+edit_log_read counter operations
+edit_log_size_bytes counter bytes
+edit_log_write counter operations
+editlog.write.latency.ms summary -
+editlog_stacked_num gauge operations
+encryption_key_num gauge nounit
+failed_stats_collect_job counter requests
+http_connections_num counter nounit
+http_handling_requests_num counter nounit
+http_worker_pending_tasks_num gauge nounit
+http_workers_num gauge nounit
+iceberg_metadata_table_query_total counter requests
+iceberg_time_travel_query_total counter requests
+image_push counter operations
+image_write counter operations
+job gauge nounit
+journal.write.batch summary -
+journal.write.bytes summary -
+journal.write.latency.ms summary -
+last_finished_job_timestamp gauge microseconds
+load_add counter requests
+load_finished counter requests
+max_journal_id gauge nounit
+max_tablet_compaction_score gauge nounit
+memory_usage gauge bytes
+merge_commit_cn_num gauge nounit
+merge_commit_job_num gauge nounit
+merge_commit_load_bytes counter nounit
+merge_commit_load_rows counter nounit
+merge_commit_task_fail_num counter nounit
+merge_commit_task_running_num counter nounit
+merge_commit_task_success_num counter nounit
+merge_commit_total_actual_parallel gauge nounit
+merge_commit_total_expect_parallel gauge nounit
+merge_commit_txn_dispatch_fail_num counter nounit
+merge_commit_txn_dispatch_pending_num counter nounit
+merge_commit_txn_dispatch_retry_num counter nounit
+merge_commit_txn_dispatch_success_num counter nounit
+merge_commit_warehouse_num gauge nounit
+meta_log_count gauge nounit
+mv_inactive_state gauge nounit
+mv_partition_count gauge nounit
+mv_query_total_considered_count counter requests
+mv_query_total_count counter requests
+mv_query_total_hit_count counter requests
+mv_query_total_matched_count counter requests
+mv_query_total_text_based_matched_count counter requests
+mv_refresh_duration summary -
+mv_refresh_jobs counter requests
+mv_refresh_pending_jobs gauge nounit
+mv_refresh_running_jobs gauge nounit
+mv_refresh_total_empty_jobs counter requests
+mv_refresh_total_failed_jobs counter requests
+mv_refresh_total_retry_meta_count counter requests
+mv_refresh_total_success_jobs counter requests
+mv_row_count gauge nounit
+mv_storage_size gauge nounit
+object_count gauge nounit
+plan_advisor_guide_applied_total counter requests
+plan_advisor_guide_generated_total counter requests
+plan_advisor_optimization_duration_ms_total counter milliseconds
+publish_version_daemon_loop_total counter operations
+qps gauge nounit
+query.cache_miss_ratio.permille summary -
+query.latency.ms summary -
+query_analysis_err counter requests
+query_analysis_err_rate gauge nounit
+query_err counter requests
+query_err_rate gauge nounit
+query_internal_err counter requests
+query_internal_err_rate gauge nounit
+query_latency gauge milliseconds
+query_queue_pending counter requests
+query_queue_slot_pending counter requests
+query_queue_slot_running counter requests
+query_queue_timeout counter requests
+query_queue_total counter requests
+query_queue_v2_category_min_slots gauge requests
+query_queue_v2_category_pending_slots counter requests
+query_queue_v2_category_running_slots counter requests
+query_queue_v2_category_state counter requests
+query_queue_v2_category_total_allocated_slots counter requests
+query_queue_v2_category_weight gauge requests
+query_success counter requests
+query_timeout counter requests
+query_timeout_rate gauge nounit
+query_total counter requests
+report_queue_size gauge nounit
+request_total counter requests
+routine_load_error_rows counter rows
+routine_load_jobs gauge nounit
+routine_load_max_lag_of_partition gauge nounit
+routine_load_max_lag_time_of_partition gauge seconds
+routine_load_paused counter requests
+routine_load_receive_bytes counter bytes
+routine_load_rows counter rows
+rps gauge nounit
+running_stats_collect_job counter requests
+safe_mode gauge nounit
+scheduled_pending_tablet_num gauge nounit
+scheduled_running_tablet_num gauge nounit
+scheduled_tablet_num gauge nounit
+shortcircuit.latency.ms summary -
+shortcircuit_query counter requests
+shortcircuit_rpc counter requests
+slow_lock_held_time_ms summary -
+slow_lock_wait_time_ms summary -
+slow_query counter requests
+snmp gauge nounit
+spm_baseline_count gauge nounit
+spm_capture_candidate_total counter requests
+spm_rewrite_total counter requests
+sql_block_hit_count counter requests
+starmgr_meta_sync_process_time_total counter seconds
+starmgr_meta_sync_shard_deletion_total counter nounit
+starmgr_meta_sync_shard_group_deletion_total counter nounit
+table_load_aborted_tasks counter requests
+table_load_bytes counter bytes
+table_load_committed_tasks counter requests
+table_load_error_rows counter rows
+table_load_finished counter requests
+table_load_rows counter rows
+table_load_unselected_rows counter rows
+table_num gauge operations
+table_scan_bytes counter bytes
+table_scan_finished counter requests
+table_scan_rows counter rows
+table_size_bytes gauge bytes
+tablet_count gauge nounit
+tablet_max_compaction_score gauge nounit
+tablet_num gauge nounit
+tablet_pre_split.boundaries_planned summary -
+tablet_pre_split.post_submit_wait.ms summary -
+tablet_pre_split.pre_submit_wait.ms summary -
+tablet_pre_split_eligibility_skipped counter requests
+tablet_pre_split_load_abort counter requests
+tablet_pre_split_partitions_capped counter requests
+tablet_pre_split_partitions_total counter requests
+tablet_pre_split_post_submit_hard_cap counter requests
+tablet_pre_split_pre_create counter requests
+tablet_pre_split_sampler_failed counter requests
+tablet_pre_split_sampler_invocations counter requests
+tablet_pre_split_tier_used counter requests
+tablet_reshard_job.duration.ms summary -
+tablet_reshard_job_aborted counter requests
+tablet_reshard_job_finished counter requests
+tablet_reshard_job_total counter requests
+tablet_reshard_parallel_tablets gauge nounit
+thread_pool gauge nounit
+total_data_size_bytes gauge bytes
+total_stats_collect_job counter requests
+txn_begin counter requests
+txn_failed counter requests
+txn_reject counter requests
+txn_running gauge nounit
+txn_stream_load_begin_num counter nounit
+txn_stream_load_cache_eviction_num gauge nounit
+txn_stream_load_cache_hit_num gauge nounit
+txn_stream_load_cache_miss_num gauge nounit
+txn_stream_load_commit_num counter nounit
+txn_stream_load_load_num counter nounit
+txn_stream_load_prepare_num counter nounit
+txn_stream_load_rollback_num counter nounit
+txn_success counter requests
+unfinished_backup_job counter requests
+unfinished_query counter requests
+unfinished_restore_job counter requests
+vacuum_files_bytes counter bytes
+vacuum_files_count counter requests
+warehouse_query_queue gauge nounit
