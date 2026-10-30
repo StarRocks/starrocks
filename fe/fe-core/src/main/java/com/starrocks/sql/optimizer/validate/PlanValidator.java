@@ -56,6 +56,11 @@ public final class PlanValidator {
     public void enableAllCheckers() {
         checkerList = ImmutableList.of(
                 TypeChecker.getInstance(),
+<<<<<<< HEAD
+=======
+                ConditionalTypeChecker.getInstance(),
+                ConstInPredicateChecker.getInstance(),
+>>>>>>> 34cf07d ([BugFix][RB-841] Keep const IN-predicate value lists free of column refs (#81825))
                 CTEUniqueChecker.getInstance(),
                 InputDependenciesChecker.getInstance(),
                 ColumnReuseChecker.getInstance());
