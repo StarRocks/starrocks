@@ -194,6 +194,143 @@ TEST_F(TDigestTest, MergeTest) {
     digest2.add(std::vector<const TDigest*>{&digest1});
 }
 
+TEST_F(TDigestTest, RepeatedUnprocessedMergesAndSerialization) {
+    TDigest merged(1000);
+    TDigest direct(1000);
+    // Cross the unprocessed limit twice, leaving both processed and unprocessed centroids.
+    for (int i = 0; i < 20001; ++i) {
+        const Value value = (i * 7919) % 100003;
+        const Weight weight = i % 3 + 1;
+        TDigest input;
+        input.add(value, weight);
+        merged.merge(&input);
+        direct.add(value, weight);
+    }
+    ASSERT_FALSE(merged.processed().empty());
+    ASSERT_FALSE(merged.unprocessed().empty());
+    EXPECT_EQ(direct.totalWeight(), merged.totalWeight());
+
+    std::vector<uint8_t> bytes(merged.serialize_size());
+    merged.serialize(bytes.data());
+    TDigest restored(reinterpret_cast<const char*>(bytes.data()));
+    EXPECT_EQ(merged.totalWeight(), restored.totalWeight());
+    for (Value q : {0.0f, 0.1f, 0.5f, 0.9f, 1.0f}) {
+        EXPECT_FLOAT_EQ(direct.quantile(q), merged.quantile(q));
+        EXPECT_FLOAT_EQ(direct.quantile(q), restored.quantile(q));
+    }
+    for (Value x : {0.0f, 10000.0f, 50000.0f, 90000.0f, 100003.0f}) {
+        EXPECT_FLOAT_EQ(direct.cdf(x), merged.cdf(x));
+        EXPECT_FLOAT_EQ(direct.cdf(x), restored.cdf(x));
+    }
+}
+
+TEST_F(TDigestTest, UnprocessedMergePreservesProcessedQueries) {
+    TDigest digest(1000);
+    for (Value value : {0.0f, 10.0f, 20.0f}) {
+        digest.add(value);
+    }
+    digest.compress();
+    const Value median = digest.quantileProcessed(0.5);
+    const Value cdf = digest.cdfProcessed(10);
+
+    TDigest input;
+    input.add(30);
+    input.add(40);
+    digest.merge(&input);
+    EXPECT_FLOAT_EQ(median, digest.quantileProcessed(0.5));
+    EXPECT_FLOAT_EQ(cdf, digest.cdfProcessed(10));
+    EXPECT_EQ(5, digest.totalWeight());
+    EXPECT_FLOAT_EQ(20, digest.quantile(0.5));
+
+    TDigest empty;
+    digest.merge(&empty);
+    EXPECT_FLOAT_EQ(20, digest.quantileProcessed(0.5));
+    EXPECT_EQ(5, digest.totalWeight());
+}
+
+TEST_F(TDigestTest, MixedProcessedAndUnprocessedMerges) {
+    std::vector<TDigest> inputs(3);
+    inputs[0].add(10);
+    inputs[0].compress();
+    inputs[1].add(20);
+    inputs[1].add(30);
+    inputs[2].add(40);
+    inputs[2].compress();
+    inputs[2].add(50);
+
+    TDigest merged;
+    TDigest batched;
+    for (const auto& input : inputs) {
+        merged.merge(&input);
+        batched.add(std::vector<const TDigest*>{&input});
+        EXPECT_EQ(batched.totalWeight(), merged.totalWeight());
+        EXPECT_FLOAT_EQ(batched.quantileProcessed(0.5), merged.quantileProcessed(0.5));
+        EXPECT_FLOAT_EQ(batched.cdfProcessed(25), merged.cdfProcessed(25));
+    }
+    EXPECT_EQ(5, merged.totalWeight());
+    for (Value q : {0.0f, 0.1f, 0.5f, 0.9f, 1.0f}) {
+        EXPECT_FLOAT_EQ(batched.quantile(q), merged.quantile(q));
+    }
+}
+
+static std::vector<uint8_t> serialize_digest(const TDigest& digest) {
+    std::vector<uint8_t> bytes(digest.serialize_size());
+    digest.serialize(bytes.data());
+    return bytes;
+}
+
+TEST_F(TDigestTest, UnprocessedMergeSerializesLikeBatchedAdd) {
+    // Merging an empty digest into a fresh one must still initialize cumulative weights.
+    {
+        TDigest merged;
+        TDigest batched;
+        TDigest empty;
+        merged.merge(&empty);
+        batched.add(std::vector<const TDigest*>{&empty});
+        EXPECT_EQ(batched.serialize_size(), merged.serialize_size());
+        EXPECT_EQ(serialize_digest(batched), serialize_digest(merged));
+    }
+
+    std::vector<TDigest> inputs(4);
+    inputs[0].add(10);
+    inputs[1].add(20);
+    inputs[1].add(30);
+    inputs[2].add(40);
+    inputs[2].compress();
+    inputs[2].add(50);
+    inputs[3].add(60);
+
+    TDigest merged;
+    TDigest batched;
+    for (const auto& input : inputs) {
+        merged.merge(&input);
+        batched.add(std::vector<const TDigest*>{&input});
+        EXPECT_EQ(batched.serialize_size(), merged.serialize_size());
+        EXPECT_EQ(serialize_digest(batched), serialize_digest(merged));
+    }
+}
+
+TEST_F(TDigestTest, UnprocessedMergeBoundsReallocationAndCapacity) {
+    TDigest digest(10000);
+    TDigest input;
+    input.add(1);
+
+    size_t reallocations = 0;
+    const Centroid* data = digest.unprocessed().data();
+    for (int i = 0; i < 5000; ++i) {
+        digest.merge(&input);
+        if (digest.unprocessed().data() != data) {
+            ++reallocations;
+            data = digest.unprocessed().data();
+        }
+        const size_t size = digest.unprocessed().size();
+        ASSERT_LE(digest.unprocessed().capacity(), size * 3 / 2 + 1);
+        ASSERT_LE(digest.unprocessed().capacity(), static_cast<size_t>(digest.maxUnprocessed()) + 1);
+    }
+    EXPECT_EQ(5000, digest.unprocessed().size());
+    EXPECT_LT(reallocations, 50);
+}
+
 TEST_F(TDigestTest, TestSorted) {
     TDigest digest(1000);
     std::uniform_real_distribution<> reals(0.0, 1.0);
