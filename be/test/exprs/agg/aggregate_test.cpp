@@ -1856,7 +1856,8 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // nullable columns input
     {
-        auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
         auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
@@ -2080,7 +2081,8 @@ TEST_F(AggregateTest, test_array_aggV2) {
 
     // append nullable columns input
     {
-        auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
         auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
@@ -2145,7 +2147,8 @@ TEST_F(AggregateTest, test_array_aggV2) {
     // nullable columns input with cancelled
     {
         auto state = ManagedAggrState::create(local_ctx.get(), array_agg_func);
-        auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
         auto int_column = ColumnTestHelper::build_nullable_column<int32_t>({0, 9, 0, 7, 6}, {1, 0, 1, 0, 0});
 
@@ -2468,7 +2471,8 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
     // nullable columns input
     {
-        auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
@@ -2653,7 +2657,8 @@ TEST_F(AggregateTest, test_group_concatV2) {
 
     // nullable columns input with cancelled
     {
-        auto char_column = ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
+        auto char_column =
+                ColumnTestHelper::build_nullable_column<Slice>({"", "bcd", "cdrdfe", "", "esfg"}, {1, 0, 0, 1, 0});
 
         auto sep_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(",", 5);
 
