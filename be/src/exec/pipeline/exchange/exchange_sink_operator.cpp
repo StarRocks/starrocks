@@ -126,7 +126,7 @@ private:
     Status _close_internal(RuntimeState* state, FragmentContext* fragment_ctx);
 
     bool _check_use_pass_through();
-    void _prepare_pass_through();
+    void _prepare_pass_through(RuntimeState* state);
     // Account the memory retained by _chunks[driver_sequence] into the parent's profile counter.
     // Container (capacity) usage is re-read each time, which is O(#columns); memory referenced by
     // out-of-line objects (JSON, bitmap, HLL, ...) is only measured for the rows just appended and
@@ -186,8 +186,8 @@ bool ExchangeSinkOperator::Channel::_check_use_pass_through() {
     return is_local();
 }
 
-void ExchangeSinkOperator::Channel::_prepare_pass_through() {
-    _pass_through_context.init();
+void ExchangeSinkOperator::Channel::_prepare_pass_through(RuntimeState* state) {
+    _pass_through_context.init(state->query_mem_tracker_ptr());
     _use_pass_through = _check_use_pass_through();
 }
 
@@ -217,7 +217,7 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         return Status::InternalError(msg);
     }
 
-    _prepare_pass_through();
+    _prepare_pass_through(state);
     _ignore_local_data = _enable_exchange_perf && is_local();
 
     _is_inited = true;
