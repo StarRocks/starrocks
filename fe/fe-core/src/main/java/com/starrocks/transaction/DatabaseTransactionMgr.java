@@ -1167,6 +1167,7 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         if (!txnIds.equals(previous)) {
+            MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.increase(1L);
             LOG.info("freeze lake publish batch db:{} txns:{}", dbId, txnIds);
         }
     }

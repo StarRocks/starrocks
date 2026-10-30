@@ -1519,6 +1519,33 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testFrozenPublishBatchMetricCountsEachNewFreeze() throws AnalysisException {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = true;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            long base = MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.getValue();
+
+            masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
+            assertEquals(base + 1, MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.getValue());
+            // The same batch failing again is not a new freeze.
+            masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7));
+            assertEquals(base + 1, MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.getValue());
+            masterDbTransMgr.freezePublishBatch(List.of(txnId6, txnId7, txnId8));
+            assertEquals(base + 2, MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.getValue());
+
+            Config.lake_enable_batch_publish_retry_freeze = false;
+            masterDbTransMgr.freezePublishBatch(List.of(txnId7));
+            assertEquals(base + 2, MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_FROZEN.getValue());
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
+    }
+
+    @Test
     public void testFreezeOfAFinishedHeadTxnIsIgnored() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
         // txn 1 is already VISIBLE, so a batch frozen at it can never be retried and nothing would remove it.
