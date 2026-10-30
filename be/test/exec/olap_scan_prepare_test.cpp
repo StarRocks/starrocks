@@ -472,8 +472,8 @@ TEST_F(ChunkPredicateBuilderTest, varchar_long_in_on_dict_column_is_not_read_as_
         forward.emplace(Slice(dict_words[i]), code);
         reverse.emplace(code, Slice(dict_words[i]));
     }
-    _fragment_dict_state->mutable_query_global_dicts()->emplace(slot_id,
-                                                                std::make_pair(std::move(forward), std::move(reverse)));
+    _runtime_state.mutable_query_global_dict_map()->emplace(slot_id,
+                                                            std::make_pair(std::move(forward), std::move(reverse)));
 
     std::vector<std::string> values;
     for (int i = 0; i < 2048; i++) {
