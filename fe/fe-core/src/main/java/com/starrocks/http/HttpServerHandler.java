@@ -181,8 +181,10 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                     // The SQL actions on a channel share one ConnectContext for as long as the channel lives; they
                     // never run on it at once, since a connection's requests are handled one at a time.
                     action.handleRequest(request);
-                } catch (Exception e) {
-                    handleException(request, e);
+                } catch (Throwable t) {
+                    // An Error, such as an OutOfMemoryError while building a response, would otherwise end this
+                    // thread without an answer and leave the client waiting on an open connection.
+                    handleException(request, t);
                 } finally {
                     try {
                         // HttpServerHandler will flush automatically in channelReadComplete. For synchronous
@@ -241,10 +243,13 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private void handleException(BaseRequest request, Exception exception) {
+    private void handleException(BaseRequest request, Throwable exception) {
         writeResponse(request.getContext(), HttpResponseStatus.INTERNAL_SERVER_ERROR,
                 String.format("failed to handle request, error: %s:%s ", exception.getClass(), exception.getMessage()));
-        if (LOG.isDebugEnabled()) {
+        if (exception instanceof Error) {
+            LOG.warn("Failed to handle request: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
+                    exception);
+        } else if (LOG.isDebugEnabled()) {
             LOG.debug("Failed to handle request: {}", WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri()),
                     exception);
         }

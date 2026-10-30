@@ -1,0 +1,37 @@
+-- name: test_query_detail_api_streams_the_window @sequential
+admin set frontend config ("enable_collect_query_detail_info" = "true");
+-- result:
+-- !result
+shell: for i in $(seq 1 8); do printf "select '%s' is not null as qd_${uuid0}_$i;\n" "$(head -c 262144 /dev/zero | tr '\0' x)"; done | ${mysql_cmd} > /dev/null
+-- result:
+0
+-- !result
+shell: curl -s -u 'root:' -D - -o /dev/null '${url}/api/query_detail?event_time=0' | grep -i -c '^transfer-encoding: chunked'
+-- result:
+0
+1
+-- !result
+shell: curl -s -u 'root:' '${url}/api/query_detail?event_time=0' | python3 -c "import json, sys; d = json.load(sys.stdin); m = [x for x in d if 'qd_${uuid0}_' in (x.get('sql') or '')]; print(len({x['queryId'] for x in m}), all(len(x['sql']) > 262144 for x in m))"
+-- result:
+0
+8 True
+-- !result
+shell: curl -s -0 -u 'root:' -D - -o /dev/null '${url}/api/query_detail?event_time=0' | grep -i -c '^transfer-encoding' || true
+-- result:
+0
+0
+-- !result
+shell: curl -s -0 -u 'root:' '${url}/api/query_detail?event_time=0' | python3 -c "import json, sys; d = json.load(sys.stdin); print(len({x['queryId'] for x in d if 'qd_${uuid0}_' in (x.get('sql') or '')}))"
+-- result:
+0
+8
+-- !result
+shell: curl -s -u 'root:' -o /dev/null -o /dev/null -w '%{http_code} %{num_connects}\n' '${url}/api/query_detail?event_time=0' '${url}/api/query_detail?event_time=0'
+-- result:
+0
+200 1
+200 0
+-- !result
+admin set frontend config ("enable_collect_query_detail_info" = "false");
+-- result:
+-- !result
