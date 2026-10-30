@@ -15,7 +15,6 @@
 #include "storage/lake/primary_key_manager.h"
 
 #include <algorithm>
-
 #include <limits>
 
 #include "base/container/lru_cache.h"
@@ -947,12 +946,12 @@ Status PrimaryKeyManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_writ
 }
 
 Status PrimaryKeyManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
-                                                 const TabletMetadataPtr& metadata, Tablet* tablet,
-                                                 LakePersistentIndex& index, MetaFileBuilder* builder,
-                                                 int64_t base_version, uint32_t rowset_id,
-                                                 const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
-                                                 const FlexibleInsertMask& flexible_insert_mask,
-                                                 uint32_t* new_del_rebuild_rssid) {
+                                                     const TabletMetadataPtr& metadata, Tablet* tablet,
+                                                     LakePersistentIndex& index, MetaFileBuilder* builder,
+                                                     int64_t base_version, uint32_t rowset_id,
+                                                     const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                                     const FlexibleInsertMask& flexible_insert_mask,
+                                                     uint32_t* new_del_rebuild_rssid) {
     // A FLEXIBLE load arrives as COLUMN_UPDATE_MODE (see stream_load.cpp) but is semantically an
     // upsert, exactly like every other partial update: a key that is not in the table yet must be
     // INSERTED with defaults for the columns the row did not declare. Letting it fall out here is
@@ -1059,7 +1058,8 @@ Status PrimaryKeyManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_
                                                       insert_rowids.begin() + batch_end);
             ChunkPtr full_chunk;
             RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, source_segment.get(), source_read_file.get(),
-                                                   batch_insert_rowids, update_cids, seg, flexible_insert_mask, &full_chunk));
+                                                   batch_insert_rowids, update_cids, seg, flexible_insert_mask,
+                                                   &full_chunk));
 
             RETURN_IF_ERROR(writer.append_chunk(*full_chunk));
             total_rows += full_chunk->num_rows();
@@ -2100,11 +2100,12 @@ static Status new_lake_overlay_column_iterator(GetDeltaColumnContext& ctx, const
     return Status::OK();
 }
 
-Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& params, const std::vector<uint32_t>& column_ids,
-                                        bool with_default,
-                                        const std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        MutableColumns* columns, const std::map<string, string>* column_to_expr_value,
-                                        AutoIncrementPartialUpdateState* auto_increment_state) {
+Status PrimaryKeyManager::get_column_values(const RowsetUpdateStateParams& params,
+                                            const std::vector<uint32_t>& column_ids, bool with_default,
+                                            const std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
+                                            MutableColumns* columns,
+                                            const std::map<string, string>* column_to_expr_value,
+                                            AutoIncrementPartialUpdateState* auto_increment_state) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_column_values_latency_us");
     std::stringstream cost_str;
     MonotonicStopWatch watch;
@@ -2536,9 +2537,9 @@ bool PrimaryKeyManager::_use_light_publish_primary_compaction(const TxnLogPB_OpC
 }
 
 Status PrimaryKeyManager::light_publish_primary_compaction(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
-                                                       const TabletMetadataPtr& metadata, const Tablet& tablet,
-                                                       IndexEntry* index_entry, MetaFileBuilder* builder,
-                                                       int64_t base_version, bool replay_conflict) {
+                                                           const TabletMetadataPtr& metadata, const Tablet& tablet,
+                                                           IndexEntry* index_entry, MetaFileBuilder* builder,
+                                                           int64_t base_version, bool replay_conflict) {
     // 1. init some state
     auto& index = index_entry->value();
     std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(), op_compaction.input_rowsets().end());

@@ -15,8 +15,8 @@
 #include "storage/lake/compaction_task.h"
 
 #include <algorithm>
-#include <roaring/roaring.hh>
 #include <ctime>
+#include <roaring/roaring.hh>
 
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
