@@ -1,0 +1,381 @@
+-- name: test_ivm_force_activates_after_dup_delete @cloud
+CREATE TABLE fa_del_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fa_del_base VALUES ('2026-10-01',1,10),('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fa_del
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED ASYNC EVERY(INTERVAL 1 DAY)
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM fa_del_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_del';
+REFRESH MATERIALIZED VIEW mv_fa_del WITH SYNC MODE;
+DELETE FROM fa_del_base WHERE k = 2;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_del WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken by non-append-only base change:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_del';
+-- result:
+false	1
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_del WITH SYNC MODE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to incremental refresh broken%or run %mv_fa_del FORCE, to recover.%';
+-- result:
+1
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_del FORCE WITH SYNC MODE;
+SELECT STATE, get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND get_json_string(EXTRA_MESSAGE, '$.refreshModeReason') = 'FORCE_REFRESH';
+-- result:
+SUCCESS	PCT
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 60, "interval": 2, "desc": "the refresh the activation queued has finished"}
+  result=SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND STATE IN ('SUCCESS', 'SKIPPED', 'FAILED');
+  CHECK: int(${result}[0][0]) >= 5
+} END LOOP
+
+SELECT STATE IN ('SUCCESS', 'SKIPPED') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+1
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_del';
+-- result:
+true
+-- !result
+INSERT INTO fa_del_base VALUES ('2026-10-01',1,10),('2026-10-04',4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_del WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, k, v, c FROM mv_fa_del ORDER BY dt, k;
+-- result:
+2026-10-01	1	30	3
+2026-10-03	3	30	1
+2026-10-04	4	40	1
+-- !result
+SELECT dt, k, SUM(v), COUNT(*) FROM fa_del_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-10-01	1	30	3
+2026-10-03	3	30	1
+2026-10-04	4	40	1
+-- !result
+-- name: test_ivm_force_activates_after_drop_partition @cloud
+CREATE TABLE fa_dp_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fa_dp_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-02',2,20),('2026-10-03',3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fa_dp
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, v FROM fa_dp_base;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_dp';
+REFRESH MATERIALIZED VIEW mv_fa_dp WITH SYNC MODE;
+ALTER TABLE fa_dp_base DROP PARTITION p20261002;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_dp WITH SYNC MODE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%do not support non-append-only base changes%or run %mv_fa_dp FORCE, to recover.%';
+-- result:
+1
+-- !result
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken by non-append-only base change:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_dp';
+-- result:
+false	1
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_dp FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_dp';
+-- result:
+true
+-- !result
+INSERT INTO fa_dp_base VALUES ('2026-10-01',1,10),('2026-10-04',4,40);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_dp WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, k, v FROM mv_fa_dp ORDER BY dt, k, v;
+-- result:
+2026-10-01	1	10
+2026-10-01	1	10
+2026-10-03	3	30
+2026-10-04	4	40
+-- !result
+SELECT dt, k, v FROM fa_dp_base ORDER BY dt, k, v;
+-- result:
+2026-10-01	1	10
+2026-10-01	1	10
+2026-10-03	3	30
+2026-10-04	4	40
+-- !result
+-- name: test_ivm_force_activates_after_baseline_released @cloud
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "true");
+CREATE TABLE fa_bu_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fa_bu_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-02',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fa_bu
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM fa_bu_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_bu';
+REFRESH MATERIALIZED VIEW mv_fa_bu WITH SYNC MODE;
+[UC]BASE_ID=SELECT TABLE_ID FROM information_schema.tables_config WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'fa_bu_base';
+SELECT COUNT(*) FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+-- result:
+1
+-- !result
+[UC]BOOKMARK_ID=SELECT BOOKMARK_ID FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+[UC]HOLDER_ID=SELECT HOLDER_ID FROM information_schema.table_bookmark_references WHERE TABLE_ID = ${BASE_ID} AND HOLDER_ID LIKE 'mv:%';
+SELECT bookmark_release("${db[0]}", "fa_bu_base", "${BOOKMARK_ID}", "${HOLDER_ID}");
+-- result:
+true
+-- !result
+[UC]ADMIN SET FRONTEND CONFIG ("enable_bookmark_meta_functions" = "false");
+INSERT INTO fa_bu_base VALUES ('2026-10-03',3,30);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_bu WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken: the base table state this view refreshes from is no longer available:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_bu';
+-- result:
+false	1
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_bu WITH SYNC MODE;
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to incremental refresh broken: the base table state%or run %mv_fa_bu FORCE, to recover.%';
+-- result:
+1
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_bu FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_bu';
+-- result:
+true	PCT	FORCE_REFRESH
+-- !result
+INSERT INTO fa_bu_base VALUES ('2026-10-01',1,10),('2026-10-03',3,30);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_bu WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, k, v, c FROM mv_fa_bu ORDER BY dt, k;
+-- result:
+2026-10-01	1	20	2
+2026-10-02	2	40	2
+2026-10-03	3	60	2
+-- !result
+SELECT dt, k, SUM(v), COUNT(*) FROM fa_bu_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-10-01	1	20	2
+2026-10-02	2	40	2
+2026-10-03	3	60	2
+-- !result
+-- name: test_ivm_force_keeps_manually_inactive @cloud
+CREATE TABLE fa_man_base (k int, v bigint) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fa_man_base VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fa_man
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT k, v FROM fa_man_base;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_man';
+REFRESH MATERIALIZED VIEW mv_fa_man WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_fa_man INACTIVE;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_man FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_man';
+-- result:
+false	user use alter materialized view set status to inactive
+-- !result
+SELECT COUNT(*) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}';
+-- result:
+1
+-- !result
+ALTER MATERIALIZED VIEW mv_fa_man ACTIVE;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_man FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_man';
+-- result:
+true
+-- !result
+-- name: test_ivm_force_keeps_optimize_inactive @cloud
+CREATE TABLE fa_opt_base (k INT NOT NULL, k2 INT NOT NULL, v BIGINT) PRIMARY KEY(k, k2)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+-- result:
+-- !result
+INSERT INTO fa_opt_base VALUES (1,1,10),(2,2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fa_opt
+REFRESH DEFERRED MANUAL
+PROPERTIES ('refresh_mode' = 'incremental')
+AS SELECT k, k2, v FROM fa_opt_base;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_opt';
+REFRESH MATERIALIZED VIEW mv_fa_opt WITH SYNC MODE;
+ALTER TABLE fa_opt_base DISTRIBUTED BY HASH(k, k2) BUCKETS 2;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_opt FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'base-table optimized:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_opt';
+-- result:
+false	1
+-- !result
+SELECT COUNT(*), SUM(IF(ERROR_MESSAGE LIKE '%FORCE, to recover%', 1, 0)) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to base-table optimized:%';
+-- result:
+1	0
+-- !result
+-- name: test_ivm_force_does_not_fix_a_column_type_change @cloud
+CREATE TABLE fa_mod_base (k INT, v INT) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fa_mod_base VALUES (1,10),(2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fa_mod
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('refresh_mode' = 'incremental')
+AS SELECT k, v FROM fa_mod_base;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_mod';
+REFRESH MATERIALIZED VIEW mv_fa_mod WITH SYNC MODE;
+ALTER TABLE fa_mod_base MODIFY COLUMN v BIGINT;
+-- result:
+-- !result
+INSERT INTO fa_mod_base VALUES (3,30);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_mod FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_mod';
+-- result:
+false
+-- !result
+SELECT COUNT(*), SUM(IF(ERROR_MESSAGE LIKE '%FORCE, to recover%', 1, 0)) FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' AND ERROR_MESSAGE LIKE '%is not active due to column schema not compatible%';
+-- result:
+1	0
+-- !result
+SELECT k, v FROM mv_fa_mod ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+-- name: test_ivm_force_after_consecutive_failures @cloud
+CREATE TABLE fa_cf_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fa_cf_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fa_cf
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM fa_cf_base GROUP BY dt, k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+ALTER MATERIALIZED VIEW mv_fa_cf SET ("session.query_mem_limit" = "1");
+-- result:
+-- !result
+INSERT INTO fa_cf_base VALUES ('2026-10-01',1,10);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_cf';
+-- result:
+false	mv consecutive failures: mv_fa_cf
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_fa_cf FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_cf';
+-- result:
+false	mv consecutive failures: mv_fa_cf
+-- !result
+ALTER MATERIALIZED VIEW mv_fa_cf ACTIVE;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_fa_cf SET ("session.query_mem_limit" = "0");
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fa_cf FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_EXECUTED_REFRESH_MODE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_fa_cf';
+-- result:
+true	PCT	FORCE_REFRESH
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, k, v, c FROM mv_fa_cf ORDER BY dt, k;
+-- result:
+2026-10-01	1	20	2
+2026-10-02	2	20	1
+-- !result
+SELECT dt, k, SUM(v), COUNT(*) FROM fa_cf_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-10-01	1	20	2
+2026-10-02	2	20	1
+-- !result

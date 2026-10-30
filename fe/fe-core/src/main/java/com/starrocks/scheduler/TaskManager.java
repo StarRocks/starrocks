@@ -577,6 +577,7 @@ public class TaskManager implements MemoryTrackable {
         }
         MVTaskRunProcessor mvRefreshProcessor = (MVTaskRunProcessor) processor;
         TaskRunContext taskRunContext = taskRun.buildTaskRunContext();
+        taskRunContext.setIsExplain(true);
         try {
             // prepare the task run context
             taskRunContext = mvRefreshProcessor.prepare(taskRunContext);

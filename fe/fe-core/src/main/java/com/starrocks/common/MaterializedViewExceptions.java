@@ -14,11 +14,13 @@
 
 package com.starrocks.common;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.MVInactiveException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -93,6 +95,26 @@ public class MaterializedViewExceptions {
             }
         }
         return inactiveReasonForIncrementalBreaking(mvName);
+    }
+
+    /**
+     * Every reason {@link #inactiveReasonForBreakingFailure} returns, mapped to whether REFRESH ... FORCE recovers a
+     * view inactive for it: a rebuild never reads the baseline, but derives the maintenance query a refresh does.
+     */
+    @VisibleForTesting
+    static final Map<String, Boolean> BREAKING_REASON_RECOVERED_BY_FORCE = Map.of(
+            INACTIVE_REASON_FOR_INCREMENTAL_BREAKING, true,
+            INACTIVE_REASON_FOR_BASELINE_UNREACHABLE, true,
+            INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH, false);
+
+    public static boolean isRecoveredByForceRefresh(String inactiveReason) {
+        return inactiveReason != null && BREAKING_REASON_RECOVERED_BY_FORCE.entrySet().stream()
+                .anyMatch(entry -> entry.getValue() && inactiveReason.startsWith(entry.getKey()));
+    }
+
+    public static String recoverByRebuildHint(String mvName) {
+        return String.format("Drop and recreate the materialized view, or run REFRESH MATERIALIZED VIEW %s FORCE, "
+                + "to recover.", mvName);
     }
 
     // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
