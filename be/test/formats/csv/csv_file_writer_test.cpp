@@ -38,6 +38,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::formats {
 
@@ -361,11 +362,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarchar) {
     auto chunk = std::make_shared<Chunk>();
     {
         // not-null column
-        auto data_column = BinaryColumn::create();
-        data_column->append("hello");
-        data_column->append("world");
-        data_column->append("starrocks");
-        data_column->append("lakehouse");
+        auto data_column = ColumnTestHelper::build_column<Slice>({"hello", "world", "starrocks", "lakehouse"});
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {0, 0, 0, 0};
@@ -689,11 +686,7 @@ TEST_F(CSVFileWriterTest, TestWriteNestedArray) {
     {
         // Create ARRAY<ARRAY<INT>> column with data: [[1,2],[3]], [[4]]
         // Inner elements: 1,2,3,4
-        auto inner_elements = Int32Column::create();
-        inner_elements->append(1);
-        inner_elements->append(2);
-        inner_elements->append(3);
-        inner_elements->append(4);
+        auto inner_elements = ColumnTestHelper::build_column<int32_t>({1, 2, 3, 4});
 
         // Inner offsets: [0,2,3,4] for inner arrays [1,2], [3], [4]
         auto inner_offsets = UInt32Column::create();
@@ -815,9 +808,7 @@ TEST_F(CSVFileWriterTest, TestWriteWithHeader) {
         ASSERT_EQ(appended, size(int_nums));
         chunk->append_column(std::move(col0), chunk->num_columns());
 
-        auto data_column = BinaryColumn::create();
-        data_column->append("Alice");
-        data_column->append("Bob");
+        auto data_column = ColumnTestHelper::build_column<Slice>({"Alice", "Bob"});
         auto null_column = UInt8Column::create();
         null_column->append_numbers(std::vector<uint8_t>{0, 0}.data(), 2);
         auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
@@ -1087,11 +1078,7 @@ TEST_F(CSVFileWriterTest, TestWriteVarcharWithGzipCompression) {
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto data_column = BinaryColumn::create();
-        data_column->append("hello");
-        data_column->append("world");
-        data_column->append("starrocks");
-        data_column->append("lakehouse");
+        auto data_column = ColumnTestHelper::build_column<Slice>({"hello", "world", "starrocks", "lakehouse"});
 
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {0, 0, 0, 0};
@@ -1262,12 +1249,8 @@ TEST_F(CSVFileWriterTest, TestFactoryWithGzipCompression) {
 
     // Write some data
     auto chunk = std::make_shared<Chunk>();
-    auto int_col = Int32Column::create();
-    auto str_col = BinaryColumn::create();
-    int_col->append(1);
-    int_col->append(2);
-    str_col->append("test1");
-    str_col->append("test2");
+    auto int_col = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto str_col = ColumnTestHelper::build_column<Slice>({"test1", "test2"});
     chunk->append_column(std::move(int_col), chunk->num_columns());
     chunk->append_column(std::move(str_col), chunk->num_columns());
 
@@ -1443,9 +1426,7 @@ TEST_F(CSVFileWriterTest, TestEncloseWithoutEscape) {
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
-    auto data = BinaryColumn::create();
-    data->append("hello");
-    data->append("a,b");
+    auto data = ColumnTestHelper::build_column<Slice>({"hello", "a,b"});
     auto nulls = UInt8Column::create();
     nulls->append_numbers(std::vector<uint8_t>{0, 0}.data(), 2);
     chunk->append_column(NullableColumn::create(std::move(data), std::move(nulls)), chunk->num_columns());
@@ -1484,12 +1465,10 @@ TEST_F(CSVFileWriterTest, TestEncloseWithHeader) {
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
-    auto id_col = Int32Column::create();
-    id_col->append(1);
+    auto id_col = ColumnTestHelper::build_column<int32_t>({1});
     chunk->append_column(std::move(id_col), chunk->num_columns());
 
-    auto name_data = BinaryColumn::create();
-    name_data->append("alice");
+    auto name_data = ColumnTestHelper::build_column<Slice>({"alice"});
     auto name_nulls = UInt8Column::create();
     name_nulls->append(0);
     chunk->append_column(NullableColumn::create(std::move(name_data), std::move(name_nulls)), chunk->num_columns());
@@ -1525,14 +1504,10 @@ TEST_F(CSVFileWriterTest, TestEncloseDisabled) {
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
-    auto id_col = Int32Column::create();
-    id_col->append(1);
-    id_col->append(2);
+    auto id_col = ColumnTestHelper::build_column<int32_t>({1, 2});
     chunk->append_column(std::move(id_col), chunk->num_columns());
 
-    auto name_data = BinaryColumn::create();
-    name_data->append("alice");
-    name_data->append("bob");
+    auto name_data = ColumnTestHelper::build_column<Slice>({"alice", "bob"});
     auto name_nulls = UInt8Column::create();
     name_nulls->append_numbers(std::vector<uint8_t>{0, 0}.data(), 2);
     chunk->append_column(NullableColumn::create(std::move(name_data), std::move(name_nulls)), chunk->num_columns());
@@ -1574,10 +1549,7 @@ TEST_F(CSVFileWriterTest, TestEncloseConstNullableColumn) {
     constexpr size_t kNumRows = 3;
 
     // Column 0: regular INT column.
-    auto id_col = Int32Column::create();
-    id_col->append(1);
-    id_col->append(2);
-    id_col->append(3);
+    auto id_col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
     chunk->append_column(std::move(id_col), chunk->num_columns());
 
     // Column 1: ConstColumn wrapping a NullableColumn that holds a single NULL.
@@ -1626,13 +1598,10 @@ TEST_F(CSVFileWriterTest, TestConstColumnWithoutEnclose) {
     auto chunk = std::make_shared<Chunk>();
     constexpr size_t kNumRows = 2;
 
-    auto id_col = Int32Column::create();
-    id_col->append(10);
-    id_col->append(20);
+    auto id_col = ColumnTestHelper::build_column<int32_t>({10, 20});
     chunk->append_column(std::move(id_col), chunk->num_columns());
 
-    auto data_col = BinaryColumn::create();
-    data_col->append("hello");
+    auto data_col = ColumnTestHelper::build_column<Slice>({"hello"});
     auto const_str_col = ConstColumn::create(std::move(data_col), kNumRows);
     chunk->append_column(std::move(const_str_col), chunk->num_columns());
 
@@ -1675,16 +1644,12 @@ TEST_F(CSVFileWriterTest, TestEncloseConstStringColumn) {
     constexpr size_t kNumRows = 3;
 
     // Column 0: regular INT.
-    auto id_col = Int32Column::create();
-    id_col->append(1);
-    id_col->append(2);
-    id_col->append(3);
+    auto id_col = ColumnTestHelper::build_column<int32_t>({1, 2, 3});
     chunk->append_column(std::move(id_col), chunk->num_columns());
 
     // Column 1: ConstColumn wrapping a non-null BinaryColumn — a value that also
     // contains the column separator and the enclose char, to exercise escaping.
-    auto data_col = BinaryColumn::create();
-    data_col->append("hello,\"world\"");
+    auto data_col = ColumnTestHelper::build_column<Slice>({"hello,\"world\""});
     auto const_str_col = ConstColumn::create(std::move(data_col), kNumRows);
     chunk->append_column(std::move(const_str_col), chunk->num_columns());
 
@@ -1746,12 +1711,8 @@ TEST_F(CSVFileWriterTest, TestCompressionWithCustomDelimiters) {
 
     auto chunk = std::make_shared<Chunk>();
     {
-        auto int_col = Int32Column::create();
-        auto str_col = BinaryColumn::create();
-        int_col->append(100);
-        int_col->append(200);
-        str_col->append("value1");
-        str_col->append("value2");
+        auto int_col = ColumnTestHelper::build_column<int32_t>({100, 200});
+        auto str_col = ColumnTestHelper::build_column<Slice>({"value1", "value2"});
         chunk->append_column(std::move(int_col), chunk->num_columns());
         chunk->append_column(std::move(str_col), chunk->num_columns());
     }

@@ -39,6 +39,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "testutil/type_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -243,10 +244,8 @@ TEST(SortingTest, materialize_by_permutation_binary) {
 }
 
 TEST(SortingTest, materialize_by_permutation_int) {
-    auto input1 = Int32Column::create();
-    auto input2 = Int32Column::create();
-    input1->append(1024);
-    input2->append(2048);
+    auto input1 = ColumnTestHelper::build_column<int32_t>({1024});
+    auto input2 = ColumnTestHelper::build_column<int32_t>({2048});
 
     {
         auto merged = Int32Column::create();
