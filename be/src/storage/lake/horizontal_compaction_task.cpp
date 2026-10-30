@@ -97,9 +97,9 @@ Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flu
     // parallel prefill is disabled.
     const int64_t read_buffer_size =
             config::enable_compaction_parallel_merge_init
-                    ? std::min(_stream_buffer_size,
-                               CompactionUtils::get_read_buffer_size(input_bytes, _context->stats->read_segment_count,
-                                                                     _tablet_schema->num_columns(), _stream_buffer_size))
+                    ? std::min(_stream_buffer_size, CompactionUtils::get_read_buffer_size(
+                                                            input_bytes, _context->stats->read_segment_count,
+                                                            _tablet_schema->num_columns(), _stream_buffer_size))
                     : _stream_buffer_size;
     reader_params.lake_io_opts = {.fill_data_cache = config::lake_enable_horizontal_compaction_fill_data_cache,
                                   .buffer_size = read_buffer_size,
@@ -323,10 +323,9 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
             est_input_bytes += rowset->data_size_after_deletion();
             est_segments += rowset->num_segments();
         }
-        read_buffer_size =
-                std::min(_stream_buffer_size,
-                         CompactionUtils::get_read_buffer_size(est_input_bytes, est_segments,
-                                                               _tablet_schema->num_columns(), _stream_buffer_size));
+        read_buffer_size = std::min(_stream_buffer_size, CompactionUtils::get_read_buffer_size(
+                                                                 est_input_bytes, est_segments,
+                                                                 _tablet_schema->num_columns(), _stream_buffer_size));
     }
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();

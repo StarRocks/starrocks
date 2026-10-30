@@ -399,27 +399,29 @@ struct OlapReaderStatistics {
         lake_prepared_seed_vector_index_load_ns +=
                 current.lake_prepared_seed_vector_index_load_ns - previous.lake_prepared_seed_vector_index_load_ns;
         lake_prepared_seed_get_row_ranges_by_vector_index_ns +=
-                current.lake_prepared_seed_get_row_ranges_by_vector_index_ns - previous.lake_prepared_seed_get_row_ranges_by_vector_index_ns;
-        lake_prepared_seed_vector_index_cache_lookup_ns +=
-                current.lake_prepared_seed_vector_index_cache_lookup_ns - previous.lake_prepared_seed_vector_index_cache_lookup_ns;
-        lake_prepared_seed_vector_index_file_open_ns +=
-                current.lake_prepared_seed_vector_index_file_open_ns - previous.lake_prepared_seed_vector_index_file_open_ns;
-        lake_prepared_seed_vector_index_read_file_ns +=
-                current.lake_prepared_seed_vector_index_read_file_ns - previous.lake_prepared_seed_vector_index_read_file_ns;
-        lake_prepared_seed_vector_index_init_index_ns +=
-                current.lake_prepared_seed_vector_index_init_index_ns - previous.lake_prepared_seed_vector_index_init_index_ns;
-        lake_prepared_seed_vector_index_searcher_init_ns +=
-                current.lake_prepared_seed_vector_index_searcher_init_ns - previous.lake_prepared_seed_vector_index_searcher_init_ns;
-        lake_prepared_seed_vector_index_cache_hit_count +=
-                current.lake_prepared_seed_vector_index_cache_hit_count - previous.lake_prepared_seed_vector_index_cache_hit_count;
-        lake_prepared_seed_vector_index_cache_miss_count +=
-                current.lake_prepared_seed_vector_index_cache_miss_count - previous.lake_prepared_seed_vector_index_cache_miss_count;
+                current.lake_prepared_seed_get_row_ranges_by_vector_index_ns -
+                previous.lake_prepared_seed_get_row_ranges_by_vector_index_ns;
+        lake_prepared_seed_vector_index_cache_lookup_ns += current.lake_prepared_seed_vector_index_cache_lookup_ns -
+                                                           previous.lake_prepared_seed_vector_index_cache_lookup_ns;
+        lake_prepared_seed_vector_index_file_open_ns += current.lake_prepared_seed_vector_index_file_open_ns -
+                                                        previous.lake_prepared_seed_vector_index_file_open_ns;
+        lake_prepared_seed_vector_index_read_file_ns += current.lake_prepared_seed_vector_index_read_file_ns -
+                                                        previous.lake_prepared_seed_vector_index_read_file_ns;
+        lake_prepared_seed_vector_index_init_index_ns += current.lake_prepared_seed_vector_index_init_index_ns -
+                                                         previous.lake_prepared_seed_vector_index_init_index_ns;
+        lake_prepared_seed_vector_index_searcher_init_ns += current.lake_prepared_seed_vector_index_searcher_init_ns -
+                                                            previous.lake_prepared_seed_vector_index_searcher_init_ns;
+        lake_prepared_seed_vector_index_cache_hit_count += current.lake_prepared_seed_vector_index_cache_hit_count -
+                                                           previous.lake_prepared_seed_vector_index_cache_hit_count;
+        lake_prepared_seed_vector_index_cache_miss_count += current.lake_prepared_seed_vector_index_cache_miss_count -
+                                                            previous.lake_prepared_seed_vector_index_cache_miss_count;
         lake_prepared_seed_vector_search_ns +=
                 current.lake_prepared_seed_vector_search_ns - previous.lake_prepared_seed_vector_search_ns;
         lake_prepared_seed_process_vector_distance_and_id_ns +=
-                current.lake_prepared_seed_process_vector_distance_and_id_ns - previous.lake_prepared_seed_process_vector_distance_and_id_ns;
-        lake_prepared_seed_rows_vector_index_filtered +=
-                current.lake_prepared_seed_rows_vector_index_filtered - previous.lake_prepared_seed_rows_vector_index_filtered;
+                current.lake_prepared_seed_process_vector_distance_and_id_ns -
+                previous.lake_prepared_seed_process_vector_distance_and_id_ns;
+        lake_prepared_seed_rows_vector_index_filtered += current.lake_prepared_seed_rows_vector_index_filtered -
+                                                         previous.lake_prepared_seed_rows_vector_index_filtered;
         lake_prepared_seed_zonemap_ns += current.lake_prepared_seed_zonemap_ns - previous.lake_prepared_seed_zonemap_ns;
         lake_prepared_seed_zonemap_filtered_rows +=
                 current.lake_prepared_seed_zonemap_filtered_rows - previous.lake_prepared_seed_zonemap_filtered_rows;
