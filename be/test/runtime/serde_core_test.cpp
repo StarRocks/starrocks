@@ -437,10 +437,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_base_shredded) {
     ASSERT_EQ(3, c2->remain_value_column()->size());
 
     const auto& tc = c2->typed_columns()[0];
-    ASSERT_EQ(3, tc->size());
-    ASSERT_EQ(100, tc->get(0).get_int64());
-    ASSERT_EQ(200, tc->get(1).get_int64());
-    ASSERT_EQ(300, tc->get(2).get_int64());
+    ASSERT_EQ("[100, 200, 300]", tc->debug_string());
 
     // Verify metadata/remain content round-trips correctly
     for (int i = 0; i < 3; ++i) {

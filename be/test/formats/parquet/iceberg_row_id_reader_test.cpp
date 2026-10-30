@@ -156,10 +156,7 @@ TEST_F(IcebergRowIdReaderTest, TestFillDstColumn) {
 
     ColumnPtr dst = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), false);
     ASSERT_TRUE(reader.fill_dst_column(dst, src).ok());
-    ASSERT_EQ(dst->size(), 3);
-    ASSERT_EQ(dst->get(0).get_int64(), 100);
-    ASSERT_EQ(dst->get(1).get_int64(), 101);
-    ASSERT_EQ(dst->get(2).get_int64(), 102);
+    ASSERT_EQ("[100, 101, 102]", dst->debug_string());
 }
 
 // ==================== No-op method tests ====================
@@ -586,10 +583,7 @@ TEST_F(IcebergRowIdReaderTest, TestNullPhysicalRowIdFallsBackToInheritance) {
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
 
-    ASSERT_EQ(column->size(), 3);
-    ASSERT_EQ(column->get(0).get_int64(), 500);
-    ASSERT_EQ(column->get(1).get_int64(), 501);
-    ASSERT_EQ(column->get(2).get_int64(), 502);
+    ASSERT_EQ("[500, 501, 502]", column->debug_string());
 }
 
 TEST_F(IcebergRowIdReaderTest, TestNullPhysicalSequenceNumberFallsBackToInheritance) {
@@ -601,10 +595,7 @@ TEST_F(IcebergRowIdReaderTest, TestNullPhysicalSequenceNumberFallsBackToInherita
     ColumnPtr column = ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT), true);
     ASSERT_TRUE(reader.read_range(range, nullptr, column).ok());
 
-    ASSERT_EQ(column->size(), 3);
-    ASSERT_EQ(column->get(0).get_int64(), 42);
-    ASSERT_EQ(column->get(1).get_int64(), 42);
-    ASSERT_EQ(column->get(2).get_int64(), 42);
+    ASSERT_EQ("[42, 42, 42]", column->debug_string());
 }
 
 } // namespace starrocks::parquet
