@@ -678,8 +678,16 @@ public:
             }
             auto* element_column = array_col->elements_column_raw_ptr();
             auto* offsets_col = array_col->offsets_column_raw_ptr();
+            const Column* col = src[j].get();
+            if (col->only_null()) {
+                element_column->append_nulls(chunk_size);
+            } else if (col->is_constant()) {
+                element_column->append_value_multiple_times(*down_cast<const ConstColumn*>(col)->data_column(), 0,
+                                                            chunk_size);
+            } else {
+                element_column->append(*col, 0, chunk_size);
+            }
             for (size_t i = 0; i < chunk_size; i++) {
-                element_column->append_datum(src[j]->get(i));
                 offsets_col->append(offsets_col->immutable_data().back() + 1);
             }
         }
