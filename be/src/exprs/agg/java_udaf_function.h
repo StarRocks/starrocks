@@ -327,9 +327,13 @@ public:
         }
 
         const auto& offsets_buf = offsets.small_storage();
-        auto buffer_array =
+        auto buffer_array_or =
                 helper.batch_create_bytebuf(serialized_bytes.data(), offsets_buf.data(), start, start + size);
-        RETURN_IF_UNLIKELY_NULL(buffer_array, (void)0);
+        if (!buffer_array_or.ok()) {
+            ctx->set_error(std::string(buffer_array_or.status().message()).c_str());
+            return;
+        }
+        jobject buffer_array = buffer_array_or.value();
         LOCAL_REF_GUARD_ENV(env, buffer_array);
         // batch call merge
         caller(state_array, buffer_array);

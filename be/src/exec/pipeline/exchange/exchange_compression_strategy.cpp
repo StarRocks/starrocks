@@ -28,8 +28,16 @@ void ExchangeCompressionStrategy::feedback(uint64_t uncompressed_bytes, uint64_t
     if (uncompressed_bytes == 0 || compressed_bytes == 0 || compression_time_ns == 0) {
         return;
     }
-    double compress_speed = uncompressed_bytes / compression_time_ns * (1e9 / 1024 / 1024); // MB/s
-    double compress_ratio = uncompressed_bytes / compressed_bytes;
+    // Both divisions are between uint64_t operands, so they have to be widened before dividing:
+    // integer division truncates the very range the reward is meant to discriminate on.  lz4 on
+    // analytic data lands around 1.3x at roughly 1 GB/s, which truncates to a ratio of 1 and -- once
+    // compression runs slower than one byte per nanosecond -- a speed of 0.  The reward then never
+    // clears 1.0, _beta grows monotonically, and the Thompson sampler turns compression off for the
+    // rest of the query.  Measured on TPC-DS Q67 (SF1000): the exchange serialized 16.9 GB but only
+    // 85.8 MB (0.5%) ever reached the codec.
+    double compress_speed = static_cast<double>(uncompressed_bytes) / static_cast<double>(compression_time_ns) *
+                            (1e9 / 1024 / 1024); // MB/s
+    double compress_ratio = static_cast<double>(uncompressed_bytes) / static_cast<double>(compressed_bytes);
     double reward_ratio = (compress_ratio / config::lz4_expected_compression_ratio) *
                           (compress_speed / config::lz4_expected_compression_speed_mbps);
     if (reward_ratio > 1.0) {

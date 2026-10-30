@@ -73,7 +73,7 @@ INSERT INTO t2_list_rollup VALUES(1, 100, 'a'), (3, 200, 'b'), (5, 300, 'c');
 -- !result
 SELECT MIN(c1), MAX(c1) FROM t2_list_rollup;
 -- result:
-1	6
+1	5
 -- !result
 ALTER TABLE t2_list_rollup ADD ROLLUP r1(c1, c2);
 -- result:
@@ -84,7 +84,7 @@ None
 -- !result
 SELECT MIN(c1), MAX(c1) FROM t2_list_rollup;
 -- result:
-1	6
+1	5
 -- !result
 CREATE TABLE `t3_range_empty` (
     `dt` date NULL COMMENT "",

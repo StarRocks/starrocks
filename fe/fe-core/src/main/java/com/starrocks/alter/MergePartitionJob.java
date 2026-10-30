@@ -38,6 +38,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
@@ -555,6 +556,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             rewriteTask.setLastVersion(partitionLastVersion.get(tmpPartitionName));
             // use half of the alter timeout as rewrite task timeout
             rewriteTask.getProperties().put(SessionVariable.INSERT_TIMEOUT, String.valueOf(timeoutMs / 2000));
+            // A re-run of this job after a leader change cancels itself on the task name collision, so the task must
+            // stay registered while the job can still run. It expires no earlier than one task TTL after the job
+            // deadline, and TaskManager removes it then.
+            rewriteTask.setExpireTime(rewriteTask.getCreateTime() + timeoutMs + Config.task_ttl_second * 1000L);
             rewriteTasks.add(rewriteTask);
         });
 
@@ -875,6 +880,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             Set<Tablet> sourceTablets = Sets.newHashSet();
             if (getTmpPartitionIds() != null) {
                 for (long pid : getTmpPartitionIds()) {
+                    // A temp partition that was already swapped in keeps its id and is live now, so leave it alone.
+                    if (!targetTable.isTempPartition(pid)) {
+                        continue;
+                    }
                     LOG.info("merge partitions job {} drop temp partition:{}", jobId, pid);
 
                     Partition partition = targetTable.getPartition(pid);
@@ -971,6 +980,10 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
 
         Set<Tablet> sourceTablets = Sets.newHashSet();
         for (long id : replayedJob.getTmpPartitionIds()) {
+            // The swaps were replayed before this entry and kept the temp partition ids, which are live now.
+            if (!targetTable.isTempPartition(id)) {
+                continue;
+            }
             Partition partition = targetTable.getPartition(id);
             if (partition != null) {
                 for (MaterializedIndex index :
@@ -1040,6 +1053,20 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
             default:
                 break;
         }
+    }
+
+    /**
+     * Drops the per-partition data of a done job, which stays in memory only for SHOW ALTER: the rewrite tasks, the
+     * maps from temp to source partitions and the optimize clause. getInfo reads none of them, and a done job never
+     * runs again (the leader handoff reset skips it too), so nothing reads the clause either. The maps are replaced,
+     * not cleared: replay shares them with the journal entry it came from.
+     */
+    @Override
+    public void pruneMeta() {
+        rewriteTasks = Lists.newArrayList();
+        tempPartitionIdToSourcePartitionIds = ArrayListMultimap.create();
+        tempPartitionNameToSourcePartitionNames = ArrayListMultimap.create();
+        optimizeClause = null;
     }
 
     @Override

@@ -509,6 +509,7 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
@@ -1897,8 +1898,10 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableRef tableRef = new TableRef(normalizeName(qualifiedName), null, createPos(context));
 
+        // INTEGER_VALUE() is an empty list, never null, when no job ids are given. Keep the list
+        // null in that case so the handler cancels all unfinished jobs of the table.
         List<Long> alterJobIdList = null;
-        if (context.INTEGER_VALUE() != null) {
+        if (!context.INTEGER_VALUE().isEmpty()) {
             alterJobIdList = context.INTEGER_VALUE()
                     .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
         }
@@ -2718,6 +2721,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         return res;
     }
 
+    // the branch named by FOR VERSION AS OF in a DML statement, or null for the main branch
+    private String getWriteBranch(com.starrocks.sql.parser.StarRocksParser.WriteBranchContext context) {
+        return context == null ? null : ((Identifier) visit(context)).getValue();
+    }
+
     @Override
     public ParseNode visitUpdateStatement(com.starrocks.sql.parser.StarRocksParser.UpdateStatementContext context) {
         List<CTERelation> ctes = null;
@@ -2739,7 +2747,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
         }
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
-        UpdateStmt ret = new UpdateStmt(tableRef, assignments, fromRelations, where, ctes, createPos(context));
+        UpdateStmt ret = new UpdateStmt(tableRef, assignments, fromRelations, where, ctes,
+                getWriteBranch(context.writeBranch()), createPos(context));
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
             if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
@@ -2765,7 +2774,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         List<Relation> usingRelations = context.using != null ? visit(context.using.relation(), Relation.class) : null;
         Expr where = context.where != null ? (Expr) visit(context.where) : null;
         DeleteStmt ret =
-                new DeleteStmt(tableRef, partitionNames, usingRelations, where, ctes, createPos(context));
+                new DeleteStmt(tableRef, partitionNames, usingRelations, where, ctes,
+                        getWriteBranch(context.writeBranch()), createPos(context));
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
             if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
@@ -2789,8 +2799,8 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         }
         Expr mergeCondition = (Expr) visit(context.mergeCondition);
         List<MergeWhenClause> whenClauses = visit(context.mergeWhenClause(), MergeWhenClause.class);
-        MergeIntoStmt ret = new MergeIntoStmt(tableRef, targetAlias, sourceRelation, sourceAlias,
-                mergeCondition, whenClauses, createPos(context));
+        MergeIntoStmt ret = new MergeIntoStmt(tableRef, getWriteBranch(context.writeBranch()), targetAlias,
+                sourceRelation, sourceAlias, mergeCondition, whenClauses, createPos(context));
         if (context.explainDesc() != null) {
             ret.setIsExplain(true, getExplainType(context.explainDesc()));
             if (StatementBase.ExplainLevel.ANALYZE.equals(ret.getExplainLevel())) {
@@ -7824,6 +7834,16 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             com.starrocks.sql.parser.StarRocksParser.DropGroupProviderStatementContext context) {
         String name = ((Identifier) visit(context.identifier())).getValue();
         return new DropGroupProviderStmt(name, context.IF() != null, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterGroupProviderStatement(
+            com.starrocks.sql.parser.StarRocksParser.AlterGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        // Case-sensitive like CREATE GROUP PROVIDER: property values (DNs, filters, passwords) must not be
+        // folded. The list may legally be empty here - the analyzer turns that into a readable error.
+        Map<String, String> properties = getProperties(context.property(), false);
+        return new AlterGroupProviderStmt(name, properties, createPos(context));
     }
 
     @Override

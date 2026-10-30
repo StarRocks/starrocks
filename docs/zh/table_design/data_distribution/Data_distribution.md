@@ -992,7 +992,7 @@ AS SELECT ... FROM range_table;
 
 - 手动设置
 
-  自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。
+  自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分区中分桶数量的设置。简化后，确定分区中分桶数量方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分区中分桶数量。v4.1 及以后版本的存算分离集群已支持大容量 Tablet，可以改为按照每个 Tablet 10 GB ~ 50 GB 数据计算，单个 Tablet 不超过 100 GB。
 
   如果需要开启并行扫描 Tablet，则您需要确保系统变量 `enable_tablet_internal_parallel` 全局生效 `SET GLOBAL enable_tablet_internal_parallel = true;`。
 

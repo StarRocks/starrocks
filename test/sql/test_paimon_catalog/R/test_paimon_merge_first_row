@@ -1,0 +1,295 @@
+-- name: test_paimon_merge_first_row_parquet
+create external catalog paimon_matrix_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id;
+-- result:
+100	1
+None	2
+300	3
+400	4
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 where amount >= 10 order by id;
+-- result:
+1	10	100
+2	20	None
+4	40	400
+-- !result
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 where amount is null order by id;
+-- result:
+3
+-- !result
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1;
+-- result:
+4	3	70
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "starrocks")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id;
+-- result:
+100	1
+None	2
+300	3
+400	4
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 where amount >= 10 order by id;
+-- result:
+1	10	100
+2	20	None
+4	40	400
+-- !result
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 where amount is null order by id;
+-- result:
+3
+-- !result
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1;
+-- result:
+4	3	70
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "starrocks")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_parquet_v1 order by id", "pk_first_row_parquet_v1", "jni")
+-- result:
+None
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_matrix_${uuid0};
+-- result:
+-- !result
+
+-- name: test_paimon_merge_first_row_orc
+create external catalog paimon_matrix_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id;
+-- result:
+100	1
+None	2
+300	3
+400	4
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 where amount >= 10 order by id;
+-- result:
+1	10	100
+2	20	None
+4	40	400
+-- !result
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 where amount is null order by id;
+-- result:
+3
+-- !result
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1;
+-- result:
+4	3	70
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "starrocks")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id;
+-- result:
+100	1
+None	2
+300	3
+400	4
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 where amount >= 10 order by id;
+-- result:
+1	10	100
+2	20	None
+4	40	400
+-- !result
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 where amount is null order by id;
+-- result:
+3
+-- !result
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1;
+-- result:
+4	3	70
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "starrocks")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_orc_v1 order by id", "pk_first_row_orc_v1", "jni")
+-- result:
+None
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_matrix_${uuid0};
+-- result:
+-- !result
+
+-- name: test_paimon_merge_first_row_avro
+create external catalog paimon_matrix_${uuid0}
+properties (
+"type" = "paimon",
+"paimon.catalog.type" = "filesystem",
+"paimon.catalog.warehouse" = "oss://${oss_bucket}/ci_catalog_test_data/paimon/",
+"aws.s3.access_key" = "${oss_ak}",
+"aws.s3.secret_key" = "${oss_sk}",
+"aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+[ORDER]select score, id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id;
+-- result:
+100	1
+None	2
+300	3
+400	4
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 where amount >= 10 order by id;
+-- result:
+1	10	100
+2	20	None
+4	40	400
+-- !result
+[ORDER]select id from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 where amount is null order by id;
+-- result:
+3
+-- !result
+select count(*), count(amount), sum(amount) from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1;
+-- result:
+4	3	70
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id", "pk_first_row_avro_v1", "native")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id", "pk_first_row_avro_v1", "native")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id;
+-- result:
+1	10	100
+2	20	None
+3	None	300
+4	40	400
+-- !result
+function: assert_paimon_reader("select id, amount, score from paimon_matrix_${uuid0}.paimon_test.pk_first_row_avro_v1 order by id", "pk_first_row_avro_v1", "jni")
+-- result:
+None
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_matrix_${uuid0};
+-- result:
+-- !result

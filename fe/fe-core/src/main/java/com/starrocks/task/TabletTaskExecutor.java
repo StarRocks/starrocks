@@ -146,6 +146,12 @@ public class TabletTaskExecutor {
                 partition -> partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
+        // buildCreateReplicaTasks turns the optimization off for a partition with more than one index. Do it before
+        // the latch below is sized, or the latch counts fewer tasks than are sent and stops waiting too early.
+        if (partitions.stream().anyMatch(
+                partition -> partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1)) {
+            option.setEnableTabletCreationOptimization(false);
+        }
         if (option.isEnableTabletCreationOptimization()) {
             numReplicas = numIndexes;
         }

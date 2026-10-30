@@ -227,11 +227,9 @@ static void BM_primitive(benchmark::State& state) {
     // Start to read data
     TypeDescriptor c0Type;
     if (logicalType == TYPE_DECIMAL64) {
-        c0Type = TypeDescriptor::from_logical_type(TYPE_DECIMAL64, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                   decimal64Precision, decimal64Scale);
+        c0Type = TypeDescriptor::from_logical_type(TYPE_DECIMAL64, decimal64Precision, decimal64Scale);
     } else if (logicalType == TYPE_DECIMAL128) {
-        c0Type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                   decimal128Precision, decimal128Scale);
+        c0Type = TypeDescriptor::from_logical_type(TYPE_DECIMAL128, decimal128Precision, decimal128Scale);
     } else {
         c0Type = TypeDescriptor::from_logical_type(logicalType);
     }

@@ -35,13 +35,12 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log_applier.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vector_index_utils.h"
 #include "storage/olap_common.h"
-#include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/segment_rewriter.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
@@ -382,7 +381,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     _auto_increment_partial_update_states[segment_id].write_column = column->clone_empty();
 
     // use upserts to get rowids in this segment
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &(_auto_increment_partial_update_states[segment_id].src_rss_rowids), need_lock));
 
@@ -429,9 +428,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
         }
     }
 
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(params, column_id, new_rows > 0, rowids_by_rssid,
-                                                                   &read_column, &_column_to_expr_value,
-                                                                   &_auto_increment_partial_update_states[segment_id]));
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
+            params, column_id, new_rows > 0, rowids_by_rssid, &read_column, &_column_to_expr_value,
+            &_auto_increment_partial_update_states[segment_id]));
 
     TRY_CATCH_BAD_ALLOC(_auto_increment_partial_update_states[segment_id].write_column->append_selective(
             *read_column[0], idxes.data(), 0, idxes.size()));
@@ -499,7 +498,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     }
 
     // use upsert to get rowids for this segment
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], segment_pk_column, &src_rss_rowids, need_lock));
     // A cross-published child receives its siblings' rows too. Those are not its rows to merge, and
     // resolving one can name a rowset the split pruned away, so leave them at the "no old row"
@@ -513,7 +512,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     plan_read_by_rssid(src_rss_rowids, &num_default, &rowids_by_rssid, &idxes);
     size_t total_rows = src_rss_rowids.size();
     // get column values by rowid, also get default values if needed
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
             params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
     for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
         TRY_CATCH_BAD_ALLOC(_partial_update_states[segment_id].write_columns[col_idx]->append_selective(
@@ -538,59 +537,6 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
     }
 }
 
-// Append |count| copies of the value the merge produces for a row that has no old value: the column's
-// declared default, or the expression default this transaction carries for it, exactly as
-// UpdateManager::get_column_values fills its default slot -- which is what makes a narrowed publish and
-// a per-row-selected one write the same segment. |tablet_column| null means the caller has no such
-// notion (the auto-increment column, whose no-old-row values come from the FE allocation rather than a
-// default) and gets the column's plain zero value.
-static Status append_no_old_row_values(const TabletColumn* tablet_column,
-                                       const std::map<std::string, std::string>& column_to_expr_value, size_t count,
-                                       Column* column) {
-    if (count == 0) {
-        return Status::OK();
-    }
-    bool has_default_value = tablet_column != nullptr && tablet_column->has_default_value();
-    std::string default_value = has_default_value ? tablet_column->default_value() : "";
-    if (tablet_column != nullptr) {
-        auto iter = column_to_expr_value.find(std::string(tablet_column->name()));
-        if (iter != column_to_expr_value.end()) {
-            has_default_value = true;
-            default_value = iter->second;
-        }
-    }
-    if (!has_default_value) {
-        TRY_CATCH_BAD_ALLOC(column->append_default(count));
-        return Status::OK();
-    }
-    const TypeInfoPtr& type_info = get_type_info(*tablet_column);
-    auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
-            true, default_value, tablet_column->is_nullable(), type_info, tablet_column->length(), count);
-    ColumnIteratorOptions iter_opts;
-    RETURN_IF_ERROR(default_value_iter->init(iter_opts));
-    return default_value_iter->fetch_values_by_rowid(nullptr, count, column);
-}
-
-// Widen the merged values to one per row of the SOURCE segment, defaulting the rows a sibling owns.
-//
-// On a cross publish the publish iterator is narrowed to this tablet's slice of the shared segment
-// (get_each_segment_iterator -> Rowset::set_segment_tablet_range), so the state built from it covers
-// only [base, base + k) of the segment. The rewriters are not narrowed and cannot be:
-// rewrite_partial_update copies the source segment's own columns verbatim -- every row of them -- and
-// rewrite_auto_increment_lake re-reads every row, so a short column makes the segment they emit
-// inconsistent. The first fails outright (SegmentWriter::finalize_columns, "num rows written
-// mismatch"), which fails the publish for good since publish retries; the second builds a chunk whose
-// columns disagree in length.
-//
-// The padded rows belong to a sibling, so a default is as good as anything: nothing reads them from
-// here, because the rowset carries this tablet's range and Rowset::set_segment_tablet_range clips the
-// rewrite output on it -- the output file is private (MetaFileBuilder clears `shared`) but the rows in
-// it are not all ours.
-//
-// Returns a COPY, and nullptr when the column already spans the segment. Widening the state in place
-// would break a publish retry: the state is cached per transaction, and on the next attempt
-// _resolve_conflict_partial_update patches write_columns at iterator-relative offsets, which line up
-// only with the unwidened column.
 // The publish iterator hands out an empty ownership mask when it has no row selector, which is every
 // publish but a split child's cross publish. Named so the rewrite call site can say "no mask" without
 // materializing one per segment.
@@ -854,7 +800,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
 
     // use upserts to get rowids in this segment
     std::vector<uint64_t> new_rss_rowids(_upserts[segment_id]->standalone_pk_column()->size());
-    RETURN_IF_ERROR(params.tablet->update_mgr()->get_rowids_from_pkindex(
+    RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_rowids_from_pkindex(
             params.tablet->id(), _base_versions[segment_id], _upserts[segment_id]->standalone_pk_column(),
             &new_rss_rowids, false));
 
@@ -922,7 +868,7 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
         std::vector<uint32_t> read_idxes;
         plan_read_by_rssid(conflict_rowids, &num_default, &rowids_by_rssid, &read_idxes);
         DCHECK_EQ(conflict_idxes.size(), read_idxes.size());
-        RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+        RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
                 params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
@@ -1010,7 +956,7 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         MutableColumns auto_increment_read_column;
         auto_increment_read_column.resize(1);
         auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
-        RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
+        RETURN_IF_ERROR(params.tablet->primary_key_mgr()->get_column_values(
                 params, column_id, new_rows > 0, rowids_by_rssid, &auto_increment_read_column, &_column_to_expr_value,
                 &_auto_increment_partial_update_states[segment_id]));
 
@@ -1160,13 +1106,10 @@ static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params
     // publish memory in the first place.
     const size_t num_keys = deletes->size();
     const Column* data_column = ColumnHelper::get_data_column(deletes);
-    const LargeBinaryColumn* large_binary_column = nullptr;
     const BinaryColumn* binary_column = nullptr;
     const uint8_t* fixed_width_data = nullptr;
     size_t fixed_width_key_size = 0;
-    if (data_column->is_large_binary()) {
-        large_binary_column = down_cast<const LargeBinaryColumn*>(data_column);
-    } else if (data_column->is_binary()) {
+    if (data_column->is_binary()) {
         binary_column = down_cast<const BinaryColumn*>(data_column);
     } else {
         // A non-binary PK column is fixed width: keys sit back to back, type_size() bytes each.
@@ -1176,9 +1119,6 @@ static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params
         fixed_width_key_size = data_column->type_size();
     }
     auto key_at = [&](size_t i) -> Slice {
-        if (large_binary_column != nullptr) {
-            return large_binary_column->get_slice(i);
-        }
         if (binary_column != nullptr) {
             return binary_column->get_slice(i);
         }

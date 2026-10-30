@@ -49,7 +49,7 @@ public:
     void SetUp() override { clear_and_init_test_dir(); }
 
     void TearDown() override {
-        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
+        EXPECT_TRUE(_primary_key_mgr->TEST_check_primary_index_cache_ref(_tablet_metadata->id(), 1));
         remove_test_dir_or_die();
     }
 

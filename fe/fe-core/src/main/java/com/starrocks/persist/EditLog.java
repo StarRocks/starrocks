@@ -303,6 +303,11 @@ public class EditLog {
                     globalStateMgr.getAlterJobMgr().replayModifyPartition(info);
                     break;
                 }
+                case OperationType.OP_MODIFY_PARTITION_VACUUM_STATE: {
+                    PartitionVacuumStateInfo info = (PartitionVacuumStateInfo) journal.data();
+                    globalStateMgr.getLocalMetastore().replayModifyPartitionVacuumState(info);
+                    break;
+                }
                 case OperationType.OP_BATCH_MODIFY_PARTITION: {
                     BatchModifyPartitionsInfo info = (BatchModifyPartitionsInfo) journal.data();
                     for (ModifyPartitionInfo modifyPartitionInfo : info.getModifyPartitionInfos()) {
@@ -857,6 +862,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA: {
+                    ReleaseAlterJobHistorySchemaLog log = (ReleaseAlterJobHistorySchemaLog) journal.data();
+                    globalStateMgr.getSchemaChangeHandler().replayReleaseHistorySchema(log);
+                    break;
+                }
                 case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
                     AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.data();
                     globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
@@ -1361,6 +1371,12 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
+                case OperationType.OP_ALTER_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayAlterGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
+                    break;
+                }
                 case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
                     BaselinePlan.Info bp = (BaselinePlan.Info) journal.data();
                     globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
@@ -1440,6 +1456,27 @@ public class EditLog {
             }
             inFlight++;
         }
+    }
+
+    /** Keeps provisional metadata changes and their commit/rollback inside the existing WAL fence. */
+    public final class WalScope implements AutoCloseable {
+        private boolean closed;
+
+        private WalScope() {
+            enterGate();
+        }
+
+        @Override
+        public void close() {
+            if (!closed) {
+                closed = true;
+                exitGate();
+            }
+        }
+    }
+
+    public WalScope openWalScope() {
+        return new WalScope();
     }
 
     private void exitGate() {
@@ -1756,6 +1793,10 @@ public class EditLog {
 
     public void logModifyPartition(ModifyPartitionInfo info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_MODIFY_PARTITION_V2, info, walApplier);
+    }
+
+    public void logModifyPartitionVacuumState(PartitionVacuumStateInfo info) {
+        logJsonObject(OperationType.OP_MODIFY_PARTITION_VACUUM_STATE, info);
     }
 
     public void logBatchModifyPartition(BatchModifyPartitionsInfo info, WALApplier walApplier) {
@@ -2128,6 +2169,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_REMOVE_ALTER_JOB_V2, log, walApplier);
     }
 
+    public void logReleaseAlterJobHistorySchema(ReleaseAlterJobHistorySchemaLog log, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_RELEASE_ALTER_JOB_HISTORY_SCHEMA, log, walApplier);
+    }
+
     public void logAlterRoutineLoadJob(AlterRoutineLoadJobOperationLog log, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log, walApplier);
     }
@@ -2478,6 +2523,10 @@ public class EditLog {
         logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, job);
     }
 
+    public void logUpdateTabletReshardJob(TabletReshardJob snapshot, WALApplier applier) {
+        logJsonObject(OperationType.OP_UPDATE_TABLET_RESHARD_JOB_LOG, snapshot, applier);
+    }
+
     public void logRemoveTabletReshardJob(long jobId, WALApplier walApplier) {
         logJsonObject(OperationType.OP_REMOVE_TABLET_RESHARD_JOB_LOG, new RemoveTabletReshardJobLog(jobId), walApplier);
     }
@@ -2488,5 +2537,9 @@ public class EditLog {
 
     public void logDropGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
         logJsonObject(OperationType.OP_DROP_GROUP_PROVIDER, groupProviderLog, walApplier);
+    }
+
+    public void logAlterGroupProvider(GroupProviderLog groupProviderLog, WALApplier walApplier) {
+        logJsonObject(OperationType.OP_ALTER_GROUP_PROVIDER, groupProviderLog, walApplier);
     }
 }

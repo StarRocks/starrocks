@@ -96,15 +96,13 @@ public class EsRepository extends FrontendDaemon {
                 continue;
             }
             try {
+                // Also clears the failure of the previous sync, if any.
                 esTable.syncTableMetaData(esClient);
-                // After synchronize success, we should set LastMetaDataSyncException to null.
-                esTable.setLastMetaDataSyncException(null);
             } catch (Exception e) {
                 LOG.warn(String.format("Thread %s: Exception happens when fetch index [%s] meta " +
                                 "data from remote es cluster. Table info: [%s]",
                         Thread.currentThread().getName(), esTable.getName(), esTable), e);
-                esTable.setEsTablePartitions(null);
-                esTable.setLastMetaDataSyncException(e);
+                esTable.markMetaDataSyncFailed(e);
             }
         }
     }

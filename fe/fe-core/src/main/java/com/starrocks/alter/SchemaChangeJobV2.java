@@ -389,8 +389,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     }
 
     /**
-     * clear some date structure in this job to save memory
-     * these data structures must not used in getInfo method
+     * Clears the per-tablet and per-partition data structures of this job to save memory. getInfo reads none
+     * of them except the schema change batch task, and only while the job is RUNNING, so it is safe once the
+     * job is done.
      */
     @Override
     public void pruneMeta() {
@@ -398,6 +399,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         physicalPartitionIndexMap.clear();
         indexMetaIdToSchema.clear();
         indexMetaIdToShortKey.clear();
+        schemaChangeBatchTask = new AgentBatchTask();
+        // A cancel in PENDING or a replica creation timeout leaves a mark for every replica not created.
+        createReplicaLatch = null;
     }
 
     /**
@@ -1073,8 +1077,11 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             // If waitingCreatingReplica == false, we will assume that
             // cancel thread will get the object lock very quickly.
             if (waitingCreatingReplica.get()) {
-                Preconditions.checkState(createReplicaLatch != null);
-                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
+                // No latch means the wait has ended since, and the job was reset or pruned.
+                MarkedCountDownLatch<Long, Long> latch = createReplicaLatch;
+                if (latch != null) {
+                    latch.countDownToZero(new Status(TStatusCode.OK, ""));
+                }
             }
             synchronized (this) {
                 return cancelInternal(errMsg);
@@ -1304,8 +1311,10 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     protected void getInfo(List<List<Comparable>> infos) {
         // calc progress first. all index share the same process
         String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && schemaChangeBatchTask.getTaskNum() > 0) {
-            progress = schemaChangeBatchTask.getFinishedTaskNum() + "/" + schemaChangeBatchTask.getTaskNum();
+        // Read once: this runs without the job lock, and pruning the done job replaces the batch.
+        AgentBatchTask batchTask = schemaChangeBatchTask;
+        if (jobState == JobState.RUNNING && batchTask.getTaskNum() > 0) {
+            progress = batchTask.getFinishedTaskNum() + "/" + batchTask.getTaskNum();
         }
 
         // one line for one shadow index

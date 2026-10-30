@@ -38,6 +38,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/thread/priority_thread_pool.hpp"
+#include "common/thread/threadpool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #include "data_workflows/data_workflows_env.h"
@@ -487,6 +488,14 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     compute_env->stop();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": compute env stop successfully";
+
+    // Executors and pollers can no longer submit closes. Join running closes and cancel queued ones before
+    // freeing the operators, sinks and RuntimeStates they reference. Their object-store dependencies and
+    // put_combined_txn_log pool must remain alive until this completes.
+    if (auto* close_pool = runtime_env->load_sink_close_thread_pool(); close_pool != nullptr) {
+        close_pool->shutdown();
+    }
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": load sink close thread pool shutdown successfully";
 
     exec_env->clear_query_contexts();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": query contexts clear successfully";

@@ -1,0 +1,64 @@
+-- name: test_insert_from_table_column_list_pre_split @cloud @sequential
+-- An INSERT-from-table with an explicit target column list used to be pre-split only when the list
+-- named every base column exactly once, in schema order. It now only has to pass the shared
+-- column-list gate, and the sampler pairs each target sort-key column with the source column the
+-- SELECT actually feeds it. This covers the two newly admitted shapes: a partial list (the omitted
+-- column is nullable) and a reordered list.
+--
+-- The source's two columns hold different values (v = k * 10), so the reordered load visibly swaps
+-- them: dst_reordered.k receives src.v. Its sort key is therefore sampled from src.v, and the
+-- content check below proves the columns landed crosswise.
+--
+-- As in test_static_insert_overwrite_pre_split, the sampled tier's tablet count follows the
+-- cluster's compute-node count, so only the widening is asserted, right after each load returns
+-- and before the background split/merge daemon (minutes cadence) could have split anything.
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table src (k int, v bigint) properties('replication_num' = '1');
+insert into src select x, x * 10 from table(generate_series(1, 100000)) as g(x);
+select count(*), sum(k), sum(v) from src;
+
+set enable_range_distribution = true;
+create table dst_partial (k int, v bigint, extra varchar(16) null) order by (k) properties('replication_num' = '1');
+create table dst_reordered (k int, v bigint) order by (k) properties('replication_num' = '1');
+set enable_range_distribution = false;
+
+-- A range-distributed partition is created with exactly one tablet.
+SELECT TABLE_NAME, BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME IN ('dst_partial', 'dst_reordered') AND IS_TEMP = false
+ORDER BY TABLE_NAME;
+
+-- Partial list: extra is omitted and filled with NULL.
+insert into dst_partial (k, v) select k, v from src;
+SELECT BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_partial' AND IS_TEMP = false;
+select count(*), count(distinct k), sum(k), sum(v), min(k), max(k), count(extra) from dst_partial;
+
+-- Reordered list: dst_reordered.v <- src.k and dst_reordered.k <- src.v.
+insert into dst_reordered (v, k) select k, v from src;
+SELECT BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_reordered' AND IS_TEMP = false;
+select count(*), count(distinct k), sum(k), sum(v), min(k), max(k), min(v), max(v) from dst_reordered;
+select count(*) from dst_reordered where k != v * 10;
+-- The boundaries must come from src.v (10..1000000), the column that feeds the sort key. Had the
+-- sampler read src.k (1..100000) instead, every boundary would fall in the bottom tenth of the
+-- written keys and the last tablet would hold at least 90% of the rows, whatever the tablet count.
+SELECT max(t.NUM_ROW) * 10 < sum(t.NUM_ROW) * 8 AS no_tablet_holds_80_percent
+FROM information_schema.be_tablets t, information_schema.tables_config c
+WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_SCHEMA = 'db_${uuid0}' AND c.TABLE_NAME = 'dst_reordered';
+
+drop table dst_reordered;
+drop table dst_partial;
+drop table src;
+drop database db_${uuid0};
+
+-- The reset lives in CLEANUP so it also runs when an assertion above fails; otherwise the lowered
+-- target size would leak into every later sequential case.
+CLEANUP {
+    admin set frontend config ("tablet_pre_split_target_size" = "0");
+} END CLEANUP

@@ -1323,6 +1323,29 @@ public class LowCardinalityTest2 extends PlanTestBase {
     }
 
     @Test
+    public void testDictMappingGroupByNumericResultHasNoDictRange() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        try {
+            // A dict-mapping group-by key that returns a number yields the expression's values,
+            // not dict codes, so the dict-size range must not be used as its min/max.
+            String sql = "select count(*) from supplier group by "
+                    + "case when S_ADDRESS = 'a' then 1001 when S_ADDRESS = 'b' then 1002 else 1003 end";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "group by: [9: case, SMALLINT, true]");
+            assertContains(plan, "9 <-> DictDecode(");
+            assertNotContains(plan, "group by min-max stats");
+
+            sql = "select count(*) from supplier group by cast(S_ADDRESS as int)";
+            plan = getVerboseExplain(sql);
+            assertContains(plan, "group by: [9: cast, INT, true]");
+            assertContains(plan, "9 <-> DictDecode(");
+            assertNotContains(plan, "group by min-max stats");
+        } finally {
+            connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        }
+    }
+
+    @Test
     public void testDictMappingGroupByReservesExtraCode() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         try {
@@ -1910,7 +1933,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
         new Expectations(dictManager) {
             {
-                dictManager.hasGlobalDict(anyLong, ColumnId.create("S_ADDRESS"), anyLong);
+                dictManager.hasGlobalDict((OlapTable) any, ColumnId.create("S_ADDRESS"), anyLong);
                 result = true;
                 dictManager.getGlobalDict(anyLong, ColumnId.create("S_ADDRESS"));
                 result = Optional.empty();

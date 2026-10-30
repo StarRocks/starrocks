@@ -17,8 +17,10 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Security integration specified in `Config.authentication_chain`.
@@ -61,6 +63,15 @@ public abstract class SecurityIntegration {
 
     public abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
 
+    /**
+     * The issuers (iss) this integration accepts, used to route an HTTP/Arrow Flight Bearer token
+     * to the right integration. Only token-based integrations (JWT / OAuth2) participate; the
+     * default empty array means "never matched by Bearer routing" (e.g. LDAP).
+     */
+    public String[] getRequiredIssuer() {
+        return new String[0];
+    }
+
     public Map<String, String> getPropertyMapWithMasking() {
         return propertyMap;
     }
@@ -71,20 +82,36 @@ public abstract class SecurityIntegration {
         }
     }
 
+    /**
+     * Validate the properties an {@code ALTER SECURITY INTEGRATION} sets, before they are merged
+     * into this integration's. ALTER does not go through {@link #checkProperty()}, and must not:
+     * only what the statement mentions is checked, so an integration created before a validation
+     * existed can still be altered. Types with no per-property rules keep this no-op.
+     */
+    public void checkAlteredProperties(Map<String, String> alteredProperties) throws SemanticException {
+    }
+
     public List<String> getGroupProviderName() {
-        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER);
-        if (property == null || property.isBlank()) {
-            return List.of();
-        }
-        return List.of(property.split(",\\s*"));
+        return splitCommaSeparated(propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER));
     }
 
     public List<String> getGroupAllowedLoginList() {
-        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN);
+        return splitCommaSeparated(propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN));
+    }
+
+    /**
+     * Split a comma-separated property value. Administrators write these by hand in SQL, so tolerate
+     * whitespace anywhere around an item ("a , b") and drop empty items ("a,,b"). Splitting on ",\\s*"
+     * only removed whitespace that followed a comma, which left a trailing blank on items such as "a "
+     * and made them compare unequal to everything.
+     */
+    protected static List<String> splitCommaSeparated(String property) {
         if (property == null || property.isBlank()) {
             return List.of();
-        } else {
-            return List.of(property.split(",\\s*"));
         }
+        return Arrays.stream(property.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .collect(Collectors.toUnmodifiableList());
     }
 }

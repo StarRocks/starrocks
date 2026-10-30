@@ -110,7 +110,7 @@ protected:
             return true;
         case arrow::Type::STRING:
         case arrow::Type::LARGE_STRING:
-            *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *type_desc = TYPE_VARCHAR_DESC;
             return true;
         default:
             return false;

@@ -46,6 +46,10 @@ class BoolOrAggregateFunction final
 public:
     using InputColumnType = BooleanColumn;
 
+    // Registered without the nullable wrapper, so convert_to_serialize_format passes NULL inputs through to the
+    // intermediate column; merge() skips them itself.
+    bool support_nullable_immediate_input() const override { return true; }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).reset();
     }

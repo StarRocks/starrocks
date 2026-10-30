@@ -33,6 +33,7 @@
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -40,7 +41,6 @@
 #include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
-#include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -188,7 +188,7 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
         // preload primary key table's compaction state
         SCOPED_RAW_TIMER(&_context->stats->preload_compaction_state_ns);
         Tablet t(_tablet.tablet_manager(), _tablet.id());
-        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
+        _tablet.tablet_manager()->primary_key_mgr()->preload_compaction_state(*txn_log, t, _tablet_schema);
     }
 
     if (config::enable_tablet_write_log) {
@@ -208,6 +208,9 @@ Status VerticalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush
 
 StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         const std::vector<uint32_t>& column_group) {
+    // Every input source opens one buffered stream per column of the group, all at once.
+    const int64_t num_streams = _total_input_segs * static_cast<int64_t>(column_group.size());
+    _stream_buffer_size = stream_buffer_size_for_pass(num_streams);
     if (_input_rowsets.size() > 0 && _input_rowsets.back()->partial_segments_compaction()) {
         // can not call `get_read_chunk_size`, for example, if `_total_input_segs` is shrinked to half,
         // read_chunk_size might be doubled, in this case, this optimization will not take effect
@@ -266,7 +269,8 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
     // resident regardless of this group's width -- and it grows as later passes touch more column
     // indexes, so this re-decides every pass: once holding would starve the budget the task stops
     // holding, for this pass and every later one. See there.
-    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs);
+    return chunk_size_with_held_segments(held_segments_bytes, _total_num_rows, total_mem_footprint, _total_input_segs,
+                                         num_streams * _stream_buffer_size);
 }
 
 Status VerticalCompactionTask::compact_column_group(
@@ -457,13 +461,13 @@ Status VerticalCompactionTask::compact_column_group(
             source_masks->clear();
         }
 
+        const auto& read_stats = reader.compaction_stats();
         if (_total_num_rows > 0 && column_group_size > 0) {
-            _context->progress.update(
-                    (100 * column_group_index + 100 * reader.stats().raw_rows_read / _total_num_rows) /
-                    column_group_size);
+            _context->progress.update((100 * column_group_index + 100 * read_stats.raw_rows_read / _total_num_rows) /
+                                      column_group_size);
         }
         CompactionTaskStats temp_stats;
-        temp_stats.collect(reader.stats());
+        temp_stats.collect(read_stats);
         CompactionTaskStats diff_stats = temp_stats - prev_stats;
         *_context->stats = *_context->stats + diff_stats;
         prev_stats = temp_stats;
@@ -485,13 +489,13 @@ Status VerticalCompactionTask::compact_column_group(
 
 int64_t VerticalCompactionTask::read_buffer_size() const {
     if (!config::enable_compaction_parallel_merge_init) {
-        return config::lake_compaction_stream_buffer_size_bytes;
+        return _stream_buffer_size;
     }
     // read_segment_count is the actual segment count; _total_input_segs collapses a
     // non-overlapping rowset to 1 and would under-count the streams that get opened.
-    return CompactionUtils::get_read_buffer_size(_total_data_size, _context->stats->read_segment_count,
-                                                 _tablet_schema->num_columns(),
-                                                 config::lake_compaction_stream_buffer_size_bytes);
+    return std::min(_stream_buffer_size,
+                    CompactionUtils::get_read_buffer_size(_total_data_size, _context->stats->read_segment_count,
+                                                          _tablet_schema->num_columns(), _stream_buffer_size));
 }
 
 void VerticalCompactionTask::move_pk_columns_into_key_group(std::vector<std::vector<uint32_t>>* column_groups) const {

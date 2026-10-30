@@ -70,6 +70,16 @@ This topic introduces the following types of BE configurations:
 - Description: Maximum response-body size accepted from one AI HTTP attempt. Responses larger than this limit are rejected before provider parsing to bound BE memory consumption. Increase it only when a model legitimately returns larger responses. A newly opened AI fragment/operator captures this value as part of one complete immutable runtime snapshot; an already-open fragment keeps its existing snapshot. Changes require no BE restart.
 - Introduced in: -
 
+### ai_function_max_input_file_bytes
+
+- Default: 10485760
+- Type: Int
+- Unit: Bytes
+- Valid values: Positive integers
+- Is mutable: Yes
+- Description: Maximum raw byte size of each inline FILE passed to `ai_complete` or `ai_embed`, checked before AI-owned payload copying and Base64 encoding. The default is 10 MiB. Increase it only when the selected provider and model accept larger inputs. This limit does not control scan or chunk materialization; query memory tracking still applies to those allocations and to AI payloads. Invalid or oversized inline inputs follow `ai_function_on_error`. A newly opened AI fragment/operator captures this value in its immutable runtime snapshot; an already-open fragment retains its snapshot. Changes require no BE restart.
+- Introduced in: -
+
 ### ai_function_worker_thread_num
 
 - Default: 16
@@ -137,7 +147,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Requests per second
 - Valid values: Positive integers
 - Is mutable: Yes
-- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. Applies to SYSTEM and AI provider-selected embedding calls, including retries. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
+- Description: Per-BE admission rate for each text-embedding HTTP-attempt bucket, keyed by endpoint, credential, and capability. This limit is independent of `ai_function_rate_limit_qps_chat`; the process-wide `ai_function_max_inflight` limit still applies. Lower it for provider quotas or outbound-load control; raise it only when the provider and BE have capacity. Runtime updates take effect live and require no BE restart.
 - Introduced in: -
 
 ### ai_function_max_inflight
@@ -166,6 +176,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `agg_hash_map_prefetch_dist`.
+- Introduced in: -
+
+### arrow_io_thread_pool_size
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of threads in the process-wide I/O thread pool of Apache Arrow, which runs Arrow's asynchronous I/O tasks. `0` keeps the size Arrow chooses at startup: the value of the environment variable `ARROW_IO_THREADS` if it is a positive integer, and 8 otherwise. A value greater than `0` overrides `ARROW_IO_THREADS`. Valid range: [0, 32768]. A change takes effect immediately without a restart: growing the pool starts threads for queued tasks at once, and shrinking it lets each excess thread exit after it finishes its current task. Setting the value back to `0` restores the size Arrow chose at startup. If the value in the configuration file is out of range, the BE logs a warning and keeps the size Arrow chose.
 - Introduced in: -
 
 ### clear_udf_cache_when_start
@@ -216,6 +235,24 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
+
+### enable_compaction_flat_json_mixed_inputs
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether a compaction whose input segments store a JSON column partly as Flat JSON and partly as whole JSON reads the whole-JSON segments into the Flat JSON layout of the other segments, with every sub-column typed JSON. The output is then written while it is read instead of being held in memory as a whole segment. The JSON-typed sub-columns record the types and ranges of their values, so a later compaction can store them with the type that holds every value exactly. It takes effect only when `enable_compaction_flat_json` is `true` and the table flattens JSON.
+- Introduced in: -
+
+### enable_compaction_flat_json_partial_paths
+
+- Default: True
+- Type: Boolean
+- Unit:
+- Is mutable: Yes
+- Description: Whether a compaction of Flat JSON segments keeps a sub-column that only some input segments have, when enough rows hold it (`json_flat_sparsity_factor`). Segments without the sub-column contribute the values in their remaining JSON, and the sub-column is typed JSON when such a segment may hold values there. When disabled, a compaction keeps only the sub-columns that every input segment has, and a key that any input segment does not flatten is stored in the remaining JSON. It takes effect only when `enable_compaction_flat_json` is `true`.
+- Introduced in: -
 
 ### enable_default_value_column_zonemap_filter
 
@@ -279,6 +316,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: Whether to enable memory cache for zonemap index. Memory cache is recommended if you want to use zonemap indexes to accelerate scan.
+- Introduced in: -
+
+### exchange_sink_buffer_flush_threshold_bytes
+
+- Default: 67108864
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The maximum memory that each exchange sink driver can use to buffer rows for a shuffle before they are sent. During a shuffle, the exchange sink keeps one partial chunk for each destination pipeline driver and sends it only when the chunk is full. When the total size of these partial chunks exceeds this limit, all of them are sent immediately and cleared; if the memory they still hold exceeds half of the limit, partial chunks are released until it no longer does. A value of `0` or less disables the limit.
 - Introduced in: -
 
 ### exchg_node_buffer_size_bytes
@@ -424,6 +470,15 @@ This topic introduces the following types of BE configurations:
 - Is mutable: Yes
 - Description: The proportion of columns with the same name for Flat JSON. Extraction is not performed if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `enable_json_flat` is set to `true`.
 - Introduced in: v3.3.0
+
+### json_max_parse_nesting_depth
+
+- Default: 1024
+- Type: Int
+- Unit:
+- Is mutable: Yes
+- Description: The maximum object/array nesting depth accepted when parsing JSON (for example `parse_json`, `CAST AS JSON`, and JSON column ingestion). The parser recurses once per nesting level, so an unbounded depth allows a deeply nested document to overflow the thread stack and crash the BE. Input nested deeper than this value fails with a data quality error instead. A positive value sets the cap; a value of `0` or below keeps the built-in default (1024) rather than disabling the check.
+- Introduced in: v4.2.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 
@@ -668,6 +723,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
 
+### case_when_selective_eval_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether each `THEN` branch of a searched `CASE WHEN` is evaluated only on the rows that branch owns, instead of being evaluated over the whole chunk and having its rows picked afterwards. It only applies when the `CASE` returns a collection (ARRAY/MAP/STRUCT) or VARIANT type, where materializing a row is expensive enough to pay for compacting the branch's input rows into a sub-chunk. A branch is compacted only when `owned_rows * case_when_selective_eval_ratio < chunk_rows`, that is, when the branch owns less than `1 / case_when_selective_eval_ratio` of the chunk; a branch above the threshold is still evaluated over the whole chunk, because compacting its input would copy more than the skipped evaluation saves. Setting this item to `1` compacts every branch that does not own the whole chunk. Setting it to `0` or a negative value turns the optimization off entirely and restores the previous behavior, including the behavior change it carries: a `THEN` or `ELSE` that would raise an error is no longer evaluated when no row selects it.
+- Introduced in: -
+
 ### enable_lock_free_scan_task_queue
 
 - Default: true
@@ -740,6 +804,15 @@ This topic introduces the following types of BE configurations:
 - Description: The wait time before BufferControlBlock releases data.
 - Introduced in: -
 
+### runtime_filter_worker_thread_num
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: No
+- Description: The number of threads on each BE that merge and deliver global runtime filters. All events of one runtime filter are handled by the same thread, and different runtime filters are spread over the threads. A value less than or equal to `1` uses a single thread.
+- Introduced in: -
+
 ### scan_context_gc_interval_min
 
 - Default: 5
@@ -776,6 +849,15 @@ This topic introduces the following types of BE configurations:
 - Description: The number of threads which the storage engine used for concurrent storage volume scanning. All threads are managed in the thread pool.
 - Introduced in: -
 
+### spill_max_dir_bytes_ratio
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum proportion of disk capacity that a spill directory (`spill_local_storage_dir`) can use when it is on the same disk as a storage path (`storage_root_path`). The default value `0.5` means intermediate result spilling can use up to 50% of that disk's capacity. A spill directory on a separate disk is not subject to this limit. This value is read when the BE starts, so a change takes effect only after a restart.
+- Introduced in: v3.2.0
+
 ### string_prefix_zonemap_prefix_len
 
 - Default: 16
@@ -808,8 +890,8 @@ This topic introduces the following types of BE configurations:
 - Default: 60
 - Type: Int
 - Unit: Percent
-- Is mutable: No
-- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). The HTTP config update logic registers a callback that calls `update_primary_index_memory_limit` on the update managers, so changes would be applied to the update subsystem if the config were changed. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
+- Is mutable: Yes
+- Description: Fraction of the BE process memory reserved for update-related memory and caches. During startup `RuntimeEnv` computes the `MemTracker` for updates as process_mem_limit * clamp(update_memory_limit_percent, 0, 100) / 100. `UpdateManager` also uses this percentage to size its primary-index/index-cache capacity (index cache capacity = RuntimeEnv::process_mem_limit * update_memory_limit_percent / 100). When this value is changed at runtime, the update `MemTracker` limit, the primary index cache capacity, and the derived limits of the update state, compaction state, and primary index block caches are recalculated. Decreasing this value evicts unused primary index cache entries immediately, but memory that is in use is released only after the running loads and compactions finish. Increasing this value gives more memory to update/primary-index paths (reducing memory available for other pools); decreasing it reduces update memory and cache capacity. Values are clamped to the range 0–100.
 - Introduced in: v3.2.0
 
 ### enable_vector_index_block_cache
@@ -1076,6 +1158,33 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The time for which data loading logs are reserved.
 - Introduced in: -
 
+### load_sink_close_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads that run the final close of load sinks. In a shared-data cluster this close writes the combined transaction log to object storage; running it in this pool keeps a slow write from blocking the pipeline poller and the pipeline execution threads. When all threads are busy, further closes wait in the queue of the pool, which has no size limit, so no close is dropped. Values must be greater than 0. This limit can be changed at runtime without restarting the BE or CN. Lowering the limit does not interrupt closes already running. One worker is prestarted and retained while idle; additional workers can exit after 500 ms of idle time.
+- Introduced in: -
+
+### enable_put_combinded_txn_log_parallel
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to write the combined transaction logs of a load in parallel in a shared-data cluster. When the load sink closes, it writes one combined transaction log for each partition the load touched to object storage. When this item is set to `true`, these writes run concurrently in a dedicated thread pool, whose size is capped by `put_combined_txn_log_thread_pool_num_max` (default `64`). When it is set to `false`, the partitions are written one after another. In both cases the load waits for all writes to finish, and fails if any write fails.
+- Introduced in: -
+
+### put_combined_txn_log_thread_pool_num_max
+
+- Default: 64
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of threads in the thread pool that writes combined transaction logs to object storage in a shared-data cluster. When `enable_put_combinded_txn_log_parallel` is set to `true`, the combined transaction logs of the partitions that a load touched are written concurrently in this pool. When all threads are busy, further writes wait in the queue of the pool, which has no size limit. This limit can be changed at runtime without restarting the BE or CN. A value less than or equal to `0` is treated as `1`. Lowering the limit does not interrupt writes already running. Idle threads exit after 500 ms.
+- Introduced in: -
+
 ### enable_rejected_record_sync
 
 - Default: false
@@ -1291,6 +1400,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: When enabled, handling of load-channel open RPCs (for example, `PTabletWriterOpen`) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a `ChannelOpenTask` and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and allows tuning concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread pool submission fails (when pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when you want to enable this feature so as to avoid request rejections or delayed processing.
 - Introduced in: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether this BE takes part in the compact encoding of all-NULL columns on the tablet sink RPC, the hop on which a load routes rows to the BE that holds the target tablet. When enabled, a receiving BE advertises support for the encoding in its tablet writer open response, and a sending BE that sees the advertisement sends a row count in place of the payload of any column whose rows are all NULL, rather than a null flag and an offset for every row. This mainly helps wide tables in which most columns hold no data, and reduces both the bytes sent on this hop and the serialization work on either end. The encoding is used only when both ends of the RPC agree on it, so a mixed-version cluster or a downgrade falls back to the original layout automatically. Set this to `false` on either the sending or the receiving BE to turn the encoding off for loads that pass through that node. This item is not dynamically configurable: a receiving BE uses it both to advertise support and to decide whether to apply the encoding a sender declares, and changing it at runtime would leave those two decisions inconsistent.
+- Introduced in: v4.2.0
 
 ### enable_load_diagnose
 

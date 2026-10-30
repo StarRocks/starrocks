@@ -393,4 +393,18 @@ Status normalize_txn_log_before_save(TxnLogPB* txn_log) {
     return Status::OK();
 }
 
+void give_standalone_segments_a_bundle_offset(RowsetMetadataPB* rowset_metadata) {
+    const auto& segment_metas = rowset_metadata->segment_metas();
+    if (std::none_of(segment_metas.begin(), segment_metas.end(),
+                     [](const SegmentMetadataPB& segment_meta) { return segment_meta.has_bundle_file_offset(); })) {
+        return;
+    }
+    for (auto& segment_meta : *rowset_metadata->mutable_segment_metas()) {
+        if (!segment_meta.has_bundle_file_offset() && segment_meta.has_size()) {
+            segment_meta.set_bundle_file_offset(0);
+            segment_meta.set_synthetic_bundle_file_offset(true);
+        }
+    }
+}
+
 } // namespace starrocks::lake

@@ -551,7 +551,7 @@ TEST_F(AlterTabletMetaTest, test_skip_load_pindex) {
         std::unique_ptr<TxnLogApplier> log_applier =
                 new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false, false);
         ASSERT_OK(log_applier->apply(log));
-        ASSERT_TRUE(_tablet_mgr->update_mgr()->TEST_primary_index_refcnt(tablet_metadata->id(), 0));
+        ASSERT_TRUE(_tablet_mgr->primary_key_mgr()->TEST_primary_index_refcnt(tablet_metadata->id(), 0));
     }
 
     {
@@ -564,7 +564,7 @@ TEST_F(AlterTabletMetaTest, test_skip_load_pindex) {
         std::unique_ptr<TxnLogApplier> log_applier =
                 new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false, false);
         ASSERT_OK(log_applier->apply(log));
-        ASSERT_TRUE(_tablet_mgr->update_mgr()->TEST_primary_index_refcnt(tablet_metadata->id(), 0));
+        ASSERT_TRUE(_tablet_mgr->primary_key_mgr()->TEST_primary_index_refcnt(tablet_metadata->id(), 0));
     }
 }
 

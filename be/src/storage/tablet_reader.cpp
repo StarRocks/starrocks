@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -34,6 +35,7 @@
 #include "storage/column_predicate_rewriter.h"
 #include "storage/delete_handler.h"
 #include "storage/delete_predicates.h"
+#include "storage/flat_json_metrics.h"
 #include "storage/json_path_deriver.h"
 #include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
@@ -153,13 +155,12 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
         return Status::OK();
     }
 
-    if (!read_params.column_access_paths->empty()) {
-        VLOG(3) << "Compaction flat json paths exists: " << read_params.column_access_paths->size();
-        return Status::OK();
+    // A vertical compaction reads its column groups in turn and keeps the paths derived by earlier groups in this
+    // list: derive the JSON columns of this read that have none yet, rather than only the first group's.
+    std::unordered_set<uint32_t> columns_with_path;
+    for (const auto& path : *read_params.column_access_paths) {
+        columns_with_path.insert(path->index());
     }
-
-    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
-           read_params.column_access_paths->empty());
     int num_readers = 0;
     for (const auto& rowset : _rowsets) {
         auto segments = rowset->segments();
@@ -167,14 +168,22 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
                       [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
     }
 
+    auto flat_json_config = _tablet->flat_json_config();
+    // Only a table that flattens JSON writes the output flat; otherwise inputs read flat are merged back.
+    const bool mixed_inputs =
+            config::enable_compaction_flat_json_mixed_inputs &&
+            (flat_json_config != nullptr ? flat_json_config->is_flat_json_enabled() : config::enable_json_flat);
+
     std::vector<const ColumnReader*> readers;
     for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
         const auto& col = _tablet_schema->column(i);
         auto col_name = std::string(col.name());
-        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON ||
+            columns_with_path.contains(i)) {
             continue;
         }
         readers.clear();
+        int num_plain = 0;
         for (const auto& rowset : _rowsets) {
             for (const auto& segment : rowset->segments()) {
                 if (segment->num_rows() == 0) {
@@ -184,17 +193,26 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
                 if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
                     nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
                     readers.emplace_back(reader);
+                } else if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON) {
+                    num_plain++;
                 }
             }
         }
-        if (readers.size() == num_readers) {
-            // must all be flat json type
+        // Some inputs flat, the others whole JSON: a segment without the column reads as defaults that are
+        // never flat, so it is left to the whole-JSON path.
+        const bool mixed = !readers.empty() && readers.size() + num_plain == num_readers && num_plain > 0;
+        if (readers.size() == num_readers || (mixed && mixed_inputs)) {
             JsonPathDeriver deriver;
-            auto flat_json_config = _tablet->flat_json_config();
             deriver.init_flat_json_config(flat_json_config.get());
             deriver.derived(readers);
             auto paths = deriver.flat_paths();
             auto types = deriver.flat_types();
+            if (mixed && !paths.empty()) {
+                // A whole-JSON input may hold any value at any path; JSON keeps each as it is, and the value
+                // stats of the JSON sub-columns written let a later compaction type the paths by their values.
+                types.assign(types.size(), LogicalType::TYPE_JSON);
+                FlatJsonMetrics::instance()->flat_json_compaction_mixed_inputs_total.increment(1);
+            }
 
             VLOG(3) << "Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
             ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, col_name, i));

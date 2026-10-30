@@ -993,4 +993,13 @@ class ParserTest {
         SqlParser.parse("CREATE TABLE t(id bigint, d datetime) PARTITION BY days_add(d, 1)", new SessionVariable());
         SqlParser.parse("CREATE TABLE t(id bigint, d date) PARTITION BY years_add(d, 1)", new SessionVariable());
     }
+
+    @Test
+    void testIntervalArithmeticRejectsUnsupportedOperator() {
+        String sql = "select date '2026-06-26' + interval 1 day % 2";
+        ParsingException exception = Assertions.assertThrows(ParsingException.class,
+                () -> SqlParser.parse(sql, new SessionVariable()), sql);
+        Assertions.assertTrue(exception.getMessage().contains("Interval arithmetic only supports + and -"),
+                exception.getMessage());
+    }
 }
