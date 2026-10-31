@@ -186,8 +186,14 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 #### sink.max-retries
 
 - **Required**: No
-- **Default value**: 3
-- **Description**: The number of times that the system retries to perform the Stream Load job. This parameter is available only when you set `sink.version` to `V1`. Valid values: 0 to 10.
+- **Default value**: 3 (`0` when Merge Commit is enabled)
+- **Description**: The number of times that the system retries to perform the Stream Load job. This parameter takes effect when you set `sink.version` to `V1` or when Merge Commit is enabled. Valid values: 0 to 10. When Merge Commit is enabled, the connector does not retry failed load requests unless you explicitly set this parameter, for example, `'sink.max-retries' = '3'`. With retries enabled, the connector keeps the data of each load request in memory until the request succeeds, which increases memory usage. Because Merge Commit provides at-least-once semantics, a retried request may be loaded twice if the original request actually succeeded, for example, when its response is lost.
+
+#### sink.retry.interval-ms
+
+- **Required**: No
+- **Default value**: 10000
+- **Description**: The interval between two retries of a failed load request when Merge Commit is enabled. Unit: ms. This parameter takes effect only when `sink.max-retries` is greater than `0`. It does not take effect when `sink.version` is set to `V1`.
 
 #### sink.connect.timeout-ms
 
@@ -443,6 +449,10 @@ Below are some important notes when using Merge Commit:
 - **Only at-least-once semantic**
 
   Merge Commit only guarantees at-least-once semantic. It does not support exactly-once semantic. Do not set `sink.semantic` to `exactly-once` when Merge Commit is enabled.
+
+- **Retries are disabled by default**
+
+  When Merge Commit is enabled, `sink.max-retries` defaults to `0`, so a load request that fails due to a transient error, such as a StarRocks node being scaled in, is not retried and the sink fails. To retry failed load requests, explicitly set `sink.max-retries`, for example, `'sink.max-retries' = '3'`. You can use `sink.retry.interval-ms` to control the interval between retries.
 
 - **Ordering for Primary Key tables**
 
