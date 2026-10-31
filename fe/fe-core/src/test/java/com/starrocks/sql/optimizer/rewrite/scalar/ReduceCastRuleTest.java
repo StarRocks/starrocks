@@ -26,11 +26,13 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -261,6 +263,20 @@ public class ReduceCastRuleTest {
 
         assertTrue(result.getType().isChar());
         assertEquals(OperatorType.CONSTANT, result.getOpType());
+    }
+
+    @Test
+    public void testComplexCastIsNotReducedWhenItChecksDecimalPrecision() {
+        ScalarOperatorRewriteRule rule = new ReduceCastRule();
+        Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        Type decimal9 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 9, 0);
+        ScalarOperator array = new ColumnRefOperator(0, new ArrayType(decimal9), "a", true);
+        // An explicit cast turns an element with more than three digits into NULL, though the types match
+        ScalarOperator explicit = new CastOperator(new ArrayType(decimal3), array);
+        assertTrue(rule.apply(explicit, null) instanceof CastOperator);
+        // An implicit one keeps the elements, so it is reduced as before
+        ScalarOperator implicit = new CastOperator(new ArrayType(decimal3), array, true);
+        Assertions.assertFalse(rule.apply(implicit, null) instanceof CastOperator);
     }
 
     @Test

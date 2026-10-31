@@ -46,7 +46,7 @@ public:
 private:
     static StatusOr<Expr*> create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
                                             const TypeDescriptor& cast_type, bool allow_throw_exception,
-                                            bool cast_by_name = false);
+                                            bool cast_by_name = false, bool check_decimal_precision = false);
     static StatusOr<Expr*> create_cast_expr(ObjectPool* pool, const TExprNode& node, const TypeDescriptor& from_type,
                                             const TypeDescriptor& to_type, bool allow_throw_exception);
     static Expr* create_json_to_complex_type_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,

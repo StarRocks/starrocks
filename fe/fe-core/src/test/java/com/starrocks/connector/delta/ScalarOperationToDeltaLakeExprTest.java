@@ -25,6 +25,8 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.CharType;
 import com.starrocks.type.HLLType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import io.delta.kernel.expressions.AlwaysTrue;
 import io.delta.kernel.expressions.And;
@@ -195,6 +197,21 @@ public class ScalarOperationToDeltaLakeExprTest {
                 new CastOperator(new CharType(5), cVarcharCol, true), value);
         expected = new Predicate("=", cDeltaVarcharCol, Literal.ofString("hello"));
         Assertions.assertEquals(expected.toString(), converter.convert(List.of(implicitEquality), context).toString());
+    }
+
+    @Test
+    public void testDecimalPrecisionCastIsNotPushedDown() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+        // A cast to DECIMAL(3, 0) turns 9999 into NULL, which c_int IS NULL would miss
+        com.starrocks.type.Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        ScalarOperator isNull = new IsNullPredicateOperator(false, new CastOperator(decimal3, cIntCol));
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(isNull), context));
+
+        ScalarOperator implicitIsNull = new IsNullPredicateOperator(false, new CastOperator(decimal3, cIntCol, true));
+        Predicate expected = new Predicate("IS_NULL", cDeltaIntCol);
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(implicitIsNull), context).toString());
     }
 
     @Test

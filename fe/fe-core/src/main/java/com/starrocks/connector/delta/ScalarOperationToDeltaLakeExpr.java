@@ -388,7 +388,7 @@ public class ScalarOperationToDeltaLakeExpr {
 
         @Override
         public String visitCastOperator(CastOperator operator, Void context) {
-            if (operator.isTruncatingCharCast()) {
+            if (operator.isTruncatingCharCast() || operator.checksDecimalPrecision()) {
                 return null;
             }
             return operator.getChild(0).accept(this, context);
