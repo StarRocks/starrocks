@@ -1027,12 +1027,20 @@ TEST(SliceWithHash32Test, EscapedKeyEqualsPlainKey) {
     EXPECT_EQ(Slice(value), persisted.slice());
     EXPECT_TRUE(SliceWithHash32Equal<PhmapSeed1>()(plain, persisted));
 
+    static_assert(sizeof(SliceAggHashSet<PhmapSeed1>::key_type) == sizeof(Slice));
+    static_assert(sizeof(SliceAggTwoLevelHashSet<PhmapSeed2>::key_type) == sizeof(Slice));
+
     SliceAggHashMap<PhmapSeed1> map;
     int64_t state = 7;
     map.emplace(persisted, reinterpret_cast<AggDataPtr>(&state));
     auto it = map.find(plain);
     ASSERT_TRUE(it != map.end());
     EXPECT_EQ(&state, reinterpret_cast<int64_t*>(it->second));
+
+    SliceAggHashSet<PhmapSeed1> set;
+    set.emplace(persisted);
+    EXPECT_TRUE(set.contains(plain));
+    EXPECT_TRUE(set.contains(escaped));
 
     // A plain key is never copied into the scratch pool.
     MemPool scratch;
