@@ -27,7 +27,7 @@ description: "Query detail API 返回 FE 内存中缓存的最近查询执行详
 
 ## 响应
 
-- v1 返回 `QueryDetail` 数组。
+- v1 返回 `QueryDetail` 数组。该数组以分块传输编码（chunked transfer encoding）流式返回，响应不带 `Content-Length` 头；对于 HTTP/1.0 请求，响应体在连接关闭时结束。
 - v2 返回 `{ "code": "0", "message": "OK", "result": [ ... ] }`，其中 `result` 为 `QueryDetail` 列表。
 
 ## 认证与权限
