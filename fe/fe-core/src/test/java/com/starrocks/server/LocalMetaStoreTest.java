@@ -1055,7 +1055,8 @@ public class LocalMetaStoreTest {
                         "PROPERTIES ('replication_num' = '1')");
         long tabletsBefore = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
 
-        MockUp<TabletTaskExecutor> sendFailure = new MockUp<TabletTaskExecutor>() {
+        // The mock-up lasts until the end of the test.
+        new MockUp<TabletTaskExecutor>() {
             @Mock
             public static void buildPartitionsSequentially(long dbId, OlapTable table, List<PhysicalPartition> partitions,
                                                            int numReplicas, int numBackends,
@@ -1072,13 +1073,9 @@ public class LocalMetaStoreTest {
                 throw new RuntimeException("Send failed to node 10001: Connection refused");
             }
         };
-        try {
-            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
-                    "ALTER TABLE test.add_part_send_failed ADD PARTITION p2 VALUES [('2024-01-02'), ('2024-01-03'))"));
-            Assertions.assertTrue(e.getMessage().contains("Connection refused"), e.getMessage());
-        } finally {
-            sendFailure.tearDown();
-        }
+        Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE test.add_part_send_failed ADD PARTITION p2 VALUES [('2024-01-02'), ('2024-01-03'))"));
+        Assertions.assertTrue(e.getMessage().contains("Connection refused"), e.getMessage());
 
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable("test", "add_part_send_failed");
