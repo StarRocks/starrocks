@@ -410,6 +410,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
     有关通用分区表达式 TTL 和 `force_mv` 语义的详细指导，参考 [示例六](#示例)。
 
 - `storage_volume`：如果您使用存算分离集群，则需要指定创建物化视图的 Storage Volume 名称。该属性自 v3.1 版本起支持。如果未指定该属性，则使用默认 Storage Volume。示例：`"storage_volume" = "def_volume"`。
+- `file_bundling`：是否为异步物化视图启用 File Bundling 优化。该属性仅适用于存算分离集群，自 v26.2 版本起支持。如果未指定该属性，则由 FE 配置项 `enable_file_bundling`（默认值：`true`）决定。已有的物化视图在升级后仍不启用 File Bundling，可以通过 [ALTER MATERIALIZED VIEW](ALTER_MATERIALIZED_VIEW.md) 修改该属性。File Bundling 的作用以及修改该属性的限制，参见 [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) 中的 `file_bundling` 属性。
 - `force_external_table_query_rewrite`: 是否启用基于 External Catalog 的物化视图的查询改写。该属性自 v3.2 起支持。有效值：
   - `true`（自 v3.3 变为默认值）：启用基于 External Catalog 的物化视图的查询改写。
   - `false`：禁用基于 External Catalog 的物化视图的查询改写。

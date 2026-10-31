@@ -2293,6 +2293,14 @@ public class PropertyAnalyzer {
                 }
             }
 
+            // file_bundling
+            if (materializedView.isCloudNativeMaterializedView()) {
+                materializedView.setFileBundling(PropertyAnalyzer.analyzeFileBundling(properties));
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+                throw new AnalysisException(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING
+                        + " is only supported for materialized views in shared-data mode");
+            }
+
             // NOTE: for recognizing unknown properties, this should be put as the last if condition
             // session properties
             if (!properties.isEmpty()) {

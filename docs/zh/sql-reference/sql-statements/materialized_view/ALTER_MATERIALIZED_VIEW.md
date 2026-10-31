@@ -31,6 +31,7 @@ description: "变更异步物化视图的名称、刷新策略、状态和属性
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `file_bundling`（仅限存算分离集群，自 v26.2 起支持）
   - 所有 Session 变量属性。有关 Session 变量，详细信息请见 [系统变量](../../System_variable.md)。
 
 :::tip
@@ -131,4 +132,9 @@ ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
 示例 11：在线将 Range 分布物化视图的排序键变更为 `(k2, k1)`（自 v4.2 起支持）。
 ```SQL
 ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
+```
+
+示例 12：为存算分离集群中的物化视图启用 File Bundling（自 v26.2 起支持）。同一条语句中只能设置 `file_bundling` 这一个属性。变更以异步作业的方式执行，可以通过 [SHOW ALTER TABLE COLUMN](../table_bucket_part_index/SHOW_ALTER.md) 查看进度。修改 `file_bundling` 的限制与表相同，参见 [CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) 中的 `file_bundling` 属性。
+```SQL
+ALTER MATERIALIZED VIEW order_mv SET ("file_bundling" = "true");
 ```

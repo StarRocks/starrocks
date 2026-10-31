@@ -1085,7 +1085,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
+- 描述: 是否为云原生表启用 File Bundling 优化。自 v26.2 起，该配置也作用于存算分离集群中的异步物化视图。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为，或使用 CREATE MATERIALIZED VIEW 属性 `file_bundling` 在物化视图级别控制此行为。
 - 引入版本: v4.0
 
 ### `enable_pipeline_routine_load`

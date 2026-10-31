@@ -22,6 +22,16 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeTableAlterMetaJob;
+import com.starrocks.authorization.AccessControlProvider;
+import com.starrocks.authorization.AccessController;
+import com.starrocks.authorization.ExternalAccessController;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.catalog.BaseTableInfo;
+>>>>>>> fb429eec9de... [Enhancement][RB-810] Enable file bundling for new async materialized views and allow ALTER to change it (#67132)
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -61,6 +71,11 @@ import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.MVTestUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+>>>>>>> fb429eec9de... [Enhancement][RB-810] Enable file bundling for new async materialized views and allow ALTER to change it (#67132)
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -580,5 +595,72 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
 
         starRocksAssert.dropMaterializedView("mv6");
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv6"));
+    }
+
+    @Test
+    public void testCreateFileBundling() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        boolean savedConfig = Config.enable_file_bundling;
+        try {
+            starRocksAssert.withMaterializedView("create materialized view fb_mv_default\n" +
+                    "refresh on_change\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView defaultMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "fb_mv_default");
+            Assertions.assertTrue(defaultMv.isFileBundling());
+            Assertions.assertTrue(defaultMv.getMaterializedViewDdlStmt(true).contains("\"file_bundling\" = \"true\""));
+            starRocksAssert.dropMaterializedView("fb_mv_default");
+
+            starRocksAssert.withMaterializedView("create materialized view fb_mv_off\n" +
+                    "PROPERTIES('file_bundling' = 'false')\n" +
+                    "refresh on_change\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView offMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "fb_mv_off");
+            Assertions.assertFalse(offMv.isFileBundling());
+            starRocksAssert.dropMaterializedView("fb_mv_off");
+
+            Config.enable_file_bundling = false;
+            starRocksAssert.withMaterializedView("create materialized view fb_mv_config_off\n" +
+                    "refresh on_change\n" +
+                    "as select k2, sum(k3) as total from base_table group by k2;");
+            MaterializedView configOffMv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable(db.getFullName(), "fb_mv_config_off");
+            Assertions.assertFalse(configOffMv.isFileBundling());
+            starRocksAssert.dropMaterializedView("fb_mv_config_off");
+        } finally {
+            Config.enable_file_bundling = savedConfig;
+        }
+    }
+
+    @Test
+    public void testAlterFileBundling() throws Exception {
+        starRocksAssert.withMaterializedView("create materialized view fb_mv_alter\n" +
+                "PROPERTIES('file_bundling' = 'false')\n" +
+                "refresh on_change\n" +
+                "as select k2, sum(k3) as total from base_table group by k2;");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable(db.getFullName(), "fb_mv_alter");
+        Assertions.assertFalse(mv.isFileBundling());
+
+        Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.ddl(
+                "alter materialized view fb_mv_alter set ('file_bundling' = 'true', 'session.query_timeout' = '10')"));
+        Assertions.assertTrue(e.getMessage().contains("Can only set one table property at a time"), e.getMessage());
+        e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.ddl(
+                "alter materialized view fb_mv_alter set ('file_bundling' = 'yes')"));
+        Assertions.assertTrue(e.getMessage().contains("must be bool type"), e.getMessage());
+        e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.ddl(
+                "alter materialized view fb_mv_alter set ('file_bundling' = 'false')"));
+        Assertions.assertTrue(e.getMessage().contains("nothing need to do"), e.getMessage());
+
+        starRocksAssert.ddl("alter materialized view fb_mv_alter set ('file_bundling' = 'true')");
+        AlterJobV2 job = MVTestUtils.findAlterJobV2(db.getId(), mv.getId()).orElseThrow();
+        Assertions.assertInstanceOf(LakeTableAlterMetaJob.class, job);
+        Assertions.assertTrue(waitForSchemaChangeAlterJobFinish(job));
+        Assertions.assertTrue(mv.isFileBundling());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, mv.getState());
+
+        starRocksAssert.dropMaterializedView("fb_mv_alter");
     }
 }
