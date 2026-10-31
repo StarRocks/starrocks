@@ -29,6 +29,12 @@
 
 namespace starrocks {
 
+// How long a read of a channel stream load pipe waits for data before the pipeline scan yields. A channel can stay
+// idle for seconds between the requests of a transaction. Data and the end of the stream wake the read at once, so
+// a longer wait only means fewer wake-ups of idle channels: with a 500 us wait, the scan task of every idle channel
+// was re-queued thousands of times a second.
+static constexpr int32_t CHANNEL_PIPE_READ_WAIT_US = 20 * 1000;
+
 StreamContextMgr::StreamContextMgr(LoadStreamMgr* load_stream_mgr) : _load_stream_mgr(load_stream_mgr) {}
 
 StreamContextMgr::~StreamContextMgr() {
@@ -93,7 +99,13 @@ Status StreamContextMgr::create_channel_context(const std::string& label, int ch
     if (_load_stream_mgr == nullptr) {
         return Status::InternalError("load stream manager is not initialized");
     }
-    auto pipe = std::make_shared<StreamLoadPipe>(true);
+    // A channel stays open between the requests of a transaction and until it is committed. Its fragment reads
+    // without blocking (the pipeline scan yields on a timed-out read), so an open channel holds a connector scan
+    // thread for at most one read wait instead of until its next request, and requests are buffered like any
+    // stream load's, so an HTTP worker does not wait for the fragment to consume the previous chunk.
+    auto pipe = std::make_shared<StreamLoadPipe>(/*non_blocking_read=*/true, CHANNEL_PIPE_READ_WAIT_US,
+                                                 DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
+                                                 DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE);
     RETURN_IF_ERROR(_load_stream_mgr->put(load_id, pipe));
     ctx = new StreamLoadContext(load_id, _load_stream_mgr);
     if (ctx == nullptr) {
