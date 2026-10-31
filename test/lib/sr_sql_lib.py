@@ -3697,6 +3697,43 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             time.sleep(0.5)
         tools.assert_true(False, "compaction of %s did not commit within %ss" % (table_name, timeout))
 
+    def wait_parallel_compaction_finished(self, table_name: str, timeout: int = 60):
+        """Wait for a completed parallel compaction of a fresh, single-tablet test table.
+
+        Callers must use a unique database/table so its compaction history cannot contain an
+        earlier run, and one tablet because the profile sums subtask counts across tablets.
+        Output rowsets can be merged across subtasks, so use the profile to prove parallelism.
+        """
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], f'Fail to read current database, error=[{res["msg"]}]')
+        tools.assert_true(res["result"] and res["result"][0][0], "No current database selected")
+        partition_prefix = f"{res['result'][0][0]}.{table_name}."
+        empty_values = (None, "", "NULL", "None")
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            res = self.execute_sql("SHOW PROC '/compactions'", True)
+            tools.assert_true(res["status"], f'Fail to read compactions, error=[{res["msg"]}]')
+            # Read columns by name because newer servers also include a Warehouse column.
+            columns = [col[0] for col in res["desc"]]
+            for values in res["result"]:
+                row = dict(zip(columns, values))
+                if not row["Partition"].startswith(partition_prefix) or row["FinishTime"] in empty_values:
+                    continue
+                tools.assert_true(
+                    row["Error"] in empty_values, f"Compaction of {table_name} failed: {row['Error']}"
+                )
+                tools.assert_true(
+                    row["Profile"] not in empty_values, f"Completed compaction of {table_name} has no profile"
+                )
+                profile = json.loads(row["Profile"])
+                tools.assert_true(
+                    profile.get("sub_task_count", 0) > 1,
+                    f"Compaction of {table_name} was not parallel: {row['Profile']}",
+                )
+                return
+            time.sleep(0.5)
+        tools.assert_true(False, f"Parallel compaction of {table_name} did not finish within {timeout}s")
+
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.
 
