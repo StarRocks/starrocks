@@ -411,7 +411,8 @@ TEST_F(LakeRowsetTest, test_held_segment_bytes_tracks_loaded_column_indexes) {
             EXPECT_EQ(initial_bytes, rowset->held_segments_bytes());
             EXPECT_EQ(before + initial_bytes, gauge->value());
 
-            auto* reader = const_cast<ColumnReader*>(held[0]->column_with_uid(_tablet_schema->column(0).unique_id()));
+            auto* reader =
+                    const_cast<ColumnReader*>(held[0]->column_with_uid(_tablet_schema->column(0).unique_id()).value());
             ASSERT_NE(nullptr, reader);
             ASSERT_EQ(0, reader->num_data_pages());
             ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(held[0]->file_name()));

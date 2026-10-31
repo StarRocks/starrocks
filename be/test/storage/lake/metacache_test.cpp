@@ -204,7 +204,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     TabletReaderParams params;
     ASSERT_OK(reader->open(params));
 
-    // load segment without indexes
+    // load segment without column readers
     auto sz1 = metacache->segment_metadata_memory_usage();
 
     auto read_chunk_ptr = ChunkFactory::new_chunk(*_schema, 1024);
@@ -217,11 +217,11 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
     reader->close();
 
-    // load segment with indexes, and remove index meta (index meta is larger than index)
+    // reading built the column readers and loaded their indexes
     auto sz2 = metacache->segment_metadata_memory_usage();
     LOG(INFO) << "metadata cache memory usage: " << sz0 << "-" << sz1 << "-" << sz2;
     ASSERT_GT(sz1, sz0);
-    ASSERT_LT(sz2, sz1);
+    ASSERT_GT(sz2, sz1);
 }
 
 TEST_F(LakeMetacacheTest, test_update_capacity) {
