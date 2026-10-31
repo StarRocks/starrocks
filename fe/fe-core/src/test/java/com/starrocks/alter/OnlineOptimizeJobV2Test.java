@@ -34,6 +34,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.UUIDUtil;
@@ -137,6 +138,29 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
         Assertions.assertEquals(OlapTableState.OPTIMIZE, olapTable.getState());
+    }
+
+    @Test
+    public void testOptimizeTableRejectedUnderNewPublishMechanism() throws Exception {
+        // Online optimize does not support the new publish mechanism: the ALTER fails before it creates a job or
+        // changes the table.
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        int jobCount = schemaChangeHandler.getAlterJobsV2().size();
+
+        boolean savedEnableNewPublishMechanism = Config.enable_new_publish_mechanism;
+        Config.enable_new_publish_mechanism = true;
+        try {
+            DdlException e = Assertions.assertThrows(DdlException.class,
+                    () -> schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable));
+            Assertions.assertTrue(e.getMessage().contains("enable_new_publish_mechanism"), e.getMessage());
+        } finally {
+            Config.enable_new_publish_mechanism = savedEnableNewPublishMechanism;
+        }
+        Assertions.assertEquals(jobCount, schemaChangeHandler.getAlterJobsV2().size());
+        Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
     }
 
     // start a schema change, then finished

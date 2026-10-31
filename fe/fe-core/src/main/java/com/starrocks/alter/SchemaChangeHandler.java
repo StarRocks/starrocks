@@ -289,13 +289,6 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is not in NORMAL state");
         }
 
-        // Bucket-only optimize changes the physical layout without changing the MV-visible semantics,
-        // so we skip inactivating related MVs in that case.
-        if (shouldInactiveRelatedMaterializedViewsForOptimize(optimizeClause, olapTable)) {
-            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()));
-        }
-
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
         // create job
@@ -305,8 +298,16 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withDbId(db.getId())
                 .withTimeoutSeconds(timeoutSecond)
                 .withComputeResource(ConnectContext.get().getCurrentComputeResource());
+        // Built before the related MVs are made inactive, so that an optimize the builder rejects leaves them active.
+        AlterJobV2 optimizeJob = jobBuilder.build();
 
-        return jobBuilder.build();
+        // Bucket-only optimize changes the physical layout without changing the MV-visible semantics,
+        // so we skip inactivating related MVs in that case.
+        if (shouldInactiveRelatedMaterializedViewsForOptimize(optimizeClause, olapTable)) {
+            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableOptimized(olapTable.getName()));
+        }
+        return optimizeJob;
     }
 
     private boolean shouldInactiveRelatedMaterializedViewsForOptimize(OptimizeClause optimizeClause, OlapTable olapTable) {

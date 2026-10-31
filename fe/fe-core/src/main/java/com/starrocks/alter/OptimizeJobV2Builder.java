@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.RandomDistributionDesc;
@@ -61,6 +62,14 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
             optimizeJob.setComputeResource(computeResource);
             return optimizeJob;
         } else {
+            if (Config.enable_new_publish_mechanism) {
+                // A double write of an online optimize goes to a temp partition whose versions have a hole until the
+                // rewrite fills it. The new publish mechanism finishes a transaction only once its replicas report its
+                // version, and publishes the transactions of a table in commit order, so the rewrite would wait behind
+                // double writes that wait for it.
+                throw new DdlException("Online optimize does not support the new publish mechanism. Set the FE "
+                        + "configuration enable_new_publish_mechanism or enable_online_optimize_table to false.");
+            }
             LOG.info("Online optimize job {} is created, table: {}", jobId, table.getName());
             OnlineOptimizeJobV2 onlineOptimizeJob = new OnlineOptimizeJobV2(
                     jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
