@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.common.AIModelConfigs;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -42,12 +43,30 @@ final class AIFunctionAnalyzer {
 
         int argumentCount = node.getChildren().size();
         validateNamedArguments(node);
+        if (AIModelConfigs.getAICapability(node.getFn()) == VectorizedBuiltinFunctions.AICapability.DECISION) {
+            validateDecisionInputs(node);
+        }
         // Function analysis precedes argument coercion, including VARCHAR/JSON to ARRAY casts.
         for (int i = 0; i < argumentCount; i++) {
             if (node.getFn().getArgs()[i].isArrayType()) {
                 validateHelperArray(node.getChild(i), node.getFn().getArgs()[i], node);
             }
         }
+    }
+
+    private static void validateDecisionInputs(FunctionCallExpr node) {
+        Expr state = node.getChild(0);
+        if (!state.getType().isStringType() && !state.getType().isJsonType() && !state.getType().isNull()) {
+            throw new SemanticException("ai_decide state must have VARCHAR or JSON type", state.getPos());
+        }
+        Expr questions = node.getChild(1);
+        if (!questions.getType().isJsonType() && !questions.getType().isNull()) {
+            throw new SemanticException("ai_decide questions must have JSON type", questions.getPos());
+        }
+        if (!questions.isConstant()) {
+            throw new SemanticException("ai_decide questions must be constant", questions.getPos());
+        }
+        // BE open validates the typed schema; SQL NULL remains distinct from JSON null.
     }
 
     // Arguments have been reordered and defaults appended by the named argument framework.

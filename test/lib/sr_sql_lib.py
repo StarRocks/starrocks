@@ -3263,9 +3263,11 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             res = self.execute_sql(sql, True)
             if not res["status"]:
                 tools.assert_true(False, "acquire task state error")
-            state = res["result"][0][0]
-            if state != "RUNNING" and state != "PENDING" and state != "SUBMITTED":
-                return ""
+            # A task can be absent while the scheduler moves it from pending to running.
+            if res["result"]:
+                state = res["result"][0][0]
+                if state != "RUNNING" and state != "PENDING" and state != "SUBMITTED":
+                    return ""
             time.sleep(1)
 
     def wait_until_has_queries(self, timeout_sec=60):

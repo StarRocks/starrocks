@@ -15,6 +15,7 @@
 package com.starrocks.utframe;
 
 import com.starrocks.context.ai.AIProvider;
+import com.starrocks.context.ai.AIProviderProtocol;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -43,6 +44,10 @@ public final class AIProviderTestUtil {
         setProperty(AIProviderType.EMBEDDING, key, value);
     }
 
+    public static void setDecisionProperty(String key, String value) {
+        setProperty(AIProviderType.DECISION, key, value);
+    }
+
     public static String defaultName(AIProviderType type) {
         return "test_default_" + type.lower();
     }
@@ -52,8 +57,10 @@ public final class AIProviderTestUtil {
             AIProviderMgr manager = GlobalStateMgr.getCurrentState().getAIProviderMgr();
             clearDefault(manager, AIProviderType.CHAT);
             clearDefault(manager, AIProviderType.EMBEDDING);
+            clearDefault(manager, AIProviderType.DECISION);
             manager.dropProvider(defaultName(AIProviderType.CHAT), true);
             manager.dropProvider(defaultName(AIProviderType.EMBEDDING), true);
+            manager.dropProvider(defaultName(AIProviderType.DECISION), true);
         } catch (Exception e) {
             throw new AssertionError(e);
         }
@@ -90,7 +97,7 @@ public final class AIProviderTestUtil {
                     return;
                 }
                 manager.createProvider(name, type, Map.of("endpoint", "https://models.example.test/v1/inference",
-                        "model", "default-model", "protocol", "openai"), "");
+                        "model", "default-model", "protocol", AIProviderProtocol.defaultFor(type).lower()), "");
             }
             manager.alterProvider(name, Map.of(key, value), false);
             manager.setDefaultProvider(name);

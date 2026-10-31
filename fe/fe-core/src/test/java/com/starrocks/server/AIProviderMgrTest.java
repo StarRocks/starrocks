@@ -121,6 +121,22 @@ public class AIProviderMgrTest {
     }
 
     @Test
+    public void testDecisionTypeAndDefaultRoundTripWithoutChangingOtherTypes() throws Exception {
+        AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        mgr.createProvider("chat", AIProviderType.CHAT, chatProps(), "");
+        mgr.setDefaultProvider("chat");
+        mgr.createProvider("decision", AIProviderType.DECISION,
+                Map.of("endpoint", "https://example.test/v1/systemone", "model", "decision-model"), "");
+        mgr.setDefaultProvider("decision");
+        AIProviderMgr restored = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(mgr), AIProviderMgr.class);
+        Assertions.assertEquals(AIProviderType.DECISION, restored.getProvider("decision").getType());
+        Assertions.assertEquals(AIProviderProtocol.BAILIAN_DECISION, restored.getProvider("decision").getProtocol());
+        Assertions.assertEquals("decision", restored.getDefaultProvider(AIProviderType.DECISION).getName());
+        Assertions.assertEquals("chat", restored.getDefaultProvider(AIProviderType.CHAT).getName());
+        Assertions.assertNull(restored.getDefaultProvider(AIProviderType.EMBEDDING));
+    }
+
+    @Test
     public void testLegacyRecordWithoutProtocolIsNormalized() {
         // Records persisted before the protocol property existed: one untyped (embedding) and one rerank.
         String legacy = "{"

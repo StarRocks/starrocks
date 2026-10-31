@@ -128,7 +128,7 @@ public class VectorizedBuiltinFunctions {
     public static final Set<String> AI_FUNCTION_NAMES = ImmutableSet.of(${ai_function_names});
 
     public enum AICapability {
-        CHAT, EMBEDDING
+        CHAT, EMBEDDING, DECISION
     }
 
     public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument) {
@@ -242,7 +242,7 @@ AI_RESULT_TYPES = {
     'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
     'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
 }
-AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'JSON': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
+AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'JSON': 'JSON', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
 
 
 def validate_ai_metadata(fn_data, ai, named_args):
@@ -281,7 +281,7 @@ def validate_ai_metadata(fn_data, ai, named_args):
         'null_as_empty_arguments': [argument(name, 'null_as_empty') for name in ai.get('null_as_empty', ())],
         'blank_as_null_arguments': [argument(name, 'blank_as_null') for name in ai.get('blank_as_null', ())],
     }
-    if metadata['capability'] not in ('CHAT', 'EMBEDDING'):
+    if metadata['capability'] not in ('CHAT', 'EMBEDDING', 'DECISION'):
         invalid('unsupported capability')
     if metadata['prompt_kind'] not in AI_PROMPT_INPUT_TYPES:
         invalid('unsupported prompt kind')
@@ -296,7 +296,7 @@ def validate_ai_metadata(fn_data, ai, named_args):
     if any(arg not in AI_ARGUMENT_TYPES for arg in args):
         invalid('unsupported AI argument type')
     options = [names.index('options')] if 'options' in names else []
-    if args.count('JSON') > 1:
+    if names.count('options') > 1:
         invalid('only one options JSON is supported')
     if options and args[options[0]] != 'JSON':
         invalid('options must refer to JSON')
@@ -306,7 +306,13 @@ def validate_ai_metadata(fn_data, ai, named_args):
     inputs = metadata['input_arguments']
     if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
         invalid('invalid input argument positions')
-    if [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
+    if metadata['capability'] == 'DECISION':
+        if (metadata['prompt_kind'] != 'NONE' or metadata['result_kind'] != 'JSON'
+                or options or file_arguments
+                or [args[i] for i in inputs] not in (['VARCHAR', 'JSON'], ['JSON', 'JSON'])
+                or metadata['null_as_empty_arguments'] or metadata['blank_as_null_arguments']):
+            invalid('decision requires typed state/questions inputs and a JSON result')
+    elif [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
         invalid('input arguments must match the prompt builder contract')
 
     file_argument = metadata.setdefault('file_argument', -1)
@@ -314,8 +320,9 @@ def validate_ai_metadata(fn_data, ai, named_args):
         invalid('file_argument is out of range')
     if file_argument >= 0 and args[file_argument] != 'FILE':
         invalid('file_argument must refer to a FILE')
-    if metadata['prompt_kind'] == 'NONE' and (metadata['capability'] != 'EMBEDDING' or file_argument < 0):
-        invalid('NONE prompt requires a FILE embedding input')
+    if metadata['prompt_kind'] == 'NONE' and metadata['capability'] != 'DECISION' and (
+            metadata['capability'] != 'EMBEDDING' or file_argument < 0):
+        invalid('NONE prompt requires a FILE embedding or structured decision input')
     if metadata['capability'] == 'EMBEDDING' and file_argument >= 0 and metadata['prompt_kind'] != 'NONE':
         invalid('FILE embedding input must not use a text prompt builder')
 
@@ -463,7 +470,8 @@ static constexpr std::array<AIFunctionDescriptor, %d> kAIFunctionDescriptors = {
 ''' % (max_arguments, max_inputs, max_arguments, max_arguments, len(ai_functions))
     for fn in ai_functions:
         metadata = fn['ai']
-        arg_types = ['AIArgumentType::' + AI_ARGUMENT_TYPES[arg] for arg in fn['args']]
+        arg_types = ['AIArgumentType::' + ('OPTIONS' if param['name'] == 'options' else AI_ARGUMENT_TYPES[arg])
+                     for arg, param in zip(fn['args'], fn['named_args'])]
         arg_types += ['AIArgumentType::VARCHAR'] * (max_arguments - len(arg_types))
         inputs = metadata['input_arguments'] + [-1] * (max_inputs - len(metadata['input_arguments']))
         fields = [

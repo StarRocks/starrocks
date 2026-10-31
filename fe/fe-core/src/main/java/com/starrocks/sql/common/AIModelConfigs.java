@@ -79,6 +79,9 @@ public final class AIModelConfigs {
             case EMBEDDING -> {
                 return AIProviderType.EMBEDDING;
             }
+            case DECISION -> {
+                return AIProviderType.DECISION;
+            }
             default -> throw new SemanticException("Unsupported AI provider type: " + function.getFunctionId());
         }
     }
@@ -115,12 +118,14 @@ public final class AIModelConfigs {
 
     public static void validateProvider(AIProvider provider) {
         AIProviderType type = provider.getType();
-        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING) {
-            throw new SemanticException("AI functions require a CHAT or EMBEDDING provider, not " + type);
+        if (type != AIProviderType.CHAT && type != AIProviderType.EMBEDDING && type != AIProviderType.DECISION) {
+            throw new SemanticException("AI functions require a CHAT, EMBEDDING or DECISION provider, not " + type);
         }
         AIProviderProtocol protocol = provider.getProtocol();
-        if (protocol != AIProviderProtocol.OPENAI) {
-            throw new SemanticException("AI functions only support an OPENAI provider protocol now, not " + protocol);
+        AIProviderProtocol required = type == AIProviderType.DECISION
+                ? AIProviderProtocol.BAILIAN_DECISION : AIProviderProtocol.OPENAI;
+        if (protocol != required) {
+            throw new SemanticException("AI functions only support an " + required + " provider protocol now, not " + protocol);
         }
         String endpoint = provider.getEndpoint();
         String model = provider.getModel();

@@ -428,14 +428,17 @@ public:
         ++build_count;
         if (_build_hook) _build_hook(request);
         if (!_build_status.ok()) return _build_status;
-        return AIProviderHttpRequest{
-                .url = std::string(request.endpoint), .headers = request_headers, .body = request_body};
+        return AIProviderHttpRequest{.url = std::string(request.endpoint),
+                                     .headers = request_headers,
+                                     .body = request_body,
+                                     .response_context = response_context};
     }
 
-    AIProviderParseResult parse_response(std::string_view,
-                                         AICapability capability = AICapability::CHAT) const override {
+    AIProviderParseResult parse_response(std::string_view, AICapability capability = AICapability::CHAT,
+                                         const AIProviderResponseContext& context = {}) const override {
         ++parse_count;
         last_parse_capability = capability;
+        if (context_parse_hook) context_parse_hook(context);
         if (_parse_hook) _parse_hook();
         if (_parse_results.empty()) return AIProviderSuccess{.value = "ok"};
         AIProviderParseResult result = _parse_results.front();
@@ -453,6 +456,8 @@ public:
     mutable AICapability last_parse_capability = AICapability::CHAT;
     std::vector<AIHttpHeader> request_headers;
     std::string request_body = "{}";
+    AIProviderResponseContext response_context;
+    std::function<void(const AIProviderResponseContext&)> context_parse_hook;
 
 private:
     Status _build_status = Status::OK();
@@ -1702,6 +1707,116 @@ TEST_F(AITaskDispatcherTest, ProviderRequestTemplateReservationReleasesOnceWhenQ
     _control.run_until_idle();
     EXPECT_EQ(1, release_calls);
     EXPECT_EQ(0, _http.submit_calls);
+}
+
+TEST_F(AITaskDispatcherTest, ResponseContextIsOwnedPerRequestAcrossRetries) {
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 503);
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 200);
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 200);
+    _provider.response_context = AIProviderResponseContext(AIDecisionResponseSchema{{{"first", "noul", {}}}});
+    auto first = request(1, UniqueId{9, 81}, 1);
+    first.chat_request.capability = AICapability::DECISION;
+    submit(std::move(first));
+    _control.run_until_idle();
+    complete_next_transport_and_run_control();
+    _completion.run_until_idle();
+    ASSERT_TRUE(_results.empty());
+
+    // The shared provider can build another request while the first one backs off.
+    _provider.response_context = AIProviderResponseContext(AIDecisionResponseSchema{{{"second", "noul", {}}}});
+    auto second = request(1, UniqueId{9, 81}, 2);
+    second.chat_request.capability = AICapability::DECISION;
+    submit(std::move(second));
+    _provider.response_context = {}; // Neither template may borrow this value.
+    std::vector<std::string> seen;
+    _provider.context_parse_hook = [&](const AIProviderResponseContext& context) {
+        const auto* schema = context.decision_schema();
+        ASSERT_NE(nullptr, schema);
+        ASSERT_EQ(1, schema->questions.size());
+        seen.emplace_back(schema->questions.front().id);
+    };
+    _control.run_until_idle();
+    // Admission can queue a later request behind the retry in the same bucket.
+    _clock.advance_ns(kSecond);
+    _control.run_until_idle();
+    ASSERT_EQ(2, _http.pending());
+    complete_next_transport_and_run_control();
+    _completion.run_until_idle();
+    complete_next_transport_and_run_control();
+    _completion.run_until_idle();
+
+    std::sort(seen.begin(), seen.end());
+    EXPECT_EQ((std::vector<std::string>{"first", "second"}), seen);
+    EXPECT_EQ(2, _provider.build_count) << "a retry must reuse its original wire body and validation schema";
+    EXPECT_EQ(3, _http.submit_calls);
+    EXPECT_EQ(2, _results.size());
+}
+
+TEST_F(AITaskDispatcherTest, ResponseContextBytesParticipateInTemplateAdmission) {
+    _provider.response_context = AIProviderResponseContext(
+            AIDecisionResponseSchema{{{std::string(1024, 'q'), "choice", {"accept", "reject"}}}});
+    const auto copied_context = _provider.response_context;
+    const size_t expected = provider_request_template_bytes("https://model.invalid/v1/chat", _provider.request_headers,
+                                                            _provider.request_body) +
+                            copied_context.retained_bytes();
+    size_t reserved = 0;
+    size_t released = 0;
+    FakeAIMemoryContext memory;
+    memory.on_reserve() = [&](size_t bytes) {
+        reserved += bytes;
+        return false;
+    };
+    memory.on_release() = [&](size_t bytes) { released += bytes; };
+    auto dispatch = request(1, UniqueId{9, 82}, 1);
+    dispatch.memory = memory.context();
+    submit(std::move(dispatch));
+    EXPECT_EQ(expected, reserved);
+    EXPECT_EQ(0, released);
+    EXPECT_EQ(0, _http.submit_calls);
+    ASSERT_EQ(1, _results.size());
+    EXPECT_TRUE(std::holds_alternative<AISanitizedRowFailure>(_results.front()));
+}
+
+TEST_F(AITaskDispatcherTest, ResponseContextSurvivesCancellationDuringParsingAndReleasesOnce) {
+    _http.push_http(ScriptedAIHttpClient::Mode::PENDING_COMPLETION, 200);
+    _provider.response_context = AIProviderResponseContext(AIDecisionResponseSchema{{{"kept", "noul", {}}}});
+    size_t reserved = 0;
+    size_t released = 0;
+    size_t release_calls = 0;
+    bool parsed = false;
+    FakeAIMemoryContext memory;
+    memory.on_reserve() = [&](size_t bytes) {
+        reserved += bytes;
+        return true;
+    };
+    memory.on_release() = [&](size_t bytes) {
+        EXPECT_TRUE(parsed);
+        released += bytes;
+        ++release_calls;
+    };
+    auto dispatch = request(1, UniqueId{9, 83}, 1);
+    dispatch.memory = memory.context();
+    _provider.context_parse_hook = [&](const AIProviderResponseContext& context) {
+        const auto* schema = context.decision_schema();
+        ASSERT_NE(nullptr, schema);
+        _handles.front().cancel();
+        ASSERT_EQ(1, schema->questions.size());
+        EXPECT_EQ("kept", schema->questions.front().id);
+        EXPECT_EQ(0, released);
+        parsed = true;
+    };
+    submit(std::move(dispatch));
+    _provider.response_context = {};
+    _control.run_until_idle();
+    complete_next_transport_and_run_control();
+    _completion.run_until_idle();
+    ASSERT_TRUE(parsed);
+    ASSERT_EQ(1, _results.size());
+    EXPECT_TRUE(std::holds_alternative<AILifecycleCancelled>(_results.front()));
+    EXPECT_EQ(reserved, released);
+    EXPECT_EQ(1, release_calls);
+    _handles.front().cancel();
+    EXPECT_EQ(1, release_calls);
 }
 
 TEST_F(AITaskDispatcherTest, ParsedSuccessReservationHandoffsBeforeResponseBodyReservationIsReleased) {

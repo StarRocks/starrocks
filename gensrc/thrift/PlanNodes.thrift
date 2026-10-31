@@ -1660,13 +1660,15 @@ struct TLookUpNode {
 enum TAIProviderType {
   EMBEDDING = 0,
   CHAT = 1,
-  RERANK = 2
+  RERANK = 2,
+  DECISION = 3
 }
 
 enum TAIProviderProtocol {
   OPENAI = 0,
   ANTHROPIC = 1,
-  COHERE = 2
+  COHERE = 2,
+  BAILIAN_DECISION = 3
 }
 
 struct TAIProvider {

@@ -138,6 +138,10 @@ Status AIExecutor::_update_integer(ConfigField field, int64_t value) {
                 candidate.rate_limit_qps_embedding = static_cast<int32_t>(value);
                 notify_admission = candidate.rate_limit_qps_embedding != previous.rate_limit_qps_embedding;
                 break;
+            case ConfigField::RATE_LIMIT_QPS_DECISION:
+                candidate.rate_limit_qps_decision = static_cast<int32_t>(value);
+                notify_admission = candidate.rate_limit_qps_decision != previous.rate_limit_qps_decision;
+                break;
             case ConfigField::MAX_INFLIGHT:
                 candidate.max_inflight = static_cast<int32_t>(value);
                 notify_admission = candidate.max_inflight != previous.max_inflight;
@@ -208,6 +212,10 @@ Status AIExecutor::update_rate_limit_qps_chat(int32_t value) {
 
 Status AIExecutor::update_rate_limit_qps_embedding(int32_t value) {
     return _update_integer(ConfigField::RATE_LIMIT_QPS_EMBEDDING, value);
+}
+
+Status AIExecutor::update_rate_limit_qps_decision(int32_t value) {
+    return _update_integer(ConfigField::RATE_LIMIT_QPS_DECISION, value);
 }
 
 Status AIExecutor::update_max_inflight(int32_t value) {

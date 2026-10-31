@@ -509,12 +509,14 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 contains_control_character(model_config.model)) {
                 return Status::InvalidArgument("AI function model configuration is invalid");
             }
-            if (model_config.capability != AICapability::CHAT && model_config.capability != AICapability::EMBEDDING) {
+            if (model_config.capability != AICapability::CHAT && model_config.capability != AICapability::EMBEDDING &&
+                model_config.capability != AICapability::DECISION) {
                 return Status::InvalidArgument("AI function model capability is invalid");
             }
             Route route{.endpoint = model_config.endpoint, .capability = model_config.capability};
             ASSIGN_OR_RETURN(route.provider, create_ai_provider(model_config.protocol, model_config.capability));
-            if (model_config.protocol != AIProviderProtocol::OPENAI ||
+            if ((model_config.protocol != AIProviderProtocol::OPENAI &&
+                 model_config.protocol != AIProviderProtocol::BAILIAN_DECISION) ||
                 contains_only_ascii_whitespace(model_config.model) ||
                 contains_control_character(model_config.api_key) ||
                 (model_config.timeout_ms.has_value() &&
@@ -599,6 +601,7 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
                                     .options = request.options,
                                     .capability = route.capability,
                                     .media = request.media,
+                                    .decision = request.decision,
                             },
                     .request_deadline_ns = request_deadline_ns,
                     .attempt_timeout_ms = route.attempt_timeout_ms,
