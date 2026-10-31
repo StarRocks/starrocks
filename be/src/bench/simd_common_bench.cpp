@@ -32,13 +32,18 @@
 #include <benchmark/benchmark.h>
 
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <random>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/simd/rle_simd.h"
 #include "base/simd/simd.h"
 #include "base/simd/string_length_filter.h"
+#include "base/string/string_searcher.h"
+#include "base/string/volnitsky.h"
 
 namespace starrocks {
 
@@ -319,6 +324,159 @@ static void BM_LengthEqMask_SIMD(benchmark::State& state) {
 
 BENCHMARK(BM_LengthEqMask_Scalar)->Arg(256)->Arg(1024)->Arg(4096);
 BENCHMARK(BM_LengthEqMask_SIMD)->Arg(256)->Arg(1024)->Arg(4096);
+
+// =====================================================================
+// Constant substring search baseline (VolnitskyUTF8 vs StringSearcher)
+// =====================================================================
+//
+// Synthetic URL-like corpus matching ClickBench Q20-Q23 shape:
+//   * 4,096 rows per chunk (~68 bytes/row, ~278.5 KB/chunk)
+//   * 10 chunks in rotation (40,960 rows total) so 0.01% selectivity (1 per 10,000 rows)
+//     is accurately represented without empty-match distortion
+//   * Parameterized by (needle_len, selectivity_per_10k):
+//       needle_len          in {2, 6, 16, 32, 33, 64}
+//       selectivity_per_10k in {1 (0.01%), 10 (0.1%), 100 (1%), 1000 (10%)}
+
+static constexpr size_t kSubstringChunkRows = 4096;
+static constexpr size_t kSubstringNumChunks = 10;
+
+struct SubstringChunk {
+    std::string data;
+    std::vector<uint32_t> offsets;
+    size_t num_rows{0};
+};
+
+static std::string make_benchmark_needle(size_t needle_len) {
+    static constexpr std::string_view kTemplate = "google_analytics_campaign_source_medium_term_content_identifier1";
+    if (needle_len == 2) {
+        return "gq";
+    }
+    if (needle_len <= kTemplate.size()) {
+        return std::string(kTemplate.substr(0, needle_len));
+    }
+    std::string s(kTemplate);
+    s.append(needle_len - kTemplate.size(), 'x');
+    return s;
+}
+
+static std::vector<SubstringChunk> build_url_chunks(size_t needle_len, size_t selectivity_per_10k) {
+    // 68-byte non-matching URL templates containing realistic ASCII characters ('g', 'e', 's', 'q', '/')
+    // without containing any prefix of make_benchmark_needle >= 2 bytes.
+    static constexpr std::string_view kMissTemplates[4] = {
+            "http://yandex.ru/yandsearch?text=starrocks+olap+database&lr=213&pg=1",
+            "https://example.org/catalog/item?category=storage&region=ap-east&p=2",
+            "http://news.portal.net/article/2026/11/01/simd-vector-execution-plan",
+            "https://shop.domain.com/search?query=high+performance+analytics&id=9",
+    };
+
+    const std::string needle = make_benchmark_needle(needle_len);
+    std::vector<SubstringChunk> chunks(kSubstringNumChunks);
+
+    for (size_t c = 0; c < kSubstringNumChunks; ++c) {
+        auto& chunk = chunks[c];
+        chunk.num_rows = kSubstringChunkRows;
+        chunk.offsets.resize(kSubstringChunkRows + 1, 0);
+        chunk.data.reserve(kSubstringChunkRows * 72);
+
+        for (size_t r = 0; r < kSubstringChunkRows; ++r) {
+            const size_t global_row = c * kSubstringChunkRows + r;
+            const bool is_hit = ((global_row * 7919ULL + 5000ULL) % 10000ULL) < selectivity_per_10k;
+            std::string row(kMissTemplates[global_row & 3]);
+            if (is_hit) {
+                if (needle.size() + 12 <= row.size()) {
+                    row.replace(12, needle.size(), needle);
+                } else {
+                    row = "http://x.ru/" + needle;
+                }
+            }
+            chunk.data.append(row);
+            chunk.offsets[r + 1] = static_cast<uint32_t>(chunk.data.size());
+        }
+    }
+    return chunks;
+}
+
+static void BM_Volnitsky_Baseline(benchmark::State& state) {
+    const size_t needle_len = static_cast<size_t>(state.range(0));
+    const size_t selectivity_per_10k = static_cast<size_t>(state.range(1));
+    const std::string needle = make_benchmark_needle(needle_len);
+    const auto chunks = build_url_chunks(needle_len, selectivity_per_10k);
+    std::vector<uint8_t> res(kSubstringChunkRows, 0);
+
+    size_t chunk_idx = 0;
+    size_t total_bytes = 0;
+    for (auto _ : state) {
+        const auto& chunk = chunks[chunk_idx];
+        chunk_idx = (chunk_idx + 1 == kSubstringNumChunks) ? 0 : (chunk_idx + 1);
+
+        const char* begin = chunk.data.data();
+        const char* end = begin + chunk.data.size();
+        const char* pos = begin;
+        size_t i = 0;
+
+        // Simulates LikePredicate::constant_substring_fn per-chunk VolnitskyUTF8 construction & scan.
+        VolnitskyUTF8 searcher(needle.data(), needle.size(), static_cast<size_t>(end - pos));
+        while (pos < end && end != (pos = searcher.search(pos, static_cast<size_t>(end - pos)))) {
+            while (begin + chunk.offsets[i + 1] <= pos) {
+                res[i] = 0;
+                ++i;
+            }
+            const char* row_end = begin + chunk.offsets[i + 1];
+            res[i] = static_cast<uint8_t>(pos + needle.size() <= row_end);
+            pos = row_end;
+            ++i;
+        }
+        if (i < chunk.num_rows) {
+            std::memset(res.data() + i, 0, chunk.num_rows - i);
+        }
+        benchmark::DoNotOptimize(res.data());
+        total_bytes += chunk.data.size();
+    }
+    state.SetBytesProcessed(static_cast<int64_t>(total_bytes));
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * kSubstringChunkRows));
+}
+
+static void BM_StringSearcher_Baseline(benchmark::State& state) {
+    const size_t needle_len = static_cast<size_t>(state.range(0));
+    const size_t selectivity_per_10k = static_cast<size_t>(state.range(1));
+    const std::string needle = make_benchmark_needle(needle_len);
+    const auto chunks = build_url_chunks(needle_len, selectivity_per_10k);
+    std::vector<uint8_t> res(kSubstringChunkRows, 0);
+
+    size_t chunk_idx = 0;
+    size_t total_bytes = 0;
+    for (auto _ : state) {
+        const auto& chunk = chunks[chunk_idx];
+        chunk_idx = (chunk_idx + 1 == kSubstringNumChunks) ? 0 : (chunk_idx + 1);
+
+        const auto* begin = reinterpret_cast<const uint8_t*>(chunk.data.data());
+        const auto* end = begin + chunk.data.size();
+        const uint8_t* pos = begin;
+        size_t i = 0;
+
+        StringSearcher searcher(needle.data(), needle.size());
+        while (pos < end && end != (pos = searcher.search(pos, end))) {
+            while (begin + chunk.offsets[i + 1] <= pos) {
+                res[i] = 0;
+                ++i;
+            }
+            const uint8_t* row_end = begin + chunk.offsets[i + 1];
+            res[i] = static_cast<uint8_t>(pos + needle.size() <= row_end);
+            pos = row_end;
+            ++i;
+        }
+        if (i < chunk.num_rows) {
+            std::memset(res.data() + i, 0, chunk.num_rows - i);
+        }
+        benchmark::DoNotOptimize(res.data());
+        total_bytes += chunk.data.size();
+    }
+    state.SetBytesProcessed(static_cast<int64_t>(total_bytes));
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * kSubstringChunkRows));
+}
+
+BENCHMARK(BM_Volnitsky_Baseline)->ArgsProduct({{2, 6, 16, 32, 33, 64}, {1, 10, 100, 1000}});
+BENCHMARK(BM_StringSearcher_Baseline)->ArgsProduct({{2, 6, 16, 32, 33, 64}, {1, 10, 100, 1000}});
 
 } // namespace starrocks
 
