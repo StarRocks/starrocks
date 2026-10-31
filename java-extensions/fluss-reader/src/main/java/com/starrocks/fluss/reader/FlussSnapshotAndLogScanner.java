@@ -34,6 +34,7 @@ public class FlussSnapshotAndLogScanner extends ConnectorScannerProxy {
     private final LakeSnapshotAndFlussLogSplit split;
     @Nullable
     private final int[] projectedFields;
+    private final Duration maxLogStall;
     private LakeSnapshotAndLogSplitScanner batchScanner;
     private CloseableIterator<InternalRow> currentBatch;
     private boolean finished = false;
@@ -41,18 +42,29 @@ public class FlussSnapshotAndLogScanner extends ConnectorScannerProxy {
     public FlussSnapshotAndLogScanner(Table table, LakeSource<LakeSplit> lakeSource,
                                       LakeSnapshotAndFlussLogSplit split,
                                       @Nullable int[] projectedFields) {
+        this(table, lakeSource, split, projectedFields, StallGuardedLogScanner.MAX_STALL);
+    }
+
+    FlussSnapshotAndLogScanner(Table table, LakeSource<LakeSplit> lakeSource,
+                               LakeSnapshotAndFlussLogSplit split,
+                               @Nullable int[] projectedFields, Duration maxLogStall) {
         this.table = table;
         this.lakeSource = lakeSource;
         this.split = split;
         this.projectedFields = projectedFields;
+        this.maxLogStall = maxLogStall;
     }
 
     @Override
     void open() throws IOException {
         long stoppingOffset = split.getStoppingOffset().orElseThrow(
                 () -> new IllegalArgumentException("Stopping offset is required for Fluss hybrid split: " + split));
+        // Fluss creates the log scanner itself, so it gets a table whose log scanners fail a stalled read.
+        Table guardedTable = new StallGuardedTable(table,
+                StallGuardedLogScanner.describeRead(split.getTableBucket(), split.getStartingOffset(), stoppingOffset),
+                maxLogStall);
         batchScanner = new LakeSnapshotAndLogSplitScanner(
-                table, lakeSource, split.getLakeSplits(), split.getTableBucket(),
+                guardedTable, lakeSource, split.getLakeSplits(), split.getTableBucket(),
                 split.getStartingOffset(), stoppingOffset, projectedFields);
     }
 

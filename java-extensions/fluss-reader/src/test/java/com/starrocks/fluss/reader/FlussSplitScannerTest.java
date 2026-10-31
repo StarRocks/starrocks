@@ -31,6 +31,7 @@ import org.apache.fluss.flink.source.split.LogSplit;
 import org.apache.fluss.flink.source.split.SourceSplitSerializer;
 import org.apache.fluss.lake.source.LakeSource;
 import org.apache.fluss.lake.source.LakeSplit;
+import org.apache.fluss.lake.source.SortedRecordReader;
 import org.apache.fluss.metadata.Schema;
 import org.apache.fluss.metadata.TableBucket;
 import org.apache.fluss.metadata.TableDescriptor;
@@ -191,6 +192,42 @@ public class FlussSplitScannerTest {
         verify(scan).project(new int[] {1, 0});
         verify(lakeSource).withProject(argThat(fields -> Arrays.deepEquals(new int[][] { {1}, {0} }, fields)));
         verify(logScanner).subscribe(0, 3L);
+        verify(logScanner).close();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testSnapshotAndLogFailsWhenLogStalls() throws Exception {
+        LogScanner logScanner = mock(LogScanner.class);
+        when(logScanner.poll(any(Duration.class))).thenReturn(ScanRecords.EMPTY);
+        Scan scan = mock(Scan.class);
+        when(scan.project(any(int[].class))).thenReturn(scan);
+        when(scan.createLogScanner()).thenReturn(logScanner);
+        Table table = mock(Table.class);
+        Schema schema = Schema.newBuilder()
+                .column("id", DataTypes.INT())
+                .column("name", DataTypes.STRING())
+                .primaryKey("id")
+                .build();
+        when(table.getTableInfo()).thenReturn(TableInfo.of(
+                TablePath.of("db", "table"), 1, 1,
+                TableDescriptor.builder().schema(schema).distributedBy(1).build(), null, 0, 0));
+        when(table.newScan()).thenReturn(scan);
+        SortedRecordReader lakeReader = mock(SortedRecordReader.class);
+        when(lakeReader.order()).thenReturn((left, right) -> 0);
+        when(lakeReader.read()).thenReturn(CloseableIterator.emptyIterator());
+        LakeSource<LakeSplit> lakeSource = mock(LakeSource.class);
+        when(lakeSource.createRecordReader(any())).thenReturn(lakeReader);
+        LakeSnapshotAndFlussLogSplit split = new LakeSnapshotAndFlussLogSplit(new TableBucket(1, 0), null, null, 3, 4);
+        FlussSnapshotAndLogScanner scanner = new FlussSnapshotAndLogScanner(
+                table, lakeSource, split, new int[] {1}, Duration.ofMillis(100));
+        try {
+            scanner.open();
+            IllegalStateException error = Assertions.assertThrows(IllegalStateException.class, scanner::hasNext);
+            Assertions.assertTrue(error.getMessage().contains("from offset 3 to 4"), error.getMessage());
+        } finally {
+            scanner.close();
+        }
         verify(logScanner).close();
     }
 

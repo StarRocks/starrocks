@@ -37,14 +37,20 @@ public class FlussLogScanner extends ConnectorScannerProxy {
     private Iterator<ScanRecord> currentBatch;
     private boolean finished = false;
     private final long stoppingOffset;
+    private final Duration maxLogStall;
     private TableBucket tableBucket;
 
     public FlussLogScanner(Table table, LogSplit logSplit, int[] projectedFields) {
+        this(table, logSplit, projectedFields, StallGuardedLogScanner.MAX_STALL);
+    }
+
+    FlussLogScanner(Table table, LogSplit logSplit, int[] projectedFields, Duration maxLogStall) {
         this.table = table;
         this.logSplit = logSplit;
         this.projectedFields = projectedFields;
         this.stoppingOffset = logSplit.getStoppingOffset().orElseThrow(
                 () -> new IllegalArgumentException("Stopping offset is required for Fluss log split: " + logSplit));
+        this.maxLogStall = maxLogStall;
     }
 
     @Override
@@ -55,7 +61,9 @@ public class FlussLogScanner extends ConnectorScannerProxy {
             return;
         }
 
-        logScanner = table.newScan().project(projectedFields).createLogScanner();
+        logScanner = new StallGuardedLogScanner(table.newScan().project(projectedFields).createLogScanner(),
+                StallGuardedLogScanner.describeRead(tableBucket, logSplit.getStartingOffset(), stoppingOffset),
+                maxLogStall);
         if (tableBucket.getPartitionId() != null) {
             logScanner.subscribe(tableBucket.getPartitionId(),
                     tableBucket.getBucket(), logSplit.getStartingOffset());
@@ -77,7 +85,8 @@ public class FlussLogScanner extends ConnectorScannerProxy {
             ScanRecords records = logScanner.poll(POLL_TIMEOUT);
             List<ScanRecord> bucketRecords = records.records(tableBucket);
             if (bucketRecords.isEmpty()) {
-                // An empty poll may be a timeout; keep polling until the stopping offset is reached.
+                // An empty poll may be a timeout; keep polling until the stopping offset is reached. The log
+                // scanner fails the read if polls stop making progress.
                 continue;
             }
             currentBatch = trimToStoppingOffset(bucketRecords).iterator();

@@ -92,13 +92,31 @@ public class FlussLogScannerTest {
                         mock(Table.class), new LogSplit(bucket, null, 0), new int[] {0}));
     }
 
+    @Test
+    public void testStalledLogFailsTheRead() throws Exception {
+        LogScanner logScanner = mock(LogScanner.class);
+        when(logScanner.poll(any(Duration.class))).thenReturn(ScanRecords.EMPTY);
+        FlussLogScanner scanner = newScanner(
+                new LogSplit(new TableBucket(1, 0), null, 0, 3), logScanner, Duration.ofMillis(100));
+        scanner.open();
+
+        IllegalStateException error = Assertions.assertThrows(IllegalStateException.class, scanner::hasNext);
+        Assertions.assertTrue(error.getMessage().contains("from offset 0 to 3"), error.getMessage());
+        scanner.close();
+        verify(logScanner).close();
+    }
+
     private static FlussLogScanner newScanner(LogSplit split, LogScanner logScanner) {
+        return newScanner(split, logScanner, StallGuardedLogScanner.MAX_STALL);
+    }
+
+    private static FlussLogScanner newScanner(LogSplit split, LogScanner logScanner, Duration maxLogStall) {
         Scan scan = mock(Scan.class);
         when(scan.project(any(int[].class))).thenReturn(scan);
         when(scan.createLogScanner()).thenReturn(logScanner);
         Table table = mock(Table.class);
         when(table.newScan()).thenReturn(scan);
-        return new FlussLogScanner(table, split, new int[] {0});
+        return new FlussLogScanner(table, split, new int[] {0}, maxLogStall);
     }
 
     private static ScanRecord record(long offset, InternalRow row) {
