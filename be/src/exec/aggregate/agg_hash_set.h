@@ -486,15 +486,20 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
-        auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
-        for (size_t i = 0; i < chunk_size; ++i) {
-            const KeyType key = make_agg_slice_key<KeyType>(column->get_slice(i), &_escape_pool);
-            if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-            } else {
-                (*not_founds)[i] = !this->hash_set.contains(key);
+        const auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
+        const uint8_t* base = column->raw_bytes();
+        column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
+                if constexpr (compute_and_allocate) {
+                    this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
+                } else {
+                    (*not_founds)[i] = !this->hash_set.contains(key);
+                }
             }
-        }
+        });
         reset_agg_escape_pool(&_escape_pool);
     }
 
@@ -502,11 +507,16 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
         const auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
+        const uint8_t* base = column->raw_bytes();
         cache.clear();
         cache.reserve(chunk_size);
-        for (size_t i = 0; i < chunk_size; ++i) {
-            cache.push_back(make_agg_slice_key<KeyType>(column->get_slice(i), &_escape_pool));
-        }
+        column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                cache.push_back(make_agg_slice_key<KeyType>(s, &_escape_pool));
+            }
+        });
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -572,13 +582,29 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
+        const uint8_t* base = data_column->raw_bytes();
 
-        if (nullable_column->has_null()) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (null_data[i]) {
-                    has_null_key = true;
-                } else {
-                    const KeyType key = make_agg_slice_key<KeyType>(data_column->get_slice(i), &_escape_pool);
+        data_column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            if (nullable_column->has_null()) {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (null_data[i]) {
+                        has_null_key = true;
+                    } else {
+                        const Slice s(base + off[i], off[i + 1] - off[i]);
+                        const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
+                        if constexpr (compute_and_allocate) {
+                            this->hash_set.lazy_emplace(
+                                    key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
+                        } else {
+                            (*not_founds)[i] = !this->hash_set.contains(key);
+                        }
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    const Slice s(base + off[i], off[i + 1] - off[i]);
+                    const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
                     if constexpr (compute_and_allocate) {
                         this->hash_set.lazy_emplace(key,
                                                     [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
@@ -587,16 +613,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
                     }
                 }
             }
-        } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                const KeyType key = make_agg_slice_key<KeyType>(data_column->get_slice(i), &_escape_pool);
-                if constexpr (compute_and_allocate) {
-                    this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
-                } else {
-                    (*not_founds)[i] = !this->hash_set.contains(key);
-                }
-            }
-        }
+        });
         reset_agg_escape_pool(&_escape_pool);
     }
 
@@ -605,12 +622,17 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
                                             Filter* not_founds) {
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+        const uint8_t* base = data_column->raw_bytes();
 
         cache.clear();
         cache.reserve(chunk_size);
-        for (size_t i = 0; i < chunk_size; ++i) {
-            cache.push_back(make_agg_slice_key<KeyType>(data_column->get_slice(i), &_escape_pool));
-        }
+        data_column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                cache.push_back(make_agg_slice_key<KeyType>(s, &_escape_pool));
+            }
+        });
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
