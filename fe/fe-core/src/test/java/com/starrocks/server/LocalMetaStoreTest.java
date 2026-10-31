@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.task.TabletTaskExecutor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -1040,6 +1041,50 @@ public class LocalMetaStoreTest {
         Assertions.assertTrue(p2.getDistributionInfo().getBucketNum() > 0);
 
         starRocksAssert.dropTable("test.add_part_rf_bucket");
+    }
+
+    @Test
+    public void testAddPartitionFailedToSendTasksDropsItsTablets() throws Exception {
+        // A create replica task that cannot be sent to a backend that is down fails with a RuntimeException. The
+        // tablets of the new partition must leave the inverted index, or a decommission of that backend never ends.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_part_send_failed(dt DATE NOT NULL, k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt, k1) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p1 VALUES [('2024-01-01'), ('2024-01-02'))) " +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3 " +
+                        "PROPERTIES ('replication_num' = '1')");
+        long tabletsBefore = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
+
+        MockUp<TabletTaskExecutor> sendFailure = new MockUp<TabletTaskExecutor>() {
+            @Mock
+            public static void buildPartitionsSequentially(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                                           int numReplicas, int numBackends,
+                                                           ComputeResource computeResource,
+                                                           TabletTaskExecutor.CreateTabletOption option) {
+                throw new RuntimeException("Send failed to node 10001: Connection refused");
+            }
+
+            @Mock
+            public static void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                                           int numReplicas, int numBackends,
+                                                           ComputeResource computeResource,
+                                                           TabletTaskExecutor.CreateTabletOption option) {
+                throw new RuntimeException("Send failed to node 10001: Connection refused");
+            }
+        };
+        try {
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE test.add_part_send_failed ADD PARTITION p2 VALUES [('2024-01-02'), ('2024-01-03'))"));
+            Assertions.assertTrue(e.getMessage().contains("Connection refused"), e.getMessage());
+        } finally {
+            sendFailure.tearDown();
+        }
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_part_send_failed");
+        Assertions.assertNull(table.getPartition("p2"));
+        Assertions.assertEquals(tabletsBefore, GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount());
+        starRocksAssert.dropTable("test.add_part_send_failed");
     }
 
     @Test

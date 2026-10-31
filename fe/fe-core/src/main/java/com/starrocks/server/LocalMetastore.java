@@ -2265,6 +2265,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 TabletTaskExecutor.buildPartitionsSequentially(
                         db.getId(), table, partitions, numReplicas, numAliveNodes, computeResource, option);
             }
+        } catch (RuntimeException e) {
+            // A create replica task that cannot be sent, as to a backend that is down, fails with a RuntimeException
+            // in shared-nothing mode. The callers drop the tablets they registered for the partitions on a
+            // DdlException only, and a tablet left in the inverted index keeps a decommission of its backend from
+            // ever ending.
+            LOG.warn("failed to build {} partitions for table {}.{}", partitions.size(), db.getFullName(),
+                    table.getName(), e);
+            throw new DdlException(e.getMessage(), e);
         } finally {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
         }
