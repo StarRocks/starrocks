@@ -25,6 +25,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "formats/parquet/column_chunk_reader.h"
+#include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
@@ -1610,6 +1611,102 @@ TEST_F(IcebergSchemaEvolutionTest, TestInnerStructWithoutSubfield) {
 
         EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
     }
+}
+
+TEST_F(IcebergSchemaEvolutionTest, TestArrayStructOnlyMissingSubfieldWithListSibling) {
+    // The element struct's stored subfields hold only lists and the only used subfield was added after the file was
+    // written: a list still gives the element levels, so the array keeps its rows and the subfield reads NULL.
+    // Files (written by pyarrow, field ids as in the comments):
+    //   required int32 id = 1;
+    //   optional group arr (LIST) = 2 { repeated group list { optional group element = 3 {
+    //     optional group items (LIST) = 4 { repeated group list { optional int32 element = 5; } } } } }
+    //   with rows (1, [{[1,2]}, {[3]}]), (2, []), (3, NULL), (4, [NULL, {NULL}, {[]}]);
+    // and the same with `items` wrapped in `optional group s = 7`, so the list is reached only through a struct.
+    for (const std::string file_name : {"array_struct_only_list_subfield", "array_struct_only_nested_list_subfield"}) {
+        SCOPED_TRACE(file_name);
+        const std::string file_path =
+                "./be/test/formats/parquet/test_data/iceberg_schema_evolution/" + file_name + ".parquet";
+        auto file = _create_file(file_path);
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                        std::filesystem::file_size(file_path));
+
+        // --------------init context---------------
+        auto ctx = _create_scan_context();
+        TIcebergSchema schema = TIcebergSchema{};
+
+        TIcebergSchemaField field_id{};
+        field_id.__set_field_id(1);
+        field_id.__set_name("id");
+
+        TIcebergSchemaField field_b{};
+        field_b.__set_field_id(6);
+        field_b.__set_name("b");
+
+        TIcebergSchemaField field_element{};
+        field_element.__set_field_id(3);
+        field_element.__set_name("element");
+        field_element.__set_children({field_b});
+
+        TIcebergSchemaField field_arr{};
+        field_arr.__set_field_id(2);
+        field_arr.__set_name("arr");
+        field_arr.__set_children({field_element});
+
+        schema.__set_fields({field_id, field_arr});
+        ctx->format_scan_context.lake_schema = &schema;
+
+        TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+        TypeDescriptor element = TypeDescriptor::create_struct_type({"b"}, {TypeDescriptor(LogicalType::TYPE_INT)});
+        TypeDescriptor arr = TypeDescriptor::create_array_type(element);
+
+        Utils::SlotDesc slot_descs[] = {{"id", id}, {"arr", arr}, {""}};
+
+        TupleDescriptor* tuple_desc = parquet::Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->format_scan_context.materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
+        _set_scan_range(ctx, _create_scan_range(file_path));
+        // --------------finish init context---------------
+
+        ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(ColumnHelper::create_column(id, true), chunk->num_columns());
+        chunk->append_column(ColumnHelper::create_column(arr, true), chunk->num_columns());
+
+        ASSERT_OK(file_reader->get_next(&chunk));
+        ASSERT_EQ(4, chunk->num_rows());
+
+        EXPECT_EQ("[1, [{b:NULL},{b:NULL}]]", chunk->debug_row(0));
+        EXPECT_EQ("[2, []]", chunk->debug_row(1));
+        EXPECT_EQ("[3, NULL]", chunk->debug_row(2));
+        EXPECT_EQ("[4, [NULL,{b:NULL},{b:NULL}]]", chunk->debug_row(3));
+    }
+}
+
+TEST_F(IcebergSchemaEvolutionTest, TestStructLevelSourcePrefersDirectList) {
+    // A list under a struct subfield is the last resort: a direct list subfield is taken even when it comes later.
+    auto make_field = [](std::string name, ColumnType type, std::vector<ParquetField> children = {}) {
+        ParquetField field{};
+        field.name = std::move(name);
+        field.type = type;
+        field.physical_type = tparquet::Type::INT32;
+        field.children = std::move(children);
+        return field;
+    };
+    auto make_list = [&](std::string name) {
+        return make_field(std::move(name), ColumnType::ARRAY, {make_field("element", ColumnType::SCALAR)});
+    };
+
+    ParquetField element = make_field("element", ColumnType::STRUCT,
+                                      {make_field("s", ColumnType::STRUCT, {make_list("items")}), make_list("tiny")});
+    const ParquetField* source = ColumnReaderFactory::find_struct_level_source(element);
+    ASSERT_NE(nullptr, source);
+    EXPECT_EQ("tiny", source->name);
+
+    element.children.pop_back();
+    source = ColumnReaderFactory::find_struct_level_source(element);
+    ASSERT_NE(nullptr, source);
+    EXPECT_EQ("s", source->name);
 }
 
 } // namespace starrocks::parquet
