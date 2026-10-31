@@ -197,6 +197,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         return (OlapTable) table;
     }
 
+    // Until the table is stable (OlapTableState.WAITING_STABLE) the job has created nothing on it, and it rewrites only
+    // the partitions it was created for: loads may create partitions meanwhile, as they may once it runs
+    // (OlapTableState.OPTIMIZE). The wait lasts as long as a replica repair, and would fail every such load.
+    @Override
+    public boolean allowConcurrentPartitionCreation() {
+        return jobState == JobState.PENDING;
+    }
+
     /**
      * runPendingJob():
      * 1. Create all temp partitions and wait them finished.

@@ -568,6 +568,38 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testLoadCreatesPartitionWhileJobWaitsForStableTable() throws Exception {
+        // The job waits for the table to become stable as long as a replica repair takes. A load that creates a
+        // partition by expression must not fail meanwhile, as it does not once the job runs (OPTIMIZE).
+        OlapTable table = createPartitionedTable("t_optimize_unstable_new_partition");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        AlterTableStmt optimize = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " DISTRIBUTED BY HASH(k1) BUCKETS 2", starRocksAssert.getCtx());
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.process(optimize.getAlterClauseList(), db, table);
+        OptimizeJobV2 job = (OptimizeJobV2) schemaChangeHandler.getUnfinishedAlterJobV2ByTableId(table.getId()).get(0);
+
+        Replica replica = ((LocalTablet) table.getPartition("p1").getDefaultPhysicalPartition().getLatestBaseIndex()
+                .getTablets().get(0)).getImmutableReplicas().get(0);
+        replica.setState(Replica.ReplicaState.DECOMMISSION);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(OlapTableState.WAITING_STABLE, table.getState());
+
+        AlterTableStmt addPartition = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " ADD PARTITION p3 VALUES LESS THAN ('30')", starRocksAssert.getCtx());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(starRocksAssert.getCtx(), db,
+                table.getName(), (AddPartitionClause) addPartition.getAlterClauseList().get(0));
+        Assertions.assertNotNull(table.getPartition("p3"));
+
+        // Once the table is stable, the job rewrites the partitions it was created for only.
+        replica.setState(Replica.ReplicaState.NORMAL);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
+        Assertions.assertEquals(2, job.getTmpPartitionIds().size());
+    }
+
+    @Test
     public void testColumnChangeCancelledByPartitionCreatedDuringJob() throws Exception {
         // A partition created while the job runs, as a load creates one by expression, keeps the old distribution
         // columns: the job must not give the table new ones, or no load could write that partition with the others.

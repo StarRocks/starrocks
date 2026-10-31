@@ -1039,10 +1039,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * Whether a partition may be added to {@code olapTable} while it is in a non-NORMAL state.
      * Only the metadata-only, provably-safe alter situations are tolerated (gated by
      * {@link Config#enable_concurrent_add_partition_during_alter}): the transient UPDATING_META
-     * window of fast schema evolution, and the shared-data ADD/DROP INDEX fast-path jobs that
-     * declare {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}. The
-     * consistency guarantee for the newly built tablets is provided by checkIfMetaChange under
-     * the table WRITE lock, not by this coarse table-state check.
+     * window of fast schema evolution, and the alter jobs that declare
+     * {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}: the shared-data
+     * ADD/DROP INDEX fast-path jobs, and the optimize jobs while they wait for the table to become
+     * stable (WAITING_STABLE). The consistency guarantee for the newly built tablets is provided by
+     * checkIfMetaChange under the table WRITE lock, not by this coarse table-state check.
      */
     private boolean allowAddPartitionDuringAlter(OlapTable olapTable) {
         if (!Config.enable_concurrent_add_partition_during_alter) {
@@ -1050,7 +1051,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         OlapTable.OlapTableState state = olapTable.getState();
         return state == OlapTable.OlapTableState.UPDATING_META
-                || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
+                || ((state == OlapTable.OlapTableState.SCHEMA_CHANGE || state == OlapTable.OlapTableState.WAITING_STABLE)
                     && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
     }
 

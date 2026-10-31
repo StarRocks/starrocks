@@ -53,6 +53,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -290,6 +291,39 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         replica1.setState(Replica.ReplicaState.NORMAL);
         optimizeJob.runPendingJob();
         Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+    }
+
+    @Test
+    public void testLoadCreatesPartitionWhileJobWaitsForStableTable() throws Exception {
+        // The job waits for the table to become stable as long as a replica repair takes. A load that creates a
+        // partition by expression must not fail meanwhile, as it does not once the job runs (OPTIMIZE).
+        OlapTable table = createPartitionedTable("t_online_optimize_unstable_new_partition");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        AlterTableStmt optimize = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " DISTRIBUTED BY HASH(k1) BUCKETS 2", starRocksAssert.getCtx());
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.process(optimize.getAlterClauseList(), db, table);
+        OnlineOptimizeJobV2 job =
+                (OnlineOptimizeJobV2) schemaChangeHandler.getUnfinishedAlterJobV2ByTableId(table.getId()).get(0);
+
+        Replica replica = ((LocalTablet) table.getPartition("p1").getDefaultPhysicalPartition().getLatestBaseIndex()
+                .getTablets().get(0)).getImmutableReplicas().get(0);
+        replica.setState(Replica.ReplicaState.DECOMMISSION);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(OlapTableState.WAITING_STABLE, table.getState());
+
+        AlterTableStmt addPartition = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " ADD PARTITION p3 VALUES LESS THAN ('30')", starRocksAssert.getCtx());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(starRocksAssert.getCtx(), db,
+                table.getName(), (AddPartitionClause) addPartition.getAlterClauseList().get(0));
+        Assertions.assertNotNull(table.getPartition("p3"));
+
+        // Once the table is stable, the job rewrites the partitions it was created for only.
+        replica.setState(Replica.ReplicaState.NORMAL);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
+        Assertions.assertEquals(2, job.getTmpPartitionIds().size());
     }
 
     @Test
