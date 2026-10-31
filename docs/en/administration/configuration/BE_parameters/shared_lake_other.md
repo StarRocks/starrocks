@@ -158,6 +158,15 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum number of input rowsets allowed in a Primary Key table compaction task in a shared-data cluster. The default value of this parameter is changed from `5` to `1000` since v3.2.4 and v3.1.10, and to `500` since v3.3.1 and v3.2.9. After the Sized-tiered Compaction policy is enabled for Primary Key tables (by setting `enable_pk_size_tiered_compaction_strategy` to `true`), StarRocks does not need to limit the number of rowsets for each compaction to reduce write amplification. Therefore, the default value of this parameter is increased.
 - Introduced in: v3.1.8, v3.2.3
 
+### lake_pk_compaction_max_rowsets_per_level
+
+- Default: 20
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The number of rowsets that still need compaction at which a size level of a Primary Key table in a shared-data cluster is merged even if it does not have the highest score. The Size-tiered Compaction policy merges only the level with the highest score in each round. While loads keep arriving, the level of the newest and smallest rowsets has the highest score in every round, so a level of larger rowsets (outputs of earlier compactions and medium-sized loads) keeps growing. This increases the number of segments that queries read, and shows up as a spike in the compaction score right after a compaction finishes. When a level that is not picked holds this many rowsets that still need compaction, and these rowsets fit in the same compaction task as the picked ones, the level is merged in that compaction task. Set it to `0` to disable this behavior.
+- Introduced in: -
+
 ### lake_pk_compaction_base_enable_delete_trigger
 
 - Default: false
