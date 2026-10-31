@@ -1576,6 +1576,7 @@ esac
     def test_parallelism_unknown_ram_conservative_fallback(self):
         # Mock 64 cpus, 0 RAM (unknown/unreadable) on modern linker -> fallback to conservative 64 // 4 + 1 = 17
         cmd = """
+        starrocks_is_darwin() { return 1; }
         starrocks_detect_parallelism() { echo 64; }
         starrocks_detect_total_ram_gb() { echo 0; }
         starrocks_detect_linker_type() { echo modern; }
@@ -1591,6 +1592,7 @@ esac
     def test_parallelism_ram_constrained_topology(self):
         # Mock 16 cpus, but only 8 GB RAM on modern linker -> clamp to min(16, 8 // 2) = 4
         cmd = """
+        starrocks_is_darwin() { return 1; }
         starrocks_detect_parallelism() { echo 16; }
         starrocks_detect_total_ram_gb() { echo 8; }
         starrocks_detect_linker_type() { echo modern; }
@@ -1602,6 +1604,7 @@ esac
     def test_parallelism_high_spec_topology(self):
         # Mock 18 cpus, 64 GB RAM on modern linker (typical CI) -> min(18, 64 // 2) = 18
         cmd = """
+        starrocks_is_darwin() { return 1; }
         starrocks_detect_parallelism() { echo 18; }
         starrocks_detect_total_ram_gb() { echo 64; }
         starrocks_detect_linker_type() { echo modern; }
@@ -1613,6 +1616,7 @@ esac
     def test_parallelism_legacy_bfd_fallback(self):
         # Mock 16 cpus on legacy bfd -> 16 // 4 + 1 = 5
         cmd = """
+        starrocks_is_darwin() { return 1; }
         starrocks_detect_parallelism() { echo 16; }
         starrocks_detect_total_ram_gb() { echo 64; }
         starrocks_detect_linker_type() { echo legacy; }
@@ -1623,6 +1627,7 @@ esac
 
     def test_parallelism_zero_or_negative_clamp(self):
         cmd = """
+        starrocks_is_darwin() { return 1; }
         starrocks_detect_parallelism() { echo 0; }
         starrocks_detect_total_ram_gb() { echo 0; }
         starrocks_detect_linker_type() { echo modern; }
@@ -2024,6 +2029,214 @@ esac
             text=True,
         )
         self.assertIn("FLAG_PARALLEL=11", res_flag.stdout)
+
+    def test_detect_linker_type_quoted_flags_with_spaces(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spaced_bin = os.path.join(tmpdir, "bfd tools", "bin")
+            os.makedirs(spaced_bin, exist_ok=True)
+            bfd_ld = os.path.join(spaced_bin, "ld.bfd")
+            with open(bfd_ld, "w") as f:
+                f.write('#!/usr/bin/env bash\necho "GNU ld (GNU Binutils) 2.40"\n')
+            os.chmod(bfd_ld, 0o755)
+
+            plain_ld = os.path.join(spaced_bin, "ld")
+            with open(plain_ld, "w") as f:
+                f.write('#!/usr/bin/env bash\necho "GNU ld (GNU Binutils) 2.40"\n')
+            os.chmod(plain_ld, 0o755)
+
+            mock_gxx = os.path.join(tmpdir, "g++")
+            with open(mock_gxx, "w") as f:
+                f.write("""#!/usr/bin/env bash
+b_dir=""
+prev_b=0
+for arg in "$@"; do
+    if [[ "${prev_b}" -eq 1 ]]; then
+        b_dir="${arg}"
+        prev_b=0
+    elif [[ "${arg}" == "-B" ]]; then
+        prev_b=1
+    elif [[ "${arg}" == -B* ]]; then
+        b_dir="${arg#-B}"
+    fi
+done
+for arg in "$@"; do
+    if [[ "${arg}" == "-Wl,--version" ]]; then
+        if [[ -n "${b_dir}" && -x "${b_dir}/ld" ]]; then
+            "${b_dir}/ld" -v
+            exit 0
+        fi
+        echo "LLD 17.0.6"
+        exit 0
+    fi
+done
+echo "13.2.0"
+""")
+            os.chmod(mock_gxx, 0o755)
+            mock_cc = os.path.join(tmpdir, "gcc")
+            with open(mock_cc, "w") as f:
+                f.write("#!/usr/bin/env bash\necho 13.2.0\n")
+            os.chmod(mock_cc, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            starrocks_detect_linker_type
+            """
+            # 1. Double-quoted --ld-path with spaces
+            out_dq = self.run_bash(
+                cmd,
+                {
+                    "CC": mock_cc,
+                    "CXX": mock_gxx,
+                    "LDFLAGS": f'--ld-path="{bfd_ld}"',
+                },
+            )
+            self.assertEqual(out_dq, "legacy")
+
+            # 2. Single-quoted --ld-path with spaces
+            out_sq = self.run_bash(
+                cmd,
+                {
+                    "CC": mock_cc,
+                    "CXX": mock_gxx,
+                    "LDFLAGS": f"--ld-path='{bfd_ld}'",
+                },
+            )
+            self.assertEqual(out_sq, "legacy")
+
+            # 3. Attached -B"<dir with spaces>" in STARROCKS_CXX_COMMON_FLAGS
+            out_b_attached = self.run_bash(
+                cmd,
+                {
+                    "CC": mock_cc,
+                    "CXX": mock_gxx,
+                    "STARROCKS_CXX_COMMON_FLAGS": f'-B"{spaced_bin}"',
+                },
+            )
+            self.assertEqual(out_b_attached, "legacy")
+
+            # 4. Separate -B "<dir with spaces>" in STARROCKS_CXX_COMMON_FLAGS
+            out_b_sep = self.run_bash(
+                cmd,
+                {
+                    "CC": mock_cc,
+                    "CXX": mock_gxx,
+                    "STARROCKS_CXX_COMMON_FLAGS": f'-B "{spaced_bin}"',
+                },
+            )
+            self.assertEqual(out_b_sep, "legacy")
+
+    def test_detect_linker_type_clang_via_cxx_wrapper_and_compiler_id(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bfd_ld = os.path.join(tmpdir, "ld.bfd")
+            with open(bfd_ld, "w") as f:
+                f.write('#!/usr/bin/env bash\necho "GNU ld (GNU Binutils) 2.40"\n')
+            os.chmod(bfd_ld, 0o755)
+
+            gcc_home = os.path.join(tmpdir, "gcc toolchain")
+            gcc_bin = os.path.join(gcc_home, "bin")
+            os.makedirs(gcc_bin, exist_ok=True)
+            gcc_ld = os.path.join(gcc_bin, "ld")
+            with open(gcc_ld, "w") as f:
+                f.write('#!/usr/bin/env bash\necho "GNU ld (GNU Binutils) 2.40"\n')
+            os.chmod(gcc_ld, 0o755)
+
+            # Compiler binary named 'c++' (does not contain 'clang' in filename)
+            mock_cxx = os.path.join(tmpdir, "c++")
+            with open(mock_cxx, "w") as f:
+                f.write("""#!/usr/bin/env bash
+toolchain_dir=""
+for arg in "$@"; do
+    case "${arg}" in
+        --version)
+            echo "Ubuntu clang version 17.0.6"
+            exit 0
+            ;;
+        --gcc-toolchain=*)
+            toolchain_dir="${arg#--gcc-toolchain=}"
+            ;;
+    esac
+done
+for arg in "$@"; do
+    if [[ "${arg}" == "-Wl,--version" ]]; then
+        if [[ -n "${toolchain_dir}" && -x "${toolchain_dir}/bin/ld" ]]; then
+            "${toolchain_dir}/bin/ld" -v
+            exit 0
+        fi
+        echo "LLD 17.0.6"
+        exit 0
+    fi
+done
+echo "17.0.6"
+""")
+            os.chmod(mock_cxx, 0o755)
+            mock_cc = os.path.join(tmpdir, "cc")
+            with open(mock_cc, "w") as f:
+                f.write('#!/usr/bin/env bash\necho "Ubuntu clang version 17.0.6"\n')
+            os.chmod(mock_cc, 0o755)
+
+            cmd = """
+            starrocks_is_darwin() { return 1; }
+            starrocks_detect_linker_type "$1"
+            """
+            # 1. Pre-CMake invocation via CC=cc CXX=c++: detects Clang via --version and gives --ld-path precedence over -fuse-ld=lld
+            out_wrapper = self.run_bash(
+                cmd,
+                {
+                    "CC": mock_cc,
+                    "CXX": mock_cxx,
+                    "LDFLAGS": f"--ld-path={bfd_ld} -fuse-ld=lld",
+                },
+            )
+            self.assertEqual(out_wrapper, "legacy")
+
+            # 2. Pre-CMake invocation via CC=cc CXX=c++ with STARROCKS_GCC_HOME (with spaces): forwards --gcc-toolchain
+            out_toolchain = self.run_bash(
+                cmd,
+                {
+                    "CC": mock_cc,
+                    "CXX": mock_cxx,
+                    "STARROCKS_GCC_HOME": gcc_home,
+                },
+            )
+            self.assertEqual(out_toolchain, "legacy")
+
+            # 3. CMake-configured build dir where compiler path is /usr/bin/c++ and CMAKE_CXX_COMPILER_ID is Clang
+            build_dir = os.path.join(tmpdir, "build_ASAN")
+            cmake_files_dir = os.path.join(build_dir, "CMakeFiles", "3.28.0")
+            os.makedirs(cmake_files_dir, exist_ok=True)
+            with open(
+                os.path.join(cmake_files_dir, "CMakeCXXCompiler.cmake"), "w"
+            ) as f:
+                f.write(
+                    f'set(CMAKE_CXX_COMPILER "{mock_cxx}")\n'
+                    'set(CMAKE_CXX_COMPILER_ID "Clang")\n'
+                )
+            with open(os.path.join(build_dir, "CMakeCache.txt"), "w") as f:
+                f.write(
+                    f"CMAKE_EXE_LINKER_FLAGS:STRING=--ld-path={bfd_ld} -fuse-ld=lld\n"
+                )
+
+            out_cmake_id = self.run_bash(
+                f'starrocks_is_darwin() {{ return 1; }}\nstarrocks_detect_linker_type "{build_dir}"'
+            )
+            self.assertEqual(out_cmake_id, "legacy")
+
+    def test_parallelism_darwin_fallback(self):
+        cmd_darwin = """
+        starrocks_is_darwin() { return 0; }
+        starrocks_detect_parallelism() { echo 16; }
+        starrocks_detect_ut_parallelism
+        """
+        p = self.run_bash(cmd_darwin, {"PARALLEL": ""})
+        self.assertEqual(p, "16")
+
+        cmd_darwin_clamp = """
+        starrocks_is_darwin() { return 0; }
+        starrocks_detect_parallelism() { echo 0; }
+        starrocks_detect_ut_parallelism
+        """
+        p_clamp = self.run_bash(cmd_darwin_clamp, {"PARALLEL": ""})
+        self.assertEqual(p_clamp, "1")
 
 
 if __name__ == "__main__":
