@@ -47,6 +47,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -88,9 +89,18 @@ public final class RangePartitionDiffer extends PartitionDiffer {
 
     /**
      * Diff considering refresh range and TTL
+     *
+     * @param applyAtomicReplacement when {@code true}, a bounded refresh replaces a partition set
+     *                               atomically: a component that contains both additions and deletions
+     *                               and is not entirely inside the refresh range is left untouched.
+     *                               This is only needed for a shape change: the mirror mapper, or an
+     *                               MV that still holds coarse mirror partitions after the mapper is
+     *                               disabled. The default mappings are granularity-preserving and keep
+     *                               the previous behavior.
      */
     public PartitionDiff diff(PCellSortedSet srcRangeMap,
-                              PCellSortedSet dstRangeMap) {
+                              PCellSortedSet dstRangeMap,
+                              boolean applyAtomicReplacement) {
         Map<String, PCell> adds = null;
         try {
             PCellSortedSet prunedAdd = pruneAddedPartitions(srcRangeMap);
@@ -100,7 +110,114 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             throw new RuntimeException(e);
         }
         Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
+        // A bounded refresh (PARTITION START/END) must replace a partition set atomically; see
+        // excludePartiallyReplacedComponents for the reason.
+        if (rangeToInclude != null && applyAtomicReplacement) {
+            excludePartiallyReplacedComponents(srcRangeMap, dstRangeMap, adds, deletes);
+        }
         return new PartitionDiff(PCellSortedSet.of(adds), PCellSortedSet.of(deletes));
+    }
+
+    /**
+     * A bounded refresh (PARTITION START/END) must replace a partition set atomically. When a shape
+     * change swaps one or more old MV partitions for one or more mapped partitions (fine to coarse
+     * after merging history into month partitions, or coarse to fine after disabling the mirror
+     * mapper), applying only the in-range half would either drop out-of-range history without its
+     * replacement, or create partitions overlapping the kept ones.
+     *
+     * <p>Group the raw diff into connected components; a component that contains both additions and
+     * deletions is applied only if it lies entirely inside {@code rangeToInclude}, otherwise it is
+     * left completely untouched. Components are formed by strict overlap (not mere endpoint
+     * adjacency), so an unrelated genuine deletion and a pure addition that merely touch are never
+     * fused into one replacement.
+     */
+    private void excludePartiallyReplacedComponents(PCellSortedSet srcRangeMap,
+                                                    PCellSortedSet dstRangeMap,
+                                                    Map<String, PCell> adds,
+                                                    Map<String, PCell> deletes) {
+        if (deletes.isEmpty()) {
+            return;
+        }
+        // Pre-prune replacement relationships: a source range not matching an existing MV partition
+        // is a potential addition, an MV range not matching a source range is a deletion.
+        Map<String, PCell> rawAdds = diffRange(srcRangeMap, dstRangeMap);
+        if (rawAdds.isEmpty()) {
+            return;
+        }
+        List<ReplacementRange> ranges = Lists.newArrayListWithCapacity(rawAdds.size() + deletes.size());
+        for (Map.Entry<String, PCell> entry : rawAdds.entrySet()) {
+            ranges.add(new ReplacementRange(entry.getKey(), ((PRangeCell) entry.getValue()).getRange(), true));
+        }
+        for (Map.Entry<String, PCell> entry : deletes.entrySet()) {
+            ranges.add(new ReplacementRange(entry.getKey(), ((PRangeCell) entry.getValue()).getRange(), false));
+        }
+        ranges.sort(Comparator.comparing(range -> range.range.lowerEndpoint()));
+
+        // Sweep connected components; two ranges are connected only when they strictly overlap.
+        PartitionKey lo = null;
+        PartitionKey hi = null;
+        List<String> addNames = Lists.newArrayList();
+        List<String> deleteNames = Lists.newArrayList();
+        for (ReplacementRange range : ranges) {
+            if (lo == null) {
+                lo = range.range.lowerEndpoint();
+                hi = range.range.upperEndpoint();
+            } else if (range.range.lowerEndpoint().compareTo(hi) < 0) {
+                // strict overlap: ranges that only touch at an endpoint (e.g. [05-01,05-02) and
+                // [05-02,05-03)) must stay in separate components, otherwise an unrelated genuine
+                // deletion and a pure addition would be fused into one replacement component.
+                if (range.range.upperEndpoint().compareTo(hi) > 0) {
+                    hi = range.range.upperEndpoint();
+                }
+            } else {
+                excludeComponentIfPartiallyInRange(lo, hi, addNames, deleteNames, adds, deletes);
+                lo = range.range.lowerEndpoint();
+                hi = range.range.upperEndpoint();
+                addNames = Lists.newArrayList();
+                deleteNames = Lists.newArrayList();
+            }
+            if (range.isAdd) {
+                addNames.add(range.name);
+            } else {
+                deleteNames.add(range.name);
+            }
+        }
+        excludeComponentIfPartiallyInRange(lo, hi, addNames, deleteNames, adds, deletes);
+    }
+
+    private void excludeComponentIfPartiallyInRange(PartitionKey lo,
+                                                    PartitionKey hi,
+                                                    List<String> addNames,
+                                                    List<String> deleteNames,
+                                                    Map<String, PCell> adds,
+                                                    Map<String, PCell> deletes) {
+        // pure additions / genuine removals keep the existing behavior
+        if (addNames.isEmpty() || deleteNames.isEmpty()) {
+            return;
+        }
+        boolean fullyInRange = rangeToInclude.lowerEndpoint().compareTo(lo) <= 0
+                && rangeToInclude.upperEndpoint().compareTo(hi) >= 0;
+        if (fullyInRange) {
+            return;
+        }
+        for (String name : addNames) {
+            adds.remove(name);
+        }
+        for (String name : deleteNames) {
+            deletes.remove(name);
+        }
+    }
+
+    private static final class ReplacementRange {
+        private final String name;
+        private final Range<PartitionKey> range;
+        private final boolean isAdd;
+
+        private ReplacementRange(String name, Range<PartitionKey> range, boolean isAdd) {
+            this.name = name;
+            this.range = range;
+            this.isAdd = isAdd;
+        }
     }
 
     /**

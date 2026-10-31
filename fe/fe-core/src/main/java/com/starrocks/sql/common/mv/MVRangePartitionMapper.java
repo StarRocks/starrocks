@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.common.mv;
 
+import com.starrocks.common.Config;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.type.PrimitiveType;
 
@@ -25,12 +26,15 @@ import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
  * {@link MVRangePartitionMapper} is used to map the partition range of the base table to the partition range of mv,
  * It's for the mv with partition expr(e.g. {@code date_trunc(granularity, dt)}).
  * </p>
- * Why are there two different implementations of {@link MVRangePartitionMapper}?
+ * Why are there several different implementations of {@link MVRangePartitionMapper}?
  * * Eager mode, which will map/unroll the base table partition range by the granularity of mv partition expr.
  * * Lazy mode, which will use the base table partition range directly and make the mv's range mapping continuous.
+ * * Mirror mode, which mirrors the base table's actual partition boundaries (snapped to the mv granularity) without
+ *   unrolling them, so mixed-granularity base tables (merged months + recent days) keep mixed-granularity mv
+ *   partitions. It's only enabled when {@code enable_mv_mirror_base_partition} is on.
  * </p>
  * But eager mode may generate too many partitions when the granularity is {@code minute or hour}, so distinguish them
- * by granularity.
+ * by granularity: sub-day granularities always use lazy, day and coarser use eager by default (or mirror if enabled).
  */
 public abstract class MVRangePartitionMapper {
     /**
@@ -52,8 +56,11 @@ public abstract class MVRangePartitionMapper {
     public static MVRangePartitionMapper getInstance(String granularity) {
         if (granularity != null && TIME_MAP.containsKey(granularity) && TIME_MAP.get(granularity) < TIME_MAP.get(DAY)) {
             return MVLazyRangePartitionMapper.INSTANCE;
-        } else {
-            return MVEagerRangePartitionMapper.INSTANCE;
         }
+        if (Config.enable_mv_mirror_base_partition) {
+            // day and coarser: mirror the base table's actual (possibly mixed) partition boundaries.
+            return MVMirrorRangePartitionMapper.INSTANCE;
+        }
+        return MVEagerRangePartitionMapper.INSTANCE;
     }
 }
