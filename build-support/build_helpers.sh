@@ -350,6 +350,77 @@ starrocks_classify_linker_spec() {
     return 0
 }
 
+starrocks_tokenize_flags() {
+    local input="${1:-}"
+    STARROCKS_TOKENIZED_FLAGS=()
+    local i=0
+    local len="${#input}"
+    local in_single=0
+    local in_double=0
+    local escaped=0
+    local token=""
+    local has_token=0
+    local ch=""
+    local next_ch=""
+
+    while [[ "${i}" -lt "${len}" ]]; do
+        ch="${input:i:1}"
+        if [[ "${escaped}" -eq 1 ]]; then
+            token+="${ch}"
+            has_token=1
+            escaped=0
+        elif [[ "${in_single}" -eq 1 ]]; then
+            if [[ "${ch}" == "'" ]]; then
+                in_single=0
+            else
+                token+="${ch}"
+            fi
+        elif [[ "${in_double}" -eq 1 ]]; then
+            if [[ "${ch}" == '"' ]]; then
+                in_double=0
+            elif [[ "${ch}" == '\' ]]; then
+                if [[ $((i + 1)) -lt "${len}" ]]; then
+                    next_ch="${input:i+1:1}"
+                    if [[ "${next_ch}" == '"' || "${next_ch}" == '\' || "${next_ch}" == '$' || "${next_ch}" == '`' ]]; then
+                        escaped=1
+                    else
+                        token+="${ch}"
+                    fi
+                else
+                    token+="${ch}"
+                fi
+            else
+                token+="${ch}"
+            fi
+        else
+            if [[ "${ch}" == '\' ]]; then
+                escaped=1
+                has_token=1
+            elif [[ "${ch}" == "'" ]]; then
+                in_single=1
+                has_token=1
+            elif [[ "${ch}" == '"' ]]; then
+                in_double=1
+                has_token=1
+            elif [[ "${ch}" =~ [[:space:]] ]]; then
+                if [[ "${has_token}" -eq 1 ]]; then
+                    STARROCKS_TOKENIZED_FLAGS+=("${token}")
+                    token=""
+                    has_token=0
+                fi
+            else
+                token+="${ch}"
+                has_token=1
+            fi
+        fi
+        i=$((i + 1))
+    done
+
+    if [[ "${has_token}" -eq 1 ]]; then
+        STARROCKS_TOKENIZED_FLAGS+=("${token}")
+    fi
+}
+
 starrocks_detect_linker_type() {
     local build_dir="${1:-${CMAKE_BUILD_DIR:-}}"
     local explicit_linker="${STARROCKS_LINKER:-}"
@@ -365,6 +436,7 @@ starrocks_detect_linker_type() {
     local cached_c=""
     local cached_cxx=""
     local cached_cxx_arg1=""
+    local cached_cxx_compiler_id=""
     local cached_build_type=""
     local cached_config_cxx_flags=""
     local cached_cxx_link_flags=""
@@ -377,6 +449,7 @@ starrocks_detect_linker_type() {
             cached_c="$(sed -n -E 's/^CMAKE_C_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
             cached_cxx="$(sed -n -E 's/^CMAKE_CXX_COMPILER(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
             cached_cxx_arg1="$(sed -n -E 's/^CMAKE_CXX_COMPILER_ARG1(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
+            cached_cxx_compiler_id="$(sed -n -E 's/^CMAKE_CXX_COMPILER_ID(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
             cached_build_type="$(sed -n -E 's/^CMAKE_BUILD_TYPE(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
             cached_cxx_link_flags="$(sed -n -E 's/^CMAKE_CXX_LINK_FLAGS(:[^=]*)?=(.*)$/\2/p' "${build_dir}/CMakeCache.txt" | tail -n 1)"
             if grep -q -E '^CMAKE_EXE_LINKER_FLAGS(:[^=]*)?=' "${build_dir}/CMakeCache.txt" 2>/dev/null; then
@@ -419,6 +492,9 @@ starrocks_detect_linker_type() {
                 fi
                 if [[ -z "${cached_cxx_arg1}" ]]; then
                     cached_cxx_arg1="$(sed -n -E 's/^[[:space:]]*set\(CMAKE_CXX_COMPILER_ARG1[[:space:]]+"([^"]+)".*\).*$/\1/p' "${cmake_compiler_file}" | tail -n 1)"
+                fi
+                if [[ -z "${cached_cxx_compiler_id}" ]]; then
+                    cached_cxx_compiler_id="$(sed -n -E 's/^[[:space:]]*set\(CMAKE_CXX_COMPILER_ID[[:space:]]+"([^"]+)".*\).*$/\1/p' "${cmake_compiler_file}" | tail -n 1)"
                 fi
                 break
             fi
@@ -466,20 +542,18 @@ starrocks_detect_linker_type() {
                 if command -v "${part}" >/dev/null 2>&1; then
                     cxx_compiler="${part}"
                 else
-                    local ws_tokens=()
-                    read -r -a ws_tokens <<< "${part}"
-                    if [[ "${#ws_tokens[@]}" -gt 0 ]]; then
-                        cxx_compiler="${ws_tokens[0]}"
-                        if [[ "${#ws_tokens[@]}" -gt 1 ]]; then
-                            cxx_compiler_args+=("${ws_tokens[@]:1}")
+                    starrocks_tokenize_flags "${part}"
+                    if [[ "${#STARROCKS_TOKENIZED_FLAGS[@]}" -gt 0 ]]; then
+                        cxx_compiler="${STARROCKS_TOKENIZED_FLAGS[0]}"
+                        if [[ "${#STARROCKS_TOKENIZED_FLAGS[@]}" -gt 1 ]]; then
+                            cxx_compiler_args+=("${STARROCKS_TOKENIZED_FLAGS[@]:1}")
                         fi
                     fi
                 fi
             else
-                local extra_tokens=()
-                read -r -a extra_tokens <<< "${part}"
-                if [[ "${#extra_tokens[@]}" -gt 0 ]]; then
-                    cxx_compiler_args+=("${extra_tokens[@]}")
+                starrocks_tokenize_flags "${part}"
+                if [[ "${#STARROCKS_TOKENIZED_FLAGS[@]}" -gt 0 ]]; then
+                    cxx_compiler_args+=("${STARROCKS_TOKENIZED_FLAGS[@]}")
                 fi
             fi
             part_idx=$((part_idx + 1))
@@ -487,13 +561,27 @@ starrocks_detect_linker_type() {
     fi
     cxx_compiler="${cxx_compiler:-g++}"
     if [[ -n "${raw_cxx_arg1}" ]]; then
-        local arg1_tokens=()
-        read -r -a arg1_tokens <<< "${raw_cxx_arg1}"
-        if [[ "${#arg1_tokens[@]}" -gt 0 ]]; then
-            cxx_compiler_args+=("${arg1_tokens[@]}")
+        starrocks_tokenize_flags "${raw_cxx_arg1}"
+        if [[ "${#STARROCKS_TOKENIZED_FLAGS[@]}" -gt 0 ]]; then
+            cxx_compiler_args+=("${STARROCKS_TOKENIZED_FLAGS[@]}")
         fi
     fi
     local cxx_compiler_spec="${cxx_compiler} ${cxx_compiler_args[*]+"${cxx_compiler_args[*]}"}"
+
+    local is_clang=0
+    local effective_compiler_id=""
+    if [[ -n "${cached_cxx_compiler_id}" ]] && [[ "${has_cmake_compiler_override}" -eq 1 || ( -z "${CC:-}" && -z "${CXX:-}" && -z "${STARROCKS_GCC_HOME:-}" && -z "${STARROCKS_LLVM_HOME:-}" ) ]]; then
+        effective_compiler_id="${cached_cxx_compiler_id}"
+    fi
+    if [[ "${cxx_compiler_spec}" == *[Cc]lang* || "${effective_compiler_id}" == *[Cc]lang* ]]; then
+        is_clang=1
+    elif [[ "${effective_compiler_id}" != "GNU" && "${cxx_compiler##*/}" != *g++* && "${cxx_compiler##*/}" != *gcc* ]]; then
+        local compiler_version_banner=""
+        compiler_version_banner="$("${cxx_compiler}" "${cxx_compiler_args[@]+"${cxx_compiler_args[@]}"}" --version 2>&1 || true)"
+        if [[ "${compiler_version_banner}" == *[Cc]lang* ]]; then
+            is_clang=1
+        fi
+    fi
 
     # Stage 2: Determine effective STARROCKS_LINKER (explicit or non-aarch64 glibc<2.29 + compiler>14.0.0 gold fallback)
     local effective_starrocks_linker="${explicit_linker}"
@@ -540,13 +628,19 @@ starrocks_detect_linker_type() {
     else
         base_exe_linker_flags="${LDFLAGS:-}"
     fi
-    local gcc_toolchain_flag=""
-    if [[ "${cxx_compiler_spec}" == *clang* && -n "${STARROCKS_GCC_HOME:-}" ]]; then
-        gcc_toolchain_flag="--gcc-toolchain=${STARROCKS_GCC_HOME}"
-    fi
-    local combined_flags="${STARROCKS_CXX_COMMON_FLAGS:-} ${gcc_toolchain_flag} ${cached_config_cxx_flags} ${cached_cxx_link_flags} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-} ${cached_config_exe_linker_flags}"
     local extra_flag_tokens=()
-    read -r -a extra_flag_tokens <<< "${combined_flags}"
+    starrocks_tokenize_flags "${STARROCKS_CXX_COMMON_FLAGS:-}"
+    if [[ "${#STARROCKS_TOKENIZED_FLAGS[@]}" -gt 0 ]]; then
+        extra_flag_tokens+=("${STARROCKS_TOKENIZED_FLAGS[@]}")
+    fi
+    if [[ "${is_clang}" -eq 1 && -n "${STARROCKS_GCC_HOME:-}" ]]; then
+        extra_flag_tokens+=("--gcc-toolchain=${STARROCKS_GCC_HOME}")
+    fi
+    local post_toolchain_flags="${cached_config_cxx_flags} ${cached_cxx_link_flags} ${base_exe_linker_flags} ${STARROCKS_CXX_LINKER_FLAGS:-} ${cached_config_exe_linker_flags}"
+    starrocks_tokenize_flags "${post_toolchain_flags}"
+    if [[ "${#STARROCKS_TOKENIZED_FLAGS[@]}" -gt 0 ]]; then
+        extra_flag_tokens+=("${STARROCKS_TOKENIZED_FLAGS[@]}")
+    fi
     local all_driver_tokens=()
     if [[ "${#cxx_compiler_args[@]}" -gt 0 ]]; then
         all_driver_tokens+=("${cxx_compiler_args[@]}")
@@ -573,7 +667,7 @@ starrocks_detect_linker_type() {
         last_selector_val="${effective_starrocks_linker}"
     fi
     local selected_linker=""
-    if [[ "${cxx_compiler_spec}" == *clang* && -n "${last_ld_path}" ]]; then
+    if [[ "${is_clang}" -eq 1 && -n "${last_ld_path}" ]]; then
         selected_linker="${last_ld_path}"
     else
         selected_linker="${last_selector_val}"
@@ -663,16 +757,16 @@ starrocks_detect_ut_parallelism() {
         return 0
     fi
 
-    # 2. Darwin host defaults to 100% core parallelism
-    if starrocks_is_darwin; then
-        starrocks_detect_parallelism
-        return 0
-    fi
-
     local cpus
     cpus="$(starrocks_detect_parallelism)"
     if [[ -z "${cpus}" || ! "${cpus}" =~ ^[0-9]+$ || "${cpus}" -lt 1 ]]; then
         cpus=1
+    fi
+
+    # 2. Darwin host defaults to 100% core parallelism
+    if starrocks_is_darwin; then
+        echo "${cpus}"
+        return 0
     fi
 
     local linker_type="${1:-}"
