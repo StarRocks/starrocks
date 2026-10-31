@@ -176,8 +176,11 @@ Status BinaryDictPageBuilder::get_last_value(void* value) const {
 }
 
 bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dict) const {
+    std::string padded_key;
     for (const auto& it : _dictionary) {
-        if (auto iter = global_dict->find(it.first); iter == global_dict->end()) {
+        padded_key.assign(it.first.data(), it.first.size());
+        padded_key.append(SLICE_MEMEQUAL_OVERFLOW_PADDING, '\0');
+        if (auto iter = global_dict->find(Slice(padded_key.data(), it.first.size())); iter == global_dict->end()) {
             return false;
         }
     }

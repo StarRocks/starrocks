@@ -983,7 +983,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
             if (slot.global_dict_words_size()) {
                 for (size_t i = 0; i < slot.global_dict_words_size(); i++) {
                     const std::string& dict_word = slot.global_dict_words(i);
-                    auto* data = _mem_pool->allocate(dict_word.size());
+                    auto* data = _mem_pool->allocate_with_reserve(dict_word.size(), SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     RETURN_IF_UNLIKELY_NULL(data, Status::MemoryAllocFailed("alloc mem for global dict failed"));
                     memcpy(data, dict_word.data(), dict_word.size());
                     Slice slice(data, dict_word.size());
