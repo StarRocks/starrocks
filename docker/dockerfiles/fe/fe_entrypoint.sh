@@ -77,6 +77,15 @@ collect_env_info()
     fi
 }
 
+probe_port()
+{
+    # use bash /dev/tcp instead of `nc`: netcat-traditional only resolves IPv4
+    # addresses, so it can never reach the FE service on IPv6-only clusters
+    local host=$1
+    local port=$2
+    timeout 2 bash -c 'exec 3<>"/dev/tcp/$1/$2"' -- "$host" "$port" &>/dev/null
+}
+
 show_frontends()
 {
     local svc=$1
@@ -94,8 +103,7 @@ probe_leader_for_pod0()
     local memlist=
     while true
     do
-        NC="nc -z -w 2"
-        if $NC $svc $QUERY_PORT ; then
+        if probe_port $svc $QUERY_PORT ; then
             log_stderr "FE service is alive, check if has leader ..."
 
             memlist=`show_frontends $svc`
@@ -147,8 +155,7 @@ probe_leader_for_podX()
     local start=`date +%s`
     while true
     do
-        NC="nc -z -w 2"
-        if $NC $svc $QUERY_PORT ; then
+        if probe_port $svc $QUERY_PORT ; then
             log_stderr "FE service is alive, check if has leader ..."
             local leader=`show_frontends $svc | grep '\<LEADER\>' | awk '{print $3}'`
             if [[ "x$leader" != "x" ]] ; then
