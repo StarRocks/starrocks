@@ -486,11 +486,20 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                             return;
                         }
 
-                        rewriteTask.setOptimizeTaskState(taskState);
-                        if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
+                        if (taskState == Constants.TaskRunState.FAILED) {
+                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
                             this.allPartitionOptimized = false;
+                            this.future = null;
+                        } else {
+                            Partition tmpPartition = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
+                            if (tmpPartition != null && hasCommittedNotVisible(tmpPartition.getId())) {
+                                LOG.info("wait committed transactions to be visible for temp partition {}, job: {}",
+                                            rewriteTask.getTempPartitionName(), jobId);
+                                return;
+                            }
+                            rewriteTask.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+                            this.future = null;
                         }
-                        this.future = null;
                     } else {
                         LOG.info("wait rewrite task {} to be finished, optimize job: {}", rewriteTask.getName(), jobId);
                         return;
@@ -705,6 +714,11 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
+    }
+
+    protected boolean hasCommittedNotVisible(long partitionId) {
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .existCommittedTxns(dbId, tableId, partitionId);
     }
 
     // Check whether transactions of the given database which txnId is less than 'watershedTxnId' are finished.
