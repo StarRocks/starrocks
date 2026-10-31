@@ -19,23 +19,26 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.DropFrontendInfo;
->>>>>>> b1bb363fbd1... [BugFix][RB-434] Rebuild the lake index fast-path BE payload instead of journaling Thrift structs (#65270)
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -55,13 +58,21 @@ import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TDropIndexInfo;
 import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.PublishVersionDaemon;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 
 import java.util.ArrayList;
@@ -70,6 +81,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -914,8 +926,6 @@ public class LakeTableIndexFastPathJobTest {
         assertEquals(expectedRows, restoredRows);
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testAddIndexJobReplayedFromJournalSendsTheIndexes() throws Exception {
         OlapTable table = createTable("t_add_index_journal", "c0 INT, c1 INT, c2 INT");
@@ -1172,8 +1182,7 @@ public class LakeTableIndexFastPathJobTest {
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
-                                       ComputeResource computeResource, boolean useAggregatePublish,
-                                       PublishProperty publishProperty) {
+                                       ComputeResource computeResource, boolean useAggregatePublish) {
                 publishedVersions.add(new long[] {baseVersion, newVersion});
             }
         };
@@ -1250,7 +1259,6 @@ public class LakeTableIndexFastPathJobTest {
         }
     }
 
->>>>>>> b1bb363fbd1... [BugFix][RB-434] Rebuild the lake index fast-path BE payload instead of journaling Thrift structs (#65270)
     private static OlapTable createTable(String tableName, String columns) throws Exception {
         return createTable(tableName, columns, null);
     }

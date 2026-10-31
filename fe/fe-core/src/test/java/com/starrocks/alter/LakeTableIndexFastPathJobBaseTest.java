@@ -380,6 +380,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         when(idx.getTablets()).thenReturn(new ArrayList<>());
         when(pp.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
                 .thenReturn(Collections.singletonList(idx));
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
@@ -395,6 +396,62 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertFalse(job.isForceSkippedAtCommitted());
             verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
             verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testCancelImpl_FinishedRewriting_ForceRefusedWhileEarlierLoadNotVisible() throws Exception {
+        // Reserved V=5 but visible is 3: a load holding 4 has not finished on FE.
+        // It may already be published on BE, so the no-op publish of 5 would
+        // succeed while the visible bump to 5 is skipped, leaving 5 invisible
+        // forever. The force cancel must be refused before any no-op publish.
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        Map<Long, Long> commit = new HashMap<>();
+        commit.put(100L, 5L);
+        setField(job, "commitVersionMap", commit);
+
+        Database db = new Database(2L, "db");
+        OlapTable table = mock(OlapTable.class);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(3L);
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+
+        GlobalStateMgr gsm = buildLockableGsm(db, table);
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
+                MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+
+            assertFalse(job.cancelImpl("force skip", true));
+
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+            assertFalse(job.isForceSkippedAtCommitted());
+            utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
+                    any(), any(), any(), anyBoolean()), never());
+            verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
+            verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
+        }
+    }
+
+    @Test
+    public void testReadyToForceSkipPublish_NothingToCheckIsReady() throws Exception {
+        // Nothing reserved, or the db / table / partition is gone: there is no
+        // version to advance, so the check must not block the force cancel.
+        LakeTableAddIndexJob job = newJob();
+        Map<Long, Long> commit = new HashMap<>();
+        assertTrue(job.readyToForceSkipPublish(null));
+        assertTrue(job.readyToForceSkipPublish(commit));
+        commit.put(100L, 5L);
+
+        OlapTable table = mock(OlapTable.class);
+        when(table.getPhysicalPartition(100L)).thenReturn(null);
+        List<GlobalStateMgr> states = List.of(buildLockableGsm(null, null),
+                buildLockableGsm(new Database(2L, "db"), null), buildLockableGsm(new Database(2L, "db"), table));
+        for (GlobalStateMgr gsm : states) {
+            try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+                gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+                assertTrue(job.readyToForceSkipPublish(commit));
+            }
         }
     }
 
@@ -1351,6 +1408,19 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "publishVersionFuture", f);
     }
 
+    /**
+     * A table whose physical partition 100 is at {@code visibleVersion}, for a job with commit version 5 on it.
+     */
+    private GlobalStateMgr buildGsmWithPartition(LakeTableAddIndexJob job, PhysicalPartition pp, long visibleVersion)
+            throws Exception {
+        setField(job, "commitVersionMap", new HashMap<>(Map.of(100L, 5L)));
+        OlapTable table = mock(OlapTable.class);
+        when(table.getIndexes()).thenReturn(new ArrayList<>());
+        when(table.getPhysicalPartition(100L)).thenReturn(pp);
+        when(pp.getVisibleVersion()).thenReturn(visibleVersion);
+        return buildLockableGsm(new Database(2L, "db"), table);
+    }
+
     @Test
     public void testRunFinishedRewritingJob_PublishVersionPendingReturns() throws Exception {
         LakeTableAddIndexJob job = newJob();
@@ -1358,9 +1428,15 @@ public class LakeTableIndexFastPathJobBaseTest {
         // Future not yet done -> publishVersion() returns false; method returns early.
         CompletableFuture<Boolean> pending = new CompletableFuture<>();
         setField(job, "publishVersionFuture", pending);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 4L);
 
-        invokePrivate(job, "runFinishedRewritingJob");
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
         assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
     }
 
     @Test
@@ -1371,8 +1447,55 @@ public class LakeTableIndexFastPathJobBaseTest {
         setField(job, "timeoutMs", 1L);
         CompletableFuture<Boolean> pending = new CompletableFuture<>();
         setField(job, "publishVersionFuture", pending);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, mock(PhysicalPartition.class), 4L);
 
-        assertThrows(AlterCancelException.class, () -> invokePrivate(job, "runFinishedRewritingJob"));
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            AlterCancelException e = assertThrows(AlterCancelException.class,
+                    () -> invokePrivate(job, "runFinishedRewritingJob"));
+            assertTrue(e.getMessage().contains("publish timeout"), e.getMessage());
+        }
+    }
+
+    /**
+     * A load that committed after the watershed holds version 4, below the job's commit version 5, and is not
+     * visible yet. The job must neither publish on top of version 4 nor make version 5 visible: the load could
+     * then never finish.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_WaitsForVersionBelowCommitVersion() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 3L);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        assertNull(getField(job, "publishVersionFuture"));
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
+    }
+
+    /**
+     * An earlier attempt of the finish step made the commit version visible and later loads moved the partition
+     * on before the job reached FINISHED. Finishing now must not move the visible version back.
+     */
+    @Test
+    public void testRunFinishedRewritingJob_DoesNotMoveVisibleVersionBack() throws Exception {
+        LakeTableAddIndexJob job = newJob();
+        setField(job, "jobState", AlterJobV2.JobState.FINISHED_REWRITING);
+        setPublishFuture(job, true);
+        PhysicalPartition pp = mock(PhysicalPartition.class);
+        GlobalStateMgr gsm = buildGsmWithPartition(job, pp, 7L);
+
+        try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class)) {
+            gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
+            invokePrivate(job, "runFinishedRewritingJob");
+        }
+        assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
     }
 
     @Test
@@ -1388,6 +1511,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
         PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
 
         GlobalStateMgr gsm = buildLockableGsm(db, table);
@@ -1422,6 +1546,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         OlapTable table = mock(OlapTable.class);
         when(table.getIndexes()).thenReturn(new ArrayList<>());
         PhysicalPartition pp = mock(PhysicalPartition.class);
+        when(pp.getVisibleVersion()).thenReturn(4L);
         when(table.getPhysicalPartition(100L)).thenReturn(pp);
         MaterializedIndexMeta retiredMeta = mock(MaterializedIndexMeta.class);
         when(retiredMeta.getSchemaId()).thenReturn(999L);
