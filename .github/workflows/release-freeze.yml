@@ -2,7 +2,8 @@ name: RELEASE FREEZE
 
 # A patch branch takes no more merges once it is released: a PR into branch-X.Y.Z gets the
 # `release-freeze` status, a required check of the patch-branch protection rules. It fails once
-# the release tag X.Y.Z exists, unless the PR is labelled `release-unfreeze` (a respin).
+# the release tag X.Y.Z exists, unless QA labelled the PR `release-unfreeze`
+# (a respin; only logins in ci-tool lib/qa_label.py QA_USERS count, as for SKIP CASE).
 # Other release branches (customer branches such as branch-4.0.17-sn-1025, -rcNN) get success,
 # so the required status never leaves them pending.
 # Thin caller: the logic is ci-tool lib/release_freeze.py. workflow_dispatch checks every open
@@ -17,6 +18,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  issues: read  # who added release-unfreeze (issue events)
   statuses: write
 
 concurrency:
@@ -28,7 +30,7 @@ jobs:
     if: github.repository == 'StarRocks/starrocks'
     runs-on: [self-hosted, quick]
     env:
-      # Reads the PR and the tag, posts the status; no PR code is checked out.
+      # Reads the PR, its label events and the tag, posts the status; no PR code is checked out.
       GH_TOKEN: ${{ github.token }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
