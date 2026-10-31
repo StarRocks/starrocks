@@ -21,6 +21,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TDropIndexInfo;
+import com.starrocks.thrift.TIndexType;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -59,14 +60,20 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
     /**
      * Catalog-side index names to remove. Required because the indexId
      * shortcut is not unique across non-isCompatibleIndex types
-     * (BITMAP / NGRAMBF / BLOOM_FILTER all share indexId=-1).
+     * (BITMAP / NGRAMBF / BLOOM_FILTER all share indexId=-1). Also the
+     * source the BE payload is rebuilt from (see {@link #buildDropInfos}).
      */
     @SerializedName(value = "dropIndexNames")
     private List<String> dropIndexNames = new ArrayList<>();
 
-    /** Thrift payload for BE: (index_id, col_unique_id, index_type) triples. */
-    @SerializedName(value = "dropInfos")
-    private List<TDropIndexInfo> dropInfos = new ArrayList<>();
+    /**
+     * Thrift payload for BE: (index_id, col_unique_id, index_type) triples,
+     * resolved at each dispatch by {@link #prepareAlterRequests}. Never
+     * persisted: Gson drops every field of a Thrift struct, so a journaled
+     * copy would come back empty. Older FEs wrote it under "dropInfos"; a new
+     * FE ignores that key.
+     */
+    private transient List<TDropIndexInfo> dropInfos = new ArrayList<>();
 
     /**
      * Columns whose plain bloom filter (is_bf_column) should be cleared by
@@ -84,37 +91,15 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
     }
 
     public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                                 List<Long> dropIndexIds, List<String> dropIndexNames,
-                                 List<TDropIndexInfo> dropInfos) {
-        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, dropIndexNames, dropInfos, new ArrayList<>());
-    }
-
-    /**
-     * Backward-compat overload used by existing unit tests that constructed the
-     * job without a names list. Production callers must use the constructor
-     * with {@code dropIndexNames} populated — otherwise BITMAP / NGRAMBF /
-     * BLOOM_FILTER drops will not remove any catalog Index (their id is -1
-     * and applyCatalogMutation falls back to name matching).
-     *
-     * <p>Note: there is no 3-list backward-compat overload (no-names with
-     * dropBfColumns) — Java erases {@code List<TDropIndexInfo>} and
-     * {@code List<String>} to the same {@code List}, which would clash with
-     * the new 3-list canonical constructor. Tests that previously used the
-     * old 3-list shape must pass an explicit empty names list using the
-     * 4-list canonical constructor.
-     */
-    public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                                 List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos) {
-        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, new ArrayList<>(), dropInfos, new ArrayList<>());
+                                 List<Long> dropIndexIds, List<String> dropIndexNames) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, dropIndexNames, new ArrayList<>());
     }
 
     public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                                 List<Long> dropIndexIds, List<String> dropIndexNames,
-                                 List<TDropIndexInfo> dropInfos, List<String> dropBfColumns) {
+                                 List<Long> dropIndexIds, List<String> dropIndexNames, List<String> dropBfColumns) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.dropIndexIds = new ArrayList<>(dropIndexIds);
         this.dropIndexNames = new ArrayList<>(dropIndexNames);
-        this.dropInfos = new ArrayList<>(dropInfos);
         this.dropBfColumns = new ArrayList<>(dropBfColumns);
     }
 
@@ -122,8 +107,75 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
         super(other);
         this.dropIndexIds = other.dropIndexIds == null ? null : new ArrayList<>(other.dropIndexIds);
         this.dropIndexNames = other.dropIndexNames == null ? null : new ArrayList<>(other.dropIndexNames);
-        this.dropInfos = other.dropInfos == null ? null : new ArrayList<>(other.dropInfos);
         this.dropBfColumns = other.dropBfColumns == null ? null : new ArrayList<>(other.dropBfColumns);
+    }
+
+    /**
+     * The tombstones BE writes for this job, as the Thrift payload of its alter tasks: one (index_id, col_unique_id,
+     * index_type) entry per column of each index named in {@code dropIndexNames} (multi-column indexes produce one
+     * per column, so BE's IDG tombstone projection matches per (col_uid, type)), then one BLOOM_FILTER entry per
+     * {@code dropBfColumns} column. Plain bloom filter has no Index object, so its index_id is the -1 sentinel; BE's
+     * apply_drop_index keys on (col_unique_id, index_type) for BF flavors. Reads only persisted fields and the table,
+     * so the FE that built the job and any FE that loaded it from the journal or an image derive the same payload: the
+     * table stays in SCHEMA_CHANGE until the job is done, so neither its indexes nor its columns change in between.
+     */
+    List<TDropIndexInfo> buildDropInfos(OlapTable table) throws AlterCancelException {
+        List<TDropIndexInfo> result = new ArrayList<>();
+        if (dropIndexNames != null) {
+            for (String name : dropIndexNames) {
+                Index target = null;
+                for (Index ix : table.getIndexes()) {
+                    if (ix.getIndexName().equalsIgnoreCase(name)) {
+                        target = ix;
+                        break;
+                    }
+                }
+                if (target == null) {
+                    throw new AlterCancelException("index " + name + " does not exist in table " + table.getName());
+                }
+                if (target.getColumns() == null) {
+                    continue;
+                }
+                for (ColumnId colId : target.getColumns()) {
+                    Column col = table.getColumn(colId);
+                    if (col == null) {
+                        continue;
+                    }
+                    result.add(dropInfo(target.getIndexId(), col.getUniqueId(), toThriftIndexType(target.getIndexType())));
+                }
+            }
+        }
+        if (dropBfColumns != null) {
+            for (String name : dropBfColumns) {
+                Column col = table.getColumn(name);
+                if (col == null) {
+                    throw new AlterCancelException("bloom filter column " + name + " does not exist in table "
+                            + table.getName());
+                }
+                result.add(dropInfo(-1, col.getUniqueId(), TIndexType.BLOOM_FILTER));
+            }
+        }
+        return result;
+    }
+
+    private static TDropIndexInfo dropInfo(long indexId, int colUniqueId, TIndexType indexType) {
+        TDropIndexInfo info = new TDropIndexInfo();
+        info.setIndex_id(indexId);
+        info.setCol_unique_id(colUniqueId);
+        info.setIndex_type(indexType);
+        return info;
+    }
+
+    @Override
+    protected void prepareAlterRequests(OlapTable table) throws AlterCancelException {
+        List<TDropIndexInfo> infos = buildDropInfos(table);
+        // A job always drops something. Nothing to drop means the definitions this FE holds do not describe the job;
+        // fail here rather than send BE requests it rejects.
+        if (infos.isEmpty()) {
+            throw new AlterCancelException("DROP INDEX job " + jobId + " found nothing to drop on table "
+                    + table.getName());
+        }
+        dropInfos = infos;
     }
 
     @Override
@@ -217,7 +269,9 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
     protected void copySubclassFields(LakeTableIndexFastPathJobBase copy) {
         LakeTableDropIndexJob c = (LakeTableDropIndexJob) copy;
         c.dropIndexIds = this.dropIndexIds == null ? null : new ArrayList<>(this.dropIndexIds);
-        c.dropInfos = this.dropInfos == null ? null : new ArrayList<>(this.dropInfos);
+        // The names are what the BE payload is rebuilt from and the dropped Index objects are matched by, so every
+        // journal entry carries them, not only the one that submitted the job.
+        c.dropIndexNames = this.dropIndexNames == null ? null : new ArrayList<>(this.dropIndexNames);
         c.dropBfColumns = this.dropBfColumns == null ? null : new ArrayList<>(this.dropBfColumns);
     }
 
@@ -226,8 +280,8 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
         return dropIndexIds;
     }
 
-    public List<TDropIndexInfo> getDropInfos() {
-        return dropInfos;
+    public List<String> getDropIndexNames() {
+        return dropIndexNames;
     }
 
     public List<String> getDropBfColumns() {

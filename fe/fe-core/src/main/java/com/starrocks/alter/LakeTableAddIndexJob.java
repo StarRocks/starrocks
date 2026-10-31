@@ -14,6 +14,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.task.AlterReplicaTask;
+import com.starrocks.thrift.TIndexType;
 import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
@@ -46,20 +48,23 @@ import java.util.TreeSet;
 public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
 
     /**
-     * Catalog-side {@link Index} metadata to add. Persisted so a replayed
-     * job (FE cold start after crash) can reapply the catalog mutation
-     * idempotently.
+     * Catalog-side {@link Index} metadata after the alter: the table's existing
+     * indexes plus the ones this job adds. Persisted so a replayed job (FE cold
+     * start after crash) can reapply the catalog mutation idempotently, and so
+     * any FE can rebuild the BE payload from it (see {@link #buildIndexesToAdd}).
      */
     @SerializedName(value = "newIndexes")
     private List<Index> newIndexes = new ArrayList<>();
 
     /**
-     * Persisted index definitions carrying column display names. Keep this
-     * journal representation compatible with existing jobs; dispatch converts
-     * copies to stable ColumnIds, matching the column names in the BE schema.
+     * Index definitions sent to BE, rebuilt at each dispatch by
+     * {@link #prepareAlterRequests}. They carry column display names;
+     * {@link #applicableIndexes} converts copies to the stable ColumnIds that
+     * match the column names in the BE schema. Never persisted: Gson drops every
+     * field of a Thrift struct, so a journaled copy would come back empty. Older
+     * FEs wrote it under "indexesToAdd"; a new FE ignores that key.
      */
-    @SerializedName(value = "indexesToAdd")
-    private List<TOlapTableIndex> indexesToAdd = new ArrayList<>();
+    private transient List<TOlapTableIndex> indexesToAdd = new ArrayList<>();
 
     /**
      * Columns newly enabled for plain bloom filter (is_bf_column=true) by
@@ -67,7 +72,8 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
      * / GIN). Populated when the alter originated from a
      * {@code bloom_filter_columns} property change; applyCatalogMutation
      * merges these into the table's bf set (and the corresponding synthetic
-     * BLOOM_FILTER entries in {@code indexesToAdd} drive the BE-side build).
+     * BLOOM_FILTER entries {@link #buildIndexesToAdd} derives from them drive
+     * the BE-side build).
      */
     @SerializedName(value = "addBfColumns")
     private List<String> addBfColumns = new ArrayList<>();
@@ -99,23 +105,20 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     }
 
     public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                                List<Index> newIndexes, List<TOlapTableIndex> indexesToAdd) {
-        this(jobId, dbId, tableId, tableName, timeoutMs, newIndexes, indexesToAdd, new ArrayList<>());
+                                List<Index> newIndexes) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, newIndexes, new ArrayList<>());
     }
 
     public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
-                                List<Index> newIndexes, List<TOlapTableIndex> indexesToAdd,
-                                List<String> addBfColumns) {
+                                List<Index> newIndexes, List<String> addBfColumns) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.newIndexes = new ArrayList<>(newIndexes);
-        this.indexesToAdd = new ArrayList<>(indexesToAdd);
         this.addBfColumns = new ArrayList<>(addBfColumns);
     }
 
     protected LakeTableAddIndexJob(LakeTableAddIndexJob other) {
         super(other);
         this.newIndexes = other.newIndexes == null ? null : new ArrayList<>(other.newIndexes);
-        this.indexesToAdd = other.indexesToAdd == null ? null : new ArrayList<>(other.indexesToAdd);
         this.addBfColumns = other.addBfColumns == null ? null : new ArrayList<>(other.addBfColumns);
         this.indexMetaIdToNewSchema = other.indexMetaIdToNewSchema == null ? null
                 : new HashMap<>(other.indexMetaIdToNewSchema);
@@ -131,10 +134,11 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
      * failing the alter. Matching by ColumnId (not name) is required so a rollup
      * / sync-MV that keeps the indexed column's ColumnId under a renamed output
      * is still indexed — otherwise its FE schema (which includes the index) and
-     * BE tablet (never stamped) would diverge. Resolve the persisted display
-     * names through {@code table} and return copies with stable ColumnIds for
-     * the BE request. Do not mutate the journaled definitions: a retry could
-     * otherwise resolve a ColumnId as another column's reused display name.
+     * BE tablet (never stamped) would diverge. Resolve the display names
+     * through {@code table} and return copies with stable ColumnIds for the BE
+     * request. Do not mutate {@code indexes}: every task of a dispatch reads the
+     * same definitions, and a second pass could resolve a ColumnId as another
+     * column's reused display name.
      * When {@code meta} is null (defensive), every index applies unchanged.
      */
     static List<TOlapTableIndex> applicableIndexes(List<TOlapTableIndex> indexes, MaterializedIndexMeta meta,
@@ -169,6 +173,87 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
             }
         }
         return applicable;
+    }
+
+    /**
+     * The indexes BE builds for this job, as the Thrift payload of its alter tasks: one entry per index in
+     * {@code newIndexes} the table does not carry yet (exactly the ones applyCatalogMutation appends), then one
+     * synthetic BLOOM_FILTER entry per {@code addBfColumns} column. Carries column display names, which
+     * {@link #applicableIndexes} converts to ColumnIds per task. Reads only persisted fields and the table, so the FE
+     * that built the job and any FE that loaded it from the journal or an image derive the same payload: the table
+     * stays in SCHEMA_CHANGE until the job is done, so neither its indexes nor its columns change in between.
+     */
+    List<TOlapTableIndex> buildIndexesToAdd(OlapTable table) throws AlterCancelException {
+        List<TOlapTableIndex> result = new ArrayList<>();
+        if (newIndexes != null) {
+            for (Index ix : newIndexes) {
+                if (table.getIndexes().stream().noneMatch(existing -> sameIndex(existing, ix))) {
+                    result.add(toThriftIndex(ix, table));
+                }
+            }
+        }
+        if (addBfColumns != null && !addBfColumns.isEmpty()) {
+            // Carry the fpp through index_properties so BE's BloomFilterOptions
+            // picks up the right false-positive rate.
+            double fpp = table.getBfFpp();
+            if (fpp <= 0) {
+                fpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+            }
+            for (String name : addBfColumns) {
+                Column col = table.getColumn(name);
+                if (col == null) {
+                    throw new AlterCancelException("bloom filter column " + name + " does not exist in table "
+                            + table.getName());
+                }
+                TOlapTableIndex t = new TOlapTableIndex();
+                t.setIndex_id(-1);
+                t.setIndex_name("");
+                t.setIndex_type(TIndexType.BLOOM_FILTER);
+                t.setColumns(Lists.newArrayList(col.getName()));
+                Map<String, String> props = new HashMap<>();
+                props.put("bloom_filter_fpp", Double.toString(fpp));
+                t.setIndex_properties(props);
+                result.add(t);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Translate a catalog {@link Index} to the fast-path index definition with
+     * column display names; {@link #applicableIndexes} converts a copy to stable
+     * ColumnIds before it is sent to BE's do_process_add_index_only.
+     */
+    private static TOlapTableIndex toThriftIndex(Index ix, OlapTable table) {
+        TOlapTableIndex t = new TOlapTableIndex();
+        t.setIndex_name(ix.getIndexName());
+        t.setIndex_id(ix.getIndexId());
+        t.setIndex_type(toThriftIndexType(ix.getIndexType()));
+        if (ix.getColumns() != null) {
+            List<String> names = new ArrayList<>();
+            for (ColumnId colId : ix.getColumns()) {
+                Column col = table.getColumn(colId);
+                names.add(col == null ? colId.getId() : col.getName());
+            }
+            t.setColumns(names);
+        }
+        if (ix.getProperties() != null) {
+            t.setIndex_properties(new HashMap<>(ix.getProperties()));
+        }
+        return t;
+    }
+
+    @Override
+    protected void prepareAlterRequests(OlapTable table) throws AlterCancelException {
+        List<TOlapTableIndex> indexes = buildIndexesToAdd(table);
+        // A job always adds at least one index. Nothing to build means the definitions this FE holds do not describe
+        // the job; sending BE empty (no-op) requests would let it finish with the catalog listing an index that no
+        // existing segment has.
+        if (indexes.isEmpty()) {
+            throw new AlterCancelException("ADD INDEX job " + jobId + " found no index to build on table "
+                    + table.getName());
+        }
+        indexesToAdd = indexes;
     }
 
     @Override
@@ -300,7 +385,6 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     protected void copySubclassFields(LakeTableIndexFastPathJobBase copy) {
         LakeTableAddIndexJob c = (LakeTableAddIndexJob) copy;
         c.newIndexes = this.newIndexes == null ? null : new ArrayList<>(this.newIndexes);
-        c.indexesToAdd = this.indexesToAdd == null ? null : new ArrayList<>(this.indexesToAdd);
         c.addBfColumns = this.addBfColumns == null ? null : new ArrayList<>(this.addBfColumns);
         c.indexMetaIdToNewSchema = this.indexMetaIdToNewSchema == null ? null
                 : new HashMap<>(this.indexMetaIdToNewSchema);
@@ -309,10 +393,6 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     // Accessors for tests / tooling.
     public List<Index> getNewIndexes() {
         return newIndexes;
-    }
-
-    public List<TOlapTableIndex> getIndexesToAdd() {
-        return indexesToAdd;
     }
 
     public List<String> getAddBfColumns() {
