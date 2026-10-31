@@ -65,6 +65,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.common.MetaUtils;
@@ -81,6 +82,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -507,17 +509,65 @@ public class ColocateTableIndex implements Writable {
         return true;
     }
 
+    /**
+     * Opens a scope in which StarMgr is asked once per shared-data colocate group whether the group is stable, and the
+     * answer is reused until the scope closes. The optimizer asks for every distribution it considers, so planning a
+     * query with several colocate joins would otherwise make dozens of StarMgr calls for the same group. One answer
+     * per statement also keeps the decisions within a plan consistent. A nested scope reuses the outer one.
+     */
+    public static StabilityScope openStabilityScope(ConnectContext context) {
+        return new StabilityScope(context);
+    }
+
+    public static final class StabilityScope implements AutoCloseable {
+        private final ConnectContext context;
+        private final boolean owner;
+
+        private StabilityScope(ConnectContext context) {
+            this.context = context;
+            this.owner = context != null && context.getColocateGroupStability() == null;
+            if (owner) {
+                context.setColocateGroupStability(new ConcurrentHashMap<>());
+            }
+        }
+
+        @Override
+        public void close() {
+            if (owner) {
+                context.setColocateGroupStability(null);
+            }
+        }
+    }
+
     public boolean isGroupUnstable(GroupId groupId) {
         readLock();
         try {
-            if (metaGroups.contains(groupId)) {
-                return !GlobalStateMgr.getCurrentState().getStarOSAgent().queryMetaGroupStable(groupId.grpId);
-            } else {
+            if (!metaGroups.contains(groupId)) {
                 return unstableGroups.contains(groupId);
             }
         } finally {
             readUnlock();
         }
+        // StarMgr holds the stability of a shared-data group. Ask it outside the lock, and inside a stability scope
+        // only once per group.
+        ConnectContext context = ConnectContext.get();
+        Map<GroupId, Boolean> stability = context == null ? null : context.getColocateGroupStability();
+        if (stability == null) {
+            return !isMetaGroupStable(groupId);
+        }
+        Boolean stable = stability.get(groupId);
+        if (stable == null) {
+            stable = isMetaGroupStable(groupId);
+            Boolean earlier = stability.putIfAbsent(groupId, stable);
+            if (earlier != null) {
+                stable = earlier;
+            }
+        }
+        return !stable;
+    }
+
+    private static boolean isMetaGroupStable(GroupId groupId) {
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().queryMetaGroupStable(groupId.grpId);
     }
 
     public boolean isColocateTable(long tableId) {
