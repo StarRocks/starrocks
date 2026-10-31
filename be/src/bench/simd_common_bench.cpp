@@ -478,6 +478,56 @@ static void BM_StringSearcher_Baseline(benchmark::State& state) {
 BENCHMARK(BM_Volnitsky_Baseline)->ArgsProduct({{2, 6, 16, 32, 33, 64}, {1, 10, 100, 1000}});
 BENCHMARK(BM_StringSearcher_Baseline)->ArgsProduct({{2, 6, 16, 32, 33, 64}, {1, 10, 100, 1000}});
 
+// =====================================================================
+// Direct 64 KB buffer scan: StringSearcher::search_scalar vs StringSearcher::search (SIMD)
+// =====================================================================
+
+static std::string build_64kb_haystack(const std::string& needle) {
+    static constexpr std::string_view kLine = "http://yandex.ru/yandsearch?text=starrocks+olap+database&lr=213&pg=1";
+    constexpr size_t kBufSize = 64 * 1024;
+    std::string buf;
+    buf.reserve(kBufSize + kLine.size());
+    while (buf.size() < kBufSize) {
+        buf.append(kLine);
+    }
+    buf.resize(kBufSize);
+    buf.replace(kBufSize - needle.size(), needle.size(), needle);
+    return buf;
+}
+
+static void BM_StringSearcher_Scalar(benchmark::State& state) {
+    const size_t needle_len = static_cast<size_t>(state.range(0));
+    const std::string needle = make_benchmark_needle(needle_len);
+    const std::string hay = build_64kb_haystack(needle);
+    const auto* begin = reinterpret_cast<const uint8_t*>(hay.data());
+    const auto* end = begin + hay.size();
+    StringSearcher searcher(needle.data(), needle.size());
+
+    for (auto _ : state) {
+        const uint8_t* res = searcher.search_scalar(begin, end);
+        benchmark::DoNotOptimize(res);
+    }
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * hay.size()));
+}
+
+static void BM_StringSearcher_SIMD(benchmark::State& state) {
+    const size_t needle_len = static_cast<size_t>(state.range(0));
+    const std::string needle = make_benchmark_needle(needle_len);
+    const std::string hay = build_64kb_haystack(needle);
+    const auto* begin = reinterpret_cast<const uint8_t*>(hay.data());
+    const auto* end = begin + hay.size();
+    StringSearcher searcher(needle.data(), needle.size());
+
+    for (auto _ : state) {
+        const uint8_t* res = searcher.search(begin, end);
+        benchmark::DoNotOptimize(res);
+    }
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * hay.size()));
+}
+
+BENCHMARK(BM_StringSearcher_Scalar)->Arg(2)->Arg(6)->Arg(16)->Arg(32);
+BENCHMARK(BM_StringSearcher_SIMD)->Arg(2)->Arg(6)->Arg(16)->Arg(32);
+
 } // namespace starrocks
 
 BENCHMARK_MAIN();
