@@ -667,4 +667,56 @@ TEST_F(StringFunctionLocateTest, locateNullColumnNotSharedTest) {
     }
 }
 
+TEST_F(StringFunctionLocateTest, LocateConstStartPosNullableAndUtf8) {
+    // 1. Constant start_pos <= 0 on Nullable haystack
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        auto null = NullColumn::create();
+        for (int i = 0; i < 32; ++i) {
+            str->append(i % 3 == 0 ? "https://www.google.com.au" : "https://starrocks.io");
+            null->append(i % 4 == 0 ? 1 : 0);
+        }
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 32));
+        columns.emplace_back(NullableColumn::create(std::move(str), std::move(null)));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(0, 32));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_EQ(32, result->size());
+        ASSERT_TRUE(result->is_nullable());
+        auto data_col =
+                ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+        for (int i = 0; i < 32; ++i) {
+            if (i % 4 == 0) {
+                EXPECT_TRUE(result->is_null(i));
+            } else {
+                EXPECT_FALSE(result->is_null(i));
+                EXPECT_EQ(0, data_col->get_data()[i]);
+            }
+        }
+    }
+
+    // 2. Constant start_pos > 1 on multi-byte UTF-8 haystack with needle appearing both before and after start_pos
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        // Char positions: 1:'中', 2:'文', 3:'g', 4:'o', 5:'o', 6:'g', 7:'l', 8:'e', 9:'测', 10:'试', 11:'g', ...
+        str->append("中文google测试google尾");
+        str->append("中文google测试无后缀");
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 2));
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(4, 2));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        auto data_col = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(2, data_col->size());
+        EXPECT_EQ(11, data_col->get_data()[0]);
+        EXPECT_EQ(0, data_col->get_data()[1]);
+    }
+}
+
 } // namespace starrocks
