@@ -2783,10 +2783,32 @@ public class IcebergMetadata implements ConnectorMetadata {
                         catalogName, dbName, tableName);
             }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(commitFailureMessage(e, catalogName, dbName, tableName));
         } finally {
             cleanupAction.run();
         }
+    }
+
+    // Iceberg's own text for a commit rejected because the table moved on after this statement read it
+    // names neither cause nor remedy. The failed commit drops this FE's cached table (cleanupAction), but a
+    // retry may run on another FE that still caches the old metadata, so point at REFRESH EXTERNAL TABLE.
+    @VisibleForTesting
+    static String commitFailureMessage(Exception e, String catalogName, String dbName, String tableName) {
+        String table = dbName + "." + tableName;
+        String remedy = String.format("Run REFRESH EXTERNAL TABLE %s.%s and retry the statement.", catalogName, table);
+        if (e instanceof ValidationException) {
+            return String.format("Iceberg table %s was changed by another commit after this statement read it, " +
+                    "and the change conflicts with this statement: %s. %s", table, e.getMessage(), remedy);
+        }
+        // Raised by Iceberg when the commit applies the BE's Parquet position deletes to a table that is now
+        // format version 3 or later: the statement was planned against older, format-version-2 metadata.
+        if (e instanceof IllegalArgumentException && e.getMessage() != null
+                && e.getMessage().startsWith("Must use DVs for position deletes")) {
+            return String.format("Iceberg table %s was upgraded to a newer format version after this statement " +
+                    "was planned against its format-version-2 metadata, so the position delete files it wrote " +
+                    "are no longer accepted (%s). %s", table, e.getMessage(), remedy);
+        }
+        return e.getMessage();
     }
 
     private void invalidateCacheAfterCommit(String dbName, String tableName) {
