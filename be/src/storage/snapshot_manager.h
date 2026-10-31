@@ -99,6 +99,19 @@ public:
 
     Status make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet);
 
+    // Snapshot transfer currently enumerates only top-level files and does not support recursive
+    // directory transfer. CLucene stores each index in <rowset_id>_<segment_id>_<index_id>.ivt/,
+    // so snapshot creation flattens its contents into the snapshot directory for transport:
+    //   <rowset_id>_<segment_id>_<index_id>.ivt/<file>
+    //       -> <rowset_id>_<segment_id>_<index_id>_<file>
+    // This method restores the original directory layout on the receiving side without changing
+    // file contents. Call it before converting rowset IDs or loading the snapshot, so index files
+    // can be located under their expected .ivt paths. Safe to call on already restored directories.
+    static Status restore_clucene_index_files(const std::string& snapshot_dir);
+
+    // Collect files recursively, using paths relative to the snapshot directory.
+    static Status list_snapshot_files(const std::string& root, std::set<std::string>* files);
+
     Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
                                 const TabletSchemaCSPtr& tablet_schema = nullptr);
 
@@ -108,6 +121,8 @@ public:
     }
 
 private:
+    static Status flatten_clucene_index_files(const std::string& snapshot_dir);
+
     SnapshotManager(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
 
     std::string _calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s);

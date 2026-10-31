@@ -36,6 +36,7 @@
 
 #include <fmt/format.h>
 
+#include <charconv>
 #include <iterator>
 #include <map>
 #include <set>
@@ -169,6 +170,46 @@ Status SnapshotManager::release_snapshot(const string& snapshot_path) {
     return Status::InvalidArgument(fmt::format("Illegal snapshot_path: {}", snapshot_path));
 }
 
+Status SnapshotManager::restore_clucene_index_files(const std::string& clone_dir) {
+    std::vector<std::string> all_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
+#ifndef __APPLE__
+    for (const auto& file : all_files) {
+        if (CLucenePlugin::is_index_files(file)) {
+            const auto p1 = file.find('_');
+            const auto p2 = p1 == std::string::npos ? std::string::npos : file.find('_', p1 + 1);
+            const auto p3 = p2 == std::string::npos ? std::string::npos : file.find('_', p2 + 1);
+            if (p1 == std::string::npos || p1 == 0 || p2 == std::string::npos || p3 == std::string::npos ||
+                p3 + 1 == file.size()) {
+                return Status::InvalidArgument("invalid index file name: " + file);
+            }
+
+            int32_t segment_id;
+            int64_t index_id;
+            auto segment_result = std::from_chars(file.data() + p1 + 1, file.data() + p2, segment_id);
+            auto index_result = std::from_chars(file.data() + p2 + 1, file.data() + p3, index_id);
+            if (segment_result.ec != std::errc() || segment_result.ptr != file.data() + p2 ||
+                index_result.ec != std::errc() || index_result.ptr != file.data() + p3 || segment_id < 0 ||
+                index_id < 0) {
+                return Status::InvalidArgument("invalid index file name: " + file);
+            }
+            std::string inverted_index_path =
+                    IndexDescriptor::inverted_index_file_path(clone_dir, file.substr(0, p1), segment_id, index_id);
+
+            if (!fs::path_exist(inverted_index_path)) {
+                RETURN_IF_ERROR(fs::create_directories(inverted_index_path));
+            }
+
+            std::string new_file_name = file.substr(p3 + 1);
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file,
+                                                               inverted_index_path + "/" + new_file_name));
+        }
+    }
+#endif
+
+    return Status::OK();
+}
+
 Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tablet_id, int32_t schema_hash) {
     // load original tablet meta
     std::string cloned_header_file = clone_dir + "/" + std::to_string(tablet_id) + ".hdr";
@@ -187,14 +228,13 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     TabletMetaPB cloned_tablet_meta_pb;
     if (has_meta_file) {
         return Status::OK();
-    } else {
-        TabletMeta cloned_tablet_meta;
-        if (Status st = cloned_tablet_meta.create_from_file(cloned_header_file); !st.ok()) {
-            LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file << ": " << st;
-            return Status::RuntimeError("fail to load cloned header file");
-        }
-        cloned_tablet_meta.to_meta_pb(&cloned_tablet_meta_pb);
     }
+    TabletMeta cloned_tablet_meta;
+    if (Status st = cloned_tablet_meta.create_from_file(cloned_header_file); !st.ok()) {
+        LOG(WARNING) << "Fail to create rowset meta from " << cloned_header_file << ": " << st;
+        return Status::RuntimeError("fail to load cloned header file");
+    }
+    cloned_tablet_meta.to_meta_pb(&cloned_tablet_meta_pb);
     LOG(INFO) << "Assigning new rowset id for cloned rowsets";
 
     TabletMetaPB new_tablet_meta_pb;
@@ -206,37 +246,6 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
     new_tablet_meta_pb.set_tablet_id(tablet_id);
     new_tablet_meta_pb.set_schema_hash(schema_hash);
     auto tablet_schema = std::make_shared<const TabletSchema>(new_tablet_meta_pb.schema());
-
-    // handle inverted index file
-    std::vector<std::string> all_files;
-    std::vector<std::string> new_inverted_index_files;
-    RETURN_IF_ERROR(FileSystem::Default()->get_children(clone_dir, &all_files));
-#ifndef __APPLE__
-    for (const auto& file : all_files) {
-        if (CLucenePlugin::is_index_files(file)) {
-            auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
-            auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
-            auto* p3 = (char*)std::memchr(p2 + 1, '_', file.size() - (p2 - file.data() + 1));
-            if (p1 == nullptr || p2 == nullptr || p3 == nullptr) {
-                return Status::InternalError("invalid index file name: " + file);
-            }
-
-            std::string rowsetid = file.substr(0, p1 - file.data());
-            std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
-            std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
-            std::string inverted_index_path = IndexDescriptor::inverted_index_file_path(
-                    clone_dir, rowsetid, std::stoi(segment_id), std::stoi(index_id));
-
-            if (!fs::path_exist(inverted_index_path)) {
-                RETURN_IF_ERROR(fs::create_directories(inverted_index_path));
-            }
-
-            std::string new_file_name = file.substr(p3 - file.data() + 1, file.data() + file.size() - p3);
-            RETURN_IF_ERROR(FileSystem::Default()->rename_file(clone_dir + "/" + file,
-                                                               inverted_index_path + "/" + new_file_name));
-        }
-    }
-#endif
 
     std::unordered_map<string, string> old_to_new_rowsetid;
 
@@ -455,7 +464,41 @@ StatusOr<std::string> SnapshotManager::snapshot_incremental(const TabletSharedPt
         }
     }
 
+    auto st = flatten_clucene_index_files(snapshot_dir);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to flatten CLucene snapshot files: " << st << " tablet:" << tablet->tablet_id();
+        (void)fs::remove_all(snapshot_id_path);
+        return st;
+    }
+
     return snapshot_id_path;
+}
+
+Status SnapshotManager::flatten_clucene_index_files(const std::string& snapshot_dir) {
+    // Snapshot transfer enumerates top-level files only, so flatten CLucene directories here.
+    std::vector<std::string> all_files;
+    RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir, &all_files));
+    for (const auto& file : all_files) {
+        constexpr std::string_view suffix = ".ivt";
+        if (file.size() <= suffix.size() || file.compare(file.size() - suffix.size(), suffix.size(), suffix) != 0) {
+            continue;
+        }
+        const auto index_dir = snapshot_dir + "/" + file;
+        ASSIGN_OR_RETURN(auto is_dir, fs::is_directory(index_dir));
+        if (!is_dir) {
+            continue;
+        }
+        // Keep the complete rowset/segment/index prefix without parsing its separators or numeric IDs.
+        const auto prefix = file.substr(0, file.size() - suffix.size());
+        std::vector<std::string> index_files;
+        RETURN_IF_ERROR(FileSystem::Default()->get_children(index_dir, &index_files));
+        for (const auto& index_file : index_files) {
+            RETURN_IF_ERROR(FileSystem::Default()->rename_file(index_dir + "/" + index_file,
+                                                               snapshot_dir + "/" + prefix + "_" + index_file));
+        }
+        RETURN_IF_ERROR(FileSystem::Default()->delete_dir_recursive(index_dir));
+    }
+    return Status::OK();
 }
 
 StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version,
@@ -519,6 +562,8 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
         }
     }
 
+    RETURN_IF_ERROR(flatten_clucene_index_files(snapshot_dir));
+
     // 4. Build snapshot header/meta file for the non-PrimaryKey tablet.
     if (tablet->updates() != nullptr) {
         return snapshot_id_path;
@@ -551,33 +596,6 @@ StatusOr<std::string> SnapshotManager::snapshot_full(const TabletSharedPtr& tabl
     std::stringstream dcg_snapshot_path;
     dcg_snapshot_path << snapshot_dir << "/" << tablet->tablet_id() << ".dcgs_snapshot";
     RETURN_IF_ERROR(DeltaColumnGroupListHelper::save_snapshot(dcg_snapshot_path.str(), dcg_snapshot_pb));
-
-    // handle inverted index files
-    std::vector<std::string> all_files;
-    RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir, &all_files));
-    for (const auto& file : all_files) {
-        auto is_dir = fs::is_directory(snapshot_dir + "/" + file);
-        if (is_dir.ok() && is_dir.value() && file.find("ivt", 0) != std::string::npos) {
-            std::vector<std::string> index_files;
-            RETURN_IF_ERROR(FileSystem::Default()->get_children(snapshot_dir + "/" + file, &index_files));
-            for (const auto& index_file : index_files) {
-                auto* p1 = (char*)std::memchr(file.data(), '_', file.size());
-                auto* p2 = (char*)std::memchr(p1 + 1, '_', file.size() - (p1 - file.data() + 1));
-                auto* p3 = (char*)std::memchr(p2 + 1, '.', file.size() - (p2 - file.data() + 1));
-
-                std::string rowsetid = file.substr(0, p1 - file.data());
-                std::string segment_id = file.substr(p1 - file.data() + 1, p2 - p1 - 1);
-                std::string index_id = file.substr(p2 - file.data() + 1, p3 - p2 - 1);
-
-                std::string old_name = snapshot_dir + "/" + file + "/" + index_file;
-                std::string new_name =
-                        snapshot_dir + "/" + rowsetid + "_" + segment_id + "_" + index_id + "_" + index_file;
-
-                RETURN_IF_ERROR(FileSystem::Default()->rename_file(old_name, new_name));
-            }
-            RETURN_IF_ERROR(FileSystem::Default()->delete_dir_recursive(snapshot_dir + "/" + file));
-        }
-    }
 
     snapshot_tablet_meta->revise_inc_rs_metas(vector<RowsetMetaSharedPtr>());
     snapshot_tablet_meta->revise_rs_metas(std::move(snapshot_rowset_metas));
@@ -677,6 +695,13 @@ StatusOr<std::string> SnapshotManager::snapshot_primary(const TabletSharedPtr& t
         }
     }
 
+    st = flatten_clucene_index_files(snapshot_dir);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to flatten CLucene snapshot files: " << st << " tablet:" << tablet->tablet_id();
+        (void)fs::remove_all(snapshot_id_path);
+        return st;
+    }
+
     return snapshot_id_path;
 }
 
@@ -774,6 +799,25 @@ StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& f
     ASSIGN_OR_RETURN(auto file, FileSystem::Default()->new_random_access_file(filename));
     RETURN_IF_ERROR(snapshot_meta.parse_from_file(file.get()));
     return std::move(snapshot_meta);
+}
+
+// Keep relative paths so index directory contents participate in duplicate checking and cleanup.
+Status SnapshotManager::list_snapshot_files(const std::string& root, std::set<std::string>* files) {
+    std::vector<std::string> pending{""};
+    while (!pending.empty()) {
+        auto prefix = std::move(pending.back());
+        pending.pop_back();
+        std::set<std::string> children;
+        std::set<std::string> directories;
+        RETURN_IF_ERROR(fs::list_dirs_files(root + "/" + prefix, &directories, &children));
+        for (const auto& file : children) {
+            files->insert(prefix + file);
+        }
+        for (const auto& directory : directories) {
+            pending.push_back(prefix + directory + "/");
+        }
+    }
+    return Status::OK();
 }
 
 Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
