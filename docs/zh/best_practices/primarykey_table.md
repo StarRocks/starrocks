@@ -3,14 +3,14 @@ sidebar_position: 40
 description: "主键表使用了由 StarRocks 设计的新存储引擎。"
 ---
 
-# 主键表 {#primary-key-tables}
+# 主键表
 
 主键表使用了由 StarRocks 设计的新型存储引擎。其主要优势在于支持实时数据更新，同时确保复杂即席查询的高效性能。在实时业务分析中，决策可以受益于主键表，它使用最新数据实时分析结果，从而减少数据分析中的数据延迟。
 然而，主键并非免费的午餐。如果使用不当，可能会导致不必要的资源浪费。
 
 因此，在本节中，我们将指导您如何更高效地使用主键模型以达到预期效果。
 
-## 选择主键索引 {#choosing-primary-key-index}
+## 选择主键索引
 
 主键索引是主键表中最关键的组成部分。主键索引用于存储主键值与由主键值标识的数据行所在位置之间的映射关系。
 
@@ -49,7 +49,7 @@ PROPERTIES (
 1. 不依赖本地磁盘容量。
 2. 数据分片重新均衡后无需重建索引。
 
-## 选择主键 {#choosing-the-primary-key}
+## 选择主键
 
 主键通常无助于加速查询。您可以使用 `ORDER BY` 子句指定与主键不同的列作为排序键以加快查询速度。因此，在选择主键时，您只需考虑数据导入和更新过程中的唯一性。
 
@@ -59,7 +59,7 @@ PROPERTIES (
 
 持久化索引会占用多少存储和内存空间？
 
-### 存储空间成本公式 {#formula-for-storage-space-cost}
+### 存储空间成本公式
 
 `(key size + 8 bytes) * row count * 50% `
 
@@ -67,11 +67,11 @@ PROPERTIES (
 50% 是估算的压缩效率，实际压缩效果取决于数据本身。
 :::
 
-### 内存成本公式 {#formula-for-memory-cost}
+### 内存成本公式
 
 `min(l0_max_mem_usage * tablet cnt, update_memory_limit_percent * BE process memory);`
 
-## 内存使用 {#memory-usage}
+## 内存使用
 
 主键表使用的内存可以通过 mem_tracker 进行监控：
 
@@ -113,7 +113,7 @@ transaction_publish_version_worker_count = (some value smaller than cpu core num
 
 但需要注意，降低 `l0_max_mem_usage` 可能会增加 I/O 压力，而降低 `transaction_apply_worker_count` 或 `transaction_publish_version_worker_count` 可能会减慢数据导入速度。
 
-## 在 Compaction 资源、数据新鲜度和查询延迟之间进行权衡 {#tradeoff-between-compaction-resource-data-freshness-and-query-latency}
+## 在 Compaction 资源、数据新鲜度和查询延迟之间进行权衡
 
 与其他表模型相比，主键表在数据导入、更新和删除过程中需要额外的主键索引查找和 Delete Vector 生成操作，这会引入额外的资源开销。
 因此，您需要在以下三个因素之间进行权衡：
@@ -122,7 +122,7 @@ transaction_publish_version_worker_count = (some value smaller than cpu core num
 - 数据新鲜度
 - 查询延迟
 
-#### 数据新鲜度和查询延迟 {#data-freshness--query-latency}
+#### 数据新鲜度和查询延迟
 
 如果您希望获得更好的数据新鲜度，同时也希望获得更低的查询延迟，这意味着您将引入高频写入，并且希望确保它们能够尽快完成 Compaction。
 这样您就需要更多的 Compaction 资源来处理这些写入：
@@ -180,7 +180,7 @@ Failed to load data into partition xxx, because of too large compaction score, c
 Failed to load data into tablet xxx, because of too many versions, current/limit: xxx/xxx. You can reduce the loading job concurrency, or increase loading data batch size. If you are loading data with Routine Load, you can increase FE configs routine_load_task_consume_second and max_routine_load_batch_size.
 ```
 
-#### 数据新鲜度与 Compaction 资源限制 {#data-freshness--compaction-resources-limitation}
+#### 数据新鲜度与 Compaction 资源限制
 
 如果您的 Compaction 资源有限，但仍需要保持足够的数据新鲜度，这意味着您需要牺牲一些查询延迟。
 
@@ -209,7 +209,7 @@ tablet_max_versions = xxx (default is 1000, you can increase it)
 
 通过增大这些配置，系统可以容纳更多的小数据文件并降低 Compaction 频率，但这也会影响查询延迟。
 
-#### 查询延迟与 Compaction 资源限制 {#query-latency--compaction-resources-limitation}
+#### 查询延迟与 Compaction 资源限制
 
 如果您希望在 Compaction 资源有限的情况下实现良好的查询延迟，需要降低写入频率，并为导入创建更大的数据批次。
 

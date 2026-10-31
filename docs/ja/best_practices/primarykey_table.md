@@ -3,14 +3,14 @@ sidebar_position: 40
 description: "主キーテーブルは、StarRocks によって設計された新しいストレージエンジンを使用します。"
 ---
 
-# 主キーテーブル {#primary-key-tables}
+# 主キーテーブル
 
 主キーテーブルは StarRocks が設計した新しいストレージエンジンを使用しています。その主な利点は、リアルタイムのデータ更新をサポートしながら、複雑なアドホッククエリに対しても効率的なパフォーマンスを確保できる点にあります。リアルタイムのビジネス分析では、意思決定は主キーテーブルの恩恵を受けることができます。主キーテーブルは最新のデータを使用して結果をリアルタイムに分析するため、データ分析におけるデータ遅延を軽減できます。
 ただし、主キーは万能というわけではありません。不適切に使用すると、不要なリソースの浪費につながる可能性があります。
 
 そのため、このセクションでは、望ましい結果を得るために、より効率的に主キーモデルを使用する方法について説明します。
 
-## 主キーインデックスの選択 {#choosing-primary-key-index}
+## 主キーインデックスの選択
 
 主キーインデックスは、主キーテーブルにおいて最も重要なコンポーネントです。主キーインデックスは、主キー値とその主キー値によって特定されるデータ行の位置とのマッピングを格納するために使用されます。
 
@@ -49,7 +49,7 @@ PROPERTIES (
 1. ローカルディスクの容量に依存しません。
 2. データシャードの再バランス後にインデックスを再構築する必要がありません。
 
-## 主キーの選択 {#choosing-the-primary-key}
+## 主キーの選択
 
 主キーは通常、クエリの高速化には役立ちません。クエリを高速化するために、`ORDER BY` 句を使用して主キーとは異なる列をソートキーとして指定できます。そのため、主キーを選択する際は、データのインポートおよび更新プロセス中の一意性のみを考慮すればよいです。
 
@@ -59,7 +59,7 @@ PROPERTIES (
 
 永続性インデックスはどれくらいのストレージ容量とメモリ容量を占有しますか？
 
-### ストレージ容量コストの計算式 {#formula-for-storage-space-cost}
+### ストレージ容量コストの計算式
 
 `(key size + 8 bytes) * row count * 50% `
 
@@ -67,11 +67,11 @@ PROPERTIES (
 50%は推定される圧縮効率であり、実際の圧縮効果はデータ自体に依存します。
 :::
 
-### メモリコストの計算式 {#formula-for-memory-cost}
+### メモリコストの計算式
 
 `min(l0_max_mem_usage * tablet cnt, update_memory_limit_percent * BE process memory);`
 
-## メモリ使用量 {#memory-usage}
+## メモリ使用量
 
 主キーテーブルが使用するメモリは mem_tracker で監視できます：
 
@@ -113,7 +113,7 @@ transaction_publish_version_worker_count = (some value smaller than cpu core num
 
 ただし、`l0_max_mem_usage` を減らすと I/O への負荷が増加する可能性があり、`transaction_apply_worker_count` または `transaction_publish_version_worker_count` を減らすとデータの取り込みが遅くなる可能性があることに注意してください。
 
-## Compaction リソース、データの鮮度、クエリレイテンシのトレードオフ {#tradeoff-between-compaction-resource-data-freshness-and-query-latency}
+## Compaction リソース、データの鮮度、クエリレイテンシのトレードオフ
 
 他のモデルのテーブルと比較して、主キーテーブルはデータのインポート、更新、削除の際に主キーインデックスの検索と Delete Vector の生成という追加の操作が必要となり、これにより追加のリソースオーバーヘッドが発生します。
 そのため、以下の3つの要素の間でトレードオフを行う必要があります：
@@ -122,7 +122,7 @@ transaction_publish_version_worker_count = (some value smaller than cpu core num
 - データの鮮度
 - クエリレイテンシ
 
-#### データの鮮度とクエリレイテンシ {#data-freshness--query-latency}
+#### データの鮮度とクエリレイテンシ
 
 より良いデータの鮮度とより良いクエリレイテンシの両方を得たい場合、それは高頻度の書き込みを導入することを意味し、さらにそれらができるだけ早く Compaction されることを確保したいということになります。
 その場合、これらの書き込みを処理するためにより多くの Compaction リソースが必要になります：
@@ -180,7 +180,7 @@ Failed to load data into partition xxx, because of too large compaction score, c
 Failed to load data into tablet xxx, because of too many versions, current/limit: xxx/xxx. You can reduce the loading job concurrency, or increase loading data batch size. If you are loading data with Routine Load, you can increase FE configs routine_load_task_consume_second and max_routine_load_batch_size.
 ```
 
-#### データの鮮度と Compaction リソースの制限 {#data-freshness--compaction-resources-limitation}
+#### データの鮮度と Compaction リソースの制限
 
 コンパクションリソースが限られているにもかかわらず、十分なデータの鮮度を維持する必要がある場合、クエリレイテンシーをある程度犠牲にする必要があります。
 
@@ -209,7 +209,7 @@ tablet_max_versions = xxx (default is 1000, you can increase it)
 
 これらの設定を大きくすることで、システムはより多くの小さなデータファイルを許容し、コンパクションの頻度を減らすことができますが、クエリレイテンシーにも影響します。
 
-#### クエリレイテンシーと Compaction リソースの制限 {#query-latency--compaction-resources-limitation}
+#### クエリレイテンシーと Compaction リソースの制限
 
 限られたコンパクションリソースで良好なクエリレイテンシーを実現したい場合は、書き込み頻度を減らし、データ取り込みのためのより大きなデータバッチを作成する必要があります。
 
