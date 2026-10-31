@@ -158,6 +158,13 @@ public:
     ZoneMapPB* segment_zone_map() const { return _segment_zone_map.get(); }
 
     PagePointer get_dict_page_pointer() const { return _dict_page_pointer; }
+    // The compression-dictionary page while its DDict is still to be built -- the column's first
+    // data page read loads it. Size 0 when the column has none or the DDict already exists.
+    PagePointer pending_zstd_compression_dict_page() const {
+        return has_zstd_compression_dict() && !invoked(_zstd_compression_ddict_once)
+                       ? _zstd_compression_dict_page_pointer
+                       : PagePointer();
+    }
     LogicalType column_type() const { return _column_type; }
     int32_t column_length() const { return _column_length; }
     bool has_all_dict_encoded() const { return _flags & kHasAllDictEncodedMask; }

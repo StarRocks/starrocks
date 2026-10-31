@@ -33,6 +33,10 @@ public:
 
     size_t merged_rows() const override { return _child->merged_rows(); }
 
+    StatusOr<bool> prefetch(std::atomic<int64_t>* budget) override { return _child->prefetch(budget); }
+
+    OlapReaderStatistics* set_read_stats(OlapReaderStatistics* stats) override { return _child->set_read_stats(stats); }
+
     Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
         return _child->init_encoded_schema(dict_maps);

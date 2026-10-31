@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -84,6 +85,17 @@ public:
     io::IoStatsSnapshot get_io_stats_snapshot() const override;
 
     Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
+    // Load every registered buffer that is not resident yet, in ascending offset order, reserving
+    // each buffer's bytes from |budget| before loading it and stopping once the budget runs out.
+    // Returns whether every registered buffer is now loaded. Lets a caller run the IO of a scan
+    // up front (e.g. on an IO worker) while the decoding stays with the consuming thread; the
+    // budget is shared by every stream of the same read, so their combined residency stays capped.
+    // Subsequent reads of uncovered ranges go directly to the underlying stream instead of
+    // loading a registered buffer outside the budget.
+    StatusOr<bool> prefetch_registered(std::atomic<int64_t>* budget);
+    // Disable demand-loading of registered buffers for scans whose residency must be authorized
+    // by prefetch_registered(). Also keeps reads bounded when no prefetch worker is available.
+    void set_prefetch_only() { _prefetch_only = true; }
     void release_to_offset(int64_t offset);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
@@ -126,6 +138,7 @@ private:
     int64_t _direct_io_timer = 0;
     int64_t _align_size = 0;
     int64_t _estimated_mem_usage = 0;
+    bool _prefetch_only = false;
 };
 
 } // namespace starrocks
