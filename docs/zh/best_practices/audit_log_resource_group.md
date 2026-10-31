@@ -77,12 +77,14 @@ LIMIT 20;                                                       -- 列出 CPU �
 
 ### 分析
 
-以下 SQL 计算了过去 30 天内每个用户单个查询的最大内存使用量 (`memCostBytes`)。
+`memCostBytes` 记录该查询在所有参与执行的 BE 上的内存峰值中的最大值（存算分离集群中为 CN）。单节点峰值取自该查询整体的内存追踪统计，不是各个算子独立内存峰值的累加。
+
+以下 SQL 按用户统计过去 30 天内各查询的单节点内存峰值，并取其中的最大值。
 
 ```SQL
 SELECT 
     user,
-    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb            -- 每个查询的最大内存使用量（以 MB 为单位）。
+    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb            -- 单节点查询内存峰值的最大值（以 MB 为单位）。
 FROM starrocks_audit_db__.starrocks_audit_tbl__
 WHERE state IN ('EOF','OK')                                    -- 仅包含已完成的查询。
   AND timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)   -- 查询过去 30 天的数据。
@@ -93,7 +95,7 @@ LIMIT 20;                                                      -- 列出内存�
 
 ### 最佳实践
 
-`max_mem_mb` 表示**所有 BEs 的总内存使用量**。您可以通过以下公式计算每个 BE 上的近似内存使用量：`max_mem_mb / number_of_BEs`。
+`max_mem_mb` 已经是**单节点内存峰值**，不是所有 BE 的内存总和。估算单节点内存使用量时，不应再除以 BE 或 CN 的数量。
 
 您可以按如下方式配置资源组的内存限制：
 
@@ -173,7 +175,7 @@ LIMIT 50;                                                     -- 列出并发性
 ```SQL
 SELECT 
     user,
-    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb             -- 每个查询的最大内存使用量（以 MB 为单位）。
+    MAX(memCostBytes) / (1024 * 1024) AS max_mem_mb             -- 单节点查询内存峰值的最大值（以 MB 为单位）。
 FROM starrocks_audit_db__.starrocks_audit_tbl__
 WHERE state IN ('EOF','OK')                                     -- 仅包含已完成的查询。
   AND timestamp >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)    -- 查询过去 30 天的数据。
