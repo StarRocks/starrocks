@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 4
 ---
 
 # Monitor and Alert with Prometheus and Grafana
