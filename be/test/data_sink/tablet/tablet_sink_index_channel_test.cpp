@@ -14,8 +14,10 @@
 
 #include "data_sink/tablet/tablet_sink_index_channel.h"
 
+#include <bvar/bvar.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <thread>
 
@@ -562,6 +564,82 @@ TEST_F(TabletSinkIndexChannelTest, chunk_encode_level_follows_the_peer_advertise
             for (int level : observed_levels) {
                 EXPECT_EQ(c.expected_level, level);
             }
+        }
+    }
+}
+
+// The coordinator-side rpc bvars: one add_chunk rpc in flight while the call is out and none once it
+// is collected, a latency sample per completed rpc, and a failure counted only when the rpc layer
+// itself fails.
+TEST_F(TabletSinkIndexChannelTest, rpc_bvars_follow_the_add_chunk_rpcs) {
+    auto bvar_value = [](const char* name) -> int64_t { return std::stoll(bvar::Variable::describe_exposed(name)); };
+
+    for (bool rpc_fails : {false, true}) {
+        TQueryOptions query_options;
+        query_options.__set_batch_size(4096);
+        query_options.__set_query_timeout(3600);
+        auto runtime_state = _build_runtime_state(query_options);
+        auto sink = _build_prepared_sink(runtime_state.get());
+
+        const int64_t latency_count_before = bvar_value("tablet_sink_send_chunk_count");
+        const int64_t failed_before = bvar_value("tablet_sink_rpc_failed_total");
+        ASSERT_EQ(0, bvar_value("tablet_sink_rpc_pending"));
+        int64_t sends = 0;
+        int64_t max_pending_seen = 0;
+
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+            SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+            RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+            RefCountClosure<PTabletWriterOpenResult>* closure = rpc_pair->second;
+            closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+            closure->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [](void* arg) {});
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+            RpcAddChunkTuple* rpc_tuple = (RpcAddChunkTuple*)arg;
+            ReusableClosure<PTabletWriterAddBatchResult>* closure = std::get<2>(*rpc_tuple);
+            // Seen from inside the call, the rpc just issued is still in flight.
+            max_pending_seen = std::max(max_pending_seen, bvar_value("tablet_sink_rpc_pending"));
+            sends++;
+            if (rpc_fails) {
+                closure->cntl.SetFailed("mock rpc failure");
+            } else {
+                closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+            }
+            closure->Run();
+        });
+        SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [](void* arg) {
+            auto* rpc_pair = (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+            *rpc_pair->second = true;
+        });
+
+        ASSERT_OK(sink->open(runtime_state.get()));
+        auto chunk = _build_test_chunk(runtime_state.get());
+        ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+        Status close_st = sink->close(runtime_state.get(), Status::OK());
+        ASSERT_EQ(!rpc_fails, close_st.ok()) << close_st;
+
+        ASSERT_GT(sends, 0);
+        EXPECT_EQ(1, max_pending_seen);
+        EXPECT_EQ(0, bvar_value("tablet_sink_rpc_pending"));
+        const int64_t latency_samples = bvar_value("tablet_sink_send_chunk_count") - latency_count_before;
+        const int64_t failed = bvar_value("tablet_sink_rpc_failed_total") - failed_before;
+        if (rpc_fails) {
+            // The first failure cancels the sink, so later rpcs may never be collected.
+            EXPECT_GE(failed, 1);
+            EXPECT_LE(failed, sends);
+            EXPECT_EQ(failed, latency_samples);
+        } else {
+            EXPECT_EQ(0, failed);
+            EXPECT_EQ(sends, latency_samples);
         }
     }
 }

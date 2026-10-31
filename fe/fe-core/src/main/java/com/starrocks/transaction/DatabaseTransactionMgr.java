@@ -719,6 +719,7 @@ public class DatabaseTransactionMgr {
         }
 
         LOG.info("transaction:[{}] successfully rollback", copiedState);
+        TransactionMetricRegistry.getInstance().update(copiedState);
 
         Database db = globalStateMgr.getLocalMetastore().getDb(dbId);
         if (db == null) {

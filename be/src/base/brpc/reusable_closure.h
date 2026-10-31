@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <bvar/bvar.h>
 #include <google/protobuf/stubs/common.h>
 
 #include <atomic>
@@ -41,8 +42,22 @@ public:
 
     void Run() override {
         _latency = MonotonicNanos() - _start_timestamp;
+        if (_inflight != nullptr) {
+            *_inflight << -1;
+        }
         if (unref()) {
             delete this;
+        }
+    }
+
+    // Counts the calls issued through this closure that brpc has not completed yet. Set once before
+    // the first call; the owner calls issued() right before handing the closure to the stub and Run()
+    // takes the count back, so a call that is cancelled or never joined still leaves it balanced.
+    void set_inflight_counter(bvar::Adder<int64_t>* counter) { _inflight = counter; }
+
+    void issued() {
+        if (_inflight != nullptr) {
+            *_inflight << 1;
         }
     }
 
@@ -78,6 +93,7 @@ private:
     std::atomic<int> _refs;
     int64_t _start_timestamp;
     int64_t _latency;
+    bvar::Adder<int64_t>* _inflight = nullptr;
 };
 
 } // namespace starrocks
