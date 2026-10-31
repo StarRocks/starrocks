@@ -438,7 +438,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     StatusOr<TabletMetadataPtr> res;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
-                                                    skip_write_tablet_metadata, fe_built_version, base_version_order);
+                                                    skip_write_tablet_metadata, fe_built_version, base_version_order,
+                                                    request->is_retry_publish());
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
