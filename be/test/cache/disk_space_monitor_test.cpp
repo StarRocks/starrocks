@@ -19,6 +19,7 @@
 
 #include <cstring>
 #include <filesystem>
+#include <string>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
@@ -187,12 +188,21 @@ TEST_F(DiskSpaceMonitorTest, adjust_for_dirty_cache_dir) {
     ASSERT_EQ(dir_spaces[2].size, 200 * GB);
 }
 
-TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
+TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota_after_default_idle_period) {
+    // cache_test uses gtest_main without initializing configs, so load this field's registered default.
+    int64_t default_idle_seconds = 0;
+    for (const auto& info : config::list_configs()) {
+        if (info.name == "datacache_disk_idle_seconds_for_expansion") {
+            default_idle_seconds = std::stoll(info.defval);
+            break;
+        }
+    }
+    ASSERT_GT(default_idle_seconds, 0);
+    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, default_idle_seconds);
     SCOPED_UPDATE(bool, config::datacache_enable, true);
     SCOPED_UPDATE(bool, config::enable_datacache_disk_auto_adjust, false);
     SCOPED_UPDATE(int64_t, config::datacache_min_disk_quota_for_adjustment, 0);
     SCOPED_UPDATE(int64_t, config::datacache_disk_adjust_interval_seconds, 1);
-    SCOPED_UPDATE(int64_t, config::datacache_disk_idle_seconds_for_expansion, 300);
 
     auto options = TestCacheUtils::create_simple_options(kBlockSize, 0, 20 * MB);
     auto block_cache = TestCacheUtils::create_cache(options);
@@ -217,16 +227,16 @@ TEST_F(DiskSpaceMonitorTest, auto_increase_cache_quota) {
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
-    {
-        config::enable_datacache_disk_auto_adjust = true;
+    // Use the configured default idle period: a full cache must wait five minutes before expanding.
+    config::enable_datacache_disk_auto_adjust = true;
+    for (int elapsed_seconds = 1; elapsed_seconds < 300; ++elapsed_seconds) {
         ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
-        ASSERT_FALSE(changed);
+        ASSERT_FALSE(changed) << "elapsed seconds: " << elapsed_seconds;
         auto metrics = local_cache->cache_metrics();
         ASSERT_EQ(metrics.disk_quota_bytes, 20 * MB);
     }
 
     {
-        config::datacache_disk_idle_seconds_for_expansion = 1;
         ASSIGN_OR_ASSERT_FAIL(auto changed, adjust_quota_once(space_monitor.get()));
         ASSERT_TRUE(changed);
         auto metrics = local_cache->cache_metrics();
