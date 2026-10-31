@@ -532,7 +532,7 @@ select tablet_id,t.data_size,num_row,visible_version,num_version,num_rowset,num_
 
 #### BE Load
 
-これらのメトリクスは Grafana の **BE Load** カテゴリで利用可能です。このカテゴリが見つからない場合は、[最新の Grafana ダッシュボードテンプレート](../../administration/management/monitoring/monitoring.md#125-ダッシュボードの設定) を使用していることを確認してください。
+これらのメトリクスは Grafana の **BE Load** カテゴリで利用可能です。このカテゴリが見つからない場合は、[最新の Grafana ダッシュボードテンプレート](../../administration/management/monitoring/prometheus_grafana.md#125-ダッシュボードの設定) を使用していることを確認してください。
 
 ##### ThreadPool
 

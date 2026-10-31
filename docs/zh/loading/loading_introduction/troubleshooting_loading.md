@@ -532,7 +532,7 @@ select tablet_id,t.data_size,num_row,visible_version,num_version,num_rowset,num_
 
 #### BE Load
 
-这些指标在 Grafana 的 **BE Load** 类别下可用。如果找不到此类别，请确认您正在使用 [最新的 Grafana 仪表板模板](../../administration/management/monitoring/monitoring.md#125-配置-dashboard)。
+这些指标在 Grafana 的 **BE Load** 类别下可用。如果找不到此类别，请确认您正在使用 [最新的 Grafana 仪表板模板](../../administration/management/monitoring/prometheus_grafana.md#125-配置-dashboard)。
 
 ##### ThreadPool
 
