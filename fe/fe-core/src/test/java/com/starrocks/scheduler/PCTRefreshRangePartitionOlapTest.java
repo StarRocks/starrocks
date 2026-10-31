@@ -229,9 +229,42 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         Assertions.assertNotNull(nextTaskRun);
         Assertions.assertEquals(String.valueOf(leaderStartTime),
                 nextTaskRun.getProperties().get(TaskRun.MV_FRESHNESS_BASELINE_TIME));
+        Assertions.assertEquals(String.valueOf(leaderStartTime),
+                nextTaskRun.getProperties().get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME));
+        Assertions.assertNull(taskRun.getProperties().get(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "the first run must not write the job process start onto itself");
         String leaderSubmitUser = taskRun.getStatus().getSubmitUser();
         Assertions.assertNotNull(leaderSubmitUser);
         Assertions.assertEquals(leaderSubmitUser, nextTaskRun.getExecuteOption().getSubmitUser());
+    }
+
+    @Test
+    public void testMVBatchRefreshDoesNotSeedJobProcessStartTimeWhenUnset() throws Exception {
+        String partitionTable = "CREATE TABLE range_job_start_t0 (dt1 date, int1 int)\n" +
+                "PARTITION BY date_trunc('day', dt1)";
+        starRocksAssert.withTable(partitionTable);
+        addRangePartition("range_job_start_t0", "p1", "2024-01-04", "2024-01-05");
+        addRangePartition("range_job_start_t0", "p2", "2024-01-05", "2024-01-06");
+        executeInsertSql("INSERT INTO range_job_start_t0 partition(p1) VALUES (\"2024-01-04\",1);");
+        executeInsertSql("INSERT INTO range_job_start_t0 partition(p2) VALUES (\"2024-01-05\",1);");
+
+        String mvQuery = "CREATE MATERIALIZED VIEW test_mv_job_start_0 " +
+                "PARTITION BY date_trunc('day', dt1) " +
+                "REFRESH DEFERRED MANUAL PROPERTIES (\"partition_refresh_number\"=\"1\")\n" +
+                "AS SELECT dt1,sum(int1) from range_job_start_t0 group by dt1";
+        starRocksAssert.withMaterializedView(mvQuery);
+
+        MaterializedView mv = getMv("test_mv_job_start_0");
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        taskRun.getProperties().put(TaskRun.FORCE, "true");
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        // processStartTime left at 0: unknown, so the job-start property must not be written as "0".
+        taskRun.executeTaskRun();
+
+        TaskRun nextTaskRun = getPartitionBasedRefreshProcessor(taskRun).getNextTaskRun();
+        Assertions.assertNotNull(nextTaskRun);
+        Assertions.assertFalse(nextTaskRun.getProperties().containsKey(TaskRun.MV_REFRESH_JOB_PROCESS_START_TIME),
+                "unknown processStartTime must not seed a 0 sentinel onto the next run");
     }
 
     @Test
