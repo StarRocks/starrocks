@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_position: 4
 ---
 
 # Prometheus と Grafana を使用した監視とアラート
