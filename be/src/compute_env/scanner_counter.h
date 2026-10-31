@@ -68,6 +68,12 @@ struct ScannerCounter {
     int64_t file_read_count = 0;
     // count of files opened for reading
     int64_t num_files_read = 0;
+
+    // Arrow IPC discrete stream counters
+    int64_t arrow_messages_read = 0;
+    int64_t arrow_messages_rejected = 0;
+    int64_t arrow_decompressed_bytes = 0;
+    int64_t arrow_decode_ns = 0;
 };
 
 } // namespace starrocks

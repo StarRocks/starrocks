@@ -17,18 +17,26 @@
 #include <arrow/api.h>
 #include <arrow/ipc/api.h>
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/string/slice.h"
+
+namespace starrocks {
+class StreamLoadPipeInputStream;
+}
+
+#include "column/arrow/arrow_memory_pool.h"
 #include "column/arrow/arrow_to_starrocks_converter.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
 #include "connector/file/scanner/file_scanner.h"
 #include "fs/fs.h"
+#include "runtime/byte_buffer.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
@@ -51,16 +59,43 @@ public:
 private:
     Status open_next_reader();
     Status next_batch();
+    Status validate_batch_schema(const std::shared_ptr<arrow::RecordBatch>& batch);
+    Status validate_ipc_schema(const std::shared_ptr<arrow::Schema>& schema);
+
+    // Discrete (Routine Load) input. A message is decoded, validated and converted as a unit into _ready_chunks,
+    // so a rejected message never exposes any of its rows and every message is counted exactly once.
+    StatusOr<ChunkPtr> get_next_discrete();
+    Status read_discrete_message();
+    Status decode_and_convert_discrete_message(int64_t* filtered_rows);
+    Status decode_discrete_message(ArrowBoundedMemoryPool* pool,
+                                   std::deque<std::shared_ptr<arrow::RecordBatch>>* batches, int64_t* rows,
+                                   int64_t* filtered_rows);
+    Status convert_discrete_batches(std::deque<std::shared_ptr<arrow::RecordBatch>>* batches, int64_t max_bytes);
+    int64_t estimate_batch_output_bytes(const arrow::RecordBatch& batch) const;
+    void reject_discrete_message(const std::string& reason, int64_t filtered_rows);
+
     Status initialize_src_chunk(ChunkPtr* chunk);
     Status append_batch_to_src_chunk(ChunkPtr* chunk);
     bool chunk_is_full();
     bool batch_is_exhausted();
     Status finalize_src_chunk(ChunkPtr* chunk);
 
+    bool _is_discrete_pipe{false};
     const TBrokerScanRange& _scan_range;
     int _next_file{0};
+    // Index into _scan_range.ranges for the file whose rows are in the current
+    // chunk being built.  Captured in initialize_src_chunk() and used by
+    // finalize_src_chunk() so that path/partition columns are always attributed
+    // to the correct file, even when get_next() breaks at a file boundary after
+    // opening a new file (which would otherwise advance _next_file past the
+    // current chunk's file).
+    int _chunk_file_idx{0};
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> _curr_file_reader;
     bool _scanner_eof{false};
+    // Fully converted chunks of the discrete message being drained by get_next_discrete().
+    std::deque<ChunkPtr> _ready_chunks;
+    // Set once the "further warnings suppressed" notice was logged for rejected messages.
+    bool _reject_log_suppressed{false};
     std::shared_ptr<arrow::RecordBatch> _batch;
     const size_t _max_chunk_size;
     size_t _batch_start_idx{0};
@@ -72,6 +107,13 @@ private:
     Filter _chunk_filter;
     ArrowConvertContext _conv_ctx;
     int64_t _last_file_scan_rows{0};
+    std::shared_ptr<SequentialFile> _file;
+    ByteBufferPtr _parser_buf;
+    RuntimeProfile::Counter* _arrow_messages_read_counter = nullptr;
+    RuntimeProfile::Counter* _arrow_messages_rejected_counter = nullptr;
+    RuntimeProfile::Counter* _arrow_decompressed_bytes_counter = nullptr;
+    RuntimeProfile::Counter* _arrow_decode_timer = nullptr;
+    arrow::MemoryPool* _decode_delegate_pool{arrow::default_memory_pool()};
 };
 
 } // namespace starrocks
