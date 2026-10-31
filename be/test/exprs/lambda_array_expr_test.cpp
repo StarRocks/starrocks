@@ -72,8 +72,7 @@ public:
         _array_expr.push_back(const_null);
 
         // [null]
-        array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
-        array->append_datum(DatumArray{Datum()});
+        array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, true, {{std::nullopt}});
         auto* null_array = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT_DESC);
         _array_expr.push_back(null_array);
 
