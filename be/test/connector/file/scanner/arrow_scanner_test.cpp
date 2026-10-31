@@ -5594,4 +5594,36 @@ TEST_F(ArrowScannerTest, TestStreamRejectsUnreadBytesAfterFirstIpcEos) {
     scanner.close();
 }
 
+TEST_F(ArrowScannerTest, TestStreamRecordsReadBatchAndFileReadCounters) {
+    auto c = make_int_slot_case();
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(c.slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    const std::string corrupt = "corrupt_ipc";
+    append_raw_message(pipe, reinterpret_cast<const uint8_t*>(corrupt.data()), corrupt.size());
+    append_ipc_message(pipe, c.good_schema, {make_int32_batch(c.good_schema, {10, 20})});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+
+    auto res = scanner.get_next();
+    ASSERT_OK(res.status());
+    ASSERT_NE(nullptr, res.value());
+    ASSERT_EQ(2, res.value()->num_rows());
+    EXPECT_EQ(10, res.value()->columns()[0]->get(0).get_int32());
+    EXPECT_EQ(20, res.value()->columns()[0]->get(1).get_int32());
+
+    EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+    EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+    EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+    EXPECT_GT(ctx->counter->arrow_decode_ns, 0);
+    EXPECT_GE(ctx->counter->read_batch_ns, ctx->counter->arrow_decode_ns);
+    EXPECT_EQ(3, ctx->counter->file_read_count);
+    EXPECT_GT(ctx->counter->file_read_ns, 0);
+    scanner.close();
+}
+
 } // namespace starrocks

@@ -454,45 +454,53 @@ Status ArrowScanner::validate_ipc_schema(const std::shared_ptr<arrow::Schema>& s
 // validated and converted as a unit: it either lands in _ready_chunks in full, or it is rejected in full and none
 // of its rows are ever exposed. Returns EndOfFile once the pipe is drained.
 Status ArrowScanner::read_discrete_message() {
-    auto* stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
-    auto* pipe = stream_file ? stream_file->pipe().get() : nullptr;
-    DCHECK(pipe != nullptr);
+    {
+        SCOPED_RAW_TIMER(&_counter->read_batch_ns);
+        auto* stream_file = dynamic_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+        auto* pipe = stream_file ? stream_file->pipe().get() : nullptr;
+        DCHECK(pipe != nullptr);
 
-    auto res = pipe->read();
-    if (!res.ok()) {
-        _parser_buf.reset();
-        if (res.status().is_end_of_file()) {
-            _scanner_eof = true;
-            return Status::EndOfFile("EOF");
+        StatusOr<ByteBufferPtr> res;
+        ++_counter->file_read_count;
+        {
+            SCOPED_RAW_TIMER(&_counter->file_read_ns);
+            res = pipe->read();
         }
-        return res.status();
-    }
-    _parser_buf = res.value();
-    if (_parser_buf == nullptr || _parser_buf->remaining() == 0) {
-        _parser_buf.reset();
-        return Status::OK();
-    }
-
-    if (_state != nullptr) {
-        _state->update_num_bytes_scan_from_source(_parser_buf->remaining());
-    }
-
-    _last_file_scan_rows = 0;
-    _conv_ctx.current_batch_first_row_in_file = -1;
-    _conv_ctx.clear_current_column();
-    _conv_ctx.consumer_partition = -1;
-    _conv_ctx.consumer_offset = -1;
-    _conv_ctx.consumer_message_id.clear();
-    if (auto meta = _parser_buf->meta()) {
-        if (meta->type() != ByteBufferMetaType::NONE) {
-            auto msg_meta = static_cast<const StreamMessageMeta*>(meta);
-            _conv_ctx.consumer_partition = msg_meta->partition();
-            _conv_ctx.consumer_offset = msg_meta->offset();
-            _conv_ctx.consumer_message_id = msg_meta->message_id();
+        if (!res.ok()) {
+            _parser_buf.reset();
+            if (res.status().is_end_of_file()) {
+                _scanner_eof = true;
+                return Status::EndOfFile("EOF");
+            }
+            return res.status();
         }
-    }
-    for (auto& conv : _conv_funcs) {
-        conv = std::make_unique<ConvertFuncTree>();
+        _parser_buf = res.value();
+        if (_parser_buf == nullptr || _parser_buf->remaining() == 0) {
+            _parser_buf.reset();
+            return Status::OK();
+        }
+
+        if (_state != nullptr) {
+            _state->update_num_bytes_scan_from_source(_parser_buf->remaining());
+        }
+
+        _last_file_scan_rows = 0;
+        _conv_ctx.current_batch_first_row_in_file = -1;
+        _conv_ctx.clear_current_column();
+        _conv_ctx.consumer_partition = -1;
+        _conv_ctx.consumer_offset = -1;
+        _conv_ctx.consumer_message_id.clear();
+        if (auto meta = _parser_buf->meta()) {
+            if (meta->type() != ByteBufferMetaType::NONE) {
+                auto msg_meta = static_cast<const StreamMessageMeta*>(meta);
+                _conv_ctx.consumer_partition = msg_meta->partition();
+                _conv_ctx.consumer_offset = msg_meta->offset();
+                _conv_ctx.consumer_message_id = msg_meta->message_id();
+            }
+        }
+        for (auto& conv : _conv_funcs) {
+            conv = std::make_unique<ConvertFuncTree>();
+        }
     }
 
     const int64_t filtered_before = _counter->num_rows_filtered;
@@ -573,6 +581,7 @@ Status ArrowScanner::decode_discrete_message(ArrowBoundedMemoryPool* pool,
     int64_t decode_ns = 0;
     DeferOp update_decode_timer([this, &decode_ns]() {
         _counter->arrow_decode_ns += decode_ns;
+        _counter->read_batch_ns += decode_ns;
         if (_arrow_decode_timer != nullptr) {
             COUNTER_UPDATE(_arrow_decode_timer, decode_ns);
         }
