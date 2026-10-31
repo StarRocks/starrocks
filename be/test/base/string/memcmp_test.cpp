@@ -18,7 +18,10 @@
 #include "base/string/memcmp.h"
 
 #include <gtest/gtest.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -162,6 +165,83 @@ TEST(MemcmpTest, MemequalMultiChunkAndUnaligned) {
             }
         }
     }
+}
+
+TEST(MemcmpTest, MemcompareAndPaddedOracle) {
+    auto oracle = [](const char* p1, size_t s1, const char* p2, size_t s2) -> int {
+        size_t min_s = std::min(s1, s2);
+        int r = std::memcmp(p1, p2, min_s);
+        if (r != 0) return r > 0 ? 1 : -1;
+        return compare(s1, s2);
+    };
+
+    std::vector<char> raw1(256, 0);
+    std::vector<char> raw2(256, 0);
+    for (size_t i = 0; i < raw1.size(); ++i) {
+        raw1[i] = static_cast<char>((i * 73 + 0x80) & 0xFF);
+    }
+
+    for (size_t off : {size_t(0), size_t(1), size_t(7), size_t(15)}) {
+        for (size_t len = 0; len <= 64; ++len) {
+            char* p1 = raw1.data() + off;
+            char* p2 = raw2.data() + off;
+            std::memcpy(p2, p1, len);
+
+            ASSERT_EQ(0, memcompare(p1, len, p2, len));
+            ASSERT_EQ(0, memcompare_padded(p1, len, p2, len));
+            ASSERT_EQ(-1, memcompare(p1, len, p2, len + 1));
+            ASSERT_EQ(1, memcompare(p1, len + 1, p2, len));
+            ASSERT_EQ(-1, memcompare_padded(p1, len, p2, len + 1));
+            ASSERT_EQ(1, memcompare_padded(p1, len + 1, p2, len));
+
+            for (size_t pos = 0; pos < len; ++pos) {
+                const uint8_t orig = static_cast<uint8_t>(p1[pos]);
+                for (uint8_t cand : {uint8_t(0x00), uint8_t(0x7F), uint8_t(0x80), uint8_t(0xFF), uint8_t(orig ^ 1)}) {
+                    p2[pos] = static_cast<char>(cand);
+                    int exp = oracle(p1, len, p2, len);
+                    ASSERT_EQ(exp, memcompare(p1, len, p2, len)) << "len=" << len << " pos=" << pos;
+                    ASSERT_EQ(exp, memcompare_padded(p1, len, p2, len)) << "len=" << len << " pos=" << pos;
+                }
+                p2[pos] = static_cast<char>(orig);
+            }
+        }
+    }
+}
+
+TEST(MemcmpTest, PageBoundaryGuard) {
+    const size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    void* map1 = mmap(nullptr, 2 * page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    void* map2 = mmap(nullptr, 2 * page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(MAP_FAILED, map1);
+    ASSERT_NE(MAP_FAILED, map2);
+    ASSERT_EQ(0, mprotect(static_cast<char*>(map1) + page_size, page_size, PROT_NONE));
+    ASSERT_EQ(0, mprotect(static_cast<char*>(map2) + page_size, page_size, PROT_NONE));
+
+    char* end1 = static_cast<char*>(map1) + page_size;
+    char* end2 = static_cast<char*>(map2) + page_size;
+
+    for (size_t len = 0; len <= 64; ++len) {
+        char* p1 = end1 - len;
+        char* p2 = end2 - len;
+        for (size_t i = 0; i < len; ++i) {
+            p1[i] = static_cast<char>((i * 37 + 11) & 0xFF);
+            p2[i] = p1[i];
+        }
+        EXPECT_TRUE(memequal(p1, len, p2, len)) << "len=" << len;
+        EXPECT_EQ(0, memcompare(p1, len, p2, len)) << "len=" << len;
+        EXPECT_EQ(0, memcompare_padded(p1, len, p2, len)) << "len=" << len;
+
+        if (len > 0) {
+            p2[len - 1] = static_cast<char>(static_cast<uint8_t>(p1[len - 1]) ^ 0x80);
+            EXPECT_FALSE(memequal(p1, len, p2, len)) << "len=" << len;
+            int expected = (static_cast<uint8_t>(p1[len - 1]) < static_cast<uint8_t>(p2[len - 1])) ? -1 : 1;
+            EXPECT_EQ(expected, memcompare(p1, len, p2, len)) << "len=" << len;
+            EXPECT_EQ(expected, memcompare_padded(p1, len, p2, len)) << "len=" << len;
+        }
+    }
+
+    munmap(map1, 2 * page_size);
+    munmap(map2, 2 * page_size);
 }
 
 } // namespace starrocks
