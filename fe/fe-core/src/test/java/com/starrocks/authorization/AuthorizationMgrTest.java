@@ -2013,7 +2013,9 @@ public class AuthorizationMgrTest {
 
         HiveTable hiveMv = hiveTable(catalog, "hive_mv", HiveTable.HiveTableType.MATERIALIZED_VIEW);
         HiveTable hiveTbl = hiveTable(catalog, "hive_tbl", HiveTable.HiveTableType.MANAGED_TABLE);
-        new MockUp<MetadataMgr>() {
+        // The suite installs RBACMockedMetadataMgr, which overrides getTable. Mocking MetadataMgr
+        // does not intercept that override, so the lookup misses hive_mv and the check returns.
+        new MockUp<RBACMockedMetadataMgr>() {
             @Mock
             public Optional<Table> getTable(Invocation inv, ConnectContext context, TableName tableName) {
                 if (tableName != null && "hive_mv".equals(tableName.getTbl())) {
