@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryType;
@@ -62,6 +63,7 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             .put("microseconds_", ImmutableList.of(FunctionSet.MICROSECONDS_ADD, FunctionSet.MICROSECONDS_SUB))
             .put("date", ImmutableList.of(FunctionSet.DATE_ADD, FunctionSet.DATE_SUB))
             .build();
+    private static final Set<String> MONTH_BASED_TIME_FNS = ImmutableSet.of("years_", "quarters_", "months_");
     private static final List<String> TIME_FN_NAMES = ImmutableList.<String>builder()
             .add(FunctionSet.YEARS_ADD).add(FunctionSet.YEARS_SUB)
             .add(FunctionSet.QUARTERS_ADD).add(FunctionSet.QUARTERS_SUB)
@@ -459,6 +461,11 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
 
         if (l1.isNull() || l2.isNull()) {
             return ConstantOperator.createNull(call.getType());
+        }
+        // years/quarters/months clamp to the month end, so they do not compose:
+        // months_add(months_add('2024-01-31', 1), 1) = '2024-03-29' but months_add('2024-01-31', 2) = '2024-03-31'
+        if (MONTH_BASED_TIME_FNS.contains(fn)) {
+            return call;
         }
 
         int i1 = call.getFnName().contains("add") ? l1.getInt() : l1.getInt() * -1;
