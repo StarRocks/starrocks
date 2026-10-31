@@ -1113,6 +1113,64 @@ TEST(SliceWithHash32Test, OneStringKeyGroupsSurviveRehash) {
     check_slice_map_groups_survive_rehash<OneStringTwoLevelAggHashMap<PhmapSeed2>>(make_string_chunk);
 }
 
+static void make_nullable_string_chunk(int begin, int n, Columns* columns) {
+    auto strings = BinaryColumn::create();
+    auto nulls = NullColumn::create();
+    for (int i = begin; i < begin + n; i++) {
+        strings->append("nullable-string-key-" + std::to_string(i));
+        nulls->append(0);
+    }
+    columns->emplace_back(NullableColumn::create(std::move(strings), std::move(nulls)));
+}
+
+template <typename SetWithKey>
+void check_slice_set_groups_survive_rehash(void (*make_chunk)(int, int, Columns*)) {
+    constexpr int kGroups = 200000;
+    constexpr int kChunkSize = 4096;
+    RuntimeProfile profile("check_slice_set_groups_survive_rehash");
+    AggStatistics statistics(&profile);
+    SetWithKey set(kChunkSize, &statistics);
+    MemPool pool;
+
+    for (int pass = 0; pass < 2; pass++) {
+        for (int begin = 0; begin < kGroups; begin += kChunkSize) {
+            const int n = std::min(kChunkSize, kGroups - begin);
+            Columns columns;
+            make_chunk(begin, n, &columns);
+            set.build_hash_set(n, columns, &pool);
+        }
+        ASSERT_EQ(static_cast<size_t>(kGroups), set.hash_set.size());
+    }
+
+    // Verify selection probe (compute_and_allocate == false) finds every existing group and misses unseen groups.
+    for (int begin = 0; begin < kGroups; begin += kChunkSize) {
+        const int n = std::min(kChunkSize, kGroups - begin);
+        Columns columns;
+        make_chunk(begin, n, &columns);
+        Filter not_founds;
+        set.build_hash_set_with_selection(n, columns, &pool, &not_founds);
+        ASSERT_EQ(static_cast<size_t>(n), not_founds.size());
+        for (int i = 0; i < n; i++) {
+            ASSERT_EQ(0, not_founds[i]) << "group " << begin + i;
+        }
+    }
+    Columns unseen_columns;
+    make_chunk(kGroups, 128, &unseen_columns);
+    Filter unseen_not_founds;
+    set.build_hash_set_with_selection(128, unseen_columns, &pool, &unseen_not_founds);
+    for (int i = 0; i < 128; i++) {
+        ASSERT_EQ(1, unseen_not_founds[i]) << "unseen " << i;
+    }
+}
+
+TEST(SliceWithHash32Test, SliceSetGroupsSurviveRehash) {
+    check_slice_set_groups_survive_rehash<OneStringAggHashSet<PhmapSeed1>>(make_string_chunk);
+    check_slice_set_groups_survive_rehash<OneStringTwoLevelAggHashSet<PhmapSeed1>>(make_string_chunk);
+    check_slice_set_groups_survive_rehash<NullOneStringAggHashSet<PhmapSeed1>>(make_nullable_string_chunk);
+    check_slice_set_groups_survive_rehash<SerializedKeyAggHashSet<PhmapSeed1>>(make_string_int_chunk);
+    check_slice_set_groups_survive_rehash<SerializedTwoLevelKeyAggHashSet<PhmapSeed2>>(make_string_int_chunk);
+}
+
 // Writes the key into the state prefix, as AllocateState does, so a test can read it back the way
 // convert_hash_map_to_chunk does.
 template <typename MapWithKey>
