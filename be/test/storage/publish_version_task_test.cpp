@@ -52,6 +52,7 @@
 #include "storage/options.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
@@ -826,6 +827,99 @@ TEST_F(PublishVersionTaskTest, test_publish_double_write_not_waited_by_sync_publ
     ASSERT_EQ(tablet_id, normal_finish.tablet_publish_versions[0].tablet_id);
     ASSERT_EQ(2, normal_finish.tablet_publish_versions[0].version);
     ASSERT_EQ(3, tablet_manager->get_tablet(tablet_id)->max_continuous_version());
+
+    ASSERT_TRUE(tablet_manager->drop_tablet(tablet_id, kDeleteFiles).ok());
+    (void)tablet_manager->delete_shutdown_tablet(tablet_id);
+}
+
+// The rewrite of an online optimize overwrites the versions of a temp partition tablet. A backend loads a tablet from
+// its saved meta and the rowset metas saved apart from it (see DataDir::load), and the tablet meta takes the overwrite
+// at its next checkpoint only: the publish has to save the rowset meta as visible, or a restart before the checkpoint
+// loads the rowset as the one of an unpublished transaction and the tablet without the versions it overwrites.
+TEST_F(PublishVersionTaskTest, test_publish_version_overwrite_saves_visible_rowset_meta) {
+    const int64_t tablet_id = 54323;
+    const int64_t partition_id = 22;
+    const int32_t schema_hash = 4444;
+    const int64_t txn_id = 8892;
+
+    TCreateTabletReq request;
+    set_default_create_tablet_request(&request);
+    request.tablet_id = tablet_id;
+    request.__set_partition_id(partition_id);
+    request.tablet_schema.schema_hash = schema_hash;
+    ASSERT_TRUE(StorageEngine::instance()->create_tablet(request).ok());
+    auto* tablet_manager = StorageEngine::instance()->tablet_manager();
+    auto tablet = tablet_manager->get_tablet(tablet_id);
+    ASSERT_TRUE(tablet != nullptr);
+
+    TupleDescriptor* tuple_desc = _create_tuple_desc();
+    DeltaWriterOptions writer_options;
+    writer_options.tablet_id = tablet_id;
+    writer_options.schema_hash = schema_hash;
+    writer_options.txn_id = txn_id;
+    writer_options.partition_id = partition_id;
+    writer_options.load_id.set_hi(txn_id);
+    writer_options.load_id.set_lo(txn_id);
+    writer_options.replica_state = Primary;
+    writer_options.slots = &tuple_desc->slots();
+    {
+        MemTracker mem_checker(1024 * 1024 * 1024);
+        auto writer_status = DeltaWriter::open(writer_options, &mem_checker);
+        ASSERT_TRUE(writer_status.ok()) << writer_status.status();
+        auto delta_writer = std::move(writer_status.value());
+        auto chunk = RuntimeChunkHelper::new_chunk(tuple_desc->slots(), 8);
+        std::vector<uint32_t> indexes;
+        std::vector<std::string> keys;
+        for (size_t i = 0; i < 8; ++i) {
+            indexes.push_back(i);
+            keys.push_back("ow" + std::to_string(i));
+        }
+        for (size_t i = 0; i < 8; ++i) {
+            auto cols = chunk->columns();
+            cols[0]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+            cols[1]->as_mutable_ptr()->append_datum(Datum(Slice(keys[i])));
+            cols[2]->as_mutable_ptr()->append_datum(Datum(static_cast<int32_t>(i)));
+        }
+        ASSERT_TRUE(delta_writer->write(*chunk, indexes.data(), 0, indexes.size()).ok());
+        ASSERT_TRUE(delta_writer->close().ok());
+        ASSERT_TRUE(delta_writer->commit().ok());
+    }
+
+    auto token = ExecEnv::GetInstance()
+                         ->agent_server()
+                         ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                         ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::unordered_set<DataDir*> affected_dirs;
+    TFinishTaskRequest finish_task_request;
+    TPublishVersionRequest publish_version_req;
+    publish_version_req.transaction_id = txn_id;
+    TPartitionVersionInfo pvinfo;
+    pvinfo.partition_id = partition_id;
+    pvinfo.version = 5;
+    publish_version_req.partition_version_infos.push_back(pvinfo);
+    publish_version_req.__set_is_version_overwrite(true);
+    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
+    ASSERT_EQ(0, finish_task_request.error_tablet_ids.size());
+
+    // The rowset takes the place of the initial version of the tablet, with versions 0 to 5.
+    RowsetSharedPtr rowset;
+    {
+        std::shared_lock rdlock(tablet->get_header_lock());
+        rowset = tablet->get_rowset_by_version(Version(0, 5));
+    }
+    ASSERT_TRUE(rowset != nullptr);
+    ASSERT_EQ(5, tablet->max_continuous_version());
+
+    std::string meta_value;
+    ASSERT_TRUE(RowsetMetaManager::get_rowset_meta_value(tablet->data_dir()->get_meta(), tablet->tablet_uid(),
+                                                         rowset->rowset_id(), &meta_value)
+                        .ok());
+    bool parse_ok = false;
+    RowsetMeta saved_meta(meta_value, &parse_ok);
+    ASSERT_TRUE(parse_ok);
+    ASSERT_EQ(RowsetStatePB::VISIBLE, saved_meta.rowset_state());
+    ASSERT_EQ(0, saved_meta.version().first);
+    ASSERT_EQ(5, saved_meta.version().second);
 
     ASSERT_TRUE(tablet_manager->drop_tablet(tablet_id, kDeleteFiles).ok());
     (void)tablet_manager->delete_shutdown_tablet(tablet_id);
