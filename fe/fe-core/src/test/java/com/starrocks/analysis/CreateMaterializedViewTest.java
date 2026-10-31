@@ -6014,7 +6014,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "  `event_type` varchar(64) NULL COMMENT \"\",\n" +
                 "  `event_level` varchar(64) NULL COMMENT \"\",\n" +
                 "  `properties` json NULL COMMENT \"\",\n" +
-                "  `dt` datetime NULL AS date_trunc('day', from_unixtime(`event_ts` / 1000)) COMMENT \"\"\n" +
+                "  `dt` datetime NULL AS date_trunc('day', " +
+                "from_unixtime(`event_ts` / 1000, '%Y-%m-%d %H:%i:%s', 'UTC')) COMMENT \"\"\n" +
                 ") ENGINE=OLAP \n" +
                 "DUPLICATE KEY(`user_id`, `event_ts`, `event_name`)\n" +
                 "COMMENT \"OLAP\"\n" +

@@ -92,6 +92,7 @@ public class ColumnDef implements ParseNode {
     private Boolean isAllowNull;
     private Boolean isAutoIncrement;
     private Expr generatedColumnExpr;
+    private final boolean internalGeneratedPartitionColumn;
     private DefaultValueDef defaultValueDef;
     private final String comment;
     private boolean isPartitionColumn = false;
@@ -128,6 +129,15 @@ public class ColumnDef implements ParseNode {
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
                      AggStateDesc aggStateDesc, Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement,
                      Expr generatedColumnExpr, String comment, NodePosition pos) {
+        this(name, typeDef, charsetName, isKey, aggregateType, aggStateDesc, isAllowNull, defaultValueDef,
+                isAutoIncrement, generatedColumnExpr, comment, pos, false);
+    }
+
+    private ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
+                      AggStateDesc aggStateDesc, Boolean isAllowNull, DefaultValueDef defaultValueDef,
+                      Boolean isAutoIncrement, Expr generatedColumnExpr, String comment, NodePosition pos,
+                      boolean internalGeneratedPartitionColumn) {
+        this.internalGeneratedPartitionColumn = internalGeneratedPartitionColumn;
         this.pos = pos;
         this.name = name;
         this.typeDef = typeDef;
@@ -154,6 +164,26 @@ public class ColumnDef implements ParseNode {
         }
         this.generatedColumnExpr = generatedColumnExpr;
         this.comment = comment;
+    }
+
+    // This factory is used only when materializing a partition expression, never by the SQL parser.
+    public static ColumnDef newInternalGeneratedPartitionColumn(String name, TypeDef typeDef, Expr expression) {
+        return new ColumnDef(name, typeDef, null, false, null, null, true, DefaultValueDef.NOT_SET,
+                null, expression, "", NodePosition.ZERO, true);
+    }
+
+    // Preserve existing catalog provenance when converting a Column back into its AST definition.
+    public static ColumnDef fromColumn(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
+                                       AggStateDesc aggStateDesc, Boolean isAllowNull, DefaultValueDef defaultValueDef,
+                                       Boolean isAutoIncrement, Expr expression, String comment,
+                                       boolean internalGeneratedPartitionColumn) {
+        return new ColumnDef(name, typeDef, null, isKey, aggregateType, aggStateDesc, isAllowNull,
+                defaultValueDef, isAutoIncrement, expression, comment, NodePosition.ZERO,
+                internalGeneratedPartitionColumn);
+    }
+
+    public boolean isInternalGeneratedPartitionColumn() {
+        return internalGeneratedPartitionColumn && isGeneratedColumn();
     }
 
     public boolean isAllowNull() {

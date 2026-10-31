@@ -14,6 +14,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -26,11 +27,13 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.SqlFunction;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PartitionTimeUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -53,15 +56,21 @@ import com.starrocks.sql.ast.SinglePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.DictQueryExpr;
+import com.starrocks.sql.ast.expression.DictionaryGetExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.InformationFunction;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
+import com.starrocks.sql.ast.expression.UserVariableExpr;
+import com.starrocks.sql.ast.expression.VariableExpr;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.DateType;
 import com.starrocks.type.Type;
@@ -563,7 +572,19 @@ public class PartitionDescAnalyzer {
 
     private static void analyzeListPartitionExprs(ListPartitionDesc desc, List<ColumnDef> columnDefs, KeysType keysType)
             throws AnalysisException {
-        List<String> slotRefs = Lists.newArrayList();
+        // A partition expression must be a function of the row it partitions. A non-deterministic one
+        // sends rows that belong together to different partitions, which breaks partition pruning for
+        // every table type and, on an aggregate or unique table, splits one key across partitions so
+        // it never merges into a single row.
+        if (desc.getPartitionExprs() != null) {
+            for (Expr partitionExpr : desc.getPartitionExprs()) {
+                checkPartitionExprDeterminism(partitionExpr);
+            }
+        }
+
+        // the expression carries the column name as the user spelled it, which may differ in case
+        // from the declared column, so the source columns are collected case insensitively
+        Set<String> slotRefs = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (desc.getPartitionExprs() != null) {
             slotRefs.addAll(desc.getPartitionExprs().stream()
                     .flatMap(e -> ExprUtils.collectAllSlotRefs(e).stream())
@@ -579,6 +600,9 @@ public class PartitionDescAnalyzer {
                 continue;
             }
             if (partitionColumnDef.isGeneratedColumn()) {
+                // Identifier-only partitioning has no inline partition expr. Check the actual generated
+                // expression too, including ordinary user-defined generated columns used for partitioning.
+                checkPartitionExprDeterminism(partitionColumnDef.getGeneratedColumnExpr());
                 slotRefs.addAll(ExprUtils.collectAllSlotRefs(partitionColumnDef.getGeneratedColumnExpr())
                         .stream().map(SlotRef::getColumnName).collect(Collectors.toList()));
             } else {
@@ -603,6 +627,74 @@ public class PartitionDescAnalyzer {
                 if (!keyColumnNames.contains(slotRef)) {
                     throw new AnalysisException("The partition expr should base on key column");
                 }
+            }
+        }
+    }
+
+    static void checkPartitionExprDeterminism(Expr expr) throws AnalysisException {
+        // These nodes are rebound in the inserting session, even when they appear below a function
+        // call and the only column reference is a key. Check them before analysis can fold values.
+        if (expr.contains(e -> e instanceof InformationFunction || e instanceof VariableExpr
+                || e instanceof UserVariableExpr)) {
+            throw new AnalysisException("The partition expr should not depend on session context, but got "
+                    + ExprToSql.toSql(expr));
+        }
+        // Dictionary lookups bind the current table/cache version again when a load is planned.
+        // Even with key-only arguments, the same key can therefore acquire a different partition
+        // value after the dictionary changes. Check nested and identifier-based expressions too.
+        if (expr.contains(e -> e instanceof DictQueryExpr || e instanceof DictionaryGetExpr)) {
+            throw new AnalysisException("The partition expr should not depend on mutable dictionary state, but got "
+                    + ExprToSql.toSql(expr));
+        }
+        Pair<Boolean, String> nonDeterministic = AnalyzerUtils.containsNonDeterministicFunction(expr);
+        if (nonDeterministic.first) {
+            throw new AnalysisException("The partition expr should be deterministic, but got "
+                    + nonDeterministic.second);
+        }
+
+        // These overloads are functions of the session/load time zone, not just the row. The second
+        // to_datetime argument is a timestamp scale, not a time zone. Keep this partition-specific:
+        // ordinary calls, to_datetime_ntz and from_unixtime's explicit-time-zone overload stay valid.
+        List<FunctionCallExpr> functions = new ArrayList<>();
+        expr.collectAll((Predicate<Expr>) e -> e instanceof FunctionCallExpr, functions);
+        for (FunctionCallExpr function : functions) {
+            // The outer SQL-UDF call hides its body from this traversal, and even a deterministic
+            // body can change after replacing the function. Inspect resolved functions too; raw
+            // partition expressions may not have function bindings until generated-column analysis.
+            if (function.getFn() instanceof SqlFunction || (function.getFn() != null
+                    && (function.getFn().isUdf() || (function.getFn().getBinaryType() != null
+                    && function.getFn().getBinaryType() != TFunctionBinaryType.BUILTIN)))) {
+                throw new AnalysisException("The partition expr should only use built-in functions, but got "
+                        + ExprToSql.toSql(function));
+            }
+            String name = function.getFunctionName();
+            // A value that is constant within one query need not be stable between loads or workers.
+            // These built-ins read node/query/session/auth state or mutable FE configuration; meta
+            // functions additionally inspect mutable catalog/runtime state. Keep ordinary calls valid.
+            boolean runtimeContextDependent = FunctionSet.HOST_NAME.equalsIgnoreCase(name)
+                    || "current_timezone".equalsIgnoreCase(name)
+                    || FunctionSet.LAST_QUERY_ID.equalsIgnoreCase(name)
+                    || FunctionSet.CURRENT_VERSION.equalsIgnoreCase(name)
+                    || "version".equalsIgnoreCase(name)
+                    || "is_role_in_session".equalsIgnoreCase(name)
+                    || FunctionSet.GET_QUERY_PROFILE.equalsIgnoreCase(name);
+            if (runtimeContextDependent || (function.getFn() != null && function.getFn().isMetaFunction())) {
+                throw new AnalysisException("The partition expr should not depend on runtime context, but got "
+                        + ExprToSql.toSql(function));
+            }
+            int argumentCount = function.getChildren().size();
+            boolean sessionTimezoneDependent =
+                    (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(name) && (argumentCount == 1 || argumentCount == 2))
+                            || (FunctionSet.FROM_UNIXTIME_MS.equalsIgnoreCase(name) && argumentCount == 1)
+                            || (FunctionSet.TO_DATETIME.equalsIgnoreCase(name) && (argumentCount == 1 || argumentCount == 2))
+                            || (FunctionSet.HOUR_FROM_UNIXTIME.equalsIgnoreCase(name) && argumentCount == 1);
+            if (sessionTimezoneDependent) {
+                String hint = FunctionSet.TO_DATETIME.equalsIgnoreCase(name)
+                        || FunctionSet.HOUR_FROM_UNIXTIME.equalsIgnoreCase(name)
+                        ? ". Use to_datetime_ntz or from_unixtime with an explicit time zone argument"
+                        : ". Use from_unixtime with an explicit time zone argument";
+                throw new AnalysisException("The partition expr should not depend on the session time zone, but got "
+                        + ExprToSql.toSql(function) + hint);
             }
         }
     }

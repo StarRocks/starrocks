@@ -1,5 +1,5 @@
 -- name: test_primary_key_table
-create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d');
+create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d', 'Asia/Shanghai');
 -- result:
 -- !result
 insert into t values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
@@ -39,7 +39,7 @@ explain select * from t where k2=1196389819;
 -- result:
 [REGEX].*partitions=1/2.*
 -- !result
-create table t1(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d'),k1;
+create table t1(k1 int, k2 bigint, v int) PRIMARY KEY(k1, k2) partition by from_unixtime(k2, '%Y-%m-%d', 'Asia/Shanghai'),k1;
 -- result:
 -- !result
 insert into t1 values(1,UNIX_TIMESTAMP('2020-01-01 01:01:01'),1);
@@ -96,11 +96,11 @@ explain select * from t1 where k2=1196389819;
 
 
 -- name: test_create_error
-create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(k2, '%Y-%m-%d');
+create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(v, '%Y-%m-%d', 'Asia/Shanghai');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: AGG_KEYS table should specify aggregate type for non-key column[__generated_partition_column_0].')
+E: (1064, 'Getting analyzing error. Detail message: The partition expr should base on key column.')
 -- !result
-create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d');
+create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d', 'Asia/Shanghai');
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: The partition expr should base on key column.')
 -- !result
@@ -174,7 +174,7 @@ CREATE TABLE base_tbl_unix_ts (c1 bigint, c2 string, c3 date);
 insert into base_tbl_unix_ts values(1592841600, 'beijing', '2020-06-23');
 -- result:
 -- !result
-CREATE TABLE multi_level_expr_par_tbl_1 primary KEY(c1) PARTITION BY from_unixtime(c1) DISTRIBUTED BY HASH(c1) BUCKETS 3 as select * from base_tbl_unix_ts;
+CREATE TABLE multi_level_expr_par_tbl_1 primary KEY(c1) PARTITION BY from_unixtime(c1, '%Y-%m-%d %H:%i:%s', 'Asia/Shanghai') DISTRIBUTED BY HASH(c1) BUCKETS 3 as select * from base_tbl_unix_ts;
 -- result:
 -- !result
 select * from multi_level_expr_par_tbl_1;
@@ -189,7 +189,7 @@ multi_level_expr_par_tbl_1	CREATE TABLE `multi_level_expr_par_tbl_1` (
   `c3` date NULL COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`c1`)
-PARTITION BY (from_unixtime(c1))
+PARTITION BY (from_unixtime(c1, '%Y-%m-%d %H:%i:%s', 'Asia/Shanghai'))
 DISTRIBUTED BY HASH(`c1`) BUCKETS 3 
 PROPERTIES (
 "compression" = "LZ4",
