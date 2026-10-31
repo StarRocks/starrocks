@@ -22,7 +22,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -881,8 +880,7 @@ public class LakeTableIndexFastPathJobTest {
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
-                                       ComputeResource computeResource, boolean useAggregatePublish,
-                                       PublishProperty publishProperty) {
+                                       ComputeResource computeResource, boolean useAggregatePublish) {
                 publishedVersions.add(new long[] {baseVersion, newVersion});
             }
         };
