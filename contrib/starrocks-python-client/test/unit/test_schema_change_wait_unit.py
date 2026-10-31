@@ -21,6 +21,7 @@ classification used to decide whether to poll at all.
 
 from alembic.ddl import base as alembic_base
 from sqlalchemy import Column
+from sqlalchemy.testing import fixtures
 
 from starrocks import INTEGER
 from starrocks.alembic.starrocks import SchemaChangeState, StarRocksImpl
@@ -28,7 +29,7 @@ from starrocks.dialect import StarRocksDialect
 from starrocks.sql.ddl import AlterTableColumns
 
 
-class TestSchemaChangeState:
+class SchemaChangeStateTest(fixtures.TestBase):
     def test_known_states_parse_case_insensitively(self):
         assert SchemaChangeState.parse("finished") is SchemaChangeState.FINISHED
         assert SchemaChangeState.parse("CANCELLED") is SchemaChangeState.CANCELLED
@@ -45,7 +46,7 @@ class TestSchemaChangeState:
         assert state is not SchemaChangeState.CANCELLED
 
 
-class TestGenShowAlterTableStatement:
+class GenShowAlterTableStatementTest(fixtures.TestBase):
     def test_default_shape_is_unchanged(self):
         # Existing callers (e.g. test/system/test_table_lifecycle.py) rely on this.
         stmt = StarRocksDialect.gen_show_alter_table_statement("t", "OPTIMIZE")
@@ -72,7 +73,7 @@ class TestGenShowAlterTableStatement:
         assert stmt.endswith("LIMIT 5")
 
 
-class TestSchemaChangeTarget:
+class SchemaChangeTargetTest(fixtures.TestBase):
     def test_column_constructs_are_targets(self):
         col = Column("a", INTEGER)
         for construct in (

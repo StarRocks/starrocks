@@ -3,6 +3,7 @@ Version history
 
 **Unreleased**
 
+- Run every test, with SQLAlchemy's and Alembic's dialect suites, in one `pytest` run under SQLAlchemy's testing plugin, on SQLAlchemy 2.0 and 1.4 and in parallel (by @rad-pat)
 - Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (by @chris-celerdata)
 - Reflect `TIME` and `VARIANT` columns instead of returning `NullType` (#77259 by @rad-pat)
 - Add the `starrocks_temp_view_schema` Alembic option (`context.configure(...)`) to designate
