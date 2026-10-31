@@ -154,6 +154,17 @@ void OrdinalIndexReader::_reset() {
 }
 
 OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal) {
+    // Defense-in-depth: a not-yet-loaded (or _reset) reader has _num_pages == 0 and a NULL
+    // _ordinals buffer, so the binary search below would dereference _ordinals[0] and SIGSEGV.
+    // A loaded index always has _num_pages >= 1, so this branch is unreachable in normal
+    // operation; if it ever fires it means the index buffer was overwritten (heap corruption) or
+    // seeked before load -- log loudly and return an end/invalid iterator instead of crashing, so
+    // the caller surfaces a clean not-found rather than taking down the process.
+    if (_num_pages <= 0 || _ordinals == nullptr) {
+        LOG(ERROR) << "OrdinalIndexReader::seek_at_or_before on an unloaded/empty index (_num_pages=" << _num_pages
+                   << ", _ordinals=" << static_cast<const void*>(_ordinals.get()) << ")";
+        return {this, _num_pages};
+    }
     int32_t left = 0;
     int32_t right = _num_pages - 1;
     while (left < right) {

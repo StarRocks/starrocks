@@ -39,6 +39,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
@@ -54,6 +57,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.IntegerType;
@@ -183,6 +187,142 @@ public class StreamLoadPlannerTest {
                 CRAcquireContext.of(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         StreamLoadInfo.fromRoutineLoadJob(routineLoadJob);
+    }
+
+    // `partial_update_mode=auto` on a JSON partial update may arrive with the flexible bit set (the BE sets it
+    // for a JSON auto load when its own enable_sparse_dcg is on). The plan must succeed as the homogeneous
+    // partial update, and the info flag the scan node reads must be cleared so no hidden "__cset__" slot is
+    // injected for a payload the writer will not treat as flexible, in BOTH of these cases:
+    //   - Config.enable_sparse_dcg = false (the default): nothing is ever planned as flexible;
+    //   - Config.enable_sparse_dcg = true: this destTable is an unstubbed mock, i.e. NOT cloud-native, so
+    //     flexible cannot apply -- and `auto` worked on such tables before flexible existed.
+    @Test
+    public void testAutoFlexibleDegradesOnUnsupportedTable() throws StarRocksException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("c1", IntegerType.BIGINT, false));
+        columns.add(new Column("c2", IntegerType.BIGINT, true));
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+                destTable.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                scanNode.getChildren();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                scanNode.getId();
+                minTimes = 0;
+                result = new PlanNodeId(5);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setPartial_update(true);
+        request.setPartial_update_mode(TPartialUpdateMode.AUTO_MODE);
+        request.setFlexible_partial_update(true);
+        request.setColumns("c1,c2");
+        boolean saved = Config.enable_sparse_dcg;
+        try {
+            for (boolean sparseDcg : new boolean[] {false, true}) {
+                Config.enable_sparse_dcg = sparseDcg;
+                StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+                Assertions.assertTrue(streamLoadInfo.isFlexiblePartialUpdate());
+                StreamLoadPlanner planner =
+                        new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
+                planner.plan(streamLoadInfo.getId());
+                Assertions.assertFalse(streamLoadInfo.isFlexiblePartialUpdate(),
+                        "auto must degrade to the homogeneous plan (enable_sparse_dcg=" + sparseDcg + ")");
+            }
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
+    }
+
+    // The same request with an explicit `partial_update_mode=flexible` names the feature, so with the feature
+    // on the unsupported table is an error the caller asked for.
+    @Test
+    public void testExplicitFlexibleRejectedOnUnsupportedTable() throws StarRocksException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("c1", IntegerType.BIGINT, false));
+        columns.add(new Column("c2", IntegerType.BIGINT, true));
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setPartial_update(true);
+        request.setPartial_update_mode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+        request.setFlexible_partial_update(true);
+        request.setColumns("c1,c2");
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = true;
+        try {
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data",
+                    () -> planner.plan(streamLoadInfo.getId()));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
+    }
+
+    // With the feature off (the default) an explicit flexible request is rejected up front, naming the
+    // config, before any table-shape check runs.
+    @Test
+    public void testExplicitFlexibleRejectedWhenSparseDcgDisabled() throws StarRocksException {
+        List<Column> columns = Lists.newArrayList();
+        columns.add(new Column("c1", IntegerType.BIGINT, false));
+        columns.add(new Column("c2", IntegerType.BIGINT, true));
+        new Expectations() {
+            {
+                destTable.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                destTable.getBaseSchema();
+                minTimes = 0;
+                result = columns;
+            }
+        };
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.setTxnId(1);
+        request.setLoadId(new TUniqueId(2, 3));
+        request.setFileType(TFileType.FILE_STREAM);
+        request.setFormatType(TFileFormatType.FORMAT_JSON);
+        request.setPartial_update(true);
+        request.setPartial_update_mode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+        request.setFlexible_partial_update(true);
+        request.setColumns("c1,c2");
+        StreamLoadInfo streamLoadInfo = StreamLoadInfo.fromTStreamLoadPutRequest(request, db);
+        StreamLoadPlanner planner = new StreamLoadPlanner(new ConnectContext(), db, destTable, streamLoadInfo);
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = false;
+        try {
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "enable_sparse_dcg",
+                    () -> planner.plan(streamLoadInfo.getId()));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
     }
 
     @Test

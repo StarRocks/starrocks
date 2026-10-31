@@ -284,6 +284,7 @@ public class StreamLoadScanNode extends LoadScanNode {
                 exprsByName, descriptorTable, paramCreateContext.tupleDescriptor, slotDescByName,
                 paramCreateContext.params, true, useVectorizedLoad, Lists.newArrayList(),
                 streamLoadInfo.getFormatType() == TFileFormatType.FORMAT_JSON, streamLoadInfo.isPartialUpdate(),
+                streamLoadInfo.isFlexiblePartialUpdate(),
                 streamLoadInfo.getRoutineLoadSourceType(), streamLoadInfo.getMetadata());
     }
 
@@ -409,11 +410,31 @@ public class StreamLoadScanNode extends LoadScanNode {
         paramCreateContext.params.setDest_sid_to_src_sid_without_trans(destSidToSrcSidWithoutTrans);
         paramCreateContext.params.setSrc_tuple_id(paramCreateContext.tupleDescriptor.getId().asInt());
         paramCreateContext.params.setDest_tuple_id(desc.getId().asInt());
+        if (streamLoadInfo.isFlexiblePartialUpdate()) {
+            // SDCG flexible: tell the BE json scanner explicitly that the plan carries the hidden
+            // "__cset__" slot and that it must compute per-row column-set ids into it. The scanner
+            // keys off this flag, never off the slot name. streamLoadInfo.isFlexiblePartialUpdate()
+            // is the planner's decision (StreamLoadPlanner / LoadPlanner clear it when they plan the
+            // homogeneous update), the same flag that declared the "__cset__" source slot above.
+            paramCreateContext.params.setFlexible_partial_update(true);
+        }
         if (needAssignBE) {
             paramCreateContext.params.setTxn_id(txnId);
             paramCreateContext.params.setDb_name(dbName);
             paramCreateContext.params.setTable_name(dstTable.getName());
             paramCreateContext.params.setLabel(label);
+        } else if (streamLoadInfo.isFlexiblePartialUpdate()) {
+            // SDCG flexible: the BE json scanner interns each row's present-column set into
+            // FlexiblePartialUpdateRegistry keyed by the scan-range txn_id, and the lake delta
+            // writer folds that dictionary into txn_meta.distinct_column_sets under its own
+            // (real load) txn_id. On the normal (non-batch-write) stream-load path the scan-range
+            // txn_id was left unset (0) -- so the scanner interned under 0 while the writer folded
+            // under the real txn_id, the dict was never found, flexible_partial_update was never
+            // set, and the apply degraded to a homogeneous UNION partial update that NULLs every
+            // column a row did not declare. Carry the real load txn_id (the node's own txnId field
+            // is 0 on the thrift streamLoadPut path; streamLoadInfo.getTxnId() is authoritative and
+            // matches the OlapTableSink txn used by the BE delta writer).
+            paramCreateContext.params.setTxn_id(streamLoadInfo.getTxnId());
         }
 
         paramCreateContext.tupleDescriptor.computeMemLayout();

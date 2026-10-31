@@ -27,6 +27,7 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.IcebergRowDeltaSink;
@@ -200,16 +201,33 @@ public class UpdatePlanner {
                 olapTable.enableReplicatedStorage(), false,
                 olapTable.supportedAutomaticPartition(), session.getCurrentComputeResource());
         if (updateStmt.usePartialUpdate()) {
-            // Row mode for a range-distributed primary-key table whose ORDER BY differs from its primary
-            // key: its column-mode DCG would be dropped by the UNSHARE rewrite a split drags behind it,
-            // so OlapTableSink refuses that mode. Refusing here instead would leave the statement with no
-            // way to run at all -- UpdateAnalyzer only reaches setUsePartialUpdate() with no WHERE
-            // clause, and dropping partial update is what makes a WHERE mandatory. Row mode rewrites
-            // whole rows, survives the split, and needs no WHERE.
+            // TWO independent reasons to force ROW mode, and they compose -- neither replaces the
+            // other, so the upstream sort-key rule computes the baseline mode and the GIN guard is
+            // allowed to upgrade it. forceRowModeForInvertedIndexedColumn returns its argument
+            // unchanged when the mode is already ROW_MODE (Load.java:832), so the order is safe.
+            //
+            // 1. A range-distributed primary-key table whose ORDER BY differs from its primary key:
+            //    its column-mode DCG would be dropped by the UNSHARE rewrite a split drags behind
+            //    it, so OlapTableSink refuses that mode. Refusing here instead would leave the
+            //    statement with no way to run at all -- UpdateAnalyzer only reaches
+            //    setUsePartialUpdate() with no WHERE clause, and dropping partial update is what
+            //    makes a WHERE mandatory. Row mode rewrites whole rows and needs no WHERE.
+            // 2. UPDATE lands on the same column-mode apply path as a partial-update load, so it
+            //    needs the same GIN guard the load planners apply: a column-mode overlay cannot
+            //    serve a correct inverted index, and a stale sidecar index over the base segment
+            //    silently prunes the rows the update rewrote.
             TPartialUpdateMode mode = MetaUtils.hasSeparateSortKey(olapTable, olapTable.getBaseIndexMetaId())
                     ? TPartialUpdateMode.ROW_MODE
                     : TPartialUpdateMode.COLUMN_UPDATE_MODE;
-            ((OlapTableSink) dataSink).setPartialUpdateMode(mode);
+            List<Column> updateColumns = Lists.newArrayList();
+            for (Column column : targetTable.getFullSchema()) {
+                if (!column.isKey() && !column.isGeneratedColumn()
+                        && updateStmt.isAssignmentColumn(column.getName())) {
+                    updateColumns.add(column);
+                }
+            }
+            ((OlapTableSink) dataSink).setPartialUpdateMode(
+                    Load.forceRowModeForInvertedIndexedColumn(targetTable, updateColumns, mode));
         }
         if (session.getTxnId() != 0) {
             ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
