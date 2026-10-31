@@ -25,6 +25,7 @@ Defines data files in remote storage, used for loading and unloading data:
   - ORC (Supported from v3.3 onwards)
   - CSV (Supported from v3.3 onwards)
   - Avro (Supported from v3.4.4 onwards and for loading only)
+  - JSON (For loading only)
 
 From v3.2 onwards, FILES() further supports complex data types including `ARRAY`, `JSON`, `MAP`, and `STRUCT` in addition to basic data types.
 
@@ -125,6 +126,7 @@ The format of the data file. Valid values:
 - `orc` (Supported from v3.3 onwards)
 - `csv` (Supported from v3.3 onwards)
 - `avro` (Supported from v3.4.4 onwards and for loading only)
+- `json` (For loading only)
 
 You must set detailed options for specific data file formats.
 
@@ -227,6 +229,41 @@ Specifies the character that is used to escape various special characters, such 
 > - When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.
 > - Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.
 :::
+
+##### JSON
+
+`FILES()` supports loading JSON files. The JSON format is supported for loading only (not unloading).
+
+Example:
+
+```SQL
+"format" = "json",
+"jsonpaths" = '["$.id", "$.name", "$.score"]',  -- optional
+"json_root" = "$.data",                          -- optional
+"strip_outer_array" = "true"                     -- optional
+```
+
+###### `jsonpaths`
+
+Specifies the JSON paths used to extract fields from each JSON object and map them to destination columns, in the same order as the destination columns. Type: JSON array of strings. Default value: empty (all top-level fields are extracted as columns).
+
+Each element in the array is a JSONPath expression. For example, `["$.id", "$.name"]` extracts the `id` and `name` fields from each JSON record.
+
+When `jsonpaths` is omitted, StarRocks extracts all top-level keys from the JSON object and maps them to table columns by name.
+
+###### `json_root`
+
+Specifies a JSONPath expression that identifies the root element of each JSON record. Type: string. Default value: empty (the outermost object is used as the record).
+
+Use `json_root` when the actual data is nested inside a wrapper field. For example, if each line of your file is `{"data": {"id": 1, "name": "Alice"}}`, set `"json_root" = "$.data"`.
+
+###### `strip_outer_array`
+
+Whether to expand a top-level JSON array into individual rows. Valid values: `true` and `false` (default).
+
+Set this to `true` when each line of your JSON file is an array of objects, such as `[{"id": 1}, {"id": 2}]`. Each element of the array is treated as a separate row.
+
+When `strip_outer_array` is `false` (the default), the entire JSON value on each line is treated as a single row.
 
 #### `schema_detect`
 
