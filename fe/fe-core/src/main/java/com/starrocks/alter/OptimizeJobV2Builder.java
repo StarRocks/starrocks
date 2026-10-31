@@ -18,6 +18,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.analyzer.DistributionDescAnalyzer;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.thrift.TStorageType;
@@ -40,6 +41,16 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
         return this;
     }
 
+    // A load writes the source and the temp partition of an online optimize together, with one set of distribution
+    // columns for all the partitions it writes (OlapTableSink#setDistributedColumns), and the online job swaps the
+    // partitions in one by one: an optimize that gives the table another distribution runs offline.
+    private boolean changesDistribution() {
+        return optimizeClause.getDistributionDesc() != null
+                && (DistributionDescAnalyzer.isDifferentDistributionType(optimizeClause.getDistributionDesc(),
+                        table.getDefaultDistributionInfo())
+                    || OptimizeJobV2.changesDistributionColumns(optimizeClause, table));
+    }
+
     @Override
     public AlterJobV2 build() throws StarRocksException {
         long tableId = table.getId();
@@ -56,7 +67,12 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
                     && optimizeClause.getDistributionDesc() instanceof RandomDistributionDesc)
                 || table.getStorageType() == TStorageType.COLUMN_WITH_ROW
                 || !table.enableReplicatedStorage()
-                || table.isCloudNativeTableOrMaterializedView()) {
+                || table.isCloudNativeTableOrMaterializedView()
+                || changesDistribution()) {
+            if (Config.enable_online_optimize_table && changesDistribution()) {
+                LOG.info("Optimize job {} runs offline: it changes the distribution of table {}", jobId,
+                        table.getName());
+            }
             LOG.info("Optimize job {} is created, table: {}", jobId, table.getName());
             OptimizeJobV2 optimizeJob = new OptimizeJobV2(jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
             optimizeJob.setComputeResource(computeResource);

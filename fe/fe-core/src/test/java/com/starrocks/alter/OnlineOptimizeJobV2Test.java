@@ -632,6 +632,19 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testDistributionChangeRunsOffline() throws Exception {
+        // A load double-writes the source and the temp partition of an online job with one set of distribution
+        // columns, and the online job swaps the partitions in one by one: another distribution runs offline.
+        Assertions.assertInstanceOf(OptimizeJobV2.class, createOptimizeJob(
+                createPartitionedTable("t_online_optimize_other_columns"), "DISTRIBUTED BY HASH(v1) BUCKETS 2"));
+        Assertions.assertInstanceOf(OptimizeJobV2.class, createOptimizeJob(
+                createPartitionedTable("t_online_optimize_other_type"), "DISTRIBUTED BY RANDOM BUCKETS 2"));
+        // Column names compare regardless of case.
+        Assertions.assertInstanceOf(OnlineOptimizeJobV2.class, createOptimizeJob(
+                createPartitionedTable("t_online_optimize_same_columns"), "DISTRIBUTED BY HASH(K1) BUCKETS 2"));
+    }
+
+    @Test
     public void testLeftOutDoubleWriteKeepsDictMetadata() throws Exception {
         // The listener puts the dictionary metadata of a load on one of its partition commit infos only. If that is
         // the double write the commit leaves out, the commit info of the source partition must take it over, or the
@@ -1141,6 +1154,15 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Mockito.doReturn(true).when(job).isPreviousLoadFinished();
         Mockito.doNothing().when(job).executeSql(Mockito.anyString(), Mockito.any());
         return job;
+    }
+
+    private static AlterJobV2 createOptimizeJob(OlapTable table, String clause) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " " + clause, starRocksAssert.getCtx());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        handler.process(stmt.getAlterClauseList(), db, table);
+        return handler.getAlterJobsV2().values().iterator().next();
     }
 
     private static void runToRunning(OnlineOptimizeJobV2 job) throws Exception {
