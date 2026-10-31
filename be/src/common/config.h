@@ -2201,6 +2201,10 @@ CONF_mInt32(agg_hash_map_prefetch_dist, "16");
 // contended many-driver-per-core deployments where the effective L2 share per
 // table is smaller than the nominal per-core size.
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
+// Minimum sub-range length (in rows) to use SIMD 8-bit LSD radix sort instead
+// of pdqsort for fixed-length columns. Set <= 0 to disable radix sort and
+// always use pdqsort.
+CONF_mInt32(radix_sort_threshold, "256");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");
 // Memory limit of the rows an exchange sink driver buffers per (destination, driver_sequence) while shuffling.

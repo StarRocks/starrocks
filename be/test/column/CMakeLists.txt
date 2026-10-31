@@ -139,6 +139,7 @@ set(COLUMN_SORT_CORE_TEST_FILES
     fixed_length_column_extended_test.cpp
     nullable_column_test.cpp
     sorting/sort_core_test.cpp
+    sorting/radix_sort_test.cpp
 )
 
 set(COLUMN_SORT_CORE_TEST_LINK_LIBS
