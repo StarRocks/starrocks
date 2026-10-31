@@ -112,7 +112,7 @@ protected:
               _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
               _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
               _primary_key_mgr(std::make_unique<PrimaryKeyManager>(_lp, _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp, _primary_key_mgr.get(), cache_limit,
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _primary_key_mgr.get(), cache_limit, cache_limit,
                                                           PlatformEnv::GetInstance()->store_path_registry())) {
         if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
             parallel_compact_mgr != nullptr) {

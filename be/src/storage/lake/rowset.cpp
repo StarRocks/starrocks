@@ -995,7 +995,7 @@ void Rowset::release_held_segments() {
     // Dropped, not donated to the shared metadata cache. Handing the whole input set over in one
     // burst is worse than the pre-hold behaviour this restores: on the shape that makes a task fall
     // back (an input set large against the budget, typically alongside a small
-    // lake_metadata_cache_limit) it evicts every co-resident tablet's entries and then self-evicts,
+    // lake_segment_metadata_cache_limit_percent) it evicts every co-resident tablet's entries and then self-evicts,
     // so the read pass re-parses the footers anyway. The read pass now runs with
     // fill_metadata_cache = true and repopulates the cache one segment at a time as it loads them,
     // which is exactly what happened before hold_segments existed.

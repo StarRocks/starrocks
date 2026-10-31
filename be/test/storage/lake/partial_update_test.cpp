@@ -345,7 +345,7 @@ public:
         _tablet_mgr->prune_metacache();
         ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_cache_key));
         ASSERT_EQ(base_version, _primary_key_mgr->get_primary_index_data_version(tablet_id));
-        ASSERT_GE(_tablet_mgr->metacache()->capacity(), 2 * 1024);
+        ASSERT_GE(_tablet_mgr->metacache()->segment_metadata_capacity(), 2 * 1024);
         ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(tablet_id, base_version + 1, txn_id));
         EXPECT_EQ(0, index_load_count.load()) << "PK index rebuild must not seed the base segment cache";
         ASSERT_EQ(base_version + 1, _primary_key_mgr->get_primary_index_data_version(tablet_id));
@@ -1956,7 +1956,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
         GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
     }
 
-    // TestBase constructs its TabletManager with this metacache capacity.
+    // TestBase constructs its TabletManager with this segment metadata cache capacity.
     constexpr int64_t kDefaultMetacacheLimit = 1024 * 1024;
     constexpr int kRanges = 6;
     constexpr int kRangeSize = kChunkSize / kRanges;
@@ -1969,7 +1969,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
-        _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(kDefaultMetacacheLimit);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
@@ -2018,7 +2018,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
     // while a shard gets only 2 KiB. An aggregate-only gate incorrectly enables caching here.
     constexpr int64_t kSmallMetacacheLimit = 64 * 1024;
     ASSERT_LT(base_metadata->rowsets_size() * _tablet_schema->num_columns() * 1024, kSmallMetacacheLimit);
-    _tablet_mgr->update_metacache_limit(kSmallMetacacheLimit);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kSmallMetacacheLimit);
     fill_decisions.clear();
     write_and_publish(generate_data(kThirdKeys, 1, true, 5), /*row_mode_partial_update=*/true);
     ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
@@ -2027,13 +2027,13 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
 
     // No room: every segment is skipped, the first one included -- nothing has to be cached before
     // the gate can decide.
-    _tablet_mgr->update_metacache_limit(0);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(0);
     fill_decisions.clear();
     write_and_publish(generate_data(kThirdKeys, 2, true, 5), /*row_mode_partial_update=*/true);
     ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
     EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
 
-    _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kDefaultMetacacheLimit);
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
@@ -2156,12 +2156,12 @@ TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
     const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
-        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(1024 * 1024);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
     config::lake_pk_partial_update_use_segment_cache = true;
-    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kCacheCapacity);
     std::vector<bool> decisions;
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
                                           [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
@@ -2202,7 +2202,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
         config::enable_zstd_compression_dict = saved_write_dictionary;
-        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(1024 * 1024);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
@@ -2300,7 +2300,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
     const TxnLogPB_OpWrite op_write;
     const RowsetUpdateStateParams params{op_write, tablet_schema, read_metadata, &tablet, container};
     const std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{1, rowids}};
-    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kCacheCapacity);
     std::vector<bool> decisions;
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
                                           [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });

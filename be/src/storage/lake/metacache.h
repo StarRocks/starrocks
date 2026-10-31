@@ -37,9 +37,16 @@ using CacheValue = std::variant<std::shared_ptr<const TabletMetadataPB>, std::sh
                                 std::shared_ptr<const TabletSchema>, std::shared_ptr<const DelVector>,
                                 std::shared_ptr<Segment>, std::shared_ptr<const CombinedTxnLogPB>, bool>;
 
+// Byte capacity of a metacache LRU sized at |percent| of |mem_limit|, with |percent| clamped to [0, 100].
+int64_t metacache_capacity(int64_t mem_limit, int32_t percent);
+
+// Two independent LRU caches behind one interface. Tablet metadata, txn logs and bundled metadata markers
+// go to the tablet metadata cache; segments, delete vectors and tablet schemas go to the segment metadata
+// cache. Segments are large and churn with every query and compaction, so keeping them apart stops them
+// from evicting the small tablet metadata and txn logs that every load, publish and scan starts from.
 class Metacache {
 public:
-    explicit Metacache(int64_t cache_capacity);
+    Metacache(int64_t tablet_metadata_capacity, int64_t segment_metadata_capacity);
 
     ~Metacache();
 
@@ -87,27 +94,37 @@ public:
 
     void cache_bundled_metadata_marker(std::string_view key);
 
+    // Erases |key| from both caches.
     void erase(std::string_view key);
 
-    void update_capacity(size_t new_capacity);
+    void update_tablet_metadata_capacity(size_t new_capacity);
+
+    void update_segment_metadata_capacity(size_t new_capacity);
 
     void prune();
 
-    size_t memory_usage() const;
+    size_t tablet_metadata_memory_usage() const;
 
-    size_t capacity() const;
+    size_t tablet_metadata_capacity() const;
+
+    size_t segment_metadata_memory_usage() const;
+
+    size_t segment_metadata_capacity() const;
 
 private:
     static void cache_value_deleter(const CacheKey& key, void* value);
 
-    void insert(std::string_view key, CacheValue* ptr, size_t size);
+    static void insert(Cache* cache, std::string_view key, CacheValue* ptr, size_t size);
+
+    static void update_capacity(Cache* cache, size_t new_capacity);
 
     // No metacache-level lock: conditional replacement, the compare-and-insert needed by cache_segment_if_absent()
     // and the in-place charge update needed by update_segment_cache_size() are provided
     // atomically by the underlying sharded cache. Keeping the cache lock as the only lock
     // also keeps cached value destructors (notably ~Segment) off every lock, because
     // LRUCache always runs deleters after releasing its shard mutex.
-    std::unique_ptr<Cache> _cache;
+    std::unique_ptr<Cache> _tablet_metadata_cache;
+    std::unique_ptr<Cache> _segment_metadata_cache;
 };
 
 } // namespace starrocks::lake

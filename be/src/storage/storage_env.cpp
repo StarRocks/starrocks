@@ -110,9 +110,9 @@ Status StorageEnv::init(const StorageEnvOptions& options) {
 
     auto lake_primary_key_manager =
             std::make_unique<lake::PrimaryKeyManager>(lake_location_provider, options.update_mem_tracker);
-    auto lake_tablet_manager =
-            std::make_unique<lake::TabletManager>(lake_location_provider, lake_primary_key_manager.get(),
-                                                  options.lake_metadata_cache_limit, options.store_path_registry);
+    auto lake_tablet_manager = std::make_unique<lake::TabletManager>(
+            lake_location_provider, lake_primary_key_manager.get(), options.lake_tablet_metadata_cache_limit,
+            options.lake_segment_metadata_cache_limit, options.store_path_registry);
     auto lake_replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(lake_tablet_manager.get());
 
     auto parallel_compact_mgr =

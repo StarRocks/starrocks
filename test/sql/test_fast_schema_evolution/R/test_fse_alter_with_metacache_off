@@ -1,5 +1,8 @@
 -- name: test_lake_alter_add_first_key_no_metacache @cloud
-update information_schema.be_configs set value = "0" where name = "lake_metadata_cache_limit";
+update information_schema.be_configs set value = "0" where name = "lake_tablet_metadata_cache_limit_percent";
+-- result:
+-- !result
+update information_schema.be_configs set value = "0" where name = "lake_segment_metadata_cache_limit_percent";
 -- result:
 -- !result
 create database test_db_${uuid0};
@@ -41,6 +44,9 @@ select * from t1 order by k1;
 drop database test_db_${uuid0};
 -- result:
 -- !result
-update information_schema.be_configs set value = "2147483648" where name = "lake_metadata_cache_limit";
+update information_schema.be_configs set value = "10" where name = "lake_tablet_metadata_cache_limit_percent";
+-- result:
+-- !result
+update information_schema.be_configs set value = "20" where name = "lake_segment_metadata_cache_limit_percent";
 -- result:
 -- !result
