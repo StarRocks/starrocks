@@ -253,16 +253,28 @@ public class SplitTabletJob extends TabletReshardJob {
         // 3. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
         // From this point the job must not abort or throw, because the run() wrapper would attempt to abort.
+<<<<<<< HEAD
         updateNextVersions();
+=======
+        // Steps 4-6 stay under the same lock, so the reservation is journaled (step 6) before a load can commit
+        // above it. A load journaled first would leave a new leader with the load but not the reservation, and
+        // the reserved version would never be published.
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            // Drawn first, so a failure here leaves no version reserved.
+            gtid = globalStateMgr.getGtidGenerator().nextGtid();
+            updateNextVersions(lockedTable.get());
+>>>>>>> 64dbbd9e618... [BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#66811)
 
-        // 4. Add new tablets to inverted index
-        addTabletsToInvertedIndex();
+            // 4. Add new tablets to inverted index
+            addTabletsToInvertedIndex();
 
-        // 5. Register resharding tablets
-        registerReshardingTablets();
+            // 5. Register resharding tablets
+            registerReshardingTablets();
 
-        // 6. Set job state to PREPARING
-        setJobState(JobState.PREPARING);
+            // 6. Set job state to PREPARING
+            setJobState(JobState.PREPARING);
+        }
     }
 
     /*
@@ -711,6 +723,7 @@ public class SplitTabletJob extends TabletReshardJob {
                     reshardingPhysicalPartition.setCommitVersion(commitVersion);
                 }
 
+<<<<<<< HEAD
                 // Never move nextVersion backwards. The commit version is reserved here, in
                 // runPendingJob, but the job does not journal anything until it reaches PREPARING a
                 // few steps later -- so a load transaction that commits in between journals its own
@@ -721,6 +734,16 @@ public class SplitTabletJob extends TabletReshardJob {
                 if (physicalPartition.getNextVersion() < commitVersion + 1) {
                     physicalPartition.setNextVersion(commitVersion + 1);
                 }
+=======
+            // Never move nextVersion backwards. runPendingJob journals the reservation before it
+            // releases the table lock, but a journal written by an FE without that ordering can
+            // still carry a load that committed between the reservation and its PREPARING entry.
+            // A replaying FE applies that load first, so the load has already carried nextVersion
+            // past the version reserved here, and assigning commitVersion + 1 unconditionally
+            // would drag it back, handing the same version out twice.
+            if (physicalPartition.getNextVersion() < commitVersion + 1) {
+                physicalPartition.setNextVersion(commitVersion + 1);
+>>>>>>> 64dbbd9e618... [BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#66811)
             }
         }
     }
