@@ -18,7 +18,7 @@ A JDBC catalog is a kind of external catalog that enables you to query data from
 
 Also, you can directly transform and load data from JDBC data sources by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on JDBC catalogs.
 
-JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, and ClickHouse (Experimental) since v3.3.0.
+JDBC catalogs support MySQL and PostgreSQL from v3.0 onwards, Oracle and SQLServer since v3.2.9 and v3.3.1, and ClickHouse (Experimental) since v3.3.0. In addition, JDBC catalogs support DM (Dameng).
 
 ## Prerequisites
 
@@ -59,8 +59,8 @@ The properties of the JDBC Catalog. `PROPERTIES` must include the following para
 | password          | The password that is used to connect to the target database. |
 | jdbc_uri          | The URI that the JDBC driver uses to connect to the target database. For MySQL, the URI is in the `"jdbc:mysql://ip:port"` format. For PostgreSQL, the URI is in the `"jdbc:postgresql://ip:port/db_name"` format. For more information: [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html). |
 | driver_url        | The download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br />**NOTE**<br />You can also put the JDBC driver to any same path on the FE and BE or CN nodes and set `driver_url` to that path, which must be in the `file:///<path>/to/the/driver` format. |
-| driver_class      | The class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x and earlier) and `com.mysql.cj.jdbc.Driver` (MySQL v6.x and later)</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li></ul> |
-| schema_resolver   | (Optional) Explicitly specifies the schema resolver to use. Valid values: `postgresql`, `mysql`, `oracle`, `sqlserver`, `clickhouse`. Use this parameter when working with non-standard JDBC drivers that cannot be auto-detected by driver class name. If not specified, StarRocks will auto-detect the appropriate resolver based on the `driver_class` parameter. |
+| driver_class      | The class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: `com.mysql.jdbc.Driver` (MySQL v5.x and earlier) and `com.mysql.cj.jdbc.Driver` (MySQL v6.x and later)</li><li>PostgreSQL: `org.postgresql.Driver`</li><li>Oracle: `oracle.jdbc.driver.OracleDriver`</li><li>DM (Dameng): `dm.jdbc.driver.DmDriver`</li></ul> |
+| schema_resolver   | (Optional) Explicitly specifies the schema resolver to use. Valid values: `postgresql`, `mysql`, `oracle`, `sqlserver`, `clickhouse`, `dameng`. Use this parameter when working with non-standard JDBC drivers that cannot be auto-detected by driver class name. If not specified, StarRocks will auto-detect the appropriate resolver based on the `driver_class` parameter. |
 
 #### Optional Oracle properties
 
@@ -71,6 +71,17 @@ When `driver_class` is set to Oracle, you can configure the following optional p
 | oracle.number.default-scale    | 6           | Set it when Oracle `NUMBER` metadata does not provide explicit precision and scale. Valid range: `0` to `38`. |
 | oracle.temporal.to-datetime    | false       | Controls Oracle `DATE`, `TIMESTAMP`, and `TIMESTAMP WITH LOCAL TIME ZONE` mapping. If it is set to `true`, these data types are mapped to StarRocks' `DATETIME` type; otherwise, `DATE` remains `DATE`, and `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` are mapped to `VARCHAR(64)`. |
 | oracle.timestamptz.to-datetime | false       | Controls Oracle `TIMESTAMP WITH TIME ZONE` mapping. If it is set to `true`, it is mapped to StarRocks' `DATETIME` type; otherwise, it is mapped to `VARCHAR(64)`. |
+
+#### Optional DM properties
+
+When `driver_class` is set to DM (Dameng), you can configure the following optional properties:
+
+| **Parameter**                   | **Default** | **Description**                                                                                          |
+| ------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| dameng.number.default-scale     | 6           | The default scale used when DM `NUMBER`/`DECIMAL` columns are declared without precision and scale. Valid range: `0` to `38`. |
+| dameng.timestamptz.to-datetime  | false       | Controls the mapping of DM `TIMESTAMP WITH TIME ZONE`. If set to `true`, it is mapped to the StarRocks `DATETIME` type (the time zone offset is ignored); otherwise it is mapped to `VARCHAR(64)`. |
+
+**Type mappings**: DM `DATE` is mapped to the StarRocks `DATE` type, `TIME` to `TIME`, `TIMESTAMP` to `DATETIME`, and `INTERVAL`/`TIME WITH TIME ZONE` to `VARCHAR(64)`.
 
 #### Optional row-count cache properties
 
@@ -158,6 +169,30 @@ PROPERTIES
     "jdbc_uri"="jdbc:clickhouse://127.0.0.1:8443",
     "driver_url"="https://repo1.maven.org/maven2/com/clickhouse/clickhouse-jdbc/0.4.6/clickhouse-jdbc-0.4.6.jar",
     "driver_class"="com.clickhouse.jdbc.ClickHouseDriver"
+);
+-- DM (Dameng)
+CREATE EXTERNAL CATALOG jdbc6
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="SYSDBA",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:dm://127.0.0.1:5236",
+    "driver_url"="https://repo1.maven.org/maven2/com/dameng/DmJdbcDriver18/8.1.3.140/DmJdbcDriver18-8.1.3.140.jar",
+    "driver_class"="dm.jdbc.driver.DmDriver"
+);
+-- DM (with DM-specific optional properties)
+CREATE EXTERNAL CATALOG jdbc6_ext
+PROPERTIES
+(
+    "type"="jdbc",
+    "user"="SYSDBA",
+    "password"="changeme",
+    "jdbc_uri"="jdbc:dm://127.0.0.1:5236",
+    "driver_url"="https://repo1.maven.org/maven2/com/dameng/DmJdbcDriver18/8.1.3.140/DmJdbcDriver18-8.1.3.140.jar",
+    "driver_class"="dm.jdbc.driver.DmDriver",
+    "dameng.number.default-scale"="6",
+    "dameng.timestamptz.to-datetime"="false"
 );
 -- Using schema_resolver for non-standard driver
 CREATE EXTERNAL CATALOG jdbc5

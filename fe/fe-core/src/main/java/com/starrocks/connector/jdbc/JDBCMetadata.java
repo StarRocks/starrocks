@@ -94,7 +94,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     static final long MINIMUM_KEEPALIVE_TIME_MS = 30_000L;
     static final long KEEPALIVE_DISABLED = 0L;
     private static final List<String> SUPPORTED_SCHEMA_RESOLVERS =
-            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse");
+            ImmutableList.of("postgresql", "mysql", "oracle", "sqlserver", "clickhouse", "dameng");
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
@@ -155,6 +155,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             return new OracleSchemaResolver(properties);
         } else if (driverClass.contains("sqlserver")) {
             return new SqlServerSchemaResolver();
+        } else if (driverClass.contains("dm.jdbc.driver")) {
+            return new DamengSchemaResolver(properties);
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
@@ -178,6 +180,9 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return new SqlServerSchemaResolver();
             case "clickhouse":
                 return new ClickhouseSchemaResolver(properties);
+            case "dameng":
+            case "dm":
+                return new DamengSchemaResolver(properties);
             default:
                 throw new StarRocksConnectorException(
                         "Unknown schema_resolver: " + resolverType +
