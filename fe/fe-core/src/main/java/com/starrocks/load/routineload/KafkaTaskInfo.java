@@ -35,6 +35,7 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.google.gson.Gson;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -115,6 +116,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     @Override
     public boolean readyToExecute() throws StarRocksException {
         if (checkReadyToExecuteFast()) {
+            // Keep the cached offsets that proved there is more data. Without them
+            // isProgressKeepUp() sees no latest offsets after the commit, reports the task
+            // as caught up, and the next task waits max_batch_interval although the
+            // partition still has a backlog.
+            this.latestPartOffset = localLatestOffsets();
             return true;
         }
 
@@ -143,6 +149,19 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         }
 
         return false;
+    }
+
+    // The job's cached latest offset of every partition this task consumes, as far as it is known.
+    private Map<Integer, Long> localLatestOffsets() {
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) job;
+        Map<Integer, Long> offsets = Maps.newHashMap();
+        for (Integer partitionId : partitionIdToOffset.keySet()) {
+            Long localLatestOffset = kafkaRoutineLoadJob.getPartitionOffset(partitionId);
+            if (localLatestOffset != null) {
+                offsets.put(partitionId, localLatestOffset);
+            }
+        }
+        return offsets;
     }
 
     @Override
