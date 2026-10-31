@@ -79,6 +79,8 @@ public class Pipe implements GsonPostProcessable {
     public static final int MAX_POLL_INTERVAL = 3600; // 1 hour
     public static final long DEFAULT_BATCH_SIZE = 1 << 30; // 1 GB
     public static final long DEFAULT_BATCH_FILES = 256;
+    // How many times a failed task is retried before it gives up and marks its files as ERROR. The
+    // pipe itself stops on Config.pipe_max_consecutive_failed_task_executions failures in a row.
     public static final int FAILED_TASK_THRESHOLD = 5;
 
     private static final String TASK_PROPERTY_PREFIX = "task.";
@@ -410,11 +412,20 @@ public class Pipe implements GsonPostProcessable {
                 }
                 if (task.isError()) {
                     failedTaskExecutionCount++;
-                    if (failedTaskExecutionCount > FAILED_TASK_THRESHOLD) {
-                        changeStateAction = () -> changeState(State.ERROR, false);
+                    int maxFailures = Config.pipe_max_consecutive_failed_task_executions;
+                    if (failedTaskExecutionCount > maxFailures) {
+                        LOG.warn("pipe {} changes to ERROR: {} task executions failed in a row, more than "
+                                        + "pipe_max_consecutive_failed_task_executions={}, last error: {}",
+                                this, failedTaskExecutionCount, maxFailures, task.getErrorMsg());
+                        // Persisted like every other state change, so that followers, a restarted
+                        // FE and the next leader all keep the pipe stopped.
+                        changeStateAction = () -> changeState(State.ERROR, true);
                     }
                 }
                 if (task.isFinished()) {
+                    // A task that loads ends the failure streak. The pipe stops only on failures in
+                    // a row, so transient ones spread over time never add up to stopping it.
+                    failedTaskExecutionCount = 0;
                     FilePipePiece piece = task.getPiece();
                     changedLoadStatus.loadedFiles += piece.getNumFiles();
                     changedLoadStatus.loadedBytes += piece.getTotalBytes();
@@ -589,6 +600,11 @@ public class Pipe implements GsonPostProcessable {
 
         // Change the pipe state if it's stopped
         if (getState().canResume()) {
+            // Restart with a clean failure count, as RESUME does. Clear it while the pipe is still
+            // stopped: once it is RUNNING the scheduler may count a new failure.
+            try (CloseableLock l = takeWriteLock()) {
+                this.failedTaskExecutionCount = 0;
+            }
             changeState(State.RUNNING, true);
         }
     }
