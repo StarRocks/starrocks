@@ -3512,6 +3512,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_reuse_spark_column_statistics = true;
 
+    @ConfField(mutable = true, comment = "Whether Delta Lake catalogs list an Azure (abfs/abfss) _delta_log " +
+            "from the requested version instead of listing all of its files. When off, listings behave like " +
+            "Delta's stock AzureLogStore. Takes effect immediately for all catalogs.")
+    public static boolean enable_delta_lake_azure_start_from_listing = true;
+
     /**
      * size of iceberg worker pool
      */
