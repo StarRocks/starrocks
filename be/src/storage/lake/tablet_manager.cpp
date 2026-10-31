@@ -904,6 +904,10 @@ TabletMetadataPtr TabletManager::get_latest_cached_tablet_metadata(int64_t table
     return _metacache->lookup_tablet_metadata(tablet_latest_metadata_cache_key(tablet_id));
 }
 
+void TabletManager::erase_latest_cached_tablet_metadata(int64_t tablet_id) {
+    _metacache->erase(tablet_latest_metadata_cache_key(tablet_id));
+}
+
 StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(int64_t tablet_id, int64_t version, bool fill_cache,
                                                                int64_t expected_gtid,
                                                                const std::shared_ptr<FileSystem>& fs) {
@@ -1409,9 +1413,6 @@ StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::stri
     for (auto& txn_log : *log->mutable_txn_logs()) {
         normalize_txn_log_after_load(&txn_log);
     }
-    if (fill_cache) {
-        _metacache->cache_combined_txn_log(path, log);
-    }
     return log;
 }
 
@@ -1421,7 +1422,13 @@ StatusOr<CombinedTxnLogPtr> TabletManager::get_combined_txn_log(const std::strin
         TRACE("got cached combined txn log");
         return ptr;
     }
-    return _combined_txn_log_group.Do(cache_key, [&]() { return load_combined_txn_log(path, fill_cache); });
+    return _combined_txn_log_group.Do(cache_key, [&]() -> StatusOr<CombinedTxnLogPtr> {
+        ASSIGN_OR_RETURN(auto log, load_combined_txn_log(path, fill_cache));
+        if (fill_cache) {
+            _metacache->cache_combined_txn_log(cache_key, log);
+        }
+        return log;
+    });
 }
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id) {
