@@ -1,0 +1,60 @@
+-- name: test_agg_null_literal_arg
+CREATE TABLE `t1` (
+  `k` bigint NOT NULL,
+  `v` varchar(20) DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 SELECT generate_series, concat('v', generate_series) FROM TABLE(generate_series(1, 10000));
+-- result:
+-- !result
+set new_planner_agg_stage = 2;
+-- result:
+-- !result
+set streaming_preaggregation_mode = "force_streaming";
+-- result:
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as varchar)) a from t1 group by k) t;
+-- result:
+10000	10000	0
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as bigint)) a from t1 group by k) t;
+-- result:
+10000	10000	0
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as array<int>)) a from t1 group by k) t;
+-- result:
+10000	10000	0
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(if(1 = 0, v, null)) a from t1 group by k) t;
+-- result:
+10000	10000	0
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(v order by cast(null as varchar)) a from t1 group by k) t;
+-- result:
+10000	10000	10000
+-- !result
+select count(*), sum(c), count(mx), count(gc) from (select k, count(cast(null as varchar)) c, max(cast(null as varchar)) mx, group_concat(cast(null as varchar)) gc from t1 group by k) t;
+-- result:
+10000	0	0	0
+-- !result
+set streaming_preaggregation_mode = "force_preaggregation";
+-- result:
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as varchar)) a from t1 group by k) t;
+-- result:
+10000	10000	0
+-- !result
+select count(*), sum(c), count(mx), count(gc) from (select k, count(cast(null as varchar)) c, max(cast(null as varchar)) mx, group_concat(cast(null as varchar)) gc from t1 group by k) t;
+-- result:
+10000	0	0	0
+-- !result
+select array_length(array_agg(cast(null as varchar))), count(cast(null as varchar)), max(cast(null as varchar)) from t1;
+-- result:
+10000	0	None
+-- !result

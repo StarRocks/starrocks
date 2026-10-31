@@ -1,0 +1,26 @@
+-- name: test_agg_null_literal_arg
+CREATE TABLE `t1` (
+  `k` bigint NOT NULL,
+  `v` varchar(20) DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t1 SELECT generate_series, concat('v', generate_series) FROM TABLE(generate_series(1, 10000));
+
+-- A NULL literal argument reaches the aggregate function as an all-NULL column of the argument's type.
+set new_planner_agg_stage = 2;
+set streaming_preaggregation_mode = "force_streaming";
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as varchar)) a from t1 group by k) t;
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as bigint)) a from t1 group by k) t;
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as array<int>)) a from t1 group by k) t;
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(if(1 = 0, v, null)) a from t1 group by k) t;
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(v order by cast(null as varchar)) a from t1 group by k) t;
+select count(*), sum(c), count(mx), count(gc) from (select k, count(cast(null as varchar)) c, max(cast(null as varchar)) mx, group_concat(cast(null as varchar)) gc from t1 group by k) t;
+
+set streaming_preaggregation_mode = "force_preaggregation";
+select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as varchar)) a from t1 group by k) t;
+select count(*), sum(c), count(mx), count(gc) from (select k, count(cast(null as varchar)) c, max(cast(null as varchar)) mx, group_concat(cast(null as varchar)) gc from t1 group by k) t;
+select array_length(array_agg(cast(null as varchar))), count(cast(null as varchar)), max(cast(null as varchar)) from t1;
