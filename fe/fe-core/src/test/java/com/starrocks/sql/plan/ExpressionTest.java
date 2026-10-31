@@ -1007,13 +1007,22 @@ public class ExpressionTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         assertContains(planFragment, "PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'");
 
+        // years/months add/sub clamp to the month end and are not invertible: keep the predicate as is
         sql = "select t1a from test_all_type where years_sub(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_sub(8: id_datetime, 2) = '2020-12-21 00:00:00'");
 
-        sql = "select t1a from test_all_type where years_add(id_datetime, 2) = '2020-12-21'";
+        sql = "select t1a from test_all_type where years_add(id_datetime, 1) = '2025-02-28'";
         planFragment = getFragmentPlan(sql);
-        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'");
+        assertContains(planFragment, "PREDICATES: years_add(8: id_datetime, 1) = '2025-02-28 00:00:00'");
+
+        sql = "select t1a from test_all_type where months_add(id_datetime, 1) = '2024-02-29'";
+        planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "PREDICATES: months_add(8: id_datetime, 1) = '2024-02-29 00:00:00'");
+
+        sql = "select t1a from test_all_type where date_add(id_datetime, interval 1 month) < '2024-02-29'";
+        planFragment = getFragmentPlan(sql);
+        assertContains(planFragment, "PREDICATES: months_add(8: id_datetime, 1) < '2024-02-29 00:00:00'");
     }
 
     @Test
@@ -1773,9 +1782,15 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "days_sub(CAST(2: v2 AS DATETIME), 6)");
 
+        // years/quarters/months clamp to the month end and do not compose: 2020-02-29 + 1 + 2 - 3 years = 2020-02-28
         sql = "select years_add(years_sub(years_sub(v2, -1), -2), -3) from t0";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "<slot 4> : CAST(2: v2 AS DATETIME)");
+        assertContains(plan, "years_add(years_sub(years_sub(CAST(2: v2 AS DATETIME), -1), -2), -3)");
+
+        sql = "select months_sub(months_add(v2, 1), 1), quarters_add(quarters_add(v2, 1), 1) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "months_sub(months_add(6: cast, 1), 1)");
+        assertContains(plan, "quarters_add(quarters_add(6: cast, 1), 1)");
 
         sql = "select date_add(date_add(date_sub(v2, -1), -2), -3) from t0";
         plan = getFragmentPlan(sql);
