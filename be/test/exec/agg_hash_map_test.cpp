@@ -1179,6 +1179,97 @@ TEST(SliceWithHash32Test, SliceSetGroupsSurviveRehash) {
     check_slice_set_groups_survive_rehash<SerializedTwoLevelKeyAggHashSet<PhmapSeed2>>(make_string_int_chunk);
 }
 
+TEST(SliceWithHash32Test, LargeOffsetBinaryColumnAggMapAndSet) {
+    constexpr int kRows = 256;
+    auto make_large_binary_col = []() {
+        auto col = BinaryColumn::create();
+        for (int i = 0; i < kRows; ++i) {
+            std::string s = "large-offset-key-" + std::to_string(i % 64);
+            col->append(Slice(s));
+        }
+        col->get_offset().ensure_width_for_value(static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1);
+        return col;
+    };
+
+    auto bin_col = make_large_binary_col();
+    ASSERT_TRUE(bin_col->get_offset().is_large());
+    Columns non_null_cols{bin_col};
+
+    auto null_flags = NullColumn::create();
+    for (int i = 0; i < kRows; ++i) {
+        null_flags->append(i % 16 == 0 ? 1 : 0);
+    }
+    auto nullable_with_nulls = NullableColumn::create(make_large_binary_col(), std::move(null_flags));
+    Columns nullable_cols_with_nulls{nullable_with_nulls};
+
+    auto no_null_flags = NullColumn::create(kRows, 0);
+    auto nullable_without_nulls_data = make_large_binary_col();
+    auto nullable_without_nulls = NullableColumn::create(nullable_without_nulls_data, std::move(no_null_flags));
+    Columns nullable_cols_without_nulls{nullable_without_nulls};
+
+    RuntimeProfile profile("LargeOffsetBinaryColumnAggMapAndSet");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+    struct Alloc {
+        MemPool* pool;
+        AggDataPtr operator()(const SliceWithHash32<PhmapSeed1>&) { return pool->allocate(8); }
+        AggDataPtr operator()(std::nullptr_t) { return pool->allocate(8); }
+    };
+
+    ExtraAggParam extra;
+
+    // 1. OneStringAggHashMap (noprefetch + prefetch)
+    {
+        OneStringAggHashMap<PhmapSeed1> map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows, nullptr);
+        map.compute_agg_noprefetch<Alloc, HTBuildOp<true, false, false, false>>(bin_col.get(), &states, &pool,
+                                                                                Alloc{&pool}, &extra);
+        EXPECT_EQ(64u, map.hash_map.size());
+        Buffer<AggDataPtr> prefetch_states(kRows, nullptr);
+        map.compute_agg_prefetch<Alloc, HTBuildOp<true, false, false, false>>(bin_col.get(), &prefetch_states, &pool,
+                                                                              Alloc{&pool}, &extra);
+        for (int i = 0; i < kRows; ++i) {
+            EXPECT_EQ(states[i], prefetch_states[i]);
+        }
+    }
+
+    // 2. NullOneStringAggHashMap (with nulls and without nulls)
+    {
+        NullOneStringAggHashMap<PhmapSeed1> map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows, nullptr);
+        map.build_hash_map(kRows, nullable_cols_with_nulls, &pool, Alloc{&pool}, &states);
+        EXPECT_NE(nullptr, map.null_key_data);
+        EXPECT_EQ(60u, map.hash_map.size());
+
+        Buffer<AggDataPtr> prefetch_states(kRows, nullptr);
+        map.compute_agg_prefetch<Alloc, HTBuildOp<true, false, false, false>>(
+                nullable_without_nulls_data.get(), &prefetch_states, &pool, Alloc{&pool}, &extra);
+        EXPECT_EQ(64u, map.hash_map.size());
+    }
+
+    // 3. OneStringAggHashSet (noprefetch + prefetch + selection)
+    {
+        OneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_set_noprefetch<true>(kRows, non_null_cols, &pool, nullptr);
+        EXPECT_EQ(64u, set.hash_set.size());
+        Filter not_founds(kRows, 0);
+        set.build_set_prefetch<false>(kRows, non_null_cols, &pool, &not_founds);
+        for (int i = 0; i < kRows; ++i) {
+            EXPECT_EQ(0, not_founds[i]);
+        }
+    }
+
+    // 4. NullOneStringAggHashSet (with nulls + without nulls + prefetch)
+    {
+        NullOneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_set_noprefetch<true>(kRows, nullable_cols_with_nulls, &pool, nullptr);
+        EXPECT_TRUE(set.has_null_key);
+        EXPECT_EQ(60u, set.hash_set.size());
+        set.build_set_prefetch<true>(kRows, nullable_cols_without_nulls, &pool, nullptr);
+        EXPECT_EQ(64u, set.hash_set.size());
+    }
+}
+
 // Writes the key into the state prefix, as AllocateState does, so a test can read it back the way
 // convert_hash_map_to_chunk does.
 template <typename MapWithKey>
