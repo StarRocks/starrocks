@@ -1332,6 +1332,7 @@ TEST_F(BitmapValueTest, croaring_5_3_2_unaligned_deserialize_and_simd_containers
         }
         lhs |= single_container;
         ASSERT_EQ(512 + 300, lhs.cardinality());
+        // Pre-existing odd element in container 128 from lhs at k = 64 (64 * 2 = 128, 64 % 17 = 13)
         ASSERT_TRUE(lhs.contains(128ULL * 65536ULL + 13));
         ASSERT_TRUE(lhs.contains(128ULL * 65536ULL + 299 * 2));
 
