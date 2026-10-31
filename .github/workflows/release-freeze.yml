@@ -1,0 +1,41 @@
+name: RELEASE FREEZE
+
+# A patch branch takes no more merges once it is released: a PR into branch-X.Y.Z gets the
+# `release-freeze` status, a required check of the patch-branch protection rules. It fails once
+# the release tag X.Y.Z exists, unless the PR is labelled `release-unfreeze` (a respin).
+# Other release branches (customer branches such as branch-4.0.17-sn-1025, -rcNN) get success,
+# so the required status never leaves them pending.
+# Thin caller: the logic is ci-tool lib/release_freeze.py. workflow_dispatch checks every open
+# PR; run it once before making the status required.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+    branches: ['branch-[0-9]*.[0-9]*.*', 'branch-[0-9]*.[0-9]*-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: release-freeze-${{ github.event.pull_request.number || 'all' }}
+  cancel-in-progress: true
+
+jobs:
+  release-freeze:
+    if: github.repository == 'StarRocks/starrocks'
+    runs-on: [self-hosted, quick]
+    env:
+      # Reads the PR and the tag, posts the status; no PR code is checked out.
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: release-freeze status
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          if [ -n "${PR_NUMBER}" ]; then scope=(--pr "${PR_NUMBER}"); else scope=(--all); fi
+          python3 ci-tool/lib/release_freeze.py --repo "${{ github.repository }}" \
+            --target-url "${RUN_URL}" "${scope[@]}"
