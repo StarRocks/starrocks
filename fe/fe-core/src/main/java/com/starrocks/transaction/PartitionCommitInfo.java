@@ -116,6 +116,11 @@ public class PartitionCommitInfo implements Writable {
     // Leaving it unsynchronized keeps such a mistake loud instead of silently truncating stats.
     private final Map<Long, TabletStatPB> tabletStats = new HashMap<>();
 
+    // Persisted: replaying a double write's commit has to move the next version of the temp partition to the version
+    // after it, as the leader did (OlapTableTxnLogApplier.applyCommitLog), not just one past its own; a follower that
+    // took the other branch would carry a next version below the visible one into the partition the optimize swaps in,
+    // and stall every load to it once it leads.
+    @SerializedName(value = "isDoubleWrite")
     private boolean isDoubleWrite = false;
 
     // Paces the "fail to publish partition" error log for this partition. Deliberately not
@@ -256,6 +261,21 @@ public class PartitionCommitInfo implements Writable {
 
     public List<Long> getDictCollectedVersions() {
         return dictCollectedVersions;
+    }
+
+    /**
+     * Takes over the dictionary metadata of another commit info of the same load, one the commit drops or one whose
+     * partition may be dropped before the load becomes visible. The listener puts the metadata of a table on one of its
+     * partitions only (OlapTableTxnStateListener.preWriteCommitLog), and without it the global dicts of the table are
+     * neither invalidated nor advanced when the load becomes visible.
+     */
+    public void takeDictMetadataFrom(PartitionCommitInfo other) {
+        invalidDictCacheColumns.addAll(other.invalidDictCacheColumns);
+        if (validDictCacheColumns.isEmpty() && !other.validDictCacheColumns.isEmpty()) {
+            validDictCacheColumns.addAll(other.validDictCacheColumns);
+            dictCollectedVersions.addAll(other.dictCollectedVersions);
+            dictContentIdentities.addAll(other.dictContentIdentities);
+        }
     }
 
     public void setCompactionScore(Quantiles compactionScore) {

@@ -750,13 +750,18 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                                      *    partitionCommitInfos does not contain these partitions.
                                      * 4. So we will not able to get partitionCommitInfo here.
                                      *
-                                     * Just print a log to observe
+                                     * Or a load double-wrote into the temp partition of an online optimize
+                                     * and committed before the job fixed the version its rewrite copies,
+                                     * which then left the temp partition out of the transaction. Either
+                                     * way the visible transaction will never publish the partition, and
+                                     * a temp partition outlives it: clear what the BE committed for it.
                                      */
                                     LOG.info(
-                                            "failed to find partition commit info. table: {}, " +
+                                            "failed to find partition commit info, clear it. table: {}, " +
                                                     "partition: {}, tablet: {}, txn_id: {}",
                                             tabletMeta.getTableId(), physicalPartitionId, tabletId,
                                             transactionState.getTransactionId());
+                                    transactionsToClear.put(transactionId, physicalPartitionId);
                                 } else {
                                     TPartitionVersionInfo versionInfo =
                                             new TPartitionVersionInfo(physicalPartitionId,

@@ -16,7 +16,9 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.sql.analyzer.DistributionDescAnalyzer;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.thrift.TStorageType;
@@ -39,6 +41,16 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
         return this;
     }
 
+    // A load writes the source and the temp partition of an online optimize together, with one set of distribution
+    // columns for all the partitions it writes (OlapTableSink#setDistributedColumns), and the online job swaps the
+    // partitions in one by one: an optimize that gives the table another distribution runs offline.
+    private boolean changesDistribution() {
+        return optimizeClause.getDistributionDesc() != null
+                && (DistributionDescAnalyzer.isDifferentDistributionType(optimizeClause.getDistributionDesc(),
+                        table.getDefaultDistributionInfo())
+                    || OptimizeJobV2.changesDistributionColumns(optimizeClause, table));
+    }
+
     @Override
     public AlterJobV2 build() throws StarRocksException {
         long tableId = table.getId();
@@ -55,12 +67,25 @@ public class OptimizeJobV2Builder extends AlterJobV2Builder {
                     && optimizeClause.getDistributionDesc() instanceof RandomDistributionDesc)
                 || table.getStorageType() == TStorageType.COLUMN_WITH_ROW
                 || !table.enableReplicatedStorage()
-                || table.isCloudNativeTableOrMaterializedView()) {
+                || table.isCloudNativeTableOrMaterializedView()
+                || changesDistribution()) {
+            if (Config.enable_online_optimize_table && changesDistribution()) {
+                LOG.info("Optimize job {} runs offline: it changes the distribution of table {}", jobId,
+                        table.getName());
+            }
             LOG.info("Optimize job {} is created, table: {}", jobId, table.getName());
             OptimizeJobV2 optimizeJob = new OptimizeJobV2(jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);
             optimizeJob.setComputeResource(computeResource);
             return optimizeJob;
         } else {
+            if (Config.enable_new_publish_mechanism) {
+                // A double write of an online optimize goes to a temp partition whose versions have a hole until the
+                // rewrite fills it. The new publish mechanism finishes a transaction only once its replicas report its
+                // version, and publishes the transactions of a table in commit order, so the rewrite would wait behind
+                // double writes that wait for it.
+                throw new DdlException("Online optimize does not support the new publish mechanism. Set the FE "
+                        + "configuration enable_new_publish_mechanism or enable_online_optimize_table to false.");
+            }
             LOG.info("Online optimize job {} is created, table: {}", jobId, table.getName());
             OnlineOptimizeJobV2 onlineOptimizeJob = new OnlineOptimizeJobV2(
                     jobId, dbId, tableId, table.getName(), timeoutMs, optimizeClause);

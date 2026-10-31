@@ -684,7 +684,7 @@ void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
     }
 }
 
-void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
+Status Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     std::unique_lock wrlock(_meta_lock);
     vector<RowsetSharedPtr> origin_rowsets;
     _pick_candicate_rowset_before_specify_version(&origin_rowsets, version);
@@ -696,7 +696,26 @@ void Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     }
     Version rowset_version(0, version);
     rowset->make_visible(rowset_version);
+
+    // Like add_inc_rowset, save the rowset meta, now visible, over the committed one the load saved. The tablet meta
+    // takes the overwrite at its next checkpoint only: a restart before it would load the rowset as the one of an
+    // unpublished transaction and the tablet without the versions it overwrites. Loading the visible rowset meta puts
+    // the rowset back into the tablet and drops the rowsets it covers (see DataDir::load).
+    RowsetMetaPB rowset_meta_pb;
+    if (rowset->rowset_meta()->skip_tablet_schema()) {
+        rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
+    } else {
+        rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
+    }
+    auto st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to save overwrite rowset. tablet_id: " << tablet_id() << ", txn_id: " << rowset->txn_id()
+                     << ", rowset_id: " << rowset->rowset_id() << ", res=" << st;
+        return st;
+    }
+
     modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
+    return Status::OK();
 }
 
 void Tablet::_delete_inc_rowset_by_version(const Version& version) {
