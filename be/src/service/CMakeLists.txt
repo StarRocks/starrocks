@@ -68,6 +68,9 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     add_executable(starrocks_be
         ${STARROCKS_BE_MAIN_FILES}
     )
+    # See WL_ALLOW_MULTIPLE_DEF in be/CMakeLists.txt: riscv64's source-built
+    # libs2.a carries a vendored gutil that BE's own Gutil module also defines.
+    target_link_options(starrocks_be PRIVATE ${WL_ALLOW_MULTIPLE_DEF})
 
     # This permits libraries loaded by dlopen to link to the symbols in the program.
     # set_target_properties(starrocks_be PROPERTIES LINK_FLAGS -pthread)
