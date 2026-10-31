@@ -395,7 +395,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ### リソースグループの監視
 
-リソースグループの[監視とアラート](../monitoring/monitoring.md)を設定できます。
+リソースグループの[監視とアラート](../monitoring/prometheus_grafana.md)を設定できます。
 
 リソースグループ関連の FE および BE メトリクスは次のとおりです。以下のすべてのメトリクスには、対応するリソースグループを示す `name` ラベルがあります。
 
