@@ -422,7 +422,7 @@ public class RangerInterfaceTest {
             }
         };
 
-        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service", null);
         ConnectContext ctx = new ConnectContext();
         ctx.setCurrentUserIdentity(new UserIdentity("alice", "%"));
         TableName hiveView = new TableName("hive_catalog", "db", "hive_view");
