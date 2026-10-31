@@ -422,7 +422,7 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
             assertFalse(job.isForceSkippedAtCommitted());
             utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
-                    any(), any(), any(), anyBoolean(), any()), never());
+                    any(), any(), any(), anyBoolean()), never());
             verify(pp, never()).setVisibleVersion(anyLong(), anyLong());
             verify(table, never()).setState(OlapTable.OlapTableState.NORMAL);
         }

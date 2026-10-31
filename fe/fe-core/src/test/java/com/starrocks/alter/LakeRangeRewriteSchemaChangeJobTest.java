@@ -1873,7 +1873,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                                                    java.util.Map<Long, Long> commitVersionMap,
                                                    java.util.Map<Long, List<Tablet>> tabletsByPartition,
                                                    com.starrocks.warehouse.cngroup.ComputeResource cr,
-                                                   boolean useAggregatePublish, PublishProperty publishProperty) {
+                                                   boolean useAggregatePublish) {
                 noOpPublishes.incrementAndGet();
                 return true;
             }
