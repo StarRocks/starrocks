@@ -22,7 +22,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.PulsarUtil;
-import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.proto.PPulsarMetaProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
@@ -48,6 +47,7 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.Mockito.when;
@@ -143,6 +143,55 @@ public class PulsarRoutineLoadJobTest {
         Assertions.assertThrows(StarRocksException.class, () -> {
             job.getAllPulsarPartitions();
         });
+    }
+
+    // StarRocks has no compute resource of a CN group, so this stands in for one: unlike
+    // WarehouseManager.DEFAULT_RESOURCE, it names a fixed CN group (worker group) of a warehouse, and two
+    // resources of the same warehouse and CN group are equal.
+    private static final class CNGroupResource implements ComputeResource {
+        private final long warehouseId;
+        private final long cnGroupId;
+
+        private CNGroupResource(long warehouseId, long cnGroupId) {
+            this.warehouseId = warehouseId;
+            this.cnGroupId = cnGroupId;
+        }
+
+        static CNGroupResource of(long warehouseId, long cnGroupId) {
+            return new CNGroupResource(warehouseId, cnGroupId);
+        }
+
+        @Override
+        public long getWarehouseId() {
+            return warehouseId;
+        }
+
+        @Override
+        public long getWorkerGroupId() {
+            return cnGroupId;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof CNGroupResource)) {
+                return false;
+            }
+            CNGroupResource other = (CNGroupResource) obj;
+            return warehouseId == other.warehouseId && cnGroupId == other.cnGroupId;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(warehouseId, cnGroupId);
+        }
+
+        @Override
+        public String toString() {
+            return "{warehouseId=" + warehouseId + ", cnGroupId=" + cnGroupId + "}";
+        }
     }
 
     @Test

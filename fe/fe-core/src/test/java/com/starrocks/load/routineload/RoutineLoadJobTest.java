@@ -50,7 +50,6 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -89,6 +88,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class RoutineLoadJobTest {
 
@@ -822,6 +822,55 @@ public class RoutineLoadJobTest {
                 Deencapsulation.getField(routineLoadJob, "currentPulsarPartitions"));
     }
 
+    // StarRocks has no compute resource of a CN group, so this stands in for one: unlike
+    // WarehouseManager.DEFAULT_RESOURCE, it names a fixed CN group (worker group) of a warehouse, and two
+    // resources of the same warehouse and CN group are equal.
+    private static final class CNGroupResource implements ComputeResource {
+        private final long warehouseId;
+        private final long cnGroupId;
+
+        private CNGroupResource(long warehouseId, long cnGroupId) {
+            this.warehouseId = warehouseId;
+            this.cnGroupId = cnGroupId;
+        }
+
+        static CNGroupResource of(long warehouseId, long cnGroupId) {
+            return new CNGroupResource(warehouseId, cnGroupId);
+        }
+
+        @Override
+        public long getWarehouseId() {
+            return warehouseId;
+        }
+
+        @Override
+        public long getWorkerGroupId() {
+            return cnGroupId;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof CNGroupResource)) {
+                return false;
+            }
+            CNGroupResource other = (CNGroupResource) obj;
+            return warehouseId == other.warehouseId && cnGroupId == other.cnGroupId;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(warehouseId, cnGroupId);
+        }
+
+        @Override
+        public String toString() {
+            return "{warehouseId=" + warehouseId + ", cnGroupId=" + cnGroupId + "}";
+        }
+    }
+
     // A shared-data warehouse laid out the way CelerData Cloud builds a multi-AZ one: every CN sits
     // in an AZ-named CN group, and the builtin CN group 0 is empty. Group 0 of default_warehouse is
     // also the compute resource that a routine load job holds until prepare() acquires one.
@@ -832,6 +881,8 @@ public class RoutineLoadJobTest {
                 return RunMode.SHARED_DATA;
             }
         };
+        // in shared-data mode WarehouseManager.DEFAULT_RESOURCE reads its CN group from default_warehouse
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
         new MockUp<WarehouseManager>() {
             @Mock
             public List<Long> getAllComputeNodeIds(ComputeResource computeResource) {
