@@ -15,6 +15,7 @@
 #pragma once
 
 #include <list>
+#include <unordered_map>
 
 #include "common/statusor.h"
 #include "gen_cpp/lake_service.pb.h"
@@ -83,8 +84,12 @@ Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id,
 Status vacuum_load_spill(std::string_view root_location, int64_t min_active_txn_id, bool cleanup_legacy_load_spill,
                          int64_t* deleted_files = nullptr);
 
+// Lists the tablet metadata files under |metadata_root_location|, split into per-tablet and bundle files.
+// If |bundle_meta_mtimes| is not null, it receives the last modification time (seconds since the Epoch)
+// of every bundle file the listing reports one for.
 StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
-        FileSystem* fs, const std::string& metadata_root_location);
+        FileSystem* fs, const std::string& metadata_root_location,
+        std::unordered_map<std::string, int64_t>* bundle_meta_mtimes = nullptr);
 
 StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs, std::string_view root_location,
                                                                  int64_t expired_seconds,

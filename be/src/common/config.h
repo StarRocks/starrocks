@@ -2278,6 +2278,12 @@ CONF_Int32(lake_service_max_concurrency, "0");
 
 CONF_mInt64(lake_vacuum_min_batch_delete_size, "200");
 
+// Full vacuum deletes a bundle tablet metadata file whose transactions all committed before the grace
+// timestamp. When the file's last modification time, taken from the directory listing, is at least this many
+// seconds before the grace timestamp, full vacuum trusts it instead of downloading the file to read the commit
+// times. A negative value always downloads.
+CONF_mInt64(lake_fullvacuum_meta_mtime_margin_seconds, "600");
+
 // TOPN RuntimeFilter parameters
 CONF_mInt32(desc_hint_split_range, "10");
 
