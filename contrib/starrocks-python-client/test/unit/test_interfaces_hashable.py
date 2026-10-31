@@ -19,6 +19,8 @@ SQLAlchemy's reflection cache (sqlalchemy.engine.reflection.cache).
 See: https://github.com/StarRocks/starrocks/issues/70733
 """
 
+from sqlalchemy.testing import fixtures
+
 from starrocks.engine.interfaces import (
     ReflectedDistributionInfo,
     ReflectedPartitionInfo,
@@ -27,7 +29,7 @@ from starrocks.engine.interfaces import (
 )
 
 
-class TestReflectedPartitionInfoHashable:
+class ReflectedPartitionInfoHashableTest(fixtures.TestBase):
 
     def test_hashable(self):
         info = ReflectedPartitionInfo(type="RANGE", partition_method="RANGE(dt)")
@@ -52,7 +54,7 @@ class TestReflectedPartitionInfoHashable:
         assert hash(info) == hash(info)
 
 
-class TestReflectedDistributionInfoHashable:
+class ReflectedDistributionInfoHashableTest(fixtures.TestBase):
 
     def test_hashable(self):
         info = ReflectedDistributionInfo(
@@ -77,7 +79,7 @@ class TestReflectedDistributionInfoHashable:
         assert hash(a) == hash(b)
 
 
-class TestReflectedTableKeyInfoHashable:
+class ReflectedTableKeyInfoHashableTest(fixtures.TestBase):
 
     def test_hashable(self):
         info = ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id, name")
@@ -108,7 +110,7 @@ class TestReflectedTableKeyInfoHashable:
         assert hash(a) == hash(b)
 
 
-class TestReflectedRefreshInfoHashable:
+class ReflectedRefreshInfoHashableTest(fixtures.TestBase):
 
     def test_hashable(self):
         info = ReflectedRefreshInfo(moment="ASYNC", type="FULL")
@@ -125,7 +127,7 @@ class TestReflectedRefreshInfoHashable:
         assert hash(a) == hash(b)
 
 
-class TestReflectedInfoUsableInCacheTuple:
+class ReflectedInfoUsableInCacheTupleTest(fixtures.TestBase):
     """
     Simulates SQLAlchemy's reflection cache behavior where reflected info
     objects end up as elements inside a tuple used as a dictionary key.
