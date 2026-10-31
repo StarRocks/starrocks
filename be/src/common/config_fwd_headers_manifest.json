@@ -929,6 +929,7 @@
         "lake_enable_protobuf_file_checksum",
         "experimental_enable_lake_capture_tablet_and_rowsets",
         "lake_vacuum_min_batch_delete_size",
+        "lake_fullvacuum_meta_mtime_margin_seconds",
         "lake_local_pk_index_unused_threshold_seconds",
         "lake_enable_vertical_compaction_fill_data_cache",
         "lake_enable_horizontal_compaction_fill_data_cache",

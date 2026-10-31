@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include <algorithm>
 #include <atomic>
@@ -553,6 +554,66 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
     EXPECT_TRUE(file_exist("0000000000000005_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000004_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000004_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+}
+
+// A bundle metadata file last modified well before the grace timestamp is expired by its modification time alone,
+// without being read. Every other bundle file is still read and judged by its commit times.
+TEST_P(LakeVacuumTest, test_vacuum_full_judges_old_bundle_meta_by_mtime) {
+    const int64_t now = std::time(nullptr);
+    const int64_t grace_timestamp = now - 3600;
+    auto put_bundle = [&](int64_t version, int64_t commit_time) {
+        std::map<int64_t, TabletMetadataPB> metas;
+        for (int64_t tablet_id : {66600, 66601}) {
+            auto& meta = metas[tablet_id];
+            meta.set_id(tablet_id);
+            meta.set_version(version);
+            meta.set_commit_time(commit_time);
+        }
+        ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(metas));
+    };
+    // v6 cannot be parsed, so only its modification time can expire it; v7 is valid and was committed before the
+    // grace timestamp but written just now; v8 was committed after the grace timestamp; v9 is the visible version.
+    const auto v6_path = join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_metadata_filename(0, 6));
+    {
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(v6_path));
+        ASSERT_OK(f->append("not a bundle tablet metadata file"));
+        ASSERT_OK(f->close());
+        struct utimbuf times;
+        times.actime = times.modtime = static_cast<time_t>(grace_timestamp - 7200);
+        ASSERT_EQ(0, ::utime(v6_path.c_str(), &times));
+    }
+    put_bundle(7, grace_timestamp - 100);
+    put_bundle(8, now);
+    put_bundle(9, now);
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66600);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(grace_timestamp);
+    request.set_min_check_version(0);
+    request.set_max_check_version(9);
+
+    // With the shortcut off, v6 has to be read and the full vacuum fails on it.
+    {
+        ConfigResetGuard<int64_t> margin_guard(&config::lake_fullvacuum_meta_mtime_margin_seconds, -1);
+        VacuumFullResponse response;
+        vacuum_full(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_NE(0, response.status().status_code());
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 6)));
+    }
+
+    ConfigResetGuard<int64_t> margin_guard(&config::lake_fullvacuum_meta_mtime_margin_seconds, 600);
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_EQ(2, response.vacuumed_files());
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 6)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 7)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 8)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 9)));
 }
 
 // NOLINTNEXTLINE
