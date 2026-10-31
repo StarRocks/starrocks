@@ -71,7 +71,14 @@ CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 // Allow skipping invalid delete_predicate in order to get the segment data back, and do manual correction.
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 
-CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+// Capacity of the shared-data tablet metadata cache, as a percentage of the process memory limit, clamped to
+// [0, 100]. The cache holds tablet metadata and txn logs, apart from the segment metadata cache, so that segments
+// loaded by queries and compactions cannot evict them. Set to 0 to disable the cache.
+CONF_mInt32(lake_tablet_metadata_cache_limit_percent, "10");
+
+// Capacity of the shared-data segment metadata cache, as a percentage of the process memory limit, clamped to
+// [0, 100]. The cache holds opened segments, delete vectors and tablet schemas. Set to 0 to disable the cache.
+CONF_mInt32(lake_segment_metadata_cache_limit_percent, "20");
 
 // Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
 // MemTracker accounting granularity. New requests fail closed when the value is non-positive.
@@ -99,7 +106,7 @@ CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 // neither looks up nor fills the cache, so every publish re-parses the footer and rebuilds a column
 // reader for every column of the tablet schema, a cost paid again on each publish for base segments
 // that a high frequency update stream keeps touching. The cache is used only while the tablet's base
-// segments fit in lake_metadata_cache_limit and each segment's estimate fits in a cache shard;
+// segments fit in the segment metadata cache and each segment's estimate fits in a cache shard;
 // otherwise, publish falls back to the static open rather than thrash. The auto-increment branch
 // always uses the static open: it reads this transaction's own segment through a schema restricted
 // to the partial-update columns, which must never be published into the cache. Set to false to
