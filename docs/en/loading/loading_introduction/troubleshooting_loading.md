@@ -497,7 +497,7 @@ select tablet_id,t.data_size,num_row,visible_version,num_version,num_rowset,num_
 
 #### BE Load
 
-These metrics are available under the **BE Load** category in Grafana. If you cannot find this category, verify that you are using the [latest Grafana dashboard template](../../administration/management/monitoring/monitoring.md#125-configure-dashboard).
+These metrics are available under the **BE Load** category in Grafana. If you cannot find this category, verify that you are using the [latest Grafana dashboard template](../../administration/management/monitoring/prometheus_grafana.md#125-configure-dashboard).
 
 ##### ThreadPool
 
