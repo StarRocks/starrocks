@@ -2789,8 +2789,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-<<<<<<< HEAD
-=======
     // Iceberg's own text for a commit rejected because the table moved on after this statement read it
     // names neither cause nor remedy. The failed commit drops this FE's cached table (cleanupAction), but a
     // retry may run on another FE that still caches the old metadata, so point at REFRESH EXTERNAL TABLE.
@@ -2813,23 +2811,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         return e.getMessage();
     }
 
-    // Publishing the staged updates. The caller has already run <op>.commit(), so the transaction
-    // carries the new snapshot and the catalog still points at the old metadata -- the window a
-    // competing commit has to land in to produce "Base metadata location is not same".
-    //
-    // This one-line method exists so that window has a name a Byteman rule can target:
-    // iceberg_commit_before_metadata_swap arms AT ENTRY here. The rule used to sit on
-    // commitWithCleanup's entry, which is *before* commitAction.run() and therefore before
-    // anything is staged -- a different race than the one it documented. The alternatives are
-    // both un-compilable-against: a rule on iceberg's own Transaction/BaseTransaction goes
-    // silently dead when the library's signature drifts, and a rule on the synthetic
-    // lambda$...$N that holds these two statements goes silently dead on any edit to this file.
-    // Do not inline it back. See the header of conf/failpoint.btm.
-    private void publishStagedTransaction(Transaction transaction) {
-        transaction.commitTransaction();
-    }
-
->>>>>>> 07ea5169b81... [Enhancement][RB-225] Explain Iceberg DML commits rejected against stale table metadata (#67617)
     private void invalidateCacheAfterCommit(String dbName, String tableName) {
         // Invalidate cache after commit
         tables.remove(TableIdentifier.of(dbName, tableName));
