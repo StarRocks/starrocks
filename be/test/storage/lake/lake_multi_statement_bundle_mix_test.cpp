@@ -203,20 +203,30 @@ protected:
         std::vector<PUniqueId> load_ids = bundled_first ? std::vector<PUniqueId>{small_load_id, large_load_id}
                                                         : std::vector<PUniqueId>{large_load_id, small_load_id};
         ASSIGN_OR_ABORT(auto metadata, publish_multi_statement(2, txn_id, load_ids));
-        ASSERT_EQ(1, metadata->rowsets_size());
-        const auto& rowset = metadata->rowsets(0);
-        ASSERT_EQ(1 + kLargeChunks, rowset.segment_metas_size());
+        // PK batches preserve each physical file kind in consecutive rowsets; DUP batches use
+        // main's synthetic offset representation in one rowset. Both must keep the same data.
+        const bool split_pk_batch = GetParam() == PRIMARY_KEYS;
+        ASSERT_EQ(split_pk_batch ? 2 : 1, metadata->rowsets_size());
         const auto& bundled_segment = small_log->op_write().rowset().segment_metas(0);
-        for (const auto& segment_meta : rowset.segment_metas()) {
-            ASSERT_TRUE(segment_meta.has_bundle_file_offset());
-            if (segment_meta.filename() == bundled_segment.filename()) {
-                EXPECT_EQ(bundled_segment.bundle_file_offset(), segment_meta.bundle_file_offset());
-                EXPECT_FALSE(segment_meta.synthetic_bundle_file_offset());
-            } else {
-                EXPECT_EQ(0, segment_meta.bundle_file_offset());
-                EXPECT_TRUE(segment_meta.synthetic_bundle_file_offset());
+        int segment_count = 0;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& segment_meta : rowset.segment_metas()) {
+                ++segment_count;
+                if (segment_meta.filename() == bundled_segment.filename()) {
+                    ASSERT_TRUE(segment_meta.has_bundle_file_offset());
+                    EXPECT_EQ(bundled_segment.bundle_file_offset(), segment_meta.bundle_file_offset());
+                    EXPECT_FALSE(segment_meta.synthetic_bundle_file_offset());
+                } else if (split_pk_batch) {
+                    EXPECT_FALSE(segment_meta.has_bundle_file_offset());
+                    EXPECT_FALSE(segment_meta.synthetic_bundle_file_offset());
+                } else {
+                    ASSERT_TRUE(segment_meta.has_bundle_file_offset());
+                    EXPECT_EQ(0, segment_meta.bundle_file_offset());
+                    EXPECT_TRUE(segment_meta.synthetic_bundle_file_offset());
+                }
             }
         }
+        ASSERT_EQ(1 + kLargeChunks, segment_count);
 
         // Read back from the persisted metadata, not the cached copy publish returned.
         _tablet_mgr->metacache()->prune();
