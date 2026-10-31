@@ -150,6 +150,18 @@ Index TDigest::unprocessedSize(Index size, Value compression) noexcept {
 
 // merge in another t-digest
 void TDigest::merge(const TDigest* other) {
+    if (other->_processed.empty()) {
+        // Small percentile states often contain only unprocessed centroids. Append directly
+        // without temporary merge queues or rebuilding cumulative weights for unchanged centroids.
+        reserveUnprocessed(_unprocessed.size() + other->_unprocessed.size());
+        appendUnprocessed(*other);
+        processIfNecessary();
+        // _processed is unchanged, so _cumulative only needs building if it was never initialized.
+        if (_cumulative.size() != _processed.size() + 1) {
+            updateCumulative();
+        }
+        return;
+    }
     std::vector<const TDigest*> others{other};
     add(others.cbegin(), others.cend());
 }
@@ -498,11 +510,23 @@ void TDigest::mergeUnprocessed(const std::vector<const TDigest*>& tdigests) {
         total += td->_unprocessed.size();
     }
 
-    _unprocessed.reserve(total);
+    reserveUnprocessed(total);
     for (auto& td : tdigests) {
-        _unprocessed.insert(_unprocessed.end(), td->_unprocessed.cbegin(), td->_unprocessed.cend());
-        _unprocessed_weight += td->_unprocessed_weight;
+        appendUnprocessed(*td);
     }
+}
+
+void TDigest::appendUnprocessed(const TDigest& other) {
+    _unprocessed.insert(_unprocessed.end(), other._unprocessed.cbegin(), other._unprocessed.cend());
+    _unprocessed_weight += other._unprocessed_weight;
+}
+
+void TDigest::reserveUnprocessed(size_t needed) {
+    if (needed <= _unprocessed.capacity()) return;
+    // Grow by 1.5x rather than to the exact size so repeated tiny merges don't reallocate every time,
+    // but not past what can accumulate before process() drains the buffer.
+    const size_t grown = _unprocessed.capacity() + _unprocessed.capacity() / 2;
+    _unprocessed.reserve(std::max(needed, std::min(grown, static_cast<size_t>(_max_unprocessed) + 1)));
 }
 
 void TDigest::mergeProcessed(const std::vector<const TDigest*>& tdigests) {
@@ -567,6 +591,8 @@ void TDigest::process() {
     CentroidComparator cc;
     pdqsort(_unprocessed.begin(), _unprocessed.end(), [&](auto& lhs, auto& rhs) { return lhs.mean() < rhs.mean(); });
     auto count = _unprocessed.size();
+    // Reserve exactly so the insert does not double the capacity, which clear() below would retain.
+    _unprocessed.reserve(count + _processed.size());
     _unprocessed.insert(_unprocessed.end(), _processed.cbegin(), _processed.cend());
     std::inplace_merge(_unprocessed.begin(), _unprocessed.begin() + count, _unprocessed.end(), cc);
 
