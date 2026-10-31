@@ -306,6 +306,7 @@
         "ai_function_on_error",
         "ai_function_rate_limit_qps_chat",
         "ai_function_rate_limit_qps_embedding",
+        "ai_function_rate_limit_qps_rerank",
         "ai_function_max_inflight"
       ]
     },

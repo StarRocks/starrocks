@@ -19,6 +19,7 @@
 
 import argparse
 import os
+import re
 import sys
 
 from string import Template
@@ -64,6 +65,9 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.common.Pair;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.StructField;
+import com.starrocks.type.StructType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.google.common.collect.ImmutableMap;
@@ -128,7 +132,7 @@ public class VectorizedBuiltinFunctions {
     public static final Set<String> AI_FUNCTION_NAMES = ImmutableSet.of(${ai_function_names});
 
     public enum AICapability {
-        CHAT, EMBEDDING
+        CHAT, EMBEDDING, RERANK
     }
 
     public record AIFunctionDescriptor(AICapability capability, int modelArgument, int providerArgument) {
@@ -241,6 +245,7 @@ AI_PROMPT_INPUT_TYPES = {
 AI_RESULT_TYPES = {
     'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
     'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
+    'RERANK': ('ARRAY', ('STRUCT', (('index', 'INT'), ('relevance_score', 'DOUBLE')))),
 }
 AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'JSON': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
 
@@ -281,7 +286,7 @@ def validate_ai_metadata(fn_data, ai, named_args):
         'null_as_empty_arguments': [argument(name, 'null_as_empty') for name in ai.get('null_as_empty', ())],
         'blank_as_null_arguments': [argument(name, 'blank_as_null') for name in ai.get('blank_as_null', ())],
     }
-    if metadata['capability'] not in ('CHAT', 'EMBEDDING'):
+    if metadata['capability'] not in ('CHAT', 'EMBEDDING', 'RERANK'):
         invalid('unsupported capability')
     if metadata['prompt_kind'] not in AI_PROMPT_INPUT_TYPES:
         invalid('unsupported prompt kind')
@@ -289,6 +294,8 @@ def validate_ai_metadata(fn_data, ai, named_args):
         invalid('result decoder must match SQL return type')
     if (metadata['capability'] == 'EMBEDDING') != (metadata['result_kind'] == 'EMBEDDING'):
         invalid('embedding capability and result decoder must agree')
+    if (metadata['capability'] == 'RERANK') != (metadata['result_kind'] == 'RERANK'):
+        invalid('rerank capability and result decoder must agree')
     if metadata['capability'] == 'EMBEDDING' and metadata['prompt_kind'] not in ('PASSTHROUGH', 'NONE'):
         invalid('embedding input must not use a chat prompt builder')
 
@@ -306,7 +313,12 @@ def validate_ai_metadata(fn_data, ai, named_args):
     inputs = metadata['input_arguments']
     if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
         invalid('invalid input argument positions')
-    if [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
+    if metadata['capability'] == 'RERANK':
+        if (metadata['prompt_kind'] != 'NONE' or [args[i] for i in inputs] != ['VARCHAR', 'ARRAY_VARCHAR']
+                or metadata['file_argument'] >= 0 or metadata['null_as_empty_arguments']
+                or metadata['blank_as_null_arguments']):
+            invalid('rerank requires query and documents typed inputs without a prompt or NULL/blank policies')
+    elif [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
         invalid('input arguments must match the prompt builder contract')
 
     file_argument = metadata.setdefault('file_argument', -1)
@@ -314,7 +326,8 @@ def validate_ai_metadata(fn_data, ai, named_args):
         invalid('file_argument is out of range')
     if file_argument >= 0 and args[file_argument] != 'FILE':
         invalid('file_argument must refer to a FILE')
-    if metadata['prompt_kind'] == 'NONE' and (metadata['capability'] != 'EMBEDDING' or file_argument < 0):
+    if (metadata['prompt_kind'] == 'NONE' and metadata['capability'] != 'RERANK'
+            and (metadata['capability'] != 'EMBEDDING' or file_argument < 0)):
         invalid('NONE prompt requires a FILE embedding input')
     if metadata['capability'] == 'EMBEDDING' and file_argument >= 0 and metadata['prompt_kind'] != 'NONE':
         invalid('FILE embedding input must not use a text prompt builder')
@@ -376,6 +389,28 @@ def generate_default_value(param, fn_id, arg_type):
         return None
 
 
+def java_type(declaration):
+    """Render a fixed SQL type as a fresh Java type tree; existing scalar tokens stay unchanged."""
+    if isinstance(declaration, str):
+        return declaration
+    if not isinstance(declaration, tuple) or len(declaration) != 2:
+        raise ValueError(f"Invalid fixed type declaration: {declaration!r}")
+    kind, value = declaration
+    if kind == 'ARRAY':
+        return f'new ArrayType({java_type(value)})'
+    if kind == 'STRUCT' and isinstance(value, tuple) and value:
+        fields = []
+        names = set()
+        for field in value:
+            if (not isinstance(field, tuple) or len(field) != 2 or not isinstance(field[0], str)
+                    or not re.fullmatch(r'[A-Za-z_][A-Za-z_0-9]*', field[0]) or field[0].lower() in names):
+                raise ValueError(f"Invalid or duplicate struct field: {field!r}")
+            names.add(field[0].lower())
+            fields.append(f'new StructField("{field[0]}", {java_type(field[1])})')
+        return 'new StructType(Lists.newArrayList(' + ', '.join(fields) + '), true)'
+    raise ValueError(f"Invalid fixed type declaration: {declaration!r}")
+
+
 def generate_fe(path):
     fn_template = Template(
         'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, ${ret}${args_types});'
@@ -391,6 +426,7 @@ ${default_values}
         }''')
 
     def gen_fe_fn(fnm):
+        fnm = dict(fnm, ret=java_type(fnm["ret"]))
         fnm["args_types"] = ", " if len(fnm["args"]) > 0 else ""
         fnm["args_types"] = fnm["args_types"] + ", ".join(
             [i for i in fnm["args"] if i != "..."]

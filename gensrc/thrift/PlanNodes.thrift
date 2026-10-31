@@ -1666,7 +1666,8 @@ enum TAIProviderType {
 enum TAIProviderProtocol {
   OPENAI = 0,
   ANTHROPIC = 1,
-  COHERE = 2
+  COHERE = 2,
+  DASHSCOPE_RERANK = 4
 }
 
 struct TAIProvider {

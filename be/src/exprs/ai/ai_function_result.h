@@ -23,7 +23,7 @@ namespace starrocks {
 
 class Column;
 
-enum class AIFunctionResultKind : uint8_t { STRING, SENTIMENT, JSON, BOOLEAN, SIMILARITY, EMBEDDING };
+enum class AIFunctionResultKind : uint8_t { STRING, SENTIMENT, JSON, BOOLEAN, SIMILARITY, EMBEDDING, RERANK };
 
 // Called only by the source driver. Malformed provider values return a sanitized
 // InvalidArgument without appending; allocation/resource failures are not row errors.

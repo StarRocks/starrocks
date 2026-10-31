@@ -13,6 +13,7 @@ toc_max_heading_level: 2
 | --- | --- | --- |
 | [ai_complete](#ai_complete) | 按提示词生成文本 | VARCHAR |
 | [ai_embed](#ai_embed) | 生成文本向量 | `ARRAY<FLOAT>` |
+| [ai_rerank](ai_rerank.md) | 按查询相关性重排候选文档 | `ARRAY<STRUCT<index INT, relevance_score DOUBLE>>` |
 | [ai_sentiment](#ai_sentiment) | 判断文本情感倾向 | VARCHAR |
 | [ai_classify](#ai_classify) | 按给定类别分类 | JSON |
 | [ai_extract](#ai_extract) | 提取指定信息 | JSON |
@@ -51,13 +52,13 @@ SELECT ai_complete(prompt => '解释列式存储。', model => 'chat-model');
 | `provider` | 使用对应类型的集群默认 Provider | 使用指定名称的 Provider；无需设置集群默认值 |
 | `model` | 使用所选 Provider 的默认模型 | 使用所选服务提供的指定模型 |
 
-`ai_embed` 要求 embedding Provider，其余函数要求 chat Provider。
+`ai_embed` 要求 embedding Provider，`ai_rerank` 要求 rerank Provider，其余函数要求 chat Provider。
 
 Provider 配置包含端点和可选凭证，支持 HTTP 和 HTTPS。每个执行计划固定所选 Provider 的配置快照；修改 Provider 或切换默认值影响重新规划的查询。管理语法参见 [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) 和 [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md)。
 
 ### JSON options {/* #json-options */}
 
-仅 `ai_complete` 和 `ai_embed` 支持可选的 `options`，其类型为 JSON，必须是常量表达式，且非 SQL NULL 的值必须是 JSON 对象。省略时默认为空对象；`json_object()` 和 SQL NULL 都表示不传额外选项。
+`ai_complete`、`ai_embed` 和 `ai_rerank` 支持可选的 `options`，其类型为 JSON，必须是常量表达式，且非 SQL NULL 的值必须是 JSON 对象。省略时默认为空对象；`json_object()` 和 SQL NULL 都表示不传额外选项。
 
 ```sql
 SELECT ai_complete(

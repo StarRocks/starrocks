@@ -1855,4 +1855,89 @@ TEST_F(AIFunctionCallExprTest, ProviderCorrelationKeyIsExplicit) {
 }
 
 } // namespace
+TEST_F(AIFunctionCallExprTest, RerankDynamicDocumentsKeepOriginalPositionsAndLocalEmptyResults) {
+    const auto documents_type = TypeDescriptor::create_array_type(varchar_type());
+    const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"index", "relevance_score"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE)}));
+    auto wire = make_extended_ai_expression(
+            200170, "ai_rerank", result_type,
+            {varchar_type(), documents_type, varchar_type(), varchar_type(), options_type()});
+    wire.nodes.front().__set_ai_provider_id("provider:default_rerank");
+    ObjectPool pool;
+    auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+    ASSERT_TRUE(created.ok()) << created.status();
+    auto documents = ColumnHelper::create_column(documents_type, true);
+    documents->append_datum(Datum(DatumArray{Datum(Slice("same")), Datum(Slice("")), Datum(Slice("same"))}));
+    documents->append_datum(Datum(DatumArray{}));
+    documents->append_nulls(1);
+    documents->append_datum(Datum(DatumArray{Datum()}));
+    documents->append_datum(Datum(DatumArray{Datum(Slice("unused"))}));
+    replace_children(&pool, created.value(),
+                     {{varchar_type(), make_varchar_column({"", "query", "query", "query", std::nullopt})},
+                      {documents_type, documents},
+                      {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 5)},
+                      {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 5)},
+                      {options_type(), make_const_options(5, true)}});
+    RuntimeState state;
+    ExprContext context(created.value());
+    ASSERT_TRUE(context.prepare(&state).ok());
+    ASSERT_TRUE(context.open(&state).ok());
+    auto chunk = make_chunk(5);
+    auto result = created.value()->build_input_batch(&context, chunk.get(), "rerank-model");
+    ASSERT_TRUE(result.ok()) << result.status();
+    const auto& rows = result->rows;
+    ASSERT_EQ(5, rows.size());
+    EXPECT_EQ(AIFunctionRowAction::DISPATCH, rows[0].action);
+    ASSERT_TRUE(rows[0].rerank.has_value());
+    EXPECT_EQ("", rows[0].rerank->query);
+    EXPECT_EQ((std::vector<std::string>{"same", "", "same"}), rows[0].rerank->documents);
+    EXPECT_EQ(AIFunctionRowAction::LOCAL_RESULT, rows[1].action);
+    ASSERT_TRUE(rows[1].local_result.has_value());
+    EXPECT_TRUE(std::get<AIRerankResult>(*rows[1].local_result).empty());
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, rows[2].action);
+    EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, rows[3].action);
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, rows[4].action);
+    EXPECT_FALSE(created.value()->evaluate_checked(&context, chunk.get()).ok());
+    context.close(&state);
+    for (bool change_return : {false, true}) {
+        auto malformed = wire.nodes.front();
+        auto& type = change_return ? malformed.fn.ret_type : malformed.type;
+        type.types[1].struct_fields[0].__set_name("wrong");
+        EXPECT_FALSE(AIFunctionCallExpr::create(&pool, malformed).ok());
+    }
+}
+
+TEST_F(AIFunctionCallExprTest, RerankValidatesConstantOptionsBeforeNullAndEmptyInput) {
+    const auto documents_type = TypeDescriptor::create_array_type(varchar_type());
+    const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+            {"index", "relevance_score"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE)}));
+    for (const auto json : {R"({"top_n":0})", R"({"top_n":1.5})", R"({"top_n":2147483648})", R"({"query":"override"})",
+                            R"({"documents":[]})"}) {
+        ObjectPool pool;
+        auto wire = make_extended_ai_expression(
+                200170, "ai_rerank", result_type,
+                {varchar_type(), documents_type, varchar_type(), varchar_type(), options_type()});
+        auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+        ASSERT_TRUE(created.ok()) << created.status();
+        auto documents = ColumnHelper::create_column(documents_type, true);
+        documents->append_datum(Datum(DatumArray{}));
+        auto options = JsonColumn::create();
+        options->append(JsonValue::parse(json).value());
+        replace_children(&pool, created.value(),
+                         {{varchar_type(), make_varchar_column({std::nullopt})},
+                          {documents_type, documents},
+                          {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1)},
+                          {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1)},
+                          {options_type(), ConstColumn::create(std::move(options), 1)}});
+        RuntimeState state;
+        ExprContext context(created.value());
+        ASSERT_TRUE(context.prepare(&state).ok());
+        // Opening an expression validates options even if no input rows ever survive.
+        EXPECT_FALSE(context.open(&state).ok()) << json;
+        auto chunk = make_chunk(1);
+        EXPECT_FALSE(created.value()->build_input_batch(&context, chunk.get(), "model").ok()) << json;
+        context.close(&state);
+    }
+}
+
 } // namespace starrocks
