@@ -23,6 +23,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/string/volnitsky.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -33,6 +34,8 @@
 namespace starrocks {
 
 class LikePredicate {
+    friend class LikeTest;
+
 public:
     // Like method
     static Status like_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -227,6 +230,9 @@ private:
         // a type containing error details that is returned by the compile calls on failure.
         hs_compile_error_t* compile_err = nullptr;
 
+        std::unique_ptr<VolnitskyUTF8> substring_searcher;
+        std::unique_ptr<StringSearcher> substring_fallback;
+
         LikePredicateState() = default;
         // No custom destructor needed: `database` is released by its shared_ptr deleter
         // (hs_free_database) and every other member is self-owning.
@@ -235,6 +241,11 @@ private:
             search_string = search_string_arg;
             search_string_sv = Slice(search_string);
             _search_string_column = ColumnHelper::create_const_column<TYPE_VARCHAR>(search_string_sv, 1);
+        }
+
+        void init_substring_searcher() {
+            substring_searcher = std::make_unique<VolnitskyUTF8>(search_string.data(), search_string.size());
+            substring_fallback = std::make_unique<StringSearcher>(search_string.data(), search_string.size());
         }
     };
 };
