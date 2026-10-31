@@ -122,6 +122,7 @@ set(AI_PROJECT_PROCESSOR_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     ${BE_TEST_JNI_ENV_STUB}
     pipeline/ai/ai_project_processor_test.cpp
+    pipeline/ai/ai_aggregate_reduce_work_test.cpp
 )
 
 add_executable(ai_project_processor_test ${AI_PROJECT_PROCESSOR_TEST_FILES})

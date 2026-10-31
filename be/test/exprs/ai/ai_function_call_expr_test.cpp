@@ -56,6 +56,16 @@
 namespace starrocks {
 namespace {
 
+StatusOr<AIFunctionInputBatch> scalar_input_batch(const AIFunctionCallExpr* expression, ExprContext* context,
+                                                  Chunk* chunk, std::string_view model,
+                                                  size_t max_bytes = kDefaultAIMaxInputFileBytes) {
+    ASSIGN_OR_RETURN(auto batch, expression->build_input_batch(context, chunk, model, max_bytes));
+    if (!std::holds_alternative<AIFunctionInputBatch>(batch)) {
+        return Status::InternalError("Expected scalar input batch");
+    }
+    return std::get<AIFunctionInputBatch>(std::move(batch));
+}
+
 constexpr int64_t kPromptFid = 200000;
 constexpr std::string_view kDefaultConfigId = "provider:default_chat";
 
@@ -806,7 +816,7 @@ TEST_F(AIFunctionCallExprTest, PromptRowsUseTheValidatedDefaultModelAndPreserveN
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(3);
-    auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
+    auto batch_result = scalar_input_batch(expression, &context, chunk.get(), "default-model");
 
     ASSERT_TRUE(batch_result.ok()) << batch_result.status().message();
     const auto& rows = batch_result->rows;
@@ -839,7 +849,7 @@ TEST_F(AIFunctionCallExprTest, ExplicitModelAndPromptRowsRemainPositionallyStabl
         ExprContext context(expression);
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
-        auto batch = expression->build_input_batch(&context, make_chunk(3).get(), "default");
+        auto batch = scalar_input_batch(expression, &context, make_chunk(3).get(), "default");
         ASSERT_TRUE(batch.ok()) << batch.status();
         owned = std::move(batch).value();
         context.close(&state);
@@ -869,7 +879,7 @@ TEST_F(AIFunctionCallExprTest, PromptOptionsAreConstantPreparedOnceAndSharedByTh
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
         auto chunk = make_chunk(3);
-        auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
+        auto batch_result = scalar_input_batch(expression, &context, chunk.get(), "default-model");
 
         ASSERT_TRUE(batch_result.ok()) << batch_result.status().message();
         ASSERT_NE(nullptr, batch_result->options);
@@ -933,7 +943,7 @@ TEST_F(AIFunctionCallExprTest, ConstantJsonExpressionIsPreparedOnceForTheBatch) 
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(3);
-    auto batch = expression->build_input_batch(&context, chunk.get(), "default-model");
+    auto batch = scalar_input_batch(expression, &context, chunk.get(), "default-model");
     ASSERT_TRUE(batch.ok()) << batch.status();
     EXPECT_EQ(1, options->evaluation_count());
     ASSERT_EQ(3, batch->rows.size());
@@ -965,7 +975,7 @@ TEST_F(AIFunctionCallExprTest, ProviderPrecedesModelInCanonicalArguments) {
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
         auto chunk = make_chunk(1);
-        auto batch = expression->build_input_batch(&context, chunk.get(), "provider-default-model");
+        auto batch = scalar_input_batch(expression, &context, chunk.get(), "provider-default-model");
         ASSERT_TRUE(batch.ok()) << batch.status();
         ASSERT_EQ(1, batch->rows.size());
         EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
@@ -995,7 +1005,7 @@ TEST_F(AIFunctionCallExprTest, NormalizedSelectorsAndNullOptionsUseDefaults) {
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(1);
-    auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
+    auto batch_result = scalar_input_batch(expression, &context, chunk.get(), "default-model");
 
     ASSERT_TRUE(batch_result.ok()) << batch_result.status().message();
     ASSERT_EQ(1, batch_result->rows.size());
@@ -1020,7 +1030,7 @@ TEST_F(AIFunctionCallExprTest, NonConstantOptionsAreRejectedAfterEachChildIsEval
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(1);
-    auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
+    auto batch_result = scalar_input_batch(expression, &context, chunk.get(), "default-model");
 
     ASSERT_FALSE(batch_result.ok());
     EXPECT_NE(std::string::npos, std::string(batch_result.status().message()).find("constant"));
@@ -1046,7 +1056,7 @@ TEST_F(AIFunctionCallExprTest, NonConstantChildCardinalityMustMatchTheInputChunk
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
         auto chunk = make_chunk(2);
-        auto batch_result = expression->build_input_batch(&context, chunk.get(), "default-model");
+        auto batch_result = scalar_input_batch(expression, &context, chunk.get(), "default-model");
 
         EXPECT_FALSE(batch_result.ok());
         EXPECT_EQ("Invalid AI function expression", batch_result.status().message());
@@ -1069,7 +1079,7 @@ TEST_F(AIFunctionCallExprTest, ConstantModelSelectionPreservesNullInputRows) {
         ExprContext context(expression);
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
-        auto batch = expression->build_input_batch(&context, make_chunk(2).get(), "default");
+        auto batch = scalar_input_batch(expression, &context, make_chunk(2).get(), "default");
         ASSERT_TRUE(batch.ok()) << batch.status();
         ASSERT_EQ(2, batch->rows.size());
         EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
@@ -1220,7 +1230,7 @@ TEST_F(AIFunctionCallExprTest, FileInputsPreserveNullsAndOwnInlineBytes) {
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(3);
-    auto result = expression->build_input_batch(&context, chunk.get(), "vision");
+    auto result = scalar_input_batch(expression, &context, chunk.get(), "vision");
     ASSERT_TRUE(result.ok()) << result.status();
     auto batch = std::move(result).value();
     ASSERT_EQ(3, batch.rows.size());
@@ -1254,13 +1264,13 @@ TEST_F(AIFunctionCallExprTest, FileEmbeddingIsNotAStringCastAndEnforcesInputLimi
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(2);
-    auto result = expression->build_input_batch(&context, chunk.get(), "embed", png.size());
+    auto result = scalar_input_batch(expression, &context, chunk.get(), "embed", png.size());
     ASSERT_TRUE(result.ok()) << result.status();
     auto batch = std::move(result).value();
     ASSERT_EQ(2, batch.rows.size());
     EXPECT_TRUE(batch.rows[0].prompt.empty());
     EXPECT_EQ(png, batch.rows[1].media->bytes);
-    auto limited = expression->build_input_batch(&context, chunk.get(), "embed", png.size() - 1);
+    auto limited = scalar_input_batch(expression, &context, chunk.get(), "embed", png.size() - 1);
     ASSERT_TRUE(limited.ok()) << limited.status();
     EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, limited->rows[0].action);
     EXPECT_FALSE(limited->rows[0].media.has_value());
@@ -1284,7 +1294,7 @@ TEST_F(AIFunctionCallExprTest, FileReferencesAreRejectedWithoutDisclosingLocatio
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(1);
-    auto batch = expression->build_input_batch(&context, chunk.get(), "vision");
+    auto batch = scalar_input_batch(expression, &context, chunk.get(), "vision");
     ASSERT_FALSE(batch.ok());
     EXPECT_TRUE(batch.status().is_not_supported());
     EXPECT_EQ(std::string::npos, batch.status().message().find("private"));
@@ -1312,7 +1322,7 @@ TEST_F(AIFunctionCallExprTest, MalformedInlineFilesFailOnlyTheirOwnRows) {
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(7);
-    auto batch = expression->build_input_batch(&context, chunk.get(), "embed");
+    auto batch = scalar_input_batch(expression, &context, chunk.get(), "embed");
     ASSERT_TRUE(batch.ok()) << batch.status();
     ASSERT_EQ(7, batch->rows.size());
     for (size_t row = 0; row < 6; ++row) {
@@ -1345,7 +1355,7 @@ TEST_F(AIFunctionCallExprTest, FilterPromptRequestsUnquotedBooleanTokens) {
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
         auto chunk = make_chunk(1);
-        auto batch = expression->build_input_batch(&context, chunk.get(), "default-model");
+        auto batch = scalar_input_batch(expression, &context, chunk.get(), "default-model");
         ASSERT_TRUE(batch.ok()) << batch.status();
         ASSERT_EQ(1, batch->rows.size());
         EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
@@ -1373,7 +1383,7 @@ TEST_F(AIFunctionCallExprTest, TranslationAutoDetectsNullSourceAndUsesConstantMo
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(3);
-    auto batch = expression->build_input_batch(&context, chunk.get(), "ignored");
+    auto batch = scalar_input_batch(expression, &context, chunk.get(), "ignored");
     ASSERT_TRUE(batch.ok()) << batch.status();
     EXPECT_EQ("model", batch->rows[0].model);
     EXPECT_EQ("model", batch->rows[1].model);
@@ -1406,7 +1416,7 @@ TEST_F(AIFunctionCallExprTest, TranslationNullAndBlankPoliciesApplyAtEveryDeclar
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
         auto chunk = make_chunk(6);
-        auto batch = expression->build_input_batch(&context, chunk.get(), "snapshot-model");
+        auto batch = scalar_input_batch(expression, &context, chunk.get(), "snapshot-model");
         ASSERT_TRUE(batch.ok()) << batch.status();
         ASSERT_EQ(6, batch->rows.size());
         EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
@@ -1441,7 +1451,7 @@ TEST_F(AIFunctionCallExprTest, ProviderSelectorIsConstantBindingNotTheProviderMo
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(2);
-    auto batch = expression->build_input_batch(&context, chunk.get(), "snapshot-model");
+    auto batch = scalar_input_batch(expression, &context, chunk.get(), "snapshot-model");
     ASSERT_TRUE(batch.ok()) << batch.status();
     EXPECT_EQ("explicit-model", batch->rows[0].model);
     EXPECT_EQ(1, selector->evaluation_count());
@@ -1515,7 +1525,7 @@ TEST_F(AIFunctionCallExprTest, EveryOverloadAndCloneDispatchesItsDeclaredInputsA
             ASSERT_TRUE(context.prepare(&state).ok());
             ASSERT_TRUE(context.open(&state).ok());
             auto chunk = make_chunk(2);
-            auto batch = expression->build_input_batch(&context, chunk.get(), "snapshot-model");
+            auto batch = scalar_input_batch(expression, &context, chunk.get(), "snapshot-model");
             ASSERT_TRUE(batch.ok()) << batch.status();
             ASSERT_EQ(2, batch->rows.size());
             EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
@@ -1602,7 +1612,7 @@ TEST_F(AIFunctionCallExprTest, BatchBuilderRetainsArrayValidation) {
         // Supply an invalid materialized input after open to exercise the batch-builder backstop independently.
         expression->mutable_children()[1] = pool.add(new CountingColumnExpr(array_type, std::move(categories)));
         auto chunk = make_chunk(1);
-        auto batch = expression->build_input_batch(&context, chunk.get(), "default-model");
+        auto batch = scalar_input_batch(expression, &context, chunk.get(), "default-model");
         EXPECT_TRUE(batch.status().is_invalid_argument()) << batch.status();
         context.close(&state);
     }
@@ -1655,7 +1665,7 @@ TEST_F(AIFunctionCallExprTest, SemanticConstantArrayDoesNotRequireConstColumnSto
     EXPECT_EQ(1, categories->evaluation_count);
     EXPECT_EQ(0, prompt->evaluation_count());
     auto chunk = make_chunk(1);
-    auto batch = created.value()->build_input_batch(clone, chunk.get(), "default-model");
+    auto batch = scalar_input_batch(created.value(), clone, chunk.get(), "default-model");
     ASSERT_TRUE(batch.ok()) << batch.status();
     EXPECT_NE(std::string::npos, batch->rows[0].prompt.find("greeting"));
     EXPECT_NE(std::string::npos, batch->rows[0].prompt.find("hello"));
@@ -1765,7 +1775,7 @@ TEST_F(AIFunctionCallExprTest, OpenValidatesNativeStringAndJsonArrayCasts) {
             ASSERT_TRUE(status.ok()) << status;
             auto chunk = make_chunk(1);
             chunk->append_column(make_varchar_column({"hello"}), 1);
-            auto batch = expression->build_input_batch(&context, chunk.get(), "unused-default");
+            auto batch = scalar_input_batch(expression, &context, chunk.get(), "unused-default");
             ASSERT_TRUE(batch.ok()) << batch.status();
             EXPECT_EQ("explicit-model", batch->rows[0].model);
             EXPECT_NE(std::string::npos, batch->rows[0].prompt.find(*test.expected_array));
@@ -1796,7 +1806,7 @@ TEST_F(AIFunctionCallExprTest, EmbeddingOptionsCannotOverrideProviderInput) {
     ASSERT_TRUE(context.prepare(&state).ok());
     ASSERT_TRUE(context.open(&state).ok());
     auto chunk = make_chunk(1);
-    EXPECT_FALSE(expression->build_input_batch(&context, chunk.get(), "embedding-model").ok());
+    EXPECT_FALSE(scalar_input_batch(expression, &context, chunk.get(), "embedding-model").ok());
 }
 
 TEST_F(AIFunctionCallExprTest, CapabilityAndResultKindMatchTheDescriptor) {
@@ -1836,7 +1846,7 @@ TEST_F(AIFunctionCallExprTest, AIProviderBindingRejectsNonconstantOrBlankSelecto
         ASSERT_TRUE(context.prepare(&state).ok());
         ASSERT_TRUE(context.open(&state).ok());
         auto chunk = make_chunk(1);
-        EXPECT_FALSE(created.value()->build_input_batch(&context, chunk.get(), "snapshot-model").ok());
+        EXPECT_FALSE(scalar_input_batch(created.value(), &context, chunk.get(), "snapshot-model").ok());
     }
 }
 
@@ -1855,4 +1865,98 @@ TEST_F(AIFunctionCallExprTest, ProviderCorrelationKeyIsExplicit) {
 }
 
 } // namespace
+
+TEST_F(AIFunctionCallExprTest, AggregateRequiresBoundProviderMetadata) {
+    ObjectPool pool;
+    auto wire = make_extended_ai_expression(
+            200155, "__ai_agg_reduce", varchar_type(),
+            {TypeDescriptor(TYPE_VARBINARY), varchar_type(), varchar_type(), varchar_type(), options_type()}, true);
+    auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+    ASSERT_TRUE(created.ok()) << created.status();
+    EXPECT_EQ(AICapability::CHAT, created.value()->capability());
+    for (const std::string id : {"", " ", "provider\n"}) {
+        wire.nodes.front().__set_ai_provider_id(id);
+        EXPECT_FALSE(AIFunctionCallExpr::create(&pool, wire.nodes.front()).ok());
+    }
+}
+
+TEST_F(AIFunctionCallExprTest, AggregateInputOwnsTypedStateColumnAndCanonicalControls) {
+    for (const bool constant_state : {false, true}) {
+        for (const std::optional<std::string> model : {std::optional<std::string>{}, std::optional<std::string>(""),
+                                                       std::optional<std::string>("explicit-model")}) {
+            ObjectPool pool;
+            auto wire = make_extended_ai_expression(
+                    200155, "__ai_agg_reduce", varchar_type(),
+                    {TypeDescriptor(TYPE_VARBINARY), varchar_type(), varchar_type(), varchar_type(), options_type()},
+                    true);
+            auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+            ASSERT_TRUE(created.ok()) << created.status();
+            auto states = BinaryColumn::create();
+            states->append("opaque-state");
+            if (!constant_state) states->append("second-state");
+            ColumnPtr state_column = constant_state ? ColumnPtr(ConstColumn::create(states, 2)) : ColumnPtr(states);
+            auto children = replace_children(
+                    &pool, created.value(),
+                    {{TypeDescriptor(TYPE_VARBINARY), state_column},
+                     {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("summarize", 2)},
+                     {varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("chat-provider", 2)},
+                     {varchar_type(), model.has_value() ? ColumnHelper::create_const_column<TYPE_VARCHAR>(*model, 2)
+                                                        : ColumnHelper::create_const_null_column(2)},
+                     {options_type(), make_const_options(2)}});
+            RuntimeState state;
+            ExprContext context(created.value());
+            ASSERT_TRUE(context.prepare(&state).ok());
+            ASSERT_TRUE(context.open(&state).ok());
+            auto batch = created.value()->build_input_batch(&context, make_chunk(2).get(), "snapshot-model");
+            ASSERT_TRUE(batch.ok()) << batch.status();
+            ASSERT_TRUE(std::holds_alternative<AIAggregateReduceInputBatch>(*batch));
+            const auto& aggregate = std::get<AIAggregateReduceInputBatch>(*batch);
+            EXPECT_EQ(state_column.get(), aggregate.states.get());
+            EXPECT_EQ("summarize", aggregate.instruction);
+            EXPECT_EQ(!model.has_value() || model->empty() ? "snapshot-model" : *model, aggregate.model);
+            EXPECT_EQ(2, aggregate.states->size());
+            ASSERT_NE(nullptr, aggregate.options);
+            EXPECT_FALSE(aggregate.options->members().empty());
+            for (auto* child : children) EXPECT_EQ(1, child->evaluation_count());
+            context.close(&state);
+        }
+    }
+}
+
+TEST_F(AIFunctionCallExprTest, AggregateRejectsWrongStateAndNonconstantControls) {
+    for (const int invalid_case : {0, 1, 2, 3, 4}) {
+        SCOPED_TRACE(invalid_case);
+        ObjectPool pool;
+        auto wire = make_extended_ai_expression(200155, "__ai_agg_reduce", varchar_type(),
+                                                {invalid_case == 0 ? varchar_type() : TypeDescriptor(TYPE_VARBINARY),
+                                                 varchar_type(), varchar_type(), varchar_type(), options_type()},
+                                                true);
+        auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
+        if (invalid_case == 0) {
+            EXPECT_FALSE(created.ok());
+            continue;
+        }
+        ASSERT_TRUE(created.ok());
+        auto integers = Int32Column::create();
+        integers->append(7);
+        ColumnPtr states = invalid_case == 1 ? ColumnPtr(integers) : make_varchar_column({"state"});
+        auto control = [&](const std::string& value, int which) -> ColumnPtr {
+            if (invalid_case == which) return make_varchar_column({value});
+            return ColumnHelper::create_const_column<TYPE_VARCHAR>(value, 1);
+        };
+        replace_children(&pool, created.value(),
+                         {{TypeDescriptor(TYPE_VARBINARY), states},
+                          {varchar_type(), control("summarize", 2)},
+                          {varchar_type(), control("chat-provider", 3)},
+                          {varchar_type(), control("model", 4)},
+                          {options_type(), make_const_options(1)}});
+        RuntimeState state;
+        ExprContext context(created.value());
+        ASSERT_TRUE(context.prepare(&state).ok());
+        ASSERT_TRUE(context.open(&state).ok());
+        EXPECT_FALSE(created.value()->build_input_batch(&context, make_chunk(1).get(), "model").ok());
+        context.close(&state);
+    }
+}
+
 } // namespace starrocks

@@ -77,6 +77,10 @@ AggregateFuncResolver::~AggregateFuncResolver() {
     }
 }
 
+AggregateFunctionPtr AggregateFactory::MakeAICollectTextAggregateFunction() {
+    return new AICollectTextAggregateFunction();
+}
+
 AggregateFunctionPtr AggregateFactory::MakeBitmapUnionAggregateFunction() {
     return new BitmapUnionAggregateFunction();
 }

@@ -11,6 +11,8 @@ rerank default and vice versa.
 
 `provider` and `model` must be constant VARCHAR expressions. If `provider` is omitted, an empty string, or SQL NULL, the cluster default Provider for the function type is used: `chat` for completion and text helpers, `embedding` for embeddings. If `model` is omitted, an empty string, or SQL NULL, the selected Provider's default model is used; an explicit model takes precedence. Values containing only whitespace are invalid. An explicit Provider call does not require a cluster default.
 
+`ai_agg` uses a `chat` Provider and follows these same `provider` and `model` selection rules.
+
 ## Syntax
 
 ```SQL

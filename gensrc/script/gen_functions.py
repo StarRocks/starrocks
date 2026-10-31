@@ -55,6 +55,7 @@ ${license}
 package com.starrocks.builtins;
 
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.sql.ast.expression.BoolLiteral;
@@ -143,6 +144,22 @@ ${ai_descriptors}
         return AI_FUNCTION_DESCRIPTORS.get(functionId);
     }
 
+    public static final long AI_TEXT_COLLECTOR_ID = ${collector_id}L;
+    public static final String AI_TEXT_COLLECTOR_NAME = "${collector_name}";
+
+    public record AIAggregateLoweringDescriptor(int textArgument, int instructionArgument,
+                                                long reducerFunctionId, String reducerFunctionName) {
+    }
+
+    private static final Map<Long, AIAggregateLoweringDescriptor> AI_AGGREGATE_LOWERING_DESCRIPTORS =
+            ImmutableMap.<Long, AIAggregateLoweringDescriptor>builder()
+${ai_aggregate_descriptors}
+                    .build();
+
+    public static AIAggregateLoweringDescriptor getAIAggregateLoweringDescriptor(long functionId) {
+        return AI_AGGREGATE_LOWERING_DESCRIPTORS.get(functionId);
+    }
+
     public static void initBuiltins(FunctionSet functionSet) {
         ${functions}
   }
@@ -218,6 +235,7 @@ def add_function(fn_data):
     if 'ai' in metadata:
         entry["binary_type"] = "AI"
         entry["ai"] = validate_ai_metadata(fn_data, metadata['ai'], entry["named_args"])
+        entry["internal"] = entry["ai"].get("internal", False)
 
     function_list.append(entry)
     return entry
@@ -242,7 +260,7 @@ AI_RESULT_TYPES = {
     'STRING': 'VARCHAR', 'SENTIMENT': 'VARCHAR', 'JSON': 'JSON',
     'SIMILARITY': 'FLOAT', 'BOOLEAN': 'BOOLEAN', 'EMBEDDING': 'ARRAY_FLOAT',
 }
-AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'JSON': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE'}
+AI_ARGUMENT_TYPES = {'VARCHAR': 'VARCHAR', 'JSON': 'OPTIONS', 'ARRAY_VARCHAR': 'STRING_ARRAY', 'FILE': 'FILE', 'VARBINARY': 'AGG_STATE'}
 
 
 def validate_ai_metadata(fn_data, ai, named_args):
@@ -252,7 +270,7 @@ def validate_ai_metadata(fn_data, ai, named_args):
     if not isinstance(ai, dict):
         invalid('semantic metadata is required')
     required = {'capability', 'prompt_kind', 'result_kind', 'inputs'}
-    optional = {'null_as_empty', 'blank_as_null'}
+    optional = {'null_as_empty', 'blank_as_null', 'execution_kind', 'internal'}
     if not required <= ai.keys() or ai.keys() - required - optional:
         invalid('missing or unknown semantic metadata fields')
     if not named_args:
@@ -272,6 +290,8 @@ def validate_ai_metadata(fn_data, ai, named_args):
     # Keep runtime descriptors positional; only declarations use names.
     metadata = {
         'capability': ai['capability'],
+        'execution_kind': ai.get('execution_kind', 'SINGLE_REQUEST'),
+        'internal': ai.get('internal', False),
         'prompt_kind': ai['prompt_kind'],
         'result_kind': ai['result_kind'],
         'input_arguments': [argument(name, 'inputs') for name in ai['inputs']],
@@ -306,7 +326,16 @@ def validate_ai_metadata(fn_data, ai, named_args):
     inputs = metadata['input_arguments']
     if not isinstance(inputs, list) or any(type(i) is not int or i < 0 or i >= len(args) for i in inputs):
         invalid('invalid input argument positions')
-    if [args[i] for i in inputs] != AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]:
+    expected_inputs = AI_PROMPT_INPUT_TYPES[metadata['prompt_kind']]
+    if metadata['execution_kind'] == 'AGGREGATE_REDUCE':
+        if not metadata['internal'] or metadata['capability'] != 'CHAT' or metadata['result_kind'] != 'STRING':
+            invalid('aggregate reducers must be internal CHAT string functions')
+        if not inputs or inputs[0] != 0:
+            invalid('aggregate state must be argument zero')
+        expected_inputs = ['VARBINARY', 'VARCHAR']
+    elif metadata['execution_kind'] != 'SINGLE_REQUEST' or 'VARBINARY' in args:
+        invalid('aggregate state requires aggregate reduction')
+    if [args[i] for i in inputs] != expected_inputs:
         invalid('input arguments must match the prompt builder contract')
 
     file_argument = metadata.setdefault('file_argument', -1)
@@ -341,6 +370,32 @@ def validate_ai_metadata(fn_data, ai, named_args):
     if set(metadata['null_as_empty_arguments']) & set(metadata['blank_as_null_arguments']):
         invalid('conflicting NULL and blank policies')
     return metadata
+
+
+def add_ai_aggregate_function(fn_data):
+    declaration = fn_data[-1]
+    metadata = declaration.get('aggregate', {})
+    if metadata.keys() != {'text', 'instruction', 'reducer_function_id'}:
+        raise ValueError(f"Invalid AI aggregate metadata: {fn_data[0]}")
+    names = [arg['name'] for arg in declaration.get('named_args', [])]
+    if metadata['text'] not in names or metadata['instruction'] not in names:
+        raise ValueError(f"Invalid AI aggregate argument roles: {fn_data[0]}")
+    text = names.index(metadata['text'])
+    instruction = names.index(metadata['instruction'])
+    reducer = next((fn for fn in function_list if fn['id'] == metadata['reducer_function_id']), None)
+    expected = list(fn_data[5])
+    if text >= len(expected) or expected[text] != 'VARCHAR' or text == instruction:
+        raise ValueError(f"Invalid AI aggregate signature: {fn_data[0]}")
+    expected[text] = 'VARBINARY'
+    if (fn_data[4] != 'VARCHAR' or reducer is None
+            or reducer.get('ai', {}).get('execution_kind') != 'AGGREGATE_REDUCE'
+            or reducer['args'] != expected or reducer['ai']['input_arguments'] != [text, instruction]
+            or [arg['name'] for arg in reducer['named_args']][1:] != names[1:]):
+        raise ValueError(f"Invalid AI aggregate reducer: {fn_data[0]}")
+    entry = add_function(fn_data)
+    entry.update(binary_type='AI', aggregate=True, ai=dict(reducer['ai'],
+                 text_argument=text, instruction_argument=instruction,
+                 reducer_function_id=reducer['id'], reducer_function_name=reducer['name']))
 
 
 def generate_default_value(param, fn_id, arg_type):
@@ -382,8 +437,8 @@ def generate_fe(path):
     )
     fn_named_template = Template('''{
             List<Type> argTypes${id} = Lists.newArrayList(${args_types_list});
-            Function fn${id} = ScalarFunction.createVectorizedBuiltin(${id}L, "${name}", argTypes${id}, ${has_vargs}, ${ret});
-            fn${id}.setArgNames(Lists.newArrayList(${arg_names}));
+            Function fn${id} = ${create_function};
+${function_identity}            fn${id}.setArgNames(Lists.newArrayList(${arg_names}));
             Vector<Pair<String, Expr>> defaults${id} = new Vector<>();
 ${default_values}
             fn${id}.setDefaultNamedArgs(defaults${id});
@@ -411,6 +466,14 @@ ${default_values}
                 has_vargs=fnm["has_vargs"],
                 ret=fnm["ret"],
                 args_types_list=args_types_list,
+                create_function=(f'AggregateFunction.createBuiltin("{fnm["name"]}", argTypes{fnm["id"]}, '
+                                 f'{fnm["ret"]}, VARBINARY, false, false, false)' if fnm.get("aggregate") else
+                                 f'ScalarFunction.createVectorizedBuiltin({fnm["id"]}L, "{fnm["name"]}", '
+                                 f'argTypes{fnm["id"]}, {fnm["has_vargs"]}, {fnm["ret"]})'),
+                function_identity=(f'            fn{fnm["id"]}.setFunctionId({fnm["id"]}L);\n'
+                                   f'            fn{fnm["id"]}.setId({fnm["id"]}L);\n'
+                                   f'            fn{fnm["id"]}.setUserVisible(true);\n'
+                                   if fnm.get("aggregate") else ''),
                 arg_names=arg_names,
                 default_values=default_values,
                 register="addVectorizedAIBuiltin" if fnm.get("binary_type") == "AI" else "addBuiltin"
@@ -422,7 +485,7 @@ ${default_values}
 
     value = dict()
     value["license"] = license_string
-    value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS])
+    value["functions"] = "\n        ".join([gen_fe_fn(i) for i in function_list if i['name'] not in FE_HIDDEN_FUNCTIONS and not i.get('internal')])
     ai_function_names = sorted({fn["name"] for fn in function_list if fn.get("binary_type") == "AI"})
     value["ai_function_names"] = ", ".join('"%s"' % name for name in ai_function_names)
     value['ai_descriptors'] = '\n'.join(
@@ -430,6 +493,13 @@ ${default_values}
             fn['id'], fn['ai']['capability'], fn['ai']['model_argument'], fn['ai']['provider_argument'])
         for fn in function_list if fn.get('binary_type') == 'AI')
 
+    value['collector_id'] = functions.ai_text_collector[0]
+    value['collector_name'] = functions.ai_text_collector[1]
+    value['ai_aggregate_descriptors'] = '\n'.join(
+        '                    .put(%dL, new AIAggregateLoweringDescriptor(%d, %d, %dL, "%s"))' % (
+            fn['id'], fn['ai']['text_argument'], fn['ai']['instruction_argument'],
+            fn['ai']['reducer_function_id'], fn['ai']['reducer_function_name'])
+        for fn in function_list if fn.get('aggregate'))
     content = java_template.substitute(value)
 
     with open(path, mode="w+") as f:
@@ -437,7 +507,7 @@ ${default_values}
 
 
 def generate_ai_cpp(path):
-    ai_functions = [fn for fn in function_list if fn.get('binary_type') == 'AI']
+    ai_functions = [fn for fn in function_list if fn.get('binary_type') == 'AI' and not fn.get('aggregate')]
     max_arguments = max((len(fn['args']) for fn in ai_functions), default=0)
     max_inputs = max((len(fn['ai']['input_arguments']) for fn in ai_functions), default=0)
     content = license_string + '''
@@ -448,6 +518,7 @@ struct AIFunctionDescriptor {
     AICapability capability;
     AIFunctionResultKind result_kind;
     AIPromptKind prompt_kind;
+    AIExecutionKind execution_kind;
     size_t argument_count;
     std::array<AIArgumentType, %d> argument_types;
     size_t input_count;
@@ -471,6 +542,7 @@ static constexpr std::array<AIFunctionDescriptor, %d> kAIFunctionDescriptors = {
             ('capability', 'AICapability::' + metadata['capability']),
             ('result_kind', 'AIFunctionResultKind::' + metadata['result_kind']),
             ('prompt_kind', 'AIPromptKind::' + metadata['prompt_kind']),
+            ('execution_kind', 'AIExecutionKind::' + metadata['execution_kind']),
             ('argument_count', str(len(fn['args']))),
             ('argument_types', '{' + ', '.join(arg_types) + '}'),
             ('input_count', str(len(metadata['input_arguments']))),
@@ -635,6 +707,11 @@ if __name__ == "__main__":
     # Read the function metadata inputs
     for function in functions.vectorized_functions:
         add_function(function)
+
+    for function in functions.ai_aggregate_functions:
+        add_ai_aggregate_function(function)
+    collector = add_function(functions.ai_text_collector)
+    collector.update(internal=True, native_aggregate=True)
 
     generate_fe(fe_functions_dir + "/VectorizedBuiltinFunctions.java")
     generate_cpp(be_functions_dir + "/")
