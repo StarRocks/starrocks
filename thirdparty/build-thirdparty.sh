@@ -1203,6 +1203,7 @@ build_croaringbitmap() {
     local croaring_c_flags="${CFLAGS}"
     local croaring_cxx_flags="${CXXFLAGS}"
     if [[ "${MACHINE_TYPE}" == "x86_64" && "${THIRD_PARTY_BUILD_WITH_SSE4_2}" == "ON" ]]; then
+        # -msse4.2 implicitly enables -mpopcnt (__POPCNT__) in GCC and Clang, matching be/CMakeLists.txt
         croaring_c_flags="$(append_flags "${croaring_c_flags}" "-msse4.2 -mpclmul")"
         croaring_cxx_flags="$(append_flags "${croaring_cxx_flags}" "-msse4.2 -mpclmul")"
     fi
