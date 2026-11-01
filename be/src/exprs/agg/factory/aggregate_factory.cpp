@@ -244,7 +244,7 @@ AggregateFunctionPtr get_aggregate_function(const std::string& agg_func_name, co
 
         // hack for accepting various arguments
         if (agg_func_name == "exchange_bytes" || agg_func_name == "exchange_speed") {
-            arg_type = TypeDescriptor(TYPE_BIGINT);
+            arg_type = TYPE_BIGINT_DESC;
         }
 
         if (agg_func_name == "array_union_agg" || agg_func_name == "array_unique_agg") {

@@ -402,6 +402,7 @@ static const TypeDescriptor TYPE_DOUBLE_DESC = TypeDescriptor(LogicalType::TYPE_
 static const TypeDescriptor TYPE_TIME_DESC = TypeDescriptor(LogicalType::TYPE_TIME);
 static const TypeDescriptor TYPE_DATE_DESC = TypeDescriptor(LogicalType::TYPE_DATE);
 static const TypeDescriptor TYPE_DATETIME_DESC = TypeDescriptor(LogicalType::TYPE_DATETIME);
+static const TypeDescriptor TYPE_UNKNOWN_DESC = TypeDescriptor(LogicalType::TYPE_UNKNOWN);
 static const TypeDescriptor TYPE_VARCHAR_DESC = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
 static const TypeDescriptor TYPE_VARBINARY_DESC =
         TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);

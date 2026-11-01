@@ -217,7 +217,7 @@ void AggregatorParams::init() {
         if (AggStateUtils::is_count_function(fn.name.function_name)) {
             // count family serializes a non-nullable BIGINT. count_combine's NULL-skipping is
             // re-derived from the real input nullability in _is_agg_result_nullable, not here.
-            agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
+            agg_fn_types[i] = {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC, {}, false, false};
         } else {
             // whether agg function has nullable child
             const bool has_nullable_child = has_outer_join_child || desc.nodes[0].has_nullable_child;
