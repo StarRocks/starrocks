@@ -232,7 +232,7 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
     size_t start = from;
     size_t result = from;
     const uint8_t* sel = selector + from;
-    while (start + kBatchNums < to) {
+    while (start + kBatchNums <= to) {
         const uint8x16_t vsel = vld1q_u8(sel);
         // nibble_mask[i] != 0 ? 0xF : 0x0
         uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vsel, vsel));
