@@ -397,4 +397,199 @@ TEST_F(SIMDTest, all_ones) {
     EXPECT_FALSE(SIMD::all_ones(nums));
 }
 
+TEST_F(SIMDTest, contain_zero) {
+    // 1. Empty container and empty raw-pointer
+    {
+        std::vector<uint8_t> u8_empty;
+        EXPECT_FALSE(SIMD::contain_zero(u8_empty));
+        EXPECT_FALSE(SIMD::contain_zero(u8_empty.data(), u8_empty.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_empty), !SIMD::all_ones(u8_empty));
+        EXPECT_EQ(SIMD::contain_zero(u8_empty), SIMD::count_zero(u8_empty) > 0);
+
+        std::vector<int8_t> i8_empty;
+        EXPECT_FALSE(SIMD::contain_zero(i8_empty));
+        EXPECT_FALSE(SIMD::contain_zero(i8_empty.data(), i8_empty.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_empty), !SIMD::all_ones(i8_empty));
+        EXPECT_EQ(SIMD::contain_zero(i8_empty), SIMD::count_zero(i8_empty) > 0);
+    }
+
+    // 2. All non-zero / ones (returns false)
+    {
+        std::vector<uint8_t> u8_ones = {1, 2, 3, 4, 0xFF};
+        EXPECT_FALSE(SIMD::contain_zero(u8_ones));
+        EXPECT_FALSE(SIMD::contain_zero(u8_ones.data(), u8_ones.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_ones), !SIMD::all_ones(u8_ones));
+        EXPECT_EQ(SIMD::contain_zero(u8_ones), SIMD::count_zero(u8_ones) > 0);
+
+        std::vector<int8_t> i8_ones = {1, 2, -1, -128, 127};
+        EXPECT_FALSE(SIMD::contain_zero(i8_ones));
+        EXPECT_FALSE(SIMD::contain_zero(i8_ones.data(), i8_ones.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_ones), !SIMD::all_ones(i8_ones));
+        EXPECT_EQ(SIMD::contain_zero(i8_ones), SIMD::count_zero(i8_ones) > 0);
+
+        std::vector<uint8_t> u8_large_ones(1024, 0xAB);
+        EXPECT_FALSE(SIMD::contain_zero(u8_large_ones));
+        EXPECT_FALSE(SIMD::contain_zero(u8_large_ones.data(), u8_large_ones.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_large_ones), !SIMD::all_ones(u8_large_ones));
+        EXPECT_EQ(SIMD::contain_zero(u8_large_ones), SIMD::count_zero(u8_large_ones) > 0);
+
+        std::vector<int8_t> i8_large_ones(1024, -5);
+        EXPECT_FALSE(SIMD::contain_zero(i8_large_ones));
+        EXPECT_FALSE(SIMD::contain_zero(i8_large_ones.data(), i8_large_ones.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_large_ones), !SIMD::all_ones(i8_large_ones));
+        EXPECT_EQ(SIMD::contain_zero(i8_large_ones), SIMD::count_zero(i8_large_ones) > 0);
+    }
+
+    // 3. All zeros (returns true)
+    {
+        std::vector<uint8_t> u8_zeros = {0, 0, 0, 0};
+        EXPECT_TRUE(SIMD::contain_zero(u8_zeros));
+        EXPECT_TRUE(SIMD::contain_zero(u8_zeros.data(), u8_zeros.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_zeros), !SIMD::all_ones(u8_zeros));
+        EXPECT_EQ(SIMD::contain_zero(u8_zeros), SIMD::count_zero(u8_zeros) > 0);
+
+        std::vector<int8_t> i8_zeros = {0, 0, 0, 0};
+        EXPECT_TRUE(SIMD::contain_zero(i8_zeros));
+        EXPECT_TRUE(SIMD::contain_zero(i8_zeros.data(), i8_zeros.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_zeros), !SIMD::all_ones(i8_zeros));
+        EXPECT_EQ(SIMD::contain_zero(i8_zeros), SIMD::count_zero(i8_zeros) > 0);
+
+        std::vector<uint8_t> u8_large_zeros(1024, 0);
+        EXPECT_TRUE(SIMD::contain_zero(u8_large_zeros));
+        EXPECT_TRUE(SIMD::contain_zero(u8_large_zeros.data(), u8_large_zeros.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_large_zeros), !SIMD::all_ones(u8_large_zeros));
+        EXPECT_EQ(SIMD::contain_zero(u8_large_zeros), SIMD::count_zero(u8_large_zeros) > 0);
+
+        std::vector<int8_t> i8_large_zeros(1024, 0);
+        EXPECT_TRUE(SIMD::contain_zero(i8_large_zeros));
+        EXPECT_TRUE(SIMD::contain_zero(i8_large_zeros.data(), i8_large_zeros.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_large_zeros), !SIMD::all_ones(i8_large_zeros));
+        EXPECT_EQ(SIMD::contain_zero(i8_large_zeros), SIMD::count_zero(i8_large_zeros) > 0);
+    }
+
+    // 4. Zero at front
+    {
+        std::vector<uint8_t> u8_front = {0, 1, 2, 3};
+        EXPECT_TRUE(SIMD::contain_zero(u8_front));
+        EXPECT_TRUE(SIMD::contain_zero(u8_front.data(), u8_front.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_front), !SIMD::all_ones(u8_front));
+        EXPECT_EQ(SIMD::contain_zero(u8_front), SIMD::count_zero(u8_front) > 0);
+
+        std::vector<int8_t> i8_front = {0, -1, 2, -3};
+        EXPECT_TRUE(SIMD::contain_zero(i8_front));
+        EXPECT_TRUE(SIMD::contain_zero(i8_front.data(), i8_front.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_front), !SIMD::all_ones(i8_front));
+        EXPECT_EQ(SIMD::contain_zero(i8_front), SIMD::count_zero(i8_front) > 0);
+
+        std::vector<uint8_t> u8_large(1024, 1);
+        u8_large[0] = 0;
+        EXPECT_TRUE(SIMD::contain_zero(u8_large));
+        EXPECT_TRUE(SIMD::contain_zero(u8_large.data(), u8_large.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_large), !SIMD::all_ones(u8_large));
+        EXPECT_EQ(SIMD::contain_zero(u8_large), SIMD::count_zero(u8_large) > 0);
+
+        std::vector<int8_t> i8_large(1024, 1);
+        i8_large[0] = 0;
+        EXPECT_TRUE(SIMD::contain_zero(i8_large));
+        EXPECT_TRUE(SIMD::contain_zero(i8_large.data(), i8_large.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_large), !SIMD::all_ones(i8_large));
+        EXPECT_EQ(SIMD::contain_zero(i8_large), SIMD::count_zero(i8_large) > 0);
+    }
+
+    // 5. Zero in middle
+    {
+        std::vector<uint8_t> u8_mid = {1, 2, 0, 3, 4};
+        EXPECT_TRUE(SIMD::contain_zero(u8_mid));
+        EXPECT_TRUE(SIMD::contain_zero(u8_mid.data(), u8_mid.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_mid), !SIMD::all_ones(u8_mid));
+        EXPECT_EQ(SIMD::contain_zero(u8_mid), SIMD::count_zero(u8_mid) > 0);
+
+        std::vector<int8_t> i8_mid = {1, -2, 0, -3, 4};
+        EXPECT_TRUE(SIMD::contain_zero(i8_mid));
+        EXPECT_TRUE(SIMD::contain_zero(i8_mid.data(), i8_mid.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_mid), !SIMD::all_ones(i8_mid));
+        EXPECT_EQ(SIMD::contain_zero(i8_mid), SIMD::count_zero(i8_mid) > 0);
+
+        std::vector<uint8_t> u8_large(1024, 1);
+        u8_large[512] = 0;
+        EXPECT_TRUE(SIMD::contain_zero(u8_large));
+        EXPECT_TRUE(SIMD::contain_zero(u8_large.data(), u8_large.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_large), !SIMD::all_ones(u8_large));
+        EXPECT_EQ(SIMD::contain_zero(u8_large), SIMD::count_zero(u8_large) > 0);
+
+        std::vector<int8_t> i8_large(1024, 1);
+        i8_large[512] = 0;
+        EXPECT_TRUE(SIMD::contain_zero(i8_large));
+        EXPECT_TRUE(SIMD::contain_zero(i8_large.data(), i8_large.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_large), !SIMD::all_ones(i8_large));
+        EXPECT_EQ(SIMD::contain_zero(i8_large), SIMD::count_zero(i8_large) > 0);
+    }
+
+    // 6. Zero at end
+    {
+        std::vector<uint8_t> u8_end = {1, 2, 3, 0};
+        EXPECT_TRUE(SIMD::contain_zero(u8_end));
+        EXPECT_TRUE(SIMD::contain_zero(u8_end.data(), u8_end.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_end), !SIMD::all_ones(u8_end));
+        EXPECT_EQ(SIMD::contain_zero(u8_end), SIMD::count_zero(u8_end) > 0);
+
+        std::vector<int8_t> i8_end = {1, -2, 3, 0};
+        EXPECT_TRUE(SIMD::contain_zero(i8_end));
+        EXPECT_TRUE(SIMD::contain_zero(i8_end.data(), i8_end.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_end), !SIMD::all_ones(i8_end));
+        EXPECT_EQ(SIMD::contain_zero(i8_end), SIMD::count_zero(i8_end) > 0);
+
+        std::vector<uint8_t> u8_large(1024, 1);
+        u8_large.back() = 0;
+        EXPECT_TRUE(SIMD::contain_zero(u8_large));
+        EXPECT_TRUE(SIMD::contain_zero(u8_large.data(), u8_large.size()));
+        EXPECT_EQ(SIMD::contain_zero(u8_large), !SIMD::all_ones(u8_large));
+        EXPECT_EQ(SIMD::contain_zero(u8_large), SIMD::count_zero(u8_large) > 0);
+
+        std::vector<int8_t> i8_large(1024, 1);
+        i8_large.back() = 0;
+        EXPECT_TRUE(SIMD::contain_zero(i8_large));
+        EXPECT_TRUE(SIMD::contain_zero(i8_large.data(), i8_large.size()));
+        EXPECT_EQ(SIMD::contain_zero(i8_large), !SIMD::all_ones(i8_large));
+        EXPECT_EQ(SIMD::contain_zero(i8_large), SIMD::count_zero(i8_large) > 0);
+    }
+
+    // 7. Equivalence sweep across sizes and zero positions
+    {
+        const std::vector<size_t> sizes = {1, 7, 15, 16, 31, 32, 63, 64, 127, 128, 255, 256, 512, 1024};
+        for (size_t sz : sizes) {
+            std::vector<uint8_t> u8_buf(sz, 1);
+            std::vector<int8_t> i8_buf(sz, 1);
+
+            // Initially no zeros
+            EXPECT_EQ(SIMD::contain_zero(u8_buf.data(), sz), false);
+            EXPECT_EQ(SIMD::contain_zero(i8_buf.data(), sz), false);
+            EXPECT_EQ(SIMD::contain_zero(u8_buf.data(), sz), !SIMD::all_ones(u8_buf.data(), sz));
+            EXPECT_EQ(SIMD::contain_zero(i8_buf.data(), sz), !SIMD::all_ones(i8_buf.data(), sz));
+            EXPECT_EQ(SIMD::contain_zero(u8_buf.data(), sz), SIMD::count_zero(u8_buf.data(), sz) > 0);
+            EXPECT_EQ(SIMD::contain_zero(i8_buf.data(), sz), SIMD::count_zero(i8_buf.data(), sz) > 0);
+
+            // Place zero at various positions (start, quarter, half, 3/4, end)
+            const std::vector<size_t> positions = {0, sz / 4, sz / 2, (3 * sz) / 4, sz - 1};
+            for (size_t pos : positions) {
+                u8_buf[pos] = 0;
+                i8_buf[pos] = 0;
+
+                EXPECT_EQ(SIMD::contain_zero(u8_buf.data(), sz), true);
+                EXPECT_EQ(SIMD::contain_zero(i8_buf.data(), sz), true);
+                EXPECT_EQ(SIMD::contain_zero(u8_buf), true);
+                EXPECT_EQ(SIMD::contain_zero(i8_buf), true);
+
+                EXPECT_EQ(SIMD::contain_zero(u8_buf.data(), sz), !SIMD::all_ones(u8_buf.data(), sz));
+                EXPECT_EQ(SIMD::contain_zero(i8_buf.data(), sz), !SIMD::all_ones(i8_buf.data(), sz));
+                EXPECT_EQ(SIMD::contain_zero(u8_buf.data(), sz), SIMD::count_zero(u8_buf.data(), sz) > 0);
+                EXPECT_EQ(SIMD::contain_zero(i8_buf.data(), sz), SIMD::count_zero(i8_buf.data(), sz) > 0);
+
+                u8_buf[pos] = 1;
+                i8_buf[pos] = 1;
+            }
+        }
+    }
+}
+
 } // namespace starrocks

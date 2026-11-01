@@ -325,11 +325,16 @@ inline size_t find_nonzero(const Container& list, size_t start, size_t count) {
     return find_byte(list, start, count, static_cast<T>(1));
 }
 
+template <Integer8BitType T>
+inline bool contain_zero(const T* data, size_t size) {
+    return std::memchr(data, 0, size) != nullptr;
+}
+
 template <typename Container, typename T = typename Container::value_type>
 inline bool contain_zero(const Container& list) {
     static_assert(std::is_integral<T>::value && (sizeof(T) == sizeof(uint8_t)),
                   "only 8-bit integral types are supported");
-    return find_zero(list, 0) < list.size();
+    return contain_zero(reinterpret_cast<const uint8_t*>(list.data()), list.size());
 }
 
 template <typename Container, typename T = typename Container::value_type>
