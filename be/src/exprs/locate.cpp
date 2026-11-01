@@ -42,9 +42,7 @@ struct LocateCaseSensitiveUTF8 {
 // locate haystack is a vector and needle is a constant
 ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
                                            const ColumnPtr& start_pos_ptr) {
-    if (haystack_ptr->only_null() || needle_ptr->only_null() || start_pos_ptr->only_null()) {
-        return ColumnHelper::create_const_null_column(haystack_ptr->size());
-    }
+    DCHECK(!haystack_ptr->only_null() && !needle_ptr->only_null() && !start_pos_ptr->only_null());
     const BinaryColumn* haystack = nullptr;
     const FixedLengthColumn<int32_t>* start_pos = nullptr;
     NullColumnPtr res_null = nullptr;

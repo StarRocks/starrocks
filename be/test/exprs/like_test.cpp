@@ -1186,4 +1186,39 @@ TEST_F(LikeTest, SubstringMatchesOracleAcrossChunkShapes) {
         }
     }
 }
+
+TEST_F(LikeTest, SubstringSearcherScalarSseAndTailDecoyPaths) {
+    auto run_like = [](const std::string& pattern_str, const std::vector<std::string>& rows) {
+        auto context = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> ctx(context);
+        auto str = BinaryColumn::create();
+        for (const auto& r : rows) {
+            str->append(r);
+        }
+        Columns columns{std::move(str), ColumnHelper::create_const_column<TYPE_VARCHAR>(pattern_str, 1)};
+        context->set_constant_columns(columns);
+        EXPECT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto result = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(context, columns).value());
+        EXPECT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        std::vector<uint8_t> out(result->immutable_data().begin(), result->immutable_data().end());
+        return out;
+    };
+
+    // 1. 1-byte needle ("%g%") exercises search_scalar's needle_size == 1 (std::memchr) hit and miss paths.
+    EXPECT_EQ((std::vector<uint8_t>{0, 1, 0}), run_like("%g%", {"abc", "defg", "xyz"}));
+
+    // 2. Short chunk (< last_off + 16 = 21 bytes for 6B "google") exercises search_scalar's multi-byte loop.
+    EXPECT_EQ((std::vector<uint8_t>{0, 1}), run_like("%google%", {"gooxle", "google"}));
+
+    // 3. 16-byte SSE4.1 window (21 <= chunk_bytes < 37 for 6B "google") with a decoy ("gooxle" matches first='g',
+    //    last='e', mid='o' at offset 2, fails alt_off) in the first 16 positions (0..15) and real match at offset 6.
+    EXPECT_EQ((std::vector<uint8_t>{1}), run_like("%google%", {"gooxlegoogle............"}));
+
+    // 4. Overlapping < 16B tail in _search_sse41_from: chunk_bytes = 28 (one 16B step checks 0..15; overlapping tail
+    //    checks 16..22), with decoy "gooxle" at offset 16 and real match "google" at offset 22.
+    EXPECT_EQ((std::vector<uint8_t>{1}), run_like("%google%", {"................gooxlegoogle"}));
+
+    // 5. Homogeneous needle ("%aaaa%") exercises constructor when all interior bytes equal first == last.
+    EXPECT_EQ((std::vector<uint8_t>{0, 1}), run_like("%aaaa%", {"aaabaaabaaabaaab", "baaaab"}));
+}
 } // namespace starrocks

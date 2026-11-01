@@ -30,14 +30,6 @@
 namespace starrocks {
 
 class StringSearcher {
-public:
-    enum class Kernel : uint8_t {
-        kScalar = 0,
-        kSse41 = 1,
-        kAvx2 = 2,
-        kNeon = 3,
-    };
-
 private:
     /// string to be searched for
     const uint8_t* const needle;
@@ -46,28 +38,8 @@ private:
     uint8_t first{};
     uint8_t last{};
     uint8_t mid{};
-    Kernel kernel{Kernel::kScalar};
     uint16_t mid_off{};
     uint16_t alt_off{};
-
-    static Kernel _default_kernel() noexcept {
-        static const Kernel kDefaultKernel = []() noexcept {
-#if defined(__x86_64__)
-            if (__builtin_cpu_supports("avx2")) {
-                return Kernel::kAvx2;
-            }
-            if (__builtin_cpu_supports("sse4.1")) {
-                return Kernel::kSse41;
-            }
-            return Kernel::kScalar;
-#elif defined(__ARM_NEON)
-            return Kernel::kNeon;
-#else
-            return Kernel::kScalar;
-#endif
-        }();
-        return kDefaultKernel;
-    }
 
     inline bool _verify_interior(const uint8_t* pos) const {
         if (needle_size <= 2) {
@@ -79,10 +51,63 @@ private:
         return std::memcmp(pos + 1, needle + 1, needle_size - 2) == 0;
     }
 
+#if defined(__x86_64__)
+    __attribute__((target("sse4.1"))) const uint8_t* _search_sse41_from(const uint8_t* p,
+                                                                        const uint8_t* haystack_end) const {
+        const size_t last_off = needle_size - 1;
+        const __m128i v_first = _mm_set1_epi8(static_cast<char>(first));
+        const __m128i v_last = _mm_set1_epi8(static_cast<char>(last));
+        const __m128i v_mid = _mm_set1_epi8(static_cast<char>(mid));
+
+        while (static_cast<size_t>(haystack_end - p) >= last_off + 16) {
+            const __m128i f0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
+            const __m128i l0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + last_off));
+            __m128i eq0 = _mm_and_si128(_mm_cmpeq_epi8(f0, v_first), _mm_cmpeq_epi8(l0, v_last));
+            uint32_t mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0));
+            if (mask != 0 && needle_size > 2) {
+                const __m128i m0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + mid_off));
+                eq0 = _mm_and_si128(eq0, _mm_cmpeq_epi8(m0, v_mid));
+                mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0));
+            }
+            while (mask != 0) {
+                const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
+                if (_verify_interior(p + bit)) {
+                    return p + bit;
+                }
+                mask &= (mask - 1);
+            }
+            p += 16;
+        }
+
+        if (static_cast<size_t>(haystack_end - p) >= needle_size) {
+            const uint8_t* tail_p = haystack_end - (last_off + 16);
+            const size_t already_checked = static_cast<size_t>(p - tail_p);
+            const __m128i f0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p));
+            const __m128i l0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p + last_off));
+            __m128i eq0 = _mm_and_si128(_mm_cmpeq_epi8(f0, v_first), _mm_cmpeq_epi8(l0, v_last));
+            uint32_t mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) & (~0U << already_checked);
+            if (mask != 0 && needle_size > 2) {
+                const __m128i m0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p + mid_off));
+                eq0 = _mm_and_si128(eq0, _mm_cmpeq_epi8(m0, v_mid));
+                mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) & (~0U << already_checked);
+            }
+            while (mask != 0) {
+                const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
+                if (_verify_interior(tail_p + bit)) {
+                    return tail_p + bit;
+                }
+                mask &= (mask - 1);
+            }
+        }
+
+        return haystack_end;
+    }
+#endif
+
 public:
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
     StringSearcher(const CharT* needle_, const size_t needle_size_)
-            : needle{reinterpret_cast<const uint8_t*>(needle_)}, needle_size(needle_size_), kernel(_default_kernel()) {
+            : needle{reinterpret_cast<const uint8_t*>(needle_)}, needle_size(needle_size_) {
         if (0 == needle_size) {
             return;
         }
@@ -92,7 +117,7 @@ public:
         if (needle_size > 2) {
             const size_t max_interior = std::min<size_t>(needle_size - 2, 0xFFFFu);
             const size_t center = (1 + max_interior) / 2;
-            size_t chosen_mid = 0;
+            size_t chosen_mid = center;
             for (size_t delta = 0; delta <= max_interior; ++delta) {
                 const size_t right = center + delta;
                 if (right <= max_interior && needle[right] != first && needle[right] != last) {
@@ -107,37 +132,15 @@ public:
                     }
                 }
             }
-            if (chosen_mid == 0) {
-                for (size_t i = 1; i <= max_interior; ++i) {
-                    if (needle[i] != first || needle[i] != last) {
-                        chosen_mid = i;
-                        break;
-                    }
-                }
-            }
-            if (chosen_mid == 0) {
-                chosen_mid = center;
-            }
             mid_off = static_cast<uint16_t>(chosen_mid);
             mid = needle[mid_off];
 
-            size_t chosen_alt = 0;
+            size_t chosen_alt = (chosen_mid > 1) ? 1 : max_interior;
             for (size_t i = max_interior; i >= 1; --i) {
                 if (i != chosen_mid && needle[i] != first && needle[i] != last && needle[i] != mid) {
                     chosen_alt = i;
                     break;
                 }
-            }
-            if (chosen_alt == 0) {
-                for (size_t i = max_interior; i >= 1; --i) {
-                    if (i != chosen_mid && (needle[i] != first || needle[i] != last)) {
-                        chosen_alt = i;
-                        break;
-                    }
-                }
-            }
-            if (chosen_alt == 0) {
-                chosen_alt = (chosen_mid > 1) ? 1 : max_interior;
             }
             alt_off = static_cast<uint16_t>(chosen_alt);
         }
@@ -196,126 +199,21 @@ public:
 #if defined(__x86_64__)
     __attribute__((target("sse4.1"))) const uint8_t* search_sse41(const uint8_t* haystack,
                                                                   const uint8_t* haystack_end) const {
-        if (needle_size == 0) {
-            return haystack;
-        }
-        if (haystack == nullptr || haystack_end == nullptr || haystack >= haystack_end) {
-            return haystack_end;
-        }
-        const size_t haystack_size = static_cast<size_t>(haystack_end - haystack);
-        if (haystack_size < needle_size) {
-            return haystack_end;
-        }
-        if (needle_size == 1) {
-            const void* res = std::memchr(haystack, first, haystack_size);
-            return res != nullptr ? static_cast<const uint8_t*>(res) : haystack_end;
-        }
-
-        const size_t last_off = needle_size - 1;
-        if (haystack_size < last_off + 16) {
+        if (needle_size <= 1 || haystack == nullptr || haystack_end == nullptr || haystack >= haystack_end ||
+            static_cast<size_t>(haystack_end - haystack) < (needle_size - 1) + 16) {
             return search_scalar(haystack, haystack_end);
         }
-
-        const __m128i v_first = _mm_set1_epi8(static_cast<char>(first));
-        const __m128i v_last = _mm_set1_epi8(static_cast<char>(last));
-        const __m128i v_mid = _mm_set1_epi8(static_cast<char>(mid));
-        const uint8_t* p = haystack;
-
-        while (static_cast<size_t>(haystack_end - p) >= last_off + 32) {
-            const __m128i f0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
-            const __m128i l0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + last_off));
-            const __m128i f1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + 16));
-            const __m128i l1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + 16 + last_off));
-
-            __m128i eq0 = _mm_and_si128(_mm_cmpeq_epi8(f0, v_first), _mm_cmpeq_epi8(l0, v_last));
-            __m128i eq1 = _mm_and_si128(_mm_cmpeq_epi8(f1, v_first), _mm_cmpeq_epi8(l1, v_last));
-
-            uint32_t mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) |
-                            (static_cast<uint32_t>(_mm_movemask_epi8(eq1)) << 16);
-            if (mask != 0 && needle_size > 2) {
-                const __m128i m0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + mid_off));
-                const __m128i m1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + 16 + mid_off));
-                eq0 = _mm_and_si128(eq0, _mm_cmpeq_epi8(m0, v_mid));
-                eq1 = _mm_and_si128(eq1, _mm_cmpeq_epi8(m1, v_mid));
-                mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) |
-                       (static_cast<uint32_t>(_mm_movemask_epi8(eq1)) << 16);
-            }
-            while (mask != 0) {
-                const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
-                if (_verify_interior(p + bit)) {
-                    return p + bit;
-                }
-                mask &= (mask - 1);
-            }
-            p += 32;
-        }
-
-        while (static_cast<size_t>(haystack_end - p) >= last_off + 16) {
-            const __m128i f0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
-            const __m128i l0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + last_off));
-            __m128i eq0 = _mm_and_si128(_mm_cmpeq_epi8(f0, v_first), _mm_cmpeq_epi8(l0, v_last));
-            uint32_t mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0));
-            if (mask != 0 && needle_size > 2) {
-                const __m128i m0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + mid_off));
-                eq0 = _mm_and_si128(eq0, _mm_cmpeq_epi8(m0, v_mid));
-                mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0));
-            }
-            while (mask != 0) {
-                const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
-                if (_verify_interior(p + bit)) {
-                    return p + bit;
-                }
-                mask &= (mask - 1);
-            }
-            p += 16;
-        }
-
-        if (static_cast<size_t>(haystack_end - p) >= needle_size) {
-            const uint8_t* tail_p = haystack_end - (last_off + 16);
-            const size_t already_checked = static_cast<size_t>(p - tail_p);
-            const __m128i f0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p));
-            const __m128i l0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p + last_off));
-            __m128i eq0 = _mm_and_si128(_mm_cmpeq_epi8(f0, v_first), _mm_cmpeq_epi8(l0, v_last));
-            uint32_t mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) & (~0U << already_checked);
-            if (mask != 0 && needle_size > 2) {
-                const __m128i m0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p + mid_off));
-                eq0 = _mm_and_si128(eq0, _mm_cmpeq_epi8(m0, v_mid));
-                mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) & (~0U << already_checked);
-            }
-            while (mask != 0) {
-                const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
-                if (_verify_interior(tail_p + bit)) {
-                    return tail_p + bit;
-                }
-                mask &= (mask - 1);
-            }
-        }
-
-        return haystack_end;
+        return _search_sse41_from(haystack, haystack_end);
     }
 
     __attribute__((target("avx2"))) const uint8_t* search_avx2(const uint8_t* haystack,
                                                                const uint8_t* haystack_end) const {
-        if (needle_size == 0) {
-            return haystack;
-        }
-        if (haystack == nullptr || haystack_end == nullptr || haystack >= haystack_end) {
-            return haystack_end;
-        }
-        const size_t haystack_size = static_cast<size_t>(haystack_end - haystack);
-        if (haystack_size < needle_size) {
-            return haystack_end;
-        }
-        if (needle_size == 1) {
-            const void* res = std::memchr(haystack, first, haystack_size);
-            return res != nullptr ? static_cast<const uint8_t*>(res) : haystack_end;
-        }
-
-        const size_t last_off = needle_size - 1;
-        if (haystack_size < last_off + 16) {
+        if (needle_size <= 1 || haystack == nullptr || haystack_end == nullptr || haystack >= haystack_end ||
+            static_cast<size_t>(haystack_end - haystack) < (needle_size - 1) + 16) {
             return search_scalar(haystack, haystack_end);
         }
 
+        const size_t last_off = needle_size - 1;
         const __m256i v_first256 = _mm256_set1_epi8(static_cast<char>(first));
         const __m256i v_last256 = _mm256_set1_epi8(static_cast<char>(last));
         const __m256i v_mid256 = _mm256_set1_epi8(static_cast<char>(mid));
@@ -341,75 +239,16 @@ public:
             p += 32;
         }
 
-        const __m128i v_first128 = _mm256_castsi256_si128(v_first256);
-        const __m128i v_last128 = _mm256_castsi256_si128(v_last256);
-        const __m128i v_mid128 = _mm256_castsi256_si128(v_mid256);
-
-        while (static_cast<size_t>(haystack_end - p) >= last_off + 16) {
-            const __m128i f0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p));
-            const __m128i l0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + last_off));
-            __m128i eq0 = _mm_and_si128(_mm_cmpeq_epi8(f0, v_first128), _mm_cmpeq_epi8(l0, v_last128));
-            uint32_t mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0));
-            if (mask != 0 && needle_size > 2) {
-                const __m128i m0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(p + mid_off));
-                eq0 = _mm_and_si128(eq0, _mm_cmpeq_epi8(m0, v_mid128));
-                mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0));
-            }
-            while (mask != 0) {
-                const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
-                if (_verify_interior(p + bit)) {
-                    return p + bit;
-                }
-                mask &= (mask - 1);
-            }
-            p += 16;
-        }
-
-        if (static_cast<size_t>(haystack_end - p) >= needle_size) {
-            const uint8_t* tail_p = haystack_end - (last_off + 16);
-            const size_t already_checked = static_cast<size_t>(p - tail_p);
-            const __m128i f0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p));
-            const __m128i l0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p + last_off));
-            __m128i eq0 = _mm_and_si128(_mm_cmpeq_epi8(f0, v_first128), _mm_cmpeq_epi8(l0, v_last128));
-            uint32_t mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) & (~0U << already_checked);
-            if (mask != 0 && needle_size > 2) {
-                const __m128i m0 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(tail_p + mid_off));
-                eq0 = _mm_and_si128(eq0, _mm_cmpeq_epi8(m0, v_mid128));
-                mask = static_cast<uint32_t>(_mm_movemask_epi8(eq0)) & (~0U << already_checked);
-            }
-            while (mask != 0) {
-                const uint32_t bit = static_cast<uint32_t>(__builtin_ctz(mask));
-                if (_verify_interior(tail_p + bit)) {
-                    return tail_p + bit;
-                }
-                mask &= (mask - 1);
-            }
-        }
-
-        return haystack_end;
+        return _search_sse41_from(p, haystack_end);
     }
 #elif defined(__ARM_NEON)
     const uint8_t* search_neon(const uint8_t* haystack, const uint8_t* haystack_end) const {
-        if (needle_size == 0) {
-            return haystack;
-        }
-        if (haystack == nullptr || haystack_end == nullptr || haystack >= haystack_end) {
-            return haystack_end;
-        }
-        const size_t haystack_size = static_cast<size_t>(haystack_end - haystack);
-        if (haystack_size < needle_size) {
-            return haystack_end;
-        }
-        if (needle_size == 1) {
-            const void* res = std::memchr(haystack, first, haystack_size);
-            return res != nullptr ? static_cast<const uint8_t*>(res) : haystack_end;
-        }
-
-        const size_t last_off = needle_size - 1;
-        if (haystack_size < last_off + 16) {
+        if (needle_size <= 1 || haystack == nullptr || haystack_end == nullptr || haystack >= haystack_end ||
+            static_cast<size_t>(haystack_end - haystack) < (needle_size - 1) + 16) {
             return search_scalar(haystack, haystack_end);
         }
 
+        const size_t last_off = needle_size - 1;
         const uint8x16_t v_first = vdupq_n_u8(first);
         const uint8x16_t v_last = vdupq_n_u8(last);
         const uint8x16_t v_mid = vdupq_n_u8(mid);
@@ -501,37 +340,17 @@ public:
 
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
     const CharT* search(const CharT* haystack, const CharT* const haystack_end) const {
-        if (needle_size == 0) {
-            return haystack;
-        }
-        if (haystack == nullptr || haystack_end == nullptr || haystack >= haystack_end) {
-            return haystack_end;
-        }
-        const size_t haystack_size = static_cast<size_t>(haystack_end - haystack);
-        if (haystack_size < needle_size) {
-            return haystack_end;
-        }
         const auto* h = reinterpret_cast<const uint8_t*>(haystack);
         const auto* h_end = reinterpret_cast<const uint8_t*>(haystack_end);
-        if (needle_size == 1) {
-            const void* res = std::memchr(h, first, haystack_size);
-            return res != nullptr ? reinterpret_cast<const CharT*>(res) : haystack_end;
-        }
-
-        switch (kernel) {
-#if defined(__x86_64__)
-        case Kernel::kAvx2:
-            return reinterpret_cast<const CharT*>(search_avx2(h, h_end));
-        case Kernel::kSse41:
-            return reinterpret_cast<const CharT*>(search_sse41(h, h_end));
+#if defined(__AVX2__)
+        return reinterpret_cast<const CharT*>(search_avx2(h, h_end));
+#elif defined(__SSE4_1__)
+        return reinterpret_cast<const CharT*>(search_sse41(h, h_end));
 #elif defined(__ARM_NEON)
-        case Kernel::kNeon:
-            return reinterpret_cast<const CharT*>(search_neon(h, h_end));
+        return reinterpret_cast<const CharT*>(search_neon(h, h_end));
+#else
+        return reinterpret_cast<const CharT*>(search_scalar(h, h_end));
 #endif
-        case Kernel::kScalar:
-        default:
-            return reinterpret_cast<const CharT*>(search_scalar(h, h_end));
-        }
     }
 
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>

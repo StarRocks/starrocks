@@ -742,6 +742,64 @@ TEST_F(StringFunctionLocateTest, LocateConstStartPosNullableAndUtf8) {
         EXPECT_EQ(11, data_col->get_data()[0]);
         EXPECT_EQ(0, data_col->get_data()[1]);
     }
+
+    // 4. Constant start_pos <= 0 on non-nullable haystack
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        str->append("https://www.google.com.au");
+        str->append("https://starrocks.io");
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 2));
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_INT>(-1, 2));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_FALSE(result->is_nullable());
+        auto data_col = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(2, data_col->size());
+        EXPECT_EQ(0, data_col->get_data()[0]);
+        EXPECT_EQ(0, data_col->get_data()[1]);
+    }
+
+    // 5. Nullable haystack and nullable non-constant start_pos with constant needle
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        auto str_null = NullColumn::create();
+        auto pos = Int32Column::create();
+        auto pos_null = NullColumn::create();
+
+        str->append("xxgoogle");
+        str_null->append(0);
+        pos->append(1);
+        pos_null->append(0);
+
+        str->append("xxgoogle");
+        str_null->append(1);
+        pos->append(1);
+        pos_null->append(0);
+
+        str->append("xxgoogle");
+        str_null->append(0);
+        pos->append(1);
+        pos_null->append(1);
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 3));
+        columns.emplace_back(NullableColumn::create(std::move(str), std::move(str_null)));
+        columns.emplace_back(NullableColumn::create(std::move(pos), std::move(pos_null)));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        ASSERT_TRUE(result->is_nullable());
+        EXPECT_FALSE(result->is_null(0));
+        EXPECT_TRUE(result->is_null(1));
+        EXPECT_TRUE(result->is_null(2));
+        auto data_col =
+                ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
+        EXPECT_EQ(3, data_col->get_data()[0]);
+    }
 }
 
 } // namespace starrocks
