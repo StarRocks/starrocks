@@ -57,6 +57,28 @@ BENCHMARK(BM_int32_avx2x_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1
 
 #endif
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+static void BM_int32_neon_prefix_sum(benchmark::State& state) {
+    int64_t size = state.range(0);
+    std::vector<int32_t> elements(size);
+    int32_t last_value = 0;
+    for (auto _ : state) {
+        delta_decode_chain_int32_neon(elements.data(), size, 0, last_value);
+    }
+}
+BENCHMARK(BM_int32_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+
+static void BM_int64_neon_prefix_sum(benchmark::State& state) {
+    int64_t size = state.range(0);
+    std::vector<int64_t> elements(size);
+    int64_t last_value = 0;
+    for (auto _ : state) {
+        delta_decode_chain_int64_neon(elements.data(), size, 0, last_value);
+    }
+}
+BENCHMARK(BM_int64_neon_prefix_sum)->RangeMultiplier(2)->Range(4 * 1024, 32 * 1024);
+#endif
+
 static void BM_int32_native_prefix_sum(benchmark::State& state) {
     int64_t size = state.range(0);
     std::vector<int32_t> elements(size);
