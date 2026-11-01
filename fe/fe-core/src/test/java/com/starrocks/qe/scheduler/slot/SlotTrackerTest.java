@@ -104,6 +104,24 @@ public class SlotTrackerTest {
         assertThat(slotTracker.releaseSlot(slot1.getSlotId())).isNull();
     }
 
+    @Test
+    public void testExpiredSlotBehindUnexpiredOneIsStillPeaked() {
+        SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of());
+        long now = System.currentTimeMillis();
+        // Ordered first (earlier pending deadline) but allocated until far in the future, like a 3h job.
+        LogicalSlot longLived = new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, 1, now + 600_000, now + 10_800_000, 0, 0, 0);
+        // Ordered after it, and its allocation already expired.
+        LogicalSlot expired = new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
+                LogicalSlot.ABSENT_GROUP_ID, 1, now + 660_000, now - 1_000, 0, 0, 0);
+        assertThat(slotTracker.requireSlot(longLived)).isTrue();
+        assertThat(slotTracker.requireSlot(expired)).isTrue();
+        slotTracker.allocateSlot(longLived);
+        slotTracker.allocateSlot(expired);
+
+        assertThat(slotTracker.peakExpiredSlots()).containsExactly(expired);
+    }
+
     private static LogicalSlot generateSlot(int numSlots) {
         return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", WarehouseManager.DEFAULT_WAREHOUSE_ID,
                 LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0,
