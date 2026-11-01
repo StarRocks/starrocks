@@ -58,7 +58,6 @@ select array_length(array_agg(cast(null as varchar))), count(cast(null as varcha
 -- result:
 10000	0	None
 -- !result
-
 -- name: test_agg_null_literal_arg_partition_topn
 CREATE TABLE `t2` (
   `k` bigint NOT NULL,
