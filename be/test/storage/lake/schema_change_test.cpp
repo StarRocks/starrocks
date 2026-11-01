@@ -15,6 +15,7 @@
 #include "storage/lake/schema_change.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <thread>
 
@@ -287,7 +288,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change_2";
+    inline static const std::string kTestGroupPath = "test_lake_direct_schema_change_2_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -699,7 +700,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change";
+    inline static const std::string kTestGroupPath = "test_lake_direct_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -967,7 +968,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sorted_schema_change";
+    inline static const std::string kTestGroupPath = "test_lake_sorted_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1226,7 +1227,8 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_multi_segment_sorted_schema_change";
+    inline static const std::string kTestGroupPath =
+            "test_lake_multi_segment_sorted_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1456,7 +1458,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_1";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_1_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1694,7 +1696,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_2";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_2_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1930,7 +1932,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_3";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_3_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -2288,7 +2290,7 @@ protected:
     std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 
-    constexpr static const char* const _test_dir = "test_lake_base_tablet_read_schema";
+    inline static const std::string _test_dir = "test_lake_base_tablet_read_schema_" + std::to_string(getpid());
     int64_t _partition_id = 100;
 };
 
