@@ -1535,12 +1535,7 @@ TEST_F(ChunksSorterTest, test_compare_column) {
     rhs_values.emplace_back(int32_t(1));
 
     // get filter array x < 1
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
-    MutableColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
-
-    nullable_column->append_datum(Datum(1));
-    nullable_column->append_datum(Datum(2));
-    nullable_column->append_nulls(2);
+    auto nullable_column = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 0, 0}, {0, 0, 1, 1});
 
     cmp_vector.resize(nullable_column->size());
 
