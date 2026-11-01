@@ -381,7 +381,7 @@ TEST(HashUtilTest, CrcHash64UnmixedGoldenVectors) {
     EXPECT_EQ(crc_hash_64_unmixed(s3.data(), static_cast<int32_t>(s3.size()), seed), 0xf369fa27ULL);
 }
 
-TEST(HashUtilTest, CrcHashUnalignedAndUnrollBoundaries) {
+TEST(HashUtilTest, CrcHashUnalignedAndLengthBoundaries) {
     alignas(64) std::array<uint8_t, 256> raw{};
     for (size_t i = 0; i < raw.size(); ++i) {
         raw[i] = static_cast<uint8_t>((i * 131 + 19) & 0xff);
