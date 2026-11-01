@@ -17,6 +17,7 @@
 
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/column_view/column_view.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -425,6 +426,56 @@ TEST(AppendWithMaskCoreTest, appendViewToNullableColumnAllSelected) {
     EXPECT_EQ("star", dst2->get(0).get_slice().to_string());
     EXPECT_EQ("simd", dst2->get(2).get_slice().to_string());
     EXPECT_EQ("vector", dst2->get(3).get_slice().to_string());
+}
+
+TEST(AppendWithMaskCoreTest, appendConstNullColumnToNullableColumn) {
+    for (size_t count : {4, 16, 64}) {
+        auto const_null = ColumnHelper::create_const_null_column(count);
+        ASSERT_TRUE(const_null->is_constant());
+        ASSERT_TRUE(const_null->only_null());
+        ASSERT_TRUE(const_null->is_nullable());
+
+        // 1. Partial selection with positive mask
+        {
+            std::vector<uint8_t> mask(count, 0);
+            for (size_t i = 0; i < count; i += 2) {
+                mask[i] = 1;
+            }
+            size_t expected_selected = (count + 1) / 2;
+
+            auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(dst.get(), *const_null, mask.data(), count).ok());
+            ASSERT_EQ(expected_selected, dst->size());
+            for (size_t i = 0; i < expected_selected; ++i) {
+                EXPECT_TRUE(dst->is_null(i));
+            }
+        }
+
+        // 2. All-selected with positive mask
+        {
+            std::vector<uint8_t> all_ones(count, 1);
+            auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<true>(dst.get(), *const_null, all_ones.data(), count).ok());
+            ASSERT_EQ(count, dst->size());
+            for (size_t i = 0; i < count; ++i) {
+                EXPECT_TRUE(dst->is_null(i));
+            }
+        }
+
+        // 3. Negative selection (PositiveSelect = false)
+        {
+            std::vector<uint8_t> mask(count, 0);
+            mask[0] = 1; // row 0 is filtered out
+            size_t expected_selected = count - 1;
+
+            auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
+            ASSERT_TRUE(append_with_mask<false>(dst.get(), *const_null, mask.data(), count).ok());
+            ASSERT_EQ(expected_selected, dst->size());
+            for (size_t i = 0; i < expected_selected; ++i) {
+                EXPECT_TRUE(dst->is_null(i));
+            }
+        }
+    }
 }
 
 TEST(AppendWithMaskCoreTest, appendFixedLengthStrictBufferBoundaryUnderAsan) {
