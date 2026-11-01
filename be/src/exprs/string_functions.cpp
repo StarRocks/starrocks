@@ -1959,7 +1959,7 @@ DEFINE_UNARY_FN_WITH_IMPL(lengthImpl, str) {
 
 StatusOr<ColumnPtr> StringFunctions::length(FunctionContext* context, const Columns& columns) {
     if (columns.empty() || columns[0] == nullptr) {
-        return Status::InvalidArgument("columns is empty");
+        return Status::InvalidArgument("first column is null or empty");
     }
     const auto& col = columns[0];
     if (col->is_constant()) {
@@ -1992,7 +1992,7 @@ StatusOr<ColumnPtr> StringFunctions::length(FunctionContext* context, const Colu
         });
 
         if (null_col != nullptr) {
-            return NullableColumn::create(std::move(result_data), *null_col);
+            return NullableColumn::create(std::move(result_data), (*null_col)->clone());
         }
         return result_data;
     }
@@ -2006,7 +2006,7 @@ DEFINE_UNARY_FN_WITH_IMPL(utf8LengthImpl, str) {
 
 StatusOr<ColumnPtr> StringFunctions::utf8_length(FunctionContext* context, const starrocks::Columns& columns) {
     if (columns.empty() || columns[0] == nullptr) {
-        return Status::InvalidArgument("columns is empty");
+        return Status::InvalidArgument("first column is null or empty");
     }
     const auto& col = columns[0];
     if (col->is_constant()) {

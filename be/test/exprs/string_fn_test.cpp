@@ -23,6 +23,7 @@
 #include "base/testutil/parallel_test.h"
 #include "base/types/int128.h"
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "exprs/function_helper.h"
@@ -1510,6 +1511,58 @@ PARALLEL_TEST(VecStringFunctionsTest, LengthVectorisedTest) {
         ASSERT_EQ(5, res->size());
         ASSERT_TRUE(res->is_constant());
         ASSERT_TRUE(res->is_null(0));
+    }
+
+    // 8. NullableColumn null column detachment: ensure null bitmap is not shared with input column
+    // to prevent double-compaction and corruption under Chunk::filter()
+    {
+        auto data = BinaryColumn::create();
+        data->append("apple");
+        data->append("");
+        data->append("banana");
+        data->append("");
+        data->append("cherry");
+
+        auto null_col = NullColumn::create();
+        null_col->append(0);
+        null_col->append(1);
+        null_col->append(0);
+        null_col->append(1);
+        null_col->append(0);
+
+        auto nullable_input = NullableColumn::create(data, null_col);
+        Columns cols{nullable_input};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_TRUE(res->is_nullable());
+
+        auto nullable_res = down_cast<const NullableColumn*>(res.get());
+        ASSERT_NE(nullable_input->null_column().get(), nullable_res->null_column().get())
+                << "Null column must be detached/cloned to prevent aliasing with input";
+
+        // Place both into a chunk and filter to verify no double-compaction corruption
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(nullable_input, 0);
+        chunk->append_column(res, 1);
+
+        Filter filter = {1, 0, 1, 0, 1}; // Keep non-null rows (apple, banana, cherry)
+        chunk->filter(filter);
+
+        ASSERT_EQ(3, chunk->num_rows());
+        auto col0 = chunk->get_column_by_slot_id(0);
+        auto col1 = chunk->get_column_by_slot_id(1);
+
+        EXPECT_FALSE(col0->is_null(0));
+        EXPECT_FALSE(col0->is_null(1));
+        EXPECT_FALSE(col0->is_null(2));
+
+        EXPECT_FALSE(col1->is_null(0));
+        EXPECT_FALSE(col1->is_null(1));
+        EXPECT_FALSE(col1->is_null(2));
+
+        auto v = ColumnHelper::cast_to<TYPE_INT>(down_cast<const NullableColumn*>(col1.get())->data_column());
+        EXPECT_EQ(5, v->get_data()[0]);
+        EXPECT_EQ(6, v->get_data()[1]);
+        EXPECT_EQ(6, v->get_data()[2]);
     }
 }
 
