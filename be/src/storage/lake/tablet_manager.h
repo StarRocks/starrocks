@@ -194,6 +194,11 @@ public:
             const std::shared_ptr<FileSystem>& fs = nullptr,
             InitialMetadataOrder initial_order = InitialMetadataOrder::kPerTabletFirst);
 
+    // Reads the metadata file at |metadata_location| and nothing else: no metacache, no bundle or shared
+    // version-1 fallback, and so no lookup of the tablet's own location.
+    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
+                                                     int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+
     // Extracts |tablet_id|'s metadata from its partition's BUNDLE object, never from the tablet's own
     // key. Returns NotFound at version 1 without issuing any read: no bundle is written at that
     // version, and the object that shares its name holds a plain TabletMetadataPB (see the format
@@ -469,8 +474,6 @@ private:
     StatusOr<TabletSchemaPtr> get_tablet_schema_by_id(int64_t tablet_id, int64_t schema_id);
 
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
-    StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
-                                                     int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
     // Read the physical partition's shared initial-metadata object (tablet id 0, version 1) and
     // return it stamped with |tablet_id|. |sibling_path| is any per-tablet metadata path in that
     // partition; only its directory is used.

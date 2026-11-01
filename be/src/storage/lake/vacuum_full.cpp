@@ -69,10 +69,9 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         } else if (tablet_id != 0) {
             // Read the listed file rather than the tablet's location, which no longer resolves once the
             // tablet is dropped.
-            TabletMetadataPB metadata;
-            RETURN_IF_ERROR(TabletManager::load_tablet_metadata_file_with_meter(path, &metadata, false, nullptr));
-            if ((metadata.has_commit_time() && metadata.commit_time() < grace_timestamp) ||
-                (has_expired && !metadata.has_commit_time())) {
+            ASSIGN_OR_RETURN(auto metadata, tablet_mgr->load_tablet_metadata(path, false, 0, nullptr));
+            if ((metadata->has_commit_time() && metadata->commit_time() < grace_timestamp) ||
+                (has_expired && !metadata->has_commit_time())) {
                 need_clear = true;
             }
         }
