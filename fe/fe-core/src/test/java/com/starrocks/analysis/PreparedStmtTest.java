@@ -15,17 +15,26 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.PrepareStmtPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -33,6 +42,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -173,6 +183,55 @@ public class PreparedStmtTest{
                 ((SelectRelation) queryStmt.getQueryRelation()).getSelectList().getItems().get(1).getExpr());
         Assertions.assertTrue(stmt.getParameters().get(3) ==
                 ((SelectRelation) queryStmt.getQueryRelation()).getPredicate().getChild(1));
+    }
+
+    @Test
+    public void testCachedPointQueryRejectsParallelRangeMode() throws Exception {
+        SessionVariable saved = ctx.getSessionVariable().clone();
+        String name = "range_mode_cached_point";
+        try {
+            ctx.getSessionVariable().setEnablePrepareStmt(true);
+            ctx.getSessionVariable().setCboUseDBLock(false);
+            ctx.getSessionVariable().setRangeScanExecutionMode("colocate");
+            PrepareStmt statement = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "prepare " + name + " from select c1 from prepare_stmt where c0 = ?", ctx);
+            PrepareStmtContext prepared = new PrepareStmtContext(statement, ctx, null);
+            ctx.putPreparedStmt(name, prepared);
+            ExecPlan cached = executeRangeModePoint(statement, "a");
+            Assertions.assertSame(cached.getPhysicalPlan(), executeRangeModePoint(statement, "b").getPhysicalPlan());
+            Assertions.assertTrue(prepared.isCached());
+            PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) cached.getPhysicalPlan().getOp();
+            ConstantOperator value = scan.getPredicate().getChild(1).cast();
+            Assertions.assertEquals("b", value.getVarchar());
+
+            ctx.getSessionVariable().setRangeScanExecutionMode("parallel");
+            SemanticException failure = Assertions.assertThrows(SemanticException.class,
+                    () -> executeRangeModePoint(statement, "c"));
+            Assertions.assertTrue(failure.getMessage().contains("range_scan_execution_mode=parallel"));
+            Assertions.assertTrue(failure.getMessage().contains("an aggregate is required"));
+            value = scan.getPredicate().getChild(1).cast();
+            Assertions.assertEquals("b", value.getVarchar());
+            Assertions.assertTrue(prepared.isCached());
+            Assertions.assertTrue(ctx.getSessionVariable().isParallelRangeScan());
+
+            ctx.getSessionVariable().setRangeScanExecutionMode("colocate");
+            Assertions.assertSame(cached.getPhysicalPlan(), executeRangeModePoint(statement, "d").getPhysicalPlan());
+            value = scan.getPredicate().getChild(1).cast();
+            Assertions.assertEquals("d", value.getVarchar());
+        } finally {
+            ctx.removePreparedStmt(name);
+            ctx.setSessionVariable(saved);
+        }
+    }
+
+    private static ExecPlan executeRangeModePoint(PrepareStmt statement, String value) {
+        ctx.setQueryId(UUIDUtil.genUUID());
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(ctx.getQueryId()));
+        ctx.setThreadLocalInfo();
+        List<Expr> params = List.of(new StringLiteral(value));
+        ExecuteStmt execute = new ExecuteStmt(statement.getName(), params);
+        Analyzer.analyze(execute, ctx);
+        return PrepareStmtPlanner.plan(execute, statement.assignValues(params), ctx);
     }
 
 }
