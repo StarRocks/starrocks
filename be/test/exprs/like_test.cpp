@@ -36,6 +36,17 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     }
 
+protected:
+    static bool has_shared_state(FunctionContext* context) { return LikePredicate::shared_state(context) != nullptr; }
+
+    static const VolnitskyUTF8* substring_searcher(FunctionContext* context) {
+        return LikePredicate::shared_state(context)->substring_searcher.get();
+    }
+
+    static const StringSearcher* substring_fallback(FunctionContext* context) {
+        return LikePredicate::shared_state(context)->substring_fallback.get();
+    }
+
 public:
     TExprNode expr_node;
 };
@@ -1010,8 +1021,8 @@ TEST_F(LikeTest, SubstringSearcherHoistedSelectivelyAndStraddlingSparseBatch) {
         Columns cols{BinaryColumn::create(), ColumnHelper::create_const_column<TYPE_VARCHAR>("google%", 1)};
         context->set_constant_columns(cols);
         ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-        EXPECT_EQ(nullptr, LikePredicate::shared_state(context)->substring_searcher);
-        EXPECT_EQ(nullptr, LikePredicate::shared_state(context)->substring_fallback);
+        EXPECT_EQ(nullptr, substring_searcher(context));
+        EXPECT_EQ(nullptr, substring_fallback(context));
         ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     }
 
@@ -1044,13 +1055,12 @@ TEST_F(LikeTest, SubstringSearcherHoistedSelectivelyAndStraddlingSparseBatch) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-    auto* state = LikePredicate::shared_state(context);
-    ASSERT_NE(nullptr, state);
-    EXPECT_EQ(nullptr, state->substring_searcher);
-    ASSERT_NE(nullptr, state->substring_fallback);
+    ASSERT_TRUE(has_shared_state(context));
+    EXPECT_EQ(nullptr, substring_searcher(context));
+    ASSERT_NE(nullptr, substring_fallback(context));
 
     auto result = LikePredicate::like(context, columns).value();
-    EXPECT_EQ(nullptr, state->substring_searcher);
+    EXPECT_EQ(nullptr, substring_searcher(context));
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
     ASSERT_EQ(45, v->size());
     EXPECT_EQ(0, v->immutable_data()[0]);
@@ -1077,12 +1087,12 @@ TEST_F(LikeTest, SubstringSearcherHoistedSelectivelyAndStraddlingSparseBatch) {
         long_ctx_raw->set_constant_columns(small_cols);
         ASSERT_TRUE(
                 LikePredicate::like_prepare(long_ctx_raw, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-        auto* long_state = LikePredicate::shared_state(long_ctx_raw);
-        EXPECT_EQ(nullptr, long_state->substring_searcher);
-        ASSERT_NE(nullptr, long_state->substring_fallback);
+        ASSERT_TRUE(has_shared_state(long_ctx_raw));
+        EXPECT_EQ(nullptr, substring_searcher(long_ctx_raw));
+        ASSERT_NE(nullptr, substring_fallback(long_ctx_raw));
 
         auto small_res = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(long_ctx_raw, small_cols).value());
-        EXPECT_EQ(nullptr, long_state->substring_searcher);
+        EXPECT_EQ(nullptr, substring_searcher(long_ctx_raw));
         EXPECT_EQ(0, small_res->immutable_data()[0]);
         EXPECT_EQ(1, small_res->immutable_data()[1]);
 
@@ -1094,7 +1104,7 @@ TEST_F(LikeTest, SubstringSearcherHoistedSelectivelyAndStraddlingSparseBatch) {
         Columns large_cols{std::move(large_str),
                            ColumnHelper::create_const_column<TYPE_VARCHAR>("%" + long_needle + "%", 1)};
         auto large_res = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(long_ctx_raw, large_cols).value());
-        EXPECT_NE(nullptr, long_state->substring_searcher);
+        EXPECT_NE(nullptr, substring_searcher(long_ctx_raw));
         EXPECT_EQ(1, large_res->immutable_data()[300]);
         ASSERT_TRUE(LikePredicate::like_close(long_ctx_raw, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     }
@@ -1126,7 +1136,7 @@ TEST_F(LikeTest, RegexSubstringNullableWithResidualBytesAndLargeOffsets) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-    ASSERT_NE(nullptr, LikePredicate::shared_state(context)->substring_fallback);
+    ASSERT_NE(nullptr, substring_fallback(context));
 
     auto result = LikePredicate::regex(context, columns).value();
     ASSERT_TRUE(result->is_nullable());
