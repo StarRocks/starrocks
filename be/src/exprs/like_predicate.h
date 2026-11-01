@@ -232,6 +232,7 @@ private:
 
         std::unique_ptr<VolnitskyUTF8> substring_searcher;
         std::unique_ptr<StringSearcher> substring_fallback;
+        std::once_flag substring_searcher_once;
 
         LikePredicateState() = default;
         // No custom destructor needed: `database` is released by its shared_ptr deleter
@@ -244,8 +245,15 @@ private:
         }
 
         void init_substring_searcher() {
-            substring_searcher = std::make_unique<VolnitskyUTF8>(search_string.data(), search_string.size());
             substring_fallback = std::make_unique<StringSearcher>(search_string.data(), search_string.size());
+        }
+
+        const VolnitskyUTF8* get_or_init_volnitsky_searcher() {
+            std::call_once(substring_searcher_once, [this]() {
+                substring_searcher = std::make_unique<VolnitskyUTF8>(search_string.data(), search_string.size(),
+                                                                     VolnitskyTraits::min_haystack_size_for_algorithm);
+            });
+            return substring_searcher.get();
         }
     };
 };

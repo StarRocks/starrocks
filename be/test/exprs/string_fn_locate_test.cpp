@@ -717,6 +717,31 @@ TEST_F(StringFunctionLocateTest, LocateConstStartPosNullableAndUtf8) {
         EXPECT_EQ(11, data_col->get_data()[0]);
         EXPECT_EQ(0, data_col->get_data()[1]);
     }
+
+    // 3. Constant start_pos wrapped in a NullableColumn (both non-null and null)
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        auto str = BinaryColumn::create();
+        str->append("中文google测试google尾");
+        str->append("中文google测试无后缀");
+
+        auto pos_data = Int32Column::create();
+        pos_data->append(4);
+        auto pos_null = NullColumn::create(1, 0);
+        auto nullable_const_pos =
+                ConstColumn::create(NullableColumn::create(std::move(pos_data), std::move(pos_null)), 2);
+
+        Columns columns;
+        columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>("google", 2));
+        columns.emplace_back(std::move(str));
+        columns.emplace_back(std::move(nullable_const_pos));
+
+        ColumnPtr result = StringFunctions::locate_pos(ctx.get(), columns).value();
+        auto data_col = ColumnHelper::cast_to<TYPE_INT>(result);
+        ASSERT_EQ(2, data_col->size());
+        EXPECT_EQ(11, data_col->get_data()[0]);
+        EXPECT_EQ(0, data_col->get_data()[1]);
+    }
 }
 
 } // namespace starrocks

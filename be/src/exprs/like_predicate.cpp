@@ -412,11 +412,12 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
             };
 
             const size_t chunk_bytes = static_cast<size_t>(end - begin);
-            if (state->substring_searcher != nullptr && state->substring_fallback != nullptr) {
-                if (chunk_bytes < VolnitskyTraits::min_haystack_size_for_algorithm) {
+            if (state->substring_fallback != nullptr) {
+                if (needle.size < VolnitskyTraits::min_needle_size_for_algorithm ||
+                    chunk_bytes < VolnitskyTraits::min_haystack_size_for_algorithm) {
                     scan(*state->substring_fallback);
                 } else {
-                    scan(*state->substring_searcher);
+                    scan(*state->get_or_init_volnitsky_searcher());
                 }
             } else {
                 VolnitskyUTF8 local_searcher(needle.data, needle.size, chunk_bytes);
