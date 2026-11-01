@@ -319,6 +319,55 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testOptimizeWaitsForCommittedNotVisible() throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+
+        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
+        Assertions.assertEquals(1, alterJobsV2.size());
+        OnlineOptimizeJobV2 optimizeJob =
+                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().iterator().next());
+        optimizeJob.runPendingJob();
+        optimizeJob.runWaitingTxnJob();
+        Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+
+        // The source-partition gate is clear, but the completed rewrite is not yet visible on the temp partition.
+        Mockito.doReturn(false).when(optimizeJob)
+                .hasCommittedNotVisible(Mockito.any(), Mockito.any(), Mockito.anyString());
+        Mockito.doReturn(true).when(optimizeJob).hasCommittedNotVisible(Mockito.anyLong());
+        OptimizeTask task = optimizeJob.getOptimizeTasks().get(0);
+        task.setOptimizeTaskState(Constants.TaskRunState.RUNNING);
+        optimizeJob.future = java.util.concurrent.CompletableFuture.completedFuture(Constants.TaskRunState.SUCCESS);
+        java.util.concurrent.Future<Constants.TaskRunState> completedRewrite = optimizeJob.future;
+        Partition sourcePartition = olapTable.getPartition(task.getPartitionName());
+        Partition tempPartition = olapTable.getPartition(task.getTempPartitionName(), true);
+        Assertions.assertNotNull(sourcePartition);
+        Assertions.assertNotNull(tempPartition);
+
+        for (int round = 0; round < 2; round++) {
+            optimizeJob.runRunningJob();
+            Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
+            Assertions.assertEquals(Constants.TaskRunState.RUNNING, task.getOptimizeTaskState());
+            Assertions.assertSame(completedRewrite, optimizeJob.future);
+            Assertions.assertSame(sourcePartition, olapTable.getPartition(task.getPartitionName()));
+        }
+        Mockito.verify(optimizeJob, Mockito.atLeast(2)).hasCommittedNotVisible(tempPartition.getId());
+        Mockito.verify(optimizeJob, Mockito.never()).executeSql(Mockito.anyString());
+
+        // Once the temp partition is visible, consume the retained future and perform the replacement.
+        Mockito.doReturn(false).when(optimizeJob).hasCommittedNotVisible(Mockito.anyLong());
+        optimizeJob.runRunningJob();
+        Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
+        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, task.getOptimizeTaskState());
+        Assertions.assertNull(optimizeJob.future);
+        Assertions.assertEquals(tempPartition.getId(), olapTable.getPartition(task.getPartitionName()).getId());
+        Mockito.verify(optimizeJob, Mockito.never()).executeSql(Mockito.anyString());
+    }
+
+    @Test
     public void testReplayFinishedWithNullDistributionInfo() throws Exception {
         // Regression: a job persisted with allPartitionOptimized=true but no distribution change
         // (e.g. from a previously-accepted empty alter clause) must not clobber the table's
@@ -485,6 +534,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
 
         OnlineOptimizeJobV2 spy = Mockito.spy(job);
         Mockito.doReturn(true).when(spy).isPreviousLoadFinished();
+        Mockito.doReturn(false).when(spy).hasCommittedNotVisible(Mockito.anyLong());
         return spy;
     }
 
