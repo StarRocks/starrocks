@@ -60,8 +60,19 @@ inline bool is_sst(std::string_view file_name) {
     return HasSuffixString(file_name, ".sst");
 }
 
+inline bool is_spcols(std::string_view file_name);
+
 inline bool is_cols(std::string_view file_name) {
-    return HasSuffixString(file_name, ".cols");
+    // Guard against the ".spcols" suffix collision: ".spcols" ends with ".cols", so a naive
+    // HasSuffixString would classify a sparse SDCG file as dense. is_cols() means "dense .cols only".
+    return HasSuffixString(file_name, ".cols") && !is_spcols(file_name);
+}
+
+// Sparse Delta Column Group (SDCG) payload file: a standard Segment v2 carrying a leading
+// source_rowid column plus update value columns for K updated rows, read as an overlay layer.
+// Referenced from DeltaColumnGroupVerPB.column_files like a dense `.cols`, with the same lifecycle.
+inline bool is_spcols(std::string_view file_name) {
+    return HasSuffixString(file_name, ".spcols");
 }
 
 // Index Delta Group payload file produced by ADD INDEX fast-path schema change.

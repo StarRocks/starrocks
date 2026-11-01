@@ -413,6 +413,12 @@ Status validate_physical_slices(const std::vector<TabletMetadataPtr>& sources) {
 // Sidecar declarations: DCG (.cols), IDG (.idx), delete vectors, primary-key index sstables.
 // ---------------------------------------------------------------------------------------------------------------
 
+// Per-entry kind, with the legacy hinge: an absent file_kinds array (or an index past its end)
+// means DENSE_COLS. Mirrors DeltaColumnGroup::file_kind(idx).
+static DeltaColumnFileKindPB dcg_entry_kind(const DeltaColumnGroupVerPB& dcg, int idx) {
+    return idx < dcg.file_kinds_size() ? dcg.file_kinds(idx) : DENSE_COLS;
+}
+
 Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
     if (dcg.GetReflection()->GetUnknownFields(dcg).field_count() != 0) {
         return Status::Corruption("DCG message has unknown fields that cannot be attributed to an entry");
@@ -424,11 +430,34 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
         dcg.column_file_sizes_size() > dcg.column_files_size()) {
         return Status::Corruption("DCG shape invalid: optional fields exceed column_files size");
     }
-    std::unordered_set<uint32_t> all_cids;
-    for (const auto& unique_column_ids : dcg.unique_column_ids()) {
-        for (auto cid : unique_column_ids.column_ids()) {
-            if (!all_cids.insert(cid).second) {
-                return Status::Corruption("DCG contains duplicate column UID across entries");
+    // SDCG parallel arrays must be either empty (legacy: all DENSE / unknown K) or exactly 1:1 with
+    // column_files. Anything in between would break positional indexing.
+    if (dcg.file_kinds_size() != 0 && dcg.file_kinds_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: file_kinds size neither 0 nor column_files size");
+    }
+    if (dcg.sparse_row_counts_size() != 0 && dcg.sparse_row_counts_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: sparse_row_counts size neither 0 nor column_files size");
+    }
+    if (dcg.presences_size() != 0 && dcg.presences_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: presences size neither 0 nor column_files size");
+    }
+    // Per-column presence lists (packed flexible files): empty (legacy / no packed file) or 1:1.
+    if (dcg.column_presence_lists_size() != 0 && dcg.column_presence_lists_size() != dcg.column_files_size()) {
+        return Status::Corruption("DCG shape invalid: column_presence_lists size neither 0 nor column_files size");
+    }
+    // Duplicate column UID across entries: legal for sparse chains (col_a sparse at v2, v3, ...), where
+    // at least one involved entry's file (for that uid) is SPARSE. Two DENSE entries sharing a uid is a
+    // genuine conflict (two independent full rewrites of the same column) and stays Corruption.
+    std::unordered_map<uint32_t, bool> uid_has_dense_entry; // uid -> seen a DENSE entry claiming it
+    for (int idx = 0; idx < dcg.unique_column_ids_size(); ++idx) {
+        const bool entry_is_dense = dcg_entry_kind(dcg, idx) == DENSE_COLS;
+        for (auto cid : dcg.unique_column_ids(idx).column_ids()) {
+            auto [it, inserted] = uid_has_dense_entry.try_emplace(cid, entry_is_dense);
+            if (!inserted) {
+                if (it->second && entry_is_dense) {
+                    return Status::Corruption("DCG contains duplicate column UID across two DENSE entries");
+                }
+                it->second = it->second || entry_is_dense;
             }
         }
     }
@@ -436,10 +465,37 @@ Status validate_dcg_shape(const DeltaColumnGroupVerPB& dcg) {
 }
 
 void normalize_dcg_optional_fields(DeltaColumnGroupVerPB* dcg) {
-    while (dcg->encryption_metas_size() < dcg->column_files_size()) dcg->add_encryption_metas("");
-    while (dcg->shared_files_size() < dcg->column_files_size()) dcg->add_shared_files(false);
-    // 0 means "size unknown": readers fall back to stat/HeadObject.
-    while (dcg->column_file_sizes_size() < dcg->column_files_size()) dcg->add_column_file_sizes(0);
+    while (dcg->encryption_metas_size() < dcg->column_files_size()) {
+        dcg->add_encryption_metas("");
+    }
+    while (dcg->shared_files_size() < dcg->column_files_size()) {
+        dcg->add_shared_files(false);
+    }
+    // Pad with 0 (unknown) so column_file_sizes stays 1:1 with column_files; readers
+    // treat 0 as "size unknown" and fall back to stat/HeadObject.
+    while (dcg->column_file_sizes_size() < dcg->column_files_size()) {
+        dcg->add_column_file_sizes(0);
+    }
+    // SDCG: pad file_kinds to DENSE_COLS and sparse_row_counts to 0 so downstream index access is
+    // uniform. Legacy metas (no kinds) normalize to all-DENSE, preserving today's semantics.
+    while (dcg->file_kinds_size() < dcg->column_files_size()) {
+        dcg->add_file_kinds(DENSE_COLS);
+    }
+    while (dcg->sparse_row_counts_size() < dcg->column_files_size()) {
+        dcg->add_sparse_row_counts(0);
+    }
+    // Pad presences with empty (all-unknown) summaries so the array stays 1:1 with column_files.
+    while (dcg->presences_size() < dcg->column_files_size()) {
+        dcg->add_presences();
+    }
+    // SDCG per-column presence lists: only normalized to 1:1 when the entry already carries ANY (a packed
+    // flexible file is present). When absent (homogeneous / legacy), leave it empty so byte-identical metas
+    // stay byte-identical and the reader falls back to file-level presence for every entry.
+    if (dcg->column_presence_lists_size() > 0) {
+        while (dcg->column_presence_lists_size() < dcg->column_files_size()) {
+            dcg->add_column_presence_lists();
+        }
+    }
 }
 
 DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source, int entry_index) {
@@ -449,7 +505,23 @@ DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source,
     out.add_versions(source.versions(entry_index));
     out.add_encryption_metas(source.encryption_metas(entry_index));
     out.add_shared_files(source.shared_files(entry_index));
+    // source is normalized before this call, so column_file_sizes / file_kinds / sparse_row_counts
+    // are all 1:1 with column_files. Carry the SDCG arrays so the single-entry copy keeps its kind/K.
     out.add_column_file_sizes(source.column_file_sizes(entry_index));
+    out.add_file_kinds(source.file_kinds(entry_index));
+    out.add_sparse_row_counts(source.sparse_row_counts(entry_index));
+    // source is normalized => presences is 1:1 with column_files; carry the per-file summary.
+    out.add_presences()->CopyFrom(source.presences(entry_index));
+    // Per-column presence list (packed flexible files). Only 1:1 when the source carries any; carry the
+    // matching entry so the single-entry copy keeps its per-column apply gate. Absent => leave empty.
+    if (entry_index < source.column_presence_lists_size()) {
+        out.add_column_presence_lists()->CopyFrom(source.column_presence_lists(entry_index));
+    }
+    // source_segment_num_rows is a per-segment scalar; preserve it on the single-entry copy so the
+    // merge can reconcile it across siblings of the same target rssid.
+    if (source.has_source_segment_num_rows()) {
+        out.set_source_segment_num_rows(source.source_segment_num_rows());
+    }
     return out;
 }
 

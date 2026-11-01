@@ -1129,6 +1129,12 @@ struct TStreamLoadPutRequest {
     57: optional PlanNodes.TEnvelopeType envelope
     // "basic" (or unset) => `passwd` is a plaintext password; "bearer" => `passwd` carries a token.
     58: optional string auth_type
+    // SDCG flexible partial update: per-row heterogeneous column sets. Set by the BE stream-load
+    // handler from the `partial_update_mode=flexible` header. Carried here (not only in the
+    // FE-direct StreamLoadKvParams path) because a curl HTTP stream load reaches FE via this thrift
+    // request; without it FE silently degrades to a homogeneous union partial update that
+    // NULL-overwrites omitted columns.
+    59: optional bool flexible_partial_update
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse
