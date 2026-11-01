@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -367,24 +368,17 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     // [false]
     // [NULL]
     // [true]
-    MutableColumnPtr bool_array_not_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, false);
-    bool_array_not_nullable->append_datum(DatumArray{Datum(), true, false});
-    bool_array_not_nullable->append_datum(DatumArray{});
-    bool_array_not_nullable->append_datum(DatumArray{false});
-    bool_array_not_nullable->append_datum(DatumArray{Datum()});
-    bool_array_not_nullable->append_datum(DatumArray{true});
+    MutableColumnPtr bool_array_not_nullable = ColumnTestHelper::build_array_column<int8_t>(
+            TYPE_ARRAY_BOOLEAN_DESC, false, {{std::nullopt, true, false}, {}, {false}, {std::nullopt}, {true}});
 
     // [null, true, false]
     // NULL
     // [false]
     // [null]
     // [false, null]
-    MutableColumnPtr bool_array_nullable = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN_DESC, true);
-    bool_array_nullable->append_datum(DatumArray{Datum(), true, false});
-    bool_array_nullable->append_datum(Datum{});
-    bool_array_nullable->append_datum(DatumArray{false});
-    bool_array_nullable->append_datum(DatumArray{Datum()});
-    bool_array_nullable->append_datum(DatumArray{false, Datum()});
+    MutableColumnPtr bool_array_nullable = ColumnTestHelper::build_array_column<int8_t>(
+            TYPE_ARRAY_BOOLEAN_DESC, true,
+            {{std::nullopt, true, false}, NullArrayRow{}, {false}, {std::nullopt}, {false, std::nullopt}});
 
     {
         auto result = MapFunctions::map_filter(nullptr, {map_column_nullable, bool_array_not_nullable}).value();
