@@ -351,6 +351,11 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     protected void runFinishedRewritingJob() throws AlterCancelException {
         // Publish the new tablet metadata version per partition (lake
         // semantics) then mutate the FE catalog.
+        // If the table or database has been dropped, readyToPublishVersion()
+        // throws AlterCancelException and the job is cancelled.
+        if (!readyToPublishVersion()) {
+            return;
+        }
         if (!publishVersion()) {
             // publishVersion() returns false while the async task hasn't
             // completed yet; come back on the next scheduler tick.
@@ -381,10 +386,14 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             // lake/transactions.cpp then tries to read a now-vacuumed
             // {tablet}_{v}.vlog and fails with 404. LakeTableSchemaChangeJob
             // does this setVisibleVersion update for the same reason.
+            // readyToPublishVersion() saw commitVersion - 1 visible and no
+            // other transaction holds commitVersion, so advance from there
+            // only. A partition already at or past commitVersion was advanced
+            // by an earlier attempt of this step and must not move back.
             this.finishedTimeMs = System.currentTimeMillis();
             for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
                 PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
-                if (pp != null) {
+                if (pp != null && pp.getVisibleVersion() == e.getValue() - 1) {
                     pp.setVisibleVersion(e.getValue(), finishedTimeMs);
                 }
             }
@@ -404,6 +413,43 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.WRITE);
         }
+    }
+
+    /**
+     * Ready once every partition has made the version just below its commit version visible. The watershed only
+     * covers loads that began before the job, so a later load can commit while the tablets are being altered and
+     * take a version below the commit version reserved at FINISHED_REWRITING. A transaction finishes only while
+     * its version is the partition's next one: publishing before that load is visible and then making the commit
+     * version visible would leave the load, and every later transaction on the table, COMMITTED forever. Same
+     * check as {@link LakeTableSchemaChangeJob#readyToPublishVersion}.
+     *
+     * <p>Throws AlterCancelException iff the database or the table has been dropped.
+     */
+    private boolean readyToPublishVersion() throws AlterCancelException {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            throw new AlterCancelException("database does not exist, dbId: " + dbId);
+        }
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getId(), tableId);
+        if (table == null) {
+            throw new AlterCancelException("table does not exist, tableId: " + tableId);
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        try {
+            for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
+                PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
+                // At or past commitVersion - 1 is ready: an earlier attempt of
+                // the finish step may already have made commitVersion visible.
+                if (pp != null && pp.getVisibleVersion() < e.getValue() - 1) {
+                    return false;
+                }
+            }
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
+        }
+        return true;
     }
 
     @Override
