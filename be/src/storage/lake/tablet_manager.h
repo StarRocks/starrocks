@@ -264,6 +264,8 @@ public:
     // is either older or newer than the FE visible version.
     TabletMetadataPtr get_latest_cached_tablet_metadata(int64_t tablet_id);
 
+    void erase_latest_cached_tablet_metadata(int64_t tablet_id);
+
     StatusOr<TabletMetadataIter> list_tablet_metadata(int64_t tablet_id);
 
     Status delete_tablet_metadata(int64_t tablet_id, int64_t version);
