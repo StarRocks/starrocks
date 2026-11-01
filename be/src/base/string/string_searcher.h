@@ -28,11 +28,7 @@
 
 namespace starrocks {
 
-struct StringSearcherBase {
-    static constexpr size_t SSE2_WIDTH = 16;
-};
-
-class StringSearcher : private StringSearcherBase {
+class StringSearcher {
 public:
     enum class Kernel : uint8_t {
         kScalar = 0,
@@ -44,7 +40,6 @@ public:
 private:
     /// string to be searched for
     const uint8_t* const needle;
-    [[maybe_unused]] const uint8_t* const needle_end;
     size_t needle_size;
     /// first and last character in `needle`
     uint8_t first{};
@@ -61,9 +56,7 @@ private:
 public:
     template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
     StringSearcher(const CharT* needle_, const size_t needle_size_)
-            : needle{reinterpret_cast<const uint8_t*>(needle_)},
-              needle_end{needle + needle_size_},
-              needle_size(needle_size_) {
+            : needle{reinterpret_cast<const uint8_t*>(needle_)}, needle_size(needle_size_) {
         if (0 == needle_size) {
             return;
         }
