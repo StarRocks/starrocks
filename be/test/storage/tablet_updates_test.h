@@ -838,6 +838,7 @@ public:
     void test_load_snapshot_incremental_with_partial_rowset_new(bool enable_persistent_index,
                                                                 PartialUpdateCloneCase update_case);
     void test_load_snapshot_primary(int64_t num_version, const std::vector<uint64_t>& holes);
+    void test_clone_clears_stale_primary_key_meta(bool enable_persistent_index);
     void test_load_snapshot_primary(int64_t max_version, const std::vector<uint64_t>& holes,
                                     bool enable_persistent_index);
     void test_load_snapshot_full(bool enable_persistent_index);
