@@ -278,8 +278,16 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.mutable_load_channel_profile_config()->CopyFrom(_parent->_load_channel_profile_config);
 
     // set global dict
+<<<<<<< HEAD:be/src/exec/tablet_sink_index_channel.cpp
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
     const auto& dict_version = _runtime_state->load_dict_versions();
+=======
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict = fragment_dict_state->load_global_dicts();
+    const auto& dict_version = fragment_dict_state->load_dict_versions();
+    const auto& dict_identity = fragment_dict_state->load_dict_content_identities();
+>>>>>>> 4d43676 ([BugFix] Prevent incorrect global dictionary renewal across FEs (#79511)):be/src/data_sink/tablet/tablet_sink_index_channel.cpp
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
@@ -288,6 +296,10 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
             for (auto& item : dict) {
                 slot->add_global_dict_words(item.first.to_string());
             }
+        }
+        auto it_identity = dict_identity.find(slot->id());
+        if (it_identity != dict_identity.end()) {
+            slot->set_global_dict_content_identity(it_identity->second);
         }
         auto it_version = dict_version.find(slot->id());
         if (it_version != dict_version.end()) {
@@ -926,6 +938,9 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             }
             const auto& col_name = tablet.valid_dict_cache_columns(i);
             _valid_dict_cache_info.valid_dict_cache_column_set.emplace(col_name, version);
+            if (tablet.valid_dict_content_identities_size() == tablet.valid_dict_cache_columns_size()) {
+                _valid_dict_cache_info.content_identities.emplace(col_name, tablet.valid_dict_content_identities(i));
+            }
         }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
@@ -1106,14 +1121,19 @@ Status NodeChannel::close_wait(RuntimeState* state) {
 
         std::vector<std::string> valid_dict_cache_columns;
         std::vector<int64_t> valid_dict_collected_versions;
+        std::vector<int64_t> identities;
         for (const auto& [name, version] : _valid_dict_cache_info.valid_dict_cache_column_set) {
             if (_valid_dict_cache_info.invalid_dict_cache_column_set.count(name) == 0) {
                 valid_dict_cache_columns.emplace_back(name);
                 valid_dict_collected_versions.emplace_back(version);
+                if (!_valid_dict_cache_info.content_identities.empty()) {
+                    identities.emplace_back(_valid_dict_cache_info.content_identities.at(name));
+                }
             }
         }
         _tablet_commit_infos[0].__set_valid_dict_cache_columns(valid_dict_cache_columns);
         _tablet_commit_infos[0].__set_valid_dict_collected_versions(valid_dict_collected_versions);
+        _tablet_commit_infos[0].__set_valid_dict_content_identities(identities);
     }
 
     // 3. commit tablet infos
