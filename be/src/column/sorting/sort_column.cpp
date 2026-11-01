@@ -29,10 +29,12 @@
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/sorting/radix_sort.h"
 #include "column/sorting/sort_helper.h"
 #include "column/sorting/sort_permute.h"
 #include "column/sorting/sorting.h"
 #include "column/struct_column.h"
+#include "common/config_exec_flow_fwd.h"
 
 namespace starrocks {
 
@@ -115,6 +117,8 @@ public:
               _range_or_ranges(std::move(range_or_ranges)),
               _build_tie(build_tie) {}
 
+    bool is_stable_sorted() const { return _is_stable_sorted; }
+
     Status do_visit(const NullableColumn& column) {
         // Fastpath
         if (!column.has_null()) {
@@ -131,12 +135,14 @@ public:
             }
         };
 
-        return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc, _permutation,
-                                            _tie, _range_or_ranges, _build_tie);
+        RETURN_IF_ERROR(sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc,
+                                                     _permutation, _tie, _range_or_ranges, _build_tie));
+        _is_stable_sorted = false;
+        return Status::OK();
     }
 
     Status do_visit(const ConstColumn& column) {
-        // noop
+        _is_stable_sorted = true;
         return Status::OK();
     }
 
@@ -225,8 +231,56 @@ public:
         };
 
         auto inlined = create_inline_permutation<T, IS_RANGES>(_permutation, column.immutable_data());
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
-                                            _range_or_ranges, _build_tie));
+        _is_stable_sorted = true;
+        const int32_t threshold = config::radix_sort_threshold;
+        InlinePermutation<T> scratch;
+
+        auto sort_outer_range = [&](std::pair<int, int> outer_range) -> Status {
+            TieIterator iterator(_tie, outer_range.first, outer_range.second);
+            while (iterator.next()) {
+                if (UNLIKELY(_cancel.load(std::memory_order_acquire))) {
+                    return Status::Cancelled("Sort cancelled");
+                }
+                const std::pair<int, int> range{iterator.range_first, iterator.range_last};
+                const size_t len = static_cast<size_t>(range.second - range.first);
+                if constexpr (!IS_RANGES && RadixSortable<T>) {
+                    if (threshold > 0 && len >= static_cast<size_t>(threshold)) {
+                        if (!_build_tie) {
+                            radix_sort_inlined(_cancel, &inlined[range.first], scratch, len, _sort_desc.asc_order());
+                        } else {
+                            _tie[range.first] = 0;
+                            radix_sort_inlined_and_tie(_cancel, inlined.data(), scratch,
+                                                       static_cast<size_t>(range.first),
+                                                       static_cast<size_t>(range.second), _sort_desc.asc_order(), _tie);
+                        }
+                        if (UNLIKELY(_cancel.load(std::memory_order_acquire))) {
+                            return Status::Cancelled("Sort cancelled");
+                        }
+                    } else {
+                        if (len > 1) {
+                            _is_stable_sorted = false;
+                            _sort_inlined_range(inlined, cmp, range);
+                        }
+                    }
+                } else {
+                    if (len > 1) {
+                        _is_stable_sorted = false;
+                        _sort_inlined_range(inlined, cmp, range);
+                    }
+                }
+            }
+            return Status::OK();
+        };
+
+        if constexpr (IS_RANGES) {
+            Ranges ranges = _range_or_ranges;
+            while (ranges.next()) {
+                RETURN_IF_ERROR(sort_outer_range(ranges.get()));
+            }
+        } else {
+            RETURN_IF_ERROR(sort_outer_range(_range_or_ranges));
+        }
+
         restore_inline_permutation(inlined, _permutation);
 
         return Status::OK();
@@ -256,6 +310,25 @@ public:
     void use_german_string(bool flag) { _use_german_string = flag; }
 
 private:
+    template <typename T, typename Cmp>
+    void _sort_inlined_range(InlinePermutation<T>& inlined, Cmp&& cmp, std::pair<int, int> range) {
+        auto lesser = [&](const auto& lhs, const auto& rhs) { return cmp(lhs, rhs) < 0; };
+        auto greater = [&](const auto& lhs, const auto& rhs) { return cmp(lhs, rhs) > 0; };
+        auto begin = inlined.begin() + range.first;
+        auto end = inlined.begin() + range.second;
+        if (_sort_desc.asc_order()) {
+            ::pdqsort(begin, end, lesser);
+        } else {
+            ::pdqsort(begin, end, greater);
+        }
+        if (_build_tie) {
+            _tie[range.first] = 0;
+            for (int i = range.first + 1; i < range.second; i++) {
+                _tie[i] &= cmp(inlined[i - 1], inlined[i]) == 0;
+            }
+        }
+    }
+
     const std::atomic<bool>& _cancel;
     const SortDesc& _sort_desc;
     SmallPermutation& _permutation;
@@ -263,6 +336,7 @@ private:
     R _range_or_ranges;
     bool _build_tie;
     bool _use_german_string = false;
+    bool _is_stable_sorted = false;
 };
 
 // Sort multiple a column from multiple chunks(vertical column)
@@ -527,6 +601,25 @@ private:
     size_t _pruned_limit; // The pruned limit during partial sorting
 };
 
+static Status sort_and_tie_column_impl(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
+                                       SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
+                                       bool build_tie, const SortDescs* sort_descs, bool* is_stable_sorted) {
+    // Nullable column need set all the null rows to default values,
+    // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
+    if (column->is_nullable() && !column->is_constant()) {
+        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
+    }
+    ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
+    if (sort_descs != nullptr) {
+        column_sorter.use_german_string(sort_descs->is_use_german_string());
+    }
+    RETURN_IF_ERROR(column->accept(&column_sorter));
+    if (is_stable_sorted != nullptr) {
+        *is_stable_sorted = column_sorter.is_stable_sorted();
+    }
+    return Status::OK();
+}
+
 Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
                            const SortDescs* sort_descs) {
@@ -540,16 +633,7 @@ Status sort_and_tie_column(const std::atomic<bool>& cancel, const ColumnPtr& col
 Status sort_and_tie_column(const std::atomic<bool>& cancel, ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie,
                            const SortDescs* sort_descs) {
-    // Nullable column need set all the null rows to default values,
-    // see the comment of the declaration of `partition_null_and_nonnull_helper` for details.
-    if (column->is_nullable() && !column->is_constant()) {
-        ColumnHelper::as_raw_column<NullableColumn>(column->as_mutable_raw_ptr())->fill_null_with_default();
-    }
-    ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
-    if (sort_descs != nullptr) {
-        column_sorter.use_german_string(sort_descs->is_use_german_string());
-    }
-    return column->accept(&column_sorter);
+    return sort_and_tie_column_impl(cancel, column, sort_desc, permutation, tie, range, build_tie, sort_descs, nullptr);
 }
 
 static Status sort_and_tie_column(const std::atomic<bool>& cancel, const Column* column, const SortDesc& sort_desc,
@@ -672,20 +756,28 @@ Status stable_sort_and_tie_columns(const std::atomic<bool>& cancel, const Column
     Tie tie(num_rows, 1);
     std::pair<int, int> range{0, num_rows};
 
+    bool all_columns_stably_sorted = std::is_sorted(
+            small_perm->begin(), small_perm->end(),
+            [](SmallPermuteItem lhs, SmallPermuteItem rhs) { return lhs.index_in_chunk < rhs.index_in_chunk; });
     for (int col_index = 0; col_index < columns.size(); col_index++) {
         ColumnPtr column = columns[col_index];
-        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), *small_perm, tie,
-                                            range, true));
+        bool col_stable = false;
+        RETURN_IF_ERROR(sort_and_tie_column_impl(cancel, column, sort_desc.get_column_desc(col_index), *small_perm, tie,
+                                                 range, true, nullptr, &col_stable));
+        all_columns_stably_sorted = all_columns_stably_sorted && col_stable;
     }
 
-    // Stable sort need extra runs of sorting on permutation
-    TieIterator ti(tie);
-    while (ti.next()) {
-        int range_first = ti.range_first, range_last = ti.range_last;
-        if (range_last - range_first > 1) {
-            ::pdqsort(
-                    small_perm->begin() + range_first, small_perm->begin() + range_last,
-                    [](SmallPermuteItem lhs, SmallPermuteItem rhs) { return lhs.index_in_chunk < rhs.index_in_chunk; });
+    if (!all_columns_stably_sorted) {
+        // Stable sort need extra runs of sorting on permutation
+        TieIterator ti(tie);
+        while (ti.next()) {
+            int range_first = ti.range_first, range_last = ti.range_last;
+            if (range_last - range_first > 1) {
+                ::pdqsort(small_perm->begin() + range_first, small_perm->begin() + range_last,
+                          [](SmallPermuteItem lhs, SmallPermuteItem rhs) {
+                              return lhs.index_in_chunk < rhs.index_in_chunk;
+                          });
+            }
         }
     }
 
