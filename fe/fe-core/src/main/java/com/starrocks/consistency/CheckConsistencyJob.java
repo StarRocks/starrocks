@@ -218,10 +218,25 @@ public class CheckConsistencyJob {
         }
 
         if (state != JobState.RUNNING) {
-            // failed to send task. set tablet's checked version to avoid choosing it again
+            // The attempt did not start. Keep the last completed result so the visible version can be retried.
+            JournalTask journalTask = null;
             try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()),
                         LockType.WRITE)) {
-                tablet.setCheckedVersion(checkedVersion);
+                PhysicalPartition currentPhysicalPartition =
+                        ((OlapTable) table).getPhysicalPartition(tabletMeta.getPhysicalPartitionId());
+                if (currentPhysicalPartition != null) {
+                    MaterializedIndex currentIndex = currentPhysicalPartition.getIndex(tabletMeta.getIndexId());
+                    if (currentIndex != null) {
+                        LocalTablet currentTablet = (LocalTablet) currentIndex.getTablet(tabletId);
+                        if (currentTablet != null) {
+                            journalTask = recordCheckAttempt(db, table, currentPhysicalPartition, currentIndex,
+                                    currentTablet, System.currentTimeMillis(), false, false);
+                        }
+                    }
+                }
+            }
+            if (journalTask != null) {
+                EditLog.waitForCommit(journalTask);
             }
             return false;
         }
@@ -268,6 +283,7 @@ public class CheckConsistencyJob {
         }
 
         boolean isConsistent = true;
+        boolean isCompleted = false;
         JournalTask journalTask;
         try (AutoCloseableLock ignore =
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
@@ -325,6 +341,7 @@ public class CheckConsistencyJob {
                 if (!isFinished) {
                     return 0;
                 }
+                isCompleted = true;
 
                 // all clear. check checksum
                 long lastChecksum = -1L;
@@ -356,31 +373,36 @@ public class CheckConsistencyJob {
                 LOG.info("tablet[{}] check consistency job cancelled. timeout", tabletId);
             }
 
-            // no matter timeout or not. set this tablet as finished
-            // job done. set last check time to each instance
-            long lastCheckTime = System.currentTimeMillis();
-            db.setLastCheckTime(lastCheckTime);
-            olapTable.setLastCheckTime(lastCheckTime);
-            if (physicalPartition instanceof MetaObject) {
-                ((MetaObject) physicalPartition).setLastCheckTime(lastCheckTime);
-            }
-            index.setLastCheckTime(lastCheckTime);
-            tablet.setLastCheckTime(lastCheckTime);
-            tablet.setIsConsistent(isConsistent);
-
-            // set checked version
-            tablet.setCheckedVersion(checkedVersion);
-
-            // log
-            ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), physicalPartition.getId(),
-                        index.getId(), tabletId, lastCheckTime,
-                        checkedVersion, isConsistent);
-            journalTask = GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheck(info);
+            journalTask = recordCheckAttempt(db, table, physicalPartition, index, tablet,
+                    System.currentTimeMillis(), isCompleted, isConsistent);
         }
 
         // Wait for edit log write finish out of db lock.
         EditLog.waitForCommit(journalTask);
         return 1;
+    }
+
+    private JournalTask recordCheckAttempt(Database db, Table table, PhysicalPartition physicalPartition,
+                                           MaterializedIndex index, LocalTablet tablet, long lastCheckTime,
+                                           boolean completed, boolean isConsistent) {
+        db.setLastCheckTime(lastCheckTime);
+        table.setLastCheckTime(lastCheckTime);
+        if (physicalPartition instanceof MetaObject) {
+            ((MetaObject) physicalPartition).setLastCheckTime(lastCheckTime);
+        }
+        index.setLastCheckTime(lastCheckTime);
+        tablet.setLastCheckTime(lastCheckTime);
+
+        if (completed) {
+            tablet.setIsConsistent(isConsistent);
+            tablet.setCheckedVersion(checkedVersion);
+        }
+
+        // The edit log persists attempt time alongside the last completed result, which also makes retries
+        // after an incomplete attempt cooldown correctly after replay.
+        ConsistencyCheckInfo info = new ConsistencyCheckInfo(db.getId(), table.getId(), physicalPartition.getId(),
+                index.getId(), tabletId, lastCheckTime, tablet.getCheckedVersion(), tablet.isConsistent());
+        return GlobalStateMgr.getCurrentState().getEditLog().logFinishConsistencyCheck(info);
     }
 
     private boolean isTimeout() {
@@ -406,4 +428,3 @@ public class CheckConsistencyJob {
         }
     }
 }
-
