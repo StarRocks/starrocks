@@ -141,6 +141,18 @@ PROPERTIES(
 );
 ```
 
+## Change properties
+
+`ALTER CATALOG ... SET` adds or overwrites properties of an existing external catalog. `ALTER CATALOG ... UNSET` removes properties. After a property is removed, the catalog uses that property's default value.
+
+The `type` property cannot be set or removed. `SET` and `UNSET` cannot be used in the same statement. Unsetting a property that is not set succeeds and does not change the catalog. The removed key no longer appears in [SHOW CREATE CATALOG](SHOW_CREATE_CATALOG.md).
+
+```SQL
+ALTER CATALOG <catalog_name> SET ("key" = "value" [, ...])
+
+ALTER CATALOG <catalog_name> UNSET ("key" [, ...])
+```
+
 ## References
 
 - To view all catalogs in your StarRocks cluster, see [SHOW CATALOGS](SHOW_CATALOGS.md).
