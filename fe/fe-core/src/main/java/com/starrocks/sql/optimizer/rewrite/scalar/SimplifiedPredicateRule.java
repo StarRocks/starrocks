@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -38,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.spm.SPMFunctions;
+import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.CharType;
 import com.starrocks.type.IntegerType;
@@ -408,6 +410,8 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedJsonQuery(call);
         } else if (FunctionSet.HOUR.equalsIgnoreCase(call.getFnName())) {
             return simplifiedHourFromUnixTime(call);
+        } else if (FunctionSet.TIMESTAMP.equalsIgnoreCase(call.getFnName())) {
+            return simplifiedTimestamp(call);
         }
         return call;
     }
@@ -686,5 +690,24 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
         }
 
         return call;
+    }
+
+    private static ScalarOperator simplifiedTimestamp(CallOperator call) {
+        Function fn = call.getFunction();
+        if (!(fn instanceof ScalarFunction)
+                || fn.getBinaryType() != TFunctionBinaryType.BUILTIN
+                || !FunctionSet.TIMESTAMP.equalsIgnoreCase(fn.functionName())
+                || fn.hasVarArgs()
+                || fn.getNumArgs() != 1
+                || !fn.getArgs()[0].isDatetime()
+                || !fn.getReturnType().isDatetime()
+                || call.getChildren().size() != 1
+                || !call.getType().isDatetime()
+                || !call.getChild(0).getType().isDatetime()
+                || call.getChild(0) instanceof CastOperator) {
+            return call;
+        }
+        // Keep casts behind TIMESTAMP: connector predicate conversion may otherwise compare raw input values.
+        return call.getChild(0);
     }
 }
