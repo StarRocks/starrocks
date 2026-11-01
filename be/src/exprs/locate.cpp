@@ -42,11 +42,15 @@ struct LocateCaseSensitiveUTF8 {
 // locate haystack is a vector and needle is a constant
 ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
                                            const ColumnPtr& start_pos_ptr) {
+    if (haystack_ptr->only_null() || needle_ptr->only_null() || start_pos_ptr->only_null()) {
+        return ColumnHelper::create_const_null_column(haystack_ptr->size());
+    }
     const BinaryColumn* haystack = nullptr;
     const FixedLengthColumn<int32_t>* start_pos = nullptr;
     NullColumnPtr res_null = nullptr;
     const bool is_const_start = start_pos_ptr->is_constant();
-    const int32_t const_start = is_const_start ? ColumnHelper::get_const_value<TYPE_INT>(start_pos_ptr) : 0;
+    const int32_t const_start =
+            is_const_start ? ColumnHelper::get_data_column_by_type<TYPE_INT>(start_pos_ptr)->immutable_data()[0] : 0;
     if (is_const_start) {
         if (haystack_ptr->is_nullable()) {
             auto haystack_null = ColumnHelper::as_column<NullableColumn>(haystack_ptr);

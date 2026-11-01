@@ -112,10 +112,29 @@ TEST_F(StringSearcherTest, FirstEqualsLastSaturation) {
             EXPECT_EQ(miss_hay.end(), r) << "len=" << len;
         }
     }
+
+    // Space-filled haystack with 32B needle (" " + 30*'X' + " ") and single-interior-diff needle
+    for (const std::string& space_needle :
+         {std::string(" ") + std::string(30, 'X') + " ", std::string(15, ' ') + "X" + std::string(16, ' ')}) {
+        const std::string space_miss(4096, ' ');
+        TightBuffer miss_buf(space_miss);
+        TightBuffer ndl_buf(space_needle);
+        StringSearcher searcher(ndl_buf.begin(), ndl_buf.size());
+        for (const auto* r : run_all_kernels(searcher, miss_buf.begin(), miss_buf.end(), space_needle.size())) {
+            EXPECT_EQ(miss_buf.end(), r);
+        }
+        const std::string space_hit = space_miss + space_needle;
+        TightBuffer hit_buf(space_hit);
+        for (const auto* r : run_all_kernels(searcher, hit_buf.begin(), hit_buf.end(), space_needle.size())) {
+            EXPECT_EQ(hit_buf.begin() + 4096, r);
+        }
+    }
 }
 
 TEST_F(StringSearcherTest, EmptyNullAndEmbeddedNul) {
     StringSearcher two("ab", 2);
+    TightBuffer empty_hay("");
+    EXPECT_EQ(empty_hay.end(), two.search(empty_hay.begin(), empty_hay.end()));
     EXPECT_EQ(nullptr, two.search(static_cast<const uint8_t*>(nullptr), static_cast<const uint8_t*>(nullptr)));
     StringSearcher empty("", 0);
     TightBuffer h("xyz");

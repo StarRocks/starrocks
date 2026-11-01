@@ -1046,10 +1046,11 @@ TEST_F(LikeTest, SubstringSearcherHoistedSelectivelyAndStraddlingSparseBatch) {
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     auto* state = LikePredicate::shared_state(context);
     ASSERT_NE(nullptr, state);
-    ASSERT_NE(nullptr, state->substring_searcher);
+    EXPECT_EQ(nullptr, state->substring_searcher);
     ASSERT_NE(nullptr, state->substring_fallback);
 
     auto result = LikePredicate::like(context, columns).value();
+    EXPECT_EQ(nullptr, state->substring_searcher);
     auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
     ASSERT_EQ(45, v->size());
     EXPECT_EQ(0, v->immutable_data()[0]);
@@ -1062,6 +1063,41 @@ TEST_F(LikeTest, SubstringSearcherHoistedSelectivelyAndStraddlingSparseBatch) {
     EXPECT_EQ(0, v->immutable_data()[44]);
 
     ASSERT_TRUE(LikePredicate::like_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    // 3. Verify >= 33B needle keeps substring_searcher == nullptr on small chunks and lazily initializes on >= 20KB
+    {
+        auto long_ctx_raw = FunctionContext::create_test_context();
+        std::unique_ptr<FunctionContext> long_ctx(long_ctx_raw);
+        const std::string long_needle = std::string(35, 'q') + "needle";
+        auto small_str = BinaryColumn::create();
+        small_str->append("short_miss");
+        small_str->append("prefix_" + long_needle + "_suffix");
+        Columns small_cols{std::move(small_str),
+                           ColumnHelper::create_const_column<TYPE_VARCHAR>("%" + long_needle + "%", 1)};
+        long_ctx_raw->set_constant_columns(small_cols);
+        ASSERT_TRUE(
+                LikePredicate::like_prepare(long_ctx_raw, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+        auto* long_state = LikePredicate::shared_state(long_ctx_raw);
+        EXPECT_EQ(nullptr, long_state->substring_searcher);
+        ASSERT_NE(nullptr, long_state->substring_fallback);
+
+        auto small_res = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(long_ctx_raw, small_cols).value());
+        EXPECT_EQ(nullptr, long_state->substring_searcher);
+        EXPECT_EQ(0, small_res->immutable_data()[0]);
+        EXPECT_EQ(1, small_res->immutable_data()[1]);
+
+        auto large_str = BinaryColumn::create();
+        for (int i = 0; i < 300; ++i) {
+            large_str->append(std::string(80, 'x'));
+        }
+        large_str->append("hit_" + long_needle);
+        Columns large_cols{std::move(large_str),
+                           ColumnHelper::create_const_column<TYPE_VARCHAR>("%" + long_needle + "%", 1)};
+        auto large_res = ColumnHelper::cast_to<TYPE_BOOLEAN>(LikePredicate::like(long_ctx_raw, large_cols).value());
+        EXPECT_NE(nullptr, long_state->substring_searcher);
+        EXPECT_EQ(1, large_res->immutable_data()[300]);
+        ASSERT_TRUE(LikePredicate::like_close(long_ctx_raw, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+    }
 }
 
 TEST_F(LikeTest, RegexSubstringNullableWithResidualBytesAndLargeOffsets) {
@@ -1090,7 +1126,7 @@ TEST_F(LikeTest, RegexSubstringNullableWithResidualBytesAndLargeOffsets) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
-    ASSERT_NE(nullptr, LikePredicate::shared_state(context)->substring_searcher);
+    ASSERT_NE(nullptr, LikePredicate::shared_state(context)->substring_fallback);
 
     auto result = LikePredicate::regex(context, columns).value();
     ASSERT_TRUE(result->is_nullable());
