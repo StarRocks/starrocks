@@ -68,6 +68,91 @@ struct StringRe2ThreadState : FunctionThreadState {
     std::unique_ptr<re2::RE2> re2;
 };
 
+struct RegexpReplaceTemplate {
+    struct Segment {
+        // group_idx == -1: literal span [offset, offset + length) inside literal_bytes
+        // group_idx in [0, 9]: capture group submatch vec[group_idx]
+        int32_t group_idx;
+        uint32_t offset;
+        uint32_t length;
+    };
+
+    std::string literal_bytes;
+    std::vector<Segment> segments;
+    int nsubmatch = 1;               // 1 + MaxSubmatch(rewrite), in [1, 10]
+    int max_submatch = 0;            // MaxSubmatch(rewrite), in [0, 9]
+    bool has_invalid_escape = false; // true if trailing '\' or '\c' where c not in [0-9\]
+
+    void parse(const Slice& rpl) {
+        literal_bytes.clear();
+        segments.clear();
+        nsubmatch = 1;
+        max_submatch = 0;
+        has_invalid_escape = false;
+
+        literal_bytes.reserve(rpl.size);
+        const char* const begin = rpl.data;
+        const char* const end = begin + rpl.size;
+        uint32_t lit_start = 0;
+
+        auto flush_literal = [&]() {
+            const auto lit_len = static_cast<uint32_t>(literal_bytes.size()) - lit_start;
+            if (lit_len > 0) {
+                segments.push_back(Segment{-1, lit_start, lit_len});
+                lit_start = static_cast<uint32_t>(literal_bytes.size());
+            }
+        };
+
+        for (const char* s = begin; s < end; ++s) {
+            if (*s != '\\') {
+                if (!has_invalid_escape) {
+                    literal_bytes.push_back(*s);
+                }
+                continue;
+            }
+            ++s;
+            const int c = (s < end) ? static_cast<unsigned char>(*s) : -1;
+            if (c >= '0' && c <= '9') {
+                const int grp = c - '0';
+                if (grp > max_submatch) {
+                    max_submatch = grp;
+                }
+                if (!has_invalid_escape) {
+                    flush_literal();
+                    segments.push_back(Segment{grp, 0, 0});
+                }
+            } else if (c == '\\') {
+                if (!has_invalid_escape) {
+                    literal_bytes.push_back('\\');
+                }
+            } else {
+                // Invalid escape: RE2::Rewrite stops emitting further tokens here,
+                // while RE2::MaxSubmatch continues scanning the rest of `rpl` for `\d`.
+                if (!has_invalid_escape) {
+                    flush_literal();
+                    has_invalid_escape = true;
+                }
+            }
+        }
+        if (!has_invalid_escape) {
+            flush_literal();
+        }
+        nsubmatch = 1 + max_submatch;
+    }
+
+    bool exceeds_groups(const re2::RE2& re) const { return max_submatch > re.NumberOfCapturingGroups(); }
+
+    size_t rendered_size(const re2::StringPiece* vec) const {
+        size_t total = literal_bytes.size();
+        for (const auto& seg : segments) {
+            if (seg.group_idx >= 0) {
+                total += vec[seg.group_idx].size();
+            }
+        }
+        return total;
+    }
+};
+
 struct StringFunctionsState {
     std::string pattern;
     std::unique_ptr<re2::RE2> regex;
@@ -77,6 +162,7 @@ struct StringFunctionsState {
     bool use_hyperscan = false;
     bool use_hyperscan_vec = false;
     std::optional<std::string> opt_const_rpl{};
+    std::optional<RegexpReplaceTemplate> opt_const_rpl_template{};
     bool global_mode = true;
     int size_of_pattern = -1;
 
