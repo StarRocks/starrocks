@@ -356,11 +356,12 @@ static void BM_SliceAggHashSet_Insert(benchmark::State& state) {
     for (int i = 0; i < n; ++i) {
         pool[i] = "str_key_value_" + std::to_string(i);
     }
+    MemPool scratch;
     for (auto _ : state) {
         SliceAggHashSet<PhmapSeed1> set;
         for (int i = 0; i < n; ++i) {
             Slice s(pool[i].data(), pool[i].size());
-            set.insert(make_agg_slice_key<PhmapSeed1>(s));
+            set.insert(make_agg_slice_key<SliceWithHash32<PhmapSeed1>>(s, &scratch));
         }
         benchmark::DoNotOptimize(set);
     }
