@@ -91,4 +91,82 @@ TEST_F(CloudConfigurationFactoryTest, test_create_azure) {
     }
 }
 
+TEST_F(CloudConfigurationFactoryTest, test_create_adls2_account_scope) {
+    TCloudConfiguration configuration;
+    configuration.__set_cloud_type(TCloudType::AZURE);
+    const std::string host = "account.dfs.core.windows.net";
+    configuration.__set_cloud_properties(
+            {{"fs.azure.account.key", "global"}, {"fs.azure.account.key." + host, "scoped"}});
+    auto result = CloudConfigurationFactory::create_adls2(configuration, host);
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ("scoped", result->azure_cloud_credential.shared_key);
+    EXPECT_EQ("global", CloudConfigurationFactory::create_adls2(configuration, "other.dfs.core.windows.net")
+                                ->azure_cloud_credential.shared_key);
+    configuration.__set_cloud_properties(
+            {{"fs.azure.account.auth.type." + host, "SAS"}, {"fs.azure.sas.fixed.token." + host, "?sig=scoped"}});
+    result = CloudConfigurationFactory::create_adls2(configuration, host);
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ("sig=scoped", result->azure_cloud_credential.sas_token);
+    EXPECT_FALSE(CloudConfigurationFactory::create_adls2(configuration, "other.dfs.core.windows.net").ok());
+}
+
+TEST_F(CloudConfigurationFactoryTest, test_create_adls2_oauth) {
+    TCloudConfiguration configuration;
+    configuration.__set_cloud_type(TCloudType::AZURE);
+    const std::string host = "account.dfs.core.windows.net";
+    const std::string provider = "org.apache.hadoop.fs.azurebfs.oauth2.";
+    std::map<std::string, std::string> properties = {
+            {"fs.azure.account.auth.type", "OAuth"},
+            {"fs.azure.account.oauth.provider.type", provider + "ClientCredsTokenProvider"},
+            {"fs.azure.account.oauth2.client.id", "client"},
+            {"fs.azure.account.oauth2.client.secret", "secret"},
+            {"fs.azure.account.oauth2.client.endpoint", "https://login.microsoftonline.com/tenant/oauth2/token"}};
+    configuration.__set_cloud_properties(properties);
+    auto result = CloudConfigurationFactory::create_adls2(configuration, host);
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ("client", result->azure_cloud_credential.client_id);
+    EXPECT_EQ("secret", result->azure_cloud_credential.client_secret);
+    EXPECT_EQ("tenant", result->azure_cloud_credential.tenant_id);
+    EXPECT_EQ("https://login.microsoftonline.com", result->azure_cloud_credential.authority_host);
+
+    properties["fs.azure.account.oauth.provider.type"] = provider + "WorkloadIdentityTokenProvider";
+    properties["fs.azure.account.oauth2.token.file"] = "/var/run/token";
+    properties["fs.azure.account.oauth2.msi.tenant"] = "tenant";
+    configuration.__set_cloud_properties(properties);
+    result = CloudConfigurationFactory::create_adls2(configuration, host);
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ("/var/run/token", result->azure_cloud_credential.token_file);
+    EXPECT_TRUE(result->azure_cloud_credential.client_secret.empty());
+    auto other = result->azure_cloud_credential;
+    other.token_file = "/var/run/other-token";
+    EXPECT_FALSE(other == result->azure_cloud_credential);
+    other = result->azure_cloud_credential;
+    other.authority_host = "https://login.microsoftonline.us/";
+    EXPECT_FALSE(other == result->azure_cloud_credential);
+
+    properties["fs.azure.account.oauth.provider.type"] = provider + "MsiTokenProvider";
+    configuration.__set_cloud_properties(properties);
+    result = CloudConfigurationFactory::create_adls2(configuration, host);
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ("client", result->azure_cloud_credential.client_id);
+    EXPECT_TRUE(result->azure_cloud_credential.token_file.empty());
+    EXPECT_TRUE(result->azure_cloud_credential.client_secret.empty());
+}
+
+TEST_F(CloudConfigurationFactoryTest, test_create_adls2_reject_unsupported_credentials) {
+    TCloudConfiguration configuration;
+    configuration.__set_cloud_type(TCloudType::AZURE);
+    const std::string host = "account.dfs.core.windows.net";
+    EXPECT_FALSE(CloudConfigurationFactory::create_adls2(configuration, host).ok());
+    configuration.__set_cloud_properties({{"fs.azure.account.auth.type", "Custom"}});
+    EXPECT_FALSE(CloudConfigurationFactory::create_adls2(configuration, host).ok());
+    configuration.__set_cloud_properties({{"fs.azure.account.auth.type", "OAuth"},
+                                          {"fs.azure.account.oauth2.client.id", "client"},
+                                          {"fs.azure.account.oauth.provider.type", "custom.Provider"}});
+    EXPECT_FALSE(CloudConfigurationFactory::create_adls2(configuration, host).ok());
+    configuration.__set_cloud_properties(
+            {{"fs.azure.account.auth.type", "SAS"}, {"fs.azure.sas.token.provider.type", "custom.Provider"}});
+    EXPECT_FALSE(CloudConfigurationFactory::create_adls2(configuration, host).ok());
+}
+
 } // namespace starrocks
