@@ -851,25 +851,28 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_TOPIC_PROPERTY).append("\"=\"");
         sb.append(topic).append("\",\n");
 
-        sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY).append("\"=\"");
-        if (customeKafkaPartitionOffsets == null) {
-            List<Integer> sortedPartitions = Lists.newArrayList(currentKafkaPartitions);
-            Collections.sort(sortedPartitions);
-            sb.append(Joiner.on(",").join(sortedPartitions)).append("\",\n");
-        } else {
-            class PairComparator implements Comparator<Pair<Integer, Long>> {
-                @Override
-                public int compare(Pair<Integer, Long> p1, Pair<Integer, Long> p2) {
-                    return Integer.compare(p1.first, p2.first);
-                }
-            }
-            Collections.sort(customeKafkaPartitionOffsets, new PairComparator());
+        // Only a job created with explicit kafka_partitions/kafka_offsets prints them back. For a job
+        // that did not specify them, currentKafkaPartitions is runtime state owned by the leader's
+        // scheduler, not part of the job definition. It is serialized ("ctkp"), but always as an empty
+        // list: the job is logged before the scheduler sees it and the image is built from replayed
+        // state. So a follower FE always holds an empty list and its DDL carried "kafka_partitions"="",
+        // which CREATE ROUTINE LOAD rejects, while the leader holds every discovered partition, so
+        // re-creating from its DDL would pin the job to those partitions.
+        boolean printedPartitions = false;
+        // ALTER enables discovery by replacing this list. Use the same reference for the check and
+        // copy so a replacement between them cannot turn a nonempty legacy list into empty DDL.
+        List<Integer> customPartitions = customKafkaPartitions;
+        if (customeKafkaPartitionOffsets != null) {
+            // sort a copy: SHOW CREATE ROUTINE LOAD is a read path and must not reorder the job's state
+            List<Pair<Integer, Long>> sortedPartitionOffsets = Lists.newArrayList(customeKafkaPartitionOffsets);
+            sortedPartitionOffsets.sort(Comparator.comparingInt(partitionOffset -> partitionOffset.first));
             List<Integer> customeKafkaPartitions = new ArrayList<>();
             List<Long> customeKakfaOffsets = new ArrayList<>();
-            for (Pair<Integer, Long> partitionOffset : customeKafkaPartitionOffsets) {
+            for (Pair<Integer, Long> partitionOffset : sortedPartitionOffsets) {
                 customeKafkaPartitions.add(partitionOffset.first);
                 customeKakfaOffsets.add(partitionOffset.second);
             }
+            sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY).append("\"=\"");
             sb.append(Joiner.on(",").join(customeKafkaPartitions)).append("\",\n");
 
             sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_OFFSETS_PROPERTY).append("\"=\"");
@@ -886,6 +889,17 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
             }
             sb.append("\",\n");
+            printedPartitions = true;
+        } else if (customPartitions != null && !customPartitions.isEmpty()) {
+            // A pinned job persisted by a release that did not yet keep the CREATE-time offsets (the
+            // "ckpo" field): keep its partition list so the DDL re-creates a pinned job. Without
+            // kafka_offsets the offsets fall back to kafka_default_offsets / OFFSET_END, as for any
+            // CREATE ROUTINE LOAD that lists partitions only.
+            List<Integer> sortedPartitions = Lists.newArrayList(customPartitions);
+            Collections.sort(sortedPartitions);
+            sb.append("\"").append(CreateRoutineLoadStmt.KAFKA_PARTITIONS_PROPERTY).append("\"=\"");
+            sb.append(Joiner.on(",").join(sortedPartitions)).append("\",\n");
+            printedPartitions = true;
         }
         if (confluentSchemaRegistryUrl != null) {
             sb.append("\"").append(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL).append("\"=\"");
@@ -895,6 +909,13 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         Map<String, String> maskedProperties = getMaskedCustomProperties();
         if (useDefaultGroupId) {
             maskedProperties.remove(PROPERTY_KAFKA_GROUP_ID);
+        }
+        if (!printedPartitions) {
+            // kafka_partition_discovery is only meaningful together with kafka_partitions (CREATE ROUTINE
+            // LOAD rejects it otherwise). A job that carries the property without a partition list was
+            // unpinned by ALTER ROUTINE LOAD enabling discovery; it already consumes every partition of
+            // the topic, which is exactly what the re-created job does without the property.
+            maskedProperties.remove(CreateRoutineLoadStmt.KAFKA_PARTITION_DISCOVERY);
         }
         Iterator<Map.Entry<String, String>> iterator = maskedProperties.entrySet().iterator();
         while (iterator.hasNext()) {
