@@ -242,8 +242,11 @@ public class SplitScanORToUnionRule extends TransformationRule {
         Map<Column, ColumnRefOperator> columnToRefs = Maps.newHashMap();
         Map<ColumnRefOperator, Column> refToColumns = Maps.newHashMap();
 
+        int relationId = factory.getNextRelationId();
         scan.getColumnMetaToColRefMap().forEach((meta, ref) -> {
             ColumnRefOperator newRef = factory.create(ref.getName(), ref.getType(), ref.isNullable());
+            factory.updateColumnToRelationIds(newRef.getId(), relationId);
+            factory.updateColumnRefToColumns(newRef, meta, scan.getTable());
             columnToRefs.put(meta, newRef);
             replaceRefs.put(ref, newRef);
         });
