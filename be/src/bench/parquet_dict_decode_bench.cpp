@@ -55,8 +55,7 @@ static void BM_DictDecoder(benchmark::State& state) {
     }
 
     auto null_score = state.range(0);
-    auto nulls_ptr =
-            ColumnHelper::as_column<NullableColumn>(ColumnHelper::create_column(TYPE_INT_DESC, true));
+    auto nulls_ptr = ColumnHelper::as_column<NullableColumn>(ColumnHelper::create_column(TYPE_INT_DESC, true));
     NullableColumn* nulls = nulls_ptr.get();
     nulls->resize(kTestChunkSize);
     auto& null_data = nulls->null_column_raw_ptr()->get_data();

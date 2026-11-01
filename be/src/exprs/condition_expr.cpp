@@ -278,8 +278,7 @@ public:
                 // call select if
                 auto selector = bhs->only_null() ? UInt8Column::create(num_rows) : bhs;
                 auto select_data = dispatch_nonull_template<SelectIfOP, Type>(lds, rds, bhs, type());
-                auto select_null =
-                        dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(lns, rns, bhs, TYPE_BOOLEAN_DESC);
+                auto select_null = dispatch_nonull_template<SelectIfOP, TYPE_BOOLEAN>(lns, rns, bhs, TYPE_BOOLEAN_DESC);
                 auto res = NullableColumn::create(select_data, ColumnHelper::as_column<NullColumn>(select_null));
                 return res;
             } else {
