@@ -19,10 +19,12 @@
 #include "base/uid_util.h"
 #include "common/status.h"
 #include "compute_env/spill/mem_tracker_guard.h"
+#include "compute_env/spill/spiller.hpp"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 
 namespace starrocks::pipeline {
 Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
+    _state = state;
     RETURN_IF_ERROR(AggregateBlockingSourceOperator::prepare(state));
     RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
@@ -67,7 +69,30 @@ bool SpillableAggregateBlockingSourceOperator::has_output() const {
     if (_aggregator->is_spilled_eos() && _has_last_chunk) {
         return true;
     }
+    // No buffered chunk, not at EOF, and nothing in flight: the restore chain has stalled. A restore task
+    // is only re-armed from SpillerReader::restore(), which needs a chunk to pull, so without this the
+    // operator would report "no output" forever and the query would hang silently. Re-arm here, the same
+    // way the partitionwise aggregate/distinct and hash-join probe sources do.
+    _rearm_restore_if_stalled();
     return false;
+}
+
+void SpillableAggregateBlockingSourceOperator::_rearm_restore_if_stalled() const {
+    const auto& spiller = _aggregator->spiller();
+    if (spiller->is_cancel()) {
+        return;
+    }
+    const auto& reader = spiller->reader();
+    if (reader == nullptr) {
+        return;
+    }
+    RuntimeState* state = _state;
+    Status st = reader->rearm_if_stalled(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(reader)));
+    if (!st.ok()) {
+        // has_output() is const and cannot return a status; record it on the spiller so the next
+        // pull_chunk() fails fast instead of the query hanging.
+        spiller->update_spilled_task_status(std::move(st));
+    }
 }
 
 bool SpillableAggregateBlockingSourceOperator::is_finished() const {
