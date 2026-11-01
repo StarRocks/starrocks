@@ -15,6 +15,8 @@
 #include "base/string/string_searcher.h"
 
 #include <gtest/gtest.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <random>
 #include <string>
@@ -22,6 +24,7 @@
 #include <vector>
 
 #include "base/string/tight_buffer.h"
+#include "base/string/volnitsky.h"
 
 namespace starrocks {
 
@@ -253,6 +256,44 @@ TEST_F(StringSearcherTest, AllLengthsOffsetsAndKernelEquivalence) {
                 }
             }
         }
+    }
+}
+
+TEST_F(StringSearcherTest, LongHomogeneousNeedleCapsAnchorSelection) {
+    const size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    const size_t num_pages = 32;
+    const size_t map_bytes = num_pages * page_size;
+    const size_t needle_size = 100000;
+    ASSERT_LT(needle_size, map_bytes);
+
+    void* mapped = mmap(nullptr, map_bytes, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    ASSERT_NE(MAP_FAILED, mapped);
+
+    const auto* needle_ptr = static_cast<const char*>(mapped);
+    VolnitskyUTF8 volnitsky(needle_ptr, needle_size, 278528);
+
+    std::vector<unsigned char> residency(num_pages, 0);
+    ASSERT_EQ(0, mincore(mapped, map_bytes, residency.data()));
+    // Anchor selection must stay within the first page and never fault in middle pages (e.g. page 8 at 32 KiB).
+    EXPECT_EQ(0, residency[8] & 1) << "StringSearcher constructor scanned past bounded interior anchor window";
+    ASSERT_EQ(0, munmap(mapped, map_bytes));
+
+    const std::string long_needle(needle_size, 'a');
+    StringSearcher searcher(long_needle.data(), long_needle.size());
+
+    const std::string miss_haystack(278528, 'b');
+    const auto* miss_begin = reinterpret_cast<const uint8_t*>(miss_haystack.data());
+    const auto* miss_end = miss_begin + miss_haystack.size();
+    for (const auto* r : run_all_kernels(searcher, miss_begin, miss_end, long_needle.size())) {
+        EXPECT_EQ(miss_end, r);
+    }
+
+    std::string hit_haystack(100100, 'b');
+    hit_haystack.replace(37, long_needle.size(), long_needle);
+    const auto* hit_begin = reinterpret_cast<const uint8_t*>(hit_haystack.data());
+    const auto* hit_end = hit_begin + hit_haystack.size();
+    for (const auto* r : run_all_kernels(searcher, hit_begin, hit_end, long_needle.size())) {
+        EXPECT_EQ(hit_begin + 37, r);
     }
 }
 

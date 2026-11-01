@@ -800,6 +800,36 @@ TEST_F(StringFunctionLocateTest, LocateConstStartPosNullableAndUtf8) {
                 ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
         EXPECT_EQ(3, data_col->get_data()[0]);
     }
+
+    // 6. Long homogeneous constant needle (100,000 'a' bytes) across a short chunk and a matching chunk
+    {
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        const std::string long_needle(100000, 'a');
+
+        auto short_str = BinaryColumn::create();
+        short_str->append("short_row_1");
+        short_str->append("short_row_2");
+        Columns short_cols;
+        short_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(long_needle), 2));
+        short_cols.emplace_back(std::move(short_str));
+        ColumnPtr short_res = StringFunctions::locate(ctx.get(), short_cols).value();
+        auto short_data = ColumnHelper::cast_to<TYPE_INT>(short_res);
+        ASSERT_EQ(2, short_data->size());
+        EXPECT_EQ(0, short_data->get_data()[0]);
+        EXPECT_EQ(0, short_data->get_data()[1]);
+
+        auto hit_str = BinaryColumn::create();
+        hit_str->append(std::string(100050, 'b'));
+        hit_str->append("中文" + long_needle + "尾");
+        Columns hit_cols;
+        hit_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(long_needle), 2));
+        hit_cols.emplace_back(std::move(hit_str));
+        ColumnPtr hit_res = StringFunctions::locate(ctx.get(), hit_cols).value();
+        auto hit_data = ColumnHelper::cast_to<TYPE_INT>(hit_res);
+        ASSERT_EQ(2, hit_data->size());
+        EXPECT_EQ(0, hit_data->get_data()[0]);
+        EXPECT_EQ(3, hit_data->get_data()[1]);
+    }
 }
 
 } // namespace starrocks
