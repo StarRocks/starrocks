@@ -717,7 +717,88 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
     }
 }
 
+bool PipelineDriver::is_still_pending_finish() {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+    return source_operator()->pending_finish() || sink_operator()->pending_finish();
+}
+
+StatusOr<bool> PipelineDriver::is_not_blocked() {
+    // Readiness checks can release buffers or submit spill tasks that capture the current tracker.
+    // The blocked-driver poller does not otherwise run in this fragment's memory context.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+    // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+    if (sink_operator()->is_finished()) {
+        return true;
+    }
+    // PRECONDITION_BLOCK
+    if (_state == DriverState::PRECONDITION_BLOCK) {
+        if (is_precondition_block()) {
+            return false;
+        }
+
+        mark_precondition_ready();
+
+        RETURN_IF_ERROR(check_short_circuit());
+        if (_state == DriverState::PENDING_FINISH) {
+            return false;
+        }
+        // Driver state must be set to a state different from PRECONDITION_BLOCK bellow,
+        // to avoid call mark_precondition_ready() and check_short_circuit() multiple times.
+    }
+
+    // OUTPUT_FULL
+    if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
+        set_driver_state(DriverState::OUTPUT_FULL);
+        return false;
+    }
+
+    // INPUT_EMPTY
+    if (!source_operator()->has_output() && !source_operator()->is_finished()) {
+        set_driver_state(DriverState::INPUT_EMPTY);
+        return false;
+    }
+
+    return true;
+}
+
+bool PipelineDriver::check_is_ready() {
+    // Notifications may originate from an I/O thread or a different fragment's driver.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
+    // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
+    if (sink_operator()->is_finished()) {
+        return true;
+    }
+    if (_state == DriverState::PRECONDITION_BLOCK) {
+        if (is_precondition_block()) {
+            return false;
+        }
+        mark_precondition_ready();
+        // In the event scheduler, we avoid calling check_short_circuit inside check_is_ready.
+        // Because check_short_circuit may trigger cascading recursive calls such as set_finished.
+        // It will increase scheduler complexity (like call set finished in unknown thread).
+        // Instead, we directly return true after the precondition block state changes.
+        // The check is performed in driver::process.
+        return true;
+    }
+
+    // OUTPUT_FULL
+    if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
+        set_driver_state(DriverState::OUTPUT_FULL);
+        return false;
+    }
+
+    // INPUT_EMPTY
+    if (!source_operator()->has_output() && !source_operator()->is_finished()) {
+        set_driver_state(DriverState::INPUT_EMPTY);
+        return false;
+    }
+
+    return true;
+}
+
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+    // Cancellation also runs on the blocked-driver poller and can release operator-owned memory.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
     if (this->query_runtime_state()->is_query_expired()) {
         if (_has_log_cancelled.exchange(true) == false) {
             VLOG_ROW << "begin to cancel operators for " << to_readable_string();
