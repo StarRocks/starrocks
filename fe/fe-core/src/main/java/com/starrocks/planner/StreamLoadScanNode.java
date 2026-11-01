@@ -54,6 +54,7 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -271,6 +272,12 @@ public class StreamLoadScanNode extends LoadScanNode {
         params.setEscape(streamLoadInfo.getEscape());
         params.setStrict_mode(streamLoadInfo.isStrictMode());
         params.setJson_file_size_limit(Config.json_file_size_limit);
+        // Routine-load opt-in carried in the generic property bag rather than a new thrift field, so
+        // a rolling upgrade can mix FE and BE versions: a BE without the feature never reads this
+        // key, and a BE with it reads only "true".
+        if (streamLoadInfo.isSkipOnFatalParseError()) {
+            params.putToProperties(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR, "true");
+        }
         if (streamLoadInfo.getConfluentSchemaRegistryUrl() != null) {
             params.setConfluent_schema_registry_url(streamLoadInfo.getConfluentSchemaRegistryUrl());
         }

@@ -82,6 +82,9 @@ public class StreamLoadInfo {
     private String path;
     private boolean negative = false;
     private boolean strictMode = false; // default is false
+    // Routine-load only (CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR). Plain stream
+    // load never sets it, so its parse-error behaviour is unchanged.
+    private boolean skipOnFatalParseError = false;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private int timeout = Config.stream_load_default_timeout_second;
     private long execMemLimit = 0;
@@ -217,6 +220,10 @@ public class StreamLoadInfo {
 
     public boolean isStrictMode() {
         return strictMode;
+    }
+
+    public boolean isSkipOnFatalParseError() {
+        return skipOnFatalParseError;
     }
 
     public String getTimezone() {
@@ -463,6 +470,7 @@ public class StreamLoadInfo {
         rowDelimiter = routineLoadJob.getRowDelimiter();
         partitions = routineLoadJob.getPartitions();
         strictMode = routineLoadJob.isStrictMode();
+        skipOnFatalParseError = routineLoadJob.isSkipOnFatalParseError();
         timezone = routineLoadJob.getTimezone();
         timeout = (int) routineLoadJob.getTaskTimeoutSecond();
         if (!routineLoadJob.getJsonPaths().isEmpty()) {

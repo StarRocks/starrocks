@@ -330,6 +330,8 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
             ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
                     .put("pause_on_fatal_parse_error", "true");
+            ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
+                    .put("skip_on_fatal_parse_error", "true");
             routineLoadJob.setPartitionOffset(0, 12345);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
@@ -338,6 +340,8 @@ public class RoutineLoadJobTest {
             Assertions.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
             Assertions.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
             Assertions.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"true\""));
+            Assertions.assertTrue(showInfo.get(10).contains("\"skip_on_fatal_parse_error\":\"true\""));
+            Assertions.assertTrue(routineLoadJob.isSkipOnFatalParseError());
 
             TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
             Assertions.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
@@ -390,6 +394,9 @@ public class RoutineLoadJobTest {
             Assertions.assertEquals("RUNNING", showInfo.get(7));
             Assertions.assertEquals("", showInfo.get(16));
             Assertions.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"false\""));
+            // Never set on this job: the getter falls back to the default and nothing is displayed.
+            Assertions.assertFalse(routineLoadJob.isSkipOnFatalParseError());
+            Assertions.assertFalse(showInfo.get(10).contains("skip_on_fatal_parse_error"));
 
             loadJobInfo = routineLoadJob.toThrift();
             Assertions.assertEquals("RUNNING", loadJobInfo.getState());
@@ -870,6 +877,7 @@ public class RoutineLoadJobTest {
         String taskTimeout = "20";
         String taskConsumeTime = "3";
         String pauseOnFatalParseError = "false";
+        String skipOnFatalParseError = "true";
         String originStmt = "alter routine load for db.job1 " +
                 "properties (" +
                 "   \"desired_concurrent_number\" = \"" + desiredConcurrentNumber + "\"," +
@@ -881,6 +889,7 @@ public class RoutineLoadJobTest {
                 "   \"task_timeout_second\" = \"" + taskTimeout + "\"," +
                 "   \"strict_mode\" = \"" + strictMode + "\"," +
                 "   \"pause_on_fatal_parse_error\" = \"" + pauseOnFatalParseError + "\"," +
+                "   \"skip_on_fatal_parse_error\" = \"" + skipOnFatalParseError + "\"," +
                 "   \"timezone\" = \"" + timeZone + "\"," +
                 "   \"jsonpaths\" = \"" + jsonPaths + "\"," +
                 "   \"strip_outer_array\" = \"" + stripOuterArray + "\"," +
@@ -913,6 +922,7 @@ public class RoutineLoadJobTest {
         Assertions.assertEquals(Boolean.parseBoolean(stripOuterArray), routineLoadJob.isStripOuterArray());
         Assertions.assertEquals(jsonRoot, routineLoadJob.getJsonRoot());
         Assertions.assertEquals(Boolean.parseBoolean(pauseOnFatalParseError), routineLoadJob.isPauseOnFatalParseError());
+        Assertions.assertEquals(Boolean.parseBoolean(skipOnFatalParseError), routineLoadJob.isSkipOnFatalParseError());
     }
 
     @Test
@@ -1427,6 +1437,40 @@ public class RoutineLoadJobTest {
             String errorMsg =
                     "ErrorReason{errCode = 5611, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
             Assertions.assertEquals(errorMsg, routineLoadJob.getPauseReason());
+        }
+
+        // skipOnFatalParseError = true, pauseOnFatalParseError = false.
+        // The skip happens in the BE; the FE deliberately does NOT change how an aborted
+        // PARSE_ERROR task is handled (no offset skipping fallback), so a parse error that still
+        // reaches the FE — e.g. from a BE that predates the option — behaves exactly as before:
+        // the job stays RUNNING and the task is retried.
+        {
+            List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+            routineLoadTaskInfoList.add(routineLoadTaskInfo);
+            RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+            ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
+                    .put("skip_on_fatal_parse_error", "true");
+            Assertions.assertTrue(routineLoadJob.isSkipOnFatalParseError());
+            routineLoadJob.afterAborted(transactionState,
+                    TxnStatusChangeReason.PARSE_ERROR.toString());
+            Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        }
+
+        // Both set: pause_on_fatal_parse_error remains the safety net when a parse error does reach the FE.
+        {
+            List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+            routineLoadTaskInfoList.add(routineLoadTaskInfo);
+            RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+            Map<String, String> props = (Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties");
+            props.put("skip_on_fatal_parse_error", "true");
+            props.put("pause_on_fatal_parse_error", "true");
+            routineLoadJob.afterAborted(transactionState,
+                    TxnStatusChangeReason.PARSE_ERROR.toString());
+            Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
         }
     }
 
