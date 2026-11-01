@@ -371,27 +371,24 @@ Status BinaryPlainPageDecoder<Type>::next_range_with_filter(
         }
 
         BinaryColumn::Offsets temp_offsets;
-        temp_offsets.resize(num_rows + 1);
-        temp_offsets.set(0, 0);
+        temp_offsets.resize_uninitialized(num_rows + 1);
+        auto* __restrict dest_offsets = temp_offsets.small_storage().data();
+        dest_offsets[0] = 0;
 
         const uint32_t page_data_offset = offset_uncheck(idx);
-        for (uint32_t i = idx; i < end - 1; i++) {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-            auto offset = _offsets_ptr[i + 1];
+        const uint32_t* __restrict src_offsets = _offsets_ptr + idx + 1;
+        uint32_t* __restrict out_offsets = dest_offsets + 1;
+        const size_t count = (end - 1) - idx;
+        for (size_t k = 0; k < count; ++k) {
+            out_offsets[k] = src_offsets[k] - page_data_offset;
+        }
 #else
-            // direct call offset_uncheck() will break auto-vectorized
-            // maybe we can remove this condition compile after we upgrade the toolchain
-            auto offset = offset_uncheck(i + 1);
+        for (uint32_t i = idx; i < end - 1; ++i) {
+            dest_offsets[i - idx + 1] = offset_uncheck(i + 1) - page_data_offset;
+        }
 #endif
-
-            uint32_t current_offset = offset - page_data_offset;
-            temp_offsets.set(i - idx + 1, current_offset);
-        }
-
-        for (uint32_t i = end - 1; i < end; i++) {
-            uint32_t current_offset = offset(i + 1) - page_data_offset;
-            temp_offsets.set(i - idx + 1, current_offset);
-        }
+        dest_offsets[num_rows] = offset(end) - page_data_offset;
 
         size_t data_length = temp_offsets.back();
         const void* data_ptr = _data.get_data() + page_data_offset;
