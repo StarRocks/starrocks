@@ -184,6 +184,26 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void timeDiffRoundsTowardsZero() {
+        // The BE divides the difference in microseconds by 1000000, which drops the fraction of the second,
+        // and that is what the FE has to give for constants
+        ConstantOperator start = ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0, 0));
+        ConstantOperator after10s500ms = ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0, 10, 500_000_000));
+        ConstantOperator after10s = ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0, 10));
+        ConstantOperator almost1s = ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 999_999_000));
+        ConstantOperator nextDay = ConstantOperator.createDatetime(LocalDateTime.of(2020, 1, 2, 0, 0, 0, 1_000));
+
+        assertEquals(10.0, ScalarOperatorFunctions.timeDiff(after10s500ms, start).getTime(), 0);
+        assertEquals(-10.0, ScalarOperatorFunctions.timeDiff(start, after10s500ms).getTime(), 0);
+        assertEquals(10.0, ScalarOperatorFunctions.timeDiff(after10s, start).getTime(), 0);
+        assertEquals(-10.0, ScalarOperatorFunctions.timeDiff(start, after10s).getTime(), 0);
+        assertEquals(0.0, ScalarOperatorFunctions.timeDiff(almost1s, start).getTime(), 0);
+        assertEquals(0.0, ScalarOperatorFunctions.timeDiff(start, almost1s).getTime(), 0);
+        assertEquals(86400.0, ScalarOperatorFunctions.timeDiff(nextDay, start).getTime(), 0);
+        assertEquals(-86400.0, ScalarOperatorFunctions.timeDiff(start, nextDay).getTime(), 0);
+    }
+
+    @Test
     public void dateDiff() {
         assertEquals(-1602,
                 ScalarOperatorFunctions.dateDiff(O_DT_20101102_183010, O_DT_20150323_092355).getInt());
