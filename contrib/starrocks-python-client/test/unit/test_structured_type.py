@@ -16,10 +16,12 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-import pytest
+from sqlalchemy import testing
+from sqlalchemy.testing import fixtures
 
 from starrocks import datatype
 from starrocks.dialect import StarRocksDialect
+
 
 _DIALECT = StarRocksDialect()
 
@@ -32,7 +34,7 @@ def _col_spec(structured_type):
     return structured_type.get_col_spec()
 
 
-class TestStructuredTypeSubItems:
+class StructuredTypeSubItemsTest(fixtures.TestBase):
     def test_array_with_scalar_items(self):
         array_type = datatype.ARRAY(datatype.INTEGER)
 
@@ -115,7 +117,7 @@ class TestStructuredTypeSubItems:
         }
 
 
-class TestStructuredTypeColSpec:
+class StructuredTypeColSpecTest(fixtures.TestBase):
     def test_array_simple_col_spec(self):
         array_type = datatype.ARRAY(datatype.INTEGER)
 
@@ -178,7 +180,7 @@ def _process(type_obj, value):
     return proc(value)
 
 
-class TestArrayResultProcessor:
+class ArrayResultProcessorTest(fixtures.TestBase):
     def test_array_of_ints(self):
         assert _process(datatype.ARRAY(datatype.INTEGER), "[1,2,3]") == [1, 2, 3]
 
@@ -216,17 +218,18 @@ class TestArrayResultProcessor:
         raw = """['{"a":1}','{"b":2}']"""
         assert _process(datatype.ARRAY(datatype.JSON()), raw) == raw
 
-    @pytest.mark.parametrize("json_str,expected", [
+    @testing.combinations(
         ("[1]", [1]),
         ("[]", []),
         ('["x","y","z"]', ["x", "y", "z"]),
-    ])
+        argnames="json_str,expected",
+    )
     def test_parametrized_cases(self, json_str, expected):
         item_type = datatype.INTEGER if expected and isinstance(expected[0], int) else datatype.VARCHAR(10)
         assert _process(datatype.ARRAY(item_type), json_str) == expected
 
 
-class TestMapResultProcessor:
+class MapResultProcessorTest(fixtures.TestBase):
     def test_simple_map(self):
         assert _process(datatype.MAP(datatype.VARCHAR(10), datatype.INTEGER), '{"a":1,"b":2}') == {"a": 1, "b": 2}
 
@@ -257,7 +260,7 @@ class TestMapResultProcessor:
         assert result["k"] == Decimal('0.123456789012345678')
 
 
-class TestStructResultProcessor:
+class StructResultProcessorTest(fixtures.TestBase):
     def test_simple_struct(self):
         t = datatype.STRUCT(name=datatype.VARCHAR(50), age=datatype.INTEGER)
         assert _process(t, '{"name":"Alice","age":30}') == {"name": "Alice", "age": 30}
@@ -301,7 +304,7 @@ class TestStructResultProcessor:
         assert result["price"] == Decimal('0.123456789012345678')
 
 
-class TestMapNonStringKeys:
+class MapNonStringKeysTest(fixtures.TestBase):
     """MAP keys that are non-string types must be cast from JSON string keys."""
 
     def test_integer_keys(self):

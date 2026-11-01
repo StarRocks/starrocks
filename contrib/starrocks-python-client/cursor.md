@@ -53,11 +53,13 @@ Please follow these standards and procedures when assisting with development:
   - **Markdownlint**: Follow the project's Markdownlint standards for all Markdown files.
 
 - **Testing Requirements**:
-  - **Framework**: Use `pytest`.
+  - **Framework**: Use `pytest` with SQLAlchemy's testing plugin. Test classes derive from `sqlalchemy.testing.fixtures.TestBase` and their methods are plain functions named `test_*`; the plugin ignores anything else, and collection fails for a module-level test function or a plain test class. The plugin also drops, without a word, a test that is a classmethod, a staticmethod or a callable object, a test whose decorator doesn't use `functools.wraps`, a test class nested in another unless both derive from `TestBase`, and a class that inherits `__test__ = False`.
+    - A test or helper under a mark, or under `testing.provide_metadata`, takes no return annotation, no parameter annotated with a non-builtin type, and no default such as `object()` whose `repr` isn't source: SQLAlchemy 1.4 rebuilds its signature as source and fails to import the module.
   - **Practice**:
     - Every new feature or bug fix must have corresponding test cases, following a "unit tests first, then integration tests" sequence.
+    - Mark a test StarRocks cannot support with `testing.skip("starrocks", reason)`, and one that fails because of a known bug, in the dialect or in StarRocks, with `testing.fails_on("starrocks", reason)`, or `testing.fails_if(condition, reason)` when the bug has a condition, such as a server version.
   - **Review**: I expect to review the test cases you write or modify before you implement the code to pass them. [[memory:8065598]]
-  - **Running Tests**: Use the `pytest test/` command to run all tests.
+  - **Running Tests**: Run `pytest` from the client directory; every test, including SQLAlchemy's and Alembic's dialect suites, runs against a live StarRocks cluster. The README's Tests section explains how to run part of the tests, the test layout, and the plugin's options.
 
 ## 4. Documentation Standards
 
