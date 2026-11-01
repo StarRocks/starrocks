@@ -12,16 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Unit tests for Materialized View comparison logic.
-"""
+"""Materialized view comparison in autogenerate."""
 
 from unittest.mock import Mock
 
 from alembic.operations import ops
-from alembic.testing import eq_
-import pytest
-from sqlalchemy import MetaData, Table
+from sqlalchemy import MetaData, Table, testing
+from sqlalchemy.testing import eq_, expect_raises_message, fixtures
 
 from starrocks.alembic.compare import _compare_mv
 from starrocks.alembic.ops import AlterMaterializedViewOp
@@ -29,10 +26,12 @@ from starrocks.common.params import DialectName, TableInfoKey, TableKind, TableO
 from starrocks.sql.schema import MaterializedView
 
 
-class TestCompareMaterializedView:
-    """Test _compare_mv function directly."""
+class CompareMaterializedViewTest(fixtures.TestBase):
+    """``_compare_mv``: refresh and properties are altered in place; other changes are refused."""
 
-    def setup_method(self, method):
+    __requires__ = ("sqlalchemy_2",)
+
+    def setup_test(self):
         self.mock_autogen_context = Mock()
         self.mock_autogen_context.dialect = Mock()
         self.mock_autogen_context.dialect.name = DialectName
@@ -126,7 +125,7 @@ class TestCompareMaterializedView:
         conn_mv = self._create_reflected_mv("my_mv", definition="SELECT 1")
         meta_mv = MaterializedView("my_mv", MetaData(), definition="SELECT 2")
 
-        with pytest.raises(NotImplementedError, match="does not support altering MV definition"):
+        with expect_raises_message(NotImplementedError, "does not support altering MV definition"):
             _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
 
     def test_modify_mv_partition_by_changed(self):
@@ -135,7 +134,7 @@ class TestCompareMaterializedView:
         conn_mv = self._create_reflected_mv("my_mv", definition="SELECT 1", partition_by="date_trunc('day', dt)")
         meta_mv = MaterializedView("my_mv", MetaData(), definition="SELECT 1", starrocks_partition_by="dt")
 
-        with pytest.raises(NotImplementedError, match="does not support 'ALTER MATERIALIZED VIEW PARTITION BY'"):
+        with expect_raises_message(NotImplementedError, "does not support 'ALTER MATERIALIZED VIEW PARTITION BY'"):
             _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
 
     def test_modify_mv_distributed_by_changed(self):
@@ -144,16 +143,15 @@ class TestCompareMaterializedView:
         conn_mv = self._create_reflected_mv("my_mv", definition="SELECT 1", distributed_by="HASH(id)")
         meta_mv = MaterializedView("my_mv", MetaData(), definition="SELECT 1", starrocks_distributed_by="RANDOM")
 
-        with pytest.raises(NotImplementedError, match="does not support 'ALTER MATERIALIZED VIEW DISTRIBUTED BY'"):
+        with expect_raises_message(NotImplementedError, "does not support 'ALTER MATERIALIZED VIEW DISTRIBUTED BY'"):
             _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
 
-    @pytest.mark.parametrize(
-        "conn_distribution",
-        [
-            "RANDOM BUCKETS 10",  # StarRocks auto-assigned an explicit bucket count
-            "HASH(id)",           # older MV that defaulted to HASH on the first column
-            "RANDOM",             # auto RANDOM (equals the default)
-        ],
+    @testing.combinations(
+        ("explicit_bucket_count", "RANDOM BUCKETS 10"),
+        ("older_default_hash_on_first_column", "HASH(id)"),
+        ("default_random", "RANDOM"),
+        argnames="conn_distribution",
+        id_="ia",
     )
     def test_no_change_mv_distribution_omitted(self, conn_distribution):
         """No change: metadata that omits DISTRIBUTED BY must not diff or crash.
@@ -177,7 +175,7 @@ class TestCompareMaterializedView:
         conn_mv = self._create_reflected_mv("my_mv", definition="SELECT 1", order_by="id")
         meta_mv = MaterializedView("my_mv", MetaData(), definition="SELECT 1", starrocks_order_by="name")
 
-        with pytest.raises(NotImplementedError, match="does not support 'ALTER MATERIALIZED VIEW ORDER BY'"):
+        with expect_raises_message(NotImplementedError, "does not support 'ALTER MATERIALIZED VIEW ORDER BY'"):
             _compare_mv(self.mock_autogen_context, upgrade_ops, None, "my_mv", conn_mv, meta_mv)
 
     # ========================================================================
@@ -223,34 +221,32 @@ class TestCompareMaterializedView:
 
         eq_(len(upgrade_ops.ops), 0)
 
-    @pytest.mark.parametrize(
-        "conn_refresh, meta_refresh",
-        [
-            # StarRocks 4.1+ reflects a periodic async refresh with the SCHEDULE keyword,
-            # while metadata declares it as ASYNC. These must be treated as equivalent.
-            ("SCHEDULE EVERY(INTERVAL 10 MINUTE)", "ASYNC EVERY(INTERVAL 10 MINUTE)"),
-            # START() quoting differs between SHOW CREATE (double) and metadata (single).
-            (
-                'SCHEDULE START("2024-01-01 10:00:00") EVERY(INTERVAL 1 HOUR)',
-                "ASYNC START('2024-01-01 10:00:00') EVERY(INTERVAL 1 HOUR)",
-            ),
-            # Case/whitespace only differences.
-            ("async every(interval 10 minute)", "ASYNC EVERY(INTERVAL 10 MINUTE)"),
-            # SCHEDULE may appear after an IMMEDIATE/DEFERRED moment prefix. StarRocks 4.1 emits
-            # "REFRESH DEFERRED SCHEDULE EVERY(...)" for a deferred scheduled MV, which reflection
-            # canonicalizes to "DEFERRED ASYNC ..."; metadata using the 4.1 SCHEDULE spelling must
-            # still be treated as equivalent.
-            ("DEFERRED ASYNC EVERY(INTERVAL 1 HOUR)", "DEFERRED SCHEDULE EVERY(INTERVAL 1 HOUR)"),
-            ("IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
-            # Both sides using the SCHEDULE spelling with a moment prefix.
-            ("DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)", "DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)"),
-            # IMMEDIATE is the default refresh moment and StarRocks never renders it in SHOW CREATE
-            # (only DEFERRED is emitted), so reflection yields no moment. Metadata that explicitly
-            # declares IMMEDIATE must still be treated as equivalent to the reflected form.
-            ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)"),
-            ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
-            ("ASYNC", "IMMEDIATE ASYNC"),
-        ],
+    @testing.combinations(
+        # StarRocks 4.1+ reflects a periodic async refresh with the SCHEDULE keyword,
+        # while metadata declares it as ASYNC. These must be treated as equivalent.
+        ("SCHEDULE EVERY(INTERVAL 10 MINUTE)", "ASYNC EVERY(INTERVAL 10 MINUTE)"),
+        # START() quoting differs between SHOW CREATE (double) and metadata (single).
+        (
+            'SCHEDULE START("2024-01-01 10:00:00") EVERY(INTERVAL 1 HOUR)',
+            "ASYNC START('2024-01-01 10:00:00') EVERY(INTERVAL 1 HOUR)",
+        ),
+        # Case/whitespace only differences.
+        ("async every(interval 10 minute)", "ASYNC EVERY(INTERVAL 10 MINUTE)"),
+        # SCHEDULE may appear after an IMMEDIATE/DEFERRED moment prefix. StarRocks 4.1 emits
+        # "REFRESH DEFERRED SCHEDULE EVERY(...)" for a deferred scheduled MV, which reflection
+        # canonicalizes to "DEFERRED ASYNC ..."; metadata using the 4.1 SCHEDULE spelling must
+        # still be treated as equivalent.
+        ("DEFERRED ASYNC EVERY(INTERVAL 1 HOUR)", "DEFERRED SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+        ("IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+        # Both sides using the SCHEDULE spelling with a moment prefix.
+        ("DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)", "DEFERRED SCHEDULE EVERY(INTERVAL 30 MINUTE)"),
+        # IMMEDIATE is the default refresh moment and StarRocks never renders it in SHOW CREATE
+        # (only DEFERRED is emitted), so reflection yields no moment. Metadata that explicitly
+        # declares IMMEDIATE must still be treated as equivalent to the reflected form.
+        ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE ASYNC EVERY(INTERVAL 1 HOUR)"),
+        ("ASYNC EVERY(INTERVAL 1 HOUR)", "IMMEDIATE SCHEDULE EVERY(INTERVAL 1 HOUR)"),
+        ("ASYNC", "IMMEDIATE ASYNC"),
+        argnames="conn_refresh, meta_refresh",
     )
     def test_no_change_mv_refresh_schedule_alias(self, conn_refresh, meta_refresh):
         """No change: 4.1 SCHEDULE refresh keyword is equivalent to metadata ASYNC."""
