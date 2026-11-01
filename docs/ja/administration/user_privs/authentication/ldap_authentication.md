@@ -54,6 +54,12 @@ authentication_ldap_simple_bind_dn_pattern =
 
 例: `uid=${USER},ou=People,dc=example,dc=com`
 
+:::note
+
+FE は起動時に `fe.conf` 内の `${NAME}` を環境変数 `NAME` で置き換えます。プレースホルダーをそのまま残すには、`fe.conf` で `$${USER}` と記述してください。例: `authentication_ldap_simple_bind_dn_pattern = uid=$${USER},ou=People,dc=example,dc=com`。セキュリティインテグレーションのプロパティや `ADMIN SET FRONTEND CONFIG` ではエスケープは不要です。永続化された値はエスケープされた形で `fe.conf` に書き戻されます。
+
+:::
+
 ユーザーが複数の OU に分散している場合は、セミコロンで区切って複数のパターンを指定できます:
 
 `uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`

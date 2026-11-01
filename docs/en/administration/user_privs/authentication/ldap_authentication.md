@@ -54,6 +54,12 @@ authentication_ldap_simple_bind_dn_pattern =
 
 For example: `uid=${USER},ou=People,dc=example,dc=com`
 
+:::note
+
+FE replaces `${NAME}` in `fe.conf` with the environment variable `NAME` when it starts. To keep the placeholder, write it as `$${USER}` in `fe.conf`, for example `authentication_ldap_simple_bind_dn_pattern = uid=$${USER},ou=People,dc=example,dc=com`. The escape is not needed in the properties of a security integration or in `ADMIN SET FRONTEND CONFIG`; a persisted value is written back to `fe.conf` escaped.
+
+:::
+
 If you have users across multiple OUs, you can specify multiple patterns separated by semicolons:
 
 `uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
