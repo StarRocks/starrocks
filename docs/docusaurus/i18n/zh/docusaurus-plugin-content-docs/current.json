@@ -3,9 +3,9 @@
     "message": "Stable-3.5",
     "description": "The label for version current"
   },
-  "sidebar.docs.category.Introduction to StarRocks": {
+  "sidebar.docs.category.Introduction": {
     "message": "产品简介",
-    "description": "The label for category Introduction to StarRocks in sidebar docs"
+    "description": "The label for category Introduction in sidebar docs"
   },
   "sidebar.docs.category.Quick Start": {
     "message": "快速开始",
