@@ -160,6 +160,8 @@ public:
 
     std::vector<ExprContext*>& get_heavy_expr_ctxs() { return _heavy_expr_ctxs; }
 
+    bool uses_heavy_expr_slot(ExprContext* context) const;
+
     // Set once at fragment setup (FragmentExecutor tree walk): true when a row-reducing operator
     // (e.g. a SELECT for a residual predicate that could not be pushed into this scan) sits ABOVE
     // this scan but below the TopN limit. An ANN top-k scan reads this so the vector filter resolver
