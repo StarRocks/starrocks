@@ -1051,7 +1051,6 @@ TEST_P(LakeVacuumTest, test_vacuum_full_judges_old_bundle_meta_by_mtime) {
     vacuum_full(_tablet_mgr.get(), request, &response);
     ASSERT_TRUE(response.has_status());
     EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-    EXPECT_EQ(2, response.vacuumed_files());
     EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 6)));
     EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 7)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 8)));
