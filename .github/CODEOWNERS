@@ -57,6 +57,13 @@
 # /fe/fe-core/src/main/java/com/starrocks/metric/     @StarRocks/metadata-maintainer
 # /fe/fe-core/src/main/java/com/starrocks/system/     @StarRocks/metadata-maintainer
 
+# FE metric-name contract (external contract).
+# FE metric names are scraped by downstream consumers (dashboards, alerting rules,
+# and external monitoring tooling), so changes to the metric names or to the golden
+# inventory must be reviewed deliberately. FeMetricsContractGuardTest fails on any drift.
+/fe/fe-core/src/test/resources/metric/fe_metrics_golden.txt                     @StarRocks/metadata-maintainer
+/fe/fe-core/src/test/java/com/starrocks/metric/FeMetricsContractGuardTest.java  @StarRocks/metadata-maintainer
+
 # connector
 # /fe/fe-core/src/main/java/com/starrocks/connector/  @StarRocks/connector-maintainer
 # /fe/fe-core/src/main/java/com/starrocks/credential/  @StarRocks/connector-maintainer
