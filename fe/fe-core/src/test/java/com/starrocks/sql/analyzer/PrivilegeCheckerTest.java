@@ -1566,6 +1566,77 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testFilesTableFunctionAmbientCredentialPrivilege() throws Exception {
+        String fileErr =
+                "Access denied; you need (at least one of) the FILE privilege(s) on SYSTEM for this operation";
+        String grantSql = "grant file on system to test";
+        String revokeSql = "revoke file on system from test";
+
+        // files() that asks the BE to authenticate with its own ambient identity (instance profile, or the
+        // AWS SDK default credential chain) must require the global FILE privilege, because the scan/load
+        // then runs with the BE role rather than with caller-supplied credentials.
+        // Parse only (no analyzer): the privilege gate reads the files() properties straight from the AST,
+        // and the analyzer would try to resolve the remote path against real object storage.
+        String instanceProfileSql = "SELECT * FROM FILES(" +
+                "\"path\" = \"s3://bucket/path/*.parquet\", \"format\" = \"parquet\", " +
+                "\"aws.s3.region\" = \"us-east-1\", \"aws.s3.use_instance_profile\" = \"true\")";
+        verifyFilesCredentialGrantRevoke(instanceProfileSql, grantSql, revokeSql, fileErr);
+
+        String sdkDefaultSql = "SELECT * FROM FILES(" +
+                "\"path\" = \"s3://bucket/path/*.parquet\", \"format\" = \"parquet\", " +
+                "\"aws.s3.region\" = \"us-east-1\", \"aws.s3.use_aws_sdk_default_behavior\" = \"true\")";
+        verifyFilesCredentialGrantRevoke(sdkDefaultSql, grantSql, revokeSql, fileErr);
+
+        // INSERT INTO FILES(...) writes through the same ambient credentials, so it is gated too.
+        String insertSql = "INSERT INTO FILES(" +
+                "\"path\" = \"s3://bucket/out\", \"format\" = \"parquet\", " +
+                "\"aws.s3.region\" = \"us-east-1\", \"aws.s3.use_instance_profile\" = \"true\") " +
+                "SELECT 1";
+        verifyFilesCredentialGrantRevoke(insertSql, grantSql, revokeSql, fileErr);
+
+        // A files() call that supplies its own credentials does not use the BE identity, so it must keep
+        // working for a user without the FILE privilege -- the fix must not over-restrict normal queries.
+        String explicitCredentialSql = "SELECT * FROM FILES(" +
+                "\"path\" = \"s3://bucket/path/*.parquet\", \"format\" = \"parquet\", " +
+                "\"aws.s3.region\" = \"us-east-1\", \"aws.s3.access_key\" = \"ak\", " +
+                "\"aws.s3.secret_key\" = \"sk\")";
+        StatementBase explicitStmt =
+                UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(explicitCredentialSql, starRocksAssert.getCtx());
+        ctxToTestUser();
+        Authorizer.check(explicitStmt, starRocksAssert.getCtx());
+    }
+
+    private static void verifyFilesCredentialGrantRevoke(String sql, String grantSql, String revokeSql,
+                                                         String expectError) throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctxToRoot();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, ctx);
+
+        ctxToTestUser();
+        try {
+            Authorizer.check(statement, ctx);
+            Assertions.fail("expected access denied for: " + sql);
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
+        }
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
+        ctxToTestUser();
+        Authorizer.check(statement, ctx);
+
+        ctxToRoot();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
+        ctxToTestUser();
+        try {
+            Authorizer.check(statement, ctx);
+            Assertions.fail("expected access denied after revoke for: " + sql);
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains(expectError), e.getMessage());
+        }
+    }
+
+    @Test
     public void testDigestBlackListStmts() throws Exception {
         String grantSql = "grant blacklist on system to test";
         String revokeSql = "revoke blacklist on system from test";

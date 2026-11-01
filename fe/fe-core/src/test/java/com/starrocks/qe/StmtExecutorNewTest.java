@@ -233,4 +233,27 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
         StmtExecutor executor = new StmtExecutor(ctx, stmt);
         assertNotNull(executor);
     }
+
+    @Test
+    public void testSqlBlacklistAppliesToExplainAnalyze() throws Exception {
+        // EXPLAIN ANALYZE runs the inner query, so it must not be treated as blacklist-exempt the way a
+        // plan-only EXPLAIN is. The gate in StmtExecutor skips the check only when isExplain() is true and
+        // isExplainAnalyze() is false.
+        StatementBase plainExplain = parse("explain select 'files' as x");
+        assertTrue(plainExplain.isExplain());
+        assertFalse(plainExplain.isExplainAnalyze());
+
+        StatementBase explainAnalyze = parse("explain analyze select 'files' as x");
+        assertTrue(explainAnalyze.isExplain());
+        assertTrue(explainAnalyze.isExplainAnalyze());
+
+        StatementBase plainSelect = parse("select 'files' as x");
+        assertFalse(plainSelect.isExplain());
+        assertFalse(plainSelect.isExplainAnalyze());
+
+        // The predicate the blacklist gate uses: exempt only plan-only EXPLAIN, never EXPLAIN ANALYZE.
+        assertTrue(plainExplain.isExplain() && !plainExplain.isExplainAnalyze());
+        assertFalse(explainAnalyze.isExplain() && !explainAnalyze.isExplainAnalyze());
+        assertFalse(plainSelect.isExplain() && !plainSelect.isExplainAnalyze());
+    }
 }
