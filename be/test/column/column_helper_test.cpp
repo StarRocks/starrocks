@@ -126,9 +126,20 @@ TEST_F(ColumnHelperTest, materialize_const_column) {
     ASSERT_EQ(1, shared->size());
     ASSERT_EQ(1, down_cast<const ConstColumn*>(shared.get())->data_column()->size());
 
-    // A non-constant column is returned as is.
+    // A shared non-constant column is copied on write: the result keeps the contents, and the other owner is untouched.
+    const Column* plain_addr = col.get();
     ColumnPtr plain = col;
-    ASSERT_EQ(col.get(), ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
+    auto copied = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(col));
+    ASSERT_NE(plain_addr, copied.get());
+    ASSERT_EQ(plain_addr, plain.get());
+    ASSERT_EQ(3, copied->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, copied->get(i).get_int32());
+        ASSERT_EQ(7, plain->get(i).get_int32());
+    }
+
+    // A non-constant column owned only by the caller is returned as is.
+    ASSERT_EQ(plain_addr, ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
 }
 
 TEST_F(ColumnHelperTest, get_data_column_by_type) {
