@@ -14,7 +14,9 @@
 
 #include "platform/llm/ai_provider.h"
 
+#include "platform/llm/cohere_rerank_provider.h"
 #include "platform/llm/dashscope_multimodal_provider.h"
+#include "platform/llm/dashscope_rerank_provider.h"
 #include "platform/llm/openai_compatible_provider.h"
 
 namespace starrocks {
@@ -27,6 +29,9 @@ Status validate_ai_protocol(AIProviderProtocol protocol, AICapability capability
     if (protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL && capability == AICapability::EMBEDDING) {
         return Status::OK();
     }
+    if ((protocol == AIProviderProtocol::COHERE || protocol == AIProviderProtocol::DASHSCOPE_RERANK) &&
+        capability == AICapability::RERANK)
+        return Status::OK();
     return Status::NotSupported("AI protocol does not support the requested capability");
 }
 
@@ -35,6 +40,12 @@ StatusOr<std::unique_ptr<AIProvider>> create_ai_provider(AIProviderProtocol prot
     if (!status.ok()) return status;
     if (protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL) {
         return std::unique_ptr<AIProvider>(std::make_unique<DashScopeMultimodalProvider>());
+    }
+    if (protocol == AIProviderProtocol::COHERE) {
+        return std::unique_ptr<AIProvider>(std::make_unique<CohereRerankProvider>());
+    }
+    if (protocol == AIProviderProtocol::DASHSCOPE_RERANK) {
+        return std::unique_ptr<AIProvider>(std::make_unique<DashScopeRerankProvider>());
     }
     return std::unique_ptr<AIProvider>(std::make_unique<OpenAICompatibleProvider>());
 }

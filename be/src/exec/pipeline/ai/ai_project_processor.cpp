@@ -29,12 +29,20 @@
 
 namespace starrocks::pipeline {
 
-enum class AIProjectProcessor::TerminalKind : uint8_t { NONE, ROW_FAILURE, CANCELLED, DEADLINE, SHUTDOWN };
+enum class AIProjectProcessor::TerminalKind : uint8_t {
+    NONE,
+    ROW_FAILURE,
+    LOCAL_RESOURCE,
+    CANCELLED,
+    DEADLINE,
+    SHUTDOWN
+};
 
 struct AIProjectProcessor::ResultCell {
     uint64_t task_id = 0;
     bool completed = false;
     std::optional<AITaskSuccess> success;
+    std::optional<AIProviderValue> local_result;
     std::unique_ptr<AIProjectTaskHandle> handle;
 };
 
@@ -347,7 +355,7 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
     try {
         subchunk->outputs.reserve(subchunk->prepared.ai_outputs.size());
         for (size_t output_index = 0; output_index < subchunk->prepared.ai_outputs.size(); ++output_index) {
-            const AIProjectPreparedOutput& prepared_output = subchunk->prepared.ai_outputs[output_index];
+            AIProjectPreparedOutput& prepared_output = subchunk->prepared.ai_outputs[output_index];
             const bool slot_exists = subchunk->prepared.output_chunk->is_slot_exist(prepared_output.slot_id);
             if (prepared_output.replace_existing && !slot_exists) {
                 immediate_status = Status::InternalError("AI project output placeholder is missing");
@@ -382,6 +390,14 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
                 ResultCell& cell = output.rows[row_index];
                 const AIFunctionRowAction action = prepared_output.input.rows[row_index].action;
                 if (action == AIFunctionRowAction::SQL_NULL) {
+                    cell.completed = true;
+                } else if (action == AIFunctionRowAction::LOCAL_RESULT) {
+                    auto& local = prepared_output.input.rows[row_index].local_result;
+                    if (!local.has_value()) {
+                        immediate_status = Status::InternalError("AI local result is missing");
+                        break;
+                    }
+                    cell.local_result = std::move(local);
                     cell.completed = true;
                 } else if (action == AIFunctionRowAction::TERMINAL_ROW_FAILURE) {
                     cell.completed = true;
@@ -449,7 +465,8 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
                                          .options = output.input.options.get(),
                                          .provider_id = output.provider_id,
                                          .capability = output.capability,
-                                         .media = row.media ? &*row.media : nullptr};
+                                         .media = row.media ? &*row.media : nullptr,
+                                         .rerank = row.rerank ? &*row.rerank : nullptr};
             AITaskCallback callback;
             auto build_callback = [&] {
                 // Lane is the process-scoped async completion state. It keeps
@@ -572,7 +589,7 @@ void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& l
     }
 
     AISanitizedFailureClass failure_class = AISanitizedFailureClass::LOCAL_REQUEST;
-    if (status.is_mem_limit_exceeded() || status.is_resource_busy()) {
+    if (ai_is_local_resource_failure(status)) {
         failure_class = AISanitizedFailureClass::LOCAL_RESOURCE;
     }
     _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
@@ -603,10 +620,12 @@ void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool 
                     if (auto* success = std::get_if<AITaskSuccess>(&local_result);
                         success != nullptr && lane->terminal_status.ok() && lane->terminal_kind == TerminalKind::NONE) {
                         cell.success.emplace(std::move(*success));
-                    } else if (std::holds_alternative<AISanitizedRowFailure>(local_result)) {
-                        if (!ignore_row_failures && lane->terminal_status.ok() &&
+                    } else if (const auto* failure = std::get_if<AISanitizedRowFailure>(&local_result)) {
+                        const bool local_resource = failure->failure_class == AISanitizedFailureClass::LOCAL_RESOURCE;
+                        if ((local_resource || !ignore_row_failures) && lane->terminal_status.ok() &&
                             lane->terminal_kind == TerminalKind::NONE) {
-                            lane->terminal_kind = TerminalKind::ROW_FAILURE;
+                            lane->terminal_kind =
+                                    local_resource ? TerminalKind::LOCAL_RESOURCE : TerminalKind::ROW_FAILURE;
                             published_terminal = true;
                         }
                     } else if (auto* lifecycle = std::get_if<AILifecycleCancelled>(&local_result);
@@ -899,9 +918,9 @@ StatusOr<ChunkPtr> AIProjectProcessor::_materialize(const std::shared_ptr<Active
         auto values = ColumnHelper::create_column(result.result_type, true);
         values->reserve(result.rows.size());
         for (ResultCell& cell : result.rows) {
-            if (cell.success.has_value()) {
-                const Status status =
-                        append_ai_function_result(result.result_kind, cell.success->result(), values.get());
+            if (cell.success.has_value() || cell.local_result.has_value()) {
+                const auto& value = cell.success.has_value() ? cell.success->result() : *cell.local_result;
+                const Status status = append_ai_function_result(result.result_kind, value, values.get());
                 if (status.ok()) {
                     continue;
                 }
@@ -938,6 +957,8 @@ Status AIProjectProcessor::_terminal_status(const Status& driver_status, Termina
         return Status::OK();
     case TerminalKind::ROW_FAILURE:
         return _row_failure_status();
+    case TerminalKind::LOCAL_RESOURCE:
+        return Status::InternalError("AI function local resource failure");
     case TerminalKind::CANCELLED:
         return Status::Cancelled("AI function request was cancelled");
     case TerminalKind::DEADLINE:
@@ -986,6 +1007,7 @@ void AIProjectProcessor::_release_subchunk_results(const std::shared_ptr<Lane>& 
             {
                 std::lock_guard lock(lane->mutex);
                 success.swap(cell.success);
+                cell.local_result.reset();
             }
             success.reset();
         }

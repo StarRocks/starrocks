@@ -121,6 +121,24 @@ public class AIProviderMgrTest {
     }
 
     @Test
+    public void testNativeRerankRoundTripKeepsDefaultAndLimits() throws Exception {
+        AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        Map<String, String> params = rerankProps();
+        params.put("protocol", "dashscope_rerank");
+        params.put("max_documents", "100");
+        params.put("deadline_ms", "2000");
+        mgr.createProvider("rr", AIProviderType.RERANK, params, "native");
+        mgr.setDefaultProvider("rr");
+        AIProviderMgr restored = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(mgr), AIProviderMgr.class);
+        AIProvider provider = restored.getDefaultProvider(AIProviderType.RERANK);
+        Assertions.assertEquals("rr", provider.getName());
+        Assertions.assertEquals("dashscope_rerank", provider.getProtocol().lower());
+        Assertions.assertEquals(100, provider.getMaxDocuments());
+        Assertions.assertEquals(2000, provider.getDeadlineMs());
+        Assertions.assertEquals(4, provider.toThrift().getProtocol().getValue());
+    }
+
+    @Test
     public void testLegacyRecordWithoutProtocolIsNormalized() {
         // Records persisted before the protocol property existed: one untyped (embedding) and one rerank.
         String legacy = "{"

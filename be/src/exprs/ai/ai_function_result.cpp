@@ -19,10 +19,12 @@
 #include <cmath>
 #include <limits>
 
+#include "base/testutil/sync_point.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "gutil/strings/ascii_ctype.h"
 #include "simdjson.h"
 #include "types/datum.h"
@@ -111,6 +113,52 @@ Status append_ai_function_result(AIFunctionResultKind kind, const AIProviderValu
         return Status::InternalError("Invalid AI result column");
     }
     const Column* data = nullable->data_column().get();
+    if (kind == AIFunctionResultKind::RERANK) {
+        auto* array = dynamic_cast<ArrayColumn*>(nullable->data_column_raw_ptr());
+        auto* elements = array == nullptr ? nullptr : dynamic_cast<NullableColumn*>(&array->elements());
+        const auto* structure =
+                elements == nullptr ? nullptr : dynamic_cast<const StructColumn*>(elements->data_column().get());
+        if (structure == nullptr || structure->fields_size() != 2 || structure->field_names().size() != 2 ||
+            structure->field_names()[0] != "index" || structure->field_names()[1] != "relevance_score") {
+            return Status::InternalError("Invalid AI rerank result column");
+        }
+        const auto* indices = dynamic_cast<const NullableColumn*>(structure->field_column_raw_ptr(0));
+        const auto* scores = dynamic_cast<const NullableColumn*>(structure->field_column_raw_ptr(1));
+        if (indices == nullptr || scores == nullptr ||
+            dynamic_cast<const Int32Column*>(indices->data_column().get()) == nullptr ||
+            dynamic_cast<const DoubleColumn*>(scores->data_column().get()) == nullptr) {
+            return Status::InternalError("Invalid AI rerank result fields");
+        }
+        const auto* hits = std::get_if<AIRerankResult>(&value);
+        if (hits == nullptr) return malformed_result();
+        if (hits->size() > static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
+            array->elements().size() > std::numeric_limits<uint32_t>::max() ||
+            hits->size() > std::numeric_limits<uint32_t>::max() - array->elements().size()) {
+            return Status::CapacityLimitExceed("AI rerank result exceeds array offset capacity");
+        }
+        // Request-specific bounds were checked by the provider. Check the typed
+        // carrier again before mutating any column, including local results.
+        RETURN_IF_ERROR(validate_ai_rerank_hits(
+                *hits, {std::numeric_limits<int32_t>::max(), static_cast<int32_t>(hits->size())}));
+        DatumArray result;
+        result.reserve(hits->size());
+        for (const auto& hit : *hits) {
+            result.emplace_back(DatumStruct{Datum(hit.index), Datum(hit.relevance_score)});
+        }
+        const size_t rows = output->size();
+        try {
+            output->reserve(rows + 1);
+            array->elements().reserve(array->elements().size() + hits->size());
+            output->append_datum(Datum(result));
+            TEST_SYNC_POINT("append_ai_function_result:rerank_after_append");
+        } catch (...) {
+            // Nested appends can fail between fields or before the outer null
+            // bitmap is appended. resize restores every child from array offsets.
+            output->resize(rows);
+            throw;
+        }
+        return Status::OK();
+    }
     if (kind == AIFunctionResultKind::EMBEDDING) {
         const auto* array = dynamic_cast<const ArrayColumn*>(data);
         const auto* elements = array == nullptr ? nullptr : dynamic_cast<const NullableColumn*>(&array->elements());
@@ -195,6 +243,7 @@ Status append_ai_function_result(AIFunctionResultKind kind, const AIProviderValu
         return Status::OK();
     }
     case AIFunctionResultKind::EMBEDDING:
+    case AIFunctionResultKind::RERANK:
         break;
     }
     return Status::InternalError("Invalid AI function result kind");

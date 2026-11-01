@@ -13,6 +13,7 @@ toc_max_heading_level: 2
 | --- | --- | --- |
 | [ai_complete](#ai_complete) | プロンプトからテキストを生成 | VARCHAR |
 | [ai_embed](#ai_embed) | テキストの埋め込みベクトルを生成 | `ARRAY<FLOAT>` |
+| [ai_rerank](ai_rerank.md) | クエリに対する候補文書の関連度を再評価 | `ARRAY<STRUCT<index INT, relevance_score DOUBLE>>` |
 | [ai_sentiment](#ai_sentiment) | テキストの感情を分析 | VARCHAR |
 | [ai_classify](#ai_classify) | 指定されたカテゴリにテキストを分類 | JSON |
 | [ai_extract](#ai_extract) | 指定された情報を抽出 | JSON |
@@ -51,13 +52,13 @@ SELECT ai_complete(prompt => '列指向ストレージについて説明して�
 | `provider` | 対応するタイプのクラスターデフォルト Provider を使用 | 指定された名前の Provider を使用。クラスターデフォルトの設定は不要 |
 | `model` | 選択した Provider のデフォルトモデルを使用 | 選択したサービスが提供する指定モデルを使用 |
 
-`ai_embed` は embedding Provider を必要とし、それ以外の関数は chat Provider を必要とします。
+`ai_embed` は embedding Provider、`ai_rerank` は rerank Provider を必要とします。それ以外の関数は chat Provider を使用します。
 
 Provider の設定にはエンドポイントとオプションの認証情報が含まれ、HTTP と HTTPS をサポートします。各実行プランは、選択した Provider の設定のスナップショットを保持します。Provider の変更やデフォルトの切り替えは、新たに計画されるクエリに反映されます。管理構文については、[CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) と [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md) を参照してください。
 
 ### JSON options {/* #json-options */}
 
-オプションの `options` 引数をサポートするのは `ai_complete` と `ai_embed` のみです。JSON 型の定数式である必要があり、SQL NULL 以外の値は JSON オブジェクトである必要があります。省略時のデフォルトは空のオブジェクトです。`json_object()` と SQL NULL は、いずれも追加オプションを渡さないことを意味します。
+`ai_complete`、`ai_embed`、`ai_rerank` はオプションの `options` 引数をサポートします。JSON 型の定数式である必要があり、SQL NULL 以外の値は JSON オブジェクトである必要があります。省略時のデフォルトは空のオブジェクトです。`json_object()` と SQL NULL は、いずれも追加オプションを渡さないことを意味します。
 
 ```sql
 SELECT ai_complete(

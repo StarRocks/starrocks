@@ -426,6 +426,15 @@ StatusOr<AIProjectPreparedSubchunk> AIProjectExpressionProjection::prepare_subch
             }
             RETURN_IF_ERROR(context->get_udf_error());
 
+            if (model_config.max_documents.has_value()) {
+                for (auto& row : batch.rows) {
+                    if (row.action == AIFunctionRowAction::DISPATCH && row.rerank.has_value() &&
+                        row.rerank->documents.size() > static_cast<size_t>(*model_config.max_documents)) {
+                        row.action = AIFunctionRowAction::TERMINAL_ROW_FAILURE;
+                    }
+                }
+            }
+
             // Provider defaults are constant for this expression. Merge once for the
             // subchunk and let every dispatched row borrow the immutable result.
             if (model_config.dimensions.has_value() &&
@@ -509,22 +518,29 @@ StatusOr<std::shared_ptr<AIProjectDispatcherSubmitter>> AIProjectDispatcherSubmi
                 contains_control_character(model_config.model)) {
                 return Status::InvalidArgument("AI function model configuration is invalid");
             }
-            if (model_config.capability != AICapability::CHAT && model_config.capability != AICapability::EMBEDDING) {
+            if (model_config.capability != AICapability::CHAT && model_config.capability != AICapability::EMBEDDING &&
+                model_config.capability != AICapability::RERANK) {
                 return Status::InvalidArgument("AI function model capability is invalid");
             }
             Route route{.endpoint = model_config.endpoint, .capability = model_config.capability};
             ASSIGN_OR_RETURN(route.provider, create_ai_provider(model_config.protocol, model_config.capability));
-            if (model_config.protocol != AIProviderProtocol::OPENAI ||
+            if (model_config.protocol == AIProviderProtocol::DASHSCOPE_MULTIMODAL ||
                 contains_only_ascii_whitespace(model_config.model) ||
                 contains_control_character(model_config.api_key) ||
                 (model_config.timeout_ms.has_value() &&
                  (*model_config.timeout_ms <= 0 || *model_config.timeout_ms > std::numeric_limits<long>::max())) ||
                 (model_config.dimensions.has_value() &&
-                 (model_config.capability != AICapability::EMBEDDING || *model_config.dimensions <= 0))) {
+                 (model_config.capability != AICapability::EMBEDDING || *model_config.dimensions <= 0)) ||
+                (model_config.max_documents.has_value() &&
+                 (model_config.capability != AICapability::RERANK || *model_config.max_documents <= 0)) ||
+                (model_config.deadline_ms.has_value() &&
+                 (model_config.capability != AICapability::RERANK || *model_config.deadline_ms <= 0 ||
+                  *model_config.deadline_ms > std::numeric_limits<int32_t>::max()))) {
                 return Status::InvalidArgument("AI function provider configuration is invalid");
             }
             route.api_key = model_config.api_key;
             route.attempt_timeout_ms = model_config.timeout_ms.value_or(0);
+            route.deadline_ms = model_config.deadline_ms.value_or(0);
             RETURN_IF_ERROR(validate_ai_http_url(route.endpoint));
             auto resolved_endpoint = resolve_http_endpoint(route.endpoint, OutboundHttpAddressPolicy::BLOCK_LINK_LOCAL);
             if (!resolved_endpoint.ok()) {
@@ -582,7 +598,10 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
         const Route& route = route_it->second;
         auto handle = std::make_unique<DispatcherTaskHandle>();
         const int64_t now_ns = _clock->monotonic_now_ns();
-        const int64_t request_deadline_ns = saturating_timeout_deadline(now_ns, _config.request_timeout_ms);
+        int64_t timeout_ms = _config.request_timeout_ms;
+        if (route.deadline_ms > 0)
+            timeout_ms = timeout_ms > 0 ? std::min(timeout_ms, route.deadline_ms) : route.deadline_ms;
+        const int64_t request_deadline_ns = saturating_timeout_deadline(now_ns, timeout_ms);
 
         std::weak_ptr<QueryContext> weak_query = _query_context;
         auto build_dispatch_request = [&] {
@@ -599,6 +618,7 @@ StatusOr<std::unique_ptr<AIProjectTaskHandle>> AIProjectDispatcherSubmitter::sub
                                     .options = request.options,
                                     .capability = route.capability,
                                     .media = request.media,
+                                    .rerank = request.rerank,
                             },
                     .request_deadline_ns = request_deadline_ns,
                     .attempt_timeout_ms = route.attempt_timeout_ms,

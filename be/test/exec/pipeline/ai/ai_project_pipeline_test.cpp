@@ -49,6 +49,7 @@
 #include "exec/pipeline/ai/ai_project_factory.h"
 #include "exec/pipeline/ai/ai_project_operator.h"
 #include "exec/pipeline/ai/ai_project_runtime.h"
+#include "exec/pipeline/ai/ai_provider_config_parser.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/project_operator.h"
 #include "exec/pipeline_node.h"
@@ -746,6 +747,44 @@ protected:
         return AIProjectExpressionProjection::create(std::move(spec));
     }
 
+    StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_rerank_projection(
+            const AIProjectModelConfigs& configs) {
+        const auto documents_type = TypeDescriptor::create_array_type(varchar_type());
+        const auto result_type = TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
+                {"index", "relevance_score"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE)}));
+        auto* pool = _runtime_state->obj_pool();
+        auto call = make_ai_complete(_tuple_id, kPromptSlotId).nodes.front();
+        call.__set_num_children(5);
+        call.__set_type(result_type.to_thrift());
+        call.__set_ai_provider_id("provider:rerank");
+        call.fn.name.__set_function_name("ai_rerank");
+        call.fn.__set_fid(200170);
+        call.fn.__set_arg_types({varchar_type().to_thrift(), documents_type.to_thrift(), varchar_type().to_thrift(),
+                                 varchar_type().to_thrift(), TypeDescriptor(TYPE_JSON).to_thrift()});
+        call.fn.__set_ret_type(result_type.to_thrift());
+        ASSIGN_OR_RETURN(auto* expression, AIFunctionCallExpr::create(pool, call));
+        expression->add_child(pool->add(new ColumnRef(make_slot_ref(_tuple_id, kPromptSlotId).nodes.front())));
+        auto documents = ColumnHelper::create_column(documents_type, true);
+        documents->append_datum(Datum(DatumArray{Datum(Slice("same")), Datum(Slice("")), Datum(Slice("same"))}));
+        expression->add_child(
+                pool->add(new VectorizedLiteral(ConstColumn::create(std::move(documents), 1), documents_type)));
+        for (int selector = 0; selector < 2; ++selector) {
+            expression->add_child(pool->add(
+                    new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1), varchar_type())));
+        }
+        auto json = JsonColumn::create();
+        json->append(JsonValue::parse(R"({"top_n":1})").value());
+        expression->add_child(
+                pool->add(new VectorizedLiteral(ConstColumn::create(std::move(json), 1), TypeDescriptor(TYPE_JSON))));
+        AIProjectProjectionSpec spec(_runtime_state.get(),
+                                     {AIProjectOutputSpec{.slot_id = kAnswerSlotId,
+                                                          .expr_ctx = pool->add(new ExprContext(expression)),
+                                                          .nullable = true,
+                                                          .kind = AIProjectOutputKind::AI}},
+                                     {}, configs);
+        return AIProjectExpressionProjection::create(std::move(spec));
+    }
+
     StatusOr<std::shared_ptr<AIProjectExpressionProjection>> create_classify_projection(std::string categories) {
         const auto array_type = TypeDescriptor::create_array_type(varchar_type()).to_thrift();
         const auto result_type = TypeDescriptor(TYPE_JSON).to_thrift();
@@ -1123,6 +1162,138 @@ TEST_F(AIProjectPipelineTest, FactoryFailureClosesPairedProjectionContextsWithou
     EXPECT_TRUE(common->closed());
     EXPECT_TRUE(ai->closed());
     EXPECT_TRUE(context._pipelines.empty());
+}
+
+TEST_F(AIProjectPipelineTest, RerankProjectionRejectsExcessDocumentsWithoutTruncating) {
+    AIProjectModelConfigs configs{{"provider:rerank", AIProjectModelConfig{.endpoint = "https://127.0.0.1/v2/rerank",
+                                                                           .model = "reranker",
+                                                                           .capability = AICapability::RERANK,
+                                                                           .max_documents = 2,
+                                                                           .protocol = AIProviderProtocol::COHERE}}};
+    auto projection = create_rerank_projection(configs);
+    ASSERT_TRUE(projection.ok()) << projection.status();
+    ASSERT_OK(projection.value()->prepare(_runtime_state.get(), 1));
+    auto prepared = projection.value()->prepare_subchunk(_runtime_state.get(), 0, make_prompt_chunk(0, 2));
+    ASSERT_TRUE(prepared.ok()) << prepared.status();
+    for (const auto& row : prepared->ai_outputs.front().input.rows) {
+        EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, row.action);
+        ASSERT_TRUE(row.rerank.has_value());
+        EXPECT_EQ(3, row.rerank->documents.size());
+    }
+    EXPECT_EQ(0, _http.pending_count());
+    projection.value()->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, RerankRunsThroughProjectionDispatcherAndTypedMaterialization) {
+    set_query_deadline_ns(120'000'000'000);
+    AIProjectModelConfigs configs{{"provider:rerank", AIProjectModelConfig{.endpoint = "https://127.0.0.1/v2/rerank",
+                                                                           .model = "reranker",
+                                                                           .capability = AICapability::RERANK,
+                                                                           .max_documents = 3,
+                                                                           .protocol = AIProviderProtocol::COHERE}}};
+    auto projection = create_rerank_projection(configs);
+    ASSERT_TRUE(projection.ok()) << projection.status();
+    auto config = _config_source->snapshot();
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config);
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    auto buffer = AIChunkBuffer::create(2, 32 * kMiB);
+    ASSERT_TRUE(buffer.ok()) << buffer.status();
+    auto processor = AIProjectProcessor::create(buffer.value(), projection.value(), submitter.value(), config);
+    ASSERT_TRUE(processor.ok()) << processor.status();
+    ASSERT_OK(processor.value()->prepare(_runtime_state.get(), 1));
+    auto admitted = buffer.value()->try_put(0, make_prompt_chunk(0, 2, 1));
+    ASSERT_TRUE(admitted.ok() && admitted.value());
+    ASSERT_OK(buffer.value()->set_sink_eos(0));
+    ASSERT_OK(processor.value()->try_process(_runtime_state.get(), 0));
+    _control.run_until_idle();
+    ASSERT_EQ(1, _http.pending_count());
+    EXPECT_NE(std::string::npos, _http.request().body.find(R"("documents":["same","","same"])"));
+    EXPECT_NE(std::string::npos, _http.request().body.find(R"("top_n":1)"));
+    _http.complete_next(R"({"results":[{"index":2,"relevance_score":0.123456789012345}],)"
+                        R"("meta":{"billed_units":{"input_tokens":7}}})");
+    _completion.run_until_idle();
+    _control.run_until_idle();
+    auto output = processor.value()->pull_chunk(_runtime_state.get(), 0);
+    ASSERT_TRUE(output.ok()) << output.status();
+    ASSERT_NE(nullptr, output.value());
+    const auto column = output.value()->get_column_by_slot_id(kAnswerSlotId);
+    ASSERT_EQ(2, column->size());
+    EXPECT_TRUE(column->is_null(1));
+    const auto row = column->get(0);
+    const auto& hit = row.get_array()[0].get_struct();
+    EXPECT_EQ(2, hit[0].get_int32());
+    EXPECT_DOUBLE_EQ(0.123456789012345, hit[1].get_double());
+    const auto statistics = processor.value()->statistics(0);
+    EXPECT_EQ(1, statistics.task_count);
+    EXPECT_EQ(1, statistics.request_count);
+    EXPECT_EQ(7, statistics.prompt_tokens);
+    EXPECT_EQ(1, statistics.prompt_usage_count);
+    EXPECT_EQ(0, statistics.total_usage_count);
+    processor.value()->close(_runtime_state.get());
+}
+
+TEST_F(AIProjectPipelineTest, RerankProviderConfigValidatesProtocolAndPositiveIntLimits) {
+    TAIProvider provider;
+    provider.__set_id("provider:rerank");
+    provider.__set_type(TAIProviderType::RERANK);
+    provider.__set_params({{"endpoint", "https://127.0.0.1/v2/rerank"},
+                           {"model", "reranker"},
+                           {"max_documents", "10"},
+                           {"deadline_ms", "+1234"}});
+    for (const auto protocol : {TAIProviderProtocol::COHERE, TAIProviderProtocol::DASHSCOPE_RERANK}) {
+        provider.__set_protocol(protocol);
+        auto parsed = AIProviderConfigParser::parse(provider.id, provider);
+        ASSERT_TRUE(parsed.ok()) << parsed.status();
+        EXPECT_EQ(AICapability::RERANK, parsed->capability);
+        EXPECT_EQ(10, parsed->max_documents.value());
+        EXPECT_EQ(1234, parsed->deadline_ms.value());
+        auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), {{provider.id, parsed.value()}},
+                                                              _config_source->snapshot());
+        ASSERT_TRUE(submitter.ok()) << submitter.status();
+    }
+    for (const auto key : {"max_documents", "deadline_ms"}) {
+        for (const auto value : {"0", "-1", "2147483648", "1.5", "1x", " 1"}) {
+            auto invalid = provider;
+            invalid.params[key] = value;
+            EXPECT_FALSE(AIProviderConfigParser::parse(invalid.id, invalid).ok());
+        }
+    }
+    provider.__set_protocol(TAIProviderProtocol::OPENAI);
+    EXPECT_FALSE(AIProviderConfigParser::parse(provider.id, provider).ok());
+}
+
+TEST_F(AIProjectPipelineTest, RerankDispatcherUsesTypedPayloadAndProviderDeadlineBudget) {
+    AIProjectModelConfigs configs{{"provider:rerank", AIProjectModelConfig{.endpoint = "https://127.0.0.1/v2/rerank",
+                                                                           .model = "reranker",
+                                                                           .capability = AICapability::RERANK,
+                                                                           .deadline_ms = 1000,
+                                                                           .protocol = AIProviderProtocol::COHERE}}};
+    set_query_deadline_ns(120'000'000'000);
+    auto config = _config_source->snapshot();
+    config.request_timeout_ms = 5000;
+    auto submitter = AIProjectDispatcherSubmitter::create(_runtime_state.get(), configs, config);
+    ASSERT_TRUE(submitter.ok()) << submitter.status();
+    AIRerankInput input{"q", {"same", "", "same"}};
+    std::vector<AITaskResult> results;
+    auto handle = submitter.value()->submit(
+            AIProjectTaskRequest{.task_id = 1,
+                                 .model = "reranker",
+                                 .provider_id = "provider:rerank",
+                                 .capability = AICapability::RERANK,
+                                 .rerank = &input},
+            [&](AITaskResult result, const AIExecutionStatistics&) { results.emplace_back(std::move(result)); });
+    ASSERT_TRUE(handle.ok()) << handle.status();
+    input = {};
+    _control.run_until_idle();
+    ASSERT_EQ(1, _http.pending_count());
+    EXPECT_EQ(101'000'000'000, _http.request().request_deadline_ns);
+    EXPECT_NE(std::string::npos, _http.request().body.find("same"));
+    EXPECT_NE(std::string::npos, _http.request().body.find("documents"));
+    _http.complete_next(AIHttpNoResponseCode::SHUTDOWN);
+    _completion.run_until_idle();
+    _control.run_until_idle();
+    ASSERT_EQ(1, results.size());
+    EXPECT_TRUE(std::holds_alternative<AILifecycleCancelled>(results[0]));
 }
 
 TEST_F(AIProjectPipelineTest, ProviderCredentialsComeFromSnapshot) {

@@ -22,8 +22,8 @@ namespace starrocks {
 class DashScopeMultimodalProvider final : public AIProvider {
 public:
     StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const override;
-    AIProviderParseResult parse_response(std::string_view body,
-                                         AICapability capability = AICapability::CHAT) const override;
+    AIProviderParseResult parse_response(std::string_view body, AICapability capability = AICapability::CHAT,
+                                         const AIProviderResponseContext& context = {}) const override;
 };
 
 } // namespace starrocks
