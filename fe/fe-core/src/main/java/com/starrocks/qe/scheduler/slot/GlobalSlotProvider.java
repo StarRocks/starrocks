@@ -72,6 +72,7 @@ public class GlobalSlotProvider implements SlotProvider {
             LOG.warn("[Slot] failed to require slot [slot={}]", slot, e);
             pendingSlots.remove(slot.getSlotId());
             slotRequest.onFailed(e);
+            releaseSlotToSlotManager(slot);
         }
 
         return slotRequest.getSlotFuture();

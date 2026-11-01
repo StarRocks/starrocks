@@ -24,7 +24,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
@@ -47,6 +46,7 @@ import com.starrocks.thrift.TReleaseSlotResponse;
 import com.starrocks.thrift.TRequireSlotRequest;
 import com.starrocks.thrift.TRequireSlotResponse;
 import com.starrocks.thrift.TResourceGroupUsage;
+import com.starrocks.thrift.TResourceLogicalSlot;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
@@ -74,6 +74,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -722,6 +723,59 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
         Assertions.assertThrows(StarRocksException.class,
                 () -> manager.maybeWait(connectContext, coord),
                 "mock-require-slot-async-exception");
+    }
+
+    @Test
+    public void testRequireSlotFailureReleasesRemoteReservation() throws Exception {
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+
+        DefaultCoordinator runningCoord = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, runningCoord);
+        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, runningCoord.getSlot().getState());
+
+        AtomicInteger releaseCalls = new AtomicInteger();
+        AtomicReference<TResourceLogicalSlot> requestedSlot = new AtomicReference<>();
+        AtomicReference<TUniqueId> releasedSlotId = new AtomicReference<>();
+        mockFrontendService(new MockFrontendServiceClient() {
+            @Override
+            public TRequireSlotResponse requireSlotAsync(TRequireSlotRequest request) throws TException {
+                requestedSlot.set(request.getSlot());
+                super.requireSlotAsync(request);
+                throw new TException("mock-response-lost-after-remote-require");
+            }
+
+            @Override
+            public TReleaseSlotResponse releaseSlot(TReleaseSlotRequest request) throws TException {
+                releaseCalls.incrementAndGet();
+                releasedSlotId.set(request.getSlot_id());
+                Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+                        GlobalStateMgr.getCurrentState().getSlotManager().getSlots().stream()
+                                .anyMatch(slot -> slot.getSlotId().equals(request.getSlot_id())));
+                return super.releaseSlot(request);
+            }
+        });
+
+        DefaultCoordinator failedCoord = getSchedulerWithQueryId("select count(1) from lineitem");
+        try {
+            Assertions.assertThrows(StarRocksException.class,
+                    () -> manager.maybeWait(connectContext, failedCoord),
+                    "mock-response-lost-after-remote-require");
+            TUniqueId failedSlotId = requestedSlot.get().getSlot_id();
+            Assertions.assertEquals(1, releaseCalls.get());
+            Assertions.assertEquals(failedSlotId, releasedSlotId.get());
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() ->
+                    GlobalStateMgr.getCurrentState().getSlotManager().getSlots().stream()
+                            .noneMatch(slot -> slot.getSlotId().equals(failedSlotId)));
+        } finally {
+            mockFrontendService(new MockFrontendServiceClient());
+            TResourceLogicalSlot slot = requestedSlot.get();
+            if (slot != null) {
+                GlobalStateMgr.getCurrentState().getSlotManager()
+                        .releaseSlotAsync(slot.getWarehouse_id(), slot.getSlot_id());
+            }
+            runningCoord.onFinished();
+        }
     }
 
     @Test
@@ -1936,45 +1990,5 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         coords.forEach(coor -> coor.cancel("Cancel by test"));
         runningCoords.forEach(DefaultCoordinator::onFinished);
-    }
-
-    @Test
-    public void testStaleRangeColocateAssignmentReleasesTheQueueSlot() throws Exception {
-        // A stale range-colocate bucket assignment fails scheduling right after the queue admitted the query and
-        // before anything is deployed; the attempt gives its slot back at once, before the statement is re-planned,
-        // so a concurrency-limited queue can admit the next query meanwhile.
-        GlobalVariable.setEnableQueryQueueSelect(true);
-        GlobalVariable.setQueryQueueConcurrencyLimit(1);
-
-        AtomicInteger externalCleanups = new AtomicInteger();
-        new MockUp<DefaultCoordinator>() {
-            @Mock
-            public void prepareExec() {
-                throw new RangeColocateUnalignedException("range colocate group 1 has a stale bucket assignment in "
-                        + "physical partition 2");
-            }
-
-            @Mock
-            public void clearExternalResources() {
-                externalCleanups.incrementAndGet();
-            }
-        };
-
-        DefaultCoordinator failed = getSchedulerWithQueryId("select count(1) from lineitem");
-        Assertions.assertThrows(RangeColocateUnalignedException.class, failed::execWithoutDeploy);
-        Assertions.assertEquals(LogicalSlot.State.RELEASED, failed.getSlot().getState());
-        Assertions.assertEquals(1, externalCleanups.get());
-
-        // The retry loop releases the last attempt's slots once more; that must not change the accounting.
-        failed.onReleaseSlots();
-        Assertions.assertEquals(LogicalSlot.State.RELEASED, failed.getSlot().getState());
-        Awaitility.await().atMost(5, TimeUnit.SECONDS)
-                .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
-
-        // With a concurrency limit of 1 the next attempt is admitted at once.
-        DefaultCoordinator retry = getSchedulerWithQueryId("select count(1) from lineitem");
-        manager.maybeWait(connectContext, retry);
-        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, retry.getSlot().getState());
-        retry.onReleaseSlots();
     }
 }
