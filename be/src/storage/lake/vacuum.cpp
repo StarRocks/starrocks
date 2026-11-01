@@ -506,13 +506,15 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     return Status::OK();
 }
 
-static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
+void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
     auto cache = tablet_mgr->metacache();
     DCHECK(cache != nullptr);
-    // Assuming the cache key for tablet metadata is the path to tablet metadata.
-    // TODO: Refactor the code to extract a separate function that constructs the tablet metadata cache key
     for (const auto& path : metafiles) {
         cache->erase(path);
+        auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
+        if (tablet_id != 0) {
+            cache->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+        }
     }
 }
 
@@ -593,6 +595,10 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                 continue;
             }
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
+            // A bundle contains one metadata object per tablet, cached under the tablet's own path.
+            for (const auto& tablet_info : tablet_infos) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
+            }
         }
         RETURN_IF_ERROR(metafile_deleter.finish());
         (*vacuumed_files) += metafile_deleter.delete_count();
@@ -1008,6 +1014,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // delete files under txnlog
             RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter));
             // delete txnlog
+            auto [tablet_id, txn_id] = parse_txn_log_filename(log_name);
+            tablet_mgr->metacache()->erase(
+                    join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name));
             RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
         }
     }
@@ -1032,11 +1041,15 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // delete files under txnlog
             for (const auto& log : combine_log_ptr->txn_logs()) {
                 if (std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
+                    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id()));
                     RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
                 }
             }
             // delete txnlog
             if (!contains_alive_tablets) {
+                ASSIGN_OR_RETURN(auto cache_key,
+                                 tablet_mgr->location_provider()->real_location(join_path(log_dir, log_name)));
+                tablet_mgr->metacache()->erase(cache_key);
                 RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
             }
         }
@@ -1098,6 +1111,20 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             }
         }
     }
+
+    // Clear metadata after the walk, including returns after a partially successful delete batch.
+    // Dropped tablet pages use their owning-tablet paths even when stored in a shared bundle.
+    DeferOp evict_dropped_metadata([&] {
+        for (auto tablet_id : tablet_ids) {
+            auto it = tablet_versions.find(tablet_id);
+            if (it != tablet_versions.end()) {
+                for (const auto& [version, state] : it->second) {
+                    tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+                }
+            }
+            tablet_mgr->erase_latest_cached_tablet_metadata(tablet_id);
+        }
+    });
 
     for (auto& [tablet_id, versions_and_states] : tablet_versions) {
         DCHECK(!versions_and_states.empty());
@@ -1174,10 +1201,12 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             if (state == BundleTabletMetaState::NOT_BUNDLE_TABLET_META) {
                 // delete the individual tablet metadata file
                 auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
+                erase_tablet_metadata_from_metacache(tablet_mgr, {path});
                 RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
             } else if (state == BundleTabletMetaState::ALL_TABLETS_TO_BE_DELETED) {
                 // delete the bundle tablet metadata file
                 auto path = join_path(meta_dir, tablet_metadata_filename(0, version));
+                erase_tablet_metadata_from_metacache(tablet_mgr, {path});
                 RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
             } else if (state == BundleTabletMetaState::SOME_TABLETS_NOT_TO_BE_DELETED) {
                 // we can not delete the bundle file, so we just skip it.
@@ -1221,9 +1250,20 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
             tablet_mgr->metacache()->erase(log_path);
         }
         for (auto&& info : request.txn_infos()) {
+            // Writers also cache the individual tablet log when the persisted file is combined.
+            tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, info.txn_id()));
             auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
                                                     : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
             files_to_delete.emplace_back(log_path);
+            if (info.combined_txn_log()) {
+                auto cache_key = tablet_mgr->location_provider()->real_location(log_path);
+                if (cache_key.ok()) {
+                    tablet_mgr->metacache()->erase(*cache_key);
+                } else {
+                    LOG(WARNING) << "Fail to resolve combined txn log cache key for " << log_path << ": "
+                                 << cache_key.status();
+                }
+            }
         }
     }
 
