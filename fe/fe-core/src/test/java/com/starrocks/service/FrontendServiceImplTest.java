@@ -50,7 +50,9 @@ import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
+import com.starrocks.load.streamload.AbstractStreamLoadTask;
 import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
@@ -146,6 +148,7 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.transaction.TxnStateCallbackFactory;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -1814,6 +1817,56 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals("artificial failure", loadInfo.getError_msg());
         Assertions.assertEquals(2, loadInfo.getNum_sink_rows());
         Assertions.assertEquals(1, loadInfo.getNum_filtered_rows());
+    }
+
+    @Test
+    public void testLoadTxnBeginDuplicateRequest() throws TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        doReturn(new TNetworkAddress("127.0.0.2", 9030)).when(impl).getClientAddr();
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel(UUID.randomUUID().toString());
+        request.setRequest_id(UUIDUtil.genTUniqueId());
+        request.setDb("test");
+        request.setTbl("test_load");
+        request.setUser("root");
+        request.setPasswd("");
+
+        TLoadTxnBeginResult first = impl.loadTxnBegin(request);
+        assertEquals(TStatusCode.OK, first.getStatus().getStatus_code());
+        long txnId = first.getTxnId();
+        Assertions.assertTrue(txnId > 0);
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        StreamLoadMgr streamLoadMgr = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        AbstractStreamLoadTask originalTask = streamLoadMgr.getTaskByLabel(request.getLabel());
+        Assertions.assertNotNull(originalTask);
+        TxnStateCallbackFactory callbackFactory = transactionMgr.getCallbackFactory();
+        long taskCount = streamLoadMgr.getStreamLoadTaskCount();
+        long callbackCount = callbackFactory.getCallBackCnt();
+        StreamLoadTask invalidTxnTask = streamLoadMgr.getSyncSteamLoadTaskByTxnId(-1);
+
+        // Retrying begin must preserve the task that owns the original transaction's callbacks.
+        for (int i = 0; i < 2; i++) {
+            TLoadTxnBeginResult retry = impl.loadTxnBegin(request);
+            assertEquals(TStatusCode.OK, retry.getStatus().getStatus_code());
+            assertEquals(txnId, retry.getTxnId());
+            Assertions.assertSame(originalTask, streamLoadMgr.getTaskByLabel(request.getLabel()));
+            Assertions.assertSame(originalTask, streamLoadMgr.getSyncSteamLoadTaskByTxnId(txnId));
+            Assertions.assertSame(originalTask, callbackFactory.getCallback(originalTask.getId()));
+            assertEquals(taskCount, streamLoadMgr.getStreamLoadTaskCount());
+            assertEquals(callbackCount, callbackFactory.getCallBackCnt());
+            Assertions.assertSame(invalidTxnTask, streamLoadMgr.getSyncSteamLoadTaskByTxnId(-1));
+            assertEquals("BEFORE_LOAD", originalTask.getStateName());
+        }
+
+        TLoadTxnRollbackRequest rollback = new TLoadTxnRollbackRequest();
+        rollback.setDb(request.getDb());
+        rollback.setTbl(request.getTbl());
+        rollback.setTxnId(txnId);
+        rollback.setReason("duplicate begin test");
+        rollback.setAuth_code(100);
+        assertEquals(TStatusCode.OK, impl.loadTxnRollback(rollback).getStatus().getStatus_code());
+        assertEquals("CANCELLED", originalTask.getStateName());
+        Assertions.assertNull(callbackFactory.getCallback(originalTask.getId()));
     }
 
     private long testBeginAndPutTxn(FrontendServiceImpl impl, String db, String table) throws TException {
