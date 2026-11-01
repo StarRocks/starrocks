@@ -51,7 +51,9 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
     }
 
     auto* nullable_column = down_cast<NullableColumn*>(column);
-    if (selected == _count) {
+    bool is_view_src =
+            _src.is_view() || (_src.is_nullable() && down_cast<const NullableColumn*>(&_src)->data_column()->is_view());
+    if (selected == _count && !is_view_src) {
         nullable_column->append(_src, 0, _count);
         return Status::OK();
     }
@@ -185,7 +187,7 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary(BinaryColumn* column
     if (_mask == nullptr || _count == 0) {
         return Status::OK();
     }
-    if (_src.is_binary_view()) {
+    if (_src.is_view() || _src.is_binary_view()) {
         append_fallback(column);
         return Status::OK();
     }

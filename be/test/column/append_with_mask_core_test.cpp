@@ -382,6 +382,51 @@ TEST(AppendWithMaskCoreTest, appendBinaryViewColumnFallback) {
     EXPECT_EQ("date", neg_dst->get_slice(1).to_string());
 }
 
+TEST(AppendWithMaskCoreTest, appendViewToNullableColumnAllSelected) {
+    auto base_col = BinaryColumn::create();
+    base_col->append("star");
+    base_col->append("rocks");
+    base_col->append("simd");
+    base_col->append("vector");
+
+    auto view = ColumnView::create(BinaryColumn::create(), 1, -1);
+    view->append(*base_col, 0, base_col->size());
+    ASSERT_TRUE(view->is_binary_view());
+    ASSERT_EQ(4, view->size());
+
+    // 1. Direct BinaryView into NullableColumn with all-selected mask
+    const uint8_t all_ones_mask[] = {1, 1, 1, 1};
+    auto dst = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(append_with_mask<true>(dst.get(), *view, all_ones_mask, 4).ok());
+    ASSERT_EQ(4, dst->size());
+    EXPECT_EQ("star", dst->get(0).get_slice().to_string());
+    EXPECT_EQ("rocks", dst->get(1).get_slice().to_string());
+    EXPECT_EQ("simd", dst->get(2).get_slice().to_string());
+    EXPECT_EQ("vector", dst->get(3).get_slice().to_string());
+    for (size_t i = 0; i < 4; ++i) {
+        EXPECT_FALSE(dst->is_null(i));
+    }
+
+    // 2. Nullable-wrapped BinaryView into NullableColumn with all-selected mask
+    auto view_null = NullColumn::create();
+    view_null->append(0);
+    view_null->append(1); // "rocks" is null
+    view_null->append(0);
+    view_null->append(0);
+    auto nullable_view = NullableColumn::create(view, view_null);
+
+    auto dst2 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(append_with_mask<true>(dst2.get(), *nullable_view, all_ones_mask, 4).ok());
+    ASSERT_EQ(4, dst2->size());
+    EXPECT_FALSE(dst2->is_null(0));
+    EXPECT_TRUE(dst2->is_null(1));
+    EXPECT_FALSE(dst2->is_null(2));
+    EXPECT_FALSE(dst2->is_null(3));
+    EXPECT_EQ("star", dst2->get(0).get_slice().to_string());
+    EXPECT_EQ("simd", dst2->get(2).get_slice().to_string());
+    EXPECT_EQ("vector", dst2->get(3).get_slice().to_string());
+}
+
 TEST(AppendWithMaskCoreTest, appendFixedLengthStrictBufferBoundaryUnderAsan) {
     // Under ASAN, if append_fixed_length resizes the destination buffer to only
     // orig_size + selected, vectorised store instructions (e.g. AVX-512 _mm512_storeu_si512)

@@ -439,16 +439,16 @@ static void BM_LengthEqMask_SIMD(benchmark::State& state) {
 BENCHMARK(BM_LengthEqMask_Scalar)->Arg(8)->Arg(15)->Arg(63)->Arg(255)->Arg(1024)->Arg(4096);
 BENCHMARK(BM_LengthEqMask_SIMD)->Arg(8)->Arg(15)->Arg(63)->Arg(255)->Arg(1024)->Arg(4096);
 
-// Dedicated microbenchmarks for tail-only evaluation (1 through 7 elements)
-static void BM_LengthEqMask_TailOnly_Scalar(benchmark::State& state) {
-    size_t tail_len = static_cast<size_t>(state.range(0));
-    std::vector<uint32_t> offsets(tail_len + 1);
-    for (size_t i = 0; i <= tail_len; ++i) {
+// Dedicated microbenchmarks for small sizes (1 through 15 elements)
+static void BM_LengthEqMask_SmallSizes_Scalar(benchmark::State& state) {
+    size_t size = static_cast<size_t>(state.range(0));
+    std::vector<uint32_t> offsets(size + 1);
+    for (size_t i = 0; i <= size; ++i) {
         offsets[i] = static_cast<uint32_t>(i * 5);
     }
     for (auto _ : state) {
         uint32_t mask = 0;
-        for (size_t i = 0; i < tail_len; ++i) {
+        for (size_t i = 0; i < size; ++i) {
             if (offsets[i + 1] - offsets[i] == 5) {
                 mask |= (1u << i);
             }
@@ -457,15 +457,20 @@ static void BM_LengthEqMask_TailOnly_Scalar(benchmark::State& state) {
     }
 }
 
-static void BM_LengthEqMask_TailOnly_SIMD(benchmark::State& state) {
-    size_t tail_len = static_cast<size_t>(state.range(0));
-    std::vector<uint32_t> offsets(tail_len + 1);
-    for (size_t i = 0; i <= tail_len; ++i) {
+static void BM_LengthEqMask_SmallSizes_SIMD(benchmark::State& state) {
+    size_t size = static_cast<size_t>(state.range(0));
+    std::vector<uint32_t> offsets(size + 1);
+    for (size_t i = 0; i <= size; ++i) {
         offsets[i] = static_cast<uint32_t>(i * 5);
     }
     for (auto _ : state) {
         uint32_t mask = 0;
-        for (size_t i = 0; i < tail_len; ++i) {
+        size_t i = 0;
+        if (size >= SIMD::kStringLenSimdWidth) {
+            mask = SIMD::length_eq_mask(offsets.data(), 0, 5);
+            i += SIMD::kStringLenSimdWidth;
+        }
+        for (; i < size; ++i) {
             if (offsets[i + 1] - offsets[i] == 5) {
                 mask |= (1u << i);
             }
@@ -474,8 +479,8 @@ static void BM_LengthEqMask_TailOnly_SIMD(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_LengthEqMask_TailOnly_Scalar)->DenseRange(1, 7, 1);
-BENCHMARK(BM_LengthEqMask_TailOnly_SIMD)->DenseRange(1, 7, 1);
+BENCHMARK(BM_LengthEqMask_SmallSizes_Scalar)->DenseRange(1, 15, 1);
+BENCHMARK(BM_LengthEqMask_SmallSizes_SIMD)->DenseRange(1, 15, 1);
 
 } // namespace starrocks
 
