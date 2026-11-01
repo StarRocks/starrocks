@@ -1589,4 +1589,70 @@ TEST(SliceWithHash32Test, BuildContinuesAfterTwoLevelConversion) {
     });
 }
 
+// Zero-length keys take the size == 0 branch in memequal and hash through crc_hash_32 with no words; they must group
+// as one key distinct from the non-empty keys, in both the map and the set.
+TEST(SliceWithHash32Test, EmptyStringKeysGroupTogether) {
+    constexpr int kRows = 64;
+    auto make_chunk = []() {
+        auto column = BinaryColumn::create();
+        for (int i = 0; i < kRows; i++) {
+            column->append(i % 2 == 0 ? std::string() : std::string("non-empty"));
+        }
+        return Columns{std::move(column)};
+    };
+    RuntimeProfile profile("EmptyStringKeysGroupTogether");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+    {
+        using Map = OneStringAggHashMap<PhmapSeed1>;
+        Map map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows);
+        map.build_hash_map(kRows, make_chunk(), &pool, KeyPrefixAlloc<Map>{&pool}, &states);
+        ASSERT_EQ(2u, map.hash_map.size());
+        for (int i = 2; i < kRows; i++) {
+            ASSERT_EQ(states[i % 2], states[i]) << "row " << i;
+        }
+        ASSERT_NE(states[0], states[1]);
+    }
+    {
+        OneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_hash_set(kRows, make_chunk(), &pool);
+        ASSERT_EQ(2u, set.hash_set.size());
+    }
+}
+
+// A nullable column whose rows are all NULL never reaches the string table: the NULL group is the only group.
+TEST(SliceWithHash32Test, AllNullStringColumnOnlyCreatesNullGroup) {
+    constexpr int kRows = 128;
+    auto make_chunk = []() {
+        auto data = BinaryColumn::create();
+        auto nulls = NullColumn::create();
+        for (int i = 0; i < kRows; i++) {
+            data->append(std::string());
+            nulls->append(1);
+        }
+        return Columns{NullableColumn::create(std::move(data), std::move(nulls))};
+    };
+    RuntimeProfile profile("AllNullStringColumnOnlyCreatesNullGroup");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+    {
+        using Map = NullOneStringAggHashMap<PhmapSeed1>;
+        Map map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows);
+        map.build_hash_map(kRows, make_chunk(), &pool, KeyPrefixAlloc<Map>{&pool}, &states);
+        ASSERT_NE(nullptr, map.get_null_key_data());
+        ASSERT_EQ(0u, map.hash_map.size());
+        for (int i = 0; i < kRows; i++) {
+            ASSERT_EQ(map.get_null_key_data(), states[i]) << "row " << i;
+        }
+    }
+    {
+        NullOneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_hash_set(kRows, make_chunk(), &pool);
+        ASSERT_TRUE(set.has_null_key);
+        ASSERT_EQ(0u, set.hash_set.size());
+    }
+}
+
 } // namespace starrocks
