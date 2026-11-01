@@ -37,6 +37,11 @@ public:
     Status do_visit(BinaryColumn* column);
 
     template <typename T>
+    Status do_visit(FixedLengthColumn<T>* column) {
+        return append_fixed_length(column);
+    }
+
+    template <typename T>
     Status do_visit(FixedLengthColumnBase<T>* column) {
         return append_fixed_length(column);
     }
