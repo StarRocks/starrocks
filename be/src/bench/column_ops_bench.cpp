@@ -25,6 +25,9 @@
 //   * chunk.cpp                      -- Chunk::filter all-ones short-circuit
 //   * fixed_length_column_base.cpp   -- replicate() (const + variable fill)
 //                                       and fill_default pointer-hoist
+//   * append_with_mask.cpp           -- append_with_mask (FixedLength & Binary,
+//                                       alternating & clustered patterns)
+//   * simd.h                         -- count_zero on selection vectors
 //
 // Out of scope here:
 //   * column_hash.cpp boundary detection -- regression confirmed, dropping.
@@ -43,6 +46,9 @@
 
 #include "base/simd/simd.h"
 #include "base/simd/simd_utils.h"
+#include "column/append_with_mask.h"
+#include "column/binary_column.h"
+#include "column/fixed_length_column.h"
 
 namespace starrocks {
 
@@ -367,6 +373,205 @@ BENCHMARK_TEMPLATE(do_FillDefault, int64_t, fill_default_hoist<int64_t>)
         ->Arg(10)
         ->Arg(50)
         ->Arg(90);
+
+// =====================================================================
+// append_with_mask.cpp :: AppendWithMaskVisitor
+// =====================================================================
+//
+// Evaluates AppendWithMask on FixedLengthColumnBase<int64_t> and BinaryColumn
+// across alternating (101010) and clustered (111...000...) patterns at
+// selectivities: 0%, 1%, 10%, 50%, 90%, 100%.
+
+enum MaskPattern { kAlternating = 0, kClustered = 1 };
+
+static void generate_pattern_mask(uint8_t* mask, size_t n, int selectivity_pct, MaskPattern pattern) {
+    if (selectivity_pct <= 0) {
+        std::memset(mask, 0, n);
+        return;
+    }
+    if (selectivity_pct >= 100) {
+        std::memset(mask, 1, n);
+        return;
+    }
+    size_t selected_count = (n * selectivity_pct) / 100;
+    if (pattern == kClustered) {
+        std::memset(mask, 1, selected_count);
+        std::memset(mask + selected_count, 0, n - selected_count);
+    } else {
+        std::memset(mask, 0, n);
+        if (selectivity_pct == 50) {
+            for (size_t i = 0; i < n; i += 2) {
+                mask[i] = 1;
+            }
+        } else {
+            double step = static_cast<double>(n) / static_cast<double>(selected_count);
+            for (size_t i = 0; i < selected_count; ++i) {
+                size_t idx = static_cast<size_t>(i * step);
+                if (idx < n) {
+                    mask[idx] = 1;
+                }
+            }
+        }
+    }
+}
+
+template <MaskPattern Pattern, bool PositiveSelect = true>
+static void BM_AppendWithMask_Int64(benchmark::State& state) {
+    const int selectivity = static_cast<int>(state.range(0));
+    const size_t n = kChunk;
+    auto src = Int64Column::create();
+    for (size_t i = 0; i < n; ++i) {
+        src->append(static_cast<int64_t>(i));
+    }
+    std::vector<uint8_t> mask(n);
+    generate_pattern_mask(mask.data(), n, selectivity, Pattern);
+
+    auto dst = Int64Column::create();
+    for (auto _ : state) {
+        dst->resize(0);
+        Status st = append_with_mask<PositiveSelect>(dst.get(), *src, mask.data(), n);
+        benchmark::DoNotOptimize(dst->size());
+    }
+    state.SetItemsProcessed(state.iterations() * n);
+}
+
+template <MaskPattern Pattern, bool PositiveSelect = true>
+static void BM_AppendWithMask_Binary(benchmark::State& state) {
+    const int selectivity = static_cast<int>(state.range(0));
+    const size_t n = kChunk;
+    auto src = BinaryColumn::create();
+    for (size_t i = 0; i < n; ++i) {
+        std::string s = "starrocks_str_record_" + std::to_string(i);
+        src->append(Slice(s));
+    }
+    std::vector<uint8_t> mask(n);
+    generate_pattern_mask(mask.data(), n, selectivity, Pattern);
+
+    auto dst = BinaryColumn::create();
+    for (auto _ : state) {
+        dst->get_offset().resize(1);
+        dst->get_offset().set(0, 0);
+        dst->get_bytes().resize(0);
+        Status st = append_with_mask<PositiveSelect>(dst.get(), *src, mask.data(), n);
+        benchmark::DoNotOptimize(dst->size());
+    }
+    state.SetItemsProcessed(state.iterations() * n);
+}
+
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Int64, kAlternating)
+        ->Name("BM_AppendWithMask_Int64_Alternating")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Int64, kClustered)
+        ->Name("BM_AppendWithMask_Int64_Clustered")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Binary, kAlternating)
+        ->Name("BM_AppendWithMask_Binary_Alternating")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Binary, kClustered)
+        ->Name("BM_AppendWithMask_Binary_Clustered")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Int64, kAlternating, false)
+        ->Name("BM_AppendWithMask_Neg_Int64_Alternating")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Int64, kClustered, false)
+        ->Name("BM_AppendWithMask_Neg_Int64_Clustered")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Binary, kAlternating, false)
+        ->Name("BM_AppendWithMask_Neg_Binary_Alternating")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+BENCHMARK_TEMPLATE(BM_AppendWithMask_Binary, kClustered, false)
+        ->Name("BM_AppendWithMask_Neg_Binary_Clustered")
+        ->Arg(0)
+        ->Arg(1)
+        ->Arg(10)
+        ->Arg(50)
+        ->Arg(90)
+        ->Arg(100);
+
+// =====================================================================
+// SIMD::count_zero on selection and index vectors
+// =====================================================================
+
+static void GenerateCountZeroArgs(benchmark::Benchmark* b) {
+    for (int64_t bytes : {64, 256, 4096, 65536}) {
+        for (int64_t zero_pct : {0, 1, 10, 50, 90, 100}) {
+            b->Args({bytes, zero_pct});
+        }
+    }
+}
+
+static void BM_CountZero_8Bit(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint8_t);
+    std::vector<uint8_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : 1;
+    }
+    for (auto _ : state) {
+        size_t count = SIMD::count_zero(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+static void BM_CountZero_32Bit(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint32_t);
+    std::vector<uint32_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint32_t>(i + 1);
+    }
+    for (auto _ : state) {
+        size_t count = SIMD::count_zero(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+BENCHMARK(BM_CountZero_8Bit)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_32Bit)->Apply(GenerateCountZeroArgs);
 
 } // namespace starrocks
 
