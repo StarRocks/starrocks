@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
 #include <random>
 #include <vector>
 
@@ -146,6 +147,143 @@ PARALLEL_TEST(SimdFilterTest, vectorized_path_matches_scalar) {
         for (int keep : {0, 50, 250, 500, 750, 950, 1000}) {
             check_against_reference<int32_t>(n, keep, 12345);
             check_against_reference<int64_t>(n, keep, 67890);
+        }
+    }
+}
+
+// Exercise exact batch sizes (multiples of 16: 16, 32, 48, 64) across diverse
+// selector patterns and element types.
+template <typename T>
+static void check_exact_batch_sizes() {
+    struct Pattern {
+        const char* name;
+        std::function<uint8_t(size_t)> gen;
+    };
+    std::vector<Pattern> patterns = {
+            {"all_ones", [](size_t) -> uint8_t { return 1; }},
+            {"all_zeros", [](size_t) -> uint8_t { return 0; }},
+            {"alternating", [](size_t i) -> uint8_t { return static_cast<uint8_t>(i % 2); }},
+            {"sparse", [](size_t i) -> uint8_t { return static_cast<uint8_t>(i % 8 == 0 ? 1 : 0); }},
+            {"dense", [](size_t i) -> uint8_t { return static_cast<uint8_t>(i % 8 == 0 ? 0 : 1); }},
+            {"non_normalised",
+             [](size_t i) -> uint8_t { return static_cast<uint8_t>((i % 3 == 0) ? (0x80 | (i & 0x7f)) : 0); }},
+    };
+
+    for (size_t n : {16u, 32u, 48u, 64u}) {
+        for (const auto& pattern : patterns) {
+            std::vector<T> src(n);
+            std::vector<uint8_t> selector(n);
+            std::vector<T> expected;
+            for (size_t i = 0; i < n; ++i) {
+                src[i] = static_cast<T>(i * 17 + 3);
+                selector[i] = pattern.gen(i);
+                if (selector[i]) {
+                    expected.push_back(src[i]);
+                }
+            }
+
+            // In-place compaction
+            std::vector<T> in_place = src;
+            size_t in_place_size = filter_range(in_place.data(), in_place.data(), selector, 0, n);
+            ASSERT_EQ(expected.size(), in_place_size) << "n=" << n << " pattern=" << pattern.name;
+            for (size_t i = 0; i < in_place_size; ++i) {
+                ASSERT_EQ(expected[i], in_place[i]) << "n=" << n << " pattern=" << pattern.name << " at " << i;
+            }
+
+            // Out-of-place compaction
+            std::vector<T> out_of_place(n, static_cast<T>(-1));
+            size_t out_size = filter_range(out_of_place.data(), src.data(), selector, 0, n);
+            ASSERT_EQ(expected.size(), out_size) << "n=" << n << " pattern=" << pattern.name;
+            for (size_t i = 0; i < out_size; ++i) {
+                ASSERT_EQ(expected[i], out_of_place[i]) << "n=" << n << " pattern=" << pattern.name << " at " << i;
+            }
+        }
+    }
+}
+
+PARALLEL_TEST(SimdFilterTest, exact_batch_sizes_multiples_of_16) {
+    check_exact_batch_sizes<uint8_t>();
+    check_exact_batch_sizes<uint16_t>();
+    check_exact_batch_sizes<int32_t>();
+    check_exact_batch_sizes<int64_t>();
+}
+
+// Range filter starting at non-zero offsets with exact 16-element lengths,
+// ensuring untouched prefixes and suffixes.
+PARALLEL_TEST(SimdFilterTest, range_filter_nonzero_offsets_exact_16_multiples) {
+    struct RangeCase {
+        size_t from;
+        size_t to;
+    };
+    std::vector<RangeCase> cases = {
+            {4, 20},  // length 16, offset 4
+            {16, 32}, // length 16, offset 16
+            {8, 40},  // length 32, offset 8
+            {16, 48}, // length 32, offset 16
+            {13, 61}, // length 48, offset 13 (unaligned)
+            {32, 96}, // length 64, offset 32
+    };
+
+    struct Pattern {
+        const char* name;
+        std::function<uint8_t(size_t)> gen;
+    };
+    std::vector<Pattern> patterns = {
+            {"all_ones", [](size_t) -> uint8_t { return 1; }},
+            {"all_zeros", [](size_t) -> uint8_t { return 0; }},
+            {"alternating", [](size_t i) -> uint8_t { return static_cast<uint8_t>(i % 2); }},
+            {"sparse", [](size_t i) -> uint8_t { return static_cast<uint8_t>(i % 5 == 0 ? 1 : 0); }},
+            {"non_normalised",
+             [](size_t i) -> uint8_t { return static_cast<uint8_t>((i % 3 == 0) ? (0x80 | (i & 0x7f)) : 0); }},
+    };
+
+    for (const auto& rc : cases) {
+        size_t total_len = rc.to + 32;
+        for (const auto& pattern : patterns) {
+            std::vector<int32_t> src(total_len);
+            std::vector<uint8_t> selector(total_len);
+            std::vector<int32_t> expected_kept;
+            for (size_t i = 0; i < total_len; ++i) {
+                src[i] = static_cast<int32_t>(1000 + i);
+                selector[i] = pattern.gen(i);
+                if (i >= rc.from && i < rc.to && selector[i]) {
+                    expected_kept.push_back(src[i]);
+                }
+            }
+
+            // In-place compaction
+            std::vector<int32_t> in_place = src;
+            size_t in_place_res = filter_range(in_place.data(), in_place.data(), selector, rc.from, rc.to);
+            ASSERT_EQ(rc.from + expected_kept.size(), in_place_res)
+                    << "from=" << rc.from << " to=" << rc.to << " pattern=" << pattern.name;
+            // Verify elements before 'from' are untouched
+            for (size_t i = 0; i < rc.from; ++i) {
+                ASSERT_EQ(src[i], in_place[i]) << "prefix modified at i=" << i;
+            }
+            // Verify compacted elements in [from, in_place_res)
+            for (size_t i = 0; i < expected_kept.size(); ++i) {
+                ASSERT_EQ(expected_kept[i], in_place[rc.from + i])
+                        << "compacted mismatch at i=" << i << " from=" << rc.from << " to=" << rc.to;
+            }
+
+            // Separate destination buffer
+            std::vector<int32_t> dst(total_len, -9999);
+            size_t dst_res = filter_range(dst.data(), src.data(), selector, rc.from, rc.to);
+            ASSERT_EQ(rc.from + expected_kept.size(), dst_res)
+                    << "from=" << rc.from << " to=" << rc.to << " pattern=" << pattern.name;
+            // Elements before 'from' must be untouched
+            for (size_t i = 0; i < rc.from; ++i) {
+                ASSERT_EQ(-9999, dst[i]) << "dst prefix modified at i=" << i;
+            }
+            // Compacted elements in [from, dst_res)
+            for (size_t i = 0; i < expected_kept.size(); ++i) {
+                ASSERT_EQ(expected_kept[i], dst[rc.from + i])
+                        << "dst mismatch at i=" << i << " from=" << rc.from << " to=" << rc.to;
+            }
+            // Elements beyond the maximum possible SIMD store window (to + 16) must be untouched
+            for (size_t i = rc.to + 16; i < total_len; ++i) {
+                ASSERT_EQ(-9999, dst[i]) << "dst suffix modified at i=" << i;
+            }
         }
     }
 }
