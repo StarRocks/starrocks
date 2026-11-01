@@ -24,6 +24,7 @@
 #include <set>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/container/raw_container.h"
 #include "base/testutil/sync_point.h"
@@ -2166,6 +2167,34 @@ StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_fi
     return std::make_pair(std::move(meta_files), std::move(bundle_meta_files));
 }
 
+// Whether |name| is a kind of data file that the orphan scans consider: segment files, sst, del file,
+// delvector, vector index, idx, lcrm.
+// NOTE: .idx files are produced by the ADD INDEX fast path (Index
+// Delta Group). Active .idx files are referenced from
+// TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
+// MetaFileBuilder::apply_drop_index. Any .idx file that is older
+// than the expire window and not referenced by any live metadata is
+// a candidate here and reclaimed by the existing orphan scan logic.
+// NOTE: .lcrm files are the Lake Compaction Rows Mapper files produced
+// by (parallel and serial) PK compaction. They are referenced only from
+// the transaction log (OpCompaction.lcrm_file / OpParallelCompaction
+// subtask/orphan lcrm), never from any live TabletMetadataPB field --
+// on a successful publish they are consumed and deleted by
+// RowsMapperIterator, and superseded ones enter orphan_files. So an
+// .lcrm left behind by an aborted/failed/crashed compaction is
+// referenced by nothing durable and, before this filter included it,
+// could never be reclaimed by any GC path. An in-flight .lcrm is
+// protected here identically to the output segments the same
+// compaction wrote: the production full-vacuum path keeps any file
+// whose txn-id filename prefix is >= min_active_txn_id (see
+// delete_orphan_data_files), and the offline datafile_gc tool keeps files
+// within its mtime expire window. So exposing .lcrm here only ever
+// reclaims a truly-orphaned mapper, never a live one.
+static bool is_orphan_scan_candidate(std::string_view name) {
+    return is_segment(name) || is_sst(name) || is_delvec(name) || is_del(name) || is_vector_index(name) ||
+           is_idx(name) || is_lcrm(name);
+}
+
 static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                                  const std::string& segment_root_location,
                                                                  int64_t expired_seconds) {
@@ -2174,55 +2203,79 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
     int64_t total_files = 0;
     int64_t total_bytes = 0;
     const auto now = std::time(nullptr);
-    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir2(
-                                      segment_root_location,
-                                      [&](DirEntry entry) {
-                                          total_files++;
-                                          total_bytes += entry.size.value_or(0);
+    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(fs->iterate_dir2(segment_root_location,
+                                                                [&](DirEntry entry) {
+                                                                    total_files++;
+                                                                    total_bytes += entry.size.value_or(0);
 
-                                          // should consider segment files, sst, del file, delvector, vector index, idx, lcrm
-                                          // NOTE: .idx files are produced by the ADD INDEX fast path (Index
-                                          // Delta Group). Active .idx files are referenced from
-                                          // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
-                                          // MetaFileBuilder::apply_drop_index. Any .idx file that is older
-                                          // than the expire window and not referenced by any live metadata is
-                                          // a candidate here and reclaimed by the existing orphan scan logic.
-                                          // NOTE: .lcrm files are the Lake Compaction Rows Mapper files produced
-                                          // by (parallel and serial) PK compaction. They are referenced only from
-                                          // the transaction log (OpCompaction.lcrm_file / OpParallelCompaction
-                                          // subtask/orphan lcrm), never from any live TabletMetadataPB field --
-                                          // on a successful publish they are consumed and deleted by
-                                          // RowsMapperIterator, and superseded ones enter orphan_files. So an
-                                          // .lcrm left behind by an aborted/failed/crashed compaction is
-                                          // referenced by nothing durable and, before this filter included it,
-                                          // could never be reclaimed by any GC path. An in-flight .lcrm is
-                                          // protected here identically to the output segments the same
-                                          // compaction wrote: the production full-vacuum path keeps any file
-                                          // whose txn-id filename prefix is >= min_active_txn_id (see
-                                          // vacuum_orphaned_datafiles, which runs this scan with
-                                          // expired_seconds=0), and the offline datafile_gc tool keeps files
-                                          // within its mtime expire window. So exposing .lcrm here only ever
-                                          // reclaims a truly-orphaned mapper, never a live one.
-                                          if (!is_segment(entry.name) && !is_sst(entry.name) &&
-                                              !is_delvec(entry.name) && !is_del(entry.name) &&
-                                              !is_vector_index(entry.name) && !is_idx(entry.name) &&
-                                              !is_lcrm(entry.name)) {
-                                              return true;
-                                          }
-                                          if (!entry.mtime.has_value()) {
-                                              LOG(WARNING) << "Fail to get modified time of " << entry.name;
-                                              return true;
-                                          }
+                                                                    if (!is_orphan_scan_candidate(entry.name)) {
+                                                                        return true;
+                                                                    }
+                                                                    if (!entry.mtime.has_value()) {
+                                                                        LOG(WARNING) << "Fail to get modified time of "
+                                                                                     << entry.name;
+                                                                        return true;
+                                                                    }
 
-                                          if (now >= entry.mtime.value() + expired_seconds) {
-                                              data_files.emplace(entry.name, entry);
-                                          }
-                                          return true;
-                                      })),
+                                                                    if (now >= entry.mtime.value() + expired_seconds) {
+                                                                        data_files.emplace(entry.name, entry);
+                                                                    }
+                                                                    return true;
+                                                                })),
                               "Failed to list " + segment_root_location);
     LOG(INFO) << segment_root_location << ": Listed all data files, total files: " << total_files
               << ", total bytes: " << total_bytes << ", candidate files: " << data_files.size();
     return data_files;
+}
+
+// Calls |fn| with the name of each data file that |metadata| references.
+static void for_each_referenced_data_file(const TabletMetadataPB& metadata,
+                                          const std::function<void(const std::string&)>& fn) {
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            fn(segment_meta.filename());
+        }
+        // Protect associated .vi files, named by the segment's recorded owner (not
+        // metadata.id(): split-shared segments must be protected under the writer's name).
+        for (const auto& segment_meta : rowset.segment_metas()) {
+            for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                fn(gen_vector_index_filename_for_segment(segment_meta, vi_id));
+            }
+        }
+        for (const auto& del_file : rowset.del_files()) {
+            fn(del_file.name());
+        }
+    }
+
+    for (const auto& [_, file_meta_pb] : metadata.delvec_meta().version_to_file()) {
+        fn(file_meta_pb.name());
+    }
+
+    for (const auto& sst : metadata.sstable_meta().sstables()) {
+        fn(sst.filename());
+    }
+
+    // Referenced .cols files from DCG metadata are live.
+    if (metadata.has_dcg_meta()) {
+        for (const auto& [_, dcg] : metadata.dcg_meta().dcgs()) {
+            for (const auto& fname : dcg.column_files()) {
+                fn(fname);
+            }
+        }
+    }
+    // Referenced .idx files from IDG metadata are live. Note: fully
+    // tombstoned IDG entries have already been removed by apply_drop_index
+    // (their files were moved to orphan_files), so iterating entries here
+    // is correct without extra filtering.
+    if (metadata.has_idg_meta()) {
+        for (const auto& [_, idg_ver] : metadata.idg_meta().idgs()) {
+            for (const auto& entry : idg_ver.entries()) {
+                if (entry.has_index_file() && !entry.index_file().empty()) {
+                    fn(entry.index_file());
+                }
+            }
+        }
+    }
 }
 
 StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs, std::string_view root_location,
@@ -2241,62 +2294,10 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
 
     std::set<std::string> data_files_in_metadatas;
     auto check_reference_files = [&](const TabletMetadataPtr& check_meta) {
-        for (const auto& rowset : check_meta->rowsets()) {
-            for (const auto& segment_meta : rowset.segment_metas()) {
-                const auto& segment = segment_meta.filename();
-                data_files.erase(segment);
-                data_files_in_metadatas.emplace(segment);
-            }
-            // Protect associated .vi files, named by the segment's recorded owner (not
-            // check_meta->id(): split-shared segments must be protected under the writer's name).
-            for (const auto& segment_meta : rowset.segment_metas()) {
-                for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                    auto vi_name = gen_vector_index_filename_for_segment(segment_meta, vi_id);
-                    data_files.erase(vi_name);
-                    data_files_in_metadatas.emplace(vi_name);
-                }
-            }
-            for (const auto& del_file : rowset.del_files()) {
-                data_files.erase(del_file.name());
-                data_files_in_metadatas.emplace(del_file.name());
-            }
-        }
-
-        const auto& delvector_meta = check_meta->delvec_meta();
-        for (const auto& [_, file_meta_pb] : delvector_meta.version_to_file()) {
-            data_files.erase(file_meta_pb.name());
-            data_files_in_metadatas.emplace(file_meta_pb.name());
-        }
-
-        const auto& sstable_meta = check_meta->sstable_meta();
-        for (const auto& sst : sstable_meta.sstables()) {
-            data_files.erase(sst.filename());
-            data_files_in_metadatas.emplace(sst.filename());
-        }
-
-        // Referenced .cols files from DCG metadata are live.
-        if (check_meta->has_dcg_meta()) {
-            for (const auto& [_, dcg] : check_meta->dcg_meta().dcgs()) {
-                for (const auto& fname : dcg.column_files()) {
-                    data_files.erase(fname);
-                    data_files_in_metadatas.emplace(fname);
-                }
-            }
-        }
-        // Referenced .idx files from IDG metadata are live. Note: fully
-        // tombstoned IDG entries have already been removed by apply_drop_index
-        // (their files were moved to orphan_files), so iterating entries here
-        // is correct without extra filtering.
-        if (check_meta->has_idg_meta()) {
-            for (const auto& [_, idg_ver] : check_meta->idg_meta().idgs()) {
-                for (const auto& entry : idg_ver.entries()) {
-                    if (entry.has_index_file() && !entry.index_file().empty()) {
-                        data_files.erase(entry.index_file());
-                        data_files_in_metadatas.emplace(entry.index_file());
-                    }
-                }
-            }
-        }
+        for_each_referenced_data_file(*check_meta, [&](const std::string& name) {
+            data_files.erase(name);
+            data_files_in_metadatas.emplace(name);
+        });
     };
 
     if (audit_ostream) {
@@ -2357,6 +2358,80 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
     LOG(INFO) << "Found " << data_files.size() << " orphan files";
 
     return data_files;
+}
+
+StatusOr<std::pair<int64_t, int64_t>> delete_orphan_data_files(FileSystem* fs, std::string_view root_location,
+                                                               int64_t min_active_txn_id,
+                                                               const std::list<std::string>& meta_files,
+                                                               const std::list<std::string>& bundle_meta_files) {
+    const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
+    const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
+
+    // Reading the metadata before listing is safe: a file is deleted only if its txn id is below
+    // min_active_txn_id, so the transaction that wrote it finished, and published its metadata, before this
+    // vacuum was requested.
+    std::unordered_set<std::string> referenced;
+    auto add_references = [&](const TabletMetadataPB& metadata) {
+        for_each_referenced_data_file(metadata, [&](const std::string& name) { referenced.insert(name); });
+    };
+    for (const auto& name : meta_files) {
+        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
+        if (tablet_id == 0 && version == kInitialVersion) {
+            // The initial metadata that the tablets of a partition share has no data files.
+            continue;
+        }
+        auto location = join_path(metadata_root_location, name);
+        auto res = get_tablet_metadata(location, false);
+        if (res.status().is_not_found()) { // This metadata file was deleted by another node
+            LOG(INFO) << location << " is deleted by other node";
+            continue;
+        } else if (!res.ok()) {
+            LOG(WARNING) << "Failed to read metadata file: " << location << ", error: " << res.status();
+            return res.status();
+        }
+        add_references(*res.value());
+    }
+    for (const auto& name : bundle_meta_files) {
+        auto location = join_path(metadata_root_location, name);
+        ASSIGN_OR_RETURN(auto metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(location, fs));
+        for (const auto& metadata : metadatas) {
+            add_references(*metadata);
+        }
+    }
+    LOG(INFO) << segment_root_location << ": " << referenced.size() << " data files referenced by " << meta_files.size()
+              << " meta files and " << bundle_meta_files.size() << " bundle meta files";
+
+    AsyncFileDeleter deleter(config::lake_vacuum_min_batch_delete_size);
+    int64_t listed_files = 0;
+    int64_t bytes_to_delete = 0;
+    Status delete_status;
+    RETURN_IF_ERROR_WITH_WARN(
+            ignore_not_found(fs->iterate_dir2(segment_root_location,
+                                              [&](DirEntry entry) {
+                                                  listed_files++;
+                                                  if (!is_orphan_scan_candidate(entry.name)) {
+                                                      return true;
+                                                  }
+                                                  if (!entry.mtime.has_value()) {
+                                                      LOG(WARNING) << "Fail to get modified time of " << entry.name;
+                                                      return true;
+                                                  }
+                                                  const auto txn_id = extract_txn_id_prefix(entry.name).value_or(0);
+                                                  if (txn_id == 0 || txn_id >= min_active_txn_id ||
+                                                      referenced.contains(std::string(entry.name))) {
+                                                      return true;
+                                                  }
+                                                  bytes_to_delete += entry.size.value_or(0);
+                                                  delete_status = deleter.delete_file(
+                                                          join_path(segment_root_location, entry.name));
+                                                  return delete_status.ok();
+                                              })),
+            "Failed to list " + segment_root_location);
+    RETURN_IF_ERROR(delete_status);
+    RETURN_IF_ERROR(deleter.finish());
+    LOG(INFO) << segment_root_location << ": listed " << listed_files << " files, deleted " << deleter.delete_count()
+              << " orphan data files, total size: " << bytes_to_delete;
+    return std::make_pair(deleter.delete_count(), bytes_to_delete);
 }
 
 static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs, std::string_view root_location,
