@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-description: "chat、embedding、rerank タイプの外部 AI サービスを、クラスターの AI Provider として登録します。"
+description: "chat、embedding、rerank、decision タイプの外部 AI サービスを、クラスターの AI Provider として登録します。"
 ---
 
 # CREATE AI PROVIDER
@@ -13,6 +13,7 @@ description: "chat、embedding、rerank タイプの外部 AI サービスを、
 - `rerank` — Cohere 互換の `/rerank` エンドポイント (Cohere / Jina / Voyage / OpenRouter / ローカル TEI)。
   `/api/context/search` のオプションであるクロスエンコーダーによる第 2 フェーズで使用されます。
 - `chat` — chat / completion エンドポイント (OpenAI Chat Completions または Anthropic Messages)。
+- `decision` — [ai_decide](../../../sql-functions/ai-functions/ai_decide.md) 用の構造化意思決定エンドポイント。`bailian_decision` プロトコルを使用します。
 
 各プロバイダーは `protocol` プロパティでエンドポイントが話す**プロトコル**も宣言します。省略した場合はタイプ
 が暗黙に持つプロトコルがデフォルトになります: `embedding` と `chat` は `openai`、`rerank` は `cohere` です。
@@ -31,6 +32,8 @@ description: "chat、embedding、rerank タイプの外部 AI サービスを、
 
 `SET <provider_name> AS DEFAULT AI PROVIDER` でデフォルトを設定します。該当するデフォルトが未設定の場合、暗黙 Provider の呼び出しは `EXPLAIN` を含め FE でエラーになります。各実行プランは選択した Provider の設定を固定します。ALTER とデフォルト変更は新たに計画するクエリに反映され、プリペアド文の各 `EXECUTE` も現在のメタデータで再計画します。
 
+`decision` 型のデフォルトプロトコルは `bailian_decision` です。[ai_decide](../../../sql-functions/ai-functions/ai_decide.md) はこの型とプロトコルの組み合わせを使用します。
+
 ## 権限
 
 プロバイダーの作成や管理には SYSTEM `OPERATE` が必要です。AI 関数から呼び出す場合は、[AI 関数の権限](../../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)と、その AI PROVIDER の `USAGE` の両方が必要です。作成しても一般ユーザーに使用権限は自動付与されません。
@@ -39,12 +42,12 @@ description: "chat、embedding、rerank タイプの外部 AI サービスを、
 
 ```SQL
 CREATE AI PROVIDER [IF NOT EXISTS] <provider_name>
-TYPE { embedding | rerank | chat }
+TYPE { embedding | rerank | chat | decision }
 [ COMMENT '<comment>' ]
 PROPERTIES (
     "endpoint"   = "<url>",
     "model"      = "<model_name>"
-    [, "protocol" = "{ openai | anthropic | cohere }" ]
+    [, "protocol" = "{ openai | anthropic | cohere | bailian_decision }" ]
     [, "dimensions" = "<int>" ]      -- embedding only
     [, "max_documents" = "<int>" ]   -- rerank only (optional)
     [, "deadline_ms" = "<int>" ]     -- rerank only (optional)
@@ -58,7 +61,7 @@ PROPERTIES (
 | パラメータ      | 説明                                                                                                 |
 | --------------- | ---------------------------------------------------------------------------------------------------- |
 | `provider_name` | プロバイダーの名前。`SET ... AS DEFAULT AI PROVIDER` で使用され、`SHOW AI PROVIDERS` に表示されます。 |
-| `TYPE`          | `embedding`、`rerank`、または `chat`。許可されるプロパティと、このプロバイダーがどのタイプのデフォルトになれるかを決定します。 |
+| `TYPE`          | `embedding`、`rerank`、`chat`、または `decision`。許可されるプロパティと、このプロバイダーがどのタイプのデフォルトになれるかを決定します。 |
 | `COMMENT`       | オプションのコメント文字列。                                                                         |
 | `PROPERTIES`    | `"key" = "value"` 形式の設定。許可されるキーは `TYPE` によって異なります (以下を参照)。それ以外のキーは拒否されます。 |
 
@@ -68,7 +71,7 @@ PROPERTIES (
 | --------------- | -------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `endpoint`      | すべて         | はい     | HTTP(S) エンドポイントの URL。`http://` または `https://` で始まる必要があります。                    |
 | `model`         | すべて         | はい     | リクエストの `model` フィールドに渡されるモデル名 (例: `text-embedding-3-small`、`cohere/rerank-4-fast`)。 |
-| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、または `cohere`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`。 |
+| `protocol`      | すべて         | いいえ   | エンドポイントのプロトコル: `openai`、`anthropic`、`cohere`、または `bailian_decision`。デフォルト: `embedding` と `chat` は `openai`、`rerank` は `cohere`、`decision` は `bailian_decision`。 |
 | `dimensions`    | embedding      | いいえ   | 埋め込みベクトルの次元数 (正の整数)。プロバイダーの出力およびベクトルインデックスの次元と一致する必要があります。 |
 | `max_documents` | rerank         | いいえ   | 1 回の rerank リクエストで送信するドキュメントの最大数 (正の整数、デフォルト 1000)。                  |
 | `deadline_ms`   | rerank         | いいえ   | すべてのリトライを含む rerank 呼び出し全体の実時間の上限 (ミリ秒、正の整数、デフォルト 10000)。応答の遅い、または到達不能なリランカーが検索をどれだけ長く停止させられるかを制限し、超過した場合はフュージョン順にフォールバックします。タイムアウトはリトライされません。リトライされるのは接続失敗または HTTP 5xx のみです。 |

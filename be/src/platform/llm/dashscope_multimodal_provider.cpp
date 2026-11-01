@@ -135,8 +135,8 @@ StatusOr<AIProviderHttpRequest> DashScopeMultimodalProvider::build_request(const
     return result;
 }
 
-AIProviderParseResult DashScopeMultimodalProvider::parse_response(std::string_view body,
-                                                                  AICapability capability) const {
+AIProviderParseResult DashScopeMultimodalProvider::parse_response(std::string_view body, AICapability capability,
+                                                                  const AIProviderResponseContext&) const {
     if (body.find('\0') != std::string_view::npos) return AIProviderMalformed{};
     rapidjson::Document document;
     document.Parse<rapidjson::kParseFullPrecisionFlag | rapidjson::kParseValidateEncodingFlag>(body.data(),

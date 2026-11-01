@@ -16,6 +16,7 @@
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <velocypack/Parser.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -40,6 +41,7 @@
 #include "column/file_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
@@ -1852,6 +1854,173 @@ TEST_F(AIFunctionCallExprTest, ProviderCorrelationKeyIsExplicit) {
         node.__set_ai_provider_id(key);
         EXPECT_FALSE(AIFunctionCallExpr::create(&pool, node).ok()) << key;
     }
+}
+
+TExprNode make_decision_node(bool json_state) {
+    auto wire = make_extended_ai_expression(200160 + (json_state ? 1 : 0), "ai_decide", TypeDescriptor(TYPE_JSON),
+                                            {json_state ? TypeDescriptor(TYPE_JSON) : varchar_type(),
+                                             TypeDescriptor(TYPE_JSON), varchar_type(), varchar_type()});
+    wire.nodes.front().__set_ai_provider_id("provider:decision");
+    return wire.nodes.front();
+}
+
+void add_decision_selectors(ObjectPool* pool, Expr* expression, size_t rows, std::optional<std::string> provider = "",
+                            std::optional<std::string> model = "") {
+    for (const auto& selector : {provider, model}) {
+        expression->add_child(pool->add(new CountingColumnExpr(
+                varchar_type(), selector ? ColumnHelper::create_const_column<TYPE_VARCHAR>(*selector, rows)
+                                         : ColumnHelper::create_const_null_column(rows))));
+    }
+}
+
+ColumnPtr make_decision_json(std::initializer_list<std::optional<std::string>> values, bool constant = false) {
+    auto data = JsonColumn::create();
+    auto nulls = NullColumn::create();
+    for (const auto& value : values) {
+        if (value) {
+            auto parsed = vpack::Parser::fromJson(*value);
+            data->append(JsonValue(parsed->slice()));
+            nulls->append(0);
+        } else {
+            data->append_default();
+            nulls->append(1);
+        }
+    }
+    ColumnPtr column = NullableColumn::create(std::move(data), std::move(nulls));
+    return constant ? ConstColumn::create(std::move(column), values.size()) : column;
+}
+
+TEST_F(AIFunctionCallExprTest, DecisionSignaturesKeepTypedStateAndQuestionsAcrossContextClones) {
+    for (bool json_state : {false, true}) {
+        for (const std::optional<std::string> selector :
+             {std::optional<std::string>{}, std::optional<std::string>{""}, std::optional<std::string>{"explicit"}}) {
+            ObjectPool pool;
+            auto created = AIFunctionCallExpr::create(&pool, make_decision_node(json_state));
+            ASSERT_TRUE(created.ok()) << created.status();
+            auto* expression = created.value();
+            expression->add_child(pool.add(
+                    new CountingColumnExpr(json_state ? TypeDescriptor(TYPE_JSON) : varchar_type(),
+                                           json_state ? make_decision_json({R"({"text":"hello"})", std::nullopt})
+                                                      : make_varchar_column({"hello", std::nullopt}))));
+            auto questions = make_decision_json({R"({"q":{"type":"noul"}})"}, true);
+            questions->as_mutable_raw_ptr()->resize(2);
+            auto* question_expr = pool.add(new CountingColumnExpr(TypeDescriptor(TYPE_JSON), questions));
+            expression->add_child(question_expr);
+            add_decision_selectors(&pool, expression, 2, selector, selector);
+            RuntimeState state;
+            ExprContext context(expression);
+            ASSERT_TRUE(context.prepare(&state).ok());
+            ASSERT_TRUE(context.open(&state).ok());
+            EXPECT_EQ(1, question_expr->evaluation_count());
+            ExprContext* cloned = nullptr;
+            ASSERT_TRUE(context.clone(&state, &pool, &cloned).ok());
+            auto chunk = make_chunk(2);
+            auto batch = expression->build_input_batch(cloned, chunk.get(), "decision-default");
+            ASSERT_TRUE(batch.ok()) << batch.status();
+            EXPECT_EQ(1, question_expr->evaluation_count());
+            ASSERT_EQ(2, batch->rows.size());
+            EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[0].action);
+            EXPECT_TRUE(batch->rows[0].prompt.empty());
+            EXPECT_EQ(selector && !selector->empty() ? *selector : "decision-default", batch->rows[0].model);
+            EXPECT_EQ("provider:decision", expression->provider_id());
+            ASSERT_TRUE(batch->rows[0].decision.has_value());
+            EXPECT_EQ(json_state, batch->rows[0].decision->state_is_json);
+            EXPECT_NE(nullptr, batch->rows[0].decision->questions);
+            EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[1].action);
+            EXPECT_FALSE(batch->rows[1].decision.has_value());
+            cloned->close(&state);
+        }
+    }
+}
+
+TEST_F(AIFunctionCallExprTest, DecisionQuestionsAreValidatedAtOpenWithoutInputRows) {
+    for (const std::string questions : {"{}", "[]", "null", R"({"q":{"type":"unknown"}})"}) {
+        ObjectPool pool;
+        auto created = AIFunctionCallExpr::create(&pool, make_decision_node(false));
+        ASSERT_TRUE(created.ok()) << created.status();
+        created.value()->add_child(
+                pool.add(new CountingColumnExpr(varchar_type(), make_varchar_column({std::nullopt}))));
+        created.value()->add_child(
+                pool.add(new CountingColumnExpr(TypeDescriptor(TYPE_JSON), make_decision_json({questions}, true))));
+        add_decision_selectors(&pool, created.value(), 1);
+        RuntimeState state;
+        ExprContext context(created.value());
+        ASSERT_TRUE(context.prepare(&state).ok());
+        EXPECT_FALSE(context.open(&state).ok()) << questions;
+    }
+}
+
+TEST_F(AIFunctionCallExprTest, DecisionRequiresConstantQuestionsAndValidProvider) {
+    for (bool variable_provider : {false, true}) {
+        ObjectPool pool;
+        auto created = AIFunctionCallExpr::create(&pool, make_decision_node(false));
+        ASSERT_TRUE(created.ok());
+        created.value()->add_child(pool.add(new CountingColumnExpr(varchar_type(), make_varchar_column({"state"}))));
+        created.value()->add_child(pool.add(new CountingColumnExpr(
+                TypeDescriptor(TYPE_JSON), make_decision_json({R"({"q":{"type":"noul"}})"}, variable_provider))));
+        created.value()->add_child(pool.add(new CountingColumnExpr(
+                varchar_type(), variable_provider
+                                        ? make_varchar_column({"provider-name"})
+                                        : ColumnHelper::create_const_column<TYPE_VARCHAR>("provider-name", 1))));
+        created.value()->add_child(pool.add(
+                new CountingColumnExpr(varchar_type(), ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1))));
+        RuntimeState state;
+        ExprContext context(created.value());
+        ASSERT_TRUE(context.prepare(&state).ok());
+        if (variable_provider) {
+            ASSERT_TRUE(context.open(&state).ok());
+            auto chunk = make_chunk(1);
+            EXPECT_FALSE(created.value()->build_input_batch(&context, chunk.get(), "snapshot-model").ok());
+        } else {
+            EXPECT_FALSE(context.open(&state).ok());
+        }
+    }
+}
+
+TEST_F(AIFunctionCallExprTest, DecisionNullQuestionsDoNotDispatch) {
+    ObjectPool pool;
+    auto created = AIFunctionCallExpr::create(&pool, make_decision_node(false));
+    ASSERT_TRUE(created.ok());
+    created.value()->add_child(pool.add(new CountingColumnExpr(varchar_type(), make_varchar_column({"state"}))));
+    created.value()->add_child(
+            pool.add(new CountingColumnExpr(TypeDescriptor(TYPE_JSON), ColumnHelper::create_const_null_column(1))));
+    add_decision_selectors(&pool, created.value(), 1);
+    RuntimeState state;
+    ExprContext context(created.value());
+    ASSERT_TRUE(context.prepare(&state).ok());
+    ASSERT_TRUE(context.open(&state).ok());
+    auto chunk = make_chunk(1);
+    auto batch = created.value()->build_input_batch(&context, chunk.get(), "snapshot-model");
+    ASSERT_TRUE(batch.ok()) << batch.status();
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[0].action);
+    EXPECT_FALSE(batch->rows[0].decision.has_value());
+}
+
+TEST_F(AIFunctionCallExprTest, DecisionJsonStateRejectsScalarsAsRowFailuresAndPreservesSqlNull) {
+    ObjectPool pool;
+    auto created = AIFunctionCallExpr::create(&pool, make_decision_node(true));
+    ASSERT_TRUE(created.ok());
+    created.value()->add_child(pool.add(
+            new CountingColumnExpr(TypeDescriptor(TYPE_JSON),
+                                   make_decision_json({R"("text")", "{}", "[]", "null", "42", "true", std::nullopt}))));
+    auto questions = make_decision_json({R"({"q":{"type":"noul"}})"}, true);
+    questions->as_mutable_raw_ptr()->resize(7);
+    created.value()->add_child(pool.add(new CountingColumnExpr(TypeDescriptor(TYPE_JSON), questions)));
+    add_decision_selectors(&pool, created.value(), 7);
+    RuntimeState state;
+    ExprContext context(created.value());
+    ASSERT_TRUE(context.prepare(&state).ok());
+    ASSERT_TRUE(context.open(&state).ok());
+    auto chunk = make_chunk(7);
+    auto batch = created.value()->build_input_batch(&context, chunk.get(), "model");
+    ASSERT_TRUE(batch.ok()) << batch.status();
+    for (size_t row = 0; row < 3; ++row) {
+        EXPECT_EQ(AIFunctionRowAction::DISPATCH, batch->rows[row].action);
+        ASSERT_TRUE(batch->rows[row].decision.has_value());
+        EXPECT_TRUE(batch->rows[row].decision->state_is_json);
+    }
+    for (size_t row = 3; row < 6; ++row) EXPECT_EQ(AIFunctionRowAction::TERMINAL_ROW_FAILURE, batch->rows[row].action);
+    EXPECT_EQ(AIFunctionRowAction::SQL_NULL, batch->rows[6].action);
 }
 
 } // namespace

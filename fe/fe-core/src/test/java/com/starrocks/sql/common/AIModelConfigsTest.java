@@ -33,7 +33,8 @@ public class AIModelConfigsTest {
         Map<AIProviderType, TAIProviderType> types = Map.of(
                 AIProviderType.CHAT, TAIProviderType.CHAT,
                 AIProviderType.EMBEDDING, TAIProviderType.EMBEDDING,
-                AIProviderType.RERANK, TAIProviderType.RERANK);
+                AIProviderType.RERANK, TAIProviderType.RERANK,
+                AIProviderType.DECISION, TAIProviderType.DECISION);
         types.forEach((type, wireType) -> {
             AIProvider provider = provider(type);
             provider.mergeParams(Map.of("protocol", "OpEnAi"));
@@ -51,11 +52,24 @@ public class AIModelConfigsTest {
     }
 
     @Test
+    public void testDecisionUsesTypedProviderWireAndRequiresDecisionProtocol() {
+        AIProvider provider = provider(AIProviderType.DECISION);
+        Assertions.assertEquals(TAIProviderType.DECISION, provider.toThrift().getType());
+        Assertions.assertEquals(TAIProviderProtocol.BAILIAN_DECISION, provider.toThrift().getProtocol());
+        Assertions.assertEquals(3, TAIProviderType.DECISION.getValue());
+        Assertions.assertEquals(3, TAIProviderProtocol.BAILIAN_DECISION.getValue());
+        Assertions.assertDoesNotThrow(() -> AIModelConfigs.validateProvider(provider));
+        provider.mergeParams(Map.of("protocol", "openai"));
+        Assertions.assertThrows(SemanticException.class, () -> AIModelConfigs.validateProvider(provider));
+    }
+
+    @Test
     public void testAllProtocolMappingsPreserveOriginalParams() {
         Map<AIProviderProtocol, TAIProviderProtocol> protocols = Map.of(
                 AIProviderProtocol.OPENAI, TAIProviderProtocol.OPENAI,
                 AIProviderProtocol.ANTHROPIC, TAIProviderProtocol.ANTHROPIC,
-                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE);
+                AIProviderProtocol.COHERE, TAIProviderProtocol.COHERE,
+                AIProviderProtocol.BAILIAN_DECISION, TAIProviderProtocol.BAILIAN_DECISION);
         protocols.forEach((protocol, wireProtocol) -> {
             AIProvider provider = provider(AIProviderType.CHAT);
             provider.mergeParams(Map.of("protocol", protocol.lower()));

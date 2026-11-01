@@ -167,7 +167,7 @@ public class CallOperator extends ArgsScalarOperator {
 
     @Override
     public boolean isConstant() {
-        if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+        if (FunctionSet.isNonDeterministicFunction(fn, fnName)) {
             return false;
         }
         for (ScalarOperator child : getChildren()) {

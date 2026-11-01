@@ -455,7 +455,7 @@ public class FragmentNormalizer {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr callExpr = (FunctionCallExpr) expr;
             String funcName = callExpr.getFn().functionName();
-            if (FunctionSet.nonDeterministicFunctions.contains(funcName)) {
+            if (FunctionSet.isNonDeterministicFunction(callExpr.getFn(), funcName)) {
                 return true;
             }
             if (FunctionSet.NOW.equals(funcName)) {

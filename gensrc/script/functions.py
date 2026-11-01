@@ -1910,4 +1910,24 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'FILTER', 'BOOLEAN', inputs=('input', 'condition'))
      }],
+    [200160, 'ai_decide', True, False, 'JSON', ['VARCHAR', 'JSON', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'state'},
+             {'name': 'questions'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('DECISION', 'NONE', 'JSON', inputs=('state', 'questions'))
+     }],
+    [200161, 'ai_decide', True, False, 'JSON', ['JSON', 'JSON', 'VARCHAR', 'VARCHAR'],
+     'nullptr', {
+         'named_args': [
+             {'name': 'state'},
+             {'name': 'questions'},
+             {'name': 'provider', 'default': ''},
+             {'name': 'model', 'default': ''},
+         ],
+         'ai': ai_metadata('DECISION', 'NONE', 'JSON', inputs=('state', 'questions'))
+     }],
 ]
