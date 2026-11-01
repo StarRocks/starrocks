@@ -33,6 +33,7 @@
 #include "common/config_lake_fwd.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_memory.h"
 #include "json2pb/json_to_pb.h"
 #include "service/mem_hook.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -996,6 +997,40 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
     EXPECT_TRUE(file_exist("0000000000000005_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000004_a542f95a-bff5-48a7-a3a7-2ed05691b58c.dat"));
     EXPECT_FALSE(file_exist("0000000000000004_a542ff5a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+}
+
+// A file system that stats each entry while it lists, like the POSIX one, stops with NotFound when a file is
+// deleted during the listing. list_meta_files must not return such a partial listing.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_list_meta_files_ignores_partial_listing) {
+    class VanishingFileSystem final : public MemoryFileSystem {
+    public:
+        Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+            // Stop after the first entry, as if the next one were deleted before it was stat'ed.
+            bool first = true;
+            RETURN_IF_ERROR(MemoryFileSystem::iterate_dir2(dir, [&](DirEntry entry) {
+                if (!first) {
+                    return false;
+                }
+                first = false;
+                return cb(std::move(entry));
+            }));
+            return Status::NotFound(dir);
+        }
+    };
+    VanishingFileSystem fs;
+    const std::string dir = "/meta";
+    ASSERT_OK(fs.create_dir(dir));
+    for (const auto& name :
+         {tablet_metadata_filename(66700, 2), tablet_metadata_filename(66700, 3), tablet_metadata_filename(0, 4)}) {
+        ASSIGN_OR_ABORT(auto f, fs.new_writable_file(join_path(dir, name)));
+        ASSERT_OK(f->close());
+    }
+
+    std::unordered_map<std::string, int64_t> bundle_meta_mtimes;
+    ASSIGN_OR_ABORT(auto files, list_meta_files(&fs, dir, &bundle_meta_mtimes));
+    EXPECT_EQ(2, files.first.size());
+    EXPECT_EQ(1, files.second.size());
 }
 
 // A bundle metadata file last modified well before the grace timestamp is expired by its modification time alone,

@@ -2162,11 +2162,24 @@ StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_fi
         }
         return true;
     };
+    auto list_names = [&] {
+        return fs->iterate_dir(metadata_root_location, [&](std::string_view name) { return add(name, {}); });
+    };
     // Only ask for the modification times when the caller wants them, so other callers list exactly as before.
-    auto st = bundle_meta_mtimes != nullptr
-                      ? fs->iterate_dir2(metadata_root_location,
-                                         [&](DirEntry entry) { return add(entry.name, entry.mtime); })
-                      : fs->iterate_dir(metadata_root_location, [&](std::string_view name) { return add(name, {}); });
+    Status st;
+    if (bundle_meta_mtimes == nullptr) {
+        st = list_names();
+    } else {
+        st = fs->iterate_dir2(metadata_root_location, [&](DirEntry entry) { return add(entry.name, entry.mtime); });
+        if (st.is_not_found()) {
+            // The posix listing stats every entry and gives up with NotFound if a file is deleted meanwhile. A
+            // partial listing could hide live metadata from the orphan scan, so list again by name instead.
+            meta_files.clear();
+            bundle_meta_files.clear();
+            bundle_meta_mtimes->clear();
+            st = list_names();
+        }
+    }
     RETURN_IF_ERROR_WITH_WARN(ignore_not_found(st), "Failed to list " + metadata_root_location);
     LOG(INFO) << "Found " << meta_files.size() << " meta files, " << bundle_meta_files.size() << " bundle meta files";
     return std::make_pair(std::move(meta_files), std::move(bundle_meta_files));
