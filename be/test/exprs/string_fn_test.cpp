@@ -2179,6 +2179,44 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceWithEmptyPattern) {
                     .ok());
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPatternAndRpl) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto ptn = ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://(?:www\\.)?([^/]+)/.*$", 3);
+    auto replace = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\1", 3);
+
+    std::string strs[] = {"https://www.starrocks.io/docs/en/", "http://github.com/StarRocks/starrocks", "not_a_url"};
+    std::string res[] = {"starrocks.io", "github.com", "not_a_url"};
+
+    for (const auto& s : strs) {
+        str->append(s);
+    }
+
+    columns.emplace_back(str);
+    columns.emplace_back(ptn);
+    columns.emplace_back(replace);
+
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_replace(context, columns).value();
+    auto v = ColumnHelper::as_column<BinaryColumn>(result);
+
+    for (size_t i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+        ASSERT_EQ(res[i], v->get_slice(i).to_string());
+    }
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                    .ok());
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, replaceNullablePattern) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto context = ctx.get();

@@ -211,6 +211,12 @@ TEST_F(StringFunctionRegexpReplaceTest, testRegexpReplaceTemplateParse) {
     ASSERT_EQ(tmpl.segments[2].group_idx, -1);
     ASSERT_EQ(tmpl.literal_bytes.substr(tmpl.segments[2].offset, tmpl.segments[2].length), "0\\end");
     ASSERT_EQ(tmpl.segments[3].group_idx, 0);
+    {
+        re2::StringPiece vec[2] = {re2::StringPiece("WHOLE_MATCH", 11), re2::StringPiece("GRP1", 4)};
+        ASSERT_EQ(tmpl.rendered_size(vec), 12 + 4 + 11);
+        re2::StringPiece vec_unmatched_opt[2] = {re2::StringPiece("WHOLE", 5), re2::StringPiece()};
+        ASSERT_EQ(tmpl.rendered_size(vec_unmatched_opt), 12 + 0 + 5);
+    }
 
     // 4. Invalid escape followed by higher capture group ("prefix\x\2"):
     // segments stop at "\x", but max_submatch still records group 2 like RE2::MaxSubmatch.
@@ -234,6 +240,368 @@ TEST_F(StringFunctionRegexpReplaceTest, testRegexpReplaceTemplateParse) {
     ASSERT_EQ(tmpl.nsubmatch, 1);
     ASSERT_EQ(tmpl.segments.size(), 1);
     ASSERT_EQ(tmpl.literal_bytes.substr(tmpl.segments[0].offset, tmpl.segments[0].length), "abc");
+}
+
+namespace {
+
+StatusOr<ColumnPtr> eval_regexp_replace(const Columns& columns) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto* context = ctx.get();
+    context->set_constant_columns(columns);
+    RETURN_IF_ERROR(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL));
+    DeferOp close_op(
+            [&] { (void)StringFunctions::regexp_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL); });
+    return StringFunctions::regexp_replace(context, columns);
+}
+
+std::string re2_reference_replace(const std::string& input, const re2::RE2& re, const std::string& rpl,
+                                  bool global_mode) {
+    re2::StringPiece rpl_sp(rpl.data(), rpl.size());
+    std::string out(input.data(), input.size());
+    if (global_mode) {
+        re2::RE2::GlobalReplace(&out, re, rpl_sp);
+    } else {
+        re2::RE2::Replace(&out, re, rpl_sp);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_F(StringFunctionRegexpReplaceTest, testZeroCopyPassthroughOnNoMatch) {
+    // 1. 0 rows match on BinaryColumn -> returns exact same ColumnPtr
+    {
+        ColumnPtr str_col =
+                ColumnTestHelper::build_column<Slice>({"not_a_url", "ftp://example.com/a", "plain_text_row"});
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://([^/]+)/.*$", str_col->size());
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\1", str_col->size());
+        Columns columns = {str_col, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value().get(), columns[0].get());
+    }
+
+    // 2. 0 rows match on NullableColumn with nulls -> returns exact same ColumnPtr
+    {
+        auto data_col = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        data_col->append("not_a_url");
+        null_col->append(0);
+        data_col->append("");
+        null_col->append(1);
+        data_col->append("still_not_a_url");
+        null_col->append(0);
+        ColumnPtr nullable_str = NullableColumn::create(std::move(data_col), std::move(null_col));
+        ColumnPtr ptn_col =
+                ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://([^/]+)/.*$", nullable_str->size());
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\1", nullable_str->size());
+        Columns columns = {nullable_str, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value().get(), columns[0].get());
+    }
+
+    // 3. Out-of-range group (\2 on a 1-group pattern) -> returns exact same ColumnPtr without matching
+    {
+        ColumnPtr str_col = ColumnTestHelper::build_column<Slice>(
+                {"https://www.starrocks.io/docs", "http://example.com/index.html"});
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://([^/]+)/.*$", str_col->size());
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\2", str_col->size());
+        Columns columns = {str_col, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value().get(), columns[0].get());
+    }
+
+    // 4. Invalid escape in !global_mode (^a with replacement "x\y") -> returns exact same ColumnPtr
+    {
+        ColumnPtr str_col = ColumnTestHelper::build_column<Slice>({"abcdef", "a12345"});
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("^a", str_col->size());
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("x\\y", str_col->size());
+        Columns columns = {str_col, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value().get(), columns[0].get());
+    }
+
+    // 5. NullableColumn with 0 nulls (!has_null()) -> unwraps and returns underlying data_column() pointer
+    {
+        auto data_col = BinaryColumn::create();
+        data_col->append("not_a_url_1");
+        data_col->append("not_a_url_2");
+        const Column* expected_data_ptr = data_col.get();
+        auto null_col = NullColumn::create(2, 0);
+        ColumnPtr nullable_str = NullableColumn::create(std::move(data_col), std::move(null_col));
+        ASSERT_FALSE(nullable_str->has_null());
+        ColumnPtr ptn_col =
+                ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://([^/]+)/.*$", nullable_str->size());
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\1", nullable_str->size());
+        Columns columns = {nullable_str, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value().get(), expected_data_ptr);
+    }
+
+    // 6. All ConstColumns with no match -> returns exact same ConstColumn pointer
+    {
+        ColumnPtr str_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("not_a_url", 8);
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://([^/]+)/.*$", 8);
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\1", 8);
+        Columns columns = {str_col, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value().get(), columns[0].get());
+    }
+
+    // 7. Empty 0-row column -> returns 0-row column cleanly
+    {
+        ColumnPtr str_col = BinaryColumn::create();
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://([^/]+)/.*$", 1);
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\1", 1);
+        Columns columns = {str_col, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value()->size(), 0);
+    }
+}
+
+TEST_F(StringFunctionRegexpReplaceTest, testLazyPrefixCopyAndMultiMatchFirstRow) {
+    constexpr size_t kNumRows = 128;
+    const std::string pattern = "([0-9]+)";
+    const std::string rpl = "<\\1>";
+
+    re2::RE2::Options opts;
+    opts.set_log_errors(false);
+    opts.set_longest_match(true);
+    opts.set_dot_nl(true);
+    re2::RE2 ref_re(pattern, opts);
+    ASSERT_TRUE(ref_re.ok());
+
+    std::vector<std::string> inputs(kNumRows);
+    for (size_t i = 0; i < 64; ++i) {
+        inputs[i] = "no_digits_prefix_" + std::string((i % 7) + 1, static_cast<char>('a' + (i % 26)));
+    }
+    inputs[64] = "id=123,code=456,ver=789";
+    for (size_t i = 65; i < kNumRows; ++i) {
+        if (i % 2 == 0) {
+            inputs[i] = "item_" + std::to_string(i) + "_count_" + std::to_string(i * 10);
+        } else {
+            inputs[i] = "pure_alpha_row";
+        }
+    }
+
+    // 1. Non-nullable BinaryColumn
+    {
+        auto str_col = BinaryColumn::create();
+        for (const auto& s : inputs) {
+            str_col->append(Slice(s));
+        }
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(pattern), kNumRows);
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(rpl), kNumRows);
+        Columns columns = {str_col, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        auto out_col = ColumnHelper::as_column<BinaryColumn>(res.value());
+        ASSERT_EQ(out_col->size(), kNumRows);
+        for (size_t i = 0; i < kNumRows; ++i) {
+            std::string expected = re2_reference_replace(inputs[i], ref_re, rpl, true);
+            Slice actual = out_col->get_slice(i);
+            ASSERT_EQ(std::string(actual.data, actual.size), expected) << "row=" << i;
+        }
+    }
+
+    // 2. NullableColumn with nulls before and after first match at row 64
+    {
+        auto data_col = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        for (size_t i = 0; i < kNumRows; ++i) {
+            bool is_null = (i < 64 && (i % 5 == 0)) || (i > 64 && (i % 7 == 0));
+            if (is_null) {
+                data_col->append(Slice("999_ignored_in_null_slot"));
+                null_col->append(1);
+            } else {
+                data_col->append(Slice(inputs[i]));
+                null_col->append(0);
+            }
+        }
+        ColumnPtr nullable_str = NullableColumn::create(std::move(data_col), std::move(null_col));
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(pattern), kNumRows);
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(rpl), kNumRows);
+        Columns columns = {nullable_str, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_EQ(res.value()->size(), kNumRows);
+        ColumnViewer<TYPE_VARCHAR> viewer(res.value());
+        for (size_t i = 0; i < kNumRows; ++i) {
+            bool expected_null = (i < 64 && (i % 5 == 0)) || (i > 64 && (i % 7 == 0));
+            ASSERT_EQ(viewer.is_null(i), expected_null) << "row=" << i;
+            if (!expected_null) {
+                std::string expected = re2_reference_replace(inputs[i], ref_re, rpl, true);
+                Slice actual = viewer.value(i);
+                ASSERT_EQ(std::string(actual.data, actual.size), expected) << "row=" << i;
+            }
+        }
+    }
+}
+
+TEST_F(StringFunctionRegexpReplaceTest, testDifferentialOracleAgainstRE2) {
+    const std::vector<std::string> patterns = {
+            "^https?://(?:www\\.)?([^/]+)/.*$", "([a-z]+)-([0-9]+)", "(a)?(b)", "", "a*", "^", "$", "\\x00+",
+    };
+
+    const std::vector<std::string> replacements = {
+            "", "\\1", "\\2:\\1:\\0", "\\10", "\\\\\\1\\\\", "prefix\\x", "prefix\\x\\2", "trail\\", "CHINA",
+    };
+
+    const std::vector<std::string> inputs = {
+            "https://www.starrocks.io/docs/en/sql-reference",
+            "http://github.com/StarRocks/starrocks/pull/1",
+            "foo-123 bar-456",
+            "b",
+            "ab",
+            "aabaa",
+            "",
+            std::string("ab\0cd", 5),
+            std::string("\0\0", 2),
+            "éß",
+            "中文",
+            "😀🚀",
+            std::string("\xFF\x80", 2),
+            std::string("\xC0\x80", 2),
+            std::string("\xE0\x80\x80", 3),
+            std::string("\xF0\x80\x80\x80", 4),
+            std::string("a\xE4\xB8", 3),
+    };
+
+    re2::RE2::Options opts;
+    opts.set_log_errors(false);
+    opts.set_longest_match(true);
+    opts.set_dot_nl(true);
+
+    for (const auto& pattern : patterns) {
+        re2::RE2 ref_re(re2::StringPiece(pattern.data(), pattern.size()), opts);
+        ASSERT_TRUE(ref_re.ok());
+        const bool const_global_mode = pattern.empty() || (!pattern.starts_with("^") && !pattern.ends_with("$"));
+
+        for (const auto& rpl : replacements) {
+            // Path 1: Const pattern + const rpl over BinaryColumn
+            {
+                auto str_col = BinaryColumn::create();
+                for (const auto& s : inputs) {
+                    str_col->append(Slice(s.data(), s.size()));
+                }
+                ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+                        Slice(pattern.data(), pattern.size()), inputs.size());
+                ColumnPtr rpl_col =
+                        ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(rpl.data(), rpl.size()), inputs.size());
+                Columns columns = {str_col, ptn_col, rpl_col};
+
+                auto res = eval_regexp_replace(columns);
+                ASSERT_TRUE(res.ok()) << res.status();
+                ColumnViewer<TYPE_VARCHAR> viewer(res.value());
+                for (size_t i = 0; i < inputs.size(); ++i) {
+                    std::string expected = re2_reference_replace(inputs[i], ref_re, rpl, const_global_mode);
+                    Slice actual = viewer.value(i);
+                    ASSERT_EQ(std::string(actual.data, actual.size), expected)
+                            << "Path 1 mismatch: pattern=[" << pattern << "] rpl=[" << rpl << "] row=" << i;
+                }
+            }
+
+            // Path 1b: All ConstColumns
+            for (const auto& s : inputs) {
+                constexpr size_t kConstSize = 4;
+                ColumnPtr str_col =
+                        ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(s.data(), s.size()), kConstSize);
+                ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+                        Slice(pattern.data(), pattern.size()), kConstSize);
+                ColumnPtr rpl_col =
+                        ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(rpl.data(), rpl.size()), kConstSize);
+                Columns columns = {str_col, ptn_col, rpl_col};
+
+                auto res = eval_regexp_replace(columns);
+                ASSERT_TRUE(res.ok()) << res.status();
+                ASSERT_TRUE(res.value()->is_constant());
+                ASSERT_EQ(res.value()->size(), kConstSize);
+                ColumnViewer<TYPE_VARCHAR> viewer(res.value());
+                std::string expected = re2_reference_replace(s, ref_re, rpl, const_global_mode);
+                Slice actual = viewer.value(0);
+                ASSERT_EQ(std::string(actual.data, actual.size), expected);
+            }
+
+            // Path 2: Const pattern + non-const rpl
+            {
+                auto str_col = BinaryColumn::create();
+                auto rpl_col = BinaryColumn::create();
+                for (const auto& s : inputs) {
+                    str_col->append(Slice(s.data(), s.size()));
+                    rpl_col->append(Slice(rpl.data(), rpl.size()));
+                }
+                ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(
+                        Slice(pattern.data(), pattern.size()), inputs.size());
+                Columns columns = {str_col, ptn_col, rpl_col};
+
+                auto res = eval_regexp_replace(columns);
+                ASSERT_TRUE(res.ok()) << res.status();
+                ColumnViewer<TYPE_VARCHAR> viewer(res.value());
+                for (size_t i = 0; i < inputs.size(); ++i) {
+                    std::string expected = re2_reference_replace(inputs[i], ref_re, rpl, const_global_mode);
+                    Slice actual = viewer.value(i);
+                    ASSERT_EQ(std::string(actual.data, actual.size), expected)
+                            << "Path 2 mismatch: pattern=[" << pattern << "] rpl=[" << rpl << "] row=" << i;
+                }
+            }
+
+            // Path 3: Non-const pattern + non-const rpl (regexp_replace_general always uses GlobalReplace)
+            {
+                auto str_col = BinaryColumn::create();
+                auto ptn_col = BinaryColumn::create();
+                auto rpl_col = BinaryColumn::create();
+                for (const auto& s : inputs) {
+                    str_col->append(Slice(s.data(), s.size()));
+                    ptn_col->append(Slice(pattern.data(), pattern.size()));
+                    rpl_col->append(Slice(rpl.data(), rpl.size()));
+                }
+                Columns columns = {str_col, ptn_col, rpl_col};
+
+                auto res = eval_regexp_replace(columns);
+                ASSERT_TRUE(res.ok()) << res.status();
+                ColumnViewer<TYPE_VARCHAR> viewer(res.value());
+                for (size_t i = 0; i < inputs.size(); ++i) {
+                    std::string expected = re2_reference_replace(inputs[i], ref_re, rpl, true);
+                    Slice actual = viewer.value(i);
+                    ASSERT_EQ(std::string(actual.data, actual.size), expected)
+                            << "Path 3 mismatch: pattern=[" << pattern << "] rpl=[" << rpl << "] row=" << i;
+                }
+            }
+        }
+    }
+
+    // Also verify only_null() handling across all 3 argument positions preserves columns[0]->size()
+    {
+        auto str_col = ColumnTestHelper::build_column<Slice>({"a", "b", "c"});
+        auto ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("a", 3);
+        auto rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("x", 3);
+        auto null_col_3 = ColumnHelper::create_const_null_column(3);
+        auto null_col_1 = ColumnHelper::create_const_null_column(1);
+
+        for (const Columns& cols : std::vector<Columns>{
+                     {null_col_3, ptn_col, rpl_col}, {str_col, null_col_1, rpl_col}, {str_col, ptn_col, null_col_1}}) {
+            auto res = eval_regexp_replace(cols);
+            ASSERT_TRUE(res.ok()) << res.status();
+            ASSERT_EQ(res.value()->size(), 3);
+            ASSERT_TRUE(res.value()->only_null());
+        }
+    }
 }
 
 } // namespace starrocks
