@@ -71,14 +71,7 @@ static std::optional<int64_t> allocated_bytes() {
 // Forward-declare internal helper exposed for testing (defined in vacuum.cpp).
 int64_t calculate_retry_delay(int64_t last_delay, int64_t base, int64_t max_retries);
 
-<<<<<<< HEAD
-=======
 namespace {
-
-// Read the current value of a bvar counter by its exposed name.
-int64_t read_bvar(const std::string& name) {
-    return std::stoll(bvar::Variable::describe_exposed(name));
-}
 
 // Like Starlet, tablets have distinct virtual roots for the same partition's files. Symlinks below
 // let the local filesystem serve these aliases, while real_location() returns the shared object key.
@@ -101,7 +94,6 @@ private:
 
 } // namespace
 
->>>>>>> 0e18339b82d... [BugFix][RB-884] Fix lake metacache keys and eviction on metadata deletion (#67600)
 struct VacuumTestArg {
     int64_t min_batch_size;
 };
