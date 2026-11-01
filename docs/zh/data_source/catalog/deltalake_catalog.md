@@ -14,6 +14,53 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 - StarRocks 支持的 Delta Lake 文件格式是 Parquet。Parquet 文件支持以下压缩格式：SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION。
 
+## ADLS Gen2 上的 Unity Catalog REST
+
+将 `hive.metastore.type` 设置为 `unity`，即可通过兼容 Unity Catalog 的 REST API 读取 Parquet 格式的 Delta 表。此路径支持 `dfs.core.windows.net` 下的 ADLS Gen2 存储位置，要求服务为每个表返回只读、限定目录范围的 Azure SAS。
+
+### 身份认证
+
+使用 StarRocks 现有的 [JWT 认证](../../administration/user_privs/authentication/jwt_authentication.md) 建立连接。SQL 登录必须生成经过认证且 Catalog 服务也接受的会话令牌。StarRocks 在元数据和临时凭据请求中通过 `Authorization: Bearer <token>` 转发完整令牌。仅使用密码认证的会话无法使用此元存储。
+
+StarRocks SQL 权限和 Catalog 权限分别检查。根据身份提供方配置 SQL 账户的 JWT principal、issuer、audience 和公钥，授予所需的 catalog `USAGE` 和表 `SELECT` 权限，并在 Catalog 中授权令牌所代表的用户。此连接器不添加认证插件，也不执行令牌交换。
+
+### 创建和查询 catalog
+
+```sql
+CREATE EXTERNAL CATALOG unity_delta PROPERTIES (
+    "type" = "deltalake",
+    "hive.metastore.type" = "unity",
+    "unity.catalog.uri" = "https://catalog.example.com/api/2.1/unity-catalog",
+    "unity.catalog.name" = "main"
+);
+
+SHOW DATABASES FROM unity_delta;
+SHOW TABLES FROM unity_delta.example_schema;
+DESCRIBE unity_delta.example_schema.example_table;
+SELECT * FROM unity_delta.example_schema.example_table LIMIT 10;
+```
+
+| 参数 | 是否必需 | 说明 |
+| --- | --- | --- |
+| `hive.metastore.type` | 是 | 设置为 `unity`。 |
+| `unity.catalog.uri` | 是 | API 基础 URI，包含 `/api/2.1/unity-catalog` 和部署前缀。支持 HTTP 和 HTTPS；请使用 TLS 或可信内部传输保护 Bearer 令牌。不跟随重定向。 |
+| `unity.catalog.name` | 是 | 上游 catalog 名称，其 schema 映射为 StarRocks 数据库。catalog、schema 和表名不能为空，且不能包含点、斜杠或控制字符。 |
+
+连接器列出 schema 和表，并使用返回的表 ID 向 `temporary-table-credentials` 请求 `READ` 凭据。响应必须包含匹配表存储位置的 `url`、以 epoch 毫秒表示的 `expiration_time` 和 `azure_user_delegation_sas.sas_token`。SAS 必须未过期，使用 `sr=d` 和匹配的目录深度，权限仅限 `r` 或 `rl`。不支持容器级 SAS 或其他存储凭据类型。HTTPS DFS 表位置会规范化为 `abfss`。
+
+每个查询捕获其认证令牌并拥有独立的元数据缓存。Unity 路径不使用 catalog 级 Delta 表、JSON 和 checkpoint 缓存，即使相关缓存属性已启用。每个表使用独立的存储配置。现有工作节点扫描接收固定的表 SAS，不接收 Catalog 令牌。
+
+请使用与固定 SAS 兼容的 Hadoop 配置。继承的 `fs.azure.sas.token.provider.type.<account>` 提供方优先于固定 SAS。现有云凭据传输路径保持不变；原始 fragment 的 DEBUG/VLOG 诊断日志可能包含 SAS 值。
+
+### 支持范围与凭据有效期
+
+- 只支持读取；不支持建表、写入或客户端凭据认证模式。
+- 支持最高为 3 的 Delta reader protocol 版本，以及 `columnMapping`、`deletionVectors`、`timestampNtz` 和 `v2Checkpoint`，仍受现有 Delta Kernel 读取器校验约束。数据文件和外部删除向量必须位于表的存储根目录内。
+- 不续期 JWT 或 SAS。JWT 过期会阻止后续 Catalog 认证请求；已规划的存储读取只能在 SAS 有效期间继续。必要时使用新令牌重新连接后执行新查询。
+- Catalog 请求和快照加载在现有 external query profile 中分别显示为 `UnityCatalog.request` 和 `DeltaLake.getSnapshot`；保留现有 Delta 文件读取和扫描范围计时器。
+
+Hive、Glue 和 DLF catalog 的行为不变。请确认所使用的 Catalog 实现满足上述 REST 响应和凭据要求。
+
 ## 集成准备
 
 在创建 Delta Lake catalog 之前，请确保您的 StarRocks 集群可以与 Delta Lake 集群的存储系统和元存储集成。
