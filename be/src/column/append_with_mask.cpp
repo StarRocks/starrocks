@@ -14,8 +14,11 @@
 
 #include "column/append_with_mask.h"
 
+#include <cstring>
 #include <type_traits>
+#include <vector>
 
+#include "base/simd/filter.h"
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
@@ -28,6 +31,7 @@
 #include "column/object_column.h"
 #include "column/struct_column.h"
 #include "column/variant_column.h"
+#include "gutil/strings/fastmem.h"
 
 namespace starrocks {
 
@@ -41,11 +45,20 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
         return Status::OK();
     }
 
+    size_t selected = count_selected();
+    if (selected == 0) {
+        return Status::OK();
+    }
+
     auto* nullable_column = down_cast<NullableColumn*>(column);
+    if (selected == _count) {
+        nullable_column->append(_src, 0, _count);
+        return Status::OK();
+    }
+
     size_t orig_size = nullable_column->null_column()->size();
 
     if (_src.only_null()) {
-        size_t selected = count_selected();
         nullable_column->append_nulls(selected);
         return Status::OK();
     }
@@ -53,7 +66,6 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
     if (_src.is_nullable()) {
         const auto* src_column = down_cast<const NullableColumn*>(&_src);
         if (!src_column->has_null()) {
-            size_t selected = count_selected();
             nullable_column->null_column_raw_ptr()->resize(orig_size + selected);
             RETURN_IF_ERROR(apply(nullable_column->data_column_raw_ptr(), src_column->data_column().get()));
         } else {
@@ -68,7 +80,6 @@ Status AppendWithMaskVisitor<PositiveSelect>::do_visit(NullableColumn* column) {
             }
         }
     } else {
-        size_t selected = count_selected();
         nullable_column->null_column_raw_ptr()->resize(orig_size + selected);
         RETURN_IF_ERROR(apply(nullable_column->data_column_raw_ptr(), &_src));
     }
@@ -129,16 +140,44 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_fixed_length(FixedLengthCol
 
     auto& data = column->get_data();
     size_t orig_size = data.size();
-    raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
-    auto* __restrict dest = data.data() + orig_size;
     const T* __restrict src_data = reinterpret_cast<const T*>(src_column->raw_data());
 
-    for (size_t i = 0; i < _count; ++i) {
-        if (is_selected(_mask[i])) {
-            *dest++ = src_data[i];
-        }
+    if (selected == _count) {
+        raw::stl_vector_resize_uninitialized(&data, orig_size + _count);
+        auto* __restrict dest = data.data() + orig_size;
+        std::memcpy(dest, src_data, _count * sizeof(T));
+        return Status::OK();
     }
-    return Status::OK();
+
+    if constexpr (PositiveSelect && sizeof(T) <= 32) {
+        // Size destination buffer to orig_size + _count to prevent AVX-512 _mm512_storeu buffer overrun
+        raw::stl_vector_resize_uninitialized(&data, orig_size + _count);
+        auto* __restrict dest = data.data() + orig_size;
+        SIMD::Filter::filter_range(dest, src_data, _mask, 0, _count);
+        raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
+        return Status::OK();
+    } else {
+        raw::stl_vector_resize_uninitialized(&data, orig_size + selected);
+        auto* __restrict dest = data.data() + orig_size;
+
+        size_t i = 0;
+        while (i < _count) {
+            while (i < _count && !is_selected(_mask[i])) {
+                ++i;
+            }
+            if (i >= _count) {
+                break;
+            }
+            size_t run_start = i;
+            while (i < _count && is_selected(_mask[i])) {
+                ++i;
+            }
+            size_t run_len = i - run_start;
+            std::memcpy(dest, src_data + run_start, run_len * sizeof(T));
+            dest += run_len;
+        }
+        return Status::OK();
+    }
 }
 
 template <bool PositiveSelect>
@@ -162,15 +201,31 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary(BinaryColumn* column
         return Status::OK();
     }
 
+    if (selected == _count) {
+        column->append(*src_column, 0, _count);
+        return Status::OK();
+    }
+
     const auto& src_offsets = src_column->get_offset();
     const auto* src_bytes = src_column->raw_bytes();
 
     size_t total_bytes = 0;
     src_offsets.visit_storage([&](const auto& src_offsets_buf) {
-        for (size_t i = 0; i < _count; ++i) {
-            if (is_selected(_mask[i])) {
-                total_bytes += src_offsets_buf[i + 1] - src_offsets_buf[i];
+        const auto* __restrict src_offsets_data = src_offsets_buf.data();
+        size_t i = 0;
+        while (i < _count) {
+            while (i < _count && !is_selected(_mask[i])) {
+                ++i;
             }
+            if (i >= _count) {
+                break;
+            }
+            size_t run_start = i;
+            while (i < _count && is_selected(_mask[i])) {
+                ++i;
+            }
+            size_t run_end = i;
+            total_bytes += src_offsets_data[run_end] - src_offsets_data[run_start];
         }
     });
 
@@ -192,16 +247,33 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary(BinaryColumn* column
         uint64_t current_offset = old_bytes;
         dst_offsets_buf[old_rows] = static_cast<DstValue>(current_offset);
         size_t copied = 0;
-        for (size_t i = 0; i < _count; ++i) {
-            if (is_selected(_mask[i])) {
-                const uint64_t start = src_offsets_data[i];
-                const uint64_t end = src_offsets_data[i + 1];
-                const uint64_t len = end - start;
-                strings::memcpy_inlined(dest_bytes + copied, src_bytes + start, len);
-                copied += len;
-                current_offset += len;
-                *dest_offsets++ = static_cast<DstValue>(current_offset);
+
+        size_t i = 0;
+        while (i < _count) {
+            while (i < _count && !is_selected(_mask[i])) {
+                ++i;
             }
+            if (i >= _count) {
+                break;
+            }
+            size_t run_start = i;
+            while (i < _count && is_selected(_mask[i])) {
+                ++i;
+            }
+            size_t run_end = i;
+            size_t run_len = run_end - run_start;
+            size_t run_bytes = src_offsets_data[run_end] - src_offsets_data[run_start];
+
+            strings::memcpy_inlined(dest_bytes + copied, src_bytes + src_offsets_data[run_start], run_bytes);
+            copied += run_bytes;
+
+            const uint64_t run_start_offset = src_offsets_data[run_start];
+            for (size_t j = 0; j < run_len; ++j) {
+                dest_offsets[j] = static_cast<DstValue>(current_offset +
+                                                        (src_offsets_data[run_start + 1 + j] - run_start_offset));
+            }
+            dest_offsets += run_len;
+            current_offset += run_bytes;
         }
     });
 
@@ -218,6 +290,19 @@ template <bool PositiveSelect>
 template <typename ColumnType>
 void AppendWithMaskVisitor<PositiveSelect>::append_fallback(ColumnType* column) {
     if (_mask == nullptr || _count == 0) {
+        return;
+    }
+    if (_src.is_view()) {
+        std::vector<uint32_t> indexes;
+        indexes.reserve(_count);
+        for (size_t i = 0; i < _count; ++i) {
+            if (is_selected(_mask[i])) {
+                indexes.push_back(i);
+            }
+        }
+        if (!indexes.empty()) {
+            _src.append_selective_to(*column, indexes.data(), 0, indexes.size());
+        }
         return;
     }
     for (size_t i = 0; i < _count; ++i) {
