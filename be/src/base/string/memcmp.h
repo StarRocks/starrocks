@@ -128,13 +128,54 @@ inline bool memequal(const char* p1, size_t size1, const char* p2, size_t size2)
     return p1[0] == p2[0];
 }
 
-inline int memcompare(const char* p1, size_t size1, const char* p2, size_t size2) {
+inline int memcompare_short(const char* p1, size_t size1, const char* p2, size_t size2) {
     size_t min_size = std::min(size1, size2);
+    if (min_size == 0) {
+        return compare(size1, size2);
+    }
+    if (min_size <= 16) {
+        if (min_size >= 8) {
+            uint64_t a = __builtin_bswap64(unaligned_load<uint64_t>(p1));
+            uint64_t b = __builtin_bswap64(unaligned_load<uint64_t>(p2));
+            if (a != b) return a < b ? -1 : 1;
+            uint64_t ta = __builtin_bswap64(unaligned_load<uint64_t>(p1 + min_size - 8));
+            uint64_t tb = __builtin_bswap64(unaligned_load<uint64_t>(p2 + min_size - 8));
+            if (ta != tb) return ta < tb ? -1 : 1;
+            return compare(size1, size2);
+        }
+        if (min_size >= 4) {
+            uint32_t a = __builtin_bswap32(unaligned_load<uint32_t>(p1));
+            uint32_t b = __builtin_bswap32(unaligned_load<uint32_t>(p2));
+            if (a != b) return a < b ? -1 : 1;
+            uint32_t ta = __builtin_bswap32(unaligned_load<uint32_t>(p1 + min_size - 4));
+            uint32_t tb = __builtin_bswap32(unaligned_load<uint32_t>(p2 + min_size - 4));
+            if (ta != tb) return ta < tb ? -1 : 1;
+            return compare(size1, size2);
+        }
+        if (min_size >= 2) {
+            uint16_t a = __builtin_bswap16(unaligned_load<uint16_t>(p1));
+            uint16_t b = __builtin_bswap16(unaligned_load<uint16_t>(p2));
+            if (a != b) return a < b ? -1 : 1;
+            uint16_t ta = __builtin_bswap16(unaligned_load<uint16_t>(p1 + min_size - 2));
+            uint16_t tb = __builtin_bswap16(unaligned_load<uint16_t>(p2 + min_size - 2));
+            if (ta != tb) return ta < tb ? -1 : 1;
+            return compare(size1, size2);
+        }
+        uint8_t a = static_cast<uint8_t>(p1[0]);
+        uint8_t b = static_cast<uint8_t>(p2[0]);
+        if (a != b) return a < b ? -1 : 1;
+        return compare(size1, size2);
+    }
+
     auto res = memcmp(p1, p2, min_size);
     if (res != 0) {
         return res > 0 ? 1 : -1;
     }
     return compare(size1, size2);
+}
+
+inline int memcompare(const char* p1, size_t size1, const char* p2, size_t size2) {
+    return memcompare_short(p1, size1, p2, size2);
 }
 
 #if defined(__SSE4_2__)
@@ -153,22 +194,11 @@ inline int sse_memcmp2(const char* p1, const char* p2, size_t size) {
 #endif
 
 constexpr size_t PADDED_SIZE = 16;
-// memcmp has special inline optimizations for bytes <= 16.
-// Requires input to be overflow readable. (Allocate memory aligned to 16 byte size or tail length of 16.)
+// All loads in memcompare_short are strictly within [0, min_size), so 16-byte
+// overflow padding is no longer required; PADDED_SIZE is retained for callers
+// (e.g. maxmin.h / retract_maxmin.h) that size state buffers with it.
 inline int memcompare_padded(const char* p1, size_t size1, const char* p2, size_t size2) {
-    size_t min_size = std::min(size1, size2);
-#if defined(__SSE4_2__)
-    if (min_size > 0 && min_size <= 16) {
-        auto res = sse_memcmp2(p1, p2, min_size);
-        if (res == 0) return compare(size1, size2);
-        return res > 0 ? 1 : -1;
-    }
-#endif
-    auto res = memcmp(p1, p2, min_size);
-    if (res != 0) {
-        return res > 0 ? 1 : -1;
-    }
-    return compare(size1, size2);
+    return memcompare_short(p1, size1, p2, size2);
 }
 
 } // namespace starrocks
