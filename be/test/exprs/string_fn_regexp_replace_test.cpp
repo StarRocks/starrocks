@@ -181,4 +181,59 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     ASSERT_EQ(ori_result->debug_item(1), "'activity_50'");
 }
 
+TEST_F(StringFunctionRegexpReplaceTest, testRegexpReplaceTemplateParse) {
+    RegexpReplaceTemplate tmpl;
+
+    // 1. Empty replacement
+    tmpl.parse(Slice(""));
+    ASSERT_EQ(tmpl.nsubmatch, 1);
+    ASSERT_EQ(tmpl.max_submatch, 0);
+    ASSERT_FALSE(tmpl.has_invalid_escape);
+    ASSERT_TRUE(tmpl.segments.empty());
+
+    // 2. Single capture group "\1" (ClickBench Q28)
+    tmpl.parse(Slice("\\1"));
+    ASSERT_EQ(tmpl.nsubmatch, 2);
+    ASSERT_EQ(tmpl.max_submatch, 1);
+    ASSERT_FALSE(tmpl.has_invalid_escape);
+    ASSERT_EQ(tmpl.segments.size(), 1);
+    ASSERT_EQ(tmpl.segments[0].group_idx, 1);
+
+    // 3. Coalesced escaped backslash and multi-digit "\10" -> group 1 + literal "0\\end"
+    tmpl.parse(Slice("pre\\\\mid\\10\\\\end\\0"));
+    ASSERT_EQ(tmpl.nsubmatch, 2);
+    ASSERT_EQ(tmpl.max_submatch, 1);
+    ASSERT_FALSE(tmpl.has_invalid_escape);
+    ASSERT_EQ(tmpl.segments.size(), 4);
+    ASSERT_EQ(tmpl.segments[0].group_idx, -1);
+    ASSERT_EQ(tmpl.literal_bytes.substr(tmpl.segments[0].offset, tmpl.segments[0].length), "pre\\mid");
+    ASSERT_EQ(tmpl.segments[1].group_idx, 1);
+    ASSERT_EQ(tmpl.segments[2].group_idx, -1);
+    ASSERT_EQ(tmpl.literal_bytes.substr(tmpl.segments[2].offset, tmpl.segments[2].length), "0\\end");
+    ASSERT_EQ(tmpl.segments[3].group_idx, 0);
+
+    // 4. Invalid escape followed by higher capture group ("prefix\x\2"):
+    // segments stop at "\x", but max_submatch still records group 2 like RE2::MaxSubmatch.
+    tmpl.parse(Slice("prefix\\x\\2"));
+    ASSERT_TRUE(tmpl.has_invalid_escape);
+    ASSERT_EQ(tmpl.max_submatch, 2);
+    ASSERT_EQ(tmpl.nsubmatch, 3);
+    ASSERT_EQ(tmpl.segments.size(), 1);
+    ASSERT_EQ(tmpl.segments[0].group_idx, -1);
+    ASSERT_EQ(tmpl.literal_bytes.substr(tmpl.segments[0].offset, tmpl.segments[0].length), "prefix");
+
+    re2::RE2 one_group_re("(a)");
+    re2::RE2 two_group_re("(a)(b)");
+    ASSERT_TRUE(tmpl.exceeds_groups(one_group_re));
+    ASSERT_FALSE(tmpl.exceeds_groups(two_group_re));
+
+    // 5. Trailing backslash ("abc\")
+    tmpl.parse(Slice("abc\\"));
+    ASSERT_TRUE(tmpl.has_invalid_escape);
+    ASSERT_EQ(tmpl.max_submatch, 0);
+    ASSERT_EQ(tmpl.nsubmatch, 1);
+    ASSERT_EQ(tmpl.segments.size(), 1);
+    ASSERT_EQ(tmpl.literal_bytes.substr(tmpl.segments[0].offset, tmpl.segments[0].length), "abc");
+}
+
 } // namespace starrocks

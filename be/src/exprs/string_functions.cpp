@@ -3545,6 +3545,8 @@ Status StringFunctions::regexp_replace_prepare(FunctionContext* context, Functio
         const auto rpl_column = context->get_constant_column(2);
         const auto rpl_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(rpl_column);
         state->opt_const_rpl = rpl_slice.to_string();
+        state->opt_const_rpl_template.emplace();
+        state->opt_const_rpl_template->parse(rpl_slice);
     }
     return Status::OK();
 }
