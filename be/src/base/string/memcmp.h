@@ -35,6 +35,7 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
@@ -127,6 +128,10 @@ inline bool memequal(const char* p1, size_t size1, const char* p2, size_t size2)
     }
     return p1[0] == p2[0];
 }
+
+// memcompare_short orders keys by loading 2/4/8 bytes and byte-swapping them, so that the integer comparison
+// matches lexicographic byte order. That is only correct when native loads are little-endian.
+static_assert(std::endian::native == std::endian::little, "memcompare_short requires a little-endian target");
 
 inline int memcompare_short(const char* p1, size_t size1, const char* p2, size_t size2) {
     size_t min_size = std::min(size1, size2);
