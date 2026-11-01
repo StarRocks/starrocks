@@ -411,10 +411,10 @@ static std::optional<TypeDescriptor> level_source_read_type(const ParquetField& 
         // An unknown key or value type is not read (see ColumnReaderFactory::create).
         if (field.children.size() >= 2) {
             if (auto key = level_source_read_type(field.children[0]); key.has_value()) {
-                return TypeDescriptor::create_map_type(*key, TypeDescriptor(TYPE_UNKNOWN));
+                return TypeDescriptor::create_map_type(*key, TYPE_UNKNOWN_DESC);
             }
             if (auto value = level_source_read_type(field.children[1]); value.has_value()) {
-                return TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), *value);
+                return TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, *value);
             }
         }
         return std::nullopt;

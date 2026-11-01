@@ -194,11 +194,11 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
 
     TypeDescriptor type_desc;
     if (data_type == TYPE_INT) {
-        type_desc = TypeDescriptor(TYPE_INT);
+        type_desc = TYPE_INT_DESC;
     } else if (data_type == TYPE_VARCHAR) {
         type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     } else if (data_type == TYPE_DOUBLE) {
-        type_desc = TypeDescriptor(TYPE_DOUBLE);
+        type_desc = TYPE_DOUBLE_DESC;
     } else {
         ASSERT_TRUE(false) << "not support type: " << data_type;
     }
@@ -322,7 +322,7 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
     std::vector<bool> asc_arr;
     std::vector<bool> null_first;
     Chunk::SlotHashMap map;
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor type_desc = TYPE_INT_DESC;
 
     for (int i = 0; i < num_columns; i++) {
         auto [column, expr] = suite.build_sorted_column(type_desc, i, false, false);
@@ -407,7 +407,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
     std::vector<bool> asc_arr;
     std::vector<bool> null_first;
     Chunk::SlotHashMap map;
-    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor type_desc = TYPE_INT_DESC;
 
     for (int i = 0; i < num_columns; i++) {
         auto [column, expr] = suite.build_sorted_column(type_desc, i, false, nullable);
@@ -455,11 +455,11 @@ static void do_bench_materialize(benchmark::State& state, LogicalType data_type,
 
     TypeDescriptor type_desc;
     if (data_type == TYPE_INT) {
-        type_desc = TypeDescriptor(TYPE_INT);
+        type_desc = TYPE_INT_DESC;
     } else if (data_type == TYPE_VARCHAR) {
         type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
     } else if (data_type == TYPE_DOUBLE) {
-        type_desc = TypeDescriptor(TYPE_DOUBLE);
+        type_desc = TYPE_DOUBLE_DESC;
     } else {
         ASSERT_TRUE(false) << "not support type: " << data_type;
     }
