@@ -1,0 +1,66 @@
+-- name: test_ivm_pinned_scope_partition_only_in_snapshot
+-- Regression for a pinned refresh scoping from the live table instead of the frozen snapshot it scans.
+-- The bootstrap job freezes the Iceberg table at one snapshot and every batch reads that snapshot, so a
+-- partition removed from live mid-job is still inside it. Partition enumeration is snapshot-aware and
+-- creates an MV partition for it; if the scope is derived from live instead, no batch ever fills that
+-- partition while the last batch still promotes the baseline past the snapshot.
+-- The seam is deterministic: batches process partitions in descending date order, so after 4 of 14 have
+-- succeeded the snapshot is long frozen and 2030-01-03 is still nine batches away. The partition count is
+-- kept low because wait_async_materialized_view_finish gives the whole batch chain 180s.
+create external catalog ice_${uuid0} properties (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ice_${uuid0};
+create database ice_db_${uuid0};
+CREATE TABLE ice_${uuid0}.ice_db_${uuid0}.base_ps (dt date, k int, v bigint) PARTITION BY (dt);
+INSERT INTO ice_${uuid0}.ice_db_${uuid0}.base_ps
+SELECT date_add('2030-01-01', INTERVAL generate_series DAY), generate_series, 1
+FROM TABLE(generate_series(1, 14));
+
+set catalog default_catalog;
+create database mvdb_${uuid0};
+use mvdb_${uuid0};
+CREATE MATERIALIZED VIEW mv_ps_${uuid0}
+PARTITION BY (dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL", "partition_refresh_number" = "1")
+AS SELECT dt, k, v FROM ice_${uuid0}.ice_db_${uuid0}.base_ps;
+
+REFRESH MATERIALIZED VIEW mv_ps_${uuid0};
+function: wait_mv_refresh_count("mvdb_${uuid0}", "mv_ps_${uuid0}", 4)
+DELETE FROM ice_${uuid0}.ice_db_${uuid0}.base_ps WHERE dt = '2030-01-03';
+function: wait_async_materialized_view_finish("mvdb_${uuid0}", "mv_ps_${uuid0}")
+
+-- Guard against a trivially passing run: the delete must have landed, and after the freeze. An MV
+-- partition for the deleted date proves enumeration saw it, i.e. it is inside the frozen snapshot.
+SELECT COUNT(*) AS base_rows_for_deleted_partition FROM ice_${uuid0}.ice_db_${uuid0}.base_ps WHERE dt = '2030-01-03';
+SELECT COUNT(*) AS mv_partitions_for_deleted_date FROM information_schema.partitions_meta
+WHERE DB_NAME = 'mvdb_${uuid0}' AND TABLE_NAME = 'mv_ps_${uuid0}' AND PARTITION_NAME = 'p20300103';
+-- The assertion: that MV partition must have been refreshed. Zero means the scope came from live.
+-- Measured before any later refresh, which enumerates from live again and legitimately drops it.
+SELECT COUNT(*) AS mv_rows_for_deleted_partition FROM mv_ps_${uuid0} WHERE dt = '2030-01-03';
+
+-- A later refresh is not pinned: it enumerates from live again, so the partition the pinned run
+-- materialised is legitimately dropped, and the range that removed it is non-append-only, which ends
+-- incremental refresh here. [UC] on the refresh: its error text carries snapshot ids.
+[UC]REFRESH MATERIALIZED VIEW mv_ps_${uuid0} WITH SYNC MODE;
+SELECT DISTINCT STATE, ERROR_MESSAGE LIKE '%non-append-only change on base table%' AS reject
+FROM information_schema.task_runs
+WHERE `DATABASE` = database()
+  AND (EXTRA_MESSAGE LIKE '%mv_ps_${uuid0}%' OR DEFINITION LIKE '%mv_ps_${uuid0}%')
+  AND STATE = 'FAILED';
+SELECT COUNT(*) AS mv_partitions_for_deleted_date_after FROM information_schema.partitions_meta
+WHERE DB_NAME = 'mvdb_${uuid0}' AND TABLE_NAME = 'mv_ps_${uuid0}' AND PARTITION_NAME = 'p20300103';
+SELECT IS_ACTIVE AS mv_active_after FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = 'mvdb_${uuid0}' AND TABLE_NAME = 'mv_ps_${uuid0}';
+SELECT COUNT(*) AS mv_rows_after FROM mv_ps_${uuid0};
+SELECT COUNT(*) AS base_rows_after FROM ice_${uuid0}.ice_db_${uuid0}.base_ps;
+
+DROP MATERIALIZED VIEW mv_ps_${uuid0};
+DROP DATABASE mvdb_${uuid0};
+DROP TABLE ice_${uuid0}.ice_db_${uuid0}.base_ps FORCE;
+DROP DATABASE ice_${uuid0}.ice_db_${uuid0};
+DROP CATALOG ice_${uuid0};
