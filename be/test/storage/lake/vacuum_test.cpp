@@ -43,7 +43,7 @@
 #include "storage/lake/vacuum_full.h"
 #include "test_util.h"
 
-#if defined(ADDRESS_SANITIZER) && __has_include(<sanitizer/allocator_interface.h>)
+#if defined(ADDRESS_SANITIZER)
 #include <sanitizer/allocator_interface.h>
 #elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 #include "jemalloc/jemalloc.h"
@@ -54,7 +54,7 @@ namespace starrocks::lake {
 // Bytes allocated and not yet freed as the allocator reports them: process-wide under ASAN, the calling
 // thread's own when malloc goes through jemalloc. nullopt when the build offers neither.
 static std::optional<int64_t> allocated_bytes() {
-#if defined(ADDRESS_SANITIZER) && __has_include(<sanitizer/allocator_interface.h>)
+#if defined(ADDRESS_SANITIZER)
     return static_cast<int64_t>(__sanitizer_get_current_allocated_bytes());
 #elif STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
     uint64_t allocated = 0;
