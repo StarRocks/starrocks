@@ -799,6 +799,42 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
+<<<<<<< HEAD
+=======
+    private boolean isFirstStageAggregation(CallOperator agg, ColumnRefOperator key) {
+        return !agg.getArguments().isEmpty()
+                && (!(agg.getArguments().get(0) instanceof ColumnRefOperator ref) || ref.getId() != key.getId());
+    }
+
+    private boolean shouldProcessAggFunction(CallOperator agg, DecodeInfo info, boolean isFirstStage) {
+        ColumnRefSet supportColumns = new ColumnRefSet();
+        supportColumns.union(info.getInputStringColumns());
+        supportColumns.union(info.getInProgressStringAggregations());
+        supportColumns.union(info.getFinalizingStringAggregations());
+        final boolean enableArrayAgg = sessionVariable.isEnableArrayAggLowCardinalityOptimize()
+                && sessionVariable.isEnableArrayLowCardinalityOptimize()
+                && sessionVariable.isEnableStructLowCardinalityOptimize();
+        final boolean isArrayAgg = FunctionSet.ARRAY_AGG.equals(agg.getFnName());
+        if (isArrayAgg && !enableArrayAgg) {
+            return false;
+        }
+        if (!LOW_CARD_AGGREGATE_FUNCTIONS.contains(agg.getFnName())) {
+            return false;
+        }
+        if (isArrayAgg) {
+            ColumnRefSet candidateColumns = agg.getUsedColumns();
+            if (isFirstStage && agg.getArguments().get(0).isColumnRef()
+                    && !agg.getArguments().get(0).getType().isStringType()) {
+                candidateColumns.except(List.of(agg.getArguments().get(0).cast()));
+            }
+            return agg.getChildren().stream().allMatch(c -> c.isColumnRef() || c.isConstantRef())
+                    && supportColumns.containsAny(candidateColumns);
+        }
+        return agg.getChildren().size() == 1 && agg.getChildren().get(0).isColumnRef()
+                && supportColumns.containsAll(agg.getUsedColumns());
+    }
+
+>>>>>>> 99491ee ([BugFix] Stop encoding an aggregate whose input a sibling aggregate decodes (#80355))
     @Override
     public DecodeInfo visitPhysicalHashAggregate(OptExpression optExpression, DecodeInfo context) {
         if (context.outputStringColumns.isEmpty()) {
@@ -810,21 +846,61 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         ColumnRefSet disableColumns = new ColumnRefSet();
         for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
             CallOperator agg = aggregate.getAggregations().get(key);
+<<<<<<< HEAD
             if (!LOW_CARD_AGGREGATE_FUNCTIONS.contains(agg.getFnName())) {
                 disableColumns.union(agg.getUsedColumns());
                 disableColumns.union(key);
                 continue;
             }
             if (agg.getChildren().size() != 1 || !agg.getChildren().get(0).isColumnRef()) {
+=======
+            final boolean isFirstStage = isFirstStageAggregation(agg, key);
+            if (!shouldProcessAggFunction(agg, info, isFirstStage)) {
+>>>>>>> 99491ee ([BugFix] Stop encoding an aggregate whose input a sibling aggregate decodes (#80355))
                 disableColumns.union(agg.getUsedColumns());
                 disableColumns.union(key);
             }
         }
 
-        if (!disableColumns.isEmpty()) {
-            info.decodeStringColumns.union(info.inputStringColumns);
-            info.decodeStringColumns.intersect(disableColumns);
-            info.inputStringColumns.except(info.decodeStringColumns);
+        // Judge every function again once the decode set is known, and keep going until nothing
+        // changes. The loop above asks shouldProcessAggFunction about each function in isolation,
+        // against the input columns as they stood BEFORE any disable was known, so a function can be
+        // accepted and then have the column it reads decoded on behalf of a sibling in the same
+        // operator:
+        //
+        //   select g, min(s), group_concat(s, ' ') from t where s is null or s != 'x' group by g
+        //
+        // group_concat is not in LOW_CARD_AGGREGATE_FUNCTIONS, so it decodes `s`; min(s) was already
+        // accepted and stayed registered as producing a dictionary value although its input is now
+        // materialised as strings. The plan then carried min typed INT under a VARCHAR column ref:
+        //
+        //   Invalid plan: the type of arg N: min is defined as VARCHAR, but the actual type is INT
+        //
+        // Re-asking the same question is what makes this safe rather than a second, hand-written
+        // rule: an accepted array_agg disables its own non-string first argument just above, and a
+        // rule phrased as "a function that reads a disabled column is disabled" would switch that
+        // array_agg off, which is the sort-only encoding it is supposed to keep.
+        while (true) {
+            if (!disableColumns.isEmpty()) {
+                info.decodeStringColumns.union(info.inputStringColumns);
+                info.decodeStringColumns.intersect(disableColumns);
+                info.inputStringColumns.except(info.decodeStringColumns);
+            }
+            boolean disableGrew = false;
+            for (ColumnRefOperator key : aggregate.getAggregations().keySet()) {
+                if (disableColumns.contains(key)) {
+                    continue;
+                }
+                CallOperator agg = aggregate.getAggregations().get(key);
+                if (!shouldProcessAggFunction(agg, info, isFirstStageAggregation(agg, key))) {
+                    disableColumns.union(agg.getUsedColumns());
+                    disableColumns.union(key);
+                    disableGrew = true;
+                }
+            }
+            if (!disableGrew) {
+                break;
+            }
         }
 
         info.outputStringColumns.clear();
