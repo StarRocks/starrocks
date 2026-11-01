@@ -1016,15 +1016,6 @@ StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::stri
         log = std::make_shared<CombinedTxnLogPB>();
         RETURN_IF_ERROR(load_lake_protobuf(path, log.get(), fill_cache));
     }
-<<<<<<< HEAD
-    if (fill_cache) {
-        _metacache->cache_combined_txn_log(path, log);
-=======
-    // Back-fill the structured fields from the deprecated legacy arrays for logs written by a pre-feature BE.
-    for (auto& txn_log : *log->mutable_txn_logs()) {
-        normalize_txn_log_after_load(&txn_log);
->>>>>>> 52a3fa1 ([BugFix][RB-884] Fix lake metacache keys and eviction on metadata deletion (#81978))
-    }
     return log;
 }
 
