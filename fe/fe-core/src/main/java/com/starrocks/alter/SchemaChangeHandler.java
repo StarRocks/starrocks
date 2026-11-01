@@ -2773,6 +2773,12 @@ public class SchemaChangeHandler extends AlterHandler {
         // reach here after this table already entered SCHEMA_CHANGE. Skipping
         // the fast path here lets the legacy path raise its canonical error
         // instead of admitting a second live job on the same table.
+        //
+        // The builders below must not change the table state. process() moves
+        // the table to SCHEMA_CHANGE in the WAL applier, together with
+        // registering the job, so a journal write that fails leaves the table
+        // as it was. Concurrent alters are already kept out by the table WRITE
+        // lock that AlterJobExecutor holds across analysis and the journal write.
         boolean fastPathAdmissible = isLakeIndexFastPathAdmissible(olapTable);
         if (!fastPathAdmissible) {
             LOG.info("lake index fast path not admissible for table {} (state={}); "
@@ -4333,7 +4339,6 @@ public class SchemaChangeHandler extends AlterHandler {
      * regular schema-change path (safer than throwing).
      */
     private AlterJobV2 tryBuildLakeAddIndexJob(Database db, OlapTable olapTable, List<AlterClause> alterClauses) {
-        boolean stateSet = false;
         try {
             List<Index> newIndexes = new ArrayList<>(olapTable.getIndexes());
             List<com.starrocks.thrift.TOlapTableIndex> thriftIndexes = new ArrayList<>();
@@ -4369,14 +4374,8 @@ public class SchemaChangeHandler extends AlterHandler {
                         affectedMeta.getSchemaVersion() + 1);
             }
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
-            // Move table to SCHEMA_CHANGE so concurrent alters are blocked.
-            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-            stateSet = true;
             return job;
         } catch (Exception e) {
-            if (stateSet) {
-                olapTable.setState(OlapTable.OlapTableState.NORMAL);
-            }
             LOG.warn("failed to build LakeTableAddIndexJob for table {}: {}", olapTable.getName(), e.getMessage(), e);
             return null;
         }
@@ -4387,7 +4386,6 @@ public class SchemaChangeHandler extends AlterHandler {
      * Returns null on any unexpected failure so the caller can fall back.
      */
     private AlterJobV2 tryBuildLakeDropIndexJob(Database db, OlapTable olapTable, List<AlterClause> alterClauses) {
-        boolean stateSet = false;
         try {
             List<Long> dropIds = new ArrayList<>();
             List<String> dropNames = new ArrayList<>();
@@ -4432,13 +4430,8 @@ public class SchemaChangeHandler extends AlterHandler {
             LakeTableDropIndexJob job = new LakeTableDropIndexJob(jobId, db.getId(), olapTable.getId(),
                     olapTable.getName(), timeoutMs, dropIds, dropNames, drops);
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
-            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-            stateSet = true;
             return job;
         } catch (Exception e) {
-            if (stateSet) {
-                olapTable.setState(OlapTable.OlapTableState.NORMAL);
-            }
             LOG.warn("failed to build LakeTableDropIndexJob for table {}: {}",
                     olapTable.getName(), e.getMessage(), e);
             return null;
@@ -4458,7 +4451,6 @@ public class SchemaChangeHandler extends AlterHandler {
      * is appended because plain BF is not an index entry.
      */
     private AlterJobV2 tryBuildLakeAddBloomFilterJob(Database db, OlapTable olapTable, Set<String> addedColumns) {
-        boolean stateSet = false;
         try {
             List<com.starrocks.thrift.TOlapTableIndex> thriftIndexes = new ArrayList<>();
             List<String> addBfColumnNames = new ArrayList<>();
@@ -4504,13 +4496,8 @@ public class SchemaChangeHandler extends AlterHandler {
                         affectedMeta.getSchemaVersion() + 1);
             }
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
-            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-            stateSet = true;
             return job;
         } catch (Exception e) {
-            if (stateSet) {
-                olapTable.setState(OlapTable.OlapTableState.NORMAL);
-            }
             LOG.warn("failed to build LakeTableAddIndexJob (BF) for table {}: {}",
                     olapTable.getName(), e.getMessage(), e);
             return null;
@@ -4526,7 +4513,6 @@ public class SchemaChangeHandler extends AlterHandler {
      * into IDG and the physical .idx payloads are reclaimed by compaction.
      */
     private AlterJobV2 tryBuildLakeDropBloomFilterJob(Database db, OlapTable olapTable, Set<String> droppedColumns) {
-        boolean stateSet = false;
         try {
             List<com.starrocks.thrift.TDropIndexInfo> drops = new ArrayList<>();
             List<String> dropBfColumnNames = new ArrayList<>();
@@ -4557,13 +4543,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     olapTable.getName(), timeoutMs, new ArrayList<>(), new ArrayList<>(), drops,
                     dropBfColumnNames);
             job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
-            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
-            stateSet = true;
             return job;
         } catch (Exception e) {
-            if (stateSet) {
-                olapTable.setState(OlapTable.OlapTableState.NORMAL);
-            }
             LOG.warn("failed to build LakeTableDropIndexJob (BF) for table {}: {}",
                     olapTable.getName(), e.getMessage(), e);
             return null;
