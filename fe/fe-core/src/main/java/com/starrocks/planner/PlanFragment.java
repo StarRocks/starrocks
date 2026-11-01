@@ -43,6 +43,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.planner.expression.TypeDescSharingScope;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.TreeNode;
@@ -491,8 +492,17 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Fill the thrift fragment into {@code result}, which lets the caller choose a subclass such as
      * {@link com.starrocks.qe.scheduler.SerializeOnceTPlanFragment}.
+     *
+     * <p>The expr nodes of the fragment share one thrift type per complex type object, see
+     * {@link TypeDescSharingScope}.
      */
     public <T extends TPlanFragment> T toThrift(T result) {
+        try (TypeDescSharingScope ignored = TypeDescSharingScope.open()) {
+            return toThriftWithSharedTypeDescs(result);
+        }
+    }
+
+    private <T extends TPlanFragment> T toThriftWithSharedTypeDescs(T result) {
         if (planRoot != null) {
             result.setPlan(planRoot.treeToThrift());
         }
