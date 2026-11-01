@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -783,5 +784,20 @@ public class HistogramStatisticsTest {
         Assertions.assertTrue(buckets.get(0).getRowCountInBucket(0D, 0L, 10D, false).isEmpty());
         Assertions.assertTrue(buckets.get(0).getRowCountInBucket(42D, 0L, 10D, false).isEmpty());
         Assertions.assertEquals(303L, histogram.getTotalRows());
+    }
+
+    /**
+     * Lowercase "nan" is the string representation of NaN that we get from c++.
+     * see {@link com.starrocks.sql.optimizer.statistics.HistogramUtils#parseDouble}
+     */
+    @Test
+    public void parseBucketFromNanValue() throws Exception {
+        String histogramJson =
+                "{\"buckets\":[[\"-nan\",\"nan\", 42, 42]]}";
+
+        List<Bucket> buckets = HistogramUtils.convertBuckets(histogramJson, FloatType.DOUBLE);
+
+        Assertions.assertEquals(1, buckets.size());
+        Assertions.assertEquals(Double.NaN, buckets.get(0).getLower());
     }
 }
