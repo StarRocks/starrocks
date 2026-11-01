@@ -60,6 +60,10 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
     private int cpuCores;
     @SerializedName("macAddress")
     private String macAddress;
+    // Whether the FE rebuilds the BE payload of the lake index fast-path jobs it takes over; false for an FE that
+    // predates the rebuild (it does not report it).
+    @SerializedName("rebuildsLakeIndexPayload")
+    private boolean rebuildsLakeIndexPayload;
 
     private float heapUsedPercent;
 
@@ -131,6 +135,13 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         return macAddress;
     }
 
+    public boolean rebuildsLakeIndexPayload() {
+        return rebuildsLakeIndexPayload;
+    }
+
+    public void setRebuildsLakeIndexPayload(boolean rebuildsLakeIndexPayload) {
+        this.rebuildsLakeIndexPayload = rebuildsLakeIndexPayload;
+    }
 
 
 
@@ -144,6 +155,7 @@ public class FrontendHbResponse extends HeartbeatResponse implements Writable {
         sb.append(", replayedJournalId: ").append(replayedJournalId);
         sb.append(", feStartTime: ").append(TimeUtils.longToTimeString(feStartTime));
         sb.append(", feVersion: ").append(feVersion);
+        sb.append(", rebuildsLakeIndexPayload: ").append(rebuildsLakeIndexPayload);
         return sb.toString();
     }
 

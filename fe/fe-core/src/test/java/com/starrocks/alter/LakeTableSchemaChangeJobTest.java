@@ -82,7 +82,11 @@ import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -1089,6 +1093,102 @@ public class LakeTableSchemaChangeJobTest {
             Assertions.assertEquals(expectedCommitVersion.get(pp.getId()).longValue(), pp.getVisibleVersion(),
                     "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
         }
+    }
+
+    @Test
+    public void testForceCancelRefusedUntilEarlierLoadIsVisible() throws Exception {
+        // A load committed at C-1 after the watershed, then the job reserved C at FINISHED_REWRITING.
+        // The load can already be published on BE while its FE finishTransaction has not run yet, so the
+        // no-op publish of C (base C-1) succeeds on BE, but FE visible is still C-2 and the visible bump to
+        // C would be skipped. Once the load finished, visible would stay at C-1 with nextVersion C+1 and no
+        // later load could ever finish. So the force cancel must be refused until the load is visible.
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+
+            // BE already has C-1, so the no-op publish of C succeeds there.
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                return true;
+            }
+        };
+        keepLoadsCommitted();
+        LakeTableSchemaChangeJob job = alterTableAddColumn();
+        drivePendingJob(job);
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        long load1 = commitLoad();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long commitVersion = partition.getNextVersion() - 1;
+        Assertions.assertEquals(commitVersion - 2, partition.getVisibleVersion());
+
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+
+        Assertions.assertEquals(TransactionStatus.VISIBLE, finishLoad(load1).getTransactionStatus());
+        Assertions.assertEquals(commitVersion - 1, partition.getVisibleVersion());
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(commitVersion, partition.getVisibleVersion());
+
+        // The next load gets C+1 and can finish on top of the no-op published C.
+        long load2 = commitLoad();
+        Assertions.assertEquals(TransactionStatus.VISIBLE, finishLoad(load2).getTransactionStatus());
+        Assertions.assertEquals(commitVersion + 1, partition.getVisibleVersion());
+    }
+
+    /**
+     * Keeps the background publish daemon away from committed loads, so the test decides when each one finishes.
+     */
+    private static void keepLoadsCommitted() {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public List<TransactionState> getReadyToPublishTransactions(boolean nodep) {
+                return new ArrayList<>();
+            }
+
+            @Mock
+            public List<TransactionStateBatch> getReadyPublishTransactionsBatch() {
+                return new ArrayList<>();
+            }
+        };
+    }
+
+    /**
+     * Begins and commits a load into every tablet of the table, shadow tablets included, as a load that started
+     * after the watershed does.
+     */
+    private long commitLoad() throws Exception {
+        List<TabletCommitInfo> commitInfos = new ArrayList<>();
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            for (MaterializedIndex index : partition.getAllMaterializedIndices(IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    // Lake tablets have no replicas: the commit only looks at the tablet id.
+                    commitInfos.add(new TabletCommitInfo(tablet.getId(), /*backendId=*/ 0L));
+                }
+            }
+        }
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = txnMgr.beginTransaction(db.getId(), List.of(table.getId()), UUID.randomUUID().toString(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        txnMgr.commitTransaction(db.getId(), txnId, commitInfos, new ArrayList<>(), null);
+        return txnId;
+    }
+
+    /**
+     * Runs the FE half of a load's publish, as PublishVersionDaemon does once BE has published it.
+     */
+    private TransactionState finishLoad(long txnId) throws Exception {
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        txnMgr.finishTransaction(db.getId(), txnId, null);
+        return txnMgr.getTransactionState(db.getId(), txnId);
     }
 
     @Test
