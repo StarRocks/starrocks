@@ -115,7 +115,8 @@ public:
         first = *needle;
         last = needle[needle_size - 1];
         if (needle_size > 2) {
-            const size_t max_interior = std::min<size_t>(needle_size - 2, 0xFFFFu);
+            static constexpr size_t kMaxAnchorScan = 64;
+            const size_t max_interior = std::min<size_t>(needle_size - 2, kMaxAnchorScan);
             const size_t center = (1 + max_interior) / 2;
             size_t chosen_mid = center;
             for (size_t delta = 0; delta <= max_interior; ++delta) {

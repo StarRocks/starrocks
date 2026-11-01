@@ -88,8 +88,10 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
     auto res = RunTimeColumnType<TYPE_INT>::create();
     res->resize(haystack->size());
     auto* __restrict result_data = res->get_data().data();
+    const char* begin = haystack->get_string_begin();
+    const char* end = haystack->get_string_end();
 
-    if (is_const_start && const_start <= 0) {
+    if ((is_const_start && const_start <= 0) || static_cast<size_t>(end - begin) < needle.size) {
         if (haystack->size() > 0) {
             std::memset(result_data, 0, haystack->size() * sizeof(int32_t));
         }
@@ -126,9 +128,6 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
             return res;
         }
     }
-
-    const char* begin = haystack->get_string_begin();
-    const char* end = haystack->get_string_end();
 
     offsets.visit_storage([&](const auto& offsets_buf) {
         const auto* __restrict offset_data = offsets_buf.data();
