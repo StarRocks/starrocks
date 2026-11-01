@@ -513,6 +513,11 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         boolean advanceVersionForForce =
                 force && jobState == JobState.FINISHED_REWRITING && tableStillExists && hasReservedVersion;
         if (advanceVersionForForce) {
+            // Refuse (operator retries) while an earlier load is not yet visible:
+            // see AlterJobV2#readyToForceSkipPublish.
+            if (!readyToForceSkipPublish(commitVersionMap)) {
+                return false;
+            }
             if (!lakePublishVersionWithSkip(errMsg)) {
                 // The no-op publish RPC failed; leave the job in
                 // FINISHED_REWRITING so the operator can retry

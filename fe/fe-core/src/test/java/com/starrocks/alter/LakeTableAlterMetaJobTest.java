@@ -78,6 +78,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class LakeTableAlterMetaJobTest {
     private static final String DB_NAME = "test";
@@ -217,6 +218,42 @@ public class LakeTableAlterMetaJobTest {
                     pp.getVisibleVersion(),
                     "replay must bump VisibleVersion to commitVersion when forceSkippedAtCommitted=true");
         }
+    }
+
+    @Test
+    public void testForceCancelRefusedUntilEarlierLoadIsVisible() throws Exception {
+        // A load committed at C-1 and not yet finished on FE (it may already be published on BE), then the job
+        // reserved C. The force cancel must be refused before any no-op publish: otherwise the FE visible bump
+        // to C is skipped and C never becomes visible. Once the load is visible the force cancel goes through.
+        AtomicInteger noOpPublishes = new AtomicInteger();
+        new MockUp<LakeTableAlterMetaJobBase>() {
+            @Mock
+            public boolean lakePublishVersionWithSkip(String reason) {
+                noOpPublishes.incrementAndGet();
+                return true;
+            }
+        };
+        job.runPendingJob();
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        long loadVersion = partition.getNextVersion();
+        partition.setNextVersion(loadVersion + 1);
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long commitVersion = loadVersion + 1;
+        Assertions.assertEquals(commitVersion + 1, partition.getNextVersion());
+        Assertions.assertEquals(commitVersion - 2, partition.getVisibleVersion());
+
+        Assertions.assertFalse(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertFalse(job.isForceSkippedAtCommitted());
+        Assertions.assertEquals(0, noOpPublishes.get());
+
+        // The load finishes.
+        partition.setVisibleVersion(loadVersion, System.currentTimeMillis());
+        Assertions.assertTrue(job.cancel("force cancel", /*force=*/ true));
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        Assertions.assertEquals(1, noOpPublishes.get());
+        Assertions.assertEquals(commitVersion, partition.getVisibleVersion());
     }
 
     @Test
