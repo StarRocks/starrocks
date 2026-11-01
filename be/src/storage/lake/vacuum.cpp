@@ -586,13 +586,15 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     return Status::OK();
 }
 
-static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
+void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
     auto cache = tablet_mgr->metacache();
     DCHECK(cache != nullptr);
-    // Assuming the cache key for tablet metadata is the path to tablet metadata.
-    // TODO: Refactor the code to extract a separate function that constructs the tablet metadata cache key
     for (const auto& path : metafiles) {
         cache->erase(path);
+        auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
+        if (tablet_id != 0) {
+            cache->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+        }
     }
 }
 
@@ -681,6 +683,10 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                 continue;
             }
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
+            // A bundle contains one metadata object per tablet, cached under the tablet's own path.
+            for (const auto& tablet_info : tablet_infos) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
+            }
         }
         RETURN_IF_ERROR(metafile_deleter.finish());
         (*vacuumed_files) += metafile_deleter.delete_count();
@@ -1175,6 +1181,17 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
     }
 
+    // The walk may need cached metadata. Evict on exit, including after a partial deletion failure:
+    // already-deleted bundles will not be listed on a retry.
+    DeferOp evict_dropped_metadata([&] {
+        for (auto tablet_id : tablet_ids) {
+            for (const auto& [version, state] : bundle_version_states) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+            }
+            tablet_mgr->erase_latest_cached_tablet_metadata(tablet_id);
+        }
+    });
+
     // Shared files may go only at a version whose bundle holds nothing but tablets being deleted. A tablet's
     // own file at such a version follows the bundle, and a version no listing recorded (reachable only
     // through a stale metacache entry) keeps its shared files.
@@ -1306,6 +1323,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter));
             }
             // delete txnlog
+            auto [tablet_id, txn_id] = parse_txn_log_filename(log_name);
+            tablet_mgr->metacache()->erase(
+                    join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name));
             RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
         }
     }
@@ -1329,13 +1349,19 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             }
             // delete files under txnlog
             for (const auto& log : combine_log_ptr->txn_logs()) {
-                if (!is_range_distribution &&
-                    std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
-                    RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
+                if (std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
+                    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id()));
+                    if (!is_range_distribution) {
+                        RETURN_IF_ERROR(
+                                delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
+                    }
                 }
             }
             // delete txnlog
             if (!contains_alive_tablets) {
+                ASSIGN_OR_RETURN(auto cache_key,
+                                 tablet_mgr->location_provider()->real_location(join_path(log_dir, log_name)));
+                tablet_mgr->metacache()->erase(cache_key);
                 RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
             }
         }
@@ -1348,6 +1374,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             if (bundle_version_states.count(version) == 0) {
                 // delete the individual tablet metadata file
                 auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
+                erase_tablet_metadata_from_metacache(tablet_mgr, {path});
                 RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
             }
         }
@@ -1394,9 +1421,20 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
             tablet_mgr->metacache()->erase(log_path);
         }
         for (auto&& info : request.txn_infos()) {
+            // Writers also cache the individual tablet log when the persisted file is combined.
+            tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, info.txn_id()));
             auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
                                                     : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
             files_to_delete.emplace_back(log_path);
+            if (info.combined_txn_log()) {
+                auto cache_key = tablet_mgr->location_provider()->real_location(log_path);
+                if (cache_key.ok()) {
+                    tablet_mgr->metacache()->erase(*cache_key);
+                } else {
+                    LOG(WARNING) << "Fail to resolve combined txn log cache key for " << log_path << ": "
+                                 << cache_key.status();
+                }
+            }
         }
     }
 
