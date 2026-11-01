@@ -1903,14 +1903,15 @@ Status MetaFileBuilder::set_final_rowset() {
 
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
-    // The op_writes folded here may come from different statements, some bundled and some standalone.
-    give_standalone_segments_a_bundle_offset(rowset);
-
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // Only the rewritten file becomes standalone. Preserve every untouched segment's real
+        // bundle offset and normalize the mixed rowset after all replacements below.
+        segment_meta->clear_bundle_file_offset();
+        segment_meta->clear_synthetic_bundle_file_offset();
         // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
         // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
         // "unfiltered".
@@ -1932,18 +1933,14 @@ Status MetaFileBuilder::set_final_rowset() {
         if (replace_seg.second.segment_vector_index_uid >= 0) {
             segment_meta->set_segment_vector_index_uid(replace_seg.second.segment_vector_index_uid);
         }
-        // See apply_opwrite: clear the shared flag for the rewrite file, which is
-        // private to this tablet and must not be GC'd through the shared-file path.
+        // See apply_opwrite: clear the shared flag for the rewrite file, which is private to this
+        // tablet. A rewrite recorded as a bundle file above is still collected like one, through the
+        // shared-file path, where vacuum deletes it once no tablet of the partition references it.
         if (segment_meta->has_shared()) {
             segment_meta->set_shared(false);
         }
     }
     if (!_pending_rowset_data.replace_segments.empty()) {
-        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
-        for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
-            segment_metadata.clear_bundle_file_offset();
-            segment_metadata.clear_synthetic_bundle_file_offset();
-        }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same
         // identity. If any segment was physically rewritten, the data is now private to this
@@ -1951,6 +1948,9 @@ Status MetaFileBuilder::set_final_rowset() {
         tablet_reshard_helper::set_rowset_uid(rowset);
     }
 
+    // A standalone rewrite beside a retained bundled segment uses a synthetic zero offset.
+    // All-standalone output stays standalone, matching the current normalizer's contract.
+    give_standalone_segments_a_bundle_offset(rowset);
     rowset->set_id(_tablet_meta->next_rowset_id());
     rowset->set_version(_tablet_meta->version());
 
