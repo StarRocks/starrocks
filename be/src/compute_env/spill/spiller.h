@@ -217,9 +217,11 @@ public:
     }
 
     // RAII form of complete_io for IO task bodies; see IOCompletion below. The guard must already be
-    // scoped_begin'd; the returned object runs the completion and then guard.scoped_end() at scope exit.
+    // scoped_begin'd and `spiller` must be the spiller locked by the task; the returned object runs the
+    // completion, releases `spiller`, and then runs guard.scoped_end() at scope exit.
     template <class PublishFn, class Guard>
-    [[nodiscard]] auto defer_complete_io(PublishFn publish_fn, bool wake_sink, const Guard& guard);
+    [[nodiscard]] static auto defer_complete_io(std::shared_ptr<Spiller> spiller, PublishFn publish_fn, bool wake_sink,
+                                                const Guard& guard);
 
     // Counts in-flight IO across writer (flush) and reader (restore) tasks. It is in addition to the
     // per-writer/reader counters, which stay as lifetime gates for transient readers. It is incremented
@@ -377,15 +379,22 @@ private:
 // in-flight increment, and re-enters scoped_begin on its next run); scoped_end still runs to balance this
 // invocation's begin. The two cancels are coupled on purpose: cancelling the completion without cancelling
 // the yield defer would let the executor drop the task with the in-flight count still held.
+//
+// The completion also owns the spiller. We expect the owner of the spiller to close while a task is still
+// queued or running: a partitionwise aggregate source has no pending_finish() on restore IO, and its
+// aggregator drops the spiller on close, while the guard pins only the query and the reader. So the task
+// locks the spiller after scoped_begin and hands it here, and we release it after the notify and before
+// scoped_end: the spiller destructor returns spill blocks to the query's block manager and needs the query.
 template <class PublishFn, class Guard>
 class IOCompletion {
 public:
-    IOCompletion(Spiller* spiller, PublishFn publish_fn, bool wake_sink, const Guard& guard)
-            : _spiller(spiller), _publish_fn(std::move(publish_fn)), _wake_sink(wake_sink), _guard(guard) {}
+    IOCompletion(std::shared_ptr<Spiller> spiller, PublishFn publish_fn, bool wake_sink, const Guard& guard)
+            : _spiller(std::move(spiller)), _publish_fn(std::move(publish_fn)), _wake_sink(wake_sink), _guard(guard) {}
     ~IOCompletion() noexcept {
         if (!_cancelled) {
             _spiller->complete_io(_publish_fn, _wake_sink);
         }
+        _spiller.reset();
         _guard.scoped_end();
     }
     template <class YieldDefer>
@@ -396,7 +405,7 @@ public:
     DISALLOW_COPY_AND_MOVE(IOCompletion);
 
 private:
-    Spiller* _spiller;
+    std::shared_ptr<Spiller> _spiller;
     PublishFn _publish_fn;
     const bool _wake_sink;
     const Guard& _guard;
@@ -404,10 +413,11 @@ private:
 };
 
 template <class PublishFn, class Guard>
-[[nodiscard]] auto Spiller::defer_complete_io(PublishFn publish_fn, bool wake_sink, const Guard& guard) {
+[[nodiscard]] auto Spiller::defer_complete_io(std::shared_ptr<Spiller> spiller, PublishFn publish_fn, bool wake_sink,
+                                              const Guard& guard) {
     // Returned as a prvalue: C++17 guaranteed elision constructs it in the caller's variable, so the
     // deleted copy/move constructors are never used.
-    return IOCompletion<PublishFn, Guard>(this, std::move(publish_fn), wake_sink, guard);
+    return IOCompletion<PublishFn, Guard>(std::move(spiller), std::move(publish_fn), wake_sink, guard);
 }
 
 } // namespace starrocks::spill
