@@ -142,7 +142,7 @@ public:
                 /// When found - compare bytewise, using the offset from the hash table.
                 const auto res = pos - (hash[cell_num] - 1);
 
-                /// pointer in the code is always padded array so we can use pagesafe semantics
+                /// compare() enforces strict [haystack, haystack_end] bounds before reading
                 if (fallback_searcher.compare(haystack, haystack_end, res)) return res;
             }
         }
