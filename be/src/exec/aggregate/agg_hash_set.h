@@ -148,7 +148,7 @@ struct SliceWithHash32Hash {
 template <PhmapSeed seed>
 struct SliceWithHash32Equal {
     bool operator()(const SliceWithHash32<seed>& x, const SliceWithHash32<seed>& y) const {
-        return x.hash == y.hash && memequal_padded(x.data, x.real_size(), y.data, y.real_size());
+        return x.hash == y.hash && memequal(x.data, x.real_size(), y.data, y.real_size());
     }
 };
 
