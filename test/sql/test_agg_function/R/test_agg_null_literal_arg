@@ -58,3 +58,33 @@ select array_length(array_agg(cast(null as varchar))), count(cast(null as varcha
 -- result:
 10000	0	None
 -- !result
+
+-- name: test_agg_null_literal_arg_partition_topn
+CREATE TABLE `t2` (
+  `k` bigint NOT NULL,
+  `v` varchar(20) DEFAULT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY RANDOM BUCKETS 4
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t2 SELECT generate_series, concat('v', generate_series) FROM TABLE(generate_series(1, 100000));
+-- result:
+-- !result
+set pipeline_dop = 1;
+-- result:
+-- !result
+set enable_push_down_pre_agg_with_rank = true;
+-- result:
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, row_number() over (partition by k order by v) rn, array_agg(cast(null as varchar)) over (partition by k) a from t2) s where rn <= 1;
+-- result:
+100000	100000	0
+-- !result
+select count(*), sum(array_length(a)), count(a[1]) from (select k, row_number() over (partition by k order by v) rn, array_agg(cast(null as bigint)) over (partition by k) a from t2) s where rn <= 1;
+-- result:
+100000	100000	0
+-- !result
