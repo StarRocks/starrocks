@@ -114,7 +114,6 @@ TEST_F(StringFunctionRegexpReplaceTest, testHyperscanVec) {
 
 TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     // Test case for the reported issue with '_package_.*' pattern
-    const TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
     Columns columns;
 
     // Create input column with two rows
@@ -122,14 +121,12 @@ TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     columns.push_back(std::move(str_column));
 
     // Create pattern column (constant)
-    MutableColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
-    pattern_data->append_datum(Datum(Slice("_package_.*")));
+    auto pattern_data = ColumnTestHelper::build_column<Slice>({"_package_.*"});
     auto pattern_column = ConstColumn::create(std::move(pattern_data), 2);
     columns.push_back(std::move(pattern_column));
 
     // Create replacement column (constant empty string)
-    MutableColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
-    rpl_data->append_datum(Datum(Slice("")));
+    auto rpl_data = ColumnTestHelper::build_column<Slice>({""});
     auto rpl_column = ConstColumn::create(std::move(rpl_data), 2);
     columns.push_back(std::move(rpl_column));
 
