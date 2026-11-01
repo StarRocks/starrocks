@@ -4,13 +4,14 @@ CREATE TABLE `t1` (
   `v` varchar(20) DEFAULT NULL
 ) ENGINE=OLAP
 DUPLICATE KEY(`k`)
-DISTRIBUTED BY HASH(`k`) BUCKETS 4
+DISTRIBUTED BY RANDOM BUCKETS 4
 PROPERTIES (
 "replication_num" = "1"
 );
 insert into t1 SELECT generate_series, concat('v', generate_series) FROM TABLE(generate_series(1, 10000));
 
 -- A NULL literal argument reaches the aggregate function as an all-NULL column of the argument's type.
+-- RANDOM distribution keeps GROUP BY k two-phase, so its first phase is a streaming pre-aggregation.
 set new_planner_agg_stage = 2;
 set streaming_preaggregation_mode = "force_streaming";
 select count(*), sum(array_length(a)), count(a[1]) from (select k, array_agg(cast(null as varchar)) a from t1 group by k) t;
