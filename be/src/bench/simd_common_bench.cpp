@@ -23,11 +23,12 @@
 //
 // Functions covered:
 //   * simd.h          : all_zeros / all_ones (8-bit) vs scalar early-exit
+//                       count_zero (8-bit and 32-bit) vs scalar loop
 //   * rle_simd.h      : simd_fill_int32 / simd_fill_int16 vs scalar fill
 //                       simd_dict_gather_int32 vs scalar dict[indices[i]]
 //                       simd_minmax_int32       vs scalar min/max loop
 //                       simd_widen_int8_to_int32 vs scalar cast loop
-//   * string_length_filter.h : length_eq_mask  vs scalar batched compute
+//   * string_length_filter.h : length_eq_mask  vs scalar batched compute (batches and tails)
 
 #include <benchmark/benchmark.h>
 
@@ -262,12 +263,117 @@ BENCHMARK(BM_DictGather_AVX512)->Arg(256)->Arg(1024)->Arg(4096);
 #endif
 
 // =====================================================================
+// count_zero: 8-bit and 32-bit buffers across sizes and selectivities
+// =====================================================================
+//
+// Evaluates scalar loops against SIMD::count_zero multi-arch vectorisation
+// across 64B, 256B, 4KB, and 64KB buffers and varying zero selectivities:
+// 0%, 1%, 10%, 50%, 90%, 100%.
+
+static size_t scalar_count_zero_u8(const uint8_t* data, size_t n) {
+    size_t count = 0;
+    for (size_t i = 0; i < n; ++i) {
+        count += (data[i] == 0);
+    }
+    return count;
+}
+
+static size_t scalar_count_zero_u32(const uint32_t* data, size_t n) {
+    size_t count = 0;
+    for (size_t i = 0; i < n; ++i) {
+        count += (data[i] == 0);
+    }
+    return count;
+}
+
+static void GenerateCountZeroArgs(benchmark::Benchmark* b) {
+    for (int64_t bytes : {64, 256, 4096, 65536}) {
+        for (int64_t zero_pct : {0, 1, 10, 50, 90, 100}) {
+            b->Args({bytes, zero_pct});
+        }
+    }
+}
+
+static void BM_CountZero_8Bit_Scalar(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint8_t);
+    std::vector<uint8_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint8_t>((i % 255) + 1);
+    }
+    for (auto _ : state) {
+        size_t count = scalar_count_zero_u8(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+static void BM_CountZero_8Bit_SIMD(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint8_t);
+    std::vector<uint8_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint8_t>((i % 255) + 1);
+    }
+    for (auto _ : state) {
+        size_t count = SIMD::count_zero(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+static void BM_CountZero_32Bit_Scalar(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint32_t);
+    std::vector<uint32_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint32_t>(i + 1);
+    }
+    for (auto _ : state) {
+        size_t count = scalar_count_zero_u32(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+static void BM_CountZero_32Bit_SIMD(benchmark::State& state) {
+    const size_t bytes = static_cast<size_t>(state.range(0));
+    const int zero_pct = static_cast<int>(state.range(1));
+    const size_t n = bytes / sizeof(uint32_t);
+    std::vector<uint32_t> data(n);
+    std::mt19937_64 rng(0xC0072E80);
+    std::uniform_int_distribution<int> d(0, 99);
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = (d(rng) < zero_pct) ? 0 : static_cast<uint32_t>(i + 1);
+    }
+    for (auto _ : state) {
+        size_t count = SIMD::count_zero(data.data(), n);
+        benchmark::DoNotOptimize(count);
+    }
+    state.SetBytesProcessed(state.iterations() * bytes);
+}
+
+BENCHMARK(BM_CountZero_8Bit_Scalar)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_8Bit_SIMD)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_32Bit_Scalar)->Apply(GenerateCountZeroArgs);
+BENCHMARK(BM_CountZero_32Bit_SIMD)->Apply(GenerateCountZeroArgs);
+
+// =====================================================================
 // length_eq_mask (parquet PLAIN binary length filter, 8 strings per call)
 // =====================================================================
 //
 // Pre-PR equivalent: scalar 8-element batched compute.
-// Post-PR: AVX2 (8 lanes) or NEON (4 lanes). The NEON bench loops twice
-// per AVX2 call so total work matches.
+// Post-PR: AVX2 (8 lanes) or NEON (4 lanes widened to 8 lanes).
+// Exercises both full 8-element batches and unaligned tails.
 
 static uint32_t scalar_length_eq_mask_avx_width(const uint32_t* offsets, size_t base, uint32_t target_len) {
     uint32_t mask = 0;
@@ -290,8 +396,14 @@ static void BM_LengthEqMask_Scalar(benchmark::State& state) {
     }
     for (auto _ : state) {
         uint32_t agg = 0;
-        for (size_t base = 0; base + 8 <= n_strings; base += 8) {
+        size_t base = 0;
+        for (; base + 8 <= n_strings; base += 8) {
             agg ^= scalar_length_eq_mask_avx_width(offsets.data(), base, 5);
+        }
+        for (; base < n_strings; ++base) {
+            if (offsets[base + 1] - offsets[base] == 5) {
+                agg ^= (1u << (base % 8));
+            }
         }
         benchmark::DoNotOptimize(agg);
     }
@@ -310,15 +422,65 @@ static void BM_LengthEqMask_SIMD(benchmark::State& state) {
     }
     for (auto _ : state) {
         uint32_t agg = 0;
-        for (size_t base = 0; base + SIMD::kStringLenSimdWidth <= n_strings; base += SIMD::kStringLenSimdWidth) {
+        size_t base = 0;
+        for (; base + SIMD::kStringLenSimdWidth <= n_strings; base += SIMD::kStringLenSimdWidth) {
             agg ^= SIMD::length_eq_mask(offsets.data(), base, 5);
+        }
+        for (; base < n_strings; ++base) {
+            if (offsets[base + 1] - offsets[base] == 5) {
+                agg ^= (1u << (base % SIMD::kStringLenSimdWidth));
+            }
         }
         benchmark::DoNotOptimize(agg);
     }
 }
 
-BENCHMARK(BM_LengthEqMask_Scalar)->Arg(256)->Arg(1024)->Arg(4096);
-BENCHMARK(BM_LengthEqMask_SIMD)->Arg(256)->Arg(1024)->Arg(4096);
+// Full batches (8, 256, 1024, 4096) as well as odd tail lengths (15, 63, 255)
+BENCHMARK(BM_LengthEqMask_Scalar)->Arg(8)->Arg(15)->Arg(63)->Arg(255)->Arg(1024)->Arg(4096);
+BENCHMARK(BM_LengthEqMask_SIMD)->Arg(8)->Arg(15)->Arg(63)->Arg(255)->Arg(1024)->Arg(4096);
+
+// Dedicated microbenchmarks for small sizes (1 through 15 elements)
+static void BM_LengthEqMask_SmallSizes_Scalar(benchmark::State& state) {
+    size_t size = static_cast<size_t>(state.range(0));
+    std::vector<uint32_t> offsets(size + 1);
+    for (size_t i = 0; i <= size; ++i) {
+        offsets[i] = static_cast<uint32_t>(i * 5);
+    }
+    for (auto _ : state) {
+        uint32_t mask = 0;
+        for (size_t i = 0; i < size; ++i) {
+            if (offsets[i + 1] - offsets[i] == 5) {
+                mask |= (1u << i);
+            }
+        }
+        benchmark::DoNotOptimize(mask);
+    }
+}
+
+static void BM_LengthEqMask_SmallSizes_SIMD(benchmark::State& state) {
+    size_t size = static_cast<size_t>(state.range(0));
+    std::vector<uint32_t> offsets(size + 1);
+    for (size_t i = 0; i <= size; ++i) {
+        offsets[i] = static_cast<uint32_t>(i * 5);
+    }
+    for (auto _ : state) {
+        uint32_t mask = 0;
+        size_t i = 0;
+        if (size >= SIMD::kStringLenSimdWidth) {
+            mask = SIMD::length_eq_mask(offsets.data(), 0, 5);
+            i += SIMD::kStringLenSimdWidth;
+        }
+        for (; i < size; ++i) {
+            if (offsets[i + 1] - offsets[i] == 5) {
+                mask |= (1u << i);
+            }
+        }
+        benchmark::DoNotOptimize(mask);
+    }
+}
+
+BENCHMARK(BM_LengthEqMask_SmallSizes_Scalar)->DenseRange(1, 15, 1);
+BENCHMARK(BM_LengthEqMask_SmallSizes_SIMD)->DenseRange(1, 15, 1);
 
 } // namespace starrocks
 

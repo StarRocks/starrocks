@@ -23,6 +23,7 @@
 #include "base/testutil/parallel_test.h"
 #include "base/types/int128.h"
 #include "column/array_column.h"
+#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "exprs/function_helper.h"
@@ -1388,6 +1389,301 @@ PARALLEL_TEST(VecStringFunctionsTest, utf8LengthChineseTest) {
         } else {
             ASSERT_EQ(4, v->get_data()[k]);
         }
+    }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, LengthVectorisedTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // 1. Error handling: empty columns and nullptr column
+    {
+        Columns empty_cols;
+        auto st = StringFunctions::length(ctx.get(), empty_cols);
+        ASSERT_FALSE(st.ok());
+
+        Columns null_cols{nullptr};
+        st = StringFunctions::length(ctx.get(), null_cols);
+        ASSERT_FALSE(st.ok());
+    }
+
+    // 2. Empty BinaryColumn (0 rows)
+    {
+        auto str = BinaryColumn::create();
+        Columns cols{str};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_EQ(0, res->size());
+        ASSERT_FALSE(res->is_nullable());
+    }
+
+    // 3. BinaryColumn with various lengths: empty string, single char, medium, long
+    {
+        std::vector<std::string> test_strings = {
+                "", "a",           "bc", "def", "hello", "world123", std::string(100, 'x'), std::string(1024, 'y'),
+                "", "final_string"};
+        auto str = BinaryColumn::create();
+        for (const auto& s : test_strings) {
+            str->append(s);
+        }
+        Columns cols{str};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_EQ(test_strings.size(), res->size());
+        ASSERT_FALSE(res->is_nullable());
+
+        auto v = ColumnHelper::cast_to<TYPE_INT>(res);
+        for (size_t i = 0; i < test_strings.size(); ++i) {
+            ASSERT_EQ(static_cast<int32_t>(test_strings[i].size()), v->get_data()[i]);
+        }
+    }
+
+    // 4. NullableColumn: mix of nulls and values
+    {
+        std::vector<std::string> test_strings = {"alpha", "", "bravo_charlie", "delta", "echo"};
+        auto data = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        for (size_t i = 0; i < test_strings.size(); ++i) {
+            data->append(test_strings[i]);
+            null_col->append(i % 2 == 1); // rows 1, 3 are null
+        }
+        auto nullable = NullableColumn::create(data, null_col);
+        Columns cols{nullable};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_EQ(test_strings.size(), res->size());
+        ASSERT_TRUE(res->is_nullable());
+
+        auto nullable_res = down_cast<const NullableColumn*>(res.get());
+        auto v = ColumnHelper::cast_to<TYPE_INT>(nullable_res->data_column());
+        for (size_t i = 0; i < test_strings.size(); ++i) {
+            if (i % 2 == 1) {
+                ASSERT_TRUE(nullable_res->is_null(i));
+            } else {
+                ASSERT_FALSE(nullable_res->is_null(i));
+                ASSERT_EQ(static_cast<int32_t>(test_strings[i].size()), v->get_data()[i]);
+            }
+        }
+    }
+
+    // 5. NullableColumn: all nulls
+    {
+        auto data = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        for (int i = 0; i < 10; ++i) {
+            data->append("");
+            null_col->append(1);
+        }
+        auto nullable = NullableColumn::create(data, null_col);
+        Columns cols{nullable};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_EQ(10, res->size());
+        ASSERT_TRUE(res->is_nullable());
+        for (int i = 0; i < 10; ++i) {
+            ASSERT_TRUE(res->is_null(i));
+        }
+    }
+
+    // 6. ConstColumn non-null
+    {
+        auto data = BinaryColumn::create();
+        data->append("constant_string");
+        auto const_col = ConstColumn::create(data, 7);
+        Columns cols{const_col};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_EQ(7, res->size());
+        ASSERT_TRUE(res->is_constant());
+        auto const_res = down_cast<const ConstColumn*>(res.get());
+        auto v = ColumnHelper::cast_to<TYPE_INT>(const_res->data_column());
+        ASSERT_EQ(static_cast<int32_t>(std::string("constant_string").size()), v->get_data()[0]);
+    }
+
+    // 7. ConstColumn null
+    {
+        auto data = BinaryColumn::create();
+        data->append("");
+        auto null_col = NullColumn::create();
+        null_col->append(1);
+        auto nullable = NullableColumn::create(data, null_col);
+        auto const_col = ConstColumn::create(nullable, 5);
+        Columns cols{const_col};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_EQ(5, res->size());
+        ASSERT_TRUE(res->is_constant());
+        ASSERT_TRUE(res->is_null(0));
+    }
+
+    // 8. NullableColumn null column detachment: ensure null bitmap is not shared with input column
+    // to prevent double-compaction and corruption under Chunk::filter()
+    {
+        auto data = BinaryColumn::create();
+        data->append("apple");
+        data->append("");
+        data->append("banana");
+        data->append("");
+        data->append("cherry");
+
+        auto null_col = NullColumn::create();
+        null_col->append(0);
+        null_col->append(1);
+        null_col->append(0);
+        null_col->append(1);
+        null_col->append(0);
+
+        auto nullable_input = NullableColumn::create(data, null_col);
+        Columns cols{nullable_input};
+        auto res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_TRUE(res->is_nullable());
+
+        auto nullable_res = down_cast<const NullableColumn*>(res.get());
+        ASSERT_NE(nullable_input->null_column().get(), nullable_res->null_column().get())
+                << "Null column must be detached/cloned to prevent aliasing with input";
+
+        // Place both into a chunk and filter to verify no double-compaction corruption
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(nullable_input, 0);
+        chunk->append_column(res, 1);
+
+        Filter filter = {1, 0, 1, 0, 1}; // Keep non-null rows (apple, banana, cherry)
+        chunk->filter(filter);
+
+        ASSERT_EQ(3, chunk->num_rows());
+        auto col0 = chunk->get_column_by_slot_id(0);
+        auto col1 = chunk->get_column_by_slot_id(1);
+
+        EXPECT_FALSE(col0->is_null(0));
+        EXPECT_FALSE(col0->is_null(1));
+        EXPECT_FALSE(col0->is_null(2));
+
+        EXPECT_FALSE(col1->is_null(0));
+        EXPECT_FALSE(col1->is_null(1));
+        EXPECT_FALSE(col1->is_null(2));
+
+        auto v = ColumnHelper::cast_to<TYPE_INT>(down_cast<const NullableColumn*>(col1.get())->data_column());
+        EXPECT_EQ(5, v->get_data()[0]);
+        EXPECT_EQ(6, v->get_data()[1]);
+        EXPECT_EQ(6, v->get_data()[2]);
+    }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, Utf8LengthAsciiFastPathTest) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    // 1. Error handling: empty columns and nullptr column
+    {
+        Columns empty_cols;
+        auto st = StringFunctions::utf8_length(ctx.get(), empty_cols);
+        ASSERT_FALSE(st.ok());
+
+        Columns null_cols{nullptr};
+        st = StringFunctions::utf8_length(ctx.get(), null_cols);
+        ASSERT_FALSE(st.ok());
+    }
+
+    // 2. Pure ASCII column: verify fast path output matches length() exactly
+    {
+        std::vector<std::string> ascii_strings = {
+                "", "hello", "world", "StarRocks", "FastPath123!@#", std::string(256, 'a'), "testing ascii length"};
+        auto str = BinaryColumn::create();
+        for (const auto& s : ascii_strings) {
+            str->append(s);
+        }
+        Columns cols{str};
+        auto utf8_res = StringFunctions::utf8_length(ctx.get(), cols).value();
+        auto byte_res = StringFunctions::length(ctx.get(), cols).value();
+        ASSERT_EQ(ascii_strings.size(), utf8_res->size());
+        ASSERT_FALSE(utf8_res->is_nullable());
+
+        auto v_utf8 = ColumnHelper::cast_to<TYPE_INT>(utf8_res);
+        auto v_byte = ColumnHelper::cast_to<TYPE_INT>(byte_res);
+        for (size_t i = 0; i < ascii_strings.size(); ++i) {
+            ASSERT_EQ(static_cast<int32_t>(ascii_strings[i].size()), v_utf8->get_data()[i]);
+            ASSERT_EQ(v_byte->get_data()[i], v_utf8->get_data()[i]);
+        }
+    }
+
+    // 3. Multi-byte UTF-8 column (Chinese, emoji, accented Cyrillic, 2/3/4 byte chars)
+    {
+        struct TestCase {
+            std::string text;
+            int32_t expected_char_count;
+        };
+        std::vector<TestCase> test_cases = {
+                {"", 0},
+                {"Привет", 6},             // Cyrillic (2-byte each, 12 bytes total)
+                {"αβγδε", 5},              // Greek (2-byte each, 10 bytes total)
+                {"你好世界", 4},           // Chinese (3-byte each, 12 bytes total)
+                {"こんにちは", 5},         // Japanese (3-byte each, 15 bytes total)
+                {"🚀🎉🦀💻", 4},   // Emojis (4-byte each, 16 bytes total)
+                {"StarRocks 🚀 数据库", 15} // Mixed: 10 ascii + 1 emoji + 1 space + 3 cjk = 15
+        };
+        auto str = BinaryColumn::create();
+        for (const auto& tc : test_cases) {
+            str->append(tc.text);
+        }
+        Columns cols{str};
+        auto res = StringFunctions::utf8_length(ctx.get(), cols).value();
+        ASSERT_EQ(test_cases.size(), res->size());
+        ASSERT_FALSE(res->is_nullable());
+
+        auto v = ColumnHelper::cast_to<TYPE_INT>(res);
+        for (size_t i = 0; i < test_cases.size(); ++i) {
+            ASSERT_EQ(test_cases[i].expected_char_count, v->get_data()[i])
+                    << "Failed for string: " << test_cases[i].text;
+        }
+    }
+
+    // 4. NullableColumn with ASCII vs Multi-byte UTF-8
+    {
+        auto data = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        data->append("ascii");
+        null_col->append(0);
+        data->append("");
+        null_col->append(1); // null
+        data->append("StarRocks 🚀");
+        null_col->append(0);
+        data->append("");
+        null_col->append(1); // null
+
+        auto nullable = NullableColumn::create(data, null_col);
+        Columns cols{nullable};
+        auto res = StringFunctions::utf8_length(ctx.get(), cols).value();
+        ASSERT_EQ(4, res->size());
+        ASSERT_TRUE(res->is_nullable());
+
+        auto nullable_res = down_cast<const NullableColumn*>(res.get());
+        auto v = ColumnHelper::cast_to<TYPE_INT>(nullable_res->data_column());
+        ASSERT_FALSE(nullable_res->is_null(0));
+        ASSERT_EQ(5, v->get_data()[0]);
+
+        ASSERT_TRUE(nullable_res->is_null(1));
+
+        ASSERT_FALSE(nullable_res->is_null(2));
+        ASSERT_EQ(11, v->get_data()[2]); // "StarRocks 🚀": 10 ascii + 1 emoji = 11
+
+        ASSERT_TRUE(nullable_res->is_null(3));
+    }
+
+    // 5. ConstColumn ASCII and UTF-8
+    {
+        // Const ASCII
+        auto data_ascii = BinaryColumn::create();
+        data_ascii->append("ascii_const");
+        auto const_ascii = ConstColumn::create(data_ascii, 6);
+        Columns cols_ascii{const_ascii};
+        auto res_ascii = StringFunctions::utf8_length(ctx.get(), cols_ascii).value();
+        ASSERT_EQ(6, res_ascii->size());
+        ASSERT_TRUE(res_ascii->is_constant());
+        auto v_ascii = ColumnHelper::cast_to<TYPE_INT>(down_cast<const ConstColumn*>(res_ascii.get())->data_column());
+        ASSERT_EQ(11, v_ascii->get_data()[0]);
+
+        // Const UTF-8 multi-byte
+        auto data_utf8 = BinaryColumn::create();
+        data_utf8->append("你好世界");
+        auto const_utf8 = ConstColumn::create(data_utf8, 4);
+        Columns cols_utf8{const_utf8};
+        auto res_utf8 = StringFunctions::utf8_length(ctx.get(), cols_utf8).value();
+        ASSERT_EQ(4, res_utf8->size());
+        ASSERT_TRUE(res_utf8->is_constant());
+        auto v_utf8 = ColumnHelper::cast_to<TYPE_INT>(down_cast<const ConstColumn*>(res_utf8.get())->data_column());
+        ASSERT_EQ(4, v_utf8->get_data()[0]);
     }
 }
 
