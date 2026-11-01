@@ -67,7 +67,9 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
             // No need to get metadata for this case, just delete it if has_expired = true.
             need_clear = true;
         } else if (tablet_id != 0) {
-            ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(tablet_id, version, false));
+            // Read the listed file rather than the tablet's location, which no longer resolves once the
+            // tablet is dropped.
+            ASSIGN_OR_RETURN(auto metadata, tablet_mgr->load_tablet_metadata(path, false, 0, nullptr));
             if ((metadata->has_commit_time() && metadata->commit_time() < grace_timestamp) ||
                 (has_expired && !metadata->has_commit_time())) {
                 need_clear = true;
