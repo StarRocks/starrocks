@@ -1108,7 +1108,7 @@ TEST_F(LikeTest, RegexSubstringNullableWithResidualBytesAndLargeOffsets) {
 
 TEST_F(LikeTest, SubstringMatchesOracleAcrossChunkShapes) {
     // 6 B needle -> StringSearcher; 46 B needle on a >= 20,000 byte chunk -> hoisted Volnitsky table.
-    for (const std::string needle : {std::string("google"), std::string(40, 'q') + "needle"}) {
+    for (const std::string& needle : {std::string("google"), std::string(40, 'q') + "needle"}) {
         for (size_t rows :
              {size_t(0), size_t(1), size_t(15), size_t(16), size_t(17), size_t(18), size_t(33), size_t(400)}) {
             auto context = FunctionContext::create_test_context();

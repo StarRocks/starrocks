@@ -87,7 +87,7 @@ public:
         if (needle_size == 0) {
             return true;
         }
-        if (pos < haystack || static_cast<size_t>(haystack_end - pos) < needle_size) {
+        if (pos < haystack || pos > haystack_end || static_cast<size_t>(haystack_end - pos) < needle_size) {
             return false;
         }
         const auto* p = reinterpret_cast<const uint8_t*>(pos);
