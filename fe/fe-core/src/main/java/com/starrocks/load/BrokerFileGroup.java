@@ -202,7 +202,9 @@ public class BrokerFileGroup implements Writable {
         // check negative for sum aggregate type
         if (dataDescription.isNegative()) {
             for (Column column : table.getBaseSchema()) {
-                if (!column.isKey() && column.getAggregationType() != AggregateType.SUM) {
+                if (!column.isKey() && column.getAggregationType() != AggregateType.SUM
+                        && !(olapTable.getKeysType() == KeysType.AGG_KEYS
+                            && column.isInternalGeneratedPartitionColumn())) {
                     throw new DdlException("Column is not SUM AggreateType. column:" + column.getName());
                 }
             }
