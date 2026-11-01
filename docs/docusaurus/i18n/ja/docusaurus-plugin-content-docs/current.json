@@ -3,9 +3,9 @@
     "message": "Latest-4.1",
     "description": "The label for version current"
   },
-  "sidebar.docs.category.Introduction to StarRocks": {
-    "message": "StarRocks の紹介",
-    "description": "The label for category Introduction to StarRocks in sidebar docs"
+  "sidebar.docs.category.Introduction": {
+    "message": "概要",
+    "description": "The label for category Introduction in sidebar docs"
   },
   "sidebar.docs.category.Quick Start": {
     "message": "クイックスタート",
