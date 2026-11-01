@@ -321,13 +321,12 @@ PARALLEL_TEST(StringLengthFilterTest, caller_loop_tail_peeling_sizes_1_to_15) {
                 lengths[array_offset + match_pos] = static_cast<uint32_t>(target.size());
 
                 auto offsets = make_offsets(lengths);
-                size_t got = find_string_in_array_simd_simulated(offsets.data(), array_offset, array_size, strings,
-                                                                 target);
+                size_t got =
+                        find_string_in_array_simd_simulated(offsets.data(), array_offset, array_size, strings, target);
                 size_t expected = find_string_scalar_ref(strings, array_offset, array_size, target);
 
-                ASSERT_EQ(got, match_pos + 1)
-                        << "Failed at array_size=" << array_size << " offset=" << array_offset
-                        << " match_pos=" << match_pos;
+                ASSERT_EQ(got, match_pos + 1) << "Failed at array_size=" << array_size << " offset=" << array_offset
+                                              << " match_pos=" << match_pos;
                 ASSERT_EQ(got, expected);
             }
 
@@ -343,8 +342,8 @@ PARALLEL_TEST(StringLengthFilterTest, caller_loop_tail_peeling_sizes_1_to_15) {
                 }
 
                 auto offsets = make_offsets(lengths);
-                size_t got = find_string_in_array_simd_simulated(offsets.data(), array_offset, array_size, strings,
-                                                                 target);
+                size_t got =
+                        find_string_in_array_simd_simulated(offsets.data(), array_offset, array_size, strings, target);
                 ASSERT_EQ(got, 0UL) << "False positive match for array_size=" << array_size
                                     << " offset=" << array_offset;
             }
@@ -360,8 +359,8 @@ PARALLEL_TEST(StringLengthFilterTest, caller_loop_tail_peeling_sizes_1_to_15) {
                 }
 
                 auto offsets = make_offsets(lengths);
-                size_t got = find_string_in_array_simd_simulated(offsets.data(), array_offset, array_size, strings,
-                                                                 target);
+                size_t got =
+                        find_string_in_array_simd_simulated(offsets.data(), array_offset, array_size, strings, target);
                 ASSERT_EQ(got, 0UL) << "Expected 0 for array_size=" << array_size << " offset=" << array_offset;
             }
         }
