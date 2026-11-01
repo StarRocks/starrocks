@@ -409,6 +409,69 @@ TEST_P(LakeVacuumTest, vacuum_full_evicts_bundled_metadata) {
     }
 }
 
+// A bundle file expired by its modification time is not read. Its version is still evicted for the tablets of the
+// bundle files that were read, here v3.
+TEST_P(LakeVacuumTest, vacuum_full_evicts_bundled_metadata_expired_by_mtime) {
+    ConfigResetGuard<int64_t> margin_guard(&config::lake_fullvacuum_meta_mtime_margin_seconds, 600);
+    use_starlet_style_locations({500, 501});
+    put_cached_bundles({500, 501}, 2, 4);
+    const auto v2_path = join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_metadata_filename(0, 2));
+    struct utimbuf times;
+    times.actime = times.modtime = 100;
+    ASSERT_EQ(0, ::utime(v2_path.c_str(), &times));
+    VacuumFullRequest request;
+    VacuumFullResponse response;
+    request.set_partition_id(10);
+    request.set_tablet_id(500);
+    request.set_min_active_txn_id(1);
+    request.set_grace_timestamp(2000);
+    request.set_min_check_version(2);
+    request.set_max_check_version(4);
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    for (auto tablet_id : {500, 501}) {
+        for (auto version : {2, 3}) {
+            EXPECT_FALSE(file_exist(tablet_metadata_filename(0, version)));
+            EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, version)));
+        }
+        EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   _tablet_mgr->tablet_metadata_location(tablet_id, 4)));
+    }
+}
+
+// When no bundle file is read, the tablets come from the newest bundle file left, here v4.
+TEST_P(LakeVacuumTest, vacuum_full_evicts_bundled_metadata_when_all_expired_by_mtime) {
+    ConfigResetGuard<int64_t> margin_guard(&config::lake_fullvacuum_meta_mtime_margin_seconds, 600);
+    use_starlet_style_locations({500, 501});
+    put_cached_bundles({500, 501}, 2, 4);
+    const auto v2_path = join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_metadata_filename(0, 2));
+    struct utimbuf times;
+    times.actime = times.modtime = 100;
+    ASSERT_EQ(0, ::utime(v2_path.c_str(), &times));
+    VacuumFullRequest request;
+    VacuumFullResponse response;
+    request.set_partition_id(10);
+    request.set_tablet_id(500);
+    request.set_min_active_txn_id(1);
+    request.set_grace_timestamp(2000);
+    request.set_min_check_version(2);
+    request.set_max_check_version(4);
+    request.add_retain_versions(3);
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_EQ(0, response.status().status_code()) << response.status().DebugString();
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+    for (auto tablet_id : {500, 501}) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                   _tablet_mgr->tablet_metadata_location(tablet_id, 2)));
+        for (auto version : {3, 4}) {
+            EXPECT_TRUE(file_exist(tablet_metadata_filename(0, version)));
+            EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(
+                                       _tablet_mgr->tablet_metadata_location(tablet_id, version)));
+        }
+    }
+}
+
 TEST_P(LakeVacuumTest, delete_txn_log_evicts_both_request_formats) {
     use_starlet_style_locations({500, 501});
     for (bool use_txn_infos : {false, true}) {

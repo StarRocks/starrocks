@@ -14,8 +14,10 @@
 
 #include "storage/lake/vacuum_full.h"
 
+#include <algorithm>
 #include <set>
 #include <string_view>
+#include <vector>
 
 #include "common/config_lake_fwd.h"
 #include "common/status.h"
@@ -94,6 +96,10 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     const int64_t mtime_margin = config::lake_fullvacuum_meta_mtime_margin_seconds;
     int64_t judged_by_mtime = 0;
     int64_t judged_by_content = 0;
+    // Bundle pages are cached under each tablet's own location. A file expired by its modification time is not
+    // read, so its version is evicted after the loop, for the tablets of the bundle files that were read.
+    std::set<int64_t> bundle_tablet_ids;
+    std::vector<int64_t> versions_expired_by_mtime;
     for (const auto& name : *bundle_meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         if (!meta_ver_checker(version)) {
@@ -101,23 +107,29 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         }
         auto path = join_path(metadata_root_location, name);
         bool need_clear = true;
+        TabletMetadataPtrs metadatas;
         auto mtime = bundle_meta_mtimes.find(name);
-        if (mtime_margin >= 0 && mtime != bundle_meta_mtimes.end() && mtime->second + mtime_margin < grace_timestamp) {
+        const bool by_mtime = mtime_margin >= 0 && mtime != bundle_meta_mtimes.end() &&
+                              mtime->second + mtime_margin < grace_timestamp;
+        if (by_mtime) {
             ++judged_by_mtime;
         } else {
             ++judged_by_content;
-            ASSIGN_OR_RETURN(auto metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(path, fs.get()));
+            ASSIGN_OR_RETURN(metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(path, fs.get()));
             // metadatas parsed from bundle files should alwasy have version >= 2
             for (const auto& metadata : metadatas) {
+                bundle_tablet_ids.insert(metadata->id());
                 if (metadata->commit_time() >= grace_timestamp) {
                     need_clear = false;
-                    break;
                 }
             }
         }
         if (need_clear) {
             LOG(INFO) << "Try delete for full vacuum: " << path;
             RETURN_IF_ERROR(metafile_deleter.delete_file(path));
+            if (by_mtime) {
+                versions_expired_by_mtime.push_back(version);
+            }
             for (const auto& metadata : metadatas) {
                 tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(metadata->id(), version));
             }
@@ -126,6 +138,29 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     }
     for (const auto& bundle_expired_meta : bundle_expired_metas) {
         bundle_meta_files->remove(bundle_expired_meta);
+    }
+    if (!versions_expired_by_mtime.empty() && bundle_tablet_ids.empty()) {
+        // No bundle file was read: take the tablets from the newest one left.
+        auto newest = std::max_element(
+                bundle_meta_files->begin(), bundle_meta_files->end(), [](const std::string& a, const std::string& b) {
+                    return parse_tablet_metadata_filename(a).second < parse_tablet_metadata_filename(b).second;
+                });
+        if (newest != bundle_meta_files->end()) {
+            auto res = TabletManager::get_metas_from_bundle_tablet_metadata(join_path(metadata_root_location, *newest),
+                                                                            fs.get());
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to read " << *newest << " to evict cached bundle pages: " << res.status();
+            } else {
+                for (const auto& metadata : *res) {
+                    bundle_tablet_ids.insert(metadata->id());
+                }
+            }
+        }
+    }
+    for (auto version : versions_expired_by_mtime) {
+        for (auto id : bundle_tablet_ids) {
+            tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(id, version));
+        }
     }
     LOG(INFO) << metadata_root_location << ": full vacuum judged " << judged_by_mtime
               << " bundle meta files by modification time and read " << judged_by_content << ", "
