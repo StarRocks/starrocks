@@ -702,17 +702,8 @@ Status Tablet::overwrite_rowset(const RowsetSharedPtr& rowset, int64_t version) 
     // unpublished transaction and the tablet without the versions it overwrites. Loading the visible rowset meta puts
     // the rowset back into the tablet and drops the rowsets it covers (see DataDir::load).
     RowsetMetaPB rowset_meta_pb;
-    if (rowset->rowset_meta()->skip_tablet_schema()) {
-        rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
-    } else {
-        rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
-    }
-    auto st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
-    if (!st.ok()) {
-        LOG(WARNING) << "Fail to save overwrite rowset. tablet_id: " << tablet_id() << ", txn_id: " << rowset->txn_id()
-                     << ", rowset_id: " << rowset->rowset_id() << ", res=" << st;
-        return st;
-    }
+    rowset->rowset_meta()->get_full_meta_pb(&rowset_meta_pb, rowset->rowset_meta()->skip_tablet_schema());
+    RETURN_IF_ERROR(RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb));
 
     modify_rowsets_without_lock({rowset}, origin_rowsets, nullptr);
     return Status::OK();
