@@ -26,6 +26,7 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "exprs/function_context.h"
 #include "exprs/string_functions.h"
 
 namespace starrocks {
@@ -153,6 +154,97 @@ BENCHMARK(BM_HyperScan_Eval)->Apply(BM_HyperScan_Eval_Arg);
     BM_HyperScan_Eval/100/1/iterations:10000     497867 ns       497860 ns        10000
     BM_HyperScan_Eval/100/0/iterations:10000     100563 ns       100588 ns        10000
      */
+
+static ColumnPtr create_clickbench_q28_column(size_t num_rows, int selectivity) {
+    auto column = BinaryColumn::create();
+    for (size_t i = 0; i < num_rows; ++i) {
+        const bool match = (i % 100) < static_cast<size_t>(selectivity);
+        if (match) {
+            std::string s = "https://www.starrocks.io/blog/clickbench-vectorized-regexp-replace/benchmarks?id=" +
+                            std::to_string(i);
+            column->append(Slice(s));
+        } else {
+            std::string s = "starrocks.io/blog/clickbench-vectorized-regexp-replace/benchmarks?id=" + std::to_string(i);
+            column->append(Slice(s));
+        }
+    }
+    return column;
+}
+
+static ColumnPtr create_global_capture_column(size_t num_rows, int selectivity) {
+    auto column = BinaryColumn::create();
+    for (size_t i = 0; i < num_rows; ++i) {
+        const bool match = (i % 100) < static_cast<size_t>(selectivity);
+        if (match) {
+            std::string s = "session_event_user_1024_action_4096_code_" + std::to_string(1000 + (i % 9000));
+            column->append(Slice(s));
+        } else {
+            const char suffix1 = 'a' + static_cast<char>(i % 26);
+            const char suffix2 = 'a' + static_cast<char>((i / 26) % 26);
+            std::string s = "session_event_user_abcd_action_efgh_code_item_";
+            s.push_back(suffix1);
+            s.push_back(suffix2);
+            column->append(Slice(s));
+        }
+    }
+    return column;
+}
+
+static void run_re2_regexp_replace_bench(benchmark::State& state, const std::string& pattern,
+                                         const std::string& replacement, ColumnPtr (*create_col_fn)(size_t, int)) {
+    const int selectivity = state.range(0);
+    const size_t num_rows = 4096;
+
+    Columns columns;
+    columns.push_back(create_col_fn(num_rows, selectivity));
+
+    const TypeDescriptor type_desc(TYPE_VARCHAR);
+    auto pat_data = ColumnHelper::create_column(type_desc, false);
+    pat_data->append_datum(Datum(Slice(pattern)));
+    columns.push_back(ConstColumn::create(std::move(pat_data), num_rows));
+
+    auto rpl_data = ColumnHelper::create_column(type_desc, false);
+    rpl_data->append_datum(Datum(Slice(replacement)));
+    columns.push_back(ConstColumn::create(std::move(rpl_data), num_rows));
+
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    ctx->set_constant_columns(columns);
+    Status st = StringFunctions::regexp_replace_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    if (!st.ok()) {
+        state.SkipWithError(st.to_string().c_str());
+        return;
+    }
+
+    for (auto _ : state) {
+        auto res = StringFunctions::regexp_replace(ctx.get(), columns);
+        benchmark::DoNotOptimize(res);
+        if (UNLIKELY(!res.ok())) {
+            state.SkipWithError(res.status().to_string().c_str());
+            break;
+        }
+    }
+
+    (void)StringFunctions::regexp_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    state.SetItemsProcessed(state.iterations() * num_rows);
+}
+
+static void BM_Re2_RegexpReplace_ClickBenchQ28(benchmark::State& state) {
+    run_re2_regexp_replace_bench(state, "^https?://(?:www\\.)?([^/]+)/.*$", "\\1", create_clickbench_q28_column);
+}
+
+static void BM_Re2_RegexpReplace_GlobalCapture(benchmark::State& state) {
+    run_re2_regexp_replace_bench(state, "([0-9]+)", "#\\1#", create_global_capture_column);
+}
+
+static void BM_Re2_RegexpReplace_Args(benchmark::Benchmark* b) {
+    b->Arg(0);
+    b->Arg(10);
+    b->Arg(50);
+    b->Arg(100);
+}
+
+BENCHMARK(BM_Re2_RegexpReplace_ClickBenchQ28)->Apply(BM_Re2_RegexpReplace_Args);
+BENCHMARK(BM_Re2_RegexpReplace_GlobalCapture)->Apply(BM_Re2_RegexpReplace_Args);
 
 } // namespace starrocks
 
