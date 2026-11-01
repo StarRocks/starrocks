@@ -176,16 +176,15 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_selective_preaggregation(c
         _aggregator->build_hash_map_with_selection(chunk_size);
     }
 
-    size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
-    // very poor aggregation
-    if (zero_count == 0) {
+    // very poor aggregation: when all selection bytes are non-zero (contains no zeros)
+    if (!SIMD::contain_zero(_aggregator->streaming_selection())) {
         SCOPED_TIMER(_aggregator->streaming_timer());
         ChunkPtr res = std::make_shared<Chunk>();
         RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &res));
         _aggregator->offer_chunk_to_buffer(res);
     }
-    // very high aggregation
-    else if (zero_count == _aggregator->streaming_selection().size()) {
+    // very high aggregation: when all selection bytes are zero
+    else if (SIMD::all_zeros(_aggregator->streaming_selection())) {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
     } else {
