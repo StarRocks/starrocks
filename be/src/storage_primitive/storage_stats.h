@@ -77,6 +77,14 @@ struct OlapReaderStatistics {
     int64_t get_delta_column_group_ns = 0;
     int64_t segment_init_ns = 0;
     int64_t column_iterator_init_ns = 0;
+    // Breakdown of segment_init_ns. `_init_internal` was a black box: a field profile showed
+    // segment_init_sec=1114 while column_iterator_init_sec was only 2, i.e. the cost sat in
+    // steps that had no timer at all. These split it per step so the dominant one is visible.
+    int64_t seg_init_access_path_ns = 0;
+    int64_t seg_init_ann_reader_ns = 0;
+    int64_t seg_init_low_card_ns = 0;
+    int64_t seg_init_scan_range_ns = 0;
+    int64_t seg_init_cache_size_ns = 0;
     int64_t bitmap_index_iterator_init_ns = 0;
     int64_t zone_map_filter_ns = 0;
     int64_t rows_key_range_filter_ns = 0;
