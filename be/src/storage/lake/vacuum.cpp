@@ -506,13 +506,15 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     return Status::OK();
 }
 
-static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
+void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
     auto cache = tablet_mgr->metacache();
     DCHECK(cache != nullptr);
-    // Assuming the cache key for tablet metadata is the path to tablet metadata.
-    // TODO: Refactor the code to extract a separate function that constructs the tablet metadata cache key
     for (const auto& path : metafiles) {
         cache->erase(path);
+        auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
+        if (tablet_id != 0) {
+            cache->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+        }
     }
 }
 
@@ -593,6 +595,10 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                 continue;
             }
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
+            // A bundle contains one metadata object per tablet, cached under the tablet's own path.
+            for (const auto& tablet_info : tablet_infos) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
+            }
         }
         RETURN_IF_ERROR(metafile_deleter.finish());
         (*vacuumed_files) += metafile_deleter.delete_count();
@@ -601,6 +607,421 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+// Propose phase of the incremental vacuum protocol: WITHOUT deleting anything, walk each tablet's
+// metadata chain for at most |max_versions_per_round| versions and compute the version range
+// [*to_delete_low, *to_delete_high) (low inclusive, high EXCLUSIVE) the next round may safely delete, the
+// resume cursor *next_propose_start_version (0 == the chain bottom was reached, i.e. the pass is
+// complete), and -- on a fresh round only -- the pass retain floor *pass_start_version.
+//
+// Two ways to start a tablet's descent:
+//   - Fresh pass (|resume_from_version| == 0): start at |min_retain_version| and, on the first round,
+//     honor |grace_timestamp| -- descend until the first metadata older than the grace timestamp, which
+//     becomes the retained boundary; everything strictly below it is deletable. If every examined
+//     version is still within the grace window, the tablet has nothing deletable this round.
+//   - Resume (|resume_from_version| > 0): start at the anchor |resume_from_version| the previous round
+//     stopped at and deliberately retained, and re-read it so the anchor becomes deletable this round.
+//     Every version at/below the anchor was already grace-checked when the pass first reached
+//     |min_retain_version|, so grace is skipped on a resumed walk.
+//
+// Outputs (all partition-level aggregates across tablets):
+//   - *to_delete_high = the INTERSECTION retained floor == MIN over tablets of their grace/min_retain
+//     boundary (this is exactly VacuumTabletMetaVerionRange::max_version, the low watermark). It is the
+//     EXCLUSIVE upper bound, so every version strictly below it is deletable by every tablet. The commit
+//     round does not enter the chain at this (it is retained); it derives the range's top real node from
+//     it (the node just below it for a fresh range, or to_delete_high - 1 for a resume range).
+//   - *to_delete_low = the INTERSECTION low end (max of the per-tablet walk lows): a tablet whose budget
+//     ran out has not examined the metadata below where it stopped, so nothing below the shallowest
+//     progress may be deleted yet.
+//   - *next_propose_start_version = the deepest version any tablet still has left to walk (max of the
+//     per-tablet stops); a tablet that bottomed out within budget contributes 0 and never raises it.
+//   - *pass_start_version = the retained floor g (the lowest surviving version this pass; equals
+//     to_delete_high on a fresh round). Set only on a fresh round; the FE persists it pass-constant and
+//     replays it so every commit round can read which shared files are still referenced (see commit).
+static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<TabletInfoPB>& tablet_infos,
+                                     int64_t min_retain_version, int64_t grace_timestamp, int64_t resume_from_version,
+                                     int64_t max_versions_per_round, int64_t max_empty_walk_versions,
+                                     int64_t deadline_ms, int64_t* to_delete_low, int64_t* to_delete_high,
+                                     int64_t* next_propose_start_version, int64_t* pass_start_version,
+                                     bool* grace_blocked) {
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(max_versions_per_round > 0);
+    DCHECK(max_empty_walk_versions > 0);
+    DCHECK(to_delete_low != nullptr && to_delete_high != nullptr && next_propose_start_version != nullptr &&
+           pass_start_version != nullptr && grace_blocked != nullptr);
+
+    VacuumTabletMetaVerionRange vacuum_version_range;
+    vacuum_version_range.intersect_low = true;
+    int64_t walk_stop_version = 0;
+    bool nothing_to_delete = false;
+    // Whether the walk read any tablet metadata at or below the retain floor across all tablets. Stays
+    // false when everything at/below min_retain_version is already vacuumed away (the walk anchors nothing).
+    bool read_any_metadata = false;
+    const bool resumed = resume_from_version > 0;
+
+    for (auto& tablet_info : tablet_infos) {
+        auto tablet_id = tablet_info.tablet_id();
+        auto min_version = std::max<int64_t>(1, tablet_info.min_version());
+        auto max_version = resumed ? (resume_from_version + 1) : min_retain_version;
+        auto version = resumed ? resume_from_version : max_version;
+        bool skip_check_timestamp = (grace_timestamp <= 0) || resumed;
+        int64_t versions_walked = 0;
+        bool stopped_by_limit = false;
+        bool anchored = false;
+
+        while (version >= min_version) {
+            if (auto st = check_vacuum_deadline(deadline_ms); !st.ok()) {
+                return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
+            }
+            // fill data cache to avoid reading the bundle meta file from remote storage repeatedly.
+            auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* fill_meta_cache */,
+                                                       true /* fill_data_cache */);
+            if (res.status().is_not_found()) {
+                // The prev_garbage_version chain links only materialized versions, so once the walk is
+                // anchored a NotFound is the genuine chain bottom (a version already vacuumed, or below this
+                // tablet's existence) -- stop, as before. But a resume round's entry resume_from_version is
+                // the MAX of the previous round's per-tablet stop cursors, so it can be materialized on the
+                // tablet that produced it yet be a batch-publish hole on this one; before the walk is
+                // anchored, step down to the nearest existing version (at most one folded batch away) to
+                // anchor it, instead of zeroing this tablet's range (which zeroes the whole round via the
+                // partition-level intersection). A fresh round's entry min_retain_version always exists.
+                if (anchored) {
+                    break;
+                }
+                --version;
+                // Bound the pre-anchor step-down by max_empty_walk_versions (the batch-publish fold width),
+                // NOT the full max_versions_per_round. The only legitimate run of missing versions here is a
+                // batch-publish hole, which spans at most that many versions; a tablet that cannot anchor
+                // within it is lagging / cross-generation (its versions all sit below the band being proposed),
+                // so grinding on to max_versions_per_round is pure wasted remote reads against a tablet that
+                // contributes nothing this round. Stop early instead. Guarded by skip_check_timestamp to match
+                // the budget check below: a fresh round anchors immediately at min_retain_version and never
+                // steps down; only a resume round, where skip_check_timestamp is already set, steps down here.
+                // versions_walked is still 0-based here (the post-anchor chain walk has not run yet), so this
+                // caps the hole search at exactly max_empty_walk_versions step-downs.
+                if (skip_check_timestamp && ++versions_walked >= max_empty_walk_versions) {
+                    stopped_by_limit = true;
+                    break;
+                }
+                continue;
+            } else if (!res.ok()) {
+                return res.status();
+            }
+            anchored = true;
+            read_any_metadata = true;
+            auto metadata = std::move(res).value();
+            if (!skip_check_timestamp) {
+                int64_t compare_time = 0;
+                if (metadata->has_commit_time() && metadata->commit_time() > 0) {
+                    compare_time = metadata->commit_time();
+                }
+                // Retain this version either way; if it is the first one older than the grace timestamp,
+                // stop checking grace from here down (everything below becomes deletable).
+                max_version = version;
+                if (compare_time < grace_timestamp) {
+                    skip_check_timestamp = true;
+                }
+            }
+            int64_t next_version = metadata->prev_garbage_version();
+            CHECK_LT(next_version, version);
+            int64_t span = version - next_version;
+            version = next_version;
+            if (skip_check_timestamp) {
+                versions_walked += span;
+                if (versions_walked >= max_versions_per_round) {
+                    stopped_by_limit = true;
+                    break;
+                }
+            }
+        }
+
+        // Clamp the proposed low to the walk floor |min_version|. |version| holds the last prev_garbage_version
+        // hop; the chain's lowest surviving node -- the pass retain floor -- records a prev_garbage_version that
+        // points at the PREVIOUS compaction anchor, one compaction interval below the floor and already
+        // reclaimed by an earlier pass. Taking |version + 1| verbatim would dip the proposed low under the floor
+        // and re-propose an already-vacuumed band (proposed.low < the prior pass's committed.high, replayed as a
+        // benign but wasteful re-commit next round). Every node at or above the floor was already visited and its
+        // garbage collected; nothing below the floor is deletable, so the low must never fall below it.
+        int64_t proposed_low = std::max<int64_t>(min_version, version + 1);
+        // Width clamp: the per-round budget is enforced only AFTER accumulating a whole prev_garbage_version
+        // hop (versions_walked += span; then the >= check), so one large jump slips through and the deletable
+        // band [proposed_low, max_version) can be thousands of versions wide even with a small
+        // max_versions_per_round -- e.g. a reshard-reset chain whose retain-floor metadata records
+        // prev_garbage_version == 0 collapses the entire [1, retain) into a single hop. Such a band is
+        // expensive to commit and, against a stale/cross-generation tablet set, grinds version-by-version to
+        // the RPC deadline. Cap the band at the budget and carry the remainder on the resume cursor so every
+        // committed range stays bounded and the pass splits into budget-sized bands across rounds.
+        // band_resume_cursor is where the next round re-enters: its max_version becomes cursor + 1, i.e. this
+        // band's low, so consecutive bands stay contiguous with no overlap or gap.
+        int64_t band_resume_cursor = version;
+        if (max_version - proposed_low > max_versions_per_round) {
+            proposed_low = max_version - max_versions_per_round;
+            band_resume_cursor = proposed_low - 1;
+            stopped_by_limit = true;
+        }
+
+        // Only a tablet that both anchored (read a real version) AND cleared the grace gate
+        // (skip_check_timestamp) actually contributes a deletable range to the intersection below. The other
+        // two outcomes compute a [proposed_low, max_version) that is NOT proposed: a never-anchored tablet
+        // (all NotFound -- e.g. cross-generation) merges nothing, and a grace-blocked tablet (anchored but
+        // every version it read is still within grace) takes the nothing_to_delete break and zeroes the whole
+        // round. Log an empty band for both so the per-tablet line matches what it really proposes and the
+        // partition summary.
+        const bool proposes_range = anchored && skip_check_timestamp;
+        VLOG(2) << "incremental vacuum propose tablet=" << tablet_id << " resume_from=" << resume_from_version
+                << " min_retain=" << min_retain_version << " proposed="
+                << (proposes_range ? fmt::format("[{},{})", proposed_low, max_version) : std::string("[0,0)"))
+                << " walked=" << versions_walked << " stop="
+                << (!anchored ? "not_found"
+                              : (!skip_check_timestamp ? "grace_blocked"
+                                                       : (stopped_by_limit ? "budget" : "chain_bottom")));
+
+        if (!skip_check_timestamp) {
+            if (!anchored) {
+                // Never-anchored on a fresh round: this tablet has no metadata at or below the retain floor
+                // -- a cross-generation tablet, or a non-base index whose first version sits above the floor
+                // -- so every version it "examined" was a NotFound step-down, not a real within-grace
+                // version. It is DRAINED, not grace-blocked: it neither restricts the deletable intersection
+                // (nothing below the floor to protect) nor forces the round to wait. Skip it, exactly as the
+                // resume-round path (the `if (anchored)` merge guard below) already does. Zeroing the node
+                // here instead would (a) report grace_blocked and livelock the FE forever on a tablet that
+                // can never anchor, and (b) discard the other tablets' real garbage below the raised floor.
+                continue;
+            }
+            // Anchored but every version read is still within the grace window: genuinely grace-blocked. It
+            // has nothing safely deletable this round. As the partition range is the intersection across
+            // tablets, the whole round must wait (its garbage is not yet eligible for deletion).
+            nothing_to_delete = true;
+            break;
+        }
+        // Per-tablet deletable range merged into the intersection: [proposed_low, max_version). Only a tablet
+        // that actually anchored (read at least one real version) may contribute a range or a resume cursor.
+        // A tablet that never anchored -- it only stepped down through missing versions -- has nothing here:
+        // do NOT merge a bogus all-hole range, and do NOT carry a cursor either. Carrying one would make the
+        // next round resume the hole search one budget lower; with min_version low (e.g. 0 right after an
+        // upgrade, before any pass has established a floor) that marches empty all the way to version 1. A
+        // real batch-publish hole spans at most lake_batch_publish_max_version_num (default 10) versions --
+        // far inside one round's budget -- so a genuine anchor is always found within the round; failing to
+        // anchor across a whole round means there is nothing below (vacuum deletes contiguously from the
+        // bottom up), so the pass is simply done.
+        if (anchored) {
+            vacuum_version_range.merge(proposed_low, max_version);
+            if (stopped_by_limit) {
+                walk_stop_version = std::max(walk_stop_version, band_resume_cursor);
+            }
+        }
+    }
+
+    // Default outputs: nothing proposed (empty round -- chain bottom reached, or grace blocked all).
+    *to_delete_low = 0;
+    *to_delete_high = 0;
+    *next_propose_start_version = 0;
+    *pass_start_version = 0;
+    // Tell the FE WHY an empty proposal is empty: grace-blocked (a tablet is still within grace -> the
+    // partition round must wait) vs drained/never-anchored (chain bottom -> the FE may ignore this node).
+    // Only nothing_to_delete (the grace-branch break) is a grace block; an empty intersection from drained
+    // tablets leaves it false. Meaningless on a non-empty proposal (the FE reads it only when empty).
+    *grace_blocked = nothing_to_delete;
+    if (!nothing_to_delete && vacuum_version_range.max_version > vacuum_version_range.min_version) {
+        // min_version/max_version come straight from the intersection merge: min_version = max of the
+        // per-tablet walk lows (intersect_low), max_version = MIN of the per-tablet retain boundaries =
+        // the retained floor g. The deletable range is [to_delete_low, to_delete_high) with the high end
+        // == the floor, which is also reported as the pass retain floor pass_start_version.
+        *to_delete_low = vacuum_version_range.min_version;
+        *to_delete_high = vacuum_version_range.max_version;
+        *next_propose_start_version = walk_stop_version;
+        *pass_start_version = vacuum_version_range.max_version;
+    } else if (!read_any_metadata) {
+        // Nothing was read at or below the retain floor: everything down here is already vacuumed away.
+        // Report the retain floor as the pass floor (mirrors the one-shot path's read_any_metadata branch)
+        // so the FE advances its watermark and clears a pinned metadataSwitchVersion. An empty proposal that
+        // left pass_start_version at 0 would strand the switch -- and the retain floor capped to it --
+        // forever, since the FE clears the switch only once the pass floor reaches the switch version.
+        *pass_start_version = min_retain_version;
+    }
+    return Status::OK();
+}
+
+// Commit phase of the incremental vacuum protocol: physically delete the metadata version range
+// [to_delete_low, to_delete_high) (low inclusive, high EXCLUSIVE) that the previous round proposed and
+// the FE has durably persisted, together with the garbage data files those metadata reference and any
+// shared files no longer referenced by alive metadata. Idempotent: a NotFound on any version is skipped,
+// so a crashed/retried commit re-derives and re-deletes safely from the same range.
+//
+// |to_delete_high| is the range's retained boundary (the intersection floor) and is itself NOT deletable.
+// The garbage walk enters each tablet's prev_garbage_version chain at the range's top real node, derived
+// from it: for a fresh range (to_delete_high == |pass_start_version|, the pass floor g) read g and
+// descend from its prev_garbage_version (g is retained); for a resume range the top real node is the
+// anchor at to_delete_high - 1. |pass_start_version| is the pass retain floor g; the shared-file
+// liveness check reads exactly g -- the lowest surviving version -- so a shared file still referenced
+// there is spared from deletion.
+//
+// Unlike the legacy/propose walk this does NOT consult grace_timestamp: the range was already
+// grace-checked when proposed and the FE persisted it as a firm delete commitment, so re-narrowing it
+// here would risk a version that can never be reclaimed. Deletions run data-first then metadata so a
+// crash never leaves metadata pointing at an already-deleted data file.
+static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view root_dir,
+                                    std::vector<TabletInfoPB>& tablet_infos, int64_t to_delete_low,
+                                    int64_t to_delete_high, int64_t pass_start_version, bool enable_file_bundling,
+                                    bool enable_shared_file_cleanup, int64_t max_empty_walk_versions,
+                                    const std::unordered_set<int64_t>& retain_versions, int64_t* vacuumed_files,
+                                    int64_t* vacuumed_file_size, int64_t deadline_ms,
+                                    AsyncSharedFileDeleter& shared_file_deleter) {
+    if (to_delete_low >= to_delete_high) {
+        return Status::OK();
+    }
+    // The retain floor must sit at or above the range's exclusive high (it equals it on a fresh range, and
+    // is strictly above on a resume range). A floor at/below the range means the FE forgot to replay it;
+    // proceeding would misderive the chain entry and could delete still-referenced metadata. Fail loud.
+    if (pass_start_version < to_delete_high) {
+        return Status::InternalError(
+                fmt::format("vacuum commit: pass_start_version {} must be >= delete-range high {} (range [{}, {}))",
+                            pass_start_version, to_delete_high, to_delete_low, to_delete_high));
+    }
+    auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
+        erase_tablet_metadata_from_metacache(tablet_mgr, files);
+    };
+    auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
+    auto data_dir = join_path(root_dir, kSegmentDirectoryName);
+
+    // Step 1: walk each tablet's prev_garbage_version chain from the range's top real node down to
+    // |to_delete_low|, deleting the garbage data files each metadata references. The entry is derived
+    // from |to_delete_high| (the retained, non-deletable boundary): a fresh range reads the pass floor g
+    // and descends from its prev_garbage_version; a resume range starts at the anchor to_delete_high - 1.
+    const bool is_fresh = (to_delete_high == pass_start_version);
+    for (auto& tablet_info : tablet_infos) {
+        TabletRetainInfo tablet_retain_info;
+        tablet_retain_info.init(retain_versions);
+        auto tablet_id = tablet_info.tablet_id();
+        AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
+        int64_t garbage_data_size = 0;
+        // On a fresh round to_delete_high is the pass retain floor: it stays retained this pass (Step 3
+        // deletes only [to_delete_low, to_delete_high)), but the garbage files it records are superseded and
+        // can be reclaimed now -- mirroring the legacy walk, which collects garbage at its final_retain node.
+        // A tablet does not necessarily materialize a snapshot at every version: batch publish folds a run of
+        // txns into a single snapshot at the batch's final version, so the floor can legitimately be absent
+        // for THIS tablet (its garbage then lives in a retained higher version, reclaimed by a later,
+        // higher-floor pass) -- a NotFound here is not corruption.
+        int64_t version;
+        bool anchored = false;
+        if (is_fresh) {
+            auto res = tablet_mgr->get_tablet_metadata(tablet_id, to_delete_high, false /* fill_meta_cache */,
+                                                       true /* fill_data_cache */);
+            if (res.ok()) {
+                // Floor exists: collect its garbage and enter the chain directly from its prev_garbage_version
+                // -- the walk is already anchored on a materialized version.
+                auto floor_metadata = std::move(res).value();
+                RETURN_IF_ERROR(collect_garbage_files(*floor_metadata, data_dir, &datafile_deleter,
+                                                      &shared_file_deleter, &garbage_data_size, tablet_retain_info));
+                version = floor_metadata->prev_garbage_version();
+                anchored = true;
+            } else if (res.status().is_not_found()) {
+                // Floor folded away on this tablet: nothing to collect here; enter just below and let the walk
+                // step down to the nearest existing version to anchor.
+                version = to_delete_high - 1;
+            } else {
+                return res.status();
+            }
+        } else {
+            // Resume round: to_delete_high was already deleted by an earlier chunk; enter at to_delete_high - 1
+            // (which may itself be a hole -- the walk steps down to anchor).
+            version = to_delete_high - 1;
+        }
+        const int64_t entry = version;
+        while (version >= to_delete_low) {
+            if (auto st = check_vacuum_deadline(deadline_ms); !st.ok()) {
+                return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
+            }
+            auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* fill_meta_cache */,
+                                                       true /* fill_data_cache */);
+            if (res.status().is_not_found()) {
+                // The prev_garbage_version chain links only materialized versions, so once anchored a NotFound
+                // is the genuine chain bottom (a version already deleted by an earlier pass, or below this
+                // tablet's existence) -- stop. Before anchoring, the directly-set entry may be a batch-publish
+                // hole; step down (at most one folded batch) to the nearest existing version to anchor.
+                if (anchored) {
+                    break;
+                }
+                --version;
+                continue;
+            } else if (!res.ok()) {
+                return res.status();
+            }
+            anchored = true;
+            auto metadata = std::move(res).value();
+            RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &datafile_deleter, &shared_file_deleter,
+                                                  &garbage_data_size, tablet_retain_info));
+            CHECK_LT(metadata->prev_garbage_version(), version);
+            version = metadata->prev_garbage_version();
+        }
+        RETURN_IF_ERROR(datafile_deleter.finish());
+        (*vacuumed_files) += datafile_deleter.delete_count();
+        *vacuumed_file_size += garbage_data_size;
+        VLOG(2) << "incremental vacuum commit tablet=" << tablet_id << " committed=[" << to_delete_low << ","
+                << to_delete_high << ")"
+                << " entry=" << entry << " gc_files=" << datafile_deleter.delete_count()
+                << " gc_bytes=" << garbage_data_size;
+    }
+
+    // Step 2: shared data files no longer referenced by any metadata still alive at the retain floor
+    // |pass_start_version| (the lowest surviving version this pass).
+    if (!shared_file_deleter.is_empty() && !enable_shared_file_cleanup) {
+        // Incomplete tablet set for the partition: cannot safely decide shared-file liveness.
+        shared_file_deleter.clear();
+    }
+    if (!shared_file_deleter.is_empty()) {
+        RETURN_IF_ERROR(collect_alive_shared_files(tablet_mgr, tablet_infos, pass_start_version,
+                                                   max_empty_walk_versions, root_dir, &shared_file_deleter,
+                                                   deadline_ms));
+        RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+        RETURN_IF_ERROR(shared_file_deleter.finish());
+        (*vacuumed_files) += shared_file_deleter.delete_count();
+    }
+
+    // Step 3: delete the metadata files in [to_delete_low, to_delete_high) (high exclusive: it is the
+    // retained floor). Every version here is strictly below the floor, so nothing retained is touched.
+    AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
+    if (enable_file_bundling) {
+        // Special case mirrored from vacuum_tablet_metadata: after an alter, the version-1 initial
+        // metadata may be written under each tablet's own id, so delete those by tablet_id.
+        if (to_delete_low <= 1 && !retain_versions.contains(1)) {
+            for (auto& tablet_info : tablet_infos) {
+                RETURN_IF_ERROR(metafile_deleter.delete_file(
+                        join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
+            }
+        }
+        for (auto v = to_delete_low; v < to_delete_high; v++) {
+            if (retain_versions.find(v) != retain_versions.end()) {
+                continue;
+            }
+            RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
+            // Bundle layout: the deleted file is the shared bundle path, but each tablet's metadata OBJECT is
+            // cached under its own per-tablet path (tablet_metadata_location), so the delete callback's
+            // metacache erase (keyed by the bundle path) is a no-op for them. Evict them here.
+            for (auto& tablet_info : tablet_infos) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
+            }
+        }
+    } else {
+        for (auto& tablet_info : tablet_infos) {
+            TabletRetainInfo tablet_retain_info;
+            tablet_retain_info.init(retain_versions);
+            for (auto v = to_delete_low; v < to_delete_high; v++) {
+                if (tablet_retain_info.contains_version(v)) {
+                    continue;
+                }
+                RETURN_IF_ERROR(metafile_deleter.delete_file(
+                        join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), v))));
+            }
+        }
+    }
+    RETURN_IF_ERROR(metafile_deleter.finish());
+    (*vacuumed_files) += metafile_deleter.delete_count();
+    return Status::OK();
+}
+
+>>>>>>> 52a3fa1 ([BugFix][RB-884] Fix lake metacache keys and eviction on metadata deletion (#81978))
 Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
                       int64_t* vacuumed_file_size) {
     DCHECK(vacuumed_files != nullptr);
@@ -994,8 +1415,225 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     })));
 
     AsyncFileDeleter deleter(config::lake_vacuum_min_batch_delete_size);
+<<<<<<< HEAD
     // Used to avoid deleting bundle files that are shared by multiple tablets.
     AsyncBundleFileDeleter dummy_bundle_file_deleter(config::lake_vacuum_min_batch_delete_size);
+=======
+    // Used to avoid deleting shared files that are shared by multiple tablets.
+    AsyncSharedFileDeleter dummy_shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
+
+    RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
+        if (!is_tablet_metadata(name)) {
+            return true;
+        }
+        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
+        // if the tablet is the bundle tablet, we need to record the version.
+        // And if the version is equal to kInitialVersion, it means this is the initial tablet meta,
+        // not bundle tablet meta.
+        if (tablet_id == 0 && version != kInitialVersion) {
+            bundle_tablet_versions.insert(version);
+            return true;
+        }
+        // if the tablet is not in tablet_ids, we need to skip it.
+        if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
+            return true;
+        }
+        tablet_versions[tablet_id].insert(version);
+        return true;
+    })));
+
+    // For tablet meta, there are three cases:
+    // 1. This tablet meta is the bundle tablet meta, and all tablets in this bundle tablet meta are going to be deleted.
+    // 2. This tablet meta is the bundle tablet meta, and some tablets in this bundle tablet aren't going to be deleted.
+    // 3. This tablet meta is not the bundle tablet meta, and it is going to be deleted.
+    //
+    // We will check the bundle tablet meta state for each version in bundle_tablet_versions.
+    // ALL_TABLETS_TO_BE_DELETED means all tablets in this bundle tablet meta are going to be deleted,
+    // SOME_TABLETS_NOT_TO_BE_DELETED means some tablets in this bundle tablet meta aren't going to be deleted,
+    // NO_TABLETS_TO_BE_DELETED means no tablets in this bundle tablet meta are going to be deleted.
+    //
+    // we will only delete the bundle segment files and bundle tablet meta when the state is ALL_TABLETS_TO_BE_DELETED.
+    // A tablet meta that is not the bundle tablet meta is deleted unless a bundle tablet meta has the same version.
+    // Prefer a locally-owned tablet id as the anchor so that downstream fs ops on the URI
+    // can resolve the shard from the staros worker cache instead of paying for a
+    // get-shard-info RPC when the vacuum aggregator does not own tablet_ids[0]. The anchor
+    // is independent of `version`, so compute it once before the loop.
+    const int64_t anchor_tablet_id = tablet_mgr->pick_local_anchor_tablet_id(tablet_ids);
+    // Bundle version -> state, for the bundles that hold a tablet being deleted. The state is the same for
+    // every tablet being deleted, so it is kept per version.
+    std::map<int64_t, BundleTabletMetaState> bundle_version_states;
+    // The tablets being deleted that the newest version in |bundle_version_states| holds.
+    std::unordered_set<int64_t> tablets_in_newest_bundle;
+    for (auto version : bundle_tablet_versions) {
+        // Get the path of the bundle tablet metadata file for this version.
+        auto path = tablet_mgr->bundle_tablet_metadata_location(anchor_tablet_id, version);
+
+        // Check the state of the bundle tablet metadata for this version
+        // This tells us whether all tablets in this bundle are being deleted or not
+        ASSIGN_OR_RETURN(
+                auto bundle_meta_state,
+                check_bundle_tablet_meta_state(path, tablet_ids,
+                                               bundle_version_states.empty() ? &tablets_in_newest_bundle : nullptr));
+
+        // If there are any tablets to be deleted in this bundle (not NO_TABLETS_TO_BE_DELETED),
+        // record its state; it will be used later to determine if bundle files can be deleted
+        if (bundle_meta_state != BundleTabletMetaState::NO_TABLETS_TO_BE_DELETED) {
+            bundle_version_states[version] = bundle_meta_state;
+        }
+    }
+    if (!bundle_version_states.empty()) {
+        // Any tablet being deleted may be in a bundle, so every one of them is walked below.
+        for (auto tablet_id : tablet_ids) {
+            tablet_versions.try_emplace(tablet_id);
+        }
+    }
+
+    // The walk may need cached metadata. Evict on exit, including after a partial deletion failure:
+    // already-deleted bundles will not be listed on a retry.
+    DeferOp evict_dropped_metadata([&] {
+        for (auto tablet_id : tablet_ids) {
+            for (const auto& [version, state] : bundle_version_states) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+            }
+            tablet_mgr->erase_latest_cached_tablet_metadata(tablet_id);
+        }
+    });
+
+    // Shared files may go only at a version whose bundle holds nothing but tablets being deleted. A tablet's
+    // own file at such a version follows the bundle, and a version no listing recorded (reachable only
+    // through a stale metacache entry) keeps its shared files.
+    auto can_delete_shared_files_at = [&](int64_t version) {
+        auto it = bundle_version_states.find(version);
+        return it != bundle_version_states.end() && can_bundle_meta_file_to_be_deleted(it->second);
+    };
+    int64_t newest_bundle_version = std::numeric_limits<int64_t>::min();
+    int64_t oldest_bundle_version = std::numeric_limits<int64_t>::max();
+    if (!bundle_version_states.empty()) {
+        newest_bundle_version = bundle_version_states.rbegin()->first;
+        oldest_bundle_version = bundle_version_states.begin()->first;
+    }
+
+    for (auto& [tablet_id, own_versions] : tablet_versions) {
+        DCHECK(!own_versions.empty() || !bundle_version_states.empty());
+        int64_t max_version = newest_bundle_version;
+        int64_t min_version = oldest_bundle_version;
+        if (!own_versions.empty()) {
+            max_version = std::max(max_version, *own_versions.rbegin());
+            min_version = std::min(min_version, *own_versions.begin());
+        }
+
+        // Unless the tablet has its own file at |max_version|, its walk starts in the newest bundle. A tablet
+        // a reshard replaced is no longer in that bundle, and without a cached copy the read there returns
+        // NotFound, which ends the walk before it collects anything: skip the read and the shard lookup it costs.
+        if (own_versions.count(max_version) == 0 && tablets_in_newest_bundle.count(tablet_id) == 0 &&
+            tablet_mgr->metacache()->lookup_tablet_metadata(
+                    tablet_mgr->tablet_metadata_location(tablet_id, max_version)) == nullptr) {
+            continue;
+        }
+
+        TabletMetadataPtr latest_metadata = nullptr;
+
+        // Find metadata files that has garbage data files and delete all those files
+        for (int64_t garbage_version = max_version; garbage_version >= min_version;
+             /**/) {
+            auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
+            if (res.status().is_not_found()) {
+                break;
+            } else if (!res.ok()) {
+                LOG(ERROR) << "Fail to read tablet_id=" << tablet_id << ", version=" << garbage_version << ": "
+                           << res.status();
+                return res.status();
+            } else {
+                auto metadata = std::move(res).value();
+                if (latest_metadata == nullptr) {
+                    latest_metadata = metadata;
+                    if (latest_metadata->has_range()) {
+                        is_range_distribution = true;
+                    }
+                }
+                int64_t dummy_file_size = 0;
+                // For range distribution tablets, always protect shared files in garbage
+                // collection. can_bundle_meta_file_to_be_deleted is unreliable after tablet
+                // split because new split tablets may still reference shared files.
+                const bool allow_delete_shared = !is_range_distribution && can_delete_shared_files_at(garbage_version);
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter,
+                                                      allow_delete_shared ? nullptr : &dummy_shared_file_deleter,
+                                                      &dummy_file_size, TabletRetainInfo()));
+                if (metadata->has_prev_garbage_version()) {
+                    garbage_version = metadata->prev_garbage_version();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if (latest_metadata != nullptr) {
+            // For range distribution tablets, skip data file deletion entirely.
+            // After tablet split, data files in pre-split metadata may be shared with
+            // new tablets but not marked as shared (shared flag only exists in the
+            // split-version metadata which may have been vacuumed).
+            // Data files will be cleaned up by new tablets' regular vacuum.
+            if (!is_range_distribution) {
+                const bool allow_delete_shared_files = can_delete_shared_files_at(latest_metadata->version());
+                for (const auto& rowset : latest_metadata->rowsets()) {
+                    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                        if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
+                            const auto& segment_meta = rowset.segment_metas(i);
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment_meta.filename())));
+                            // Delete the segment's per-segment .vi sidecars under the same shared guard
+                            // (skipped while a sibling may still reference a shared segment), named by
+                            // the segment's recorded owner so the right file is removed after a split.
+                            for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(
+                                        data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
+                            }
+                        }
+                    }
+                    for (const auto& del_file : rowset.del_files()) {
+                        if (!del_file.shared() || allow_delete_shared_files) {
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, del_file.name())));
+                        }
+                    }
+                }
+                if (latest_metadata->has_delvec_meta()) {
+                    for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
+                        if (!f.shared() || allow_delete_shared_files) {
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
+                        }
+                    }
+                }
+                if (latest_metadata->has_dcg_meta()) {
+                    for (const auto& [_, dcg] : latest_metadata->dcg_meta().dcgs()) {
+                        for (int i = 0; i < dcg.column_files_size(); ++i) {
+                            const bool shared_file = i < dcg.shared_files_size() && dcg.shared_files(i);
+                            if (!shared_file || allow_delete_shared_files) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, dcg.column_files(i))));
+                            }
+                        }
+                    }
+                }
+                // IDG .idx files for the latest metadata during full vacuum.
+                if (latest_metadata->has_idg_meta()) {
+                    for (const auto& [_, idg_ver] : latest_metadata->idg_meta().idgs()) {
+                        for (const auto& entry : idg_ver.entries()) {
+                            if (!entry.has_index_file() || entry.index_file().empty()) continue;
+                            if (!entry.shared_file() || allow_delete_shared_files) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, entry.index_file())));
+                            }
+                        }
+                    }
+                }
+                if (latest_metadata->sstable_meta().sstables_size() > 0) {
+                    for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
+                        if (!sst.shared() || allow_delete_shared_files) {
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, sst.filename())));
+                        }
+                    }
+                }
+            }
+        }
+    }
+>>>>>>> 52a3fa1 ([BugFix][RB-884] Fix lake metacache keys and eviction on metadata deletion (#81978))
 
     for (const auto& log_name : txn_logs) {
         auto res = tablet_mgr->get_txn_log(join_path(log_dir, log_name), false);
@@ -1008,6 +1646,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // delete files under txnlog
             RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter));
             // delete txnlog
+            auto [tablet_id, txn_id] = parse_txn_log_filename(log_name);
+            tablet_mgr->metacache()->erase(
+                    join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name));
             RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
         }
     }
@@ -1032,16 +1673,28 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // delete files under txnlog
             for (const auto& log : combine_log_ptr->txn_logs()) {
                 if (std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
+<<<<<<< HEAD
                     RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
+=======
+                    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id()));
+                    if (!is_range_distribution) {
+                        RETURN_IF_ERROR(
+                                delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
+                    }
+>>>>>>> 52a3fa1 ([BugFix][RB-884] Fix lake metacache keys and eviction on metadata deletion (#81978))
                 }
             }
             // delete txnlog
             if (!contains_alive_tablets) {
+                ASSIGN_OR_RETURN(auto cache_key,
+                                 tablet_mgr->location_provider()->real_location(join_path(log_dir, log_name)));
+                tablet_mgr->metacache()->erase(cache_key);
                 RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
             }
         }
     }
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
         if (!is_tablet_metadata(name)) {
             return true;
@@ -1095,6 +1748,17 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // This information will be used later to determine if bundle files can be deleted
             for (auto tablet_id : tablet_ids) {
                 tablet_versions[tablet_id][version] = bundle_meta_state;
+=======
+    // Delete metadata files last.
+    for (auto& [tablet_id, own_versions] : tablet_versions) {
+        for (auto version : own_versions) {
+            // A version that also has a bundle file follows the bundle's state, and the tablet's own file stays.
+            if (bundle_version_states.count(version) == 0) {
+                // delete the individual tablet metadata file
+                auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
+                erase_tablet_metadata_from_metacache(tablet_mgr, {path});
+                RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
+>>>>>>> 52a3fa1 ([BugFix][RB-884] Fix lake metacache keys and eviction on metadata deletion (#81978))
             }
         }
     }
@@ -1221,9 +1885,20 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
             tablet_mgr->metacache()->erase(log_path);
         }
         for (auto&& info : request.txn_infos()) {
+            // Writers also cache the individual tablet log when the persisted file is combined.
+            tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, info.txn_id()));
             auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
                                                     : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
             files_to_delete.emplace_back(log_path);
+            if (info.combined_txn_log()) {
+                auto cache_key = tablet_mgr->location_provider()->real_location(log_path);
+                if (cache_key.ok()) {
+                    tablet_mgr->metacache()->erase(*cache_key);
+                } else {
+                    LOG(WARNING) << "Fail to resolve combined txn log cache key for " << log_path << ": "
+                                 << cache_key.status();
+                }
+            }
         }
     }
 

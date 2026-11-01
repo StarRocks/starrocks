@@ -41,6 +41,9 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
 
 void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& request, DeleteTxnLogResponse* response);
 
+// Deleted paths may use another tablet's root as an anchor. Also evict the owning tablet's cache key.
+void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles);
+
 // Batch delete files.
 // REQUIRE: All files in |paths| have the same file system scheme.
 Status delete_files(const std::vector<std::string>& paths);
