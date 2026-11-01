@@ -852,6 +852,49 @@ TEST_P(LakeVacuumTest, test_vacuum_full_with_initial_meta_no_failure) {
     EXPECT_FALSE(file_exist(tablet_metadata_filename(77001, 2)));
 }
 
+// Full vacuum must delete the expired metadata of a dropped tablet, whose location no longer resolves.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_deletes_metadata_of_dropped_tablet) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 77101,
+        "version": 2,
+        "commit_time": 1
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 77101,
+        "version": 3,
+        "commit_time": 200
+        }
+        )DEL")));
+
+    // Fail every read by tablet id, as for a tablet whose shard is gone.
+    SyncPoint::GetInstance()->EnableProcessing();
+    TEST_ENABLE_ERROR_POINT("TabletManager::get_tablet_metadata", Status::InternalError("shard not exist"));
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(77100);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(10);
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(77101, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(77101, 3)));
+}
+
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_vacuum_full_with_bundle) {
     create_data_file("0000000000000005_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
