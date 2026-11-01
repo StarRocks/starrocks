@@ -6,7 +6,7 @@ description: "Beekeeper Studio is a modern, easy-to-use SQL client and database 
 
 # Beekeeper Studio
 
-[Beekeeper Studio](https://www.beekeeperstudio.io/) is a free, open-source SQL editor and database manager with a modern, easy-to-use interface. It is available for Windows, macOS, and Linux, and also offers a paid Ultimate tier with cloud sync and team-sharing features.
+[Beekeeper Studio](https://www.beekeeperstudio.io/) is a free, open-source SQL database manager with a modern, easy-to-use interface. It is available for Windows, macOS, and Linux, and It also offers paid tiers with cloud sync and team-sharing features.
 
 Beekeeper Studio has built-in support for connecting directly to StarRocks.
 
