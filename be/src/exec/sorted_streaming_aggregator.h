@@ -39,7 +39,9 @@ public:
 private:
     Status _compute_group_by(size_t chunk_size);
 
+    Status _create_states(size_t chunk_size);
     Status _update_states(size_t chunk_size, bool is_update_phase);
+    void _destroy_aggregate_states() override;
     // init selector by _cmp_vector
     // return selected_size (distinct num_rows)
     void _init_selector(Filter& selector, size_t chunk_size);

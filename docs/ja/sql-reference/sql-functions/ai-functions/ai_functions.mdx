@@ -20,6 +20,8 @@ AI Provider は、クラスター内で一元管理されるモデルサービ�
 - `ai_complete` とその他のテキスト補助関数は `chat` タイプの Provider を使用します。
 - これらの AI 関数は現在、Provider が `openai` プロトコルを使用することを必要とします。エンドポイントとモデルも、対応するチャットまたは埋め込み機能をサポートしている必要があります。
 
+- [ai_agg](ai_agg.md) は `chat` Provider でグループ化されたテキストを集約します。
+
 関数の呼び出し時には、`provider` で Provider を指定するか、対応するタイプのクラスターデフォルト Provider を使用できます。デフォルトはタイプごとに独立して管理されます。`model` を省略すると、選択した Provider のデフォルトモデルが使用されます。そのサービスがサポートする別のモデルを明示的に指定することもできます。
 
 Provider の作成、設定プロパティ、管理構文については [CREATE AI PROVIDER](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md) を、デフォルトの設定については [SET DEFAULT AI PROVIDER](../../sql-statements/cluster-management/ai_provider/SET_DEFAULT_AI_PROVIDER.md) を参照してください。
