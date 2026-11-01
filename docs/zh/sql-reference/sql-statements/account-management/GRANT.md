@@ -129,7 +129,7 @@ GRANT <priv> ON TABLE <db_name>.<table_name> TO { ROLE <role_name> | USER <user_
 
 ```SQL
 GRANT  
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
@@ -140,6 +140,7 @@ GRANT
 >
 > 1. 需要执行 SET CATALOG 之后才能使用。view 还可以用 `<db_name>.<view_name>` 的方式来进行表示。
 > 2. 对于 External Catalog，仅 Hive 表视图支持 SELECT 权限。（3.1 及以后）
+> 3. 对于 EXPORT 权限，目前仅支持授予和撤销，不支持通过 EXPORT TABLE 导出该视图。
 
 ```SQL
 GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_name> }
@@ -149,7 +150,7 @@ GRANT <priv> ON VIEW <db_name>.<view_name> TO { ROLE <role_name> | USER <user_na
 
 ```SQL
 GRANT
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS IN 
            { { DATABASE <database_name> }| ALL DATABASES }}
@@ -157,10 +158,17 @@ GRANT
 ```
 
 *注意：需要执行 SET CATALOG 之后才能使用。物化视图还可以用 `<db_name>.<mv_name>` 的方式来进行表示。
+*注意：对于 EXPORT 权限，目前仅支持授予和撤销，不支持通过 EXPORT TABLE 导出该物化视图。
 
 ```SQL
 GRANT <priv> ON MATERIALIZED VIEW <db_name>.<mv_name> TO { ROLE <role_name> | USER <user_name> };
 ```
+
+:::caution
+
+`ALL PRIVILEGES` 现在在视图和物化视图上包含 `EXPORT`。升级前被授予 `ALL ... WITH GRANT OPTION`、且没有系统级 `GRANT` 权限的用户，需要管理员补授 `EXPORT ... WITH GRANT OPTION`，才能继续对该对象授予或撤销 `ALL PRIVILEGES`。
+
+:::
 
 #### Function 相关
 
