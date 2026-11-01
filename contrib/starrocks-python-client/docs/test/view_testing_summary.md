@@ -127,7 +127,7 @@
 
 - Comment changes: none→value, value→different, no-change (warning logged)
 - Security changes: none→INVOKER, INVOKER→none, INVOKER→NONE, no-change (warning logged)
-- Columns changes: with definition (allowed), only columns (raises ValueError), no-change
+- Columns changes: with definition (allowed), only columns (`op.alter_view` with the unchanged definition and the new columns), no-change
 
 **Complex Cases**:
 

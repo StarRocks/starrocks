@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Final
+from typing import Dict, Final, Optional, Tuple
 
 from starrocks.common.types import SystemRunMode, TableModel, TableType
 
@@ -236,6 +236,99 @@ InvalidTablePropertyForSharedData.ALL = {
     v for k, v in vars(InvalidTablePropertyForSharedData).items()
         if not k.startswith("__") and isinstance(v, str)
 }
+
+
+class UnalterableTableProperty:
+    """Table properties StarRocks refuses to change with ``ALTER TABLE ... SET``, mapped to why.
+
+    Checked on StarRocks 3.3.22 and 4.1.6 shared-nothing clusters, and in the 3.5 and 4.0 sources for the
+    properties that became alterable later.
+    """
+
+    SET_ONLY_AT_CREATE: Final[Dict[str, str]] = {
+        'compression': 'StarRocks sets it only when the table is created',
+        'enable_async_write_back': 'StarRocks sets it only when the table is created',
+        'fast_schema_evolution': 'StarRocks sets it only when the table is created',
+        'storage_cooldown_time': 'StarRocks sets it only when the table is created',
+        'storage_format': 'StarRocks sets it only when the table is created',
+        'storage_type': 'StarRocks sets it only when the table is created',
+    }
+    SHARED_DATA_ONLY: Final[Dict[str, str]] = {
+        'compaction_strategy': 'StarRocks changes it only on shared-data tables',
+        'persistent_index_type': 'StarRocks changes it only on shared-data tables',
+    }
+    FIRST_ALTERABLE_IN: Final[Dict[str, Tuple[Tuple[int, ...], ...]]] = {
+        'enable_statistic_collect_on_first_load': ((3, 5, 10), (4, 0, 2)),
+        'flat_json.column.max': ((4, 0, 0),),
+        'flat_json.enable': ((4, 0, 0),),
+        'flat_json.null.factor': ((4, 0, 0),),
+        'flat_json.sparsity.factor': ((4, 0, 0),),
+    }
+    """For each property, the first version of each release line that can change it."""
+
+    @classmethod
+    def reason(cls, key: str, run_mode: str, server_version: Optional[Tuple[int, ...]]) -> Optional[str]:
+        """Why StarRocks refuses to SET property ``key`` (lowercase) on this cluster, or None if it accepts it.
+
+        Without a server version, as in offline mode, a property that only later versions accept is not refused.
+        """
+        if key in cls.SET_ONLY_AT_CREATE:
+            return cls.SET_ONLY_AT_CREATE[key]
+        if key in cls.SHARED_DATA_ONLY and run_mode != SystemRunMode.SHARED_DATA:
+            return cls.SHARED_DATA_ONLY[key]
+        first_alterable = cls.FIRST_ALTERABLE_IN.get(key)
+        if first_alterable and server_version and not cls._alterable_on(tuple(server_version), first_alterable):
+            return "StarRocks changes it only from " + " and ".join(
+                ".".join(map(str, version)) for version in first_alterable
+            )
+        return None
+
+    @staticmethod
+    def _alterable_on(version: Tuple[int, ...], first_alterable: Tuple[Tuple[int, ...], ...]) -> bool:
+        """Whether ``version`` is at least the first alterable version of its release line, or of a later line."""
+        release_line = version[:2]
+        for first in first_alterable:
+            if release_line == first[:2]:
+                return version >= first
+        return release_line > max(first[:2] for first in first_alterable)
+
+
+class UnalterableMaterializedViewProperty:
+    """Materialized view properties StarRocks refuses to change with ``ALTER MATERIALIZED VIEW ... SET``.
+
+    Checked on StarRocks 3.3.22 and 4.1.6 shared-nothing clusters, on partitioned and unpartitioned materialized
+    views. StarRocks accepts the rest of what it reports, such as ``mv_rewrite_staleness_second`` and ``session.*``.
+    """
+
+    REFUSED: Final[frozenset] = frozenset({
+        'bucket_size',
+        'colocate_with',
+        'compaction_strategy',
+        'compression',
+        'enable_async_write_back',
+        'enable_load_profile',
+        'enable_persistent_index',
+        'enable_statistic_collect_on_first_load',
+        'fast_schema_evolution',
+        'flat_json.enable',
+        'in_memory',
+        'mutable_bucket_num',
+        'partition_live_number',
+        'persistent_index_type',
+        'primary_index_cache_expire_sec',
+        'replicated_storage',
+        'replication_num',
+        'storage_cooldown_time',
+        'storage_format',
+        'storage_medium',
+        'storage_type',
+        'write_quorum',
+    })
+
+    @classmethod
+    def reason(cls, key: str) -> Optional[str]:
+        """Why StarRocks refuses to SET property ``key`` (lowercase) on a materialized view, or None if it accepts it."""
+        return "ALTER MATERIALIZED VIEW cannot change it" if key in cls.REFUSED else None
 
 
 class ColumnAggInfoKeyWithPrefix:

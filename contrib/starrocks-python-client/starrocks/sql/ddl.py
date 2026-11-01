@@ -32,6 +32,14 @@ class AlterView(ExecutableDDLElement):
         self.element = element
 
 
+class AlterViewSecurity(ExecutableDDLElement):
+    """Represents an ALTER VIEW ... SET SECURITY DDL statement."""
+    __visit_name__ = "alter_view_security"
+    def __init__(self, element: View, security: str) -> None:
+        self.element = element
+        self.security = security
+
+
 class CreateView(ExecutableDDLElement):
     """Represents a CREATE VIEW DDL statement."""
     __visit_name__ = "create_view"
@@ -184,8 +192,31 @@ class AlterTableOrder(ExecutableDDLElement):
         self.order_by = order_by
 
 
+GROUPABLE_PROPERTY_PREFIXES = ("dynamic_partition.", "binlog_")
+
+
+def group_properties_for_set(properties: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Split table properties into the groups StarRocks accepts in one ``ALTER TABLE ... SET``.
+
+    StarRocks rejects a SET of more than one property ("Can only set one table property at a time"),
+    except for properties that share the ``dynamic_partition.`` or the ``binlog_`` prefix. So each
+    property is a group of its own, and the properties of one of those prefixes are one group.
+    """
+    groups: Dict[str, Dict[str, Any]] = {}
+    for key, value in properties.items():
+        lowered = str(key).lower()
+        prefix = next((p for p in GROUPABLE_PROPERTY_PREFIXES if lowered.startswith(p)), None)
+        groups.setdefault(prefix or str(key), {})[key] = value
+    return list(groups.values())
+
+
 class AlterTableProperties(ExecutableDDLElement):
-    """Represent an ALTER TABLE SET (...) statement for StarRocks properties."""
+    """Represent an ALTER TABLE SET (...) statement for StarRocks properties.
+
+    Properties that StarRocks cannot set together compile to one statement each, joined by ``;``, which
+    runs as one packet: if the first starts a schema-change job, the second fails. The Alembic operation
+    therefore executes one element per `group_properties_for_set` group.
+    """
 
     __visit_name__ = "alter_table_properties"
 

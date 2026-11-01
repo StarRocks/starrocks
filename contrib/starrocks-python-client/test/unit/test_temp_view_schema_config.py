@@ -18,6 +18,7 @@ transient canonicalization view is created for view/MV definition comparison."""
 from types import SimpleNamespace
 
 from sqlalchemy import MetaData
+from sqlalchemy.testing import fixtures
 
 from starrocks.alembic import compare
 from starrocks.alembic.compare import (
@@ -35,7 +36,7 @@ def _autogen_context(opts):
     return SimpleNamespace(migration_context=SimpleNamespace(opts=opts))
 
 
-class TestConfiguredTempViewSchema:
+class ConfiguredTempViewSchemaTest(fixtures.TestBase):
     def test_returns_configured_value(self):
         ctx = _autogen_context({TEMP_VIEW_SCHEMA_OPT: "migrations"})
         assert _configured_temp_view_schema(ctx) == "migrations"
@@ -65,14 +66,14 @@ class _FakeConn:
         self.calls = []
         self._reflected = reflected_definition
 
-    def exec_driver_sql(self, sql, params=None):
-        self.calls.append((sql, params))
+    def exec_driver_sql(self, sql, params=None, execution_options=None):
+        self.calls.append((sql, params, execution_options))
         if sql.strip().upper().startswith("SELECT VIEW_DEFINITION"):
             return _FakeResult((self._reflected,))
         return _FakeResult(None)
 
 
-class TestTempViewHostSchema:
+class TempViewHostSchemaTest(fixtures.TestBase):
     def test_temp_view_created_and_read_in_given_schema(self):
         conn = _FakeConn("SELECT a FROM t")
         result = _get_canonical_sql_via_temp_view(conn, "locked_schema", "SELECT a FROM t")
@@ -85,16 +86,60 @@ class TestTempViewHostSchema:
         # temp view dropped from the same schema
         assert any("DROP VIEW IF EXISTS `locked_schema`.`_alembic_cmp_" in c[0] for c in conn.calls)
 
+    def test_the_temp_view_states_the_column_list_with_names_quoted(self):
+        """A SELECT list naming ``id`` twice is a view only under a column list that names its columns apart."""
+        conn = _FakeConn("SELECT t.id, t2.id FROM t JOIN t2 ON t.id = t2.id")
+        _get_canonical_sql_via_temp_view(
+            conn, "odd`schema", "SELECT t.id, t2.id FROM t JOIN t2 ON t.id = t2.id", ["id1", "id`2"]
+        )
+        create = conn.calls[0][0]
+        assert create.startswith("CREATE OR REPLACE VIEW `odd``schema`.`_alembic_cmp_"), create
+        assert create.endswith("` (`id1`, `id``2`) AS SELECT t.id, t2.id FROM t JOIN t2 ON t.id = t2.id"), create
 
-class TestViewCompareRoutesToConfiguredSchema:
+
+class _FailingConn(_FakeConn):
+    """A connection on which every statement fails, as for a temporary-view schema that does not exist."""
+
+    def exec_driver_sql(self, sql, params=None, execution_options=None):
+        super().exec_driver_sql(sql, params, execution_options)
+        raise RuntimeError("(5501, \"Unknown database 'no_such_schema'\")")
+
+
+class _HidingConn(_FakeConn):
+    """A connection whose information_schema hides the view, as for a user with CREATE VIEW but no SELECT on it."""
+
+    def exec_driver_sql(self, sql, params=None, execution_options=None):
+        self.calls.append((sql, params, execution_options))
+        return _FakeResult(None)
+
+
+class TempViewErrorTest(fixtures.TestBase):
+    def test_a_temp_view_that_was_not_created_is_not_dropped(self, caplog):
+        """Nothing was created, and the drop would fail and warn too, as for a schema that does not exist."""
+        conn = _FailingConn(None)
+        result = compare._canonicalize_via_temp_view(conn, "no_such_schema", "SELECT a FROM t")
+        assert result == (None, "(5501, \"Unknown database 'no_such_schema'\")")
+        assert [sql.split()[0] for sql, _, _ in conn.calls] == ["CREATE"]
+        assert "Failed to drop" not in caplog.text
+
+    def test_a_temp_view_the_user_cannot_see_says_so(self):
+        conn = _HidingConn(None)
+        result = compare._canonicalize_via_temp_view(conn, "app", "SELECT a FROM t")
+        assert result == (None, compare._TEMPORARY_VIEW_NOT_SHOWN)
+        assert conn.calls[-1][0].startswith("DROP VIEW IF EXISTS `app`.`_alembic_cmp_")
+
+
+class ViewCompareRoutesToConfiguredSchemaTest(fixtures.TestBase):
+    __requires__ = ("sqlalchemy_2",)
+
     def test_temp_view_schema_overrides_object_schema(self, monkeypatch):
         captured = {}
 
-        def fake_temp_view(conn, schema, sql):
+        def fake_temp_view(conn, schema, sql, column_names=()):
             captured["schema"] = schema
-            return sql  # canonical form == input, so no phantom delta
+            return compare._TemporaryViewResult(sql, None)  # canonical form == input, so no phantom delta
 
-        monkeypatch.setattr(compare, "_get_canonical_sql_via_temp_view", fake_temp_view)
+        monkeypatch.setattr(compare, "_canonicalize_via_temp_view", fake_temp_view)
 
         md = MetaData()
         conn_view = View("v", md, definition="SELECT a FROM t")
@@ -109,8 +154,12 @@ class TestViewCompareRoutesToConfiguredSchema:
 
     def test_defaults_to_object_schema_when_unset(self, monkeypatch):
         captured = {}
-        monkeypatch.setattr(compare, "_get_canonical_sql_via_temp_view",
-                            lambda conn, schema, sql: captured.setdefault("schema", schema) or sql)
+        monkeypatch.setattr(
+            compare, "_canonicalize_via_temp_view",
+            lambda conn, schema, sql, column_names=(): compare._TemporaryViewResult(
+                captured.setdefault("schema", schema) and sql, None
+            ),
+        )
         conn_view = View("v", MetaData(), definition="SELECT a FROM t")
         meta_view = View("v", MetaData(), definition="SELECT a FROM t")
         _compare_view_definition_and_columns(

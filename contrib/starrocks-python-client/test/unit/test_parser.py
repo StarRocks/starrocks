@@ -17,11 +17,11 @@ import contextlib
 import logging
 from types import MethodType, SimpleNamespace
 from typing import Optional
+from unittest import mock
 
 from lark import LarkError
-import pytest
-from sqlalchemy import MetaData, Table
-from sqlalchemy.engine.reflection import _ReflectionInfo
+from sqlalchemy import MetaData, Table, testing
+from sqlalchemy.testing import expect_raises, fixtures
 
 from starrocks import datatype as datatype
 from starrocks.dialect import StarRocksDialect
@@ -33,139 +33,137 @@ from starrocks.reflection import StarRocksInspector, StarRocksTableDefinitionPar
 logger = logging.getLogger(__name__)
 
 
-class TestDataTypeParser:
-    @pytest.mark.parametrize(
-        "type_str, expected_type",
-        [
-            ("boolean", datatype.BOOLEAN),
-            ("tinyint", datatype.TINYINT),
-            ("tinyint(1)", datatype.BOOLEAN),  # TINYINT(1) should be converted to BOOLEAN during reflection
-            ("smallint", datatype.SMALLINT),
-            ("int", datatype.INTEGER),
-            ("integer", datatype.INTEGER),
-            ("bigint", datatype.BIGINT),
-            ("largeint", datatype.LARGEINT),
-            ("decimal(10, 2)", datatype.DECIMAL(10, 2)),
-            ("double", datatype.DOUBLE),
-            ("float", datatype.FLOAT),
-            ("char(10)", datatype.CHAR(10)),
-            ("varchar(100)", datatype.VARCHAR(100)),
-            ("string", datatype.STRING),
-            ("binary", datatype.BINARY),
-            ("varbinary", datatype.VARBINARY),
-            ("date", datatype.DATE),
-            ("datetime", datatype.DATETIME),
-            ("hll", datatype.HLL),
-            ("bitmap", datatype.BITMAP),
-            ("percentile", datatype.PERCENTILE),
-            ("json", datatype.JSON),
-            # Case-insensitivity
-            ("VARCHAR(50)", datatype.VARCHAR(50)),
-            ("Integer", datatype.INTEGER),
-            # Unsigned
-            ("bigint unsigned", datatype.LARGEINT),
-            ("bigint(20) unsigned", datatype.LARGEINT),
-            # ("int unsigned", datatype.INTEGER),
-            # Whitespace
-            ("  varchar  (  100  )  ", datatype.VARCHAR(100)),
-            ("array < int >", datatype.ARRAY(datatype.INTEGER)),
-        ],
+class DataTypeParserTest(fixtures.TestBase):
+    @testing.combinations(
+        ("boolean", datatype.BOOLEAN),
+        ("tinyint", datatype.TINYINT),
+        ("tinyint(1)", datatype.BOOLEAN),  # TINYINT(1) should be converted to BOOLEAN during reflection
+        ("smallint", datatype.SMALLINT),
+        ("int", datatype.INTEGER),
+        ("integer", datatype.INTEGER),
+        ("bigint", datatype.BIGINT),
+        ("largeint", datatype.LARGEINT),
+        ("decimal(10, 2)", datatype.DECIMAL(10, 2)),
+        ("decimal256(76, 10)", datatype.DECIMAL(76, 10)),
+        ("decimalv2(27, 9)", datatype.DECIMAL(27, 9)),
+        ("numeric(10, 2)", datatype.DECIMAL(10, 2)),
+        ("text", datatype.STRING),
+        ("double", datatype.DOUBLE),
+        ("float", datatype.FLOAT),
+        ("char(10)", datatype.CHAR(10)),
+        ("varchar(100)", datatype.VARCHAR(100)),
+        ("string", datatype.STRING),
+        ("binary", datatype.BINARY),
+        ("varbinary", datatype.VARBINARY),
+        ("date", datatype.DATE),
+        ("datetime", datatype.DATETIME),
+        ("hll", datatype.HLL),
+        ("bitmap", datatype.BITMAP),
+        ("percentile", datatype.PERCENTILE),
+        ("json", datatype.JSON),
+        # Case-insensitivity
+        ("VARCHAR(50)", datatype.VARCHAR(50)),
+        ("Integer", datatype.INTEGER),
+        # Unsigned
+        ("bigint unsigned", datatype.LARGEINT),
+        ("bigint(20) unsigned", datatype.LARGEINT),
+        # ("int unsigned", datatype.INTEGER),
+        # Whitespace
+        ("  varchar  (  100  )  ", datatype.VARCHAR(100)),
+        ("array < int >", datatype.ARRAY(datatype.INTEGER)),
+        argnames="type_str, expected_type",
     )
     def test_simple_types(self, type_str, expected_type):
         # logger.debug(f"type_str: {type_str}, expected_type: {expected_type}")
         assert repr(parse_data_type(type_str)) == repr(expected_type)
 
-    @pytest.mark.parametrize(
-        "type_str, expected_type",
-        [
-            ("array<int>", datatype.ARRAY(datatype.INTEGER)),
-            ("array<varchar(20)>", datatype.ARRAY(datatype.VARCHAR(20))),
-            ("map<string, int>", datatype.MAP(datatype.STRING, datatype.INTEGER)),
-            (
-                "struct<name varchar(100), age int>",
-                datatype.STRUCT(
-                    ("name", datatype.VARCHAR(100)), ("age", datatype.INTEGER)
-                ),
+    @testing.combinations(
+        ("array<int>", datatype.ARRAY(datatype.INTEGER)),
+        ("array<varchar(20)>", datatype.ARRAY(datatype.VARCHAR(20))),
+        ("array<DECIMAL256(76,10)>", datatype.ARRAY(datatype.DECIMAL(76, 10))),
+        ("map<string, decimal256(76,10)>", datatype.MAP(datatype.STRING, datatype.DECIMAL(76, 10))),
+        ("map<string, int>", datatype.MAP(datatype.STRING, datatype.INTEGER)),
+        (
+            "struct<name varchar(100), age int>",
+            datatype.STRUCT(
+                ("name", datatype.VARCHAR(100)), ("age", datatype.INTEGER)
             ),
-        ],
+        ),
+        argnames="type_str, expected_type",
     )
     def test_complex_types(self, type_str, expected_type):
         assert repr(parse_data_type(type_str)) == repr(expected_type)
 
-    @pytest.mark.parametrize(
-        "type_str, expected_type",
-        [
-            (
-                "array<array<int>>",
-                datatype.ARRAY(datatype.ARRAY(datatype.INTEGER)),
-            ),
-            (
-                "map<string, array<int>>",
-                datatype.MAP(datatype.STRING, datatype.ARRAY(datatype.INTEGER)),
-            ),
-            (
-                "struct<name varchar(100), details map<string, array<struct<item_id int, price decimal(10, 2)>>>>",
-                datatype.STRUCT(
-                    ("name", datatype.VARCHAR(100)),
-                    (
-                        "details",
-                        datatype.MAP(
-                            datatype.STRING,
-                            datatype.ARRAY(
-                                datatype.STRUCT(
-                                    ("item_id", datatype.INTEGER),
-                                    ("price", datatype.DECIMAL(10, 2)),
-                                )
-                            ),
+    @testing.combinations(
+        (
+            "array<array<int>>",
+            datatype.ARRAY(datatype.ARRAY(datatype.INTEGER)),
+        ),
+        (
+            "map<string, array<int>>",
+            datatype.MAP(datatype.STRING, datatype.ARRAY(datatype.INTEGER)),
+        ),
+        (
+            "struct<name varchar(100), details map<string, array<struct<item_id int, price decimal(10, 2)>>>>",
+            datatype.STRUCT(
+                ("name", datatype.VARCHAR(100)),
+                (
+                    "details",
+                    datatype.MAP(
+                        datatype.STRING,
+                        datatype.ARRAY(
+                            datatype.STRUCT(
+                                ("item_id", datatype.INTEGER),
+                                ("price", datatype.DECIMAL(10, 2)),
+                            )
                         ),
                     ),
                 ),
             ),
-            (
-                "STRUCT<name VARCHAR(100), details MAP<VARCHAR(65533), ARRAY<STRUCT<item_id INT(11), price DECIMAL(10, 2)>>>>",
-                datatype.STRUCT(
-                    ("name", datatype.VARCHAR(100)),
-                    (
-                        "details",
-                        datatype.MAP(
-                            datatype.VARCHAR(65533),
-                            datatype.ARRAY(
-                                datatype.STRUCT(
-                                    ("item_id", datatype.INTEGER(11)),
-                                    ("price", datatype.DECIMAL(10, 2)),
-                                )
-                            ),
+        ),
+        (
+            "STRUCT<name VARCHAR(100), details MAP<VARCHAR(65533), ARRAY<STRUCT<item_id INT(11), price DECIMAL(10, 2)>>>>",
+            datatype.STRUCT(
+                ("name", datatype.VARCHAR(100)),
+                (
+                    "details",
+                    datatype.MAP(
+                        datatype.VARCHAR(65533),
+                        datatype.ARRAY(
+                            datatype.STRUCT(
+                                ("item_id", datatype.INTEGER(11)),
+                                ("price", datatype.DECIMAL(10, 2)),
+                            )
                         ),
                     ),
                 ),
             ),
-        ],
+        ),
+        argnames="type_str, expected_type",
     )
     def test_nested_complex_types(self, type_str, expected_type):
         assert repr(parse_data_type(type_str)) == repr(expected_type)
 
-    @pytest.mark.parametrize(
-        "type_str",
-        [
-            (
-                "struct<"
-                "headers array<struct<key varchar(65533) COMMENT '', value varchar(65533) COMMENT ''>> COMMENT '', "
-                "payload struct<event_id bigint COMMENT '', labels map<string, string> COMMENT ''> COMMENT ''"
-                ">"
-            ),
-            (
-                "struct<"
-                "headers array<struct<key varchar(65533) COMMENT 'header key', value varchar(65533) COMMENT 'header value'>> COMMENT 'headers comment', "
-                "payload struct<event_id bigint COMMENT 'event id', labels map<string, string> COMMENT 'label map'> COMMENT 'payload comment'"
-                ">"
-            ),
-            (
-                "struct<"
-                "headers array<struct<key varchar(65533) COMMENT 'owner''s key', value varchar(65533) COMMENT 'has \"double\" quotes'>> COMMENT 'headers \"meta\"', "
-                "payload struct<event_id bigint COMMENT 'id', labels map<string, string> COMMENT 'labels'> COMMENT 'payload''s comment'"
-                ">"
-            ),
-        ],
+    @testing.combinations(
+        (
+            "struct<"
+            "headers array<struct<key varchar(65533) COMMENT '', value varchar(65533) COMMENT ''>> COMMENT '', "
+            "payload struct<event_id bigint COMMENT '', labels map<string, string> COMMENT ''> COMMENT ''"
+            ">"
+        ),
+        (
+            "struct<"
+            "headers array<struct<key varchar(65533) COMMENT 'header key', value varchar(65533) COMMENT 'header value'>> COMMENT 'headers comment', "
+            "payload struct<event_id bigint COMMENT 'event id', labels map<string, string> COMMENT 'label map'> COMMENT 'payload comment'"
+            ">"
+        ),
+        (
+            "struct<"
+            "headers array<struct<key varchar(65533) COMMENT 'owner''s key', value varchar(65533) COMMENT 'has \"double\" quotes'>> COMMENT 'headers \"meta\"', "
+            "payload struct<event_id bigint COMMENT 'id', labels map<string, string> COMMENT 'labels'> COMMENT 'payload''s comment'"
+            ">"
+        ),
+        argnames="type_str",
     )
     def test_nested_complex_types_with_inline_comments(self, type_str):
         expected_type = datatype.STRUCT(
@@ -188,121 +186,145 @@ class TestDataTypeParser:
         )
         assert repr(parse_data_type(type_str)) == repr(expected_type)
 
-    @pytest.mark.parametrize(
-        "type_str",
-        [
-            "invalid_type",
-            # "varchar(10, 2)",
-        ],
+    @testing.combinations(
+        ("plain", "struct<`a` int(11)>", ["a"]),
+        ("space", "struct<`a b` varchar(50), c int(11)>", ["a b", "c"]),
+        ("reserved", "struct<`key` map<boolean,double>, `Mixed` int(11)>", ["key", "Mixed"]),
+        ("non_ascii", "struct<`日本` int(11)>", ["日本"]),
+        ("doubled_backquote", "struct<`c``d` int(11)>", ["c`d"]),
+        ("nested", "array<struct<`x y` struct<`z` date>>>", None),
+        argnames="type_str, field_names",
+        id_="iaa",
+    )
+    def test_backquoted_struct_field_names(self, type_str, field_names):
+        """StarRocks 4.1 shows every STRUCT field name backquoted."""
+        parsed = parse_data_type(type_str)
+        if field_names is None:
+            outer = parsed.item_type
+            assert [name for name, _ in outer.field_tuples] == ["x y"]
+            assert [name for name, _ in outer.field_tuples[0][1].field_tuples] == ["z"]
+        else:
+            assert [name for name, _ in parsed.field_tuples] == field_names
+
+    @testing.combinations(
+        ("alone", "largeint(40)"),
+        ("map_value", "map<decimal(10, 2),largeint(40)>"),
+        argnames="type_str",
+        id_="ia",
+    )
+    def test_largeint_display_width_is_dropped(self, type_str):
+        """StarRocks shows a nested LARGEINT as ``largeint(40)``, a display width with no meaning."""
+        parsed = parse_data_type(type_str)
+        largeint = parsed.value_type if isinstance(parsed, datatype.MAP) else parsed
+        assert isinstance(largeint, datatype.LARGEINT)
+        assert largeint.compile(dialect=StarRocksDialect()) == "LARGEINT"
+
+    def test_reflected_double_reads_a_float(self):
+        double = parse_data_type("double")()
+        assert double.asdecimal is False
+
+    @testing.combinations(
+        "invalid_type",
+        # "varchar(10, 2)",
+        argnames="type_str",
     )
     def test_unsupported_types(self, type_str):
-        with pytest.raises(TypeError):
+        with expect_raises(TypeError):
             parse_data_type(type_str)
 
-    @pytest.mark.parametrize(
-        "type_str",
-        [
-            "array<int",
-            "array<ARRAY>",
-            "map<int,>",
-            "MAP<MAP>",
-            "struct<name int",
-            "xxxx<Array<int>>"
-            "varchar(10, 5, 3)",
-        ],
+    @testing.combinations(
+        "array<int",
+        "array<ARRAY>",
+        "map<int,>",
+        "MAP<MAP>",
+        "struct<name int",
+        "xxxx<Array<int>>",
+        "varchar(10, 5, 3)",
+        argnames="type_str",
     )
     def test_invalid_syntax(self, type_str):
-        with pytest.raises(LarkError):
+        with expect_raises(LarkError, check_context=False):
             parse_data_type(type_str)
 
 
-class TestMVRefreshParser:
-    @pytest.mark.parametrize(
-        "clause, expected",
-        [
-            # Correct cases
-            ("REFRESH IMMEDIATE", {"refresh_moment": "IMMEDIATE", "refresh_type": None}),
-            ("REFRESH DEFERRED", {"refresh_moment": "DEFERRED", "refresh_type": None}),
-            ("REFRESH ASYNC", {"refresh_moment": None, "refresh_type": "ASYNC"}),
-            ("REFRESH MANUAL", {"refresh_moment": None, "refresh_type": "MANUAL"}),
-            ("REFRESH INCREMENTAL", {"refresh_moment": None, "refresh_type": "INCREMENTAL"}),
-            ("REFRESH DEFERRED ASYNC", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC"}),
-            ("REFRESH IMMEDIATE MANUAL", {"refresh_moment": "IMMEDIATE", "refresh_type": "MANUAL"}),
-            ("REFRESH ASYNC EVERY (INTERVAL 1 DAY)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY (INTERVAL 1 DAY)"}),
-            ("REFRESH ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)", {"refresh_moment": None, "refresh_type": "ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)"}),
-            ("refresh deferred async", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC"}), # Case-insensitivity
-            # StarRocks 4.1+ renders a periodic async refresh with the SCHEDULE keyword in
-            # SHOW CREATE MATERIALIZED VIEW. It is canonicalized back to "ASYNC ..." so the
-            # reflected form matches an "ASYNC EVERY(...)" metadata definition.
-            ("REFRESH SCHEDULE EVERY(INTERVAL 10 MINUTE)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY(INTERVAL 10 MINUTE)"}),
-            ("REFRESH SCHEDULE START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)",
-             {"refresh_moment": None, "refresh_type": "ASYNC START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)"}),
-            ("refresh schedule every(interval 5 minute)", {"refresh_moment": None, "refresh_type": "ASYNC every(interval 5 minute)"}),
-        ]
+class MVRefreshParserTest(fixtures.TestBase):
+    @testing.combinations(
+        # Correct cases
+        ("REFRESH IMMEDIATE", {"refresh_moment": "IMMEDIATE", "refresh_type": None}),
+        ("REFRESH DEFERRED", {"refresh_moment": "DEFERRED", "refresh_type": None}),
+        ("REFRESH ASYNC", {"refresh_moment": None, "refresh_type": "ASYNC"}),
+        ("REFRESH MANUAL", {"refresh_moment": None, "refresh_type": "MANUAL"}),
+        ("REFRESH INCREMENTAL", {"refresh_moment": None, "refresh_type": "INCREMENTAL"}),
+        ("REFRESH DEFERRED ASYNC", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC"}),
+        ("REFRESH IMMEDIATE MANUAL", {"refresh_moment": "IMMEDIATE", "refresh_type": "MANUAL"}),
+        ("REFRESH ASYNC EVERY (INTERVAL 1 DAY)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY (INTERVAL 1 DAY)"}),
+        ("REFRESH ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)", {"refresh_moment": None, "refresh_type": "ASYNC START ('2025-01-01 12:00:00') EVERY (INTERVAL 1 HOUR)"}),
+        ("refresh deferred async", {"refresh_moment": "DEFERRED", "refresh_type": "ASYNC"}), # Case-insensitivity
+        # StarRocks 4.1+ renders a periodic async refresh with the SCHEDULE keyword in
+        # SHOW CREATE MATERIALIZED VIEW. It is canonicalized back to "ASYNC ..." so the
+        # reflected form matches an "ASYNC EVERY(...)" metadata definition.
+        ("REFRESH SCHEDULE EVERY(INTERVAL 10 MINUTE)", {"refresh_moment": None, "refresh_type": "ASYNC EVERY(INTERVAL 10 MINUTE)"}),
+        ("REFRESH SCHEDULE START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)",
+         {"refresh_moment": None, "refresh_type": "ASYNC START(\"2024-01-01 10:00:00\") EVERY(INTERVAL 1 HOUR)"}),
+        ("refresh schedule every(interval 5 minute)", {"refresh_moment": None, "refresh_type": "ASYNC every(interval 5 minute)"}),
+        argnames="clause, expected",
     )
     def test_correct_clauses(self, clause, expected):
         """Tests that various correct refresh clauses are parsed as expected."""
         result = parse_mv_refresh_clause(clause)
         assert result == expected
 
-    @pytest.mark.parametrize(
-        "clause",
-        [
-            # Incorrect cases
-            "REFRESH",
-            "REFRESH FOO",
-            # "REFRESH ASYNC EVERY",
-            # "REFRESH ASYNC EVERY (INTERVAL 1 MONTHS)", # Invalid time unit
-            "REFRESH IMMEDIATE DEFERRED",
-            # "REFRESH ASYNC MANUAL",
-        ]
+    @testing.combinations(
+        # Incorrect cases
+        "REFRESH",
+        "REFRESH FOO",
+        # "REFRESH ASYNC EVERY",
+        # "REFRESH ASYNC EVERY (INTERVAL 1 MONTHS)", # Invalid time unit
+        "REFRESH IMMEDIATE DEFERRED",
+        # "REFRESH ASYNC MANUAL",
+        argnames="clause",
     )
     def test_incorrect_clauses(self, clause):
         """Tests that various incorrect refresh clauses raise a LarkError."""
-        from lark.exceptions import LarkError
-        with pytest.raises(LarkError):
+        with expect_raises(LarkError, check_context=False):
             parse_mv_refresh_clause(clause)
 
 
-class TestKeyClauseParser:
-    @pytest.mark.parametrize(
-        "clause, expected",
-        [
-            ("PRIMARY KEY(id)", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id")),
-            ("PRIMARY KEY ( id )", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id")),
-            ("primary key(id, name)", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id, name")),
-            ("PRIMARY KEY ( id, name )", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id, name")),
-            ("DUPLICATE KEY (k)", ReflectedTableKeyInfo(type="DUPLICATE KEY", columns="k")),
-            ("duplicate key ( k1, k2 )", ReflectedTableKeyInfo(type="DUPLICATE KEY", columns="k1, k2")),
-            ("AGGREGATE KEY(k)", ReflectedTableKeyInfo(type="AGGREGATE KEY", columns="k")),
-            ("aggregate key ( k1, k2 )", ReflectedTableKeyInfo(type="AGGREGATE KEY", columns="k1, k2")),
-        ],
+class KeyClauseParserTest(fixtures.TestBase):
+    @testing.combinations(
+        ("PRIMARY KEY(id)", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id")),
+        ("PRIMARY KEY ( id )", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id")),
+        ("primary key(id, name)", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id, name")),
+        ("PRIMARY KEY ( id, name )", ReflectedTableKeyInfo(type="PRIMARY KEY", columns="id, name")),
+        ("DUPLICATE KEY (k)", ReflectedTableKeyInfo(type="DUPLICATE KEY", columns="k")),
+        ("duplicate key ( k1, k2 )", ReflectedTableKeyInfo(type="DUPLICATE KEY", columns="k1, k2")),
+        ("AGGREGATE KEY(k)", ReflectedTableKeyInfo(type="AGGREGATE KEY", columns="k")),
+        ("aggregate key ( k1, k2 )", ReflectedTableKeyInfo(type="AGGREGATE KEY", columns="k1, k2")),
+        argnames="clause, expected",
     )
     def test_valid_clauses(self, clause, expected):
         got = StarRocksTableDefinitionParser.parse_key_clause(clause)
         assert isinstance(got, ReflectedTableKeyInfo)
         assert str(got) == str(expected)
 
-    @pytest.mark.parametrize(
-        "clause",
-        [
-            None,
-            "",
-            "   ",
-            "KEY (id)",
-            "PRIMARY(id)",
-            "PRIMARY KEY",  # missing columns
-            "PRIMARY KEY (",  # bad paren
-            "PRIMARY KEY )",
-        ],
+    @testing.combinations(
+        None,
+        "",
+        "   ",
+        "KEY (id)",
+        "PRIMARY(id)",
+        "PRIMARY KEY",  # missing columns
+        "PRIMARY KEY (",  # bad paren
+        "PRIMARY KEY )",
+        argnames="clause",
     )
     def test_invalid_clauses(self, clause):
         got = StarRocksTableDefinitionParser.parse_key_clause(clause)
         assert got is None
 
 
-class TestColumnDefaultReflection:
-    def setup_method(self):
+class ColumnDefaultReflectionTest(fixtures.TestBase):
+    def setup_test(self):
         self.parser = StarRocksTableDefinitionParser(dialect=None, preparer=None)
 
     @staticmethod
@@ -354,8 +376,14 @@ class TestColumnDefaultReflection:
         assert parsed["default"] is None or parsed["default"] == "NULL"
 
 
-class TestColumnFlagReflection:
+class ColumnFlagReflectionTest(fixtures.TestBase):
+    """Uses SQLAlchemy 2.0's batched reflection internals."""
+
+    __requires__ = ("sqlalchemy_2",)
+
     def test_marks_primary_key_columns_and_nullable(self):
+        from sqlalchemy.engine.reflection import _ReflectionInfo
+
         parser = StarRocksTableDefinitionParser(dialect=None, preparer=None)
         table_row = SimpleNamespace(
             TABLE_NAME="t_flags",
@@ -463,3 +491,56 @@ class TestColumnFlagReflection:
         assert table.c.k_not_null.nullable is False
         assert table.c.v.primary_key is False
         assert table.c.v.nullable is True
+
+
+class SecondaryIndexParserTest(fixtures.TestBase):
+    @staticmethod
+    def _show_index_row(key_name: str, column_name: str, index_type: str, comment: str) -> dict:
+        """A row of SHOW INDEX FROM, as StarRocks 3.3 and 4.1 return it."""
+        return {
+            "Table": "db.events", "Non_unique": "", "Key_name": key_name, "Seq_in_index": "",
+            "Column_name": column_name, "Collation": "", "Cardinality": "", "Sub_part": "", "Packed": "",
+            "Null": "", "Index_type": index_type, "Comment": comment,
+        }
+
+    def test_reflects_type_properties_and_comment(self):
+        rows = [
+            self._show_index_row("ix_city", "city", "BITMAP", "city's index\nsecond line"),
+            self._show_index_row(
+                "ix name", "name", 'NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "4")', ""
+            ),
+        ]
+
+        assert StarRocksTableDefinitionParser.parse_show_index_rows(rows) == [
+            {
+                "name": "ix_city",
+                "column_names": ["city"],
+                "unique": False,
+                "dialect_options": {"starrocks_using": "BITMAP", "starrocks_comment": "city's index\nsecond line"},
+            },
+            {
+                "name": "ix name",
+                "column_names": ["name"],
+                "unique": False,
+                "dialect_options": {
+                    "starrocks_using": "NGRAMBF",
+                    "starrocks_properties": {"bloom_filter_fpp": "0.05", "case_sensitive": "true", "gram_num": "4"},
+                },
+            },
+        ]
+
+    def test_column_name_containing_a_comma(self):
+        rows = [self._show_index_row("ix_note", "note, with comma", "BITMAP", "")]
+
+        assert StarRocksTableDefinitionParser.parse_show_index_rows(rows)[0]["column_names"] == ["note, with comma"]
+
+    def test_table_without_indexes(self):
+        assert StarRocksTableDefinitionParser.parse_show_index_rows([]) == []
+
+    def test_show_index_is_read_only_for_a_table_with_an_index_line(self):
+        """Every index has a line of SHOW CREATE TABLE that starts with INDEX; a table without one sends no SHOW INDEX."""
+        connection = mock.Mock()
+        without_index = 'CREATE TABLE `t` (\n  `id` int(11) NULL COMMENT "index of it"\n) ENGINE=OLAP'
+
+        assert StarRocksDialect()._secondary_indexes(connection, "`t`", without_index) == []
+        connection.exec_driver_sql.assert_not_called()

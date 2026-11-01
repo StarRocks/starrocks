@@ -44,7 +44,6 @@ basic_view = View(
     definition="SELECT id, name, salary FROM employees WHERE department = 'Sales'",
     schema="analytics",
     comment="A view for sales employees",
-    starrocks_properties={"replication_num": "1"},
 )
 
 # View with column definitions (SQLAlchemy style)
@@ -61,7 +60,6 @@ comprehensive_view = View(
     schema="analytics",
     comment="A comprehensive two-table join view.",
     starrocks_security="INVOKER",
-    starrocks_properties={"replication_num": "1"},
 )
 
 # View with column aliases (simplified styles)
@@ -71,7 +69,6 @@ simple_view_with_col_names = View(
     metadata,
     columns=["employee_id", "employee_name"],  # Just column names
     definition="SELECT id, name FROM employees",
-    starrocks_properties={"replication_num": "1"},
 )
 
 # Style 2: List of dicts with name and optional comment
@@ -83,7 +80,6 @@ detailed_alias_view = View(
         {"name": "id", "comment": "Employee ID"},
         {"name": "name", "comment": "Employee full name"}
     ],
-    starrocks_properties={"replication_num": "1"},
 )
 
 # View from SQLAlchemy Selectable
@@ -91,8 +87,7 @@ stmt_for_view = select(employees.c.id, employees.c.name).where(employees.c.id > 
 active_employees_view = View(
     "active_employees",
     metadata,
-    definition=stmt,
-    starrocks_properties={"replication_num": "1"},
+    definition=stmt_for_view,
 )
 ```
 
@@ -105,13 +100,14 @@ The `View` object is the primary way to define a database view in your Python co
 - **`name`** (`str`): The name of the view.
 - **`metadata`** (`MetaData`): The SQLAlchemy MetaData object to associate with.
 - **`*args`** (`Column`): Optional Column objects for explicit column definitions (SQLAlchemy style).
-- **`definition`** (`str | Selectable`): **Required.** The `SELECT` statement that forms the view. Can be a raw SQL string or a SQLAlchemy `Selectable` object (e.g., `select()`).
+- **`definition`** (`str | Selectable`): **Required.** The `SELECT` statement that forms the view. Can be a raw SQL string or a SQLAlchemy `Selectable` object (e.g., `select()`). A `Selectable` is compiled once, with no server version. A `cast()` to ARRAY, MAP or STRUCT that it leaves out, such as one of text, or of JSON to a MAP, warns, and the view's column has the operand's type; see [Column Data Types](tables.md#column-data-types). Write a single `%`, as in `date_format(d, '%Y')`; see the [note on `%`](tables.md#available-table-level-options) for upgrading from `%%`.
 - **`schema`** (`Optional[str]`): The database schema where the view will be created. If not provided, the default schema is used.
 - **`comment`** (`Optional[str]`): An optional comment to describe the view's purpose. This comment will be stored in the database.
 - **`columns`** (`Optional[List[str | dict]]`): Alternative way to specify column aliases. Three formats supported:
   - List of strings: `['col1', 'col2']` - column names only
   - List of dicts: `[{'name': 'col1', 'comment': 'Comment'}, ...]` - column names with optional comments
   - Not specified: column names inferred from `Column`s if specified in `*args`.
+- **`starrocks_properties`**: StarRocks' `CREATE VIEW` takes no properties. A `starrocks_properties` given to a `View` is accepted and not sent, and `properties=` raises `TypeError`.
 - **`starrocks_security`** (`Optional[str]`): Defines the SQL security context. Can be set to `'INVOKER'` or `'NONE'`.
   > **Note**: StarRocks does **not** support `'DEFINER'`. Only `'INVOKER'` and `'NONE'` are supported now.
 
@@ -162,19 +158,17 @@ No matter whether using `--autogenerate` to create the `upgrade`/`downgrade` scr
 Please be aware of the following limitation when working with `information_schema.views`:
 
 Currently, `information_schema.views` does not return information for views that have their `SECURITY` type set to `INVOKER`.
-So, we extract the SECURITY info from MV definition now.
+So, we extract the SECURITY info from the view definition now.
 
 ### Modifying the SECURITY TYPE
 
-The `ALTER VIEW` statement in StarRocks **does not** support changing the `SECURITY` type of an existing view. If you need to change the security type, you must drop and recreate the view with the desired `SECURITY` type.
+`ALTER VIEW ... SET SECURITY {NONE | INVOKER}` changes the security of an existing view, and `op.alter_view(..., starrocks_security=...)` (or `security=`) emits it. `CREATE OR REPLACE VIEW` keeps the view's existing security whatever it says, so the dialect never relies on it for security.
 
 ### ALTER Support and Limitations
 
-- Only the following attribute can be altered for a View:
-  - **definition** (the SELECT statement). Column aliases change is allowed only together with definition.
-- The following attributes are not supported to be altered by StarRocks:
-  - comment
-  - security
-  - columns-only change (without definition change)
+- StarRocks has no ALTER for a view's comment, and `ALTER VIEW ... AS` drops it. So a change to the definition, the columns or the comment is applied as `CREATE OR REPLACE VIEW` with the full definition, columns and comment, whenever the migration states a comment or an existing one. A migration that states neither, such as a hand-written `op.alter_view('v', 'SELECT ...')`, is a plain `ALTER VIEW ... AS`, which leaves the view without a comment.
+- A security change is a separate `ALTER VIEW ... SET SECURITY` statement. Autogenerate compares security only when the model states `starrocks_security`; a view whose model omits it keeps the security it has.
+- A change to the columns alone, a name or a column comment with the same definition, is generated as `op.alter_view` with the unchanged definition and the new columns, which redefines the view as `ALTER VIEW v (columns) AS <definition>` (or `CREATE OR REPLACE VIEW` when the view has a comment).
+- A view whose old definition reads what the revision removes, a table, view or materialized view it drops or renames, or a column it drops or renames, is dropped before the table operations and created again after them, so the downgrade can restore it. StarRocks drops a view's grants with the view, where `ALTER VIEW` keeps them, so such a view loses its grants in both directions, and autogenerate warns about it. See [Views over what the revision removes](alembic.md#view-autogenerate-details-and-limitations) in the Alembic guide.
 
-Autogenerate will warn or raise for immutable changes instead of producing ALTER statements. Decide explicitly (usually DROP + CREATE) for those cases.
+Autogenerate generates an `op.alter_view` for each of these changes. A change it can't make is reported as a warning instead, with no operation for it, and the rest of the revision is still generated; decide such a change explicitly (usually DROP + CREATE). Before StarRocks 4.0.7, a definition change that can't be checked through a temporary view is also only warned about, unless it is certain: see [Choosing the canonicalization schema](alembic.md#advanced-choosing-the-canonicalization-schema-for-viewmv-comparison) in the Alembic guide.
