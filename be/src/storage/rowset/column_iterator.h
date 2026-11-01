@@ -138,6 +138,13 @@ public:
         return Status::NotSupported("Not Implemented");
     }
 
+    // IO ranges (offset, size) of the dictionary pages this iterator has yet to load. Such a page
+    // is read lazily by the first data page that needs it, and get_io_range_vec() enumerates data
+    // pages only. A caller that needs the first read served entirely from registered ranges (the
+    // compaction prefetch) registers these ranges as well. Empty when the column has no dictionary
+    // page or it is already loaded.
+    virtual std::vector<std::pair<int64_t, int64_t>> get_pending_dict_page_io_ranges() const { return {}; }
+
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
         if (auto sharedBufferStream = dynamic_cast<SharedBufferedInputStream*>(_opts.read_file);
             sharedBufferStream == nullptr) {

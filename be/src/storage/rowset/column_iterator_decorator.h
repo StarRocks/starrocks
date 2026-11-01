@@ -60,6 +60,10 @@ public:
 
     bool all_page_dict_encoded() const override { return _parent->all_page_dict_encoded(); }
 
+    std::vector<std::pair<int64_t, int64_t>> get_pending_dict_page_io_ranges() const override {
+        return _parent->get_pending_dict_page_io_ranges();
+    }
+
     Status fetch_all_dict_words(std::vector<Slice>* words) const override {
         return _parent->fetch_all_dict_words(words);
     }
