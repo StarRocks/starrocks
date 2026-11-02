@@ -470,10 +470,47 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：总加载行数。
 
+## `load_rpc_active_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 RPC 线程池中正在执行的任务数。该线程池处理 Routine Load 和通过表函数导入的 RPC。
+
+## `load_rpc_execute_time_ns_total`
+
+- 单位：纳秒
+- 类型：累计值
+- 描述：已完成的导入 RPC 任务的总执行时间。每个任务完成时更新。
+
+## `load_rpc_executed_tasks_total`
+
+- 单位：计数
+- 类型：累计值
+- 描述：导入 RPC 线程池已完成的任务数。
+
+## `load_rpc_pending_time_ns_total`
+
+- 单位：纳秒
+- 类型：累计值
+- 描述：已完成的导入 RPC 任务在线程池队列中等待的总时间。每个任务完成时更新，仍在排队的任务尚未计入。
+
+## `load_rpc_queue_count`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 RPC 线程池队列中等待的任务数。该值持续增长，说明 Routine Load 或表函数导入的 RPC 到达速度超过了线程池的处理速度。
+
+## `load_rpc_running_threads`
+
+- 单位：计数
+- 类型：瞬时值
+- 描述：导入 RPC 线程池当前的线程数。线程池初始有 10 个线程，按需增长。v4.2 之前该值以 `load_rpc_threadpool_size` 导出。
+
 ## `load_rpc_threadpool_size`
 
 - 单位：计数
-- 描述：RPC 线程池的当前大小，用于处理 Routine Load 和通过表函数加载。默认值为 10，最大值为 1000。此值根据线程池的使用情况动态调整。
+- 类型：瞬时值
+- 描述：导入 RPC 线程池的最大线程数（1000）。v4.2 之前该指标报告的是当前线程数，现在该值为 `load_rpc_running_threads`。
 
 ## `load_sink_close_active_threads`
 
@@ -687,6 +724,47 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：计数
 - 描述：通过网络发送的数据包总数。
+
+## `object_storage_<backend>_<op>_latency`
+
+- 单位：微秒
+- 类型：Gauge
+- 描述：本 BE/CN 自带的存储客户端向对象存储或 HDFS 发送请求的延迟分布，按后端（`s3`、`azblob`、`adls2`、`gs`、`hdfs`）和操作（`get` 读取源文件，例如 Broker Load 或 `FILES()`；`put` 写入）各一组。启用 `dump_metrics_with_bvar` 时通过 `/metrics` 导出，带 bvar 的常规后缀，如 `_99`（最近一秒的 p99）、`_999`、`_max_latency`、`_qps`。不包含 Starlet 自带的存储客户端，它们有自己的指标。
+
+## `object_storage_request_failed_total`
+
+- 单位：计数
+- 类型：累计值
+- 标签：`backend`（`s3`、`azblob`、`adls2`、`gs` 或 `hdfs`）、`client`（`curl`、`poco`、`azure_sdk` 或 `libhdfs`）、`op`（`get` 或 `put`）
+- 描述：向对象存储或 HDFS 发送、且客户端重试用尽后仍失败的请求数。
+
+## `object_storage_request_latency_us_total`
+
+- 单位：微秒
+- 类型：累计值
+- 标签：`backend`（`s3`、`azblob`、`adls2`、`gs` 或 `hdfs`）、`client`（`curl`、`poco`、`azure_sdk` 或 `libhdfs`）、`op`（`get` 或 `put`）
+- 描述：向对象存储或 HDFS 发送请求的总耗时，包含重试。除以 `object_storage_requests_total` 得到平均延迟。
+
+## `object_storage_request_retry_total`
+
+- 单位：计数
+- 类型：累计值
+- 标签：`backend`（`s3`、`azblob`、`adls2`、`gs` 或 `hdfs`）、`client`（`curl`、`poco`、`azure_sdk` 或 `libhdfs`）、`op`（`get` 或 `put`）
+- 描述：存储客户端重试的请求尝试次数。延迟不变但重试上升，说明存储侧在限流或报错。
+
+## `object_storage_request_timeout_total`
+
+- 单位：计数
+- 类型：累计值
+- 标签：`backend`（`s3`、`azblob`、`adls2`、`gs` 或 `hdfs`）、`client`（`curl`、`poco`、`azure_sdk` 或 `libhdfs`）、`op`（`get` 或 `put`）
+- 描述：触发客户端超时的请求尝试次数，例如 S3 的 `object_storage_request_timeout_ms`。`client` 标签区分 AWS SDK 的 curl 和 Poco HTTP 客户端。
+
+## `object_storage_requests_total`
+
+- 单位：计数
+- 类型：累计值
+- 标签：`backend`（`s3`、`azblob`、`adls2`、`gs` 或 `hdfs`）、`client`（`curl`、`poco`、`azure_sdk` 或 `libhdfs`）、`op`（`get` 或 `put`）
+- 描述：本 BE/CN 自带的存储客户端向对象存储或 HDFS 发送的请求数。`backend` 是请求的目标，`client` 是发送请求的库，`op` 表示读取（`get`）还是写入（`put`）。不包含 Starlet 自带的存储客户端。
 
 ## `ordinal_index_mem_bytes`
 

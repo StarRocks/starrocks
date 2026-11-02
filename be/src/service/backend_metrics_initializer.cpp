@@ -46,6 +46,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "io/io_profiler_metrics.h"
+#include "io/object_storage_metrics.h"
 #include "platform/http/http_metrics.h"
 #include "platform/key_cache.h"
 #include "platform/llm/ai_metrics.h"
@@ -273,6 +274,7 @@ void BackendMetricsInitializer::initialize(ProcessMetricsRegistry* process_metri
     }
 
     FileScanMetrics::instance()->install(registry);
+    io::ObjectStorageMetrics::instance()->install(registry);
     CatalogScanMetrics::instance()->install(registry);
     SpillMetrics::instance()->install(registry);
     DataCacheMetrics::instance()->install(registry);

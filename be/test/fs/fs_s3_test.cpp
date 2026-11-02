@@ -15,6 +15,7 @@
 #include "fs/fs_s3.h"
 
 #include <aws/core/Aws.h>
+#include <aws/core/client/SpecifiedRetryableErrorsRetryStrategy.h>
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <fmt/format.h>
@@ -32,6 +33,7 @@
 #include "fs/fs_options_helper.h"
 #include "fs/fs_s3.h"
 #include "gutil/strings/join.h"
+#include "io/object_storage_metrics.h"
 
 namespace starrocks {
 
@@ -837,6 +839,37 @@ TEST_F(S3FileSystemTest, test_write_with_direct_write_and_content_type) {
     EXPECT_EQ("text/csv", actual_content_type);
 
     EXPECT_OK(fs->delete_file(uri));
+}
+
+TEST(ObservedRetryStrategyTest, reports_attempts_to_request_scope) {
+    auto inner = std::make_shared<Aws::Client::SpecifiedRetryableErrorsRetryStrategy>(std::vector<Aws::String>{},
+                                                                                      /*maxRetries=*/1);
+    auto strategy = observed_retry_strategy(inner);
+    ASSERT_NE(nullptr, strategy);
+    EXPECT_EQ(nullptr, observed_retry_strategy(nullptr));
+
+    Aws::Client::AWSError<Aws::Client::CoreErrors> timeout(Aws::Client::CoreErrors::NETWORK_CONNECTION, "Timeout",
+                                                           "curlCode: 28, Timeout was reached", /*isRetryable=*/true);
+    Aws::Client::AWSError<Aws::Client::CoreErrors> denied(Aws::Client::CoreErrors::ACCESS_DENIED, "AccessDenied",
+                                                          "Access Denied", /*isRetryable=*/false);
+    {
+        io::ObjectStorageRequestScope scope(io::ObjectStorageBackend::kS3, io::ObjectStorageClient::kCurl,
+                                            io::ObjectStorageOp::kPut);
+        // Same decisions as the wrapped strategy: the timeout is retried once, then exhausted.
+        EXPECT_TRUE(strategy->ShouldRetry(timeout, 0));
+        EXPECT_FALSE(strategy->ShouldRetry(timeout, 1));
+        EXPECT_FALSE(strategy->ShouldRetry(denied, 0));
+        EXPECT_EQ(inner->CalculateDelayBeforeNextRetry(timeout, 0),
+                  strategy->CalculateDelayBeforeNextRetry(timeout, 0));
+        EXPECT_EQ(inner->GetMaxAttempts(), strategy->GetMaxAttempts());
+        scope.set_failed();
+    }
+    auto snap = io::ObjectStorageMetrics::instance()->snapshot(
+            io::ObjectStorageBackend::kS3, io::ObjectStorageClient::kCurl, io::ObjectStorageOp::kPut);
+    EXPECT_EQ(1, snap.requests);
+    EXPECT_EQ(1, snap.failed);
+    EXPECT_EQ(1, snap.retries);
+    EXPECT_EQ(2, snap.timeouts);
 }
 
 } // namespace starrocks
