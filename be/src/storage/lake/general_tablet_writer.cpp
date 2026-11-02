@@ -262,12 +262,6 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
-<<<<<<< HEAD
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
-=======
     // The table's flat_json.* settings come from whoever created this writer and knows them
     // authoritatively (see TabletWriter::set_flat_json_config): a load carries them in its open
     // request, compaction / schema change / spark load take them from the version-pinned metadata
@@ -278,7 +272,6 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     // exactly what a table that sets no flat_json.* property asks for.
     if (_flat_json_config != nullptr) {
         opts.flat_json_config = _flat_json_config;
->>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
     }
 
     opts.global_dicts = _global_dicts;
@@ -610,17 +603,10 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
-<<<<<<< HEAD
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
-=======
     // See HorizontalGeneralTabletWriter::reset_segment_writer: the config comes from the writer's
     // creator, never from the tablet metadata cache.
     if (_flat_json_config != nullptr) {
         opts.flat_json_config = _flat_json_config;
->>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
     }
 
     WritableFileOptions wopts;
