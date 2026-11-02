@@ -177,24 +177,23 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
         return Status::OK();
     }
 
-    // adjust sst seek range by tablet range
-    if (contain_shared_sstables) {
-        RETURN_IF(!_metadata->has_range(), Status::InternalError("Tablet range is not set"));
+    // adjust sst seek range by tablet range, so keys outside the range a tablet owns never reach its output
+    if (_metadata->has_range()) {
         auto tablet_schema = TabletSchema::create(_metadata->schema());
         ASSIGN_OR_RETURN(auto tablet_range,
                          TabletRangeHelper::create_sst_seek_range_from(_metadata->range(), tablet_schema));
         _seek_range &= tablet_range;
+    } else if (contain_shared_sstables) {
+        return Status::InternalError("Tablet range is not set");
     }
 
+    // Moving keeps the input files byte for byte, so a file shared with a split sibling, without a usable key range or
+    // reaching outside the seek range is always rewritten.
     if (concat_iters.size() == 1) {
         // Only one fileset, only do move.
-        bool full_contain = true;
-        for (const auto& sst : sstables) {
-            if (!_seek_range.full_contains(sst->sstable_pb().range())) {
-                full_contain = false;
-                break;
-            }
-        }
+        const bool full_contain = std::none_of(sstables.begin(), sstables.end(), [&](const auto& sst) {
+            return sstable_needs_rewrite(sst->sstable_pb(), &_seek_range);
+        });
         if (full_contain) {
             for (const auto& sst : sstables) {
                 _output_sstables.push_back(sst->sstable_pb());
@@ -421,12 +420,12 @@ void LakePersistentIndexParallelCompactMgr::generate_compaction_tasks(
         return;
     }
 
-    // Check if any sstable has no key range (infinite boundary)
+    // Check if any sstable has no usable key range (infinite boundary, or a missing start or end key)
     // If found, create a single task without parallel splitting
     for (const auto& fileset : candidates) {
         for (const auto& sst : fileset) {
-            if (!sst.has_range()) {
-                // Found an sstable with infinite boundary, no parallel splitting
+            if (!sstable_has_usable_range(sst)) {
+                // This sstable has no usable key range, no parallel splitting
                 tasks->push_back(std::make_shared<LakePersistentIndexParallelCompactTask>(
                         candidates, _tablet_mgr, metadata, merge_base_level, UniqueId::gen_uid(), SstSeekRange()));
                 return;

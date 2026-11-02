@@ -48,6 +48,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/utils.h"
 #include "storage/parallel_upsert_context.h"
 #include "storage/primary_index.h"
@@ -225,6 +226,15 @@ Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<Persisten
     bool need_create_new_fileset = false;
     if (_sstable_filesets.empty()) {
         // first fileset
+        need_create_new_fileset = true;
+    }
+    // A fileset holding a file this tablet must rewrite takes no new files, for two reasons: an UNSHARE may pick it
+    // even when it is the newest fileset, and its publish replaces whole filesets by fileset id, which would drop a
+    // file appended in the meantime; and the size-tiered picker never compacts the newest fileset, so one that kept
+    // growing would keep its shared or out-of-range file.
+    if (!need_create_new_fileset && _sstable_filesets.back()->any_sstable([&](const PersistentIndexSstablePB& pb) {
+            return sstable_needs_rewrite(pb, tablet_sst_range());
+        })) {
         need_create_new_fileset = true;
     }
     if (!need_create_new_fileset) {
@@ -779,13 +789,22 @@ StatusOr<AsyncCompactCBPtr> LakePersistentIndex::early_sst_compact(
 
 Status LakePersistentIndex::parallel_major_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
                                                    TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                                   TxnLogPB* txn_log) {
-    if (metadata->sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
-        return Status::OK();
+                                                   TxnLogPB* txn_log, bool unshare) {
+    // 1. Pick sstable for merge. UNSHARE rewrites every file the tablet cannot keep, however few files the tablet
+    // holds; otherwise use size tiered compaction strategy.
+    CompactionCandidateResult result;
+    if (unshare) {
+        ASSIGN_OR_RETURN(auto tablet_range, TabletRangeHelper::create_sst_seek_range_from(
+                                                    metadata->range(), TabletSchema::create(metadata->schema())));
+        ASSIGN_OR_RETURN(result, LakePersistentIndexSizeTieredCompactionStrategy::pick_unshare_candidates(
+                                         metadata->sstable_meta(), tablet_range));
+    } else {
+        if (metadata->sstable_meta().sstables_size() < config::lake_pk_index_sst_min_compaction_versions) {
+            return Status::OK();
+        }
+        ASSIGN_OR_RETURN(result, LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
+                                         metadata->sstable_meta()));
     }
-    // 1. Pick sstable for merge, using size tiered compaction strategy.
-    ASSIGN_OR_RETURN(auto result, LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(
-                                          metadata->sstable_meta()));
     if (result.candidate_filesets.empty()) {
         return Status::OK();
     }
@@ -998,7 +1017,8 @@ static bool should_parallel_rebuild_prefetch(int num_files) {
 
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
-Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
+Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                                      const SstSeekRange* tablet_range) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
     ASSIGN_OR_RETURN(auto pk_encoding_type, rowset->tablet_schema()->primary_key_encoding_type_or_error());
@@ -1115,6 +1135,19 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         DelFilter().swap(d->filter_words);
     };
 
+    // Drop keys outside the tablet range from the replay: a split child inherits its sibling's delete
+    // keys, and erasing them would put out-of-range keys into the next flushed index file.
+    auto clip_one = [tablet_range](DecodedDel* d) {
+        if (tablet_range == nullptr) {
+            return;
+        }
+        for (size_t i = 0; i < d->keys.size(); ++i) {
+            if (!tablet_range->contains(d->keys[i])) {
+                d->filter[i] = true;
+            }
+        }
+    };
+
     // Phase-2 work. Memtable mutation; callers invoke sequentially in del_idx order.
     // A delete's rssid is `rowset_id + op_offset` (op_offset = the segment index it follows). The LSM
     // resolves upsert vs delete for the same key by rss_rowid, so applying the right per-del rssid
@@ -1148,6 +1181,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
             RETURN_IF_ERROR(load_status);
             RETURN_IF_ERROR(get_status);
             filter_one(&d);
+            clip_one(&d);
             RETURN_IF_ERROR(erase_one(del_idx, d));
         }
         return Status::OK();
@@ -1186,6 +1220,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
     // Phase 2 (sequential): order-dependent memtable erases.
     for (int del_idx = 0; del_idx < num_del_files; ++del_idx) {
         filter_one(&decoded[del_idx]);
+        clip_one(&decoded[del_idx]);
         RETURN_IF_ERROR(erase_one(del_idx, decoded[del_idx]));
     }
     return Status::OK();
@@ -1601,6 +1636,19 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     _need_rebuild_row_cnt = row_cnt;
     ASSIGN_OR_RETURN(auto pk_encoding_type, tablet_schema->primary_key_encoding_type_or_error());
 
+    // A range-distribution tablet owns only [seek_key, stop_key); delete keys outside it are dropped
+    // on replay. Both bounds empty means (-inf, +inf), so there is nothing to clip. Range bounds are only
+    // comparable with index keys under the big-endian (V2) encoding that range distribution requires.
+    _tablet_sst_range.reset();
+    if (metadata->has_range() && pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
+        ASSIGN_OR_RETURN(auto seek_range,
+                         TabletRangeHelper::create_sst_seek_range_from(metadata->range(), tablet_schema));
+        if (!seek_range.seek_key.empty() || !seek_range.stop_key.empty()) {
+            _tablet_sst_range = std::move(seek_range);
+        }
+    }
+    const SstSeekRange* tablet_range = tablet_sst_range();
+
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
 
@@ -1689,7 +1737,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 unit_cursor++;
             }
             if (rebuild_rowsets[ro].has_del_files) {
-                RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version));
+                RETURN_IF_ERROR(load_dels(rebuild_rowsets[ro].rowset, pkey_schema, rebuild_rowsets[ro].rowset_version,
+                                          tablet_range));
             }
         }
     } else {
@@ -1718,7 +1767,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                 TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", unit_rows);
             }
             if (one->has_del_files) {
-                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, one->rowset_version));
+                RETURN_IF_ERROR(load_dels(rowset, pkey_schema, one->rowset_version, tablet_range));
             }
         }
     }

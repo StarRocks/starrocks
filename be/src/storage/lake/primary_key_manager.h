@@ -266,7 +266,9 @@ public:
 
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
-    Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
+    // With unshare, rewrite the index files the tablet cannot keep as they are instead of picking by size, unless the
+    // tablet's sort key is not its primary key, in which case no index file is compacted.
+    Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log, bool unshare = false);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
