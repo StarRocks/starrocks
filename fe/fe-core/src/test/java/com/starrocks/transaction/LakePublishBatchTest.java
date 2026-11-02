@@ -1406,7 +1406,7 @@ public class LakePublishBatchTest {
 
     @Test
     public void testFailedSingleTxnBatchIsRetriedAlone() throws Exception {
-        // A lone txn is published only when a one-txn batch is allowed.
+        // A one-transaction attempt must stay alone when it is retried.
         int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
         Config.lake_batch_publish_min_version_num = 1;
         try {

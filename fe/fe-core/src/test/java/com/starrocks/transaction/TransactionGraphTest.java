@@ -351,7 +351,7 @@ public class TransactionGraphTest {
         for (long txnId = 1; txnId <= 4; txnId++) {
             graph.add(txnId, Lists.newArrayList(1L));
         }
-        assertEquals(Lists.newArrayList(1L, 2L), graph.getTxnsWithTxnDependencyBatch(1, 10, 1, id -> id <= 2));
+        assertEquals(Lists.newArrayList(1L, 2L), graph.getTxnsWithTxnDependencyBatch(10, 1, id -> id <= 2));
 
         // Multi-table: commit Y {C}, H {A, B}, X {A, C}, Z {B}. X depends on Y outside the batch, so the batch
         // from H is [H, Z]. Once Y is gone X qualifies and comes first, but a walk that only takes H and Z
@@ -365,11 +365,11 @@ public class TransactionGraphTest {
         multi.add(h, Lists.newArrayList(1L, 2L));
         multi.add(x, Lists.newArrayList(1L, 3L));
         multi.add(z, Lists.newArrayList(2L));
-        assertEquals(Lists.newArrayList(h, z), multi.getTxnsWithTxnDependencyBatchMultiTable(1, 10, h));
+        assertEquals(Lists.newArrayList(h, z), multi.getTxnsWithTxnDependencyBatchMultiTable(10, h));
         multi.remove(y);
-        assertEquals(Lists.newArrayList(h, x), multi.getTxnsWithTxnDependencyBatchMultiTable(1, 10, h));
+        assertEquals(Lists.newArrayList(h, x), multi.getTxnsWithTxnDependencyBatchMultiTable(10, h));
         assertEquals(Lists.newArrayList(h, z),
-                multi.getTxnsWithTxnDependencyBatchMultiTable(1, 10, h, id -> id == h || id == z));
+                multi.getTxnsWithTxnDependencyBatchMultiTable(10, h, id -> id == h || id == z));
     }
 
     @Test
