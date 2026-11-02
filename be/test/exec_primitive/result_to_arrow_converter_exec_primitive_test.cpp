@@ -35,7 +35,7 @@ TEST(ResultToArrowConverterExecPrimitiveTest, BuildsSchemaAndConvertsChunkThroug
     constexpr TupleId kTupleId = 2;
     constexpr SlotId kSlotId = 5;
 
-    ColumnRef ref(TypeDescriptor(TYPE_INT), kSlotId);
+    ColumnRef ref(TYPE_INT_DESC, kSlotId);
     ref.set_tuple_id(kTupleId);
     ExprContext expr_context(&ref);
     RuntimeState runtime_state{TQueryGlobals()};

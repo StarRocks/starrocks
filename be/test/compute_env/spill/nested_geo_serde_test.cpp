@@ -65,7 +65,7 @@ public:
 std::vector<TypeDescriptor> nested_geo_types(const TypeDescriptor& leaf) {
     auto wrap = [](const TypeDescriptor& child) {
         return std::vector<TypeDescriptor>{TypeDescriptor::create_array_type(child),
-                                           TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), child),
+                                           TypeDescriptor::create_map_type(TYPE_INT_DESC, child),
                                            TypeDescriptor::create_struct_type({"g"}, {child})};
     };
     auto types = wrap(leaf);
