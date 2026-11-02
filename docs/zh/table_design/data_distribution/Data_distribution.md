@@ -861,6 +861,7 @@ PRIMARY KEY (tenant_id, created_time, id);
 | `ALTER TABLE ... DROP COLUMN <col>`，且 `<col>` 是范围排序键的一部分 | 删除排序键列会使已存储的 tablet 范围边界值失效。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ...`，且 `<col>` 是范围排序键的一部分 | 修改列类型/语义会破坏已存储的 tablet 范围边界值。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ... KEY`（或任意键类型下将值列提升为键列）触发 keyness 翻转 | 在聚合表/更新表，或未显式指定 `ORDER BY` 的表上，keyness 翻转会改变由键列推导出的范围排序键。 |
+| 在设置了 `colocate_with` 的表上使用 `CREATE TABLE ... ROLLUP (...)` | Rollup 的 tablet 按基表的排序键切分，数据却按 Rollup 自己的排序键分布，读取该 Rollup 的 Colocate Join 可能返回错误结果。 |
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
 

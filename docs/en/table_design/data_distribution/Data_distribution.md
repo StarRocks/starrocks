@@ -872,6 +872,7 @@ The following operations are not supported on tables with range distribution:
 | `ALTER TABLE ... DROP COLUMN <col>` where `<col>` is in the range sort key | Removing a sort-key column invalidates the stored 1:1-copied range tablet boundary values. |
 | `ALTER TABLE ... MODIFY COLUMN <col> ...` where `<col>` is in the range sort key | Changes the type/semantics under which the stored range tablet boundary values were recorded. |
 | `ALTER TABLE ... MODIFY COLUMN <col> ... KEY` (or value-column promotion in any keys-type) that flips keyness | A keyness flip shifts the key-derived range sort key on AGG/UNIQUE / no-explicit-ORDER-BY tables. |
+| `CREATE TABLE ... ROLLUP (...)` on a table with `colocate_with` | The rollup's tablets are cut on the base table's sort key while its rows are placed by the rollup's own sort key, so a Colocate Join that reads the rollup could return wrong results. |
 
 For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, e.g.:
 
