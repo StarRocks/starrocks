@@ -2035,7 +2035,7 @@ protected:
         }
         auto flushed = [&] {
             ScopedPkIndexFlush pk_index_flush;
-            return _primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt);
+            return _primary_key_manager->flush_pk_memtable(source, source->version());
         }();
         RETURN_IF_ERROR(flushed.status());
         if ((*flushed)->sstable_meta().sstables_size() == 0) {
@@ -2069,8 +2069,7 @@ protected:
         ASSIGN_OR_RETURN(auto written, publish_followup_upsert_delete(tablet_id, metadata->version(), 20, 200, 0,
                                                                       /*include_delete=*/false));
         ASSIGN_OR_RETURN(written, publish_followup_upsert_delete(tablet_id, written->version(), 60, 600, 61));
-        ASSIGN_OR_RETURN(auto flushed,
-                         _primary_key_manager->flush_pk_memtable(written, written->version(), std::nullopt));
+        ASSIGN_OR_RETURN(auto flushed, _primary_key_manager->flush_pk_memtable(written, written->version()));
 
         auto shared = std::make_shared<TabletMetadataPB>(*flushed);
         for (auto& rowset : *shared->mutable_rowsets()) {

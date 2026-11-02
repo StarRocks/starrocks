@@ -396,7 +396,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_dropped_by_a_newer_colu
     txn_info.set_commit_time(1);
     ASSIGN_OR_ABORT(auto published,
                     lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()), version + 1,
-                                          version + 2, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+                                          version + 2, std::span<const TxnInfoPB>(&txn_info, 1), false));
     ASSERT_NO_FATAL_FAILURE(expect_shared_input_segment(published));
     ASSERT_TRUE(published->dcg_meta().dcgs().contains(1));
     EXPECT_EQ(newer_cols, published->dcg_meta().dcgs().at(1).column_files(0));
@@ -5328,7 +5328,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_cold_index_load_drops_sibling_d
         ASSIGN_OR_ABORT(auto result, publish_followup_upsert_delete(child->id(), child->version(), /*upsert_key=*/5,
                                                                     /*upsert_value=*/55, /*delete_key=*/0,
                                                                     /*include_delete=*/false));
-        ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(result, result->version(), std::nullopt));
+        ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(result, result->version()));
         int new_ssts = 0;
         for (const auto& sst : flushed->sstable_meta().sstables()) {
             if (inherited.count(sst.filename()) > 0) continue;
@@ -5355,7 +5355,7 @@ TEST_F(LakeTabletReshardTest, test_new_sstable_does_not_join_a_fileset_holding_a
         const int lower = first_file == FirstFile::kReachesOutside ? 3 : 0;
         ASSIGN_OR_ABORT(auto seeded, create_lifecycle_source(tablet_id, lower, /*upper=*/100, /*key=*/5,
                                                              /*value=*/50, /*include_delete=*/false));
-        ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(seeded, seeded->version(), std::nullopt));
+        ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(seeded, seeded->version()));
         ASSERT_EQ(1, flushed->sstable_meta().sstables_size());
         ASSERT_TRUE(flushed->sstable_meta().sstables(0).has_fileset_id());
 
@@ -5374,8 +5374,7 @@ TEST_F(LakeTabletReshardTest, test_new_sstable_does_not_join_a_fileset_holding_a
                         publish_followup_upsert_delete(tablet_id, with_first->version(), /*upsert_key=*/60,
                                                        /*upsert_value=*/600, /*delete_key=*/0,
                                                        /*include_delete=*/false));
-        ASSIGN_OR_ABORT(auto reflushed,
-                        _primary_key_manager->flush_pk_memtable(written, written->version(), std::nullopt));
+        ASSIGN_OR_ABORT(auto reflushed, _primary_key_manager->flush_pk_memtable(written, written->version()));
         ASSERT_EQ(2, reflushed->sstable_meta().sstables_size());
         const auto& s1 = reflushed->sstable_meta().sstables(0);
         const auto& s2 = reflushed->sstable_meta().sstables(1);
@@ -5552,7 +5551,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_keeps_a_private_base_ss
     ASSIGN_OR_ABORT(source, publish_followup_upsert_delete(tablet_id, source->version(), 30, 300, 0,
                                                            /*include_delete=*/false));
     // The base index file maps keys 20 and 30, both inside the child [0, 50).
-    ASSIGN_OR_ABORT(source, _primary_key_manager->flush_pk_memtable(source, source->version(), std::nullopt));
+    ASSIGN_OR_ABORT(source, _primary_key_manager->flush_pk_memtable(source, source->version()));
     ASSERT_OK(put_tablet_metadata(source));
     ASSERT_EQ(1, source->sstable_meta().sstables_size());
     const std::string base_file = source->sstable_meta().sstables(0).filename();
@@ -5633,8 +5632,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_keeps_sstables_flushed_
         ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(child->id(), version, /*upsert_key=*/90,
                                                                      /*upsert_value=*/900, /*delete_key=*/0,
                                                                      /*include_delete=*/false));
-        ASSIGN_OR_ABORT(auto flushed,
-                        _primary_key_manager->flush_pk_memtable(written, written->version(), std::nullopt));
+        ASSIGN_OR_ABORT(auto flushed, _primary_key_manager->flush_pk_memtable(written, written->version()));
         ASSERT_OK(put_tablet_metadata(flushed));
         std::string late_file;
         for (const auto& sst : flushed->sstable_meta().sstables()) {
@@ -5651,10 +5649,10 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_keeps_sstables_flushed_
         txn_info.set_txn_id(txn_id);
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
-        ASSIGN_OR_ABORT(auto published,
-                        lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()),
-                                              flushed->version(), flushed->version() + 1,
-                                              std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+        ASSIGN_OR_ABORT(
+                auto published,
+                lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()), flushed->version(),
+                                      flushed->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
         const auto& sstables = published->sstable_meta().sstables();
         EXPECT_TRUE(std::any_of(sstables.begin(), sstables.end(),
                                 [&](const PersistentIndexSstablePB& sst) { return sst.filename() == late_file; }));
@@ -5704,9 +5702,9 @@ TEST_F(LakeTabletReshardTest, test_unshare_on_a_clean_tablet_is_a_no_op) {
     txn_info.set_txn_id(txn_id);
     txn_info.set_txn_type(TXN_NORMAL);
     txn_info.set_commit_time(1);
-    ASSIGN_OR_ABORT(auto second, lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(first->id()),
-                                                       first->version(), first->version() + 1,
-                                                       std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    ASSIGN_OR_ABORT(auto second,
+                    lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(first->id()), first->version(),
+                                          first->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
     EXPECT_EQ(first->version() + 1, second->version());
     auto files_of = [](const TabletMetadataPB& metadata) {
         std::vector<std::string> files;
@@ -5875,10 +5873,9 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_unshare_rewrites_sstables_when_
     txn_info.set_txn_id(txn_id);
     txn_info.set_txn_type(TXN_NORMAL);
     txn_info.set_commit_time(1);
-    ASSIGN_OR_ABORT(
-            auto published,
-            lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()), child->version(),
-                                  child->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+    ASSIGN_OR_ABORT(auto published,
+                    lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()), child->version(),
+                                          child->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
     ASSERT_GT(published->sstable_meta().sstables_size(), 0);
     for (const auto& sst : published->sstable_meta().sstables()) {
         EXPECT_FALSE(sst.shared()) << sst.filename();
@@ -5968,10 +5965,10 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_parallel_unshare_publishes_one_
         txn_info.set_txn_id(txn_id);
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
-        ASSIGN_OR_ABORT(auto published,
-                        lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()),
-                                              child->version(), child->version() + 1,
-                                              std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
+        ASSIGN_OR_ABORT(
+                auto published,
+                lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(child->id()), child->version(),
+                                      child->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
         EXPECT_FALSE(lake::tablet_reshard_helper::has_shared_files(*published));
         ASSERT_GT(published->sstable_meta().sstables_size(), 0);
         uint64_t last_max_rss_rowid = 0;
@@ -6077,8 +6074,7 @@ TEST_F(LakeTabletReshardTest, test_compact_runs_a_parallel_manual_compaction_whe
     txn_info.set_commit_time(1);
     ASSIGN_OR_ABORT(auto published,
                     lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), tablet->version(),
-                                          tablet->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false,
-                                          std::nullopt));
+                                          tablet->version() + 1, std::span<const TxnInfoPB>(&txn_info, 1), false));
     EXPECT_LT(published->rowsets_size(), tablet->rowsets_size());
     _primary_key_manager->unload_and_remove_primary_index(tablet_id);
     expect_lifecycle_oracle(published, {{20, 200}, {30, 300}, {40, 400}, {50, 500}, {60, 600}, {70, 700}, {80, 800}},
