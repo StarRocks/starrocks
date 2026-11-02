@@ -75,21 +75,30 @@ the same category.
    `parse_wkb` checks structure only. Each kernel either requires valid topology or does not; a kernel that does not
    check it must still never crash or cause undefined behavior on topologically invalid input.
 
-4. **Kernels that require valid topology check it before computing and return `InvalidArgument` on invalid input.**
-   Today this includes:
-   - the measurements `ST_Area` / `ST_Length` / `ST_Perimeter`, for both GEOMETRY and GEOGRAPHY
-     (`planar_measurement` / `spherical_measurement` in `geo_measurements.cpp`);
-   - `ST_Centroid` (`planar_centroid` / `spherical_centroid`);
-   - the overlays (`ST_Intersection` / `ST_Union` / `ST_Difference` / `ST_SymDifference`), `ST_Buffer` and
-     `ST_SimplifyPreserveTopology`;
-   - `H3_PolygonToCells`;
-   - GEOGRAPHY kernels that build S2 polygons or lines (`prepare_spherical_polygon`,
-     `prepare_spherical_line_family`), such as the GEOGRAPHY containment and intersection predicates.
+4. **Kernels check topology to different degrees.** Today there are three groups:
 
-   Kernels that only access coordinates or serialize a geometry (`ST_X` / `ST_Y`, `ST_GeometryType`, `ST_AsText` /
-   `ST_AsBinary`) do not check topology. A new kernel must state which group it belongs to; if it requires valid
-   topology, check it up front with `planar_is_valid` / `spherical_is_valid` (or the equivalent preparation) and test
-   that invalid input returns `InvalidArgument`.
+   - **Full topology validation before computing**, returning `InvalidArgument` for any input that `ST_IsValid` reports
+     as invalid:
+     - the measurements `ST_Area` / `ST_Length` / `ST_Perimeter`, for both GEOMETRY and GEOGRAPHY
+       (`planar_measurement` / `spherical_measurement` in `geo_measurements.cpp`);
+     - `ST_Centroid` (`planar_centroid` / `spherical_centroid`);
+     - the overlays (`ST_Intersection` / `ST_Union` / `ST_Difference` / `ST_SymDifference`) and `ST_Buffer`
+       (`bg::is_valid` on the whole input);
+     - `H3_PolygonToCells` (`spherical_is_valid`, with an equivalent direct check for a single-ring polygon).
+   - **Algorithm-specific preparation checks** that reject only what the algorithm cannot represent. They are **not**
+     full validation, so some inputs that `ST_IsValid` reports as invalid still produce a result:
+     - GEOGRAPHY containment and intersection predicates prepare each POLYGON component through S2
+       (`prepare_spherical_polygon`) independently. They do not run the inter-component overlap checks of
+       `spherical_is_valid`, so an overlapping MULTIPOLYGON is accepted;
+     - GEOGRAPHY line preparation (`prepare_spherical_line_family`) rejects antipodal segments only;
+     - `ST_SimplifyPreserveTopology` rejects the ring and boundary problems its algorithm cannot handle (crossing
+       rings, non-simple rings, disconnected interiors).
+   - **No topology check**: kernels that only access coordinates or serialize a geometry (`ST_X` / `ST_Y`,
+     `ST_GeometryType`, `ST_AsText` / `ST_AsBinary`).
+
+   A new kernel must state which group it belongs to. If it relies on valid topology, validate up front with
+   `planar_is_valid` / `spherical_is_valid` and test that invalid input returns `InvalidArgument`; do not treat a
+   successful algorithm-specific preparation as proof of validity.
 
 5. **Coverage validity is the user's responsibility.**
    `ST_CoverageSimplify` keeps its structural and safety checks (ring closure, degenerate rings, zero-area rings, the
