@@ -101,7 +101,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_int_column) {
     int_col->append_datum(Datum(static_cast<int32_t>(42)));
 
     ColumnBuilder<TYPE_VARIANT> builder(2);
-    Status st = VariantEncoder::encode_column(int_col, TypeDescriptor(TYPE_INT), &builder, true);
+    Status st = VariantEncoder::encode_column(int_col, TYPE_INT_DESC, &builder, true);
     ASSERT_TRUE(st.ok());
 
     ColumnPtr out = builder.build(false);
