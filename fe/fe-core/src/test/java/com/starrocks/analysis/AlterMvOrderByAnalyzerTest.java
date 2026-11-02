@@ -144,6 +144,16 @@ public class AlterMvOrderByAnalyzerTest {
     }
 
     @Test
+    public void testAlterMvOrderByColocateRejected() {
+        MaterializedView mv = dupRangeMv();
+        mv.setColocateGroup("g:k1");
+        SemanticException ex = assertThrows(SemanticException.class, () ->
+                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+        assertTrue(ex.getMessage().contains("not supported on a materialized view with 'colocate_with'"),
+                "expected colocate_with message, got: " + ex.getMessage());
+    }
+
+    @Test
     public void testAlterMvOrderByUnknownColumnRejected() {
         MaterializedView mv = dupRangeMv();
         SemanticException ex = assertThrows(SemanticException.class, () ->

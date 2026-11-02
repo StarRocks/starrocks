@@ -27,6 +27,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.OperationType;
@@ -395,6 +396,18 @@ public class LakeMvSortKeyRewriteJobTest {
         jobNoMv.setRefreshWasActiveAtSubmit(true);
         assertDoesNotThrow(jobNoMv::beforeShadowBuild);
         assertDoesNotThrow(() -> jobNoMv.afterJobSettled(false));
+    }
+
+    @Test
+    public void testSubmitRejectsColocateMaterializedView() {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_ID);
+        stubbedMv.setColocateGroup("g:k1");
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        DdlException ex = assertThrows(DdlException.class, () ->
+                handler.submitMvSortKeyRewriteJob(db, stubbedMv, List.of(1, 0), null));
+        assertTrue(ex.getMessage().contains("not supported on a materialized view with 'colocate_with'"),
+                "expected colocate_with message, got: " + ex.getMessage());
+        assertTrue(handler.getAlterJobsV2().isEmpty());
     }
 
     @Test

@@ -167,6 +167,12 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
             throw new SemanticException("ALTER MATERIALIZED VIEW ... ORDER BY is only supported on "
                     + "range-distributed materialized views");
         }
+        // The rewrite builds the shadow tablets without regard to the colocate group's range layout, which
+        // leaves the MV unaligned with the group; reject until an aligned rewrite is supported.
+        if (mv.hasColocateGroup()) {
+            throw new SemanticException("ALTER MATERIALIZED VIEW ... ORDER BY is not supported on a materialized view "
+                    + "with 'colocate_with'");
+        }
         // Only the base index is rewritten; a materialized view carrying additional (rollup/sync)
         // indexes is out of scope (mirrors SchemaChangeHandler#needsRangeRewriteSchemaChange).
         if (mv.getIndexMetaIdToMeta().size() > 1) {
