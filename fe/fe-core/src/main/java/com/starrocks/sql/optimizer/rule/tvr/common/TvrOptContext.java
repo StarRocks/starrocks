@@ -40,6 +40,15 @@ public class TvrOptContext {
     // instead of by schema position.
     private Map<Integer, String> ivmStateColumnNameByAggRefId;
 
+<<<<<<< HEAD
+=======
+    // MV column name -> grouping key ColumnRef id, the same binding for the aggregate's keys.
+    private Map<String, Integer> ivmGroupKeyRefIdByMvColumn = Map.of();
+
+    // MV partitions IvmDeltaAggregateRule leaves out of the state-merge MV scan; empty scans the whole MV.
+    private Set<String> ivmExcludedMvPartitions = Set.of();
+
+>>>>>>> fcf3f5f7ae9... [Enhancement] Join the mv's sort-key prefix on the IVM state-merge scan (#63299)
     public TvrOptContext(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
         this.lazyMV = () -> loadTvrTargetMV();
@@ -61,6 +70,26 @@ public class TvrOptContext {
         return ivmStateColumnNameByAggRefId;
     }
 
+<<<<<<< HEAD
+=======
+    public void setIvmGroupKeyRefIdByMvColumn(Map<String, Integer> ivmGroupKeyRefIdByMvColumn) {
+        this.ivmGroupKeyRefIdByMvColumn =
+                ivmGroupKeyRefIdByMvColumn == null ? Map.of() : ivmGroupKeyRefIdByMvColumn;
+    }
+
+    public Map<String, Integer> getIvmGroupKeyRefIdByMvColumn() {
+        return ivmGroupKeyRefIdByMvColumn;
+    }
+
+    public void setIvmExcludedMvPartitions(Set<String> ivmExcludedMvPartitions) {
+        this.ivmExcludedMvPartitions = ivmExcludedMvPartitions == null ? Set.of() : ivmExcludedMvPartitions;
+    }
+
+    public Set<String> getIvmExcludedMvPartitions() {
+        return ivmExcludedMvPartitions;
+    }
+
+>>>>>>> fcf3f5f7ae9... [Enhancement] Join the mv's sort-key prefix on the IVM state-merge scan (#63299)
     private MaterializedView loadTvrTargetMV() {
         // TODO: How to set the logical aggregate operator's aggregate state table?
         // get the aggregate state table
