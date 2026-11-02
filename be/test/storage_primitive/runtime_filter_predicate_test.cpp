@@ -80,7 +80,7 @@ std::vector<uint32_t> operator_partitions(const RuntimeFilterLayout& layout, con
     std::vector<uint32_t> bucket_ids;
     std::vector<uint32_t> round_ids;
     BucketAwarePartitionCtx bctx(layout.bucket_properties(), hash_values, round_hashes, bucket_ids, round_ids);
-    calc_hash_values_and_bucket_ids({column}, bctx);
+    compute_hash_values_and_bucket_ids({column}, bctx);
 
     std::vector<uint32_t> partitions;
     partitions.reserve(bucket_ids.size());

@@ -181,8 +181,8 @@ public class IcebergTableTest extends TableTestBase {
     }
 
     @Test
-    public void testUuidBucketHasNoBucketProperty() {
-        // Iceberg buckets a uuid by its 16 bytes, StarRocks reads it as a string: no bucket property.
+    public void testUuidBucketProperty() {
+        // Iceberg buckets a uuid by its 16 bytes, StarRocks reads it as a string: the BE parses it back.
         Schema uuidSchema = new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()),
                 Types.NestedField.required(2, "u", Types.UUIDType.get()));
         PartitionSpec spec = PartitionSpec.builderFor(uuidSchema).bucket("u", 4).build();
@@ -193,7 +193,13 @@ public class IcebergTableTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
                 "resource", "db", "table", "", schema, nativeTable, Maps.newHashMap());
         Assertions.assertTrue(icebergTable.hasBucketProperties());
-        Assertions.assertTrue(icebergTable.getBucketProperties().isEmpty());
+        List<BucketProperty> bucketProperties = icebergTable.getBucketProperties();
+        Assertions.assertEquals(1, bucketProperties.size());
+        Assertions.assertEquals(TBucketFunction.MURMUR3_X86_32_UUID, bucketProperties.get(0).getBucketFunction());
+        Assertions.assertEquals(4, bucketProperties.get(0).getBucketNum());
+        // uuid and string buckets hash differently, so they must not colocate.
+        Assertions.assertFalse(bucketProperties.get(0).satisfy(
+                new BucketProperty(TBucketFunction.MURMUR3_X86_32, 4, schema.get(1))));
     }
 
     @Test

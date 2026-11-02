@@ -773,6 +773,7 @@ PROPERTIES：支持设置超时时间，默认超时时间为一天。
 
 - 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
 - 表不能为 Colocate 表。
+- 不能删除 Rollup 排序键中的列，也不能修改这些列的类型。唯一的例外是：可以单独增加 VARCHAR 列的长度（通过 Fast Schema Evolution 完成），但不能同时调整该列的位置或修改其他属性。此类 Rollup 不支持 `ORDER BY ... FROM <rollup>`。
 - 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
 
 示例：

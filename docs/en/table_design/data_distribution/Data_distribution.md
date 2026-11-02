@@ -870,6 +870,7 @@ PRIMARY KEY (tenant_id, created_time, id);
 In addition to the colocation group, you must also specify the colocated columns in the `colocate_with` property in the format `<colocation_group>:<colocated_column>[,<colocated_column>]`:
 - The colocated columns must be a prefix of the sort columns.
 - Tables in the same colocation group must have the same type, number, and order of colocated columns.
+- The type of a colocated column cannot be changed after the table is created, including increasing the length of a VARCHAR column.
 - Default colocated columns are the sort columns.
 :::
 

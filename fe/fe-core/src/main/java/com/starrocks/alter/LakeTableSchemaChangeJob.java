@@ -160,6 +160,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     private List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
     private List<Integer> sortKeyUniqueIds;
+    // shadow index meta id -> sort key of a non-base index that keeps its own sort key (a range rollup).
+    // A non-base shadow index without an entry gets no sort key, which is also how a job journaled before
+    // these maps existed replays.
+    @SerializedName(value = "indexSortKeyIdxes")
+    private Map<Long, List<Integer>> indexSortKeyIdxes = Maps.newHashMap();
+    @SerializedName(value = "indexSortKeyUniqueIds")
+    private Map<Long, List<Integer>> indexSortKeyUniqueIds = Maps.newHashMap();
 
     // save all schema change tasks
     // Package-private so same-package tests can verify the leader-handoff reset without reflection.
@@ -260,6 +267,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
         this.sortKeyIdxes = job.sortKeyIdxes == null ? null : new ArrayList<>(job.sortKeyIdxes);
         this.sortKeyUniqueIds = job.sortKeyUniqueIds == null ? null : new ArrayList<>(job.sortKeyUniqueIds);
+        this.indexSortKeyIdxes = copyIndexSortKeys(job.indexSortKeyIdxes);
+        this.indexSortKeyUniqueIds = copyIndexSortKeys(job.indexSortKeyUniqueIds);
+    }
+
+    private static Map<Long, List<Integer>> copyIndexSortKeys(Map<Long, List<Integer>> indexSortKeys) {
+        Map<Long, List<Integer>> copy = Maps.newHashMap();
+        indexSortKeys.forEach((shadowIdxMetaId, sortKey) -> copy.put(shadowIdxMetaId, new ArrayList<>(sortKey)));
+        return copy;
     }
 
     void setBloomFilterInfo(boolean hasBfChange, Set<ColumnId> bfColumns, double bfFpp) {
@@ -290,6 +305,20 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     public void setSortKeyUniqueIds(List<Integer> sortKeyUniqueIds) {
         this.sortKeyUniqueIds = sortKeyUniqueIds;
+    }
+
+    void setIndexSortKey(long shadowIdxMetaId, List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
+        indexSortKeyIdxes.put(shadowIdxMetaId, sortKeyIdxes);
+        indexSortKeyUniqueIds.put(shadowIdxMetaId, sortKeyUniqueIds);
+    }
+
+    // The base index takes the job's sort key; any other index takes the sort key recorded for its shadow, if any.
+    private List<Integer> shadowSortKeyIdxes(long shadowIdxMetaId, boolean isBaseIndex) {
+        return isBaseIndex ? sortKeyIdxes : indexSortKeyIdxes.get(shadowIdxMetaId);
+    }
+
+    private List<Integer> shadowSortKeyUniqueIds(long shadowIdxMetaId, boolean isBaseIndex) {
+        return isBaseIndex ? sortKeyUniqueIds : indexSortKeyUniqueIds.get(shadowIdxMetaId);
     }
 
     void addTabletIdMap(long physicalPartitionId, long shadowIdxMetaId, long shadowTabletId, long originTabletId) {
@@ -331,14 +360,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         }
 
         for (long shadowIdxMetaId : indexMetaIdMap.keySet()) {
-            List<Integer> sortKeyColumnIndexes = null;
-            List<Integer> sortKeyColumnUniqueIds = null;
-
             long orgIndexMetaId = indexMetaIdMap.get(shadowIdxMetaId);
-            if (orgIndexMetaId == table.getBaseIndexMetaId()) {
-                sortKeyColumnIndexes = sortKeyIdxes;
-                sortKeyColumnUniqueIds = sortKeyUniqueIds;
-            }
+            boolean isBaseIndex = orgIndexMetaId == table.getBaseIndexMetaId();
+            List<Integer> sortKeyColumnIndexes = shadowSortKeyIdxes(shadowIdxMetaId, isBaseIndex);
+            List<Integer> sortKeyColumnUniqueIds = shadowSortKeyUniqueIds(shadowIdxMetaId, isBaseIndex);
 
             // If upgraded from an old version and do schema change,
             // the schema saved in indexSchemaMap is the schema in the old version, whose uniqueId is -1,
@@ -607,13 +632,14 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     short shadowShortKeyColumnCount = indexMetaIdToShortKey.get(shadowIdxMetaId);
                     List<Column> shadowSchema = indexMetaIdToSchema.get(shadowIdxMetaId);
                     long originIndexMetaId = indexMetaIdMap.get(shadowIdxMetaId);
+                    boolean isBaseIndex = originIndexMetaId == baseIndexMetaId;
                     KeysType originKeysType = table.getKeysTypeByIndexMetaId(originIndexMetaId);
                     TTabletSchema tabletSchema = SchemaInfo.newBuilder()
                             .setId(shadowIdxMetaId) // For newly create materialized index, schema id equals to index meta id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
-                            .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
-                            .setSortKeyUniqueIds(originIndexMetaId == baseIndexMetaId ? sortKeyUniqueIds : null)
+                            .setSortKeyIndexes(shadowSortKeyIdxes(shadowIdxMetaId, isBaseIndex))
+                            .setSortKeyUniqueIds(shadowSortKeyUniqueIds(shadowIdxMetaId, isBaseIndex))
                             .setIndexes(originIndexMetaId == baseIndexMetaId ?
                                         indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
@@ -1176,6 +1202,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.watershedGtid = other.watershedGtid;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
+            this.indexSortKeyIdxes = other.indexSortKeyIdxes;
+            this.indexSortKeyUniqueIds = other.indexSortKeyUniqueIds;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
             // FORCE-cancel audit marker. Must be copied here so the
             // CANCELLED branch below (which reads `this.forceSkippedAtCommitted`)
