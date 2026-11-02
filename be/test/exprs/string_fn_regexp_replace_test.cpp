@@ -604,4 +604,50 @@ TEST_F(StringFunctionRegexpReplaceTest, testDifferentialOracleAgainstRE2) {
     }
 }
 
+TEST_F(StringFunctionRegexpReplaceTest, testShrinkingReplacementDoesNotOverReserve) {
+    constexpr size_t kNumRows = 64;
+    const std::string blob(64 * 1024, 'a'); // 64 KiB per row -> 4 MiB total input
+
+    auto str_col = BinaryColumn::create();
+    auto var_ptn_col = BinaryColumn::create();
+    auto var_rpl_col = BinaryColumn::create();
+    for (size_t i = 0; i < kNumRows; ++i) {
+        str_col->append(Slice(blob));
+        var_ptn_col->append(Slice("^.*$"));
+        var_rpl_col->append(Slice(""));
+    }
+    ColumnPtr const_ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("^.*$", kNumRows);
+    ColumnPtr const_rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("", kNumRows);
+
+    // 1. Const pattern + const replacement
+    {
+        auto res = eval_regexp_replace({str_col, const_ptn_col, const_rpl_col});
+        ASSERT_TRUE(res.ok()) << res.status();
+        auto* out_bin = down_cast<BinaryColumn*>(res.value()->as_mutable_raw_ptr());
+        ASSERT_EQ(out_bin->size(), kNumRows);
+        ASSERT_EQ(out_bin->get_immutable_bytes().size(), 0u);
+        ASSERT_EQ(out_bin->get_bytes().capacity(), 0u);
+    }
+
+    // 2. Const pattern + non-const replacement
+    {
+        auto res = eval_regexp_replace({str_col, const_ptn_col, var_rpl_col});
+        ASSERT_TRUE(res.ok()) << res.status();
+        auto* out_bin = down_cast<BinaryColumn*>(res.value()->as_mutable_raw_ptr());
+        ASSERT_EQ(out_bin->size(), kNumRows);
+        ASSERT_EQ(out_bin->get_immutable_bytes().size(), 0u);
+        ASSERT_EQ(out_bin->get_bytes().capacity(), 0u);
+    }
+
+    // 3. Non-const pattern + non-const replacement (general path)
+    {
+        auto res = eval_regexp_replace({str_col, var_ptn_col, var_rpl_col});
+        ASSERT_TRUE(res.ok()) << res.status();
+        auto* out_bin = down_cast<BinaryColumn*>(res.value()->as_mutable_raw_ptr());
+        ASSERT_EQ(out_bin->size(), kNumRows);
+        ASSERT_EQ(out_bin->get_immutable_bytes().size(), 0u);
+        ASSERT_EQ(out_bin->get_bytes().capacity(), 0u);
+    }
+}
+
 } // namespace starrocks

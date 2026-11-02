@@ -3973,6 +3973,24 @@ static inline size_t re2_utf8_empty_match_step(const re2::RE2* re, const char* p
     return 1;
 }
 
+// Cap speculative byte reservation beyond known prefix bytes at 1 MiB so replacements
+// over large multi-megabyte string chunks do not over-reserve memory up front.
+constexpr size_t REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT = 1 << 20;
+
+static inline size_t regexp_replace_initial_reserve(size_t prefix_bytes, size_t remaining_src_bytes,
+                                                    size_t matched_row_in_bytes, size_t matched_row_out_hint,
+                                                    size_t remaining_rows) {
+    size_t speculative_remaining = std::min(remaining_src_bytes, REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT);
+    if (matched_row_out_hint < matched_row_in_bytes) {
+        const size_t scaled_by_rows =
+                (remaining_rows > 0 && matched_row_out_hint > REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT / remaining_rows)
+                        ? REGEXP_REPLACE_SPECULATIVE_RESERVE_LIMIT
+                        : remaining_rows * matched_row_out_hint;
+        speculative_remaining = std::min(speculative_remaining, scaled_by_rows);
+    }
+    return capped_string_function_initial_reserve(prefix_bytes + speculative_remaining);
+}
+
 template <bool global_mode, typename EnsureDstFn>
 static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, const char* data, size_t size,
                                                           const RegexpReplaceTemplate& tmpl, re2::StringPiece* vec,
@@ -3988,19 +4006,23 @@ static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, co
         if (!re->Match(str_sp, 0, size, re2::RE2::UNANCHORED, vec, tmpl.nsubmatch)) {
             return false;
         }
-        BinaryColumn::Bytes& dst_bytes = ensure_dst();
         const size_t prefix_len = static_cast<size_t>(vec[0].data() - data);
         const char* const match_end = vec[0].data() + vec[0].size();
         const size_t suffix_len = static_cast<size_t>((data + size) - match_end);
         const size_t rpl_len = tmpl.rendered_size(vec);
+        const size_t out_row_len = prefix_len + rpl_len + suffix_len;
+        BinaryColumn::Bytes& dst_bytes = ensure_dst(out_row_len);
         const size_t old_size = dst_bytes.size();
-        dst_bytes.resize(old_size + prefix_len + rpl_len + suffix_len);
+        dst_bytes.resize(old_size + out_row_len);
         uint8_t* out = dst_bytes.data() + old_size;
         out = copy_bytes_to_ptr(out, data, prefix_len);
         out = copy_rewrite_template_to_ptr(out, tmpl, vec);
         copy_bytes_to_ptr(out, match_end, suffix_len);
         return true;
     } else {
+        // Note: Unlike RE2::Replace (which checks the bool return of RE2::Rewrite and aborts on
+        // invalid escapes), RE2::GlobalReplace ignores RE2::Rewrite's return value and retains the
+        // partial rewrite prefix emitted before the invalid escape.
         if (UNLIKELY(tmpl.exceeds_groups(*re))) {
             return false;
         }
@@ -4014,7 +4036,8 @@ static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, co
                 break;
             }
             if (count == 0) {
-                dst_bytes_ptr = &ensure_dst();
+                const size_t first_out_row_hint = (size - vec[0].size()) + tmpl.rendered_size(vec);
+                dst_bytes_ptr = &ensure_dst(first_out_row_hint);
             }
             if (p < vec[0].data()) {
                 append_bytes(*dst_bytes_ptr, p, static_cast<size_t>(vec[0].data() - p));
@@ -4025,7 +4048,7 @@ static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, co
                     append_bytes(*dst_bytes_ptr, p, step);
                     p += step;
                 } else {
-                    p++;
+                    break;
                 }
                 continue;
             }
@@ -4058,9 +4081,10 @@ static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2:
     const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
     const size_t initial_bytes =
             all_const ? (eval_rows > 0 ? src_binary->get_slice(0).size : 0) : src_binary->get_offset().back();
-    dst->reserve(eval_rows, capped_string_function_initial_reserve(initial_bytes));
     auto& dst_bytes = dst->get_bytes();
     auto& dst_offsets = dst->get_offset();
+    dst_offsets.reserve(eval_rows + 1);
+    bool bytes_reserved = false;
 
     NullColumn::MutablePtr null_col = nullptr;
     RegexpReplaceTemplate tmpl;
@@ -4097,8 +4121,20 @@ static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2:
         const auto rpl_value = rpl_viewer.value(row);
         tmpl.parse(rpl_value);
         const auto str_value = str_viewer.value(row);
-        if (!regexp_replace_match_and_append<true>(&local_re, str_value.data, str_value.size, tmpl, vec,
-                                                   [&]() -> BinaryColumn::Bytes& { return dst_bytes; })) {
+        auto ensure_dst = [&](size_t first_out_row_hint) -> BinaryColumn::Bytes& {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, first_out_row_hint,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
+            return dst_bytes;
+        };
+        if (!regexp_replace_match_and_append<true>(&local_re, str_value.data, str_value.size, tmpl, vec, ensure_dst)) {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, str_value.size,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
             append_bytes(dst_bytes, str_value.data, str_value.size);
         }
         dst_offsets.push_back(dst_bytes.size());
@@ -4170,10 +4206,13 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
             const size_t row_size = static_cast<size_t>(src_offsets[row + 1]) - row_start;
             const char* const row_data = src_base + row_start;
 
-            auto ensure_dst = [&]() -> BinaryColumn::Bytes& {
+            auto ensure_dst = [&](size_t first_out_row_hint) -> BinaryColumn::Bytes& {
                 if (!any_match) {
                     dst = RunTimeColumnType<TYPE_VARCHAR>::create();
-                    dst->reserve(eval_rows, capped_string_function_initial_reserve(src_total_bytes));
+                    const size_t remaining_src_bytes = src_total_bytes - row_start;
+                    const size_t reserve_bytes = regexp_replace_initial_reserve(
+                            row_start, remaining_src_bytes, row_size, first_out_row_hint, eval_rows - row);
+                    dst->reserve(eval_rows, reserve_bytes);
                     if (row > 0) {
                         if (null_data == nullptr) {
                             dst->append(*src_binary, 0, row);
@@ -4241,9 +4280,10 @@ static StatusOr<ColumnPtr> regexp_replace_const(re2::RE2* const_re, const Column
     const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
     const size_t initial_bytes =
             all_const ? (eval_rows > 0 ? src_binary->get_slice(0).size : 0) : src_binary->get_offset().back();
-    dst->reserve(eval_rows, capped_string_function_initial_reserve(initial_bytes));
     auto& dst_bytes = dst->get_bytes();
     auto& dst_offsets = dst->get_offset();
+    dst_offsets.reserve(eval_rows + 1);
+    bool bytes_reserved = false;
 
     NullColumn::MutablePtr null_col = nullptr;
     RegexpReplaceTemplate tmpl;
@@ -4267,8 +4307,21 @@ static StatusOr<ColumnPtr> regexp_replace_const(re2::RE2* const_re, const Column
         const auto rpl_value = rpl_viewer.value(row);
         tmpl.parse(rpl_value);
         const auto str_value = str_viewer.value(row);
+        auto ensure_dst = [&](size_t first_out_row_hint) -> BinaryColumn::Bytes& {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, first_out_row_hint,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
+            return dst_bytes;
+        };
         if (!regexp_replace_match_and_append<global_mode>(const_re, str_value.data, str_value.size, tmpl, vec,
-                                                          [&]() -> BinaryColumn::Bytes& { return dst_bytes; })) {
+                                                          ensure_dst)) {
+            if (!bytes_reserved) {
+                dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, str_value.size,
+                                                                 eval_rows - row));
+                bytes_reserved = true;
+            }
             append_bytes(dst_bytes, str_value.data, str_value.size);
         }
         dst_offsets.push_back(dst_bytes.size());

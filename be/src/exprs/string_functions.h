@@ -111,7 +111,16 @@ struct RegexpReplaceTemplate {
                 continue;
             }
             ++s;
-            const int c = (s < end) ? static_cast<unsigned char>(*s) : -1;
+            if (s == end) {
+                // Trailing '\': RE2::Rewrite treats this as an invalid escape and stops.
+                // Break here so the loop increment does not advance `s` past `end`.
+                if (!has_invalid_escape) {
+                    flush_literal();
+                    has_invalid_escape = true;
+                }
+                break;
+            }
+            const auto c = static_cast<unsigned char>(*s);
             if (c >= '0' && c <= '9') {
                 const int grp = c - '0';
                 if (grp > max_submatch) {
