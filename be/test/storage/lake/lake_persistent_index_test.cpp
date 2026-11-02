@@ -220,8 +220,7 @@ protected:
 
     VariantPB make_int_variant_pb(int32_t v) {
         VariantPB var;
-        TypeDescriptor type_desc(TYPE_INT);
-        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         var.set_value(std::to_string(v));
         return var;
     }

@@ -133,14 +133,12 @@ TEST_F(FunctionHelperTest, testMergeNotNullableColumnMergeWithNullColumn) {
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnScalarNullableAndNonNullable) {
-    TypeDescriptor type_desc(TYPE_INT);
-
-    auto non_nullable = FunctionHelper::create_column(type_desc, false);
+    auto non_nullable = FunctionHelper::create_column(TYPE_INT_DESC, false);
     ASSERT_NE(non_nullable, nullptr);
     ASSERT_FALSE(non_nullable->is_nullable());
     ASSERT_TRUE(non_nullable->is_numeric());
 
-    auto nullable = FunctionHelper::create_column(type_desc, true);
+    auto nullable = FunctionHelper::create_column(TYPE_INT_DESC, true);
     ASSERT_NE(nullable, nullptr);
     ASSERT_TRUE(nullable->is_nullable());
     auto* nullable_column = down_cast<NullableColumn*>(nullable.get());

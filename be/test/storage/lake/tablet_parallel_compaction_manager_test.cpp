@@ -4699,8 +4699,7 @@ TEST_F(TabletParallelCompactionManagerLargeRowsetTest, test_dup_keys_large_rowse
 static TuplePB make_int_tuple(int32_t value) {
     TuplePB tuple;
     auto* v = tuple.add_values();
-    TypeDescriptor type_desc(TYPE_INT);
-    v->mutable_type()->CopyFrom(type_desc.to_protobuf());
+    v->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v->set_variant_type(VariantTypePB::NORMAL_VALUE);
     v->set_value(std::to_string(value));
     return tuple;
