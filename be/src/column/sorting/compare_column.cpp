@@ -394,6 +394,8 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
             }
         } else if constexpr (sizeof(T) == 8) {
             constexpr size_t kBlock = 8;
+            // vcgtq_* produces all-ones (0xFFFFFFFFFFFFFFFF) for true and 0 for false.
+            // Narrowing to int8x8_t yields 0xFF (-1 in two's complement) for true and 0 for false.
             auto narrow_mask_64_to_8 = [](uint64x2_t m0, uint64x2_t m1, uint64x2_t m2, uint64x2_t m3) -> int8x8_t {
                 uint32x4_t u01 = vuzp1q_u32(vreinterpretq_u32_u64(m0), vreinterpretq_u32_u64(m1));
                 uint32x4_t u23 = vuzp1q_u32(vreinterpretq_u32_u64(m2), vreinterpretq_u32_u64(m3));
@@ -401,8 +403,8 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                 return vreinterpret_s8_u8(vmovn_u16(u0123));
             };
 
-            const uint64x2_t rhs_u = vdupq_n_u64(static_cast<uint64_t>(rhs_data));
-            const int64x2_t rhs_s = vdupq_n_s64(static_cast<int64_t>(rhs_data));
+            [[maybe_unused]] const uint64x2_t rhs_u = vdupq_n_u64(static_cast<uint64_t>(rhs_data));
+            [[maybe_unused]] const int64x2_t rhs_s = vdupq_n_s64(static_cast<int64_t>(rhs_data));
 
             for (; i + kBlock <= size; i += kBlock) {
                 uint64_t block_mask = 0;
@@ -449,6 +451,10 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
 
                 int8x8_t gt_mask = narrow_mask_64_to_8(gt0, gt1, gt2, gt3);
                 int8x8_t lt_mask = narrow_mask_64_to_8(lt0, lt1, lt2, lt3);
+                // Since true masks are -1 (0xFF) and false masks are 0 (0x00) in int8_t:
+                //   lhs < rhs => lt_mask = -1, gt_mask =  0 => lt_mask - gt_mask = -1
+                //   lhs > rhs => lt_mask =  0, gt_mask = -1 => lt_mask - gt_mask = +1
+                //   lhs == rhs => lt_mask = 0, gt_mask =  0 => lt_mask - gt_mask =  0
                 int8x8_t cmp = (sort_order >= 0) ? vsub_s8(lt_mask, gt_mask) : vsub_s8(gt_mask, lt_mask);
                 vst1_s8(reinterpret_cast<int8_t*>(cmp_vector.data() + i), cmp);
             }

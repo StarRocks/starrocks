@@ -215,6 +215,8 @@ void compare_integral_simd<int64_t>(int8_t* cmp_vector, const int64_t* lhs, int6
     }
 #elif defined(__ARM_NEON) && defined(__aarch64__)
     constexpr size_t kBlock = 8;
+    // vcgtq_s64 produces all-ones (0xFFFFFFFFFFFFFFFF) for true and 0 for false.
+    // Narrowing to int8x8_t yields 0xFF (-1 in two's complement) for true and 0 for false.
     auto narrow_mask_64_to_8 = [](uint64x2_t m0, uint64x2_t m1, uint64x2_t m2, uint64x2_t m3) -> int8x8_t {
         uint32x4_t u01 = vuzp1q_u32(vreinterpretq_u32_u64(m0), vreinterpretq_u32_u64(m1));
         uint32x4_t u23 = vuzp1q_u32(vreinterpretq_u32_u64(m2), vreinterpretq_u32_u64(m3));
@@ -247,6 +249,7 @@ void compare_integral_simd<int64_t>(int8_t* cmp_vector, const int64_t* lhs, int6
 
         int8x8_t gt_mask = narrow_mask_64_to_8(gt0, gt1, gt2, gt3);
         int8x8_t lt_mask = narrow_mask_64_to_8(lt0, lt1, lt2, lt3);
+        // True masks are -1 (0xFF) in int8_t, so lt_mask - gt_mask yields -1 (<), +1 (>), or 0 (==).
         int8x8_t cmp = vsub_s8(lt_mask, gt_mask);
         vst1_s8(cmp_vector + i, cmp);
     }

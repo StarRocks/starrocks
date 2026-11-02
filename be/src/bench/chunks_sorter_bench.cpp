@@ -645,6 +645,7 @@ static void BM_topn_high_low_filter_short_circuit(benchmark::State& state) {
     }
 
     state.SetItemsProcessed(items_processed);
+    sort_expr->close(runtime_state);
     suite.TearDown();
 }
 
