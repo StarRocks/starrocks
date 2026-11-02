@@ -396,6 +396,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Description: Shared-data only. Number of times a publish on a Primary Key table had to load the whole Primary Key index of a tablet because the index was not in the Primary Key index cache, either because it had not been loaded since the BE started or because it had been evicted. A load opens all Primary Key index SST files of the tablet and replays the rowsets those files do not cover yet. Failed loads are also counted. If this value keeps rising while the set of tablets being loaded into does not change, indexes are being evicted and loaded again.
 
+## `lake_publish_batch_retry_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of batch publishes in shared-data clusters that retry an attempt that did not finish, that is, whose first transaction was already sent by an earlier attempt. When `lake_enable_batch_publish_retry_freeze` is `true`, such a retry contains only the transactions of the earlier attempt. Only the Leader FE increments this counter.
+
 ## `lake_segment_cache_hit_minute`
 
 - Unit: Count

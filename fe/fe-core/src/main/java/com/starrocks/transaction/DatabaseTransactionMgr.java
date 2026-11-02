@@ -101,6 +101,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -1018,6 +1019,11 @@ public class DatabaseTransactionMgr {
     private record PartitionCommitState(long version, List<Long> loadedIndexIds) {
     }
 
+    private boolean hasSentPublishTask(long txnId) {
+        TransactionState state = idToRunningTransactionState.get(txnId);
+        return state != null && state.hasSendTask();
+    }
+
     public List<TransactionStateBatch> getReadyToPublishTxnListBatch() {
         List<TransactionStateBatch> result = new ArrayList<>();
         readLock();
@@ -1025,15 +1031,22 @@ public class DatabaseTransactionMgr {
         try {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
+                // A head that was already sent belongs to a publish attempt that did not finish. Retry it with
+                // only the txns of that attempt, the only ones sent: taking in txns committed since would move
+                // every partition's new version and waste what the attempt already published. Such a retry is
+                // as big as the attempt was, even below lake_batch_publish_min_version_num.
+                TransactionState head = idToRunningTransactionState.get(txnId);
+                boolean retryLastAttempt = Config.lake_enable_batch_publish_retry_freeze
+                        && head != null && head.hasSendTask();
+                int minBatchSize = retryLastAttempt ? 1 : Config.lake_batch_publish_min_version_num;
+                LongPredicate canJoin = retryLastAttempt ? this::hasSentPublishTask : id -> true;
                 List<Long> txnsWithDependency;
                 if (Config.lake_enable_batch_publish_multi_table) {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
-                            Config.lake_batch_publish_min_version_num,
-                            Config.lake_batch_publish_max_version_num, txnId);
+                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 } else {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                            Config.lake_batch_publish_min_version_num,
-                            Config.lake_batch_publish_max_version_num, txnId);
+                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)

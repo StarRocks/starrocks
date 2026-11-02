@@ -814,6 +814,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
 - Introduced in: v4.1.5
 
+### `lake_enable_batch_publish_retry_freeze`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to retry a batch publish of a shared-data table that did not finish with only the transactions of that attempt, including a batch of one transaction, so that the retry does not take in the transactions committed since. Without it, the retry batch is rebuilt from scratch and takes in those transactions, so the new version of every partition changes and the work the earlier attempt finished at the old version cannot be reused. Set it to `false` to rebuild retry batches as before, from the next publish round. Effective only when `lake_enable_batch_publish_version` is `true`.
+- Introduced in: v26.2
+
 ### `lake_enable_tablet_creation_optimization`
 
 - Default: false
