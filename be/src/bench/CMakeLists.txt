@@ -13,6 +13,7 @@
 # limitations under the License.
 
 ADD_BE_BENCH(${SRC_DIR}/bench/analytor_lead_lag_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/analytor_first_last_value_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/agg_hash_map_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
