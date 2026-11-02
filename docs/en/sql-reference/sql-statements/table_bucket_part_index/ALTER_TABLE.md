@@ -773,6 +773,7 @@ PROPERTIES: Support setting timeout time and the default timeout time is one day
 
 - The table must be a Duplicate Key, Aggregate, or Unique Key table. Primary Key tables are not supported.
 - The table must not be a colocate table.
+- A column in the rollup's sort key cannot be dropped, and its type cannot be changed. The only allowed change is increasing the length of a VARCHAR column on its own (without repositioning it or changing another attribute) when it is applied by fast schema evolution. `ORDER BY ... FROM <rollup>` is not supported for such a rollup.
 - Multiple such rollups are supported. Each `ALTER TABLE` statement adds one rollup (add several rollups with separate statements). The rollup is always derived from the base index; `FROM <another_rollup>` is not supported. The table must not carry a synchronous materialized view.
 
 Example:

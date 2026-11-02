@@ -506,6 +506,17 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!isRoutedRangeRewrite) {
             rejectIfTouchesRangeSortKey(olapTable, baseIndexMetaId,
                     "DROP COLUMN", dropColName);
+            if (olapTable.isRangeDistribution()) {
+                // The column also leaves every other index that has it, or only the named rollup.
+                List<Long> rollupMetaIds = targetIndexName == null
+                        ? olapTable.getIndexMetaIdListExceptBaseIndex()
+                        : List.of(olapTable.getIndexMetaIdByName(targetIndexName));
+                for (long indexMetaId : rollupMetaIds) {
+                    if (isRangeKeyGuarded(olapTable, indexMetaId)) {
+                        rejectIfTouchesRangeSortKey(olapTable, indexMetaId, "DROP COLUMN", dropColName);
+                    }
+                }
+            }
         }
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             List<Column> baseSchema = indexMetaIdToSchema.get(baseIndexMetaId);
@@ -1191,7 +1202,15 @@ public class SchemaChangeHandler extends AlterHandler {
             // shadow index, so the stored boundary values do not need to stay valid -- skip the
             // sort-key touch reject for it.
             if (!fastPathVarcharWiden && !isRoutedRangeRewrite) {
-                rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn, "MODIFY COLUMN", newColName);
+                if (isRangeKeyGuarded(olapTable, indexMetaIdForFindingColumn)) {
+                    rejectIfTouchesRangeSortKey(olapTable, indexMetaIdForFindingColumn, "MODIFY COLUMN", newColName);
+                }
+                // The change also reaches every other index that has the column.
+                for (long otherIndexMetaId : otherIndexMetaIds) {
+                    if (isRangeKeyGuarded(olapTable, otherIndexMetaId)) {
+                        rejectIfTouchesRangeSortKey(olapTable, otherIndexMetaId, "MODIFY COLUMN", newColName);
+                    }
+                }
             }
         }
 
@@ -1335,6 +1354,24 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         if (newSchema.size() != targetIndexSchema.size()) {
             throw new DdlException("Reorder stmt should contains all columns");
+        }
+        // A range rollup's tablet ranges are cut on its own sort key, or on its key columns when it has none.
+        // Keeping its own sort key would ignore the requested order, and changing either needs the rollup's
+        // tablets to be rebuilt.
+        if (olapTable.isRangeDistribution() && targetIndexMetaId != olapTable.getBaseIndexMetaId()) {
+            MaterializedIndexMeta targetIndexMeta = olapTable.getIndexMetaByMetaId(targetIndexMetaId);
+            if (hasOwnSortKey(targetIndexMeta)) {
+                throw new DdlException("Reordering the columns of a rollup that has its own sort key is not "
+                        + "supported on tables with range distribution. Index: " + targetIndexName);
+            }
+            List<String> newKeyColumns = newSchema.stream().filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            List<String> curKeyColumns = targetIndexSchema.stream().filter(Column::isKey).map(Column::getName)
+                    .collect(Collectors.toList());
+            if (targetIndexMeta.getSortKeyIdxes() == null && !newKeyColumns.equals(curKeyColumns)) {
+                throw new DdlException("Reordering the key columns of a rollup is not supported on tables with "
+                        + "range distribution, because they are the rollup's sort key. Index: " + targetIndexName);
+            }
         }
         // A full-column ORDER BY on a cloud-native range-distribution table whose sort key is key-derived
         // (no explicit ORDER BY at creation, so getSortKeyIdxes() == null) reorders the schema and thus the
@@ -2186,7 +2223,11 @@ public class SchemaChangeHandler extends AlterHandler {
         // to determine which columns are sort key columns
         boolean useSortKeyUniqueId = (index.getSortKeyUniqueIds() != null) &&
                 (!index.getSortKeyUniqueIds().isEmpty());
-        if (index.getSortKeyIdxes() != null && olapTable.getBaseIndexMetaId() == alterIndexMetaId) {
+        boolean isBaseIndex = olapTable.getBaseIndexMetaId() == alterIndexMetaId;
+        // A range rollup's tablet ranges are cut on its own sort key and a schema change keeps them, so the
+        // rollup keeps that sort key, and the short key taken from it, the same way the base index does.
+        if (index.getSortKeyIdxes() != null
+                && (isBaseIndex || (olapTable.isRangeDistribution() && hasOwnSortKey(index)))) {
             List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
             for (Integer colIdx : originSortKeyIdxes) {
                 String columnName = originSchema.get(colIdx).getName();
@@ -2225,8 +2266,12 @@ public class SchemaChangeHandler extends AlterHandler {
                                                           incrVarcharLenColNames);
             dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
                     newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
-            dataBuilder.withSortKeyIdxes(sortKeyIdxes);
-            dataBuilder.withSortKeyUniqueIds(sortKeyUniqueIds);
+            if (isBaseIndex) {
+                dataBuilder.withSortKeyIdxes(sortKeyIdxes);
+                dataBuilder.withSortKeyUniqueIds(sortKeyUniqueIds);
+            } else {
+                dataBuilder.withIndexSortKey(alterIndexMetaId, sortKeyIdxes, sortKeyUniqueIds);
+            }
         } else {
             short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema, indexProperties);
             LOG.debug("alter index[{}] short key column count: {}", alterIndexMetaId, newShortKeyCount);
@@ -2244,6 +2289,37 @@ public class SchemaChangeHandler extends AlterHandler {
             dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
                     newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
         }
+    }
+
+    // Fast schema evolution v1 used to hand a rollup the base index's sort-key positions, which are not its own.
+    private static boolean hasOwnSortKey(MaterializedIndexMeta index) {
+        List<Integer> sortKeyIdxes = index.getSortKeyIdxes();
+        List<Column> schema = index.getSchema();
+        if (sortKeyIdxes == null || sortKeyIdxes.size() < index.getShortKeyColumnCount()
+                || sortKeyIdxes.stream().anyMatch(idx -> idx < 0 || idx >= schema.size())) {
+            return false;
+        }
+        List<Integer> sortKeyUniqueIds = index.getSortKeyUniqueIds();
+        if (sortKeyUniqueIds == null || sortKeyUniqueIds.isEmpty()) {
+            return true;
+        }
+        if (sortKeyUniqueIds.size() != sortKeyIdxes.size()) {
+            return false;
+        }
+        for (int i = 0; i < sortKeyIdxes.size(); i++) {
+            if (schema.get(sortKeyIdxes.get(i)).getUniqueId() != sortKeyUniqueIds.get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // The range sort-key guards check a non-base index by its range key: its own sort key, or its key columns
+    // when it has no sort key. A sort key that is not its own is skipped, as before these guards.
+    private static boolean isRangeKeyGuarded(OlapTable olapTable, long indexMetaId) {
+        MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(indexMetaId);
+        return indexMetaId == olapTable.getBaseIndexMetaId() || index.getSortKeyIdxes() == null
+                || hasOwnSortKey(index);
     }
 
     /**
@@ -4981,6 +5057,15 @@ public class SchemaChangeHandler extends AlterHandler {
             long indexMetaId = entry.getKey();
             String indexName = schemaChangeData.getTable().getIndexNameByMetaId(indexMetaId);
             int schemaVersion = 1 + schemaChangeData.getTable().getIndexMetaByMetaId(indexMetaId).getSchemaVersion();
+            List<Integer> sortKeyIdxes = schemaChangeData.getSortKeyIdxes();
+            List<Integer> sortKeyUniqueIds = schemaChangeData.getSortKeyUniqueIds();
+            if (schemaChangeData.getTable().isRangeDistribution()
+                    && indexMetaId != schemaChangeData.getTable().getBaseIndexMetaId()) {
+                // The base index's sort-key positions mean nothing in a rollup schema, so a range rollup takes
+                // its own sort key or none.
+                sortKeyIdxes = schemaChangeData.getIndexSortKeyIdxes().get(indexMetaId);
+                sortKeyUniqueIds = schemaChangeData.getIndexSortKeyUniqueIds().get(indexMetaId);
+            }
             SchemaInfo schemaInfo = SchemaInfo.newBuilder()
                     .setId(globalStateMgr.getNextId())
                     .setKeysType(schemaChangeData.getTable().getKeysType())
@@ -4992,8 +5077,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     .setBloomFilterFpp(schemaChangeData.getBloomFilterFpp())
                     .setZstdCompressionColumns(schemaChangeData.getZstdCompressionColumns(),
                             schemaChangeData.getZstdCompressionPageSizes())
-                    .setSortKeyIndexes(schemaChangeData.getSortKeyIdxes())
-                    .setSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
+                    .setSortKeyIndexes(sortKeyIdxes)
+                    .setSortKeyUniqueIds(sortKeyUniqueIds)
                     .setIndexes(schemaChangeData.getIndexes())
                     .setCompressionType(schemaChangeData.getTable().getCompressionType())
                     .setCompressionLevel(schemaChangeData.getTable().getCompressionLevel())
@@ -5096,6 +5181,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withNewIndexMetaIdToShortKeyCount(schemaChangeData.getNewIndexMetaIdToShortKeyCount())
                 .withSortKeyIdxes(schemaChangeData.getSortKeyIdxes())
                 .withSortKeyUniqueIds(schemaChangeData.getSortKeyUniqueIds())
+                .withIndexSortKeys(schemaChangeData.getIndexSortKeyIdxes(), schemaChangeData.getIndexSortKeyUniqueIds())
                 .withNewIndexMetaIdToSchema(schemaChangeData.getNewIndexMetaIdToSchema())
                 .withComputeResource(schemaChangeData.getComputeResource())
                 .withDisableReplicatedStorageForGIN(schemaChangeData.isDisableReplicatedStorageForGIN())
@@ -5791,11 +5877,13 @@ public class SchemaChangeHandler extends AlterHandler {
         boolean isInRangeSortKey = rangeSortKeyColumns.stream()
                 .anyMatch(column -> column.getName().equalsIgnoreCase(columnName));
         if (isInRangeSortKey) {
+            String index = indexMetaId == olapTable.getBaseIndexMetaId() ? ""
+                    : " Index: " + olapTable.getIndexNameByMetaId(indexMetaId);
             throw new DdlException(operation +
                 " on a sort-key column is not supported on tables with " +
                 "range distribution, because it would change the column set " +
                 "or type/semantics that the existing range tablet boundary " +
-                "values were recorded under. Column: " + columnName);
+                "values were recorded under. Column: " + columnName + index);
         }
     }
 
