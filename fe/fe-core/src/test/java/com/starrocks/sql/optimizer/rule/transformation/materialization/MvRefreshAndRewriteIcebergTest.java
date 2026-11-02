@@ -2222,4 +2222,37 @@ public class MvRefreshAndRewriteIcebergTest extends MVTestBase {
                         "     partitions=1/1");
         starRocksAssert.dropMaterializedView(mvName);
     }
+
+    @Test
+    public void testTwoFreshMvsDoNotDoubleCountSameIcebergPartition() throws Exception {
+        String replicaMv = "mv_iceberg_replica_count";
+        String aggregateMv = "mv_iceberg_aggregate_count";
+        String query = "select count(*) from iceberg0.partitioned_db.part_tbl1 where d = '2023-08-01'";
+        boolean originalMultiStage = connectContext.getSessionVariable().isEnableMaterializedViewMultiStagesRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
+        try {
+            starRocksAssert.withMaterializedView("create materialized view " + replicaMv + " " +
+                    "partition by str2date(d, '%Y-%m-%d') distributed by hash(a) " +
+                    "refresh deferred manual properties ('replication_num' = '1') " +
+                    "as select a, b, c, d from iceberg0.partitioned_db.part_tbl1");
+            refreshMaterializedViewWithPartition("test", replicaMv, "2023-08-01", "2023-08-02");
+            String replicaPlan = getFragmentPlan(query);
+            PlanTestBase.assertContains(replicaPlan, "TABLE: " + replicaMv);
+
+            starRocksAssert.withMaterializedView("create materialized view " + aggregateMv + " " +
+                    "partition by str2date(d, '%Y-%m-%d') distributed by hash(a) " +
+                    "refresh deferred manual properties ('replication_num' = '1') " +
+                    "as select d, a, count(*) as events from iceberg0.partitioned_db.part_tbl1 group by d, a");
+            refreshMaterializedViewWithPartition("test", aggregateMv, "2023-08-01", "2023-08-02");
+            String bothPlan = getFragmentPlan(query);
+            int replicaScans = bothPlan.split("TABLE: " + replicaMv, -1).length - 1;
+            int aggregateScans = bothPlan.split("TABLE: " + aggregateMv, -1).length - 1;
+            Assertions.assertEquals(1, replicaScans + aggregateScans, bothPlan);
+            PlanTestBase.assertNotContains(bothPlan, "UNION", "IcebergScanNode");
+        } finally {
+            starRocksAssert.dropMaterializedView(aggregateMv);
+            starRocksAssert.dropMaterializedView(replicaMv);
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(originalMultiStage);
+        }
+    }
 }
