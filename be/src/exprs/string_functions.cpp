@@ -4061,9 +4061,6 @@ template <bool global_mode, typename EnsureDstFn>
 static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, const char* data, size_t size,
                                                           const RegexpReplaceTemplate& tmpl, re2::StringPiece* vec,
                                                           EnsureDstFn&& ensure_dst) {
-    if (UNLIKELY(data == nullptr)) {
-        data = "";
-    }
     const re2::StringPiece str_sp(data, size);
     if constexpr (!global_mode) {
         if (UNLIKELY(tmpl.has_invalid_escape || tmpl.exceeds_groups(*re))) {
@@ -4101,13 +4098,6 @@ static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, co
             if (!re->Match(str_sp, static_cast<size_t>(p - data), size, re2::RE2::UNANCHORED, vec, tmpl.nsubmatch)) {
                 break;
             }
-            if (count == 0) {
-                const size_t first_out_row_hint = (size - vec[0].size()) + tmpl.rendered_size(vec);
-                dst_bytes_ptr = &ensure_dst(first_out_row_hint);
-            }
-            if (p < vec[0].data()) {
-                append_bytes(*dst_bytes_ptr, p, static_cast<size_t>(vec[0].data() - p));
-            }
             if (vec[0].data() == lastend && vec[0].empty()) {
                 const size_t step = re2_utf8_empty_match_step(re, p, ep);
                 if (step > 0) {
@@ -4117,6 +4107,13 @@ static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, co
                     break;
                 }
                 continue;
+            }
+            if (count == 0) {
+                const size_t first_out_row_hint = (size - vec[0].size()) + tmpl.rendered_size(vec);
+                dst_bytes_ptr = &ensure_dst(first_out_row_hint);
+            }
+            if (p < vec[0].data()) {
+                append_bytes(*dst_bytes_ptr, p, static_cast<size_t>(vec[0].data() - p));
             }
             append_rewrite_template(*dst_bytes_ptr, tmpl, vec);
             p = vec[0].data() + vec[0].size();
@@ -4135,12 +4132,13 @@ static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, co
 
 static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2::RE2::Options* options,
                                                   const Columns& columns) {
-    DCHECK(!ColumnHelper::is_all_const(columns));
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    const size_t eval_rows = columns[0]->size();
+    const size_t num_rows = columns[0]->size();
+    const bool all_const = ColumnHelper::is_all_const(columns);
+    const size_t eval_rows = all_const ? 1 : num_rows;
 
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
@@ -4209,7 +4207,11 @@ static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2:
     THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
 
     if (null_col != nullptr) {
-        return NullableColumn::create(std::move(dst), std::move(null_col));
+        ColumnPtr res = NullableColumn::create(std::move(dst), std::move(null_col));
+        return all_const ? ConstColumn::create(std::move(res), num_rows) : res;
+    }
+    if (all_const) {
+        return ConstColumn::create(std::move(dst), num_rows);
     }
     return dst;
 }
@@ -4323,11 +4325,12 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
 
 template <bool global_mode>
 static StatusOr<ColumnPtr> regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
-    DCHECK(!ColumnHelper::is_all_const(columns));
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    const size_t eval_rows = columns[0]->size();
+    const size_t num_rows = columns[0]->size();
+    const bool all_const = ColumnHelper::is_all_const(columns);
+    const size_t eval_rows = all_const ? 1 : num_rows;
 
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
@@ -4385,6 +4388,9 @@ static StatusOr<ColumnPtr> regexp_replace_const(re2::RE2* const_re, const Column
 
     if (null_col != nullptr) {
         return NullableColumn::create(std::move(dst), std::move(null_col));
+    }
+    if (all_const) {
+        return ConstColumn::create(std::move(dst), num_rows);
     }
     return dst;
 }

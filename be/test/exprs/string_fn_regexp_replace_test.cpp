@@ -255,13 +255,13 @@ StatusOr<ColumnPtr> eval_regexp_replace(const Columns& columns) {
     return StringFunctions::regexp_replace(context, columns);
 }
 
-std::string re2_reference_replace(const std::string& input, const re2::RE2& re, const std::string& rpl,
-                                  bool global_mode) {
+std::string re2_reference_replace(const Slice& input, const re2::RE2& re, const std::string& rpl, bool global_mode) {
     re2::StringPiece rpl_sp(rpl.data(), rpl.size());
-    std::string out(input.data(), input.size());
+    std::string out;
     if (global_mode) {
-        re2::RE2::GlobalReplace(&out, re, rpl_sp);
+        re2::RE2::GlobalReplace(re2::StringPiece(input.data, input.size), re, rpl_sp, out);
     } else {
+        out.assign(input.data, input.size);
         re2::RE2::Replace(&out, re, rpl_sp);
     }
     return out;
@@ -532,8 +532,9 @@ TEST_F(StringFunctionRegexpReplaceTest, testDifferentialOracleAgainstRE2) {
                 ASSERT_TRUE(res.ok()) << res.status();
                 ASSERT_TRUE(res.value()->is_constant());
                 ASSERT_EQ(res.value()->size(), kConstSize);
+                ColumnViewer<TYPE_VARCHAR> in_viewer(str_col);
                 ColumnViewer<TYPE_VARCHAR> viewer(res.value());
-                std::string expected = re2_reference_replace(s, ref_re, rpl, const_global_mode);
+                std::string expected = re2_reference_replace(in_viewer.value(0), ref_re, rpl, const_global_mode);
                 Slice actual = viewer.value(0);
                 ASSERT_EQ(std::string(actual.data, actual.size), expected);
             }
@@ -652,7 +653,8 @@ TEST_F(StringFunctionRegexpReplaceTest, testShrinkingReplacementDoesNotOverReser
 
 TEST_F(StringFunctionRegexpReplaceTest, testVariablePatternAndReplacementEdgeCases) {
     // 1. regexp_replace_general: non-constant pattern with invalid regex on row 0,
-    //    null str on row 1, valid matching regex on row 2, valid non-matching regex on row 3.
+    //    null str on row 1, valid matching regex on row 2, valid non-matching regex on row 3,
+    //    plus constant str column with variable pattern.
     {
         auto str_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         str_col->append_datum(Datum(Slice("abc123")));
@@ -688,6 +690,15 @@ TEST_F(StringFunctionRegexpReplaceTest, testVariablePatternAndReplacementEdgeCas
         ASSERT_EQ(viewer.value(2), Slice("abcX"));
         ASSERT_FALSE(viewer.is_null(3));
         ASSERT_EQ(viewer.value(3), Slice("abc123"));
+
+        // Constant str column with variable pattern
+        ColumnPtr const_str = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc123", 4);
+        auto res_const_str = eval_regexp_replace({const_str, ptn_col, rpl_col});
+        ASSERT_TRUE(res_const_str.ok()) << res_const_str.status();
+        ColumnViewer<TYPE_VARCHAR> viewer_const_str(res_const_str.value());
+        ASSERT_TRUE(viewer_const_str.is_null(0));
+        ASSERT_FALSE(viewer_const_str.is_null(1));
+        ASSERT_EQ(viewer_const_str.value(1), Slice("abcX"));
     }
 
     // 2. regexp_replace_const (global_mode = true and false): constant pattern,
@@ -725,6 +736,64 @@ TEST_F(StringFunctionRegexpReplaceTest, testVariablePatternAndReplacementEdgeCas
         ASSERT_TRUE(viewer_const_str.is_null(0));
         ASSERT_FALSE(viewer_const_str.is_null(1));
         ASSERT_EQ(viewer_const_str.value(1), Slice(std::string(ptn) == "[0-9]+" ? "abcR1" : "R1"));
+        ASSERT_FALSE(viewer_const_str.is_null(2));
+        ASSERT_EQ(viewer_const_str.value(2), Slice(std::string(ptn) == "[0-9]+" ? "abcR2" : "R2"));
+        ASSERT_FALSE(viewer_const_str.is_null(3));
+        ASSERT_EQ(viewer_const_str.value(3), Slice(std::string(ptn) == "[0-9]+" ? "abcR3" : "R3"));
+    }
+
+    // 3. Runtime-constant chunks (e.g. IF(id > 0, 'x', 'y') where prepare-time expression is non-constant
+    //    but evaluate_checked returns a ConstColumn for a specific chunk) in regexp_replace_general
+    //    and regexp_replace_const.
+    {
+        ColumnPtr const_str = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc123", 4);
+        ColumnPtr const_ptn_valid = ColumnHelper::create_const_column<TYPE_VARCHAR>("([0-9]+)", 4);
+        ColumnPtr const_ptn_invalid = ColumnHelper::create_const_column<TYPE_VARCHAR>("[", 4);
+        ColumnPtr const_rpl = ColumnHelper::create_const_column<TYPE_VARCHAR>("<\\1>", 4);
+
+        // 3a. regexp_replace_general with runtime-constant columns (valid + invalid pattern)
+        {
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            ctx->set_constant_columns({const_str, nullptr, nullptr});
+            ASSERT_TRUE(StringFunctions::regexp_replace_prepare(ctx.get(),
+                                                                FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                .ok());
+            DeferOp close_op([&] {
+                (void)StringFunctions::regexp_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+            });
+
+            auto res_valid = StringFunctions::regexp_replace(ctx.get(), {const_str, const_ptn_valid, const_rpl});
+            ASSERT_TRUE(res_valid.ok()) << res_valid.status();
+            ASSERT_TRUE(res_valid.value()->is_constant());
+            ASSERT_EQ(res_valid.value()->size(), 4);
+            ASSERT_EQ(ColumnViewer<TYPE_VARCHAR>(res_valid.value()).value(0), Slice("abc<123>"));
+
+            auto res_invalid = StringFunctions::regexp_replace(ctx.get(), {const_str, const_ptn_invalid, const_rpl});
+            ASSERT_TRUE(res_invalid.ok()) << res_invalid.status();
+            ASSERT_TRUE(res_invalid.value()->is_constant());
+            ASSERT_EQ(res_invalid.value()->size(), 4);
+            ASSERT_TRUE(res_invalid.value()->is_null(0));
+        }
+
+        // 3b. regexp_replace_const with runtime-constant replacement (global_mode = true and false)
+        for (const char* ptn : {"([0-9]+)", "^[a-z]+([0-9]+)$"}) {
+            ColumnPtr const_ptn = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(ptn), 4);
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            ctx->set_constant_columns({const_str, const_ptn, nullptr});
+            ASSERT_TRUE(StringFunctions::regexp_replace_prepare(ctx.get(),
+                                                                FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                                .ok());
+            DeferOp close_op([&] {
+                (void)StringFunctions::regexp_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+            });
+
+            auto res = StringFunctions::regexp_replace(ctx.get(), {const_str, const_ptn, const_rpl});
+            ASSERT_TRUE(res.ok()) << res.status();
+            ASSERT_TRUE(res.value()->is_constant());
+            ASSERT_EQ(res.value()->size(), 4);
+            ASSERT_EQ(ColumnViewer<TYPE_VARCHAR>(res.value()).value(0),
+                      Slice(std::string(ptn) == "([0-9]+)" ? "abc<123>" : "<123>"));
+        }
     }
 }
 
