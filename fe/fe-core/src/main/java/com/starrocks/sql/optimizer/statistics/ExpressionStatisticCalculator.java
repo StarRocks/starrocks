@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -325,20 +326,10 @@ public class ExpressionStatisticCalculator {
             long nonNullTrueRows = Math.min(inputRows, Math.round(predicateStatistics.getOutputRowCount()));
             long trueRows = Math.min(Math.max(0L, nonNullTrueRows), nonNullRows);
             long falseRows = nonNullRows - trueRows;
-            Map<String, Long> mcvs = new HashMap<>();
-            if (trueRows > 0) {
-                ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR)
-                        .ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
-            }
-            if (falseRows > 0) {
-                ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR)
-                        .ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
-            }
-
+            final var mcvs = makeBooleanMCVs(trueRows, falseRows);
             if (!mcvs.isEmpty()) {
                 builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
             }
-
             return builder.build();
         }
 
@@ -414,6 +405,142 @@ public class ExpressionStatisticCalculator {
                     .build();
         }
 
+        private ScalarOperator getChildForCastOperator(ScalarOperator operator) {
+            if (operator instanceof CastOperator) {
+                operator = getChildForCastOperator(operator.getChild(0));
+            }
+            return operator;
+        }
+
+        private Map<String, Long> makeBooleanMCVs(long trueRows, long falseRows) {
+            Map<String, Long> mcvs = new HashMap<>();
+            if (trueRows > 0) {
+                mcvs.put(booleanToMcvValue(true), trueRows);
+            }
+            if (falseRows > 0) {
+                mcvs.put(booleanToMcvValue(false), falseRows);
+            }
+            return mcvs;
+        }
+
+        @Override
+        public ColumnStatistic visitInPredicate(InPredicateOperator operator, Void context) {
+            final var inputColumnStatistics = operator.getChild(0).accept(this, context);
+            final var matchList = operator
+                    .getChildren()
+                    .stream()
+                    .skip(1)
+                    .map(this::getChildForCastOperator)
+                    .distinct()
+                    .toList();
+            final var constantOperatorMatchList = matchList.stream()
+                    .filter(ConstantOperator.class::isInstance)
+                    .map(ConstantOperator.class::cast)
+                    .toList();
+            final boolean allValuesAreConstants = matchList.size() == constantOperatorMatchList.size();
+
+            if (!allValuesAreConstants) {
+                // Subqueries and column references are not supported for statistics propagation with InPredicate yet and return the current statistic
+                return super.visitInPredicate(operator, context);
+            }
+
+            final var resultBuilder = ColumnStatistic.builder()
+                    .setMinValue(0)
+                    .setMaxValue(1)
+                    .setDistinctValuesCount(2)
+                    .setAverageRowSize(operator.getType().getTypeSize());
+
+            final boolean matchListContainsNull = constantOperatorMatchList.stream().anyMatch(ConstantOperator::isNull);
+            if (matchListContainsNull) {
+                if (operator.isNotIn()) {
+                    // The matchlist contains NULL, and the operator is negated, therefore the possible values are FALSE, NULL.
+                    resultBuilder.setMaxValue(0);
+                } else {
+                    // The matchlist contains NULL, and the operator is not negated, therefore the possible values are TRUE, NULL.
+                    resultBuilder.setMinValue(1);
+                }
+                resultBuilder.setDistinctValuesCount(1);
+                if (constantOperatorMatchList.size() == 1) {
+                    // If only NULL is in the matchlist, we know that all values are NULL. No further propagation of the histogram is needed.
+                    resultBuilder.setNullsFraction(1);
+                    return resultBuilder.build();
+                }
+            }
+
+            if (inputColumnStatistics.isUnknown()) {
+                return resultBuilder.build();
+            }
+
+            final var inputNullsFraction = inputColumnStatistics.getNullsFraction();
+            if (!matchListContainsNull) {
+                resultBuilder.setNullsFraction(inputNullsFraction);
+            }
+            if (inputColumnStatistics.getHistogram() == null) {
+                return resultBuilder.build();
+            }
+
+            final var matchListMcvKeys = constantOperatorMatchList.stream()
+                         // NULL is handled separately and is not an MCV match.
+                         .filter(constant -> !constant.isNull())
+                         // Convert to the representation used by MCV keys.
+                         .map(constant -> constant.castTo(VarcharType.VARCHAR))
+                         .flatMap(Optional::stream)
+                         .map(ConstantOperator::toString)
+                         .collect(Collectors.toSet());
+            final var inputMcvs = inputColumnStatistics.getHistogram().getMCV();
+            final var partitionedMCVs = inputMcvs
+                        .entrySet()
+                        .stream()
+                        .collect(Collectors.partitioningBy(val -> matchListMcvKeys.contains(val.getKey())));
+            final var foundMatchListRows =  partitionedMCVs.get(true).stream()
+                        .map(val -> val.getValue())
+                        .collect(Collectors.toList());
+            final long foundMCVRowsSum = foundMatchListRows.stream().mapToLong(Long::longValue).sum();
+            final long foundFalseMcvRows = partitionedMCVs.get(false).stream()
+                        .map(val -> val.getValue())
+                        .mapToLong(Long::longValue)
+                        .sum();
+            final double histogramTotalRows = Math.max(1.0, (double) inputColumnStatistics.getHistogram().getTotalRows());
+
+            final double knownNonMatchingFraction = Math.clamp((double) foundFalseMcvRows / histogramTotalRows, 0.0, 1.0);
+            final double foundMcvRowsFraction = Math.clamp((double) foundMCVRowsSum / histogramTotalRows, 0.0, 1.0);
+            // histogramTotalRows >=1 so we don't run into divByZero; foundMCVRowsSum <= histogramTotalRows,
+            // so 0<= nonMatchingFraction <=1
+            double nonMatchingFraction = Math.clamp(1.0 - foundMcvRowsFraction, 0.0, 1.0);
+            final double clampedNumDistinctValues = 
+                    !Double.isNaN(inputColumnStatistics.getDistinctValuesCount())
+                    ? Math.max(1, inputColumnStatistics.getDistinctValuesCount() 
+                        - inputColumnStatistics.getHistogram().getMCV().size())
+                    : inputColumnStatistics.getHistogram().getMCV().size();
+            final double uniformDistributionFractionPerNonMatching = Math.clamp((nonMatchingFraction - knownNonMatchingFraction) 
+                    / clampedNumDistinctValues, 0.0, 1.0);
+            final long notFoundMatchListValues = matchListMcvKeys.size() - foundMatchListRows.size();
+
+            final double notFoundMatchListRowFractionEstimation = Math.clamp(uniformDistributionFractionPerNonMatching * 
+                    notFoundMatchListValues, 0.0, 1.0);
+            nonMatchingFraction = Math.clamp(nonMatchingFraction - notFoundMatchListRowFractionEstimation, 0.0, 1.0);
+            final long estimatedMatchedValues =
+                    Math.round((notFoundMatchListRowFractionEstimation + foundMcvRowsFraction) * rowCount);
+            if (matchListContainsNull) {
+                // Anything that does not match becomes NULL
+                final double nullsFraction = (1 - inputNullsFraction) * nonMatchingFraction + inputNullsFraction;
+                final double clampedNullsFraction = Math.clamp(nullsFraction, 0.0, 1.0);
+                resultBuilder.setNullsFraction(clampedNullsFraction);
+                nonMatchingFraction = 0;
+            }
+
+            final long remainingValues = (long) (nonMatchingFraction * rowCount);
+            final var mcvs = operator.isNotIn() 
+                    ? makeBooleanMCVs(remainingValues, estimatedMatchedValues) 
+                    : makeBooleanMCVs(estimatedMatchedValues, remainingValues);
+
+            if (!mcvs.isEmpty()) {
+                resultBuilder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return resultBuilder.build();
+        }
+
         @Override
         public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
             final var inputStat = operator.getChild(0).accept(this, context);
@@ -428,12 +555,7 @@ public class ExpressionStatisticCalculator {
                 long trueRows = operator.isNotNull() ? nonNullRows : nullRows;
                 long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
                 // Add MCV for each branch
-                if (trueRows > 0) {
-                    mcvs.put(booleanToMcvValue(true), trueRows);
-                }
-                if (falseRows > 0) {
-                    mcvs.put(booleanToMcvValue(false), falseRows);
-                }
+                mcvs = makeBooleanMCVs(trueRows, falseRows);
             }
 
             final var builder = ColumnStatistic.builder() //
