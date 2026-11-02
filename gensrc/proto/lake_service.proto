@@ -376,6 +376,13 @@ message UploadSnapshotFilesResponsePB {
     repeated int64 failed_tablets = 2;
 }
 
+// Asks whether a node is still reachable while its upload_snapshot_files call is outstanding.
+message PingSnapshotNodeRequestPB {
+}
+
+message PingSnapshotNodeResponsePB {
+}
+
 message AbortCompactionRequest {
     optional int64 txn_id = 1;
 }
@@ -567,4 +574,5 @@ service LakeService {
     rpc repair_tablet_metadata(RepairTabletMetadataRequest) returns (RepairTabletMetadataResponse);
     // Placeholder for external cluster snapshot feature.
     rpc upload_snapshot_files(UploadSnapshotFilesRequestPB) returns (UploadSnapshotFilesResponsePB);
+    rpc ping_snapshot_node(PingSnapshotNodeRequestPB) returns (PingSnapshotNodeResponsePB);
 }
