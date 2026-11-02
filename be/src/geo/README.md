@@ -14,7 +14,10 @@ Whether a row's WKB can be decoded safely and unambiguously:
 - the type code is a supported ISO type code;
 - counts and lengths fit the buffer, with no trailing bytes;
 - polygon rings are closed and have at least 4 positions;
-- coordinates are finite (not NaN / Inf);
+- coordinates are finite (not NaN / Inf), with one exception: a POINT whose X and Y are both NaN is the WKB
+  encoding of `POINT EMPTY`. `WkbCodec::parse_wkb` accepts it and `WkbCodec::to_wkb` writes it. A POINT with only
+  one NaN ordinate, or a NaN in any other geometry, is invalid. A fast path that cannot handle `POINT EMPTY` must
+  fall back to the full parser instead of rejecting it (as `decode_canonical_xy_point` does);
 - GEOGRAPHY longitudes and latitudes are within CRS84 ranges.
 
 **The dimension is part of the structure.** The thousands digit of the type code (for example 1001 = POINT Z) decides
