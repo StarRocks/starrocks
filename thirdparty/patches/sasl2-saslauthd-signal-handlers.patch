@@ -1,0 +1,53 @@
+diff --git a/saslauthd/saslauthd-main.c b/saslauthd/saslauthd-main.c
+index ca5b725..2aca328 100644
+--- a/saslauthd/saslauthd-main.c
++++ b/saslauthd/saslauthd-main.c
+@@ -346,7 +346,7 @@ int main(int argc, char **argv) {
+ 	/*********************************************************
+ 	 * Enable general cleanup.
+ 	 **********************************************************/
+-	atexit(server_exit);
++	atexit(server_exit_atexit);
+ 
+ 	/*********************************************************
+ 	 * If required, enable the process model.
+@@ -876,7 +876,7 @@ pid_t have_baby() {
+ /*************************************************************
+  * Reap in all the dead children
+  **************************************************************/
+-void handle_sigchld() {
++void handle_sigchld(int sig) {
+ 	pid_t pid;
+ 
+ 	while ((pid = waitpid(-1, 0, WNOHANG)) > 0) {
+@@ -892,7 +892,13 @@ void handle_sigchld() {
+ /*************************************************************
+  * Do some final cleanup here.
+  **************************************************************/
+-void server_exit() {
++/* atexit wrapper: atexit requires void(*)(void); calling server_exit through
++ * an incompatible cast would be undefined behavior (C11 6.3.2.3p8). */
++void server_exit_atexit(void) {
++	server_exit(0);
++}
++
++void server_exit(int sig) {
+ 
+ 	/*********************************************************
+ 	 * If we're not the master process, don't do anything
+diff --git a/saslauthd/saslauthd-main.h b/saslauthd/saslauthd-main.h
+index 754626c..0582b35 100644
+--- a/saslauthd/saslauthd-main.h
++++ b/saslauthd/saslauthd-main.h
+@@ -96,8 +96,9 @@ extern void	set_mech_option(const char *);
+ extern void	set_run_path(const char *);
+ extern void	signal_setup();
+ extern void	detach_tty();
+-extern void	handle_sigchld();
+-extern void	server_exit();
++extern void	handle_sigchld(int);
++extern void	server_exit(int);
++extern void	server_exit_atexit(void);
+ extern pid_t	have_baby();
+ 
+ /* ipc api delcarations */
