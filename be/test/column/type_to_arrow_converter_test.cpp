@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "gen_cpp/InternalService_types.h"
 #include "testutil/type_test_helper.h"
 
 namespace starrocks {
@@ -62,10 +63,10 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
 TEST(TypeToArrowConverterTest, MapsFlightSqlSpecialTypes) {
     std::shared_ptr<arrow::DataType> type;
 
-    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TypeDescriptor(TYPE_DATE), &type));
+    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TYPE_DATE_DESC, &type, TArrowFlightSQLVersion::V1));
     EXPECT_EQ(arrow::Type::DATE32, type->id());
 
-    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TypeDescriptor(TYPE_DATETIME), &type));
+    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TYPE_DATETIME_DESC, &type, TArrowFlightSQLVersion::V1));
     ASSERT_EQ(arrow::Type::TIMESTAMP, type->id());
     auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(type);
     EXPECT_EQ(arrow::TimeUnit::MICRO, timestamp_type->unit());
@@ -76,6 +77,32 @@ TEST(TypeToArrowConverterTest, MapsFlightSqlSpecialTypes) {
     EXPECT_EQ("hll_col", field->name());
     EXPECT_TRUE(field->nullable());
     EXPECT_EQ(arrow::Type::BINARY, field->type()->id());
+}
+
+TEST(TypeToArrowConverterTest, MapsFlightSqlDatetimeWithoutTimeZoneSinceV2) {
+    auto expect_naive_timestamp = [](const std::shared_ptr<arrow::DataType>& type) {
+        ASSERT_EQ(arrow::Type::TIMESTAMP, type->id());
+        auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(type);
+        EXPECT_EQ(arrow::TimeUnit::MICRO, timestamp_type->unit());
+        EXPECT_EQ("", timestamp_type->timezone());
+    };
+    std::shared_ptr<arrow::Field> field;
+
+    ASSERT_OK(
+            convert_to_arrow_field_for_flight_sql(TYPE_DATETIME_DESC, "dt", true, &field, TArrowFlightSQLVersion::V2));
+    expect_naive_timestamp(field->type());
+
+    ASSERT_OK(convert_to_arrow_field_for_flight_sql(TYPE_ARRAY_DATETIME_DESC, "arr", true, &field,
+                                                    TArrowFlightSQLVersion::V2));
+    expect_naive_timestamp(std::static_pointer_cast<arrow::ListType>(field->type())->value_type());
+
+    auto map = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_DATETIME_DESC);
+    ASSERT_OK(convert_to_arrow_field_for_flight_sql(map, "m", true, &field, TArrowFlightSQLVersion::V2));
+    expect_naive_timestamp(std::static_pointer_cast<arrow::MapType>(field->type())->item_type());
+
+    auto structure = TypeDescriptor::create_struct_type({"dt"}, {TYPE_DATETIME_DESC});
+    ASSERT_OK(convert_to_arrow_field_for_flight_sql(structure, "s", true, &field, TArrowFlightSQLVersion::V2));
+    expect_naive_timestamp(std::static_pointer_cast<arrow::StructType>(field->type())->field(0)->type());
 }
 
 TEST(TypeToArrowConverterTest, RejectsInvalidStructShape) {
