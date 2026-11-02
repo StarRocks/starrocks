@@ -188,12 +188,13 @@ public class NestedGeoTypeRefusalTest {
         Subquery subquery = new Subquery(new QueryStatement(values));
         subquery.setType(IntegerType.BIGINT);
         MultiInPredicate in = new MultiInPredicate(List.of(new IntLiteral(1), new NullLiteral()), subquery, false);
+        // scalar geo tuple IN is covered by #82211
         if (type.hasNestedGeoType() || type.isMapType() || type.isStructType()) {
             String error = type.isMapType() || type.isStructType() ? "InPredicate of JSON, Map, Struct types is not supported" :
                     "in predicate type " + NullType.NULL.toSql() + " with type " + type.toSql() + " is invalid";
             assertEquals(error, assertThrows(SemanticException.class,
                     () -> visitor.visitMultiInPredicate(in, null)).getDetailMsg());
-        } else {
+        } else if (!type.isGeoType()) {
             visitor.visitMultiInPredicate(in, null);
         }
         FunctionCallExpr single = new FunctionCallExpr("_spm_const_enum", List.of(new IntLiteral(1), NullLiteral.create(type)));
