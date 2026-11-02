@@ -868,15 +868,11 @@ The following operations are not supported on tables with range distribution:
 | `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | Same code path as `ADD ROLLUP`. |
 | `ALTER TABLE ... ORDER BY (...)` (modify sort key) | The sort key defines tablet boundaries, so modifying it would invalidate existing range tablets. |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
-<<<<<<< HEAD
 | `ALTER TABLE ... ADD COLUMN <col> KEY ...` | New key columns auto-append to the (derived) range sort key on AGG/UNIQUE tables or tables without explicit `ORDER BY`. |
 | `ALTER TABLE ... DROP COLUMN <col>` where `<col>` is in the range sort key | Removing a sort-key column invalidates the stored 1:1-copied range tablet boundary values. |
 | `ALTER TABLE ... MODIFY COLUMN <col> ...` where `<col>` is in the range sort key | Changes the type/semantics under which the stored range tablet boundary values were recorded. |
 | `ALTER TABLE ... MODIFY COLUMN <col> ... KEY` (or value-column promotion in any keys-type) that flips keyness | A keyness flip shifts the key-derived range sort key on AGG/UNIQUE / no-explicit-ORDER-BY tables. |
-=======
-| `CREATE TABLE ... ROLLUP (...)` on a table with `colocate_with` | The rollup's tablets are cut on the base table's sort key while its rows are placed by the rollup's own sort key, so a Colocate Join that reads the rollup could return wrong results. `ALTER TABLE ... ADD ROLLUP` is not supported on such a table either. |
-| `ALTER TABLE ... MERGE TABLETS` on a Primary Key table whose `ORDER BY` differs from its primary key (automatic size-based merge is skipped for the same shape) | Such a table routes rows by a range in primary-key space while its segments are laid out in sort-key order, so a merge cannot decide which source tablet still owns a given row of a segment those sources share. SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key can still be merged. |
->>>>>>> 437d171 ([BugFix][RB-97] Reject ROLLUP in CREATE TABLE for range distribution tables with colocate_with (#82068))
+| `CREATE TABLE ... ROLLUP (...)` on a table with `colocate_with` | The rollup's tablets are cut on the base table's sort key while its rows are placed by the rollup's own sort key, so a Colocate Join that reads the rollup could return wrong results. |
 
 For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, e.g.:
 
