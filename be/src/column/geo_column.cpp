@@ -136,7 +136,10 @@ void GeoColumn::remove_first_n_values(size_t count) {
 }
 
 void GeoColumn::append(const Column& src, size_t offset, size_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append(*copy, offset, count);
@@ -147,7 +150,10 @@ void GeoColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_selective(*copy, indexes, from, count);
@@ -158,7 +164,10 @@ void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uin
 }
 
 void GeoColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_value_multiple_times(*copy, index, count);
