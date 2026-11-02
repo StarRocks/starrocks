@@ -371,7 +371,8 @@ Status DictOptimizeParser::_eval_and_rewrite(RuntimeState* runtime_state, ExprCo
                 Slice slice(value.data, value.size);
                 result_map.lazy_emplace(slice, [&](const auto& ctor) {
                     id_allocator++;
-                    auto data = runtime_state->instance_mem_pool()->allocate(value.size);
+                    auto* data = runtime_state->instance_mem_pool()->allocate_with_reserve(
+                            value.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                     memcpy(data, value.data, value.size);
                     slice = Slice(data, slice.size);
                     ctor(slice, id_allocator);

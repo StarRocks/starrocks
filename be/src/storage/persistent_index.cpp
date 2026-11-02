@@ -1184,7 +1184,7 @@ struct StringHasher2 {
 class EqualOnStringWithHash {
 public:
     bool operator()(const std::string& lhs, const std::string& rhs) const {
-        return memequal_padded(lhs.data(), lhs.size() - kIndexValueSize, rhs.data(), rhs.size() - kIndexValueSize);
+        return (lhs.size() == rhs.size()) && (memcmp(lhs.data(), rhs.data(), lhs.size() - kIndexValueSize) == 0);
     }
 };
 
