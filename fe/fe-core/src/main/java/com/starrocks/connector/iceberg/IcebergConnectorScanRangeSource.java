@@ -260,8 +260,9 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                             int filePathId = 2147483546; //https://iceberg.apache.org/spec/#reserved-field-ids
                             if (del.referencedDataFile() == null && (del.lowerBounds() != null && del.upperBounds() != null &&
                                     !del.lowerBounds().get(filePathId).equals(del.upperBounds().get(filePathId)))) {
-                                //partition pos delete file related files
+                                //partition pos delete file related files; add the task once, not once per delete
                                 res.add(fileScanTask);
+                                break;
                             }
                         } else if (del.content() == FileContent.EQUALITY_DELETES) {
                             // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
