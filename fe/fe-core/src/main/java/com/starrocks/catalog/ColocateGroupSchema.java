@@ -155,7 +155,11 @@ public class ColocateGroupSchema implements Writable {
                 }
             }
         } else if (distributionInfo instanceof RangeDistributionInfo) {
-            checkRangeColocateSchema(MetaUtils.getRangeDistributionColumns(table));
+            // A member's colocate columns are the first getColocateColumnCount() sort-key columns; the sort key
+            // itself may be longer (colocate_with = 'g:k1' with ORDER BY (k1, k2)). A shorter sort key is passed
+            // whole so the size check reports it.
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+            checkRangeColocateSchema(sortKeyColumns.subList(0, Math.min(sortKeyColumns.size(), getColocateColumnCount())));
         }
     }
 
