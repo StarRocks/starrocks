@@ -23,6 +23,7 @@
 #include <bit>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <limits>
 #include <random>
 #include <thread>
@@ -5373,5 +5374,338 @@ TEST_F(geographyFunctionsTest, h3SingleRingValidityRetainsOrderedFillAndTopology
         EXPECT_NE(std::string::npos, actual.status().to_string().find("valid spherical GEOGRAPHY topology"));
     }
 }
+
+namespace {
+
+// Writes ISO WKB whose type codes carry the requested Z/M offset (0, 1000, 2000 or 3000).
+class IsoWkbWriter {
+public:
+    explicit IsoWkbWriter(bool little) : _little(little) {}
+    IsoWkbWriter& header(uint32_t code) {
+        _bytes.push_back(_little ? 1 : 0);
+        return count(code);
+    }
+    IsoWkbWriter& count(uint32_t value) {
+        append(&value, sizeof(value));
+        return *this;
+    }
+    IsoWkbWriter& position(double x, double y, uint32_t ordinates) {
+        const double values[] = {x, y, 7.0, 9.0};
+        for (uint32_t i = 0; i < ordinates; ++i) append(&values[i], sizeof(double));
+        return *this;
+    }
+    const std::string& bytes() const { return _bytes; }
+
+private:
+    void append(const void* value, size_t size) {
+        std::string chunk(static_cast<const char*>(value), size);
+        if (_little != (std::endian::native == std::endian::little)) std::reverse(chunk.begin(), chunk.end());
+        _bytes += chunk;
+    }
+
+    bool _little;
+    std::string _bytes;
+};
+
+// Supports POINT, LINESTRING, POLYGON and MULTIPOINT. The MULTIPOINT always has an XY outer header
+// around one child that carries `offset`, so a non-zero offset gives mixed-dimension WKB.
+std::string iso_wkb(WkbGeometryType kind, uint32_t offset, bool little = true) {
+    const uint32_t ordinates = offset == 0 ? 2 : offset == 3000 ? 4 : 3;
+    IsoWkbWriter writer(little);
+    switch (kind) {
+    case WkbGeometryType::POINT:
+        writer.header(1 + offset).position(1, 1, ordinates);
+        break;
+    case WkbGeometryType::LINESTRING:
+        writer.header(2 + offset).count(2).position(0, 0, ordinates).position(1, 1, ordinates);
+        break;
+    case WkbGeometryType::POLYGON:
+        writer.header(3 + offset).count(1).count(4);
+        writer.position(0, 0, ordinates).position(4, 0, ordinates).position(0, 4, ordinates);
+        writer.position(0, 0, ordinates);
+        break;
+    case WkbGeometryType::MULTIPOINT:
+        // The outer XY header must not vouch for a child that declares its own Z/M dimension.
+        writer.header(4).count(1).header(1 + offset).position(1, 1, ordinates);
+        break;
+    default:
+        ADD_FAILURE() << "iso_wkb does not encode " << WkbCodec::type_name(kind);
+    }
+    return writer.bytes();
+}
+
+// The most trusting storage label a producer can attach: XY and semantically validated.
+ColumnPtr labelled_xy(const TypeDescriptor& type, const std::string& wkb) {
+    auto column = GeoColumn::create(GeoColumnDescriptor{
+            type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+    column->append_wkb(Slice(wkb));
+    return column;
+}
+
+} // namespace
+
+// The column-level XY label is a producer claim, not evidence about payloads. Every kernel that reads
+// coordinates must decode each row's own WKB header and refuse Z/M rows even under that label. This is
+// the guarantee that lets the storage dimension metadata be removed without changing results.
+namespace {
+
+using GeoKernelCall = std::function<StatusOr<ColumnPtr>(const ColumnPtr&)>;
+using GeoKernel = StatusOr<ColumnPtr> (*)(FunctionContext*, const Columns&);
+
+ColumnPtr xy(const TypeDescriptor& type, WkbGeometryType kind) {
+    return labelled_xy(type, iso_wkb(kind, 0));
+}
+
+// Runs `call` on the XY payload of `kind`, which must succeed so that the call itself is admitted, then
+// on its Z, M and ZM variants (plus a big-endian POINT Z), which must fail. A validity predicate may
+// answer false instead of failing.
+void expect_rejects_non_xy(const TypeDescriptor& type, WkbGeometryType kind, const GeoKernelCall& call,
+                           bool predicate = false) {
+    SCOPED_TRACE(::testing::Message() << (type.type == TYPE_GEOGRAPHY ? "GEOGRAPHY " : "GEOMETRY ")
+                                      << WkbCodec::type_name(kind));
+    auto control = call(xy(type, kind));
+    EXPECT_TRUE(control.ok()) << "XY control failed: " << control.status();
+    if (!control.ok()) return;
+    std::vector<std::pair<std::string, std::string>> payloads = {
+            {"Z", iso_wkb(kind, 1000)}, {"M", iso_wkb(kind, 2000)}, {"ZM", iso_wkb(kind, 3000)}};
+    if (kind == WkbGeometryType::POINT) payloads.emplace_back("Z big-endian", iso_wkb(kind, 1000, false));
+    for (const auto& [label, payload] : payloads) {
+        SCOPED_TRACE(label);
+        auto output = call(labelled_xy(type, payload));
+        if (predicate && output.ok()) {
+            // value() ignores the null flag and reads a default false for an all-NULL column.
+            ColumnViewer<TYPE_BOOLEAN> valid(*output);
+            EXPECT_FALSE(valid.is_null(0)) << "non-XY payload returned NULL instead of false or an error";
+            if (!valid.is_null(0)) EXPECT_FALSE(valid.value(0));
+        } else {
+            EXPECT_FALSE(output.ok()) << "non-XY payload was computed as XY";
+        }
+    }
+}
+
+GeoKernelCall unary(GeoKernel function) {
+    return [function](const ColumnPtr& input) { return function(nullptr, Columns{input}); };
+}
+
+GeoKernelCall unary_with_context(GeoKernel function, const TypeDescriptor& type) {
+    return [function, type](const ColumnPtr& input) {
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type}, type));
+        return function(context.get(), Columns{input});
+    };
+}
+
+// The non-XY payload goes to `first ? argument 0 : argument 1`; the other argument is the XY `other` kind.
+GeoKernelCall binary(GeoKernel function, const TypeDescriptor& type, WkbGeometryType other, bool first) {
+    return [function, type, other, first](const ColumnPtr& input) {
+        const auto fixed = xy(type, other);
+        return function(nullptr, first ? Columns{input, fixed} : Columns{fixed, input});
+    };
+}
+
+class GeoNonXYPayloadTest : public geographyFunctionsTest {
+protected:
+    // The GEOGRAPHY and GEOMETRY variants of one SQL function.
+    std::vector<std::pair<TypeDescriptor, GeoKernel>> both(GeoKernel geography, GeoKernel geometry) {
+        return {{geography_type(), geography}, {geometry_type(), geometry}};
+    }
+};
+
+using enum WkbGeometryType;
+const std::vector<WkbGeometryType> kAnyKind = {POINT, LINESTRING, POLYGON, MULTIPOINT};
+
+TEST_F(GeoNonXYPayloadTest, StX) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_x, GeoFunctions::st_geometry_x)) {
+        expect_rejects_non_xy(type, POINT, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StY) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_y, GeoFunctions::st_geometry_y)) {
+        expect_rejects_non_xy(type, POINT, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StGeometryType) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_type, GeoFunctions::st_geometry_type)) {
+        for (WkbGeometryType kind : kAnyKind) expect_rejects_non_xy(type, kind, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StAsText) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_as_text, GeoFunctions::st_geometry_as_text)) {
+        for (WkbGeometryType kind : kAnyKind) expect_rejects_non_xy(type, kind, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StAsBinary) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_as_wkb, GeoFunctions::st_geometry_as_wkb)) {
+        for (WkbGeometryType kind : kAnyKind) expect_rejects_non_xy(type, kind, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StIsValid) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_is_valid, GeoFunctions::st_geometry_is_valid)) {
+        for (WkbGeometryType kind : kAnyKind) expect_rejects_non_xy(type, kind, unary(function), true);
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StArea) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_area, GeoFunctions::st_geometry_area)) {
+        expect_rejects_non_xy(type, POLYGON, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StPerimeter) {
+    for (const auto& [type, function] :
+         both(GeoFunctions::st_geography_perimeter, GeoFunctions::st_geometry_perimeter)) {
+        expect_rejects_non_xy(type, POLYGON, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StLength) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_length, GeoFunctions::st_geometry_length)) {
+        expect_rejects_non_xy(type, LINESTRING, unary(function));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StCentroid) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_centroid, GeoFunctions::st_geometry_centroid)) {
+        for (WkbGeometryType kind : {POINT, LINESTRING, POLYGON}) {
+            expect_rejects_non_xy(type, kind, unary_with_context(function, type));
+        }
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StDistance) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_distance, GeoFunctions::st_geometry_distance)) {
+        for (WkbGeometryType kind : {POINT, LINESTRING}) {
+            expect_rejects_non_xy(type, kind, binary(function, type, POINT, true));
+            expect_rejects_non_xy(type, kind, binary(function, type, POINT, false));
+        }
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StDWithin) {
+    const auto threshold = ColumnHelper::create_const_column<TYPE_DOUBLE>(1.0, 1);
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_dwithin, GeoFunctions::st_geometry_dwithin)) {
+        const auto point = xy(type, POINT);
+        const auto line = xy(type, LINESTRING);
+        expect_rejects_non_xy(type, POINT, [&](const ColumnPtr& input) {
+            return function(nullptr, {input, line, threshold});
+        });
+        expect_rejects_non_xy(type, LINESTRING, [&](const ColumnPtr& input) {
+            return function(nullptr, {point, input, threshold});
+        });
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StContains) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_contains, GeoFunctions::st_geometry_contains)) {
+        expect_rejects_non_xy(type, POLYGON, binary(function, type, POINT, true));
+        expect_rejects_non_xy(type, POINT, binary(function, type, POLYGON, false));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StCovers) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_covers, GeoFunctions::st_geometry_covers)) {
+        expect_rejects_non_xy(type, POLYGON, binary(function, type, POINT, true));
+        expect_rejects_non_xy(type, POINT, binary(function, type, POLYGON, false));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StWithin) {
+    for (const auto& [type, function] : both(GeoFunctions::st_geography_within, GeoFunctions::st_geometry_within)) {
+        expect_rejects_non_xy(type, POINT, binary(function, type, POLYGON, true));
+        expect_rejects_non_xy(type, POLYGON, binary(function, type, POINT, false));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StCoveredBy) {
+    for (const auto& [type, function] :
+         both(GeoFunctions::st_geography_covered_by, GeoFunctions::st_geometry_covered_by)) {
+        expect_rejects_non_xy(type, POINT, binary(function, type, POLYGON, true));
+        expect_rejects_non_xy(type, POLYGON, binary(function, type, POINT, false));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StIntersects) {
+    for (const auto& [type, function] :
+         both(GeoFunctions::st_geography_intersects, GeoFunctions::st_geometry_intersects)) {
+        expect_rejects_non_xy(type, POLYGON, binary(function, type, POLYGON, true));
+        expect_rejects_non_xy(type, POLYGON, binary(function, type, POLYGON, false));
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, H3FromGeo) {
+    const auto type = geography_type();
+    const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    expect_rejects_non_xy(type, POINT, [&](const ColumnPtr& input) {
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({type, TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+        return GeoFunctions::h3_from_geo(context.get(), {input, resolution});
+    });
+}
+
+TEST_F(GeoNonXYPayloadTest, H3PolygonToCells) {
+    const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    expect_rejects_non_xy(geography_type(), POLYGON, [&](const ColumnPtr& input) {
+        return GeoFunctions::h3_polygon_to_cells(nullptr, {input, resolution});
+    });
+}
+
+TEST_F(GeoNonXYPayloadTest, StBuffer) {
+    const auto type = geometry_type();
+    for (WkbGeometryType kind : {POINT, LINESTRING, POLYGON}) {
+        expect_rejects_non_xy(type, kind, [&](const ColumnPtr& input) {
+            std::unique_ptr<FunctionContext> context(
+                    FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+            auto distance = DoubleColumn::create();
+            distance->append(1.0);
+            return GeoFunctions::st_geometry_buffer(context.get(), {input, std::move(distance)});
+        });
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StSimplifyPreserveTopology) {
+    const auto type = geometry_type();
+    for (WkbGeometryType kind : {LINESTRING, POLYGON}) {
+        expect_rejects_non_xy(type, kind, [&](const ColumnPtr& input) {
+            std::unique_ptr<FunctionContext> context(
+                    FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+            auto distance = DoubleColumn::create();
+            distance->append(1.0);
+            return GeoFunctions::st_geometry_simplify_preserve_topology(context.get(), {input, std::move(distance)});
+        });
+    }
+}
+
+// The overlays need a function context; the non-XY polygon is tried on either side.
+void expect_overlay_rejects_non_xy(const TypeDescriptor& type, GeoKernel function) {
+    for (bool first : {true, false}) {
+        expect_rejects_non_xy(type, POLYGON, [&](const ColumnPtr& input) {
+            std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, type));
+            const auto other = xy(type, POLYGON);
+            return function(context.get(), first ? Columns{input, other} : Columns{other, input});
+        });
+    }
+}
+
+TEST_F(GeoNonXYPayloadTest, StIntersection) {
+    expect_overlay_rejects_non_xy(geometry_type(), GeoFunctions::st_geometry_intersection);
+}
+
+TEST_F(GeoNonXYPayloadTest, StUnion) {
+    expect_overlay_rejects_non_xy(geometry_type(), GeoFunctions::st_geometry_union);
+}
+
+TEST_F(GeoNonXYPayloadTest, StDifference) {
+    expect_overlay_rejects_non_xy(geometry_type(), GeoFunctions::st_geometry_difference);
+}
+
+TEST_F(GeoNonXYPayloadTest, StSymDifference) {
+    expect_overlay_rejects_non_xy(geometry_type(), GeoFunctions::st_geometry_sym_difference);
+}
+
+} // namespace
 
 } // namespace starrocks
