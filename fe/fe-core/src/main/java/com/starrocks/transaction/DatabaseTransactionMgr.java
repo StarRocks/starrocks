@@ -565,29 +565,9 @@ public class DatabaseTransactionMgr {
                 return null;
             }
 
-<<<<<<< HEAD
             persistTxnStateInTxnLevelLock(transactionState);
-=======
-            persistTxnStateInTxnLevelLock(copiedState, wal -> {
-                writeLock();
-                try {
-                    unprotectUpsertTransactionState(copiedState);
-                } finally {
-                    writeUnlock();
-                }
-            });
-
-            txnSpan.setAttribute("num_partition", calculateNumPartitions(copiedState));
-            unprotectedCommitSpan.end();
-            // after state transform
-            try {
-                copiedState.afterStateTransform(TransactionStatus.COMMITTED, true, null);
-            } catch (Throwable t) {
-                LOG.warn("transaction after state transform failed: {}", transactionState, t);
-            }
             // the commit went through, so the rows of the tablets it skipped are lost now
-            TxnStateLogUtils.logIgnoredTablets(copiedState);
->>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
+            TxnStateLogUtils.logIgnoredTablets(transactionState);
 
             // 6. update nextVersion because of the failure of persistent transaction resulting in error version
             Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
@@ -1398,14 +1378,7 @@ public class DatabaseTransactionMgr {
                         // partition maybe dropped between commit and publish version, ignore this error
                         if (physicalPartition == null) {
                             droppedPartitionIds.add(physicalPartitionId);
-<<<<<<< HEAD
-                            LOG.warn(
-                                    "partition {} is dropped, skip version check and remove it from transaction state {}",
-                                    physicalPartitionId,
-                                    transactionState);
-=======
-                            TxnStateLogUtils.logDroppedCommittedPartition(copiedState, tableId, physicalPartitionId);
->>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
+                            TxnStateLogUtils.logDroppedCommittedPartition(transactionState, tableId, physicalPartitionId);
                             continue;
                         }
                         // The version of a replication transaction may not continuously

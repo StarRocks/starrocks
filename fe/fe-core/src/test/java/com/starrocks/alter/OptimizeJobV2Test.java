@@ -28,18 +28,10 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
->>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
 import com.starrocks.common.Config;
 import com.starrocks.common.util.ThreadUtil;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.persist.AddPartitionsInfoV2;
->>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
 import com.starrocks.persist.OperationType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -67,6 +59,7 @@ import org.mockito.Mockito;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class OptimizeJobV2Test extends DDLTestBase {
@@ -268,31 +261,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
                 .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
         OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, alterTableStmt);
 
-<<<<<<< HEAD
-        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
-        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        Assertions.assertEquals(1, alterJobsV2.size());
-        OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
-        // Force visibility check to return true (has committed-not-visible)
-        Mockito.doReturn(true).when(job).hasCommittedNotVisible(Mockito.anyLong());
-
-        job.runPendingJob();
-        job.runWaitingTxnJob();
-        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
-
-        // Mark all tasks SQL SUCCESS and add history
-        for (OptimizeTask t : job.getOptimizeTasks()) {
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removeRunningTask(t.getId());
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
-                .getTaskRunScheduler().removePendingTask(t);
-            TaskRunStatus s = new TaskRunStatus();
-            s.setTaskName(t.getName());
-            s.setDbName(db.getFullName());
-            s.setState(Constants.TaskRunState.SUCCESS);
-            GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getTaskRunHistory().addHistory(s);
-        }
-=======
         // the rewrite of the temp partition is committed but not published yet
         List<Long> rewriteTxnIds = Lists.newArrayList();
         for (Long tmpPartitionId : job.getTmpPartitionIds()) {
@@ -334,7 +302,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
         // a load starts writing into the source partition while the rewrite is running
         long txnId = beginTxnWriting(db, olapTable, sourcePartition);
         markAllRewriteTasksSucceeded(db, job);
->>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
 
         try {
             job.runRunningJob();
@@ -342,14 +309,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
             job.cancel(e.getMessage());
         }
 
-<<<<<<< HEAD
-        // All tasks should be turned to FAILED due to not visible
-        for (OptimizeTask t : job.getOptimizeTasks()) {
-            Assertions.assertEquals(Constants.TaskRunState.FAILED, t.getOptimizeTaskState());
-        }
-        // All partitions rewrite failed, job should be CANCELLED
-=======
->>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
         Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
         Assertions.assertTrue(job.errMsg.contains("has ingestion during optimize"), job.errMsg);
         Assertions.assertTrue(job.errMsg.contains(String.valueOf(txnId)), job.errMsg);
