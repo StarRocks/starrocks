@@ -1769,11 +1769,15 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
             for (long txnId : map.keySet()) {
                 long commitTime = transactionsToCommitTime.get(txnId);
                 Optional<Long> gtid = map.values().stream().flatMap(m -> m.values().stream()).map(info -> info.gtid).findFirst();
+                // A version overwrite has to be published as one again.
+                TransactionState txnState =
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(dbId, txnId);
                 PublishVersionTask task =
                         new PublishVersionTask(backendId, txnId, gtid.orElse((long) 0), dbId, commitTime,
                                 map.get(txnId).values().stream().collect(Collectors.toList()), null, null,
                                 createPublishVersionTaskTime, null,
-                                Config.enable_sync_publish, TransactionType.TXN_NORMAL);
+                                Config.enable_sync_publish, TransactionType.TXN_NORMAL,
+                                txnState != null && txnState.isVersionOverwrite());
                 batchTask.addTask(task);
                 // add to AgentTaskQueue for handling finish report.
                 AgentTaskQueue.addTask(task);

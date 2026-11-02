@@ -58,11 +58,16 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearTransactionTask;
+import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TClearTransactionTaskRequest;
+import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
 import com.starrocks.transaction.PartitionCommitInfo;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.TableCommitInfo;
@@ -884,6 +889,46 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Mockito.verify(job, Mockito.never()).executeSql(Mockito.anyString(), Mockito.any());
         Assertions.assertEquals(2, table.getDefaultDistributionInfo().getBucketNum());
         Assertions.assertTrue(table.getTempPartitions().isEmpty());
+    }
+
+    @Test
+    public void testFailedVersionOverwriteKeepsRewriteCommitted() throws Exception {
+        // A replica whose overwrite failed lacks the rewritten versions: the rewrite must not become visible, which
+        // lets the job swap its temp partition in, until a republish, sent as an overwrite again, brings them.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_failed_overwrite");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        PhysicalPartition partition = table.getPartition("p1").getDefaultPhysicalPartition();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()),
+                "online_optimize_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        transactionMgr.retryCommitOnRateLimitExceeded(db, txnId, tabletCommitInfos(table.getPartition("p1")),
+                List.of(), new InsertTxnCommitAttachment(0, 2), 60_000L);
+        Replica replica = ((LocalTablet) partition.getLatestBaseIndex().getTablets().get(0)).getImmutableReplicas().get(0);
+
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+
+        try (MockedStatic<AgentTaskExecutor> executor = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            Deencapsulation.invoke(ReportHandler.class, "handleRepublishVersionInfo",
+                    Map.of(db.getId(), Map.of(txnId, Map.of(partition.getId(),
+                            new TPartitionVersionInfo(partition.getId(), 2, 0)))),
+                    Map.of(txnId, 0L), replica.getBackendId());
+            ArgumentCaptor<AgentBatchTask> batchTask = ArgumentCaptor.forClass(AgentBatchTask.class);
+            executor.verify(() -> AgentTaskExecutor.submit(batchTask.capture()));
+            AgentTask republish = batchTask.getValue().getAllTasks().get(0);
+            AgentTaskQueue.removeTask(republish.getBackendId(), TTaskType.PUBLISH_VERSION, republish.getSignature());
+            Assertions.assertTrue(((PublishVersionTask) republish).toThrift().isIs_version_overwrite());
+        }
+
+        replica.updateVersionInfo(2, -1, 2);
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+        Assertions.assertEquals(-1, replica.getLastFailedVersion());
     }
 
     private static TransactionState commitLoad(Database db, OlapTable table, Partition... partitions)
