@@ -41,7 +41,7 @@ TEST_F(BatchRunCounterTest, batch_size_32) {
     size_t zero_count = SIMD::count_zero(filter.data(), test_size);
     BatchRunCounter<32> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
-#if defined(__AVX2__)
+#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
     EXPECT_EQ(batch.length, 32);
 #endif
     size_t count = 0;
@@ -76,7 +76,7 @@ TEST_F(BatchRunCounterTest, batch_size_16) {
     size_t zero_count = SIMD::count_zero(filter.data(), test_size);
     BatchRunCounter<16> counter(filter.data(), 0, test_size);
     BatchCount batch = counter.next_batch();
-#if defined(__SSE2__)
+#if defined(__SSE2__) || (defined(__ARM_NEON) && defined(__aarch64__))
     EXPECT_EQ(batch.length, 16);
 #endif
     size_t count = 0;
@@ -131,6 +131,88 @@ TEST_F(BatchRunCounterTest, batch_size_8) {
     }
 
     EXPECT_EQ(count, zero_count);
+}
+
+TEST_F(BatchRunCounterTest, deterministic_all_zero_all_one_and_single_flip) {
+    {
+        std::vector<uint8_t> zeros(64, 0);
+        BatchRunCounter<32> c32(zeros.data(), 0, zeros.size());
+        BatchCount b1 = c32.next_batch();
+        EXPECT_TRUE(b1.NoneSet());
+        EXPECT_FALSE(b1.AllSet());
+        BatchRunCounter<16> c16(zeros.data(), 0, zeros.size());
+        BatchCount b16 = c16.next_batch();
+        EXPECT_TRUE(b16.NoneSet());
+        EXPECT_FALSE(b16.AllSet());
+    }
+    {
+        std::vector<uint8_t> ones(64, 1);
+        BatchRunCounter<32> c32(ones.data(), 0, ones.size());
+        BatchCount b1 = c32.next_batch();
+        EXPECT_TRUE(b1.AllSet());
+        EXPECT_FALSE(b1.NoneSet());
+        BatchRunCounter<16> c16(ones.data(), 0, ones.size());
+        BatchCount b16 = c16.next_batch();
+        EXPECT_TRUE(b16.AllSet());
+        EXPECT_FALSE(b16.NoneSet());
+    }
+    for (size_t k = 0; k < 32; ++k) {
+        std::vector<uint8_t> single_one(32, 0);
+        single_one[k] = 1;
+        BatchRunCounter<32> c32(single_one.data(), 0, 32);
+        BatchCount b = c32.next_batch();
+#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+        EXPECT_EQ(b.length, 32);
+        EXPECT_FALSE(b.valid_count) << "lane k=" << k;
+        EXPECT_FALSE(b.NoneSet()) << "lane k=" << k;
+        EXPECT_FALSE(b.AllSet()) << "lane k=" << k;
+#endif
+
+        std::vector<uint8_t> single_zero(32, 1);
+        single_zero[k] = 0;
+        BatchRunCounter<32> c32_z(single_zero.data(), 0, 32);
+        BatchCount bz = c32_z.next_batch();
+#if defined(__AVX2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+        EXPECT_EQ(bz.length, 32);
+        EXPECT_FALSE(bz.valid_count) << "lane k=" << k;
+        EXPECT_FALSE(bz.NoneSet()) << "lane k=" << k;
+        EXPECT_FALSE(bz.AllSet()) << "lane k=" << k;
+#endif
+    }
+    for (size_t k = 0; k < 16; ++k) {
+        std::vector<uint8_t> single_one(16, 0);
+        single_one[k] = 1;
+        BatchRunCounter<16> c16(single_one.data(), 0, 16);
+        BatchCount b = c16.next_batch();
+#if defined(__SSE2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+        EXPECT_EQ(b.length, 16);
+        EXPECT_FALSE(b.valid_count) << "lane k=" << k;
+        EXPECT_FALSE(b.NoneSet()) << "lane k=" << k;
+        EXPECT_FALSE(b.AllSet()) << "lane k=" << k;
+#endif
+
+        std::vector<uint8_t> single_zero(16, 1);
+        single_zero[k] = 0;
+        BatchRunCounter<16> c16_z(single_zero.data(), 0, 16);
+        BatchCount bz = c16_z.next_batch();
+#if defined(__SSE2__) || (defined(__ARM_NEON) && defined(__aarch64__))
+        EXPECT_EQ(bz.length, 16);
+        EXPECT_FALSE(bz.valid_count) << "lane k=" << k;
+        EXPECT_FALSE(bz.NoneSet()) << "lane k=" << k;
+        EXPECT_FALSE(bz.AllSet()) << "lane k=" << k;
+#endif
+    }
+    for (size_t tail_len : {size_t{0}, size_t{1}, size_t{7}, size_t{8}, size_t{15}, size_t{16}, size_t{31}}) {
+        std::vector<uint8_t> tail(tail_len, 0);
+        BatchRunCounter<32> c32(tail.data(), 0, tail_len);
+        size_t total = 0;
+        while (true) {
+            BatchCount b = c32.next_batch();
+            if (b.length == 0) break;
+            total += b.length;
+        }
+        EXPECT_EQ(total, tail_len);
+    }
 }
 
 } // namespace starrocks

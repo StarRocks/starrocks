@@ -19,6 +19,8 @@
 
 #if defined(__x86_64__) && defined(__AVX2__)
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 namespace starrocks {
@@ -32,6 +34,14 @@ static inline bool contains_negative_value(const int32_t* data, size_t size) {
         __m256i cmp = _mm256_cmpgt_epi32(v_zero, v);
         if (_mm256_movemask_epi8(cmp)) return true;
     }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    int32x4_t v_or0 = vdupq_n_s32(0);
+    int32x4_t v_or1 = vdupq_n_s32(0);
+    for (; i + 8 <= size; i += 8) {
+        v_or0 = vorrq_s32(v_or0, vld1q_s32(data + i));
+        v_or1 = vorrq_s32(v_or1, vld1q_s32(data + i + 4));
+    }
+    if (vminvq_s32(vorrq_s32(v_or0, v_or1)) < 0) return true;
 #endif
     for (; i < size; ++i) {
         if (data[i] < 0) return true;
@@ -68,6 +78,10 @@ void delta_decode_chain_int32_avx2(int32_t* buf, int n, int32_t min_delta, int32
 void delta_decode_chain_int32_avx2x(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
 void delta_decode_chain_int32_avx512(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
 void delta_decode_chain_int64_avx512(int64_t* buf, int n, int64_t min_delta, int64_t& last_value);
+#if defined(__ARM_NEON) && defined(__aarch64__)
+void delta_decode_chain_int32_neon(int32_t* buf, int n, int32_t min_delta, int32_t& last_value);
+void delta_decode_chain_int64_neon(int64_t* buf, int n, int64_t min_delta, int64_t& last_value);
+#endif
 
 // Public entry points. Defined in delta_decode.cpp; they pick the best implementation for the
 // running CPU at runtime via __builtin_cpu_supports (explicit dispatch, not FMV/IFUNC).

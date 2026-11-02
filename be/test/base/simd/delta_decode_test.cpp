@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <climits>
 #include <vector>
 
 namespace starrocks {
@@ -51,6 +52,16 @@ TEST_F(DeltaDecodeTest, test_int32) {
         ASSERT_EQ(v, expected);
         ASSERT_EQ(v.back(), last_value);
     }
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+    {
+        std::vector<int32_t> v(values);
+        int32_t last_value = 10;
+        delta_decode_chain_int32_neon(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
+    }
+#endif
 
 #if defined(__x86_64__)
     if (__builtin_cpu_supports("avx2")) {
@@ -100,6 +111,16 @@ TEST_F(DeltaDecodeTest, test_int64) {
         ASSERT_EQ(v.back(), last_value);
     }
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+    {
+        std::vector<int64_t> v(values);
+        int64_t last_value = 10;
+        delta_decode_chain_int64_neon(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
+    }
+#endif
+
 #if defined(__x86_64__) && !defined(ADDRESS_SANITIZER)
     if (__builtin_cpu_supports("avx512f")) {
         std::vector<int64_t> v(values);
@@ -109,6 +130,78 @@ TEST_F(DeltaDecodeTest, test_int64) {
         ASSERT_EQ(v.back(), last_value);
     }
 #endif
+}
+
+TEST_F(DeltaDecodeTest, test_boundary_sizes_and_negative_deltas) {
+    const std::vector<int> sizes = {0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 63, 64, 65};
+    for (int n : sizes) {
+        std::vector<int32_t> base32(n);
+        std::vector<int64_t> base64(n);
+        for (int i = 0; i < n; ++i) {
+            base32[i] = (i * 7) % 13;
+            base64[i] = (i * 11) % 19;
+        }
+
+        for (int32_t min_delta : {0, 5, -10}) {
+            std::vector<int32_t> expected(base32);
+            int32_t expected_last = -500;
+            delta_decode_chain_scalar_prefetch<int32_t>(expected.data(), n, min_delta, expected_last);
+
+            std::vector<int32_t> actual(base32);
+            int32_t actual_last = -500;
+            delta_decode_chain_int32(actual.data(), n, min_delta, actual_last);
+            ASSERT_EQ(actual, expected) << "n=" << n << " min_delta=" << min_delta;
+            ASSERT_EQ(actual_last, expected_last) << "n=" << n << " min_delta=" << min_delta;
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+            std::vector<int32_t> neon_actual(base32);
+            int32_t neon_last = -500;
+            delta_decode_chain_int32_neon(neon_actual.data(), n, min_delta, neon_last);
+            ASSERT_EQ(neon_actual, expected) << "n=" << n << " min_delta=" << min_delta;
+            ASSERT_EQ(neon_last, expected_last) << "n=" << n << " min_delta=" << min_delta;
+#endif
+        }
+
+        for (int64_t min_delta : {int64_t{0}, int64_t{5}, int64_t{-10}}) {
+            std::vector<int64_t> expected(base64);
+            int64_t expected_last = -500;
+            delta_decode_chain_scalar_prefetch<int64_t>(expected.data(), n, min_delta, expected_last);
+
+            std::vector<int64_t> actual(base64);
+            int64_t actual_last = -500;
+            delta_decode_chain_int64(actual.data(), n, min_delta, actual_last);
+            ASSERT_EQ(actual, expected) << "n=" << n << " min_delta=" << min_delta;
+            ASSERT_EQ(actual_last, expected_last) << "n=" << n << " min_delta=" << min_delta;
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+            std::vector<int64_t> neon_actual(base64);
+            int64_t neon_last = -500;
+            delta_decode_chain_int64_neon(neon_actual.data(), n, min_delta, neon_last);
+            ASSERT_EQ(neon_actual, expected) << "n=" << n << " min_delta=" << min_delta;
+            ASSERT_EQ(neon_last, expected_last) << "n=" << n << " min_delta=" << min_delta;
+#endif
+        }
+    }
+}
+
+TEST_F(DeltaDecodeTest, test_contains_negative_value) {
+    const std::vector<size_t> sizes = {0, 1, 7, 8, 9, 15, 16, 23};
+    for (size_t sz : sizes) {
+        std::vector<int32_t> data(sz, 0);
+        for (size_t i = 0; i < sz; ++i) {
+            data[i] = (i % 2 == 0) ? 0 : ((i % 3 == 0) ? INT32_MAX : static_cast<int32_t>(i));
+        }
+        EXPECT_FALSE(contains_negative_value(data.data(), sz)) << "sz=" << sz;
+
+        for (size_t pos = 0; pos < sz; ++pos) {
+            int32_t saved = data[pos];
+            data[pos] = -1;
+            EXPECT_TRUE(contains_negative_value(data.data(), sz)) << "sz=" << sz << " pos=" << pos;
+            data[pos] = INT32_MIN;
+            EXPECT_TRUE(contains_negative_value(data.data(), sz)) << "sz=" << sz << " pos=" << pos;
+            data[pos] = saved;
+        }
+    }
 }
 
 } // namespace starrocks

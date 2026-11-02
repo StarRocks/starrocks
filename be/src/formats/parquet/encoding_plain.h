@@ -38,6 +38,8 @@
 
 #ifdef __AVX2__
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_neon.h>
 #endif
 
 namespace starrocks::parquet {
@@ -711,6 +713,30 @@ public:
         }
         _offset += i * _type_length;
 
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+        static_assert(sizeof(Slice) == sizeof(int128_t));
+        const uint64x2_t fixed_length = vdupq_n_u64(_type_length);
+        const uint64x2_t inc = vdupq_n_u64(_type_length * 4);
+        const uint64_t base_ptr = reinterpret_cast<uint64_t>(_data.data + _offset);
+        uint64x2_t cur_lo = vcombine_u64(vcreate_u64(base_ptr), vcreate_u64(base_ptr + _type_length));
+        uint64x2_t cur_hi =
+                vcombine_u64(vcreate_u64(base_ptr + _type_length * 2), vcreate_u64(base_ptr + _type_length * 3));
+        for (; i + 4 <= count; i += 4) {
+            uint64x2_t s0 = vzip1q_u64(cur_lo, fixed_length);
+            uint64x2_t s1 = vzip2q_u64(cur_lo, fixed_length);
+            uint64x2_t s2 = vzip1q_u64(cur_hi, fixed_length);
+            uint64x2_t s3 = vzip2q_u64(cur_hi, fixed_length);
+
+            uint8_t* out = dst + i * sizeof(Slice);
+            vst1q_u8(out, vreinterpretq_u8_u64(s0));
+            vst1q_u8(out + 16, vreinterpretq_u8_u64(s1));
+            vst1q_u8(out + 32, vreinterpretq_u8_u64(s2));
+            vst1q_u8(out + 48, vreinterpretq_u8_u64(s3));
+
+            cur_lo = vaddq_u64(cur_lo, inc);
+            cur_hi = vaddq_u64(cur_hi, inc);
+        }
+        _offset += i * _type_length;
 #endif
 
         for (; i < count; ++i) {
