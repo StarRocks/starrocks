@@ -99,7 +99,18 @@ enum TPlanNodeType {
   BENCHMARK_SCAN_NODE = 42,
   LAKE_CACHE_STATS_SCAN_NODE = 43,
   ENFORCE_UNIQUE_ROW_LOCATOR_NODE = 44,
+<<<<<<< HEAD
   AI_PROJECT_NODE = 45
+=======
+  AI_PROJECT_NODE = 45,
+  LAKE_GROUPED_SCAN_NODE = 46,
+
+  // Downstream-only members live at >= 300 (the range the rule above reserves
+  // for extensions).
+  CHANGES_SCAN_NODE = 300,
+  STARROCKS_SCAN_NODE = 301,
+  CHANGES_STATS_SCAN_NODE = 302
+>>>>>>> 3a2dd424a6a... [Enhancement][RB-533] Add backend execution for grouped range scans (#67449)
 }
 
 // phases of an execution node
@@ -587,6 +598,13 @@ struct TBenchmarkScanRange {
 struct TScanRangeExt {
 }
 
+// Query-local clip; never persisted in tablet metadata.
+struct TGroupedRangeTask {
+  1: optional i32 group_id
+  2: optional Types.TTabletRange key_range
+  3: optional list<i32> sort_key_unique_ids
+}
+
 // Specification of an individual data range which is held in its entirety
 // by a storage server
 struct TScanRange {
@@ -603,6 +621,13 @@ struct TScanRange {
 
   40: optional TBenchmarkScanRange benchmark_scan_range
   41: optional TScanRangeExt ext
+<<<<<<< HEAD
+=======
+
+  50: optional TChangesScanRange changes_scan_range
+  51: optional TStarRocksScanRange starrocks_scan_range
+  52: optional TGroupedRangeTask grouped_range_task
+>>>>>>> 3a2dd424a6a... [Enhancement][RB-533] Add backend execution for grouped range scans (#67449)
 }
 
 struct TMySQLScanNode {
