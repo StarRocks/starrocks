@@ -25,6 +25,7 @@ import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
@@ -255,6 +256,23 @@ public class TabletReshardUtils {
             // throwing from a scheduling decision.
             return false;
         }
+    }
+
+    /**
+     * Whether {@code ALTER TABLE ... COMPACT} on this table should run as UNSHARE compaction when a
+     * partition has a tablet that still shares files with its split siblings.
+     *
+     * <p>True for a shared-data, range-distributed primary-key table with file bundling whose merge is
+     * supported. A tablet merge only accepts a tablet that owns all of its files, and UNSHARE compaction
+     * is what rewrites the shared ones into private files, so compacting such a table that way is what
+     * makes a later merge possible. Other tables keep the ordinary manual compaction: a table whose merge
+     * is unsupported gains nothing from the extra rewrite, and without file bundling UNSHARE is not
+     * served at all.
+     */
+    public static boolean compactUnsharesSharedFiles(OlapTable table) {
+        return table != null && table.isCloudNativeTable() && table.isRangeDistribution()
+                && table.getKeysType() == KeysType.PRIMARY_KEYS && table.isFileBundling()
+                && !tabletMergeUnsupported(table);
     }
 
     /** Per-tablet split fan-out cap for this table. */

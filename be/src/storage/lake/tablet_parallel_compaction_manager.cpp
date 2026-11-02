@@ -674,6 +674,7 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
     ASSIGN_OR_RETURN(auto tablet, _tablet_mgr->get_tablet(tablet_id, version));
     const auto& metadata = tablet.metadata();
     bool is_pk_table = metadata->schema().keys_type() == PRIMARY_KEYS;
+    ASSIGN_OR_RETURN(is_unshare, CompactionPolicy::runs_as_unshare(*metadata, is_unshare, force_base_compaction));
 
     // Parallel compaction supports PK tables unconditionally, and non-PK tables only with the
     // size-tiered compaction strategy (no cumulative_point). For non-PK tables with the default
@@ -719,6 +720,7 @@ StatusOr<int> TabletParallelCompactionManager::create_parallel_tasks(
                      create_and_register_tablet_state(tablet_id, txn_id, version, max_parallel, max_bytes, is_unshare,
                                                       std::move(callback), release_token));
     state_ptr->is_base_compaction = is_base_compaction;
+    state_ptr->unshare_rewrites_index = is_unshare && !tablet.get_schema()->has_separate_sort_key();
     {
         // Carry over the queue wait of the caller's context, which is about to be destroyed.
         std::lock_guard<std::mutex> lock(state_ptr->mutex);
@@ -1741,8 +1743,10 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
 
     // Execute SST compaction once after all subtasks complete.
     // Store results in OpParallelCompaction (not in individual subtask OpCompactions).
-    if (!state->is_unshare) {
-        RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel));
+    // An UNSHARE of a tablet whose sort key is not its primary key rewrites shared data files only, so it skips this
+    // step, and the tablet metadata read it starts with, entirely.
+    if (!state->is_unshare || state->unshare_rewrites_index) {
+        RETURN_IF_ERROR(execute_sst_compaction_for_parallel(tablet_id, version, op_parallel, state->is_unshare));
     }
 
     return merged_log;
@@ -1936,14 +1940,20 @@ void TabletParallelCompactionManager::execute_subtask(int64_t tablet_id, int64_t
     }
 }
 
-Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
-        int64_t tablet_id, int64_t version, TxnLogPB_OpParallelCompaction* op_parallel) {
+Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(int64_t tablet_id, int64_t version,
+                                                                            TxnLogPB_OpParallelCompaction* op_parallel,
+                                                                            bool unshare) {
     // Get tablet metadata to check if SST compaction is applicable
     auto tablet_or = _tablet_mgr->get_tablet(tablet_id, version);
     if (!tablet_or.ok()) {
         LOG(WARNING) << "Failed to get tablet for SST compaction, tablet=" << tablet_id << ", version=" << version
                      << ": " << tablet_or.status();
-        return Status::OK(); // Don't fail the entire compaction for SST compaction failure
+        // An UNSHARE must not succeed while it may leave index files the tablet cannot keep, so it fails and the next
+        // COMPACT retries it. Any other compaction goes on without its SST compaction.
+        if (unshare) {
+            return tablet_or.status();
+        }
+        return Status::OK();
     }
 
     const auto& tablet = tablet_or.value();
@@ -1971,7 +1981,7 @@ Status TabletParallelCompactionManager::execute_sst_compaction_for_parallel(
 
     // Use a temporary TxnLogPB to capture SST compaction results
     TxnLogPB temp_log;
-    auto st = primary_key_mgr->execute_index_major_compaction(metadata, &temp_log);
+    auto st = primary_key_mgr->execute_index_major_compaction(metadata, &temp_log, unshare);
     if (!st.ok()) {
         // Propagate, like horizontal_compaction_task.cpp, vertical_compaction_task.cpp and
         // cloud_native_index_compaction_task.cpp do for the same call. Swallowing it here let the

@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
@@ -223,6 +224,64 @@ protected:
         auto sst = std::make_unique<PersistentIndexSstable>();
         RETURN_IF_ERROR(sst->init(std::move(rf), sst_pb, nullptr, false));
         return sst;
+    }
+
+    // Gives the tablet the key range [lower, upper) on c0; a missing bound leaves that side unbounded.
+    void set_tablet_range(std::optional<int32_t> lower, std::optional<int32_t> upper) {
+        _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
+        auto* range = _tablet_metadata->mutable_range();
+        if (lower.has_value()) {
+            auto* value = range->mutable_lower_bound()->add_values();
+            value->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+            value->set_value(std::to_string(*lower));
+            range->set_lower_bound_included(true);
+        }
+        if (upper.has_value()) {
+            auto* value = range->mutable_upper_bound()->add_values();
+            value->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+            value->set_value(std::to_string(*upper));
+            range->set_upper_bound_included(false);
+        }
+    }
+
+    // The index key of c0 = v under the order-preserving encoding of a range-distribution tablet.
+    std::string encode_int_key(int32_t v) {
+        auto pk_columns = std::vector<ColumnId>{0};
+        auto pkey_schema = ChunkHelper::convert_schema(TabletSchema::create(_tablet_metadata->schema()), pk_columns);
+        auto chunk = std::make_unique<Chunk>();
+        auto col = ColumnTestHelper::build_column<int32_t>({v});
+        chunk->append_column(std::move(col), (SlotId)0);
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        if (pk_column->is_binary()) {
+            return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
+        } else {
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
+        }
+    }
+
+    // Compacts `sst` as the only input and expects one private output under a new file name whose keys run from
+    // `first` to `last`.
+    void expect_lone_sstable_rewritten(const PersistentIndexSstablePB& sst, int32_t first, int32_t last) {
+        auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+        ASSERT_OK(mgr->init());
+        std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+        candidates.push_back({sst});
+
+        std::vector<PersistentIndexSstablePB> output_sstables;
+        ASSERT_OK(mgr->compact(candidates, _tablet_metadata, true, &output_sstables));
+
+        ASSERT_EQ(1, output_sstables.size());
+        EXPECT_NE(sst.filename(), output_sstables[0].filename());
+        EXPECT_FALSE(output_sstables[0].shared());
+        ASSERT_TRUE(output_sstables[0].has_range());
+        EXPECT_EQ(encode_int_key(first), output_sstables[0].range().start_key());
+        EXPECT_EQ(encode_int_key(last), output_sstables[0].range().end_key());
     }
 
     constexpr static const char* const kTestDir = "test_lake_persistent_index_parallel_compact_mgr";
@@ -754,8 +813,10 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sstable_without_range) {
 
     // Should create single task without parallel splitting
     ASSERT_EQ(output_sstables.size(), 1);
-    // should reuse the sstable
-    ASSERT_EQ(output_sstables[0].filename(), sst1.filename());
+    // should rewrite the sstable, so that the output declares a key range
+    ASSERT_NE(output_sstables[0].filename(), sst1.filename());
+    ASSERT_EQ(output_sstables[0].range().start_key(), fmt::format("key_{:016X}", 0));
+    ASSERT_EQ(output_sstables[0].range().end_key(), fmt::format("key_{:016X}", 99));
 }
 
 // ============================================================================
@@ -1410,28 +1471,73 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
     // Check range of output SST
     // The keys are encoded INTs. We can't directly compare with "100" string.
     // But we can check if they match the encoded values of 100 and 199.
-    auto encode_key = [&](int32_t v) {
-        auto pk_columns = std::vector<ColumnId>{0};
-        auto pkey_schema = ChunkHelper::convert_schema(TabletSchema::create(_tablet_metadata->schema()), pk_columns);
-        auto chunk = std::make_unique<Chunk>();
-        auto col = ColumnTestHelper::build_column<int32_t>({v});
-        chunk->append_column(std::move(col), (SlotId)0);
-        MutableColumnPtr pk_column;
-        EXPECT_OK(
-                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
-                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
-        if (pk_column->is_binary()) {
-            return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
-        } else {
-            RawDataVisitor visitor;
-            EXPECT_OK(pk_column->accept(&visitor));
-            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
-        }
-    };
+    ASSERT_EQ(output_sstables[0].range().start_key(), encode_int_key(100));
+    ASSERT_EQ(output_sstables[0].range().end_key(), encode_int_key(199));
+}
 
-    ASSERT_EQ(output_sstables[0].range().start_key(), encode_key(100));
-    ASSERT_EQ(output_sstables[0].range().end_key(), encode_key(199));
+// A shared index file is rewritten even when it already lies inside the tablet range: moving it would keep a file
+// that the split sibling still references.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_shared_fileset_inside_tablet_range_is_rewritten) {
+    set_tablet_range(100, 200);
+    PersistentIndexSstablePB sst;
+    ASSERT_OK(create_test_sstable_with_pk("shared_inside.sst", 120, 50, &sst, true /* shared */));
+    expect_lone_sstable_rewritten(sst, 120, 169);
+}
+
+// An index file that lacks an end key cannot be placed among the sampled split points, so the compaction runs as one
+// task over every input instead of dropping that file.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sstable_missing_an_end_key_runs_unsplit) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+    set_tablet_range(100, 200);
+
+    PersistentIndexSstablePB valid;
+    PersistentIndexSstablePB no_end_key;
+    ASSERT_OK(create_test_sstable_with_pk("valid.sst", 100, 50, &valid));
+    ASSERT_OK(create_test_sstable_with_pk("no_end_key.sst", 150, 50, &no_end_key));
+    no_end_key.mutable_range()->clear_end_key();
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({valid});
+    candidates.push_back({no_end_key});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, true, &output_sstables));
+
+    for (int32_t k = 100; k < 200; k++) {
+        const std::string key = encode_int_key(k);
+        bool found = false;
+        for (const auto& out_sst_pb : output_sstables) {
+            ASSIGN_OR_ABORT(auto sst, open_sstable(out_sst_pb));
+            Slice key_slice(key);
+            KeyIndexSet key_indexes;
+            key_indexes.insert(0);
+            std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+            KeyIndexSet found_key_indexes;
+            auto st = sst->multi_get(&key_slice, key_indexes, -1, values.data(), &found_key_indexes);
+            if (st.ok() && !found_key_indexes.empty()) {
+                found = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found) << "Key " << k << " not found in any output sstable";
+    }
+}
+
+// A lone private index file without a key range is rewritten rather than moved, so the output declares a range.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_lone_private_sstable_without_range_is_rewritten) {
+    set_tablet_range(std::nullopt, 200);
+    PersistentIndexSstablePB sst;
+    ASSERT_OK(create_test_sstable_with_pk("no_range.sst", 50, 100, &sst));
+    sst.clear_range();
+    expect_lone_sstable_rewritten(sst, 50, 149);
+}
+
+// A private index file that reaches outside the tablet range is clipped to it rather than moved as is.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_private_sstable_outside_tablet_range_is_clipped) {
+    set_tablet_range(100, 200);
+    PersistentIndexSstablePB sst;
+    ASSERT_OK(create_test_sstable_with_pk("private_out.sst", 150, 100, &sst, false /* shared */));
+    expect_lone_sstable_rewritten(sst, 150, 199);
 }
 
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column_tablet_range_filtering) {

@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -63,12 +64,21 @@ public class CompactionHandler  {
             locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(olapTable.getId()), LockType.READ);
             try {
                 List<Partition> allPartitions = findAllPartitions(olapTable, compactionClause);
+                // On a table whose COMPACT unshares, every partition is asked for UNSHARE, and a tablet holding
+                // nothing to unshare runs the manual compaction instead. Each tablet decides from its own metadata:
+                // the shared-file flags tablets report to the FE can be stale, as after a restart, and do not cover
+                // an index file reaching outside its tablet.
+                boolean compactUnshares = TabletReshardUtils.compactUnsharesSharedFiles(olapTable);
                 for (Partition partition : allPartitions) {
                     for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                         PartitionIdentifier partitionIdentifier =
                                 new PartitionIdentifier(db.getId(), olapTable.getId(), physicalPartition.getId());
                         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
-                        compactionManager.triggerManualCompaction(partitionIdentifier);
+                        if (compactUnshares) {
+                            compactionManager.triggerUnshareCompaction(partitionIdentifier);
+                        } else {
+                            compactionManager.triggerManualCompaction(partitionIdentifier);
+                        }
                     }
                 }
             } finally {

@@ -39,8 +39,19 @@ public:
     // Return true when [seek_key, stop_key) fully contains [range.start_key(), range.end_key()].
     bool full_contains(const PersistentIndexSstableRangePB& range) const;
 
+    // Return true when key falls in [seek_key, stop_key); an empty bound is unbounded on that side.
+    bool contains(const Slice& key) const;
+
     // Intersect this range with rhs.
     SstSeekRange& operator&=(const SstSeekRange& rhs);
 };
+
+// Return true when sst declares both a start key and an end key. An empty key is a valid encoded key, so the check is
+// on presence, not on emptiness.
+bool sstable_has_usable_range(const PersistentIndexSstablePB& sst);
+
+// Return true when a tablet owning tablet_range cannot keep sst as is: sst is shared with a split sibling, declares no
+// usable key range, or reaches outside tablet_range. A null tablet_range skips the last check.
+bool sstable_needs_rewrite(const PersistentIndexSstablePB& sst, const SstSeekRange* tablet_range);
 
 } // namespace starrocks::lake

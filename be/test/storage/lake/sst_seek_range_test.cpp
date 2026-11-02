@@ -19,6 +19,26 @@
 
 namespace starrocks::lake {
 
+TEST(SstSeekRangeTest, test_contains) {
+    SstSeekRange bounded{"b", "d"};
+    ASSERT_TRUE(bounded.contains(Slice("b")));
+    ASSERT_TRUE(bounded.contains(Slice("c")));
+    ASSERT_FALSE(bounded.contains(Slice("a")));
+    ASSERT_FALSE(bounded.contains(Slice("d")));
+
+    SstSeekRange no_lower{"", "d"};
+    ASSERT_TRUE(no_lower.contains(Slice("a")));
+    ASSERT_FALSE(no_lower.contains(Slice("d")));
+
+    SstSeekRange no_upper{"b", ""};
+    ASSERT_TRUE(no_upper.contains(Slice("z")));
+    ASSERT_FALSE(no_upper.contains(Slice("a")));
+
+    SstSeekRange all;
+    ASSERT_TRUE(all.contains(Slice("a")));
+    ASSERT_TRUE(all.contains(Slice("z")));
+}
+
 TEST(SstSeekRangeTest, test_has_overlap) {
     {
         // [10, 30) and [20, 40] -> overlap
@@ -146,6 +166,39 @@ TEST(SstSeekRangeTest, test_intersect) {
         ASSERT_EQ("10", r1.seek_key);
         ASSERT_EQ("30", r1.stop_key);
     }
+}
+
+TEST(SstSeekRangeTest, test_sstable_needs_rewrite) {
+    auto make_sstable = [](const std::string& start_key, const std::string& end_key, bool shared) {
+        PersistentIndexSstablePB sst;
+        sst.mutable_range()->set_start_key(start_key);
+        sst.mutable_range()->set_end_key(end_key);
+        sst.set_shared(shared);
+        return sst;
+    };
+    const SstSeekRange tablet_range{"b", "d"};
+
+    // A file shared with a split sibling is rewritten even inside the tablet range.
+    EXPECT_TRUE(sstable_needs_rewrite(make_sstable("b", "c", true), &tablet_range));
+    EXPECT_FALSE(sstable_needs_rewrite(make_sstable("b", "c", false), &tablet_range));
+
+    // A file without a usable key range is rewritten.
+    auto no_range = make_sstable("b", "c", false);
+    no_range.clear_range();
+    EXPECT_TRUE(sstable_needs_rewrite(no_range, &tablet_range));
+    auto no_end_key = make_sstable("b", "c", false);
+    no_end_key.mutable_range()->clear_end_key();
+    EXPECT_TRUE(sstable_needs_rewrite(no_end_key, &tablet_range));
+
+    // An empty start key is a present key (an empty VARCHAR primary key), not a missing one.
+    const SstSeekRange from_empty_key{"", "d"};
+    EXPECT_FALSE(sstable_needs_rewrite(make_sstable("", "c", false), &from_empty_key));
+
+    // A file reaching outside the tablet range is rewritten.
+    EXPECT_TRUE(sstable_needs_rewrite(make_sstable("c", "e", false), &tablet_range));
+
+    // Without a tablet range, only sharing and a missing key range count.
+    EXPECT_FALSE(sstable_needs_rewrite(make_sstable("a", "z", false), nullptr));
 }
 
 } // namespace starrocks::lake

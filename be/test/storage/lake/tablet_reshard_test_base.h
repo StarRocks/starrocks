@@ -204,6 +204,15 @@ public:
         }
     }
 
+    // Lets the PK index flush run, which the fixture skips by default (see SetUp), until the guard goes out of scope.
+    class ScopedPkIndexFlush {
+    public:
+        ScopedPkIndexFlush() { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE); }
+        ~ScopedPkIndexFlush() { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); }
+        ScopedPkIndexFlush(const ScopedPkIndexFlush&) = delete;
+        ScopedPkIndexFlush& operator=(const ScopedPkIndexFlush&) = delete;
+    };
+
 protected:
     std::shared_ptr<TabletMetadataPB> split_source(bool separate_sort = false) {
         auto m = std::make_shared<TabletMetadataPB>();
@@ -1971,10 +1980,12 @@ protected:
                                      base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
-    StatusOr<TabletMetadataPtr> compact_tablet(int64_t tablet_id, int64_t base_version, bool force_base) {
+    StatusOr<TabletMetadataPtr> compact_tablet(int64_t tablet_id, int64_t base_version, bool force_base,
+                                               bool is_unshare = false) {
         const int64_t txn_id = next_id();
-        auto context = std::make_unique<lake::CompactionTaskContext>(txn_id, tablet_id, base_version, force_base,
-                                                                     /*skip_write_txnlog=*/false, nullptr);
+        auto context =
+                std::make_unique<lake::CompactionTaskContext>(txn_id, tablet_id, base_version, force_base,
+                                                              /*skip_write_txnlog=*/false, nullptr, 0, 0, is_unshare);
         ASSIGN_OR_RETURN(auto task, _tablet_manager->compact(context.get()));
         RETURN_IF_ERROR(task->execute(lake::CompactionTask::kNoCancelFn));
         TxnInfoPB txn_info;
@@ -1983,6 +1994,14 @@ protected:
         txn_info.set_commit_time(1);
         return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
                                      base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+    }
+
+    // Runs an UNSHARE compaction on `tablet` and publishes it. The input metadata is persisted first because split
+    // children exist only in memory.
+    StatusOr<TabletMetadataPtr> unshare_tablet(const TabletMetadataPtr& tablet) {
+        RETURN_IF_ERROR(put_tablet_metadata(tablet));
+        _primary_key_manager->unload_and_remove_primary_index(tablet->id());
+        return compact_tablet(tablet->id(), tablet->version(), /*force_base=*/false, /*is_unshare=*/true);
     }
 
     StatusOr<TabletMetadataPtr> create_lifecycle_source(int64_t tablet_id, int lower, int upper, int32_t key,
@@ -2002,6 +2021,64 @@ protected:
         metadata->mutable_range()->set_upper_bound_included(false);
         RETURN_IF_ERROR(put_tablet_metadata(metadata));
         return publish_followup_upsert_delete(tablet_id, /*base_version=*/1, key, value, upper - 1, include_delete);
+    }
+
+    // A primary-key tablet over [0, 100) whose index file still maps key 40 to its row, while the delete file of its
+    // newest rowset, which holds nothing else, removes that row. It writes 40, then 20, 30, 60 and 70 (each with a
+    // delete of the next key), flushes its index, and deletes 40; its rows are {20, 200}, {30, 300}, {60, 600} and
+    // {70, 700}. Split it with the index flush skipped, the fixture default, so the children inherit that state.
+    StatusOr<TabletMetadataPtr> create_source_with_an_unflushed_delete(int64_t tablet_id) {
+        ASSIGN_OR_RETURN(auto source, create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/40,
+                                                              /*value=*/400, /*include_delete=*/false));
+        for (int32_t key : {20, 30, 60, 70}) {
+            ASSIGN_OR_RETURN(source,
+                             publish_followup_upsert_delete(tablet_id, source->version(), key, key * 10, key + 1));
+        }
+        auto flushed = [&] {
+            ScopedPkIndexFlush pk_index_flush;
+            return _primary_key_manager->flush_pk_memtable(source, source->version());
+        }();
+        RETURN_IF_ERROR(flushed.status());
+        if ((*flushed)->sstable_meta().sstables_size() == 0) {
+            return Status::InternalError("the index flush wrote no index file");
+        }
+        RETURN_IF_ERROR(put_tablet_metadata(*flushed));
+        return publish_followup_delete(tablet_id, (*flushed)->version(), /*delete_key=*/40);
+    }
+
+    // A primary-key tablet over [0, 100) ordered by c1, so its sort key is not its primary key. It writes 20, then 60
+    // with a delete of 61, and flushes its index; every data, delete and index file is then marked shared, as a split
+    // leaves them. The index flush must be allowed to run (see ScopedPkIndexFlush).
+    StatusOr<TabletMetadataPtr> create_shared_separate_sort_key_tablet() {
+        const int64_t tablet_id = next_id();
+        prepare_tablet_dirs(tablet_id);
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(1);
+        set_two_column_pk_schema(metadata.get(), /*schema_id=*/4001);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        // ORDER BY c1: a sort key that is not the primary key.
+        metadata->mutable_schema()->add_sort_key_idxes(1);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        RETURN_IF_ERROR(put_tablet_metadata(metadata));
+        ASSIGN_OR_RETURN(auto written, publish_followup_upsert_delete(tablet_id, metadata->version(), 20, 200, 0,
+                                                                      /*include_delete=*/false));
+        ASSIGN_OR_RETURN(written, publish_followup_upsert_delete(tablet_id, written->version(), 60, 600, 61));
+        ASSIGN_OR_RETURN(auto flushed, _primary_key_manager->flush_pk_memtable(written, written->version()));
+
+        auto shared = std::make_shared<TabletMetadataPB>(*flushed);
+        for (auto& rowset : *shared->mutable_rowsets()) {
+            for (auto& segment : *rowset.mutable_segment_metas()) segment.set_shared(true);
+            for (auto& del : *rowset.mutable_del_files()) del.set_shared(true);
+        }
+        for (auto& sst : *shared->mutable_sstable_meta()->mutable_sstables()) sst.set_shared(true);
+        return shared;
     }
 
     void append_tombstone_sstable(TabletMetadataPB* metadata, int32_t key, const std::string& filename, bool shared) {
@@ -2912,17 +2989,20 @@ protected:
         return result;
     }
 
+    // Splits `source` at the given ascending key boundaries: boundaries {0, 5, 100} yield the children [0, 5) and
+    // [5, 100).
     StatusOr<std::vector<TabletMetadataPtr>> try_split_fixed_point_source(const TabletMetadataPtr& source,
-                                                                          int child_count) {
+                                                                          const std::vector<int>& boundaries) {
         RETURN_IF_ERROR(put_tablet_metadata(source));
+        const size_t child_count = boundaries.size() - 1;
         SplittingTabletInfoPB split;
         split.set_old_tablet_id(source->id());
-        for (int i = 0; i < child_count; ++i) {
+        for (size_t i = 0; i < child_count; ++i) {
             split.add_new_tablet_ids(next_id());
             auto* range = split.add_new_tablet_ranges();
-            range->mutable_lower_bound()->CopyFrom(generate_sort_key(i * 100 / child_count));
+            range->mutable_lower_bound()->CopyFrom(generate_sort_key(boundaries[i]));
             range->set_lower_bound_included(true);
-            range->mutable_upper_bound()->CopyFrom(generate_sort_key((i + 1) * 100 / child_count));
+            range->mutable_upper_bound()->CopyFrom(generate_sort_key(boundaries[i + 1]));
             range->set_upper_bound_included(false);
         }
         TxnInfoPB txn;
@@ -2935,6 +3015,19 @@ protected:
         }
         std::vector<TabletMetadataPtr> sources;
         for (auto id : split.new_tablet_ids()) sources.push_back(children.at(id));
+        return sources;
+    }
+
+    StatusOr<std::vector<TabletMetadataPtr>> try_split_fixed_point_source(const TabletMetadataPtr& source,
+                                                                          int child_count) {
+        std::vector<int> boundaries;
+        for (int i = 0; i <= child_count; ++i) boundaries.push_back(i * 100 / child_count);
+        return try_split_fixed_point_source(source, boundaries);
+    }
+
+    std::vector<TabletMetadataPtr> split_fixed_point_source(const TabletMetadataPtr& source,
+                                                            const std::vector<int>& boundaries) {
+        ASSIGN_OR_ABORT(auto sources, try_split_fixed_point_source(source, boundaries));
         return sources;
     }
 
