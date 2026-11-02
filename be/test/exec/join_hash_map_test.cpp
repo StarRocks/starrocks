@@ -386,7 +386,7 @@ MutableColumnPtr JoinHashMapTest::create_nullable_column(LogicalType LT, const B
 }
 
 ColumnPtr JoinHashMapTest::create_int32_column(uint32_t row_count, uint32_t start_value) {
-    const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
+    const auto& int_type_desc = TYPE_INT_DESC;
     MutableColumnPtr column = ColumnHelper::create_column(int_type_desc, false);
     for (int32_t i = 0; i < row_count; i++) {
         column->append_datum(Datum(static_cast<int32_t>(start_value) + i));
@@ -697,7 +697,7 @@ void JoinHashMapTest::check_probe_index_column(const Column& column, const std::
 }
 
 ColumnPtr JoinHashMapTest::create_int32_nullable_column(uint32_t row_count, uint32_t start_value) {
-    const auto& int_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
+    const auto& int_type_desc = TYPE_INT_DESC;
     MutableColumnPtr data_column = ColumnHelper::create_column(int_type_desc, false);
     NullColumn::MutablePtr null_column = NullColumn::create();
     for (int32_t i = 0; i < row_count; i++) {

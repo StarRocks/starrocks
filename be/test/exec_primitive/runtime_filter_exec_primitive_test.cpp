@@ -132,7 +132,7 @@ TEST_F(RuntimeFilterExecPrimitiveTest, ProbeDescriptorInitDistinguishesJoinAndSt
 }
 
 TEST_F(RuntimeFilterExecPrimitiveTest, ProbeDescriptorExposesSlotRefAndAttachedFilter) {
-    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_expr = pool.add(new ColumnRef(TYPE_INT_DESC, 9));
     auto* probe_ctx = pool.add(new ExprContext(probe_expr));
 
     RuntimeFilterProbeDescriptor desc;
@@ -151,13 +151,13 @@ TEST_F(RuntimeFilterExecPrimitiveTest, ProbeDescriptorExposesSlotRefAndAttachedF
 TEST_F(RuntimeFilterExecPrimitiveTest, RegistryInstallsLocalFilterAndTracksWaiters) {
     RuntimeFilterRegistry registry;
 
-    auto* left_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* left_expr = pool.add(new ColumnRef(TYPE_INT_DESC, 9));
     auto* left_ctx = pool.add(new ExprContext(left_expr));
     RuntimeFilterProbeDescriptor left_desc;
     ASSERT_OK(left_desc.init(31, left_ctx));
     left_desc.set_probe_plan_node_id(13);
 
-    auto* right_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 10));
+    auto* right_expr = pool.add(new ColumnRef(TYPE_INT_DESC, 10));
     auto* right_ctx = pool.add(new ExprContext(right_expr));
     RuntimeFilterProbeDescriptor right_desc;
     ASSERT_OK(right_desc.init(31, right_ctx));
@@ -178,7 +178,7 @@ TEST_F(RuntimeFilterExecPrimitiveTest, RegistryInstallsLocalFilterAndTracksWaite
 TEST_F(RuntimeFilterExecPrimitiveTest, RegistryInstallsSharedFilter) {
     RuntimeFilterRegistry registry;
 
-    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_expr = pool.add(new ColumnRef(TYPE_INT_DESC, 9));
     auto* probe_ctx = pool.add(new ExprContext(probe_expr));
     RuntimeFilterProbeDescriptor desc;
     ASSERT_OK(desc.init(37, probe_ctx));
@@ -205,7 +205,7 @@ TEST_F(RuntimeFilterExecPrimitiveTest, ProbeCollectorWaitLoadsCachedFilter) {
     RuntimeFilterCache cache(2);
     ASSERT_OK(cache.init());
 
-    auto* probe_expr = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 9));
+    auto* probe_expr = pool.add(new ColumnRef(TYPE_INT_DESC, 9));
     auto* probe_ctx = pool.add(new ExprContext(probe_expr));
     RuntimeFilterProbeDescriptor desc;
     ASSERT_OK(desc.init(41, probe_ctx));
