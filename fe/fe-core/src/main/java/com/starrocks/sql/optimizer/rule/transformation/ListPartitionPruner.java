@@ -233,7 +233,7 @@ public class ListPartitionPruner implements PartitionPruner {
      * Only some simple conjuncts can be pruned
      */
     public static boolean canPruneWithConjunct(ScalarOperator conjunct) {
-        if (!(conjunct instanceof CompoundPredicateOperator) && containsTruncatingCharCast(conjunct)) {
+        if (!(conjunct instanceof CompoundPredicateOperator) && containsValueChangingCast(conjunct)) {
             return false;
         }
         if (conjunct instanceof BinaryPredicateOperator) {
@@ -502,10 +502,11 @@ public class ListPartitionPruner implements PartitionPruner {
 
 
     private Pair<Set<Long>, Boolean> evalPartitionPruneFilter(ScalarOperator operator) {
-        // LiteralExprFactory does not implement explicit CHAR(N) truncation. Keep these predicates
-        // for execution instead of pruning with different values. Compound predicates recurse so
-        // an independent AND branch can still prune; an unevaluable OR branch retains all partitions.
-        if (!(operator instanceof CompoundPredicateOperator) && containsTruncatingCharCast(operator)) {
+        // LiteralExprFactory does not implement explicit CHAR(N) truncation, and the pruning of IS NULL ignores a
+        // cast that turns a DECIMAL past its precision into NULL. Keep these predicates for execution instead of
+        // pruning with different values. Compound predicates recurse so an independent AND branch can still prune;
+        // an unevaluable OR branch retains all partitions.
+        if (!(operator instanceof CompoundPredicateOperator) && containsValueChangingCast(operator)) {
             return Pair.create(null, true);
         }
         Set<Long> matches = null;
@@ -524,11 +525,12 @@ public class ListPartitionPruner implements PartitionPruner {
         return matches == null ? Pair.create(null, true) : Pair.create(matches, existNoEval);
     }
 
-    private static boolean containsTruncatingCharCast(ScalarOperator operator) {
-        if (operator instanceof CastOperator && ((CastOperator) operator).isTruncatingCharCast()) {
+    private static boolean containsValueChangingCast(ScalarOperator operator) {
+        if (operator instanceof CastOperator && (((CastOperator) operator).isTruncatingCharCast()
+                || ((CastOperator) operator).checksDecimalPrecision())) {
             return true;
         }
-        return operator.getChildren().stream().anyMatch(ListPartitionPruner::containsTruncatingCharCast);
+        return operator.getChildren().stream().anyMatch(ListPartitionPruner::containsValueChangingCast);
     }
 
     private boolean isSinglePartitionColumn(ScalarOperator predicate) {

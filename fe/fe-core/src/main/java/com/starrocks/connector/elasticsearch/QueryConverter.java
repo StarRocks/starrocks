@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -213,6 +214,7 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
     private static class ExtractColumnName implements AstVisitorExtendInterface<String, Void> {
         @Override
         public String visitCastExpr(CastExpr node, Void context) {
+            checkNotDecimalPrecisionCast(node);
             return node.getChild(0).accept(this, null);
         }
 
@@ -244,9 +246,18 @@ public class QueryConverter implements AstVisitorExtendInterface<QueryBuilders.Q
     // SR ignore this cast transformation, push down this `Cast Operation` to Elasticsearch
     static Expr exprWithoutCast(Expr expr) {
         if (expr instanceof CastExpr) {
+            checkNotDecimalPrecisionCast((CastExpr) expr);
             return exprWithoutCast(expr.getChild(0));
         }
         return expr;
+    }
+
+    // A cast that turns a DECIMAL past its precision into NULL is not the column it casts: a predicate on it stays
+    // with StarRocks
+    private static void checkNotDecimalPrecisionCast(CastExpr cast) {
+        if (CastOperator.checksDecimalPrecision(cast.getChild(0).getType(), cast.getType(), cast.isImplicit())) {
+            throw new StarRocksConnectorException("can not push down a cast that checks the precision of a DECIMAL");
+        }
     }
 
 }

@@ -27,6 +27,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.apache.kudu.Schema;
 import org.apache.kudu.client.KuduPredicate;
@@ -104,6 +107,17 @@ public class KuduPredicateConverterTest {
         CastOperator implicitCast = new CastOperator(new CharType(5), F1, true);
         ScalarOperator implicitEquality = new BinaryPredicateOperator(BinaryType.EQ, implicitCast, value);
         Assertions.assertEquals("`f1` = \"hello\"", CONVERTER.convert(implicitEquality).get(0).toString());
+    }
+
+    @Test
+    public void testDecimalPrecisionCastIsNotPushedDown() {
+        // A cast to DECIMAL(3, 0) turns 9999 into NULL, which `f0` IS NULL would miss
+        Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        ScalarOperator isNull = new IsNullPredicateOperator(false, new CastOperator(decimal3, F0));
+        Assertions.assertTrue(CONVERTER.convert(isNull).isEmpty());
+
+        ScalarOperator implicitIsNull = new IsNullPredicateOperator(false, new CastOperator(decimal3, F0, true));
+        Assertions.assertEquals("`f0` NONE", CONVERTER.convert(implicitIsNull).get(0).toString());
     }
 
     @Test

@@ -46,6 +46,26 @@ public class CastOperator extends CallOperator {
         return !isImplicit && getType().isChar() && ((ScalarType) getType()).getLength() >= 0;
     }
 
+    // Whether a cast turns a DECIMAL value with more digits than its precision, also one in an ARRAY, MAP or
+    // STRUCT, into NULL. Only an explicit cast does: an implicit one keeps the value for the sink to check. Nor does
+    // a cast between fully compatible types, which the planner takes for one that gives no NULL (isNullable).
+    public static boolean checksDecimalPrecision(Type childType, Type type, boolean isImplicit) {
+        return checksDecimalPrecision(childType, type, isImplicit, false);
+    }
+
+    // A STRUCT cast by name pairs the fields by name, where isFullyCompatible pairs them by position, so an explicit
+    // one is checked anyway: a NULL field doesn't make the STRUCT NULL
+    public static boolean checksDecimalPrecision(Type childType, Type type, boolean isImplicit, boolean structByName) {
+        if (isImplicit || !(type.isDecimalV3() || type.isComplexType())) {
+            return false;
+        }
+        return (structByName && childType.isStructType() && type.isStructType()) || !childType.isFullyCompatible(type);
+    }
+
+    public boolean checksDecimalPrecision() {
+        return checksDecimalPrecision(getChild(0).getType(), getType(), isImplicit);
+    }
+
     @Override
     public boolean isNullable() {
         ScalarOperator fromOperator = getChild(0);

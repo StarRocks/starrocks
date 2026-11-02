@@ -266,6 +266,10 @@ struct TExprNode {
 
   // Only explicit CAST(x AS CHAR(N)) truncates. Absent/false preserves assignment cast semantics.
   61: optional bool cast_char_truncate
+
+  // Set by the FE on an explicit cast that may give NULL: a DECIMAL value with more digits than its precision,
+  // also in an ARRAY, MAP or STRUCT, becomes NULL (or an error). Absent/false keeps it for the sink to check.
+  62: optional bool cast_decimal_check_precision
 }
 
 struct TPartitionLiteral {

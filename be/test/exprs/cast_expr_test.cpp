@@ -2347,6 +2347,22 @@ static ColumnPtr cast_string_to_array_ptr(TExprNode& cast_expr, LogicalType elem
     return expr->evaluate(nullptr, nullptr);
 }
 
+// An explicit cast checks the DECIMAL elements it parses from a string against their precision
+TEST_F(VectorizedCastExprTest, string_to_decimal_array_past_precision) {
+    TExprNode cast_expr;
+    cast_expr.opcode = TExprOpcode::CAST;
+    cast_expr.node_type = TExprNodeType::CAST_EXPR;
+    cast_expr.num_children = 2;
+    cast_expr.__isset.opcode = true;
+    cast_expr.__isset.child_type = true;
+    TTypeDesc type_desc =
+            TypeDescriptor::create_array_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 3, 0)).to_thrift();
+
+    EXPECT_EQ("[9999,999]", cast_string_to_array(cast_expr, type_desc, "[9999,999]"));
+    cast_expr.__set_cast_decimal_check_precision(true);
+    EXPECT_EQ("[NULL,999]", cast_string_to_array(cast_expr, type_desc, "[9999,999]"));
+}
+
 TEST_F(VectorizedCastExprTest, string_to_array) {
     TExprNode cast_expr;
     cast_expr.opcode = TExprOpcode::CAST;
@@ -2779,7 +2795,8 @@ static ColumnPtr cast_to_variant(const TypeDescriptor& from_type, const ColumnPt
     return expr->evaluate(nullptr, nullptr);
 }
 
-static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPtr& column) {
+static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPtr& column,
+                                   bool check_decimal_precision = false) {
     TExprNode cast_expr;
     cast_expr.opcode = TExprOpcode::CAST;
     cast_expr.node_type = TExprNodeType::CAST_EXPR;
@@ -2789,6 +2806,9 @@ static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPt
     cast_expr.child_type = to_thrift(TYPE_VARIANT);
     cast_expr.type = to_type_desc;
     cast_expr.__set_child_type_desc(TypeDescriptor(TYPE_VARIANT).to_thrift());
+    if (check_decimal_precision) {
+        cast_expr.__set_cast_decimal_check_precision(true);
+    }
 
     ObjectPool pool;
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
@@ -3204,6 +3224,16 @@ TEST_F(VectorizedCastExprTest, variant_string_cast_constants_and_nullable_rows) 
             cast_to_variant(TypeDescriptor(TYPE_VARCHAR), NullableColumn::create(std::move(strings), std::move(nulls)));
     auto result = cast_from_variant(gen_type_desc(TPrimitiveType::TINYINT), variants);
     ASSERT_EQ("[35, NULL, NULL, NULL, 0]", result->debug_string());
+}
+
+// An explicit cast checks the DECIMAL elements it reads from a VARIANT against their precision
+TEST_F(VectorizedCastExprTest, variant_to_decimal_array_past_precision) {
+    constexpr size_t kInputSize = 2;
+    TTypeDesc type_desc =
+            TypeDescriptor::create_array_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 3, 0)).to_thrift();
+    auto variants = make_const_variant_column_from_json(R"([9999,999])", kInputSize);
+    assert_const_or_expanded_result(cast_from_variant(type_desc, variants), kInputSize, "[9999,999]");
+    assert_const_or_expanded_result(cast_from_variant(type_desc, variants, true), kInputSize, "[NULL,999]");
 }
 
 TEST_F(VectorizedCastExprTest, variant_string_cast_in_array) {

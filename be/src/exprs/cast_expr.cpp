@@ -45,6 +45,12 @@ static std::unique_ptr<Expr> create_slot_ref(const TypeDescriptor& type) {
     return std::make_unique<ColumnRef>(ref_node);
 }
 
+// Whether an explicit cast checks the precision of a DECIMAL. The casts of the elements of an ARRAY, MAP or STRUCT
+// that it builds do as it does.
+static bool checks_decimal_precision(const TExprNode& node) {
+    return node.__isset.cast_decimal_check_precision && node.cast_decimal_check_precision;
+}
+
 StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
     // only null
     auto column = ColumnHelper::create_column(_type, true);
@@ -149,6 +155,9 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
         cast.child_type = to_thrift(from_type);
         cast.slot_ref.slot_id = 0;
         cast.slot_ref.tuple_id = 0;
+        if (checks_decimal_precision(node)) {
+            cast.__set_cast_decimal_check_precision(true);
+        }
 
         Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
         if (cast_element_expr == nullptr) {
@@ -181,7 +190,8 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
         std::vector<Expr*> field_casts(cast_to.children.size());
         for (int i = 0; i < cast_to.children.size(); ++i) {
             TypeDescriptor json_type = TypeDescriptor::create_json_type();
-            auto ret = create_cast_expr(pool, json_type, cast_to.children[i], allow_throw_exception);
+            auto ret = create_cast_expr(pool, json_type, cast_to.children[i], allow_throw_exception,
+                                        /*cast_by_name=*/false, checks_decimal_precision(node));
             if (!ret.ok()) {
                 LOG(WARNING) << "Not support cast from type: " << json_type << ", to type: " << cast_to.children[i];
                 return nullptr;
@@ -203,7 +213,8 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
         auto& key_desc = cast_to.children[0];
         if (key_desc.type != TYPE_VARCHAR) {
             TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception,
+                                           /*cast_by_name=*/false, checks_decimal_precision(node));
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from json to map, map key type: " << key_desc
                            << ", status: " << result.status();
@@ -220,7 +231,8 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
         auto& value_desc = cast_to.children[1];
         if (value_desc.type != TYPE_JSON) {
             TypeDescriptor json_type = TypeDescriptor::create_json_type();
-            auto result = create_cast_expr(pool, json_type, value_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, json_type, value_desc, allow_throw_exception,
+                                           /*cast_by_name=*/false, checks_decimal_precision(node));
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from json to map, map value type: " << value_desc
                            << ", status: " << result.status();
@@ -255,6 +267,9 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
         cast.child_type = to_thrift(from_type);
         cast.slot_ref.slot_id = 0;
         cast.slot_ref.tuple_id = 0;
+        if (checks_decimal_precision(node)) {
+            cast.__set_cast_decimal_check_precision(true);
+        }
 
         Expr* cast_element_expr = from_thrift(pool, cast, allow_throw_exception);
         if (cast_element_expr == nullptr) {
@@ -277,7 +292,8 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
         auto& key_desc = expected_type.children[0];
         if (key_desc.type != TYPE_VARCHAR) {
             const TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception,
+                                           /*cast_by_name=*/false, checks_decimal_precision(node));
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from variant to map, map key type: " << key_desc
                            << ", status: " << result.status();
@@ -294,7 +310,8 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
         auto& value_desc = expected_type.children[1];
         if (value_desc.type != TYPE_VARIANT) {
             TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
-            auto result = create_cast_expr(pool, variant_type, value_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, variant_type, value_desc, allow_throw_exception,
+                                           /*cast_by_name=*/false, checks_decimal_precision(node));
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from variant to map, map value type: " << value_desc
                            << ", status: " << result.status();
@@ -315,7 +332,8 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
         std::vector<Expr*> field_casts(expected_type.children.size());
         for (int i = 0; i < expected_type.children.size(); ++i) {
             TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
-            auto ret = create_cast_expr(pool, variant_type, expected_type.children[i], allow_throw_exception);
+            auto ret = create_cast_expr(pool, variant_type, expected_type.children[i], allow_throw_exception,
+                                        /*cast_by_name=*/false, checks_decimal_precision(node));
             if (!ret.ok()) {
                 LOG(WARNING) << "Fail to create cast expr from variant to struct, field type: "
                              << expected_type.children[i] << ", status: " << ret.status();
@@ -361,6 +379,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         cast.child_type = to_thrift(from_type);
         cast.slot_ref.slot_id = 0;
         cast.slot_ref.tuple_id = 0;
+        if (checks_decimal_precision(node)) {
+            cast.__set_cast_decimal_check_precision(true);
+        }
 
         Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
         if (cast_element_expr == nullptr) {
@@ -532,9 +553,11 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
 StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TExprNode& node,
                                                             const TypeDescriptor& from_type,
                                                             const TypeDescriptor& to_type, bool allow_throw_exception) {
+    const bool check_decimal_precision = checks_decimal_precision(node);
     if (from_type.is_array_type() && to_type.is_array_type()) {
         ASSIGN_OR_RETURN(auto* child_cast,
-                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
+                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception,
+                                          /*cast_by_name=*/false, check_decimal_precision));
         pool->add(child_cast);
         auto child_input = create_slot_ref(from_type.children[0]);
         child_cast->add_child(child_input.get());
@@ -544,14 +567,16 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
     }
     if (from_type.is_map_type() && to_type.is_map_type()) {
         ASSIGN_OR_RETURN(auto* key_cast,
-                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception));
+                         create_cast_expr(pool, from_type.children[0], to_type.children[0], allow_throw_exception,
+                                          /*cast_by_name=*/false, check_decimal_precision));
         pool->add(key_cast);
         auto key_input = create_slot_ref(from_type.children[0]);
         key_cast->add_child(key_input.get());
         pool->add(key_input.release());
 
         ASSIGN_OR_RETURN(auto* value_cast,
-                         create_cast_expr(pool, from_type.children[1], to_type.children[1], allow_throw_exception));
+                         create_cast_expr(pool, from_type.children[1], to_type.children[1], allow_throw_exception,
+                                          /*cast_by_name=*/false, check_decimal_precision));
         pool->add(value_cast);
         auto value_input = create_slot_ref(from_type.children[1]);
         value_cast->add_child(value_input.get());
@@ -583,9 +608,9 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
                 }
                 int source_idx = it->second;
                 source_field_indices[i] = source_idx;
-                ASSIGN_OR_RETURN(field_casts[i],
-                                 create_cast_expr(pool, from_type.children[source_idx], to_type.children[i],
-                                                  allow_throw_exception, /*cast_by_name=*/true));
+                ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[source_idx],
+                                                                  to_type.children[i], allow_throw_exception,
+                                                                  /*cast_by_name=*/true, check_decimal_precision));
                 pool->add(field_casts[i]);
                 auto cast_input = create_slot_ref(from_type.children[source_idx]);
                 field_casts[i]->add_child(cast_input.get());
@@ -603,7 +628,8 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
             for (int i = 0; i < (int)to_type.children.size(); ++i) {
                 source_field_indices[i] = i;
                 ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[i], to_type.children[i],
-                                                                  allow_throw_exception));
+                                                                  allow_throw_exception, /*cast_by_name=*/false,
+                                                                  check_decimal_precision));
                 pool->add(field_casts[i]);
                 auto cast_input = create_slot_ref(from_type.children[i]);
                 field_casts[i]->add_child(cast_input.get());
@@ -642,7 +668,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
 // Need add result to pool by caller.
 StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
                                                             const TypeDescriptor& to_type, bool allow_throw_exception,
-                                                            bool cast_by_name) {
+                                                            bool cast_by_name, bool check_decimal_precision) {
     TExprNode cast_node;
     cast_node.node_type = TExprNodeType::CAST_EXPR;
     cast_node.type = to_type.to_thrift();
@@ -650,6 +676,9 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
     cast_node.__set_child_type_desc(from_type.to_thrift());
     if (cast_by_name) {
         cast_node.__set_cast_struct_by_name(true);
+    }
+    if (check_decimal_precision) {
+        cast_node.__set_cast_decimal_check_precision(true);
     }
     return create_cast_expr(pool, cast_node, from_type, to_type, allow_throw_exception);
 }
