@@ -257,7 +257,7 @@ TEST(GeoTypeDescriptorTest, UnknownProtobufWireEnumsUseUnknownDefault) {
             ASSERT_TRUE(storage.ParseFromString(protobuf_enum_wire(field, value)));
             // Closed-enum parsing leaves the field unset; its declared default is UNKNOWN.
             EXPECT_FALSE(type.GetReflection()->HasField(type, type.GetDescriptor()->FindFieldByNumber(field)));
-            // GeoStorageDescPB field 3 is reserved: it has no descriptor and always lands in unknown fields.
+            // GeoStorageDescPB has no field 3: it has no descriptor and always lands in unknown fields.
             if (field <= 2) {
                 EXPECT_FALSE(
                         storage.GetReflection()->HasField(storage, storage.GetDescriptor()->FindFieldByNumber(field)));

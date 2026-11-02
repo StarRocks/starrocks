@@ -298,9 +298,6 @@ message GeoTypeDescPB {
 message GeoStorageDescPB {
     optional GeoEncodingPB encoding = 1;
     optional GeoDimensionPB dimension = 2;
-    // Was validation_state. Do not reuse.
-    reserved 3;
-    reserved "validation_state";
 }
 
 message GeoColumnDescPB {
