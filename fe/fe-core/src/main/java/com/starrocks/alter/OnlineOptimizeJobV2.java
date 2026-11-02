@@ -58,6 +58,8 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import io.opentelemetry.api.trace.StatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -69,6 +71,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -81,6 +84,13 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
     // The optimize job will wait all transactions before this txn id finished, then send the optimize tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
+
+    // The source partition version the rewrite of the running task copies, fixed once the loads below the task's
+    // watershed are finished, see fixRewriteVersion; -1 before. Like watershedTxnId, it belongs to the running task.
+    private long rewriteVersion = -1;
+
+    // The transaction of the rewrite INSERT of the running task, -1 until it begins.
+    private volatile long rewriteTxnId = -1;
 
     private String postfix;
 
@@ -164,6 +174,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         // during RUNNING and its durable WAITING_TXN value is -1.
         rewriteTasks.clear();
         watershedTxnId = -1;
+        rewriteVersion = -1;
+        rewriteTxnId = -1;
         progress = 0;
         if (jobState == JobState.PENDING) {
             tmpPartitionIds.clear();
@@ -220,6 +232,14 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         }
         Preconditions.checkState(table instanceof OlapTable);
         return (OlapTable) table;
+    }
+
+    // Until the table is stable (OlapTableState.WAITING_STABLE) the job has created nothing on it, and it rewrites only
+    // the partitions it was created for: loads may create partitions meanwhile, as they may once it runs
+    // (OlapTableState.OPTIMIZE). The wait lasts as long as a replica repair, and would fail every such load.
+    @Override
+    public boolean allowConcurrentPartitionCreation() {
+        return jobState == JobState.PENDING;
     }
 
     /**
@@ -388,6 +408,8 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                     // (silent data loss) or fail at publish against a force-deleted source tablet.
                     this.watershedTxnId = GlobalStateMgr.getCurrentState()
                                 .getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                    this.rewriteVersion = -1;
+                    this.rewriteTxnId = -1;
 
                     LOG.info("job {} add double write partition: {}:{} -> {}:{}, watershedTxnId {}", jobId,
                                 sourcePartitionName, p.getId(), tempPartitionName, temp.getId(), watershedTxnId);
@@ -407,6 +429,48 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                     new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             tbl.clearDoubleWritePartition();
             LOG.info("job {} clear double write partitions", jobId);
+        }
+    }
+
+    /**
+     * Fixes the source partition version the rewrite of the task copies: the last version a load has committed to it.
+     * Every commit assigns versions under the table WRITE lock taken here, so from now on a load commits a version
+     * above it and keeps the double write to the temp partition, while one that committed before has a version at or
+     * below it, which the rewrite copies, and has left the temp partition out (see the version assignment in
+     * DatabaseTransactionMgr). The temp partition thus holds no double-written version at or below its version
+     * overwrite: on a tablet that is not primary key a compaction can merge such a version with a later one before
+     * the overwrite arrives, and the overwrite then drops the later one with it; a primary key tablet would apply it
+     * before the overwrite and keep rows that a later load into the source partition has deleted.
+     */
+    private long fixRewriteVersion(Database db, OlapTable tbl, OptimizeTask rewriteTask) throws AlterCancelException {
+        try (AutoCloseableLock ignored =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
+            Partition source = tbl.getPartition(rewriteTask.getPartitionName());
+            Partition temp = tbl.getPartition(rewriteTask.getTempPartitionName(), true);
+            if (source == null || temp == null) {
+                throw new AlterCancelException("partition " + rewriteTask.getPartitionName() + " or its temp partition "
+                        + rewriteTask.getTempPartitionName() + " does not exist");
+            }
+            long version = source.getDefaultPhysicalPartition().getNextVersion() - 1;
+            tbl.setDoubleWriteRewriteVersion(temp.getId(), version);
+            LOG.info("optimize job {} rewrites partition {} at version {}, {} takes the double writes above it",
+                    jobId, rewriteTask.getPartitionName(), version, rewriteTask.getTempPartitionName());
+            return version;
+        }
+    }
+
+    // The physical partition the rewrite of the task reads, once every load up to the rewrite version is visible in
+    // it; null before.
+    private PhysicalPartition getSourceVisibleAtRewriteVersion(Database db, OlapTable tbl, OptimizeTask rewriteTask)
+            throws AlterCancelException {
+        try (AutoCloseableLock ignored =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
+            Partition source = tbl.getPartition(rewriteTask.getPartitionName());
+            if (source == null) {
+                throw new AlterCancelException("partition " + rewriteTask.getPartitionName() + " does not exist");
+            }
+            PhysicalPartition physicalPartition = source.getDefaultPhysicalPartition();
+            return physicalPartition.getVisibleVersion() >= rewriteVersion ? physicalPartition : null;
         }
     }
 
@@ -459,58 +523,75 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                     throw new AlterCancelException(e.getMessage());
                 }
 
-                if (this.future != null) {
-                    if (this.future.isDone()) {
-                        Constants.TaskRunState taskState;
-                        try {
-                            taskState = future.get();
-                        } catch (InterruptedException | ExecutionException e) {
-                            LOG.warn("get rewrite task result failed", e);
-                            taskState = Constants.TaskRunState.FAILED;
-                        }
-
-                        // Before allowing the partition replacement, make sure no load transaction has
-                        // committed to the source partition but is not yet visible (published). Such a load
-                        // has already been double-written into the temp partition (it begins after the
-                        // watershed and therefore observes the double-write mapping), but replacing the source
-                        // partition before it is published would drop the source partition out from under an
-                        // unpublished transaction that still references it -> publish failure. We do NOT abandon
-                        // the optimization here; we simply wait one scheduler round for the load to become
-                        // visible, preserving the "online" contract (loads neither fail nor lose data).
-                        // future stays set and done, so the rewrite SQL is not re-run on retry.
-                        if (taskState == Constants.TaskRunState.SUCCESS
-                                && hasCommittedNotVisible(db, tbl, rewriteTask.getPartitionName())) {
-                            LOG.info("optimize job {} task {} waiting for committed-not-visible loads on "
-                                    + "partition {} before replacing", jobId, rewriteTask.getName(),
-                                    rewriteTask.getPartitionName());
-                            return;
-                        }
-
-                        rewriteTask.setOptimizeTaskState(taskState);
-                        if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
-                            this.allPartitionOptimized = false;
-                        }
-                        this.future = null;
-                    } else {
-                        LOG.info("wait rewrite task {} to be finished, optimize job: {}", rewriteTask.getName(), jobId);
+                if (this.future == null) {
+                    if (rewriteVersion < 0) {
+                        rewriteVersion = fixRewriteVersion(db, tbl, rewriteTask);
+                    }
+                    // The rewrite reads the source partition at exactly the rewrite version, which every load
+                    // committed up to it has to have published first.
+                    PhysicalPartition source = getSourceVisibleAtRewriteVersion(db, tbl, rewriteTask);
+                    if (source == null) {
+                        LOG.info("optimize job {} task {} waiting for the loads up to version {} of partition {} "
+                                + "to be visible", jobId, rewriteTask.getName(), rewriteVersion,
+                                rewriteTask.getPartitionName());
                         return;
                     }
-                } else {
-                    LOG.info("previous transactions are all finished, begin to optimize task {}. job: {}",
-                                rewriteTask.toString(), jobId);
-                    Callable<Constants.TaskRunState> task = () -> {
-                        try {
-                            executeSql(rewriteTask.getDefinition());
-                            LOG.info("finish rewrite task: {}", rewriteTask.getName());
-                            return Constants.TaskRunState.SUCCESS;
-                        } catch (Exception e) {
-                            LOG.warn("create rewrite task failed", e);
-                            return Constants.TaskRunState.FAILED;
-                        }
-                    };
-                    this.future = EXECUTOR.submit(task);
+                    if (rewriteVersion <= Partition.PARTITION_INIT_VERSION) {
+                        // No load has ever committed to the source partition: the double writes are all its data.
+                        LOG.info("optimize job {} task {} has no data to rewrite in partition {}", jobId,
+                                rewriteTask.getName(), rewriteTask.getPartitionName());
+                        this.future = CompletableFuture.completedFuture(Constants.TaskRunState.SUCCESS);
+                    } else {
+                        LOG.info("previous transactions are all finished, begin to optimize task {} at version {}. "
+                                + "job: {}", rewriteTask.toString(), rewriteVersion, jobId);
+                        Map<Long, Long> scanVersion = Map.of(source.getId(), rewriteVersion);
+                        Callable<Constants.TaskRunState> task = () -> {
+                            try {
+                                executeSql(rewriteTask.getDefinition(), scanVersion);
+                                LOG.info("finish rewrite task: {}", rewriteTask.getName());
+                                return Constants.TaskRunState.SUCCESS;
+                            } catch (Exception e) {
+                                LOG.warn("create rewrite task failed", e);
+                                return Constants.TaskRunState.FAILED;
+                            }
+                        };
+                        this.future = EXECUTOR.submit(task);
+                        return;
+                    }
+                }
+
+                if (!this.future.isDone()) {
+                    LOG.info("wait rewrite task {} to be finished, optimize job: {}", rewriteTask.getName(), jobId);
                     return;
                 }
+                Constants.TaskRunState taskState;
+                try {
+                    taskState = future.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    LOG.warn("get rewrite task result failed", e);
+                    taskState = Constants.TaskRunState.FAILED;
+                }
+
+                // A rewrite whose publish timed out has not put its version overwrite into the temp partition yet,
+                // which reads of the partition need once it replaces the source one: wait one scheduler round for it
+                // to become visible. future stays set and done, so the rewrite SQL is not re-run on retry.
+                // Loads need no such wait, though one committed but not yet visible keeps referencing the source
+                // partition: its double write already holds its data, at a version above the rewrite's, and once
+                // the temp partition replaces the source one these double writes become visible in version order
+                // like any load (see DatabaseTransactionMgr.isDoubleWriteToTempPartition). Waiting for a moment
+                // without such a load would hold the replacement for as long as loads keep coming.
+                if (taskState == Constants.TaskRunState.SUCCESS && !isRewriteVisible(db)) {
+                    LOG.info("optimize job {} task {} waiting for its rewrite transaction {} to be visible before "
+                            + "replacing partition {}", jobId, rewriteTask.getName(), rewriteTxnId,
+                            rewriteTask.getPartitionName());
+                    return;
+                }
+
+                rewriteTask.setOptimizeTaskState(taskState);
+                if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
+                    this.allPartitionOptimized = false;
+                }
+                this.future = null;
             }
 
             try (AutoCloseableLock ignore =
@@ -713,38 +794,15 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                     .isPreviousTransactionsFinished(watershedTxnId, dbId, Lists.newArrayList(tableId));
     }
 
-    // Returns true if there exists a committed-but-not-visible (not yet published) load transaction on the
-    // source partition identified by sourcePartitionName. Mirrors the visibility gate used by the offline
-    // OptimizeJobV2, so the online job never replaces a partition that an unpublished load still references.
-    protected boolean hasCommittedNotVisible(Database db, OlapTable tbl, String sourcePartitionName) {
-        // Committed load metadata (TableCommitInfo's PartitionCommitInfo map) is keyed by PHYSICAL partition
-        // id, not the logical partition id (see TableCommitInfo.addPartitionCommitInfo). For normal partitions
-        // the logical Partition.getId() differs from the physical partition id, so resolve the source
-        // partition's physical partition(s) here: passing the logical id would make existCommittedTxns miss a
-        // committed-but-not-visible load and let the replacement proceed under an unpublished transaction,
-        // reopening the publish-failure window this gate is meant to close. The source partition has a single
-        // sub-partition (see enableDoubleWritePartition), but iterate defensively in case that changes.
-        List<Long> sourcePhysicalPartitionIds = Lists.newArrayList();
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(db.getId(), tbl.getId(), LockType.READ);
-        try {
-            Partition partition = tbl.getPartition(sourcePartitionName);
-            if (partition == null) {
-                return false;
-            }
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                sourcePhysicalPartitionIds.add(physicalPartition.getId());
-            }
-        } finally {
-            locker.unLockTableWithIntensiveDbLock(db.getId(), tbl.getId(), LockType.READ);
+    // Whether the rewrite INSERT of the running task, if it has run, is visible, i.e. its version overwrite is in the
+    // temp partition. A transaction gone from the transaction manager finished long ago.
+    protected boolean isRewriteVisible(Database db) {
+        if (rewriteTxnId < 0) {
+            return true;
         }
-        for (long physicalPartitionId : sourcePhysicalPartitionIds) {
-            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                        .existCommittedTxns(db.getId(), tbl.getId(), physicalPartitionId)) {
-                return true;
-            }
-        }
-        return false;
+        TransactionState rewriteTxn =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), rewriteTxnId);
+        return rewriteTxn == null || rewriteTxn.getTransactionStatus() == TransactionStatus.VISIBLE;
     }
 
     /**
@@ -959,14 +1017,17 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         return context;
     }
 
-    protected void executeSql(String sql) throws Exception {
-        LOG.info("execute sql : {}", sql);
+    // scanVersion pins the version the rewrite reads its source physical partition at, see fixRewriteVersion.
+    protected void executeSql(String sql, Map<Long, Long> scanVersion) throws Exception {
+        LOG.info("execute sql at versions {}: {}", scanVersion, sql);
         ConnectContext context = ConnectContext.get();
         if (context == null) {
             context = buildConnectContext();
         }
         boolean originalOptimizeRewrite = context.isOptimizeRewrite();
+        Map<Long, Long> originalScanVersion = context.getScanVersionOverride();
         context.setOptimizeRewrite(true);
+        context.setScanVersionOverride(scanVersion);
         try (var scope = context.bindScope()) {
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             if (parsedStmt instanceof InsertStmt) {
@@ -985,6 +1046,9 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
             executor.execute();
+            if (parsedStmt instanceof InsertStmt) {
+                rewriteTxnId = ((InsertStmt) parsedStmt).getTxnId();
+            }
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("Execute sql fail | Error Message [{}] | {} | SQL [{}]",
@@ -993,6 +1057,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
             }
         } finally {
             context.setOptimizeRewrite(originalOptimizeRewrite);
+            context.setScanVersionOverride(originalScanVersion);
         }
     }
 

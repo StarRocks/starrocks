@@ -330,7 +330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：最適化ジョブ作成時に StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェックを満たす場合 (パーティション/キー/ソート指定なし、分散が `RandomDistributionDesc` でない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートストレージが有効、テーブルがクラウドネイティブテーブルまたはマテリアライズドビューでない)、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件が失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックします。これは、最適化中に書き込み操作をブロックする可能性があります。
+- 説明：最適化ジョブ作成時に StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェックを満たす場合 (パーティション/キー/ソート指定なし、分散が `RandomDistributionDesc` でない、バケッティング方法とバケットキーを変更しない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートストレージが有効、テーブルがクラウドネイティブテーブルまたはマテリアライズドビューでない)、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件が失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックします。これは、最適化中に書き込み操作をブロックする可能性があります。オンライン最適化パスは `enable_new_publish_mechanism` をサポートしていません。`enable_new_publish_mechanism` も true の場合、互換性チェックを満たす最適化ジョブの作成はエラーで失敗します。この場合は、`enable_new_publish_mechanism` または `enable_online_optimize_table` を false に設定してください。
 - 導入時期：v3.3.3, v3.4.0, v3.5.0
 
 ### `enable_strict_storage_medium_check`

@@ -330,7 +330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 StarRocks 在创建优化作业时是否使用非阻塞在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（无分区/键/排序规范，分布不是 `RandomDistributionDesc`，存储类型不是 `COLUMN_WITH_ROW`，已启用复制存储，且该表不是云原生表或物化视图）时，规划器会创建一个 `OnlineOptimizeJobV2` 以在不阻塞写入的情况下执行优化。如果为 false 或任何兼容性条件失败，StarRocks 将回退到 `OptimizeJobV2`，这可能会在优化期间阻塞写入操作。
+- 描述: 控制 StarRocks 在创建优化作业时是否使用非阻塞在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（无分区/键/排序规范，分布不是 `RandomDistributionDesc`，未修改分桶方式和分桶键，存储类型不是 `COLUMN_WITH_ROW`，已启用复制存储，且该表不是云原生表或物化视图）时，规划器会创建一个 `OnlineOptimizeJobV2` 以在不阻塞写入的情况下执行优化。如果为 false 或任何兼容性条件失败，StarRocks 将回退到 `OptimizeJobV2`，这可能会在优化期间阻塞写入操作。在线优化路径不支持 `enable_new_publish_mechanism`：如果 `enable_new_publish_mechanism` 也为 true，创建满足兼容性检查的优化作业会失败并返回错误。此时需要将 `enable_new_publish_mechanism` 或 `enable_online_optimize_table` 设置为 false。
 - 引入版本: v3.3.3, v3.4.0, v3.5.0
 
 ### `enable_strict_storage_medium_check`

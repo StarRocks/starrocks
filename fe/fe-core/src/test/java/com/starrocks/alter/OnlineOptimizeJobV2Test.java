@@ -14,8 +14,13 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ListMultimap;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2.JobState;
 import com.starrocks.catalog.CatalogRecycleBin;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.LocalTablet;
@@ -23,12 +28,20 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfoV2;
@@ -40,8 +53,30 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.task.ClearTransactionTask;
+import com.starrocks.task.PublishVersionTask;
+import com.starrocks.thrift.TClearTransactionTaskRequest;
+import com.starrocks.thrift.TPartitionVersionInfo;
+import com.starrocks.thrift.TTablet;
+import com.starrocks.thrift.TTabletInfo;
+import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.PartitionCommitInfo;
+import com.starrocks.transaction.PublishVersionDaemon;
+import com.starrocks.transaction.TableCommitInfo;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.jupiter.api.AfterEach;
@@ -49,10 +84,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -106,6 +144,29 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
         Assertions.assertEquals(OlapTableState.OPTIMIZE, olapTable.getState());
+    }
+
+    @Test
+    public void testOptimizeTableRejectedUnderNewPublishMechanism() throws Exception {
+        // Online optimize does not support the new publish mechanism: the ALTER fails before it creates a job or
+        // changes the table.
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        int jobCount = schemaChangeHandler.getAlterJobsV2().size();
+
+        boolean savedEnableNewPublishMechanism = Config.enable_new_publish_mechanism;
+        Config.enable_new_publish_mechanism = true;
+        try {
+            DdlException e = Assertions.assertThrows(DdlException.class,
+                    () -> schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable));
+            Assertions.assertTrue(e.getMessage().contains("enable_new_publish_mechanism"), e.getMessage());
+        } finally {
+            Config.enable_new_publish_mechanism = savedEnableNewPublishMechanism;
+        }
+        Assertions.assertEquals(jobCount, schemaChangeHandler.getAlterJobsV2().size());
+        Assertions.assertEquals(OlapTableState.NORMAL, olapTable.getState());
     }
 
     // start a schema change, then finished
@@ -168,6 +229,16 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         optimizeJob.runWaitingTxnJob();
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
 
+        // A load has made the partition non-empty, so the job has to rewrite it; the rewrite fails.
+        PhysicalPartition physicalPartition =
+                olapTable.getPartition(GlobalStateMgrTestUtil.testTable7).getDefaultPhysicalPartition();
+        long visibleVersion = physicalPartition.getVisibleVersion();
+        long nextVersion = physicalPartition.getNextVersion();
+        physicalPartition.setNextVersion(nextVersion + 1);
+        physicalPartition.setVisibleVersion(visibleVersion + 1, System.currentTimeMillis());
+        Mockito.doThrow(new Exception("rewrite failed")).when(optimizeJob)
+                .executeSql(Mockito.anyString(), Mockito.any());
+
         int retryCount = 0;
         int maxRetry = 5;
 
@@ -184,6 +255,9 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
             optimizeJob.cancel("");
         } catch (AlterCancelException e) {
             optimizeJob.cancel(e.getMessage());
+        } finally {
+            physicalPartition.setNextVersion(nextVersion);
+            physicalPartition.setVisibleVersion(visibleVersion, System.currentTimeMillis());
         }
 
         // finish alter tasks
@@ -222,6 +296,39 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         replica1.setState(Replica.ReplicaState.NORMAL);
         optimizeJob.runPendingJob();
         Assertions.assertEquals(JobState.WAITING_TXN, optimizeJob.getJobState());
+    }
+
+    @Test
+    public void testLoadCreatesPartitionWhileJobWaitsForStableTable() throws Exception {
+        // The job waits for the table to become stable as long as a replica repair takes. A load that creates a
+        // partition by expression must not fail meanwhile, as it does not once the job runs (OPTIMIZE).
+        OlapTable table = createPartitionedTable("t_online_optimize_unstable_new_partition");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        AlterTableStmt optimize = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " DISTRIBUTED BY HASH(k1) BUCKETS 2", starRocksAssert.getCtx());
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.process(optimize.getAlterClauseList(), db, table);
+        OnlineOptimizeJobV2 job =
+                (OnlineOptimizeJobV2) schemaChangeHandler.getUnfinishedAlterJobV2ByTableId(table.getId()).get(0);
+
+        Replica replica = ((LocalTablet) table.getPartition("p1").getDefaultPhysicalPartition().getLatestBaseIndex()
+                .getTablets().get(0)).getImmutableReplicas().get(0);
+        replica.setState(Replica.ReplicaState.DECOMMISSION);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(OlapTableState.WAITING_STABLE, table.getState());
+
+        AlterTableStmt addPartition = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " ADD PARTITION p3 VALUES LESS THAN ('30')", starRocksAssert.getCtx());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(starRocksAssert.getCtx(), db,
+                table.getName(), (AddPartitionClause) addPartition.getAlterClauseList().get(0));
+        Assertions.assertNotNull(table.getPartition("p3"));
+
+        // Once the table is stable, the job rewrites the partitions it was created for only.
+        replica.setState(Replica.ReplicaState.NORMAL);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
+        Assertions.assertEquals(2, job.getTmpPartitionIds().size());
     }
 
     @Test
@@ -395,36 +502,11 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
-    public void testHasCommittedNotVisibleFalseWhenNoCommittedTxns() throws Exception {
-        // The visibility gate must report "safe to replace" when there are no committed-but-unpublished
-        // loads on the source partition, so the optimization converges in the common case (we delay the
-        // replacement only while a committed load is still unpublished, we never abandon it).
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
-        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
-
-        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
-        Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
-        OnlineOptimizeJobV2 optimizeJob =
-                spyPreviousTxnFinished((OnlineOptimizeJobV2) alterJobsV2.values().stream().findAny().get());
-        optimizeJob.runPendingJob();
-        optimizeJob.runWaitingTxnJob();
-
-        OptimizeTask task = optimizeJob.getOptimizeTasks().get(0);
-        java.lang.reflect.Method m = OnlineOptimizeJobV2.class.getDeclaredMethod(
-                "hasCommittedNotVisible", Database.class, OlapTable.class, String.class);
-        m.setAccessible(true);
-        boolean committedNotVisible = (boolean) m.invoke(optimizeJob, db, olapTable, task.getPartitionName());
-        Assertions.assertFalse(committedNotVisible);
-    }
-
-    @Test
-    public void testCommittedNotVisibleDefersReplacementWithoutRerunningRewrite() throws Exception {
-        // When the rewrite SQL has finished (future done = SUCCESS) but a load is committed-but-not-visible
-        // on the source partition, runRunningJob must DEFER the partition replacement: stay in RUNNING and
-        // leave the (completed) future in place so the rewrite INSERT is NOT resubmitted on the next round.
-        // This preserves the online contract (no abandon) while never replacing under an unpublished load.
+    public void testUnpublishedRewriteDefersReplacementWithoutRerunningRewrite() throws Exception {
+        // When the rewrite SQL has finished (future done = SUCCESS) but its transaction is committed-but-not-visible,
+        // runRunningJob must DEFER the partition replacement: stay in RUNNING and leave the (completed) future in
+        // place so the rewrite INSERT is NOT resubmitted on the next round. This preserves the online contract (no
+        // abandon) while never replacing before the temp partition holds the rewrite's version overwrite.
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -447,9 +529,8 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         futureField.set(optimizeJob,
                 java.util.concurrent.CompletableFuture.completedFuture(Constants.TaskRunState.SUCCESS));
 
-        // A committed-but-not-visible load exists on the source partition -> must defer.
-        Mockito.doReturn(true).when(optimizeJob)
-                .hasCommittedNotVisible(Mockito.any(), Mockito.any(), Mockito.anyString());
+        // The rewrite transaction is committed but not visible yet -> must defer.
+        Mockito.doReturn(false).when(optimizeJob).isRewriteVisible(Mockito.any());
 
         optimizeJob.runRunningJob();
 
@@ -460,7 +541,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Assertions.assertNotNull(futureField.get(optimizeJob),
                 "completed future must be retained while deferring, so the rewrite INSERT is not re-run");
 
-        // Run a second scheduler round while still committed-not-visible: it must defer again and, crucially,
+        // Run a second scheduler round while still not visible: it must defer again and, crucially,
         // must NOT resubmit the rewrite INSERT (the retained completed future short-circuits re-execution).
         optimizeJob.runRunningJob();
         Assertions.assertEquals(JobState.RUNNING, optimizeJob.getJobState());
@@ -469,7 +550,428 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
 
         // The rewrite SQL is never (re-)executed across the deferred rounds: the injected future stands in for
         // the completed INSERT, and the defer branch returns before any resubmission path.
-        Mockito.verify(optimizeJob, Mockito.never()).executeSql(Mockito.anyString());
+        Mockito.verify(optimizeJob, Mockito.never()).executeSql(Mockito.anyString(), Mockito.any());
+    }
+
+    @Test
+    public void testLoadsCommittedBeforeRewriteVersionStayOutOfTempPartition() throws Exception {
+        // A temp partition must not receive a double-written version at or below the rewrite's version overwrite: a
+        // compaction can merge it with a later one before the overwrite arrives, and the overwrite then drops both.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_rewrite_version");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        // Start the double write of the first partition while a load from before its watershed still runs.
+        Mockito.doReturn(false).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        Partition source = table.getPartition(task.getPartitionName());
+        Partition temp = table.getPartition(task.getTempPartitionName(), true);
+        Assertions.assertEquals(Map.of(source.getId(), temp.getId()), table.getDoubleWritePartitions());
+        Assertions.assertNull(table.getDoubleWriteRewriteVersion(temp.getId()));
+
+        // The rewrite will copy a load that commits now from the source partition: it leaves the temp partition out.
+        TransactionState before = commitLoad(db, table, source, temp);
+        PartitionCommitInfo sourceBefore = partitionCommitInfo(before, table, source);
+        Assertions.assertNotNull(sourceBefore);
+        Assertions.assertNull(partitionCommitInfo(before, table, temp));
+
+        // The loads before the watershed are done: the rewrite version is the last version committed so far.
+        Mockito.doReturn(true).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        Assertions.assertEquals(sourceBefore.getVersion(), table.getDoubleWriteRewriteVersion(temp.getId()));
+
+        // A load committing from now on gets a version above it and keeps its double write, at the same version.
+        TransactionState after = commitLoad(db, table, source, temp);
+        PartitionCommitInfo sourceAfter = partitionCommitInfo(after, table, source);
+        PartitionCommitInfo doubleWrite = partitionCommitInfo(after, table, temp);
+        Assertions.assertNotNull(doubleWrite);
+        Assertions.assertTrue(doubleWrite.isDoubleWrite());
+        Assertions.assertEquals(sourceAfter.getVersion(), doubleWrite.getVersion());
+        Assertions.assertTrue(doubleWrite.getVersion() > sourceBefore.getVersion());
+
+        // Publish both loads: a committed transaction left behind keeps the next test from dropping the database.
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        transactionMgr.finishTransaction(db.getId(), before.getTransactionId(), new HashSet<>());
+        transactionMgr.finishTransaction(db.getId(), after.getTransactionId(), new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), before.getTransactionId()).getTransactionStatus());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), after.getTransactionId()).getTransactionStatus());
+    }
+
+    @Test
+    public void testLoadLeftOutOfTempPartitionIsClearedOnBackend() throws Exception {
+        // The backends committed the double write of a load that then left the temp partition out, and no publish
+        // reaches it: committing the load clears it on the backends of the load. A backend that misses this reports
+        // it as expired on the temp partition's tablets once the load is visible, which must clear it there as well.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_clear_left_out");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        Mockito.doReturn(false).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        Partition source = table.getPartition(task.getPartitionName());
+        Partition temp = table.getPartition(task.getTempPartitionName(), true);
+        long tempPhysicalPartitionId = temp.getDefaultPhysicalPartition().getId();
+        TransactionState load;
+        List<AgentBatchTask> submitted;
+        try (MockedStatic<AgentTaskExecutor> executor =
+                Mockito.mockStatic(AgentTaskExecutor.class, Mockito.CALLS_REAL_METHODS)) {
+            load = commitLoad(db, table, source, temp);
+            ArgumentCaptor<AgentBatchTask> batchTasks = ArgumentCaptor.forClass(AgentBatchTask.class);
+            executor.verify(() -> AgentTaskExecutor.submit(batchTasks.capture()), Mockito.atLeastOnce());
+            submitted = batchTasks.getAllValues();
+        }
+        Assertions.assertNull(partitionCommitInfo(load, table, temp));
+        Map<Long, TClearTransactionTaskRequest> clears = new HashMap<>();
+        for (AgentBatchTask batchTask : submitted) {
+            for (AgentTask agentTask : batchTask.getAllTasks()) {
+                if (agentTask instanceof ClearTransactionTask clear
+                        && clear.toThrift().getTransaction_id() == load.getTransactionId()) {
+                    clears.put(clear.getBackendId(), clear.toThrift());
+                }
+            }
+        }
+        Set<Long> tempBackendIds = new HashSet<>();
+        for (MaterializedIndex index : temp.getDefaultPhysicalPartition()
+                .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+            for (Tablet tablet : index.getTablets()) {
+                tempBackendIds.addAll(((LocalTablet) tablet).getBackendIds());
+            }
+        }
+        Assertions.assertTrue(clears.keySet().containsAll(tempBackendIds), clears + " " + tempBackendIds);
+        for (TClearTransactionTaskRequest clear : clears.values()) {
+            Assertions.assertEquals(List.of(tempPhysicalPartitionId), clear.getPartition_id());
+        }
+
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .finishTransaction(db.getId(), load.getTransactionId(), new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.VISIBLE, GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), load.getTransactionId()).getTransactionStatus());
+
+        LocalTablet tempTablet = (LocalTablet) temp.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().get(0);
+        Replica replica = tempTablet.getImmutableReplicas().get(0);
+        TTabletInfo tabletInfo = new TTabletInfo(tempTablet.getId(), replica.getSchemaHash(), replica.getVersion(),
+                0, replica.getRowCount(), replica.getDataSize());
+        tabletInfo.setPartition_id(tempPhysicalPartitionId);
+        tabletInfo.setTransaction_ids(List.of(load.getTransactionId()));
+        TTablet backendTablet = new TTablet(List.of(tabletInfo));
+        ListMultimap<Long, Long> transactionsToClear = ArrayListMultimap.create();
+
+        ReportHandler.tabletReport(replica.getBackendId(), Map.of(tempTablet.getId(), backendTablet), new HashMap<>(),
+                ArrayListMultimap.create(), HashBasedTable.create(), new HashSet<>(), ArrayListMultimap.create(),
+                new HashMap<>(), new HashMap<>(), transactionsToClear, ArrayListMultimap.create(), new HashSet<>());
+
+        Assertions.assertTrue(transactionsToClear.get(load.getTransactionId()).contains(tempPhysicalPartitionId),
+                transactionsToClear.toString());
+    }
+
+    @Test
+    public void testDistributionChangeRunsOffline() throws Exception {
+        // A load double-writes the source and the temp partition of an online job with one set of distribution
+        // columns, and the online job swaps the partitions in one by one: another distribution runs offline.
+        Assertions.assertInstanceOf(OptimizeJobV2.class, createOptimizeJob(
+                createPartitionedTable("t_online_optimize_other_columns"), "DISTRIBUTED BY HASH(v1) BUCKETS 2"));
+        Assertions.assertInstanceOf(OptimizeJobV2.class, createOptimizeJob(
+                createPartitionedTable("t_online_optimize_other_type"), "DISTRIBUTED BY RANDOM BUCKETS 2"));
+        // Column names compare regardless of case.
+        Assertions.assertInstanceOf(OnlineOptimizeJobV2.class, createOptimizeJob(
+                createPartitionedTable("t_online_optimize_same_columns"), "DISTRIBUTED BY HASH(K1) BUCKETS 2"));
+    }
+
+    @Test
+    public void testLeftOutDoubleWriteKeepsDictMetadata() throws Exception {
+        // The listener puts the dictionary metadata of a load on one of its partition commit infos only. If that is
+        // the double write the commit leaves out, the commit info of the source partition must take it over, or the
+        // global dicts of the table are neither invalidated nor advanced when the load becomes visible.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_left_out_dict");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        Mockito.doReturn(false).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        Partition source = table.getPartition(task.getPartitionName());
+        Partition temp = table.getPartition(task.getTempPartitionName(), true);
+        ColumnId column = table.getColumn("v1").getColumnId();
+
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()),
+                "online_optimize_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        transactionMgr.prepareTransaction(db.getId(), txnId, 60_000L, tabletCommitInfos(source, temp), List.of(),
+                null);
+        // As if the listener had put the metadata on the temp partition.
+        TableCommitInfo tableCommitInfo =
+                transactionMgr.getTransactionState(db.getId(), txnId).getTableCommitInfo(table.getId());
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(source.getDefaultPhysicalPartition().getId(),
+                -1, System.currentTimeMillis()));
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(temp.getDefaultPhysicalPartition().getId(),
+                -1, System.currentTimeMillis(), Lists.newArrayList(column), Lists.newArrayList(),
+                Lists.newArrayList()));
+        // Commit as GlobalTransactionMgr does, without its wait for the publish that the test holds back.
+        try (AutoCloseableLock ignored =
+                new AutoCloseableLock(new Locker(), db.getId(), List.of(table.getId()), LockType.WRITE)) {
+            transactionMgr.getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(txnId);
+        }
+
+        TransactionState load = transactionMgr.getTransactionState(db.getId(), txnId);
+        Assertions.assertNull(partitionCommitInfo(load, table, temp));
+        Assertions.assertEquals(List.of(column), partitionCommitInfo(load, table, source).getInvalidDictCacheColumns());
+
+        // Publish the load: a committed transaction left behind keeps the next test from dropping the database.
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+    }
+
+    @Test
+    public void testKeptDoubleWriteCarriesDictMetadataOfSource() throws Exception {
+        // The listener puts the dictionary metadata of a load on one of its partition commit infos only. The job swaps
+        // the temp partition in without waiting for the loads that kept their double write, and a load still unpublished
+        // then loses the commit info of the dropped source partition: the double write must carry the metadata too, or
+        // the global dicts of the table are neither invalidated nor advanced when the load becomes visible.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_kept_dict");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        Mockito.doReturn(false).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        Partition source = table.getPartition(task.getPartitionName());
+        Partition temp = table.getPartition(task.getTempPartitionName(), true);
+        // A load commits before the job fixes the rewrite version, which the job then fixes at the load's version.
+        TransactionState before = commitLoad(db, table, source, temp);
+        Mockito.doReturn(true).when(job).isPreviousLoadFinished();
+        job.runRunningJob();
+        Assertions.assertEquals(partitionCommitInfo(before, table, source).getVersion(),
+                table.getDoubleWriteRewriteVersion(temp.getId()));
+        ColumnId column = table.getColumn("v1").getColumnId();
+
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()),
+                "online_optimize_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        transactionMgr.prepareTransaction(db.getId(), txnId, 60_000L, tabletCommitInfos(source, temp), List.of(),
+                null);
+        // As if the listener had put the metadata on the source partition.
+        TableCommitInfo tableCommitInfo =
+                transactionMgr.getTransactionState(db.getId(), txnId).getTableCommitInfo(table.getId());
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(source.getDefaultPhysicalPartition().getId(),
+                -1, System.currentTimeMillis(), Lists.newArrayList(column), Lists.newArrayList(),
+                Lists.newArrayList()));
+        tableCommitInfo.addPartitionCommitInfo(new PartitionCommitInfo(temp.getDefaultPhysicalPartition().getId(),
+                -1, System.currentTimeMillis()));
+        // Commit as GlobalTransactionMgr does, without its wait for the publish that the test holds back.
+        try (AutoCloseableLock ignored =
+                new AutoCloseableLock(new Locker(), db.getId(), List.of(table.getId()), LockType.WRITE)) {
+            transactionMgr.getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(txnId);
+        }
+
+        TransactionState load = transactionMgr.getTransactionState(db.getId(), txnId);
+        PartitionCommitInfo doubleWrite = partitionCommitInfo(load, table, temp);
+        Assertions.assertTrue(doubleWrite.isDoubleWrite());
+        Assertions.assertEquals(List.of(column), doubleWrite.getInvalidDictCacheColumns());
+        Assertions.assertEquals(List.of(column), partitionCommitInfo(load, table, source).getInvalidDictCacheColumns());
+
+        // Publish both loads: a committed transaction left behind keeps the next test from dropping the database.
+        transactionMgr.finishTransaction(db.getId(), before.getTransactionId(), new HashSet<>());
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), before.getTransactionId()).getTransactionStatus());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+    }
+
+    @Test
+    public void testDoubleWritesPendingAtSwapBecomeVisibleInOrder() throws Exception {
+        // The job swaps the temp partition in without waiting for a moment free of unpublished loads. The double
+        // writes still pending then are the next versions of the swapped-in partition and must become visible in
+        // order: one finishing before an earlier one would move the visible version back and stall later loads.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_pending_double_writes");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        Partition source = table.getPartition(task.getPartitionName());
+        Partition temp = table.getPartition(task.getTempPartitionName(), true);
+        // The source partition holds version 2: the job rewrites it at version 2.
+        source.getDefaultPhysicalPartition().setNextVersion(3);
+        source.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        job.runRunningJob();
+        Assertions.assertEquals(2L, table.getDoubleWriteRewriteVersion(temp.getId()));
+
+        // Two loads double-write versions 3 and 4, and neither is visible when the job swaps the temp partition in.
+        TransactionState first = commitLoad(db, table, source, temp);
+        TransactionState second = commitLoad(db, table, source, temp);
+        Assertions.assertEquals(3L, partitionCommitInfo(first, table, temp).getVersion());
+        Assertions.assertEquals(4L, partitionCommitInfo(second, table, temp).getVersion());
+        // As the rewrite's version overwrite does when it becomes visible: the temp partition and its replicas reach
+        // version 2. A replica left behind the visible version is marked failed when a later version is published.
+        PhysicalPartition tempPhysicalPartition = temp.getDefaultPhysicalPartition();
+        tempPhysicalPartition.setVisibleVersion(2, System.currentTimeMillis());
+        for (MaterializedIndex index : tempPhysicalPartition.getAllMaterializedIndices(
+                MaterializedIndex.IndexExtState.ALL)) {
+            for (Tablet tablet : index.getTablets()) {
+                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                    replica.updateVersionInfo(2, -1, 2);
+                }
+            }
+        }
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (table.isTempPartition(temp.getId())) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.runRunningJob();
+            Thread.sleep(100);
+        }
+        Assertions.assertSame(temp, table.getPartition(task.getPartitionName()));
+
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        transactionMgr.finishTransaction(db.getId(), second.getTransactionId(), new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                transactionMgr.getTransactionState(db.getId(), second.getTransactionId()).getTransactionStatus());
+        Assertions.assertEquals(2L, temp.getDefaultPhysicalPartition().getVisibleVersion());
+
+        transactionMgr.finishTransaction(db.getId(), first.getTransactionId(), new HashSet<>());
+        transactionMgr.finishTransaction(db.getId(), second.getTransactionId(), new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), first.getTransactionId()).getTransactionStatus());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), second.getTransactionId()).getTransactionStatus());
+        Assertions.assertEquals(4L, temp.getDefaultPhysicalPartition().getVisibleVersion());
+    }
+
+    @Test
+    public void testRewriteReadsSourceAtRewriteVersionOnceVisible() throws Exception {
+        OlapTable table = createPartitionedTable("t_online_optimize_pinned_rewrite");
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        PhysicalPartition source = table.getPartition(task.getPartitionName()).getDefaultPhysicalPartition();
+        // Loads committed versions 2 and 3 of the source partition, and only version 2 is visible yet.
+        source.setNextVersion(4);
+        source.setVisibleVersion(2, System.currentTimeMillis());
+
+        job.runRunningJob();
+
+        long tempPartitionId = table.getPartition(task.getTempPartitionName(), true).getId();
+        Assertions.assertEquals(3L, table.getDoubleWriteRewriteVersion(tempPartitionId));
+        Mockito.verify(job, Mockito.never()).executeSql(Mockito.anyString(), Mockito.any());
+
+        // Version 3 becomes visible: the rewrite reads the source partition at it, not at a later visible version.
+        source.setNextVersion(5);
+        source.setVisibleVersion(4, System.currentTimeMillis());
+        job.runRunningJob();
+
+        Mockito.verify(job, Mockito.timeout(10_000L))
+                .executeSql(Mockito.eq(task.getDefinition()), Mockito.eq(Map.of(source.getId(), 3L)));
+        Assertions.assertEquals(3L, table.getDoubleWriteRewriteVersion(tempPartitionId));
+    }
+
+    @Test
+    public void testNeverLoadedPartitionIsSwappedWithoutRewrite() throws Exception {
+        OlapTable table = createPartitionedTable("t_online_optimize_no_rewrite");
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+
+        runToFinished(job);
+
+        // The partitions have never been loaded: the double writes hold all of their data.
+        Mockito.verify(job, Mockito.never()).executeSql(Mockito.anyString(), Mockito.any());
+        Assertions.assertEquals(2, table.getDefaultDistributionInfo().getBucketNum());
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+    }
+
+    @Test
+    public void testFailedVersionOverwriteKeepsRewriteCommitted() throws Exception {
+        // A replica whose overwrite failed lacks the rewritten versions: the rewrite must not become visible, which
+        // lets the job swap its temp partition in, until a republish, sent as an overwrite again, brings them.
+        holdPublishDaemon();
+        OlapTable table = createPartitionedTable("t_online_optimize_failed_overwrite");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        PhysicalPartition partition = table.getPartition("p1").getDefaultPhysicalPartition();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()),
+                "online_optimize_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        transactionMgr.retryCommitOnRateLimitExceeded(db, txnId, tabletCommitInfos(table.getPartition("p1")),
+                List.of(), new InsertTxnCommitAttachment(0, 2), 60_000L);
+        Replica replica = ((LocalTablet) partition.getLatestBaseIndex().getTablets().get(0)).getImmutableReplicas().get(0);
+
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+
+        try (MockedStatic<AgentTaskExecutor> executor = Mockito.mockStatic(AgentTaskExecutor.class)) {
+            Deencapsulation.invoke(ReportHandler.class, "handleRepublishVersionInfo",
+                    Map.of(db.getId(), Map.of(txnId, Map.of(partition.getId(),
+                            new TPartitionVersionInfo(partition.getId(), 2, 0)))),
+                    Map.of(txnId, 0L), replica.getBackendId());
+            ArgumentCaptor<AgentBatchTask> batchTask = ArgumentCaptor.forClass(AgentBatchTask.class);
+            executor.verify(() -> AgentTaskExecutor.submit(batchTask.capture()));
+            AgentTask republish = batchTask.getValue().getAllTasks().get(0);
+            AgentTaskQueue.removeTask(republish.getBackendId(), TTaskType.PUBLISH_VERSION, republish.getSignature());
+            Assertions.assertTrue(((PublishVersionTask) republish).toThrift().isIs_version_overwrite());
+        }
+
+        replica.updateVersionInfo(2, -1, 2);
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+        Assertions.assertEquals(-1, replica.getLastFailedVersion());
+    }
+
+    private static TransactionState commitLoad(Database db, OlapTable table, Partition... partitions)
+            throws Exception {
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()),
+                "online_optimize_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                TransactionState.LoadJobSourceType.FRONTEND, 600);
+        transactionMgr.retryCommitOnRateLimitExceeded(db, txnId, tabletCommitInfos(partitions), List.of(), null,
+                60_000L);
+        return transactionMgr.getTransactionState(db.getId(), txnId);
+    }
+
+    // A load writes every replica of every tablet of the partitions.
+    private static List<TabletCommitInfo> tabletCommitInfos(Partition... partitions) {
+        List<TabletCommitInfo> commitInfos = new ArrayList<>();
+        for (Partition partition : partitions) {
+            for (MaterializedIndex index : partition.getDefaultPhysicalPartition()
+                    .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    for (long backendId : ((LocalTablet) tablet).getBackendIds()) {
+                        commitInfos.add(new TabletCommitInfo(tablet.getId(), backendId));
+                    }
+                }
+            }
+        }
+        return commitInfos;
+    }
+
+    // Keeps the publish daemon from publishing loads for the rest of the test, so that a committed load becomes
+    // visible exactly when the test finishes it.
+    private static void holdPublishDaemon() {
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public void runAfterLeaseValid() {
+            }
+        };
+    }
+
+    private static PartitionCommitInfo partitionCommitInfo(TransactionState txn, OlapTable table, Partition partition) {
+        return txn.getTableCommitInfo(table.getId())
+                .getPartitionCommitInfo(partition.getDefaultPhysicalPartition().getId());
     }
 
     private OnlineOptimizeJobV2 spyPreviousTxnFinished(OnlineOptimizeJobV2 job) throws AnalysisException {
@@ -602,6 +1104,12 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         UtFrameUtils.PseudoImage initialImage = saveMetastore();
         OnlineOptimizeJobV2 job = submitOptimize(table);
         runToRunning(job);
+        // Loads have filled the partitions, so each one needs a rewrite (a never loaded one is swapped right away).
+        for (Partition partition : table.getPartitions()) {
+            PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+            physicalPartition.setNextVersion(3);
+            physicalPartition.setVisibleVersion(2, System.currentTimeMillis());
+        }
         // The round that swaps in the first partition also starts the double write and rewrite of the second one;
         // stop there, so that one partition is swapped in and the other one is still temp.
         long deadlineMs = System.currentTimeMillis() + 60_000L;
@@ -723,8 +1231,17 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         OnlineOptimizeJobV2 job =
                 Mockito.spy((OnlineOptimizeJobV2) handler.getAlterJobsV2().values().iterator().next());
         Mockito.doReturn(true).when(job).isPreviousLoadFinished();
-        Mockito.doNothing().when(job).executeSql(Mockito.anyString());
+        Mockito.doNothing().when(job).executeSql(Mockito.anyString(), Mockito.any());
         return job;
+    }
+
+    private static AlterJobV2 createOptimizeJob(OlapTable table, String clause) throws Exception {
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " " + clause, starRocksAssert.getCtx());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        SchemaChangeHandler handler = new SchemaChangeHandler();
+        handler.process(stmt.getAlterClauseList(), db, table);
+        return handler.getAlterJobsV2().values().iterator().next();
     }
 
     private static void runToRunning(OnlineOptimizeJobV2 job) throws Exception {

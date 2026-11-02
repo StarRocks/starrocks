@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -67,6 +68,7 @@ import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.task.TabletTaskExecutor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -1040,6 +1042,61 @@ public class LocalMetaStoreTest {
         Assertions.assertTrue(p2.getDistributionInfo().getBucketNum() > 0);
 
         starRocksAssert.dropTable("test.add_part_rf_bucket");
+    }
+
+    @Test
+    public void testPartitionBuiltWithStaleDistributionColumnsIsNotAttached() throws Exception {
+        // An optimize may give the table other distribution columns while a partition is built from a copy of it.
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t1");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        OlapTable copiedTable = localMetastore.getCopiedTable(db, table,
+                Lists.newArrayList(table.getPartition("t1").getId()), Maps.newHashMap());
+        copiedTable.setDefaultDistributionInfo(new HashDistributionInfo(3, List.of(copiedTable.getColumn("k2"))));
+        Exception e = Assertions.assertThrows(Exception.class,
+                () -> Deencapsulation.invoke(localMetastore, "checkIfMetaChange", table, copiedTable, "t1"));
+        Assertions.assertTrue(e.getMessage().contains("meta has been changed"), e.getMessage());
+    }
+
+    @Test
+    public void testAddPartitionFailedToSendTasksDropsItsTablets() throws Exception {
+        // A create replica task that cannot be sent to a backend that is down fails with a RuntimeException. The
+        // tablets of the new partition must leave the inverted index, or a decommission of that backend never ends.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_part_send_failed(dt DATE NOT NULL, k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt, k1) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p1 VALUES [('2024-01-01'), ('2024-01-02'))) " +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3 " +
+                        "PROPERTIES ('replication_num' = '1')");
+        long tabletsBefore = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount();
+
+        // The mock-up lasts until the end of the test.
+        new MockUp<TabletTaskExecutor>() {
+            @Mock
+            public static void buildPartitionsSequentially(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                                           int numReplicas, int numBackends,
+                                                           ComputeResource computeResource,
+                                                           TabletTaskExecutor.CreateTabletOption option) {
+                throw new RuntimeException("Send failed to node 10001: Connection refused");
+            }
+
+            @Mock
+            public static void buildPartitionsConcurrently(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                                           int numReplicas, int numBackends,
+                                                           ComputeResource computeResource,
+                                                           TabletTaskExecutor.CreateTabletOption option) {
+                throw new RuntimeException("Send failed to node 10001: Connection refused");
+            }
+        };
+        Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                "ALTER TABLE test.add_part_send_failed ADD PARTITION p2 VALUES [('2024-01-02'), ('2024-01-03'))"));
+        Assertions.assertTrue(e.getMessage().contains("Connection refused"), e.getMessage());
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_part_send_failed");
+        Assertions.assertNull(table.getPartition("p2"));
+        Assertions.assertEquals(tabletsBefore, GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletCount());
+        starRocksAssert.dropTable("test.add_part_send_failed");
     }
 
     @Test
