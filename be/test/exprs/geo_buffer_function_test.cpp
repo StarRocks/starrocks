@@ -188,11 +188,13 @@ TEST(GeoBufferFunctionTest, RejectsMalformedDimensionsKindsAndIncompatibleReturn
     const auto wkb = ColumnViewer<TYPE_VARBINARY>(*data).value(0).to_string();
     GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    // UNKNOWN/MIXED labels are admitted because each row's WKB is checked; non-XY labels stay rejected.
     for (auto dimension :
          {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
         auto other = descriptor;
         other.storage.dimension = dimension;
-        EXPECT_FALSE(GeoFunctions::st_geometry_buffer(ctx.get(), {raw_geometry(wkb, other), radius(1)}).ok());
+        auto result = GeoFunctions::st_geometry_buffer(ctx.get(), {raw_geometry(wkb, other), radius(1)});
+        EXPECT_EQ(dimension == GEO_DIMENSION_UNKNOWN || dimension == GEO_DIMENSION_MIXED, result.ok()) << dimension;
     }
     auto geography = descriptor;
     geography.type.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
