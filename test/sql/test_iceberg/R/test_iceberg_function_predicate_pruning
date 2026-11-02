@@ -1,0 +1,193 @@
+-- name: test_iceberg_function_predicate_pruning
+create external catalog iceberg_fn_pred_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+create database iceberg_fn_pred_${uuid0}.db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_function_predicate_pruning/${uuid0}/db_${uuid0}"
+);
+-- result:
+-- !result
+set catalog iceberg_fn_pred_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    id int,
+    ts datetime
+) partition by day(ts);
+-- result:
+-- !result
+insert into t values (1, '2023-12-31 10:00:00'), (2, '2024-01-01 10:00:00'), (3, '2024-02-01 10:00:00');
+-- result:
+-- !result
+alter table t drop partition column day(ts);
+-- result:
+-- !result
+alter table t add partition column month(ts);
+-- result:
+-- !result
+insert into t values (4, '2024-02-10 10:00:00'), (5, '2024-03-05 10:00:00'), (6, '2025-01-01 10:00:00');
+-- result:
+-- !result
+alter table t drop partition column month(ts);
+-- result:
+-- !result
+alter table t add partition column year(ts);
+-- result:
+-- !result
+insert into t values (7, '2023-06-01 10:00:00'), (8, '2024-07-01 10:00:00'), (9, '2025-07-01 10:00:00');
+-- result:
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+select group_concat(id order by id) from t where year(ts) = 2024;
+-- result:
+2,3,4,5,8
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+5
+-- !result
+select group_concat(id order by id) from t where date_trunc('month', ts) = '2024-02-01 00:00:00';
+-- result:
+3,4
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+2
+-- !result
+select group_concat(id order by id) from t where to_date(ts) in ('2023-12-31', '2025-01-01');
+-- result:
+1,6
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+2
+-- !result
+select group_concat(id order by id) from t where year(ts) between 2020 and 2023;
+-- result:
+1,7
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+2
+-- !result
+select group_concat(id order by id) from t where date_format(ts, '%Y-%m') = '2024-02';
+-- result:
+3,4
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+2
+-- !result
+select group_concat(id order by id) from t where datediff('2024-03-06', ts) between 0 and 5;
+-- result:
+5
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+1
+-- !result
+select group_concat(id order by id) from t where ts - interval 12 hour < '2023-12-31 00:00:00';
+-- result:
+1,7
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+2
+-- !result
+select group_concat(id order by id) from t where year(ts) = 2024 and month(ts) in (1, 7);
+-- result:
+2,8
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+2
+-- !result
+create table s_t (
+    id int,
+    s string
+) partition by truncate(s, 2);
+-- result:
+-- !result
+insert into s_t values (1, 'UNITED'), (2, 'UNIX'), (3, 'UK'), (4, 'CHINA'), (5, '中国人');
+-- result:
+-- !result
+select group_concat(id order by id) from s_t where left(s, 4) = 'UNIT';
+-- result:
+1
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+1
+-- !result
+select group_concat(id order by id) from s_t where starts_with(s, '中国');
+-- result:
+5
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+1
+-- !result
+select group_concat(id order by id) from s_t where substr(s, 1, 3) = 'UK';
+-- result:
+3
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+1
+-- !result
+select group_concat(id order by id) from t where date_trunc('month', ts) = '2024-02-15 00:00:00';
+-- result:
+None
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+9
+-- !result
+select group_concat(id order by id) from t where not (year(ts) = 2024);
+-- result:
+1,6,7,9
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+9
+-- !result
+set enable_iceberg_function_predicate_pruning = false;
+-- result:
+-- !result
+select group_concat(id order by id) from t where year(ts) = 2024;
+-- result:
+2,3,4,5,8
+-- !result
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+-- result:
+9
+-- !result
+set enable_iceberg_function_predicate_pruning = true;
+-- result:
+-- !result
+drop table t force;
+-- result:
+-- !result
+drop table s_t force;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_fn_pred_${uuid0};
+-- result:
+-- !result

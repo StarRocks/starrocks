@@ -804,6 +804,12 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: true
 * **Introduced in**: v26.2
 
+### enable_iceberg_function_predicate_pruning
+
+* **Description**: Whether a predicate on a function of an Iceberg column can skip data files. StarRocks converts such a predicate into a condition on the column itself, for example `year(dt) = 2024` into `dt >= '2024-01-01' AND dt < '2025-01-01'`, so that files are skipped through any partition transform of the column (`year`, `month`, `day`, `hour`, `truncate`) and through file column statistics. It applies to `year()`, `to_date()`, `date()`, `date_trunc()`, `date_format()` with a zero-padded format such as `'%Y-%m'`, `datediff()`, `weeks_add()`/`hours_add()`/`minutes_add()`/`seconds_add()` and their `_sub` forms, `year() = ... AND month()/quarter() = ...`, `left()`/`substr(s, 1, n)` compared for equality, and `starts_with()`. The original predicate is still evaluated on the rows. Set it to `false` to plan such queries as before, for example to compare results.
+* **Default**: true
+* **Introduced in**: v26.2
+
 ### enable_incremental_mv
 
 * **Description**: Session flag that controls whether the server will plan and keep an in-memory plan for materialized views that use incremental refresh. When enabled, `MaterializedViewAnalyzer.planMVQuery` will proceed for create-MV statements whose refresh scheme is an `IncrementalRefreshSchemeDesc`: it builds the logical and physical plan for the view query and sets the session `enableMVPlanner` flag (`setMVPlanner(true)`). When disabled, planning for incremental-refresh MVs is skipped. Accessible via `isEnableIncrementalRefreshMV()` and `setEnableIncrementalRefreshMv(boolean)` in `SessionVariable`.
