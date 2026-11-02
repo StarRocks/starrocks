@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
-import com.staros.proto.ShardInfo;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
@@ -45,11 +44,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Metadata for StarRocks lake table
@@ -232,6 +229,7 @@ public class LakeTable extends OlapTable {
         }
     }
 
+<<<<<<< HEAD
     public boolean checkLakeRollupAllowFileBundling() {
         return getPartitions().stream()
             .flatMap(partition -> partition.getSubPartitions().stream())
@@ -260,6 +258,8 @@ public class LakeTable extends OlapTable {
             });
     }
 
+=======
+>>>>>>> fb429eec9de... [Enhancement][RB-810] Enable file bundling for new async materialized views and allow ALTER to change it (#67132)
     public void setFastSchemaEvolutionV2(boolean enabled) {
         tableProperty.modifyTableProperties(
                 PropertyAnalyzer.PROPERTIES_CLOUD_NATIVE_FAST_SCHEMA_EVOLUTION_V2,

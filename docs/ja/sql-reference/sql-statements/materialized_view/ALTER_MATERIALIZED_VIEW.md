@@ -30,6 +30,7 @@ description: "非同期マテリアライズドビューの名前変更、リフ
   - `foreign_key_constraints`
   - `colocate_with`
   - `excluded_refresh_tables`
+  - `file_bundling`（共有データクラスタのみ、v26.2 以降でサポート）
   - すべてのセッション変数関連のプロパティ。セッション変数については、[System variables](../../System_variable.md)を参照してください。
 
 :::tip
@@ -134,4 +135,10 @@ ALTER MATERIALIZED VIEW mv1 SET ("bloom_filter_columns" = "col1, col2");
 
 ```SQL
 ALTER MATERIALIZED VIEW order_mv ORDER BY (k2, k1);
+```
+
+例12: 共有データクラスタのマテリアライズドビューでファイルバンドリングを有効にします（v26.2 以降）。このステートメントで設定できるプロパティは `file_bundling` のみです。変更は非同期ジョブとして実行され、進捗は [SHOW ALTER TABLE COLUMN](../table_bucket_part_index/SHOW_ALTER.md) で確認できます。`file_bundling` の変更に関する制限はテーブルと同じです。[CREATE TABLE](../table_bucket_part_index/CREATE_TABLE.md) の `file_bundling` プロパティを参照してください。
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv SET ("file_bundling" = "true");
 ```
