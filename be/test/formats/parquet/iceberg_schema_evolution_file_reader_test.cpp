@@ -1656,7 +1656,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestArrayStructOnlyMissingSubfieldWithListSib
         ctx->format_scan_context.lake_schema = &schema;
 
         TypeDescriptor id = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
-        TypeDescriptor element = TypeDescriptor::create_struct_type({"b"}, {TypeDescriptor(LogicalType::TYPE_INT)});
+        TypeDescriptor element = TypeDescriptor::create_struct_type({"b"}, {TYPE_INT_DESC});
         TypeDescriptor arr = TypeDescriptor::create_array_type(element);
 
         Utils::SlotDesc slot_descs[] = {{"id", id}, {"arr", arr}, {""}};

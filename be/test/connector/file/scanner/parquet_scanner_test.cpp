@@ -68,7 +68,7 @@ TEST(ParquetGeoReaderTest, EmptyFileKeepsExistingInferenceAndEof) {
         EXPECT_EQ(TYPE_VARBINARY, inferred[0].type().type);
         SlotDescriptor binary(0, "shape", TypeDescriptor::create_varbinary_type(1024));
         EXPECT_TRUE(reader.init_parquet_reader({&binary}).is_end_of_file());
-        SlotDescriptor missing(1, "missing", TypeDescriptor(TYPE_INT));
+        SlotDescriptor missing(1, "missing", TYPE_INT_DESC);
         ParquetReaderWrap ordinary(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
                                    result.ValueOrDie()->size());
         EXPECT_TRUE(ordinary.init_parquet_reader({&missing}).is_end_of_file());
@@ -104,7 +104,7 @@ TEST(ParquetGeoReaderTest, AnnotatedColumnsKeepExistingReads) {
         ScannerCounter counter;
         ParquetReaderWrap reader(std::make_shared<ParquetChunkFile>(file, 0, &counter), 1, 0,
                                  result.ValueOrDie()->size());
-        SlotDescriptor supported(0, "id", TypeDescriptor(TYPE_INT));
+        SlotDescriptor supported(0, "id", TYPE_INT_DESC);
         auto status = reader.init_parquet_reader({&supported});
         ASSERT_TRUE(status.ok()) << status;
         auto batch = reader.get_batch();

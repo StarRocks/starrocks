@@ -1055,9 +1055,8 @@ TEST_F(JsonScannerTest, test_multi_type) {
     types.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 27, 9));
     types.emplace_back(TypeDescriptor::create_char_type(20));
     types.emplace_back(TYPE_TIME);
-    types.emplace_back(
-            TypeDescriptor::create_struct_type({"f_int", "f_string"}, {TypeDescriptor(TYPE_INT), TYPE_VARCHAR_DESC}));
-    types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_DOUBLE)));
+    types.emplace_back(TypeDescriptor::create_struct_type({"f_int", "f_string"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC}));
+    types.emplace_back(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_DOUBLE_DESC));
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
