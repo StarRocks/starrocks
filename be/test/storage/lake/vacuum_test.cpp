@@ -14,6 +14,7 @@
 
 #include "storage/lake/vacuum.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <unistd.h>
 
@@ -759,8 +760,8 @@ TEST_P(LakeVacuumTest, test_vacuum_full) {
 // Production full-vacuum path: an orphan .lcrm from a finalized txn (txn_id <
 // min_active_txn_id) is reclaimed, while an in-flight .lcrm (txn_id >=
 // min_active_txn_id) is protected by the same txn-id gate that guards output
-// segments. This exercises the real vacuum_orphaned_datafiles path (runs the
-// orphan scan with expired_seconds=0 + the txn-id filter), complementing the
+// segments. This exercises the real vacuum_orphaned_datafiles path (the
+// orphan scan with the txn-id filter), complementing the
 // mtime-window offline datafile_gc test above. .lcrm is never referenced by any
 // live metadata, so it relies entirely on that txn-id gate for safety.
 // NOLINTNEXTLINE
@@ -802,6 +803,136 @@ TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_lcrm) {
 
     EXPECT_FALSE(file_exist(orphan_lcrm));  // reclaimed (fix)
     EXPECT_TRUE(file_exist(inflight_lcrm)); // protected (safety)
+}
+
+// Full vacuum deletes the unreferenced data files of finished transactions while it lists the data
+// directory. It keeps the files that metadata or bundle metadata references, the files of transactions
+// that may still be running, and files without a txn id prefix.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_deletes_orphans_while_listing) {
+    std::vector<std::string> orphans;
+    for (int i = 1; i <= 10; i++) {
+        orphans.push_back(fmt::format("{:016X}_{:08x}-6bfc-4a3a-9d9c-c97c10bb2e1d.dat", i, i));
+    }
+    orphans.emplace_back("0000000000000003_a542395a-bff5-48a7-a3a7-2ed05691b58c.del");
+    orphans.emplace_back("0000000000000004_a542395a-bff5-48a7-a3a7-2ed05691b58c.delvec");
+    orphans.emplace_back("0000000000000005_a542395a-bff5-48a7-a3a7-2ed05691b58c.sst");
+    const std::string segment_in_meta = "000000000000000B_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    const std::string sst_in_meta = "000000000000000B_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.sst";
+    const std::string segment_in_bundle = "000000000000000C_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat";
+    const std::string del_in_bundle = "000000000000000C_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.del";
+    const std::string in_flight = "0000000000000064_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"; // txn 100
+    const std::string no_txn_id = "27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.sst";
+    std::vector<std::string> kept = {segment_in_meta, sst_in_meta, segment_in_bundle,
+                                     del_in_bundle,   in_flight,   no_txn_id};
+    for (const auto& name : orphans) {
+        create_data_file(name);
+    }
+    for (const auto& name : kept) {
+        create_data_file(name);
+    }
+
+    ASSERT_OK(
+            _tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(fmt::format(R"DEL(
+        {{
+        "id": 66620,
+        "version": 5,
+        "rowsets": [{{"data_size": 4096, "segment_metas": [{{"filename": "{}"}}]}}],
+        "sstable_meta": {{"sstables": [{{"filename": "{}"}}]}},
+        "commit_time": 99
+        }}
+        )DEL",
+                                                                                      segment_in_meta, sst_in_meta))));
+    std::map<int64_t, TabletMetadataPB> bundle;
+    bundle[66621] = *json_to_pb<TabletMetadataPB>(fmt::format(R"DEL(
+        {{
+        "id": 66621,
+        "version": 6,
+        "rowsets": [{{"data_size": 4096, "segment_metas": [{{"filename": "{}"}}], "del_files": [{{"name": "{}"}}]}}],
+        "commit_time": 99
+        }}
+        )DEL",
+                                                              segment_in_bundle, del_in_bundle));
+    bundle[66622] = *json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66622,
+        "version": 6,
+        "rowsets": [],
+        "commit_time": 99
+        }
+        )DEL");
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(bundle));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66620);
+    request.set_min_active_txn_id(100);
+    request.set_grace_timestamp(0); // keep all metadata, only look for orphan data files
+    request.set_min_check_version(0);
+    request.set_max_check_version(7);
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_EQ(orphans.size(), response.vacuumed_files());
+    EXPECT_EQ(orphans.size() * 4, response.vacuumed_file_size()); // create_data_file() writes 4 bytes
+    for (const auto& name : orphans) {
+        EXPECT_FALSE(file_exist(name)) << name;
+    }
+    for (const auto& name : kept) {
+        EXPECT_TRUE(file_exist(name)) << name;
+    }
+}
+
+// When full vacuum fails to read a metadata file, it still deletes the expired metadata it found before
+// the failure, so the next run starts from there.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_keeps_progress_when_reading_metadata_fails) {
+    for (int64_t version : {2, 3}) {
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(fmt::format(R"DEL(
+            {{
+            "id": 66630,
+            "version": {},
+            "rowsets": [],
+            "commit_time": 1
+            }}
+            )DEL",
+                                                                                            version))));
+    }
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 66630,
+        "version": 9,
+        "rowsets": [],
+        "commit_time": 200
+        }
+        )DEL")));
+    // A bundle metadata file that cannot be parsed. Bundle metadata is checked after the per-tablet metadata.
+    {
+        auto path = join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_metadata_filename(0, 4));
+        ASSIGN_OR_ABORT(auto f, FileSystem::Default()->new_writable_file(path));
+        ASSERT_OK(f->append("not a bundle metadata file"));
+        ASSERT_OK(f->close());
+    }
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66630);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.add_retain_versions(9);
+    request.set_min_check_version(0);
+    request.set_max_check_version(9);
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_NE(0, response.status().status_code());
+
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(66630, 2)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(66630, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(66630, 9)));
 }
 
 // Ensure full vacuum does not fail when initial metadata 0_1.meta exists and

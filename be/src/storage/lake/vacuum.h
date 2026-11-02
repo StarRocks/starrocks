@@ -92,6 +92,14 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
                                                                  const std::list<std::string>& bundle_meta_files,
                                                                  std::ostream* audit_ostream);
 
+// Deletes the data files under |root_location| that no metadata in |meta_files| or |bundle_meta_files|
+// references and whose txn id is below |min_active_txn_id|, in batches while it lists the directory.
+// Returns the number and total size of the deleted files.
+StatusOr<std::pair<int64_t, int64_t>> delete_orphan_data_files(FileSystem* fs, std::string_view root_location,
+                                                               int64_t min_active_txn_id,
+                                                               const std::list<std::string>& meta_files,
+                                                               const std::list<std::string>& bundle_meta_files);
+
 Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths);
 
 // drop tablet data cache, starts from `version`
