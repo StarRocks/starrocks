@@ -1062,6 +1062,52 @@ public class RangeDistributionGuardTest {
                 "alter table t_guard_flip modify column k1 varchar(40)");
     }
 
+    private static String varcharColocateRangeTableDdl(String name, String colocateWith) {
+        return "create table " + name + " (k1 varchar(10) NOT NULL, k2 varchar(10) NOT NULL, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1', 'colocate_with' = '" + colocateWith + "');";
+    }
+
+    private static void assertColocateWidenRejected(String table, String column, String alterSql) {
+        int jobsBefore = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size();
+        Throwable e = assertThrows(Throwable.class, () -> starRocksAssert.alterTable(alterSql));
+        assertTrue(e.getMessage().contains("Can not modify colocate column[" + column + "] for colocate table"),
+                "Unexpected message: " + e.getMessage());
+        assertEquals(10, baseColumn(table, column).getStrLen());
+        assertEquals(jobsBefore,
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size());
+    }
+
+    @Test
+    public void testWidenColocateColumnRejectedOnRangeColocateTable() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_widen", "g_widen:k1"));
+        assertColocateWidenRejected("t_guard_colo_widen", "k1",
+                "alter table t_guard_colo_widen modify column k1 varchar(20) KEY NOT NULL");
+    }
+
+    @Test
+    public void testWidenSortKeyColumnOutsideColocatePrefixAllowedOnRangeColocateTable() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_tail", "g_tail:k1"));
+        starRocksAssert.alterTable("alter table t_guard_colo_tail modify column k2 varchar(20) KEY NOT NULL");
+        assertEquals(20, baseColumn("t_guard_colo_tail", "k2").getStrLen());
+    }
+
+    @Test
+    public void testWidenColocateColumnRejectedWhenAllSortKeyColumnsColocate() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_all", "g_all"));
+        assertColocateWidenRejected("t_guard_colo_all", "k2",
+                "alter table t_guard_colo_all modify column k2 varchar(20) KEY NOT NULL");
+    }
+
+    @Test
+    public void testWidenRenamedColocateColumnStillRejected() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_rename", "g_rename:k1"));
+        starRocksAssert.alterTable("alter table t_guard_colo_rename rename column k1 to k1_renamed");
+        assertColocateWidenRejected("t_guard_colo_rename", "k1_renamed",
+                "alter table t_guard_colo_rename modify column k1_renamed varchar(20) KEY NOT NULL");
+    }
+
     /**
      * Inject a FINISHED range-rollup index directly into the table (simulating the post-FINISHED catalog
      * state), then {@code ALTER TABLE ... DROP ROLLUP} and assert the rollup meta + index are removed
