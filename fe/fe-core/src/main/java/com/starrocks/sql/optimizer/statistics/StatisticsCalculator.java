@@ -1556,6 +1556,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 preservedColumns.union(rightStatistics.getUsedColumns());
             }
             joinStats = restoreUnknownPreservedKeys(joinStats, rawCrossJoinStats, eqOnPredicates, preservedColumns);
+            joinStats = restorePreservedColumnDistinctValues(joinStats, rawCrossJoinStats, preservedColumns);
         }
 
         allJoinPredicate.removeAll(eqOnPredicates);
@@ -2003,6 +2004,41 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
                 builder.addColumnStatistic(column, raw);
             }
+        }
+        return builder == null ? joinStats : builder.build();
+    }
+
+    // The inner-join estimate intersects the key ranges and caps every column's NDV at the inner-join row count.
+    // That is right for the matched rows, but an outer join also keeps the unmatched rows of its preserved side,
+    // so every distinct value of a preserved-side column survives.
+    // Restore the original NDV, range and histogram of the preserved columns, capped by the outer-join
+    // output row count.
+    private static Statistics restorePreservedColumnDistinctValues(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                                   ColumnRefSet preservedColumns) {
+        double outputRowCount = Math.max(1, joinStats.getOutputRowCount());
+        Statistics.Builder builder = null;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : joinStats.getColumnStatistics().entrySet()) {
+            ColumnRefOperator column = entry.getKey();
+            ColumnStatistic current = entry.getValue();
+            if (!preservedColumns.contains(column) || current.isUnknown()) {
+                continue;
+            }
+            ColumnStatistic raw = rawCrossJoinStats.getColumnStatistics().get(column);
+            if (raw == null || raw.isUnknown()) {
+                continue;
+            }
+            double restoredNdv = Math.min(raw.getDistinctValuesCount(), outputRowCount);
+            if (restoredNdv <= current.getDistinctValuesCount() && raw.getMinValue() == current.getMinValue()
+                    && raw.getMaxValue() == current.getMaxValue()) {
+                continue;
+            }
+            if (builder == null) {
+                builder = Statistics.buildFrom(joinStats);
+            }
+            builder.addColumnStatistic(column, ColumnStatistic.buildFrom(raw)
+                    .setNullsFraction(current.getNullsFraction())
+                    .setDistinctValuesCount(restoredNdv)
+                    .build());
         }
         return builder == null ? joinStats : builder.build();
     }

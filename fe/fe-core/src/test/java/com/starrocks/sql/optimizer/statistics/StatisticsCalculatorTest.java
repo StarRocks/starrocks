@@ -984,6 +984,60 @@ public class StatisticsCalculatorTest {
         Assertions.assertTrue(innerValStatAfterJoin.getNullsFraction() < outerNullFraction);
     }
 
+    // An outer join keeps the unmatched rows of its preserved side, so the NDV of the preserved side's columns must
+    // not be capped at the (tiny) inner-join row count, whereas the non-preserved side's columns stay capped.
+    @ParameterizedTest
+    @EnumSource(value = JoinOperator.class, names = {"LEFT_OUTER_JOIN", "RIGHT_OUTER_JOIN", "FULL_OUTER_JOIN"})
+    public void testOuterJoinKeepsPreservedSideDistinctValues(JoinOperator joinType) {
+        ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
+        // big side: 200000 rows, key v1 and non-key v2
+        ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
+        ColumnRefOperator v2 = columnRefFactory.create("v2", IntegerType.INT, true);
+        // small side: 100 rows, key v3 and non-key v4
+        ColumnRefOperator v3 = columnRefFactory.create("v3", IntegerType.INT, true);
+        ColumnRefOperator v4 = columnRefFactory.create("v4", IntegerType.INT, true);
+        columnRefFactory.updateColumnToRelationIds(v1.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(v2.getId(), 0);
+        columnRefFactory.updateColumnToRelationIds(v3.getId(), 1);
+        columnRefFactory.updateColumnToRelationIds(v4.getId(), 1);
+
+        Group bigGroup = new Group(0);
+        bigGroup.setStatistics(Statistics.builder().setOutputRowCount(200000)
+                .addColumnStatistic(v1, new ColumnStatistic(1, 200000, 0, 8, 200000))
+                .addColumnStatistic(v2, new ColumnStatistic(1, 200000, 0, 8, 100000))
+                .build());
+        bigGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v1, v2))));
+        Group smallGroup = new Group(1);
+        smallGroup.setStatistics(Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(v3, new ColumnStatistic(1, 100, 0, 8, 100))
+                .addColumnStatistic(v4, new ColumnStatistic(1, 100, 0, 8, 100))
+                .build());
+        smallGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(v3, v4))));
+
+        // The preserved side is the big one: left child for LEFT/FULL, right child for RIGHT.
+        boolean bigIsRight = joinType == JoinOperator.RIGHT_OUTER_JOIN;
+        Group left = bigIsRight ? smallGroup : bigGroup;
+        Group right = bigIsRight ? bigGroup : smallGroup;
+        ScalarOperator onPredicate = bigIsRight ? new BinaryPredicateOperator(BinaryType.EQ, v3, v1)
+                : new BinaryPredicateOperator(BinaryType.EQ, v1, v3);
+        GroupExpression groupExpression =
+                new GroupExpression(new LogicalJoinOperator(joinType, onPredicate), Lists.newArrayList(left, right));
+        groupExpression.setGroup(new Group(2));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        Statistics joinStats = expressionContext.getStatistics();
+        Assertions.assertEquals(200000, joinStats.getOutputRowCount(), 0.0001);
+        // preserved side: key and non-key NDVs survive, the key range is not narrowed to the small side's
+        Assertions.assertEquals(200000, joinStats.getColumnStatistic(v1).getDistinctValuesCount(), 0.0001);
+        Assertions.assertEquals(200000, joinStats.getColumnStatistic(v1).getMaxValue(), 0.0001);
+        Assertions.assertEquals(100000, joinStats.getColumnStatistic(v2).getDistinctValuesCount(), 0.0001);
+        // non-preserved side: only the matched values remain
+        Assertions.assertEquals(100, joinStats.getColumnStatistic(v3).getDistinctValuesCount(), 0.0001);
+        Assertions.assertEquals(100, joinStats.getColumnStatistic(v4).getDistinctValuesCount(), 0.0001);
+    }
+
+
     @Test
     public void testLeftJoinInnerSideNullFractionReflectsResultNulls() {
         // GIVEN
