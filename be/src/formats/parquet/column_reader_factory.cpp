@@ -391,46 +391,6 @@ static const ParquetField* find_readable_struct_leaf(const ParquetField& field) 
     return nullptr;
 }
 
-<<<<<<< HEAD
-=======
-// The type a level source is read as: a scalar as itself; a list, map or struct down to a single readable leaf, so
-// that only that leaf's column is read. nullopt when no leaf under `field` is readable.
-static std::optional<TypeDescriptor> level_source_read_type(const ParquetField& field) {
-    if (is_readable_level_source(field)) {
-        return variant_typed_desc_from_parquet_field(&field);
-    }
-    switch (field.type) {
-    case ColumnType::ARRAY:
-        if (!field.children.empty()) {
-            if (auto element = level_source_read_type(field.children[0]); element.has_value()) {
-                return TypeDescriptor::create_array_type(*element);
-            }
-        }
-        return std::nullopt;
-    case ColumnType::MAP:
-        // An unknown key or value type is not read (see ColumnReaderFactory::create).
-        if (field.children.size() >= 2) {
-            if (auto key = level_source_read_type(field.children[0]); key.has_value()) {
-                return TypeDescriptor::create_map_type(*key, TYPE_UNKNOWN_DESC);
-            }
-            if (auto value = level_source_read_type(field.children[1]); value.has_value()) {
-                return TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, *value);
-            }
-        }
-        return std::nullopt;
-    case ColumnType::STRUCT:
-        for (const auto& child : field.children) {
-            if (auto child_type = level_source_read_type(child); child_type.has_value()) {
-                return TypeDescriptor::create_struct_type({child.name}, {*child_type});
-            }
-        }
-        return std::nullopt;
-    default:
-        return std::nullopt;
-    }
-}
-
->>>>>>> 0fb1dea ([Refactor] Use TYPE_X_DESC instead of TypeDescriptor(TYPE_X) in BE sources (#82020))
 const ParquetField* ColumnReaderFactory::find_struct_level_source(const ParquetField& field) {
     // Its values are read and dropped, so prefer a fixed-width one over a byte array.
     const ParquetField* byte_array = nullptr;
