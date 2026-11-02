@@ -339,15 +339,17 @@ static TabletMetadataPtr lookup_published_new_version(TabletManager* tablet_mgr,
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("check_durable_new_version_latency_us");
         // skip_meta_cache for the same reason as in cal_new_base_version(): a metacache hit proves only that some
-        // attempt cached the metadata, not that it was written.
+        // attempt cached the metadata, not that it was written. Not filled into the metacache here: a version
+        // rejected below must not be there, or the next retry would take it from the cache if the re-apply fails.
         durable_new_metadata = tablet_mgr->get_tablet_metadata(
                 tablet_id, new_version,
-                CacheOptions{.fill_meta_cache = true, .fill_data_cache = false, .skip_meta_cache = true},
+                CacheOptions{.fill_meta_cache = false, .fill_data_cache = false, .skip_meta_cache = true},
                 txns.back().gtid());
     }
     if (!durable_new_metadata.ok() || (*durable_new_metadata)->vector_index_built_version() < fe_built_version) {
         return nullptr;
     }
+    tablet_mgr->metacache()->cache_tablet_metadata(new_metadata_path, *durable_new_metadata);
     g_publish_skipped_durable_new_version << 1;
     // Debug level like the metacache shortcut above: a retry of a large partition skips every tablet it already
     // published, so INFO would log one line per tablet while the cluster recovers.

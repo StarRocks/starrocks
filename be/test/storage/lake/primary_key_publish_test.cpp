@@ -2849,6 +2849,22 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_written_new_version) 
         txns.emplace_back(TEST_txn_info(id, commit_time));
     }
     constexpr int64_t kBuiltVersion = 7;
+    auto new_metadata_path = _tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    // If that re-apply fails, the rejected metadata must not be left in the metacache for the next retry to take.
+    {
+        TEST_ENABLE_ERROR_POINT("TabletManager::put_tablet_metadata",
+                                Status::IOError("injected put tablet metadata error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::put_tablet_metadata");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        ASSERT_ERROR(publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
+                                     /*skip_write_tablet_metadata=*/false, kBuiltVersion,
+                                     InitialMetadataOrder::kPerTabletFirst, /*is_retry_publish=*/true));
+    }
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path));
+    evict_caches();
     ASSIGN_OR_ABORT(auto republished,
                     publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
                                     /*skip_write_tablet_metadata=*/false, kBuiltVersion,
