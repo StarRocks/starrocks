@@ -1170,8 +1170,7 @@ StatusOr<MutableColumnPtr> create_geography_result(FunctionContext* context) {
     if (type.type != TYPE_GEOGRAPHY || !type.geo_type.has_value()) {
         return Status::NotSupported("GEOGRAPHY constructor requires semantic type metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
     auto data = GeoColumn::create(std::move(descriptor));
     RETURN_IF_ERROR(check_geography_boundary(*data));
     return NullableColumn::create(std::move(data), NullColumn::create());
@@ -1182,8 +1181,7 @@ StatusOr<MutableColumnPtr> create_geometry_result(FunctionContext* context) {
     if (type.type != TYPE_GEOMETRY || !type.geo_type.has_value()) {
         return Status::NotSupported("GEOMETRY constructor requires semantic type metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
     auto data = GeoColumn::create(std::move(descriptor));
     RETURN_IF_ERROR(check_geometry_boundary(*data));
     return NullableColumn::create(std::move(data), NullColumn::create());
@@ -1559,8 +1557,7 @@ StatusOr<MutableColumnPtr> create_centroid_result(FunctionContext* context) {
     if (type.type != Type || !type.geo_type.has_value()) {
         return Status::NotSupported("ST_Centroid requires native GEO return metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
     auto data = GeoColumn::create(std::move(descriptor));
     if constexpr (Type == TYPE_GEOGRAPHY) {
         RETURN_IF_ERROR(check_geography_boundary(*data));

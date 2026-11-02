@@ -68,8 +68,7 @@ ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescri
 }
 
 ColumnPtr raw_geometry(std::string_view wkb) {
-    GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{geo_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
     auto column = GeoColumn::create(descriptor);
     column->append_datum(Datum(Slice(wkb)));
     return column;
@@ -476,10 +475,10 @@ TEST(GeoOverlayTest, RejectsMalformedNonFiniteDimensionsAndReturnDescriptor) {
         }
         auto bad_return = context(geo_type("EPSG:4326"));
         EXPECT_FALSE(fn(bad_return.get(), {geometries({square}), geometries({square})}).ok());
-        auto wrong_kind = GeoColumn::create(
-                GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                     GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326},
-                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+        auto wrong_kind =
+                GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                                       GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326},
+                                                      {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
         wrong_kind->append_datum(Datum(Slice(wkb)));
         EXPECT_FALSE(fn(ctx.get(), {wrong_kind, geometries({square})}).ok());
     }

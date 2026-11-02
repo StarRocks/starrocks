@@ -286,13 +286,6 @@ enum GeoDimensionPB {
     GEO_DIMENSION_MIXED = 5;
 }
 
-enum GeoValidationStatePB {
-    GEO_VALIDATION_STATE_UNKNOWN = 0;
-    GEO_VALIDATION_STATE_UNVALIDATED = 1;
-    GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED = 2;
-    GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED = 3;
-}
-
 // Semantic and physical metadata for native geo types.
 message GeoTypeDescPB {
     optional GeoLogicalTypePB logical_type = 1;
@@ -305,7 +298,9 @@ message GeoTypeDescPB {
 message GeoStorageDescPB {
     optional GeoEncodingPB encoding = 1;
     optional GeoDimensionPB dimension = 2;
-    optional GeoValidationStatePB validation_state = 3;
+    // Was validation_state. Do not reuse.
+    reserved 3;
+    reserved "validation_state";
 }
 
 message GeoColumnDescPB {

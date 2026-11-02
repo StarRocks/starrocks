@@ -559,8 +559,7 @@ StatusOr<ColumnPtr> GeoFunctions::h3_to_boundary(FunctionContext* context, const
         !context->get_return_type().geo_type.has_value()) {
         return Status::NotSupported("H3_ToBoundary requires GEOGRAPHY return descriptor");
     }
-    GeoColumnDescriptor descriptor{context->get_return_type().geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{context->get_return_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
     const auto& type = descriptor.type;
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
         type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL || type.crs != "OGC:CRS84") {

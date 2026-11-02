@@ -140,8 +140,6 @@ TEST(CoverageWindowTest, FullPartitionEmitsDistinctRowsAcrossChunks) {
         EXPECT_EQ(geo_data(first)->descriptor().type, *type.geo_type);
         for (const auto& column : {first, second}) {
             EXPECT_EQ(geo_data(column)->descriptor().storage.dimension, GEO_DIMENSION_XY);
-            EXPECT_EQ(geo_data(column)->descriptor().storage.validation_state,
-                      GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
             auto area = GeoFunctions::st_geometry_area(nullptr, {column});
             ASSERT_TRUE(area.ok()) << area.status();
             ColumnViewer<TYPE_DOUBLE> values(*area);
@@ -281,8 +279,6 @@ TEST(CoverageWindowTest, InvalidCoveragePreservesStructuralOutputAndRowMapping) 
                 EXPECT_DOUBLE_EQ(geometry.rings[0].front().y, geometry.rings[0].back().y);
             }
             EXPECT_EQ(geo_data(result)->descriptor().type, *coverage_type().geo_type);
-            EXPECT_EQ(geo_data(result)->descriptor().storage.validation_state,
-                      GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
             result->check_or_die();
         }
 }

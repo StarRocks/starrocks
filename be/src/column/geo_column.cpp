@@ -43,8 +43,7 @@ Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
                           type.coordinate_system == GEO_COORDINATE_SYSTEM_CARTESIAN &&
                           type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR;
     if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536 ||
-        storage.encoding != GEO_ENCODING_WKB || !GeoDimensionPB_IsValid(storage.dimension) ||
-        !GeoValidationStatePB_IsValid(storage.validation_state)) {
+        storage.encoding != GEO_ENCODING_WKB || !GeoDimensionPB_IsValid(storage.dimension)) {
         return Status::NotSupported("Unsupported GEO transport descriptor");
     }
     return Status::OK();
@@ -52,9 +51,7 @@ Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
 
 } // namespace
 
-GeoColumn::GeoColumn(size_t size)
-        : GeoColumn(GeoColumnDescriptor{{},
-                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+GeoColumn::GeoColumn(size_t size) : GeoColumn(GeoColumnDescriptor{{}, {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN}}) {
     resize(size);
 }
 
@@ -65,7 +62,7 @@ GeoColumn::GeoColumn(GeoColumnDescriptor descriptor) : _descriptor(std::move(des
 
 GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
         : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{}),
-                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN}}) {
     if (type.geo_type && type.geo_type->logical_type != GEO_LOGICAL_TYPE_UNKNOWN &&
         ((type.type == TYPE_GEOGRAPHY) != (type.geo_type->logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY))) {
         throw std::invalid_argument("GeoColumn primitive/descriptor mismatch");

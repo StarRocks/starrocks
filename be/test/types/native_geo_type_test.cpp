@@ -31,7 +31,6 @@ GeoColumnDescriptor descriptor(LogicalType primitive) {
     result.type.srid = 4326;
     result.storage.encoding = GEO_ENCODING_WKB;
     result.storage.dimension = GEO_DIMENSION_XY;
-    result.storage.validation_state = GEO_VALIDATION_STATE_UNVALIDATED;
     return result;
 }
 
@@ -104,7 +103,6 @@ TEST(NativeGeoTypeTest, ColumnRepresentationIsSeparateFromType) {
     // A column reuses the semantic value, and transports its representation separately.
     column.type = *type.geo_type;
     column.storage.dimension = GEO_DIMENSION_XYZ;
-    column.storage.validation_state = GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED;
     EXPECT_EQ(column, GeoColumnDescriptor::from_protobuf(column.to_protobuf()));
     auto thrift = type.to_thrift();
     thrift.types[0].scalar_type.__set_geo(column.type.to_thrift());
