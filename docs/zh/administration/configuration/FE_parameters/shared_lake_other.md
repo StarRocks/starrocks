@@ -817,11 +817,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ### `lake_enable_batch_publish_multi_table`
 
-- 默认值: false
+- 默认值: true
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。请在所有 FE 节点都升级到支持该功能的版本之后再开启此参数：运行旧版本的 FE Follower 在回放多表事务批次时只会应用其中第一张表的 Visible Log。
+- 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。从 v26.3 开始，默认值从 `false` 更改为 `true`。v4.1.5 之前版本的 FE 不支持该功能，回放多表事务批次时只会应用其中第一张表的 Visible Log。因此，从这类版本升级时，请在每个已升级 FE 节点的 **fe.conf** 中将此参数设为 `false`，直到所有 FE 节点升级完成：升级期间一旦发生 Leader 切换，已升级的 FE 节点可能成为 Leader，而其余 FE 节点仍在运行旧版本。将集群降级到这类版本时，请先将此参数设为 `false`，等待修改之前提交的事务全部变为可见，再创建元数据快照。
 - 引入版本: v4.1.5
 
 ### `lake_enable_batch_publish_retry_freeze`
