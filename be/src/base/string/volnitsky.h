@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <functional>
 #include <limits>
+#include <memory>
 
 #include "base/string/string_searcher.h"
 
@@ -60,9 +61,11 @@ static constexpr size_t hash_size = 64 * 1024;
 
 /// min haystack size to use main algorithm instead of fallback
 static constexpr size_t min_haystack_size_for_algorithm = 20000;
+/// min needle size to use main algorithm instead of SIMD StringSearcher fallback
+static constexpr size_t min_needle_size_for_algorithm = 33;
 
 static inline bool isFallbackNeedle(const size_t needle_size, size_t haystack_size_hint = 0) {
-    return needle_size < 2 * sizeof(Ngram) || needle_size >= std::numeric_limits<Offset>::max() ||
+    return needle_size < min_needle_size_for_algorithm || needle_size >= std::numeric_limits<Offset>::max() ||
            (haystack_size_hint && haystack_size_hint < min_haystack_size_for_algorithm);
 }
 
@@ -139,7 +142,7 @@ public:
                 /// When found - compare bytewise, using the offset from the hash table.
                 const auto res = pos - (hash[cell_num] - 1);
 
-                /// pointer in the code is always padded array so we can use pagesafe semantics
+                /// compare() enforces strict [haystack, haystack_end] bounds before reading
                 if (fallback_searcher.compare(haystack, haystack_end, res)) return res;
             }
         }
