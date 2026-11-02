@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 
 /**
@@ -244,6 +245,12 @@ public class TransactionGraph {
 
     // The size of ins of node with txnId must be zero
     public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId) {
+        return getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId, id -> true);
+    }
+
+    // Same as above, but the batch ends at the first txn canJoin rejects.
+    public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId,
+                                                    LongPredicate canJoin) {
         List<Long> txns = new ArrayList<>();
         if (nodes.containsKey(txnId)) {
             Node node = nodes.get(txnId);
@@ -254,7 +261,8 @@ public class TransactionGraph {
             int count = 0;
             // can not judge by ins.size()
             // for the ins.size of the txn with multi table can be one
-            while (count < maxBatchSize && node != null && (node.writeTableIds.size() == 1)) {
+            while (count < maxBatchSize && node != null && (node.writeTableIds.size() == 1)
+                    && canJoin.test(node.txnId)) {
                 count++;
                 txns.add(node.txnId);
 
@@ -286,6 +294,12 @@ public class TransactionGraph {
      * The size of ins of node with txnId must be zero.
      */
     public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int minBatchSize, int maxBatchSize, long txnId) {
+        return getTxnsWithTxnDependencyBatchMultiTable(minBatchSize, maxBatchSize, txnId, id -> true);
+    }
+
+    // Same as above, but only txns canJoin accepts may join after the head.
+    public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int minBatchSize, int maxBatchSize, long txnId,
+                                                              LongPredicate canJoin) {
         List<Long> txns = new ArrayList<>();
         Node head = nodes.get(txnId);
         if (head == null) {
@@ -304,7 +318,7 @@ public class TransactionGraph {
                 // A successor of the tail depends on the tail, and joins only when it has
                 // no dependency outside the batch: publishing it here would otherwise jump
                 // over a txn that has to become visible first.
-                if (next.ins == null || inBatch.containsAll(next.ins)) {
+                if ((next.ins == null || inBatch.containsAll(next.ins)) && canJoin.test(next.txnId)) {
                     nextInChain = next;
                     break;
                 }
