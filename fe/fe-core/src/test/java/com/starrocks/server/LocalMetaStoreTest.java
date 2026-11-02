@@ -21,6 +21,7 @@ import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
@@ -1041,6 +1042,20 @@ public class LocalMetaStoreTest {
         Assertions.assertTrue(p2.getDistributionInfo().getBucketNum() > 0);
 
         starRocksAssert.dropTable("test.add_part_rf_bucket");
+    }
+
+    @Test
+    public void testPartitionBuiltWithStaleDistributionColumnsIsNotAttached() throws Exception {
+        // An optimize may give the table other distribution columns while a partition is built from a copy of it.
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", "t1");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        OlapTable copiedTable = localMetastore.getCopiedTable(db, table,
+                Lists.newArrayList(table.getPartition("t1").getId()), Maps.newHashMap());
+        copiedTable.setDefaultDistributionInfo(new HashDistributionInfo(3, List.of(copiedTable.getColumn("k2"))));
+        Exception e = Assertions.assertThrows(Exception.class,
+                () -> Deencapsulation.invoke(localMetastore, "checkIfMetaChange", table, copiedTable, "t1"));
+        Assertions.assertTrue(e.getMessage().contains("meta has been changed"), e.getMessage());
     }
 
     @Test

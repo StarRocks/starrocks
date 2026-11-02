@@ -1213,6 +1213,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             metaChanged = true;
         }
 
+        // An optimize may give the table other distribution columns while the partition is built: no load could write
+        // the partition together with the ones that have the new columns.
+        if (olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo distribution
+                && copiedTable.getDefaultDistributionInfo() instanceof HashDistributionInfo copiedDistribution
+                && !distribution.getDistributionColumns().equals(copiedDistribution.getDistributionColumns())) {
+            metaChanged = true;
+        }
+
         // The light_weight_tablet_creation snapshot from the lock-free phase decides whether
         // the loop in buildPartitions sends CreateReplicaTask. If a concurrent ALTER flipped
         // this property between the snapshot and the commit, the lock-free phase used a stale
