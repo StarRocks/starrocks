@@ -1,4 +1,4 @@
--- name: test_ivm_with_iceberg_join @slow
+-- name: test_ivm_with_iceberg_join
 create external catalog mv_iceberg_${uuid0}
 properties
 (
