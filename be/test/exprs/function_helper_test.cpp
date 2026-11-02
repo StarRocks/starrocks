@@ -294,7 +294,8 @@ protected:
             for (int mode : {0, 1, 2, 3, 4}) {
                 SCOPED_TRACE(::testing::Message() << path << ":" << KT << ":" << arg.type << ":" << mode);
                 auto source = physical_input(arg, mode);
-                const auto expected = check_geo_leaf(source.get(), *type.geo_type)->descriptor();
+                // Copies carry the semantic type only; storage metadata is not propagated.
+                const auto expected = check_geo_leaf(source.get(), *type.geo_type)->descriptor().type;
                 auto state = ManagedAggrState::create(ctx.get(), function);
                 auto* data = reinterpret_cast<MapAggState<KT>*>(state->state());
                 EXPECT_FALSE(data->use_datum);
@@ -321,7 +322,7 @@ protected:
                     function->serialize_to_column(ctx.get(), state->state(), result.get());
                 auto* map = down_cast<MapColumn*>(result.get());
                 const auto* copied = path < 2 ? data->value_column.get() : map->values_column_raw_ptr();
-                EXPECT_EQ(expected, check_geo_leaf(copied, *type.geo_type)->descriptor());
+                EXPECT_EQ(expected, check_geo_leaf(copied, *type.geo_type)->descriptor().type);
                 EXPECT_EQ(mode == 4 ? 0 : 2, map->values().size());
                 for (size_t i = 0; i < map->values().size(); ++i) {
                     const auto key = map->keys().get(i);
@@ -383,8 +384,8 @@ protected:
                 auto source = physical_input(arg, mode);
                 auto result = ColumnHelper::create_column(intermediate_type, true);
                 function->convert_to_serialize_format(ctx.get(), {source}, source->size(), result);
-                EXPECT_EQ(check_geo_leaf(source.get(), *type.geo_type)->descriptor(),
-                          check_geo_leaf(result.get(), *type.geo_type)->descriptor());
+                EXPECT_EQ(check_geo_leaf(source.get(), *type.geo_type)->descriptor().type,
+                          check_geo_leaf(result.get(), *type.geo_type)->descriptor().type);
                 auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(
                         down_cast<const StructColumn*>(ColumnHelper::get_data_column(result.get()))
                                 ->field_column_raw_ptr(0)));
@@ -403,8 +404,8 @@ protected:
                     function->merge(ctx.get(), result.get(), merged->state(), i);
                 auto finalized = ColumnHelper::create_column(result_type, false);
                 function->finalize_to_column(ctx.get(), merged->state(), finalized.get());
-                EXPECT_EQ(check_geo_leaf(source.get(), *type.geo_type)->descriptor(),
-                          check_geo_leaf(finalized.get(), *type.geo_type)->descriptor());
+                EXPECT_EQ(check_geo_leaf(source.get(), *type.geo_type)->descriptor().type,
+                          check_geo_leaf(finalized.get(), *type.geo_type)->descriptor().type);
                 finalized->check_or_die();
             }
             auto wrong_type = intermediate_type;
@@ -473,7 +474,7 @@ TEST_P(GeoFunctionHelperTest, CreateColumns) {
     source->append_wkb(Slice(point));
     auto result = FunctionHelper::create_column(type, false);
     result->append(*source);
-    EXPECT_EQ(source->descriptor(), check_geo_leaf(result.get(), *type.geo_type)->descriptor());
+    EXPECT_EQ(source->descriptor().type, check_geo_leaf(result.get(), *type.geo_type)->descriptor().type);
     EXPECT_EQ(point, check_geo_leaf(result.get(), *type.geo_type)->get_wkb(0).to_string());
     auto other = type;
     other.geo_type->crs = "custom:incompatible";

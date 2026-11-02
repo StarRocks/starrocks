@@ -3525,6 +3525,9 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
     auto value = GeoFunctions::st_geom_from_text(context.get(), {wkt, crs});
     ASSERT_TRUE(value.ok()) << value.status();
     const auto expected = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(value->get()))->descriptor();
+    // Copies do not propagate storage metadata; factory-created destinations keep their default storage.
+    const GeoStorageDescriptor destination_storage{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN,
+                                                   GEO_VALIDATION_STATE_UNVALIDATED};
     for (bool nullable : {false, true}) {
         // A non-nullable destination receives a non-nullable constant payload.
         ColumnPtr source =
@@ -3534,7 +3537,9 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
         EXPECT_FALSE(unfolded->is_constant());
         EXPECT_EQ(nullable, unfolded->is_nullable());
         auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(unfolded.get()));
-        EXPECT_EQ(expected, geo->descriptor());
+        // Unfolding copies into a factory-created column: the type is kept, storage stays destination-owned.
+        EXPECT_EQ(expected.type, geo->descriptor().type);
+        EXPECT_EQ(destination_storage, geo->descriptor().storage);
         auto x = GeoFunctions::st_geometry_x(nullptr, {unfolded});
         ASSERT_TRUE(x.ok()) << x.status();
         for (size_t i = 0; i < 3; ++i) EXPECT_DOUBLE_EQ(1.0, x.value()->get(i).get_double());
@@ -3548,7 +3553,9 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
     auto null_row = ColumnHelper::move_column(type, true, ColumnHelper::create_const_null_column(1), 1);
     destination->append(*null_row, 0, 1);
     destination->append(*row, 0, 1);
-    EXPECT_EQ(expected, down_cast<const GeoColumn*>(ColumnHelper::get_data_column(destination.get()))->descriptor());
+    const auto& copied = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(destination.get()))->descriptor();
+    EXPECT_EQ(expected.type, copied.type);
+    EXPECT_EQ(destination_storage, copied.storage);
     auto x = GeoFunctions::st_geometry_x(nullptr, {destination});
     ASSERT_TRUE(x.ok()) << x.status();
     ASSERT_EQ(4, x.value()->size());

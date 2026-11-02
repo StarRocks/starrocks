@@ -117,8 +117,7 @@ public:
                                                bool& has_null) override;
 
 private:
-    bool _is_storage_placeholder() const;
-    const GeoColumn& _source(const Column& src);
+    const GeoColumn& _source(const Column& src) const;
     GeoColumnDescriptor _descriptor;
     // Exclusive ownership: no mutable BinaryColumn escape hatch or shared backing buffers.
     std::unique_ptr<BinaryColumn> _data = std::make_unique<BinaryColumn>();
