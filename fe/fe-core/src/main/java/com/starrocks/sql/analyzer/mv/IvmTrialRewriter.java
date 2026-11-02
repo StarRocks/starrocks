@@ -99,7 +99,7 @@ public final class IvmTrialRewriter {
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx)
-                    .transformWithSelectLimit(rewrittenQuery.getQueryRelation());
+                    .transform(rewrittenQuery.getQueryRelation());
 
             OptimizerContext optimizerContext = OptimizerFactory.initContext(ctx, columnRefFactory);
             // InsertStmt (not CreateMaterializedViewStatement) so IvmRewriter.isPrimaryKeyTargetMv()

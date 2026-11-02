@@ -763,6 +763,22 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         }
     }
 
+    @Test
+    public void testTrialRewriteIgnoresSqlSelectLimit() throws Exception {
+        long previousSelectLimit = connectContext.getSessionVariable().getSqlSelectLimit();
+        try {
+            connectContext.getSessionVariable().setSqlSelectLimit(200);
+            String ddl = "CREATE MATERIALIZED VIEW mv_trial_select_limit "
+                    + "REFRESH DEFERRED MANUAL "
+                    + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                    + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+            CreateMaterializedViewStatement stmt = analyzeMvDdl(ddl);
+            assertEquals(MaterializedView.RefreshMode.INCREMENTAL, stmt.getAnalyzedRefreshMode());
+        } finally {
+            connectContext.getSessionVariable().setSqlSelectLimit(previousSelectLimit);
+        }
+    }
+
     /**
      * Trial must not run for PCT — PCT refresh doesn't use IvmRewriter; a spurious trial
      * would add latency and risk false positives.
