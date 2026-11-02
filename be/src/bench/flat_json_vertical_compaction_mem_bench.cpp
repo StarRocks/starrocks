@@ -701,13 +701,13 @@ StatusOr<SegmentInspection> inspect_segments(const PreparedTablet& prepared) {
             }
             for (uint32_t column_index = 1; column_index < kTabletSchemaColumnCount; ++column_index) {
                 const auto uid = prepared.tablet_schema->column(column_index).unique_id();
-                const auto* reader = segment->column_with_uid(uid);
+                ASSIGN_OR_RETURN(const auto* reader, segment->column_with_uid(uid));
                 if (reader != nullptr) {
                     inspection.column_group_root_reader_footprint_bytes += reader->total_mem_footprint();
                 }
             }
 
-            const auto* json_reader = segment->column_with_uid(json_tablet_column.unique_id());
+            ASSIGN_OR_RETURN(const auto* json_reader, segment->column_with_uid(json_tablet_column.unique_id()));
             if (json_reader == nullptr) {
                 return Status::InternalError("JSON column reader is missing from an input segment");
             }

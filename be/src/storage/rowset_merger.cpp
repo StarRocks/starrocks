@@ -203,7 +203,7 @@ static StatusOr<int32_t> calculate_chunk_size_for_column_group(const Schema& col
         const auto& segments = rowset->segments();
         for (const auto& segment : segments) {
             for (auto& field : column_group_schema.fields()) {
-                const auto* column_reader = segment->column_with_uid(field->uid());
+                ASSIGN_OR_RETURN(const auto* column_reader, segment->column_with_uid(field->uid()));
                 if (column_reader == nullptr) {
                     continue;
                 }
