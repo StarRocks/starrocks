@@ -43,7 +43,7 @@ TypeDescriptor make_array_type(LogicalType elem_type) {
 
 TEST(CastExprCoreTest, from_thrift_succeeds_for_primitive_cast) {
     ObjectPool pool;
-    TExprNode node = make_cast_node(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_BIGINT));
+    TExprNode node = make_cast_node(TYPE_INT_DESC, TYPE_BIGINT_DESC);
     Expr* expr = VectorizedCastExprFactory::from_thrift(&pool, node);
     ASSERT_NE(nullptr, expr);
     pool.add(expr);

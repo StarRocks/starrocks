@@ -157,7 +157,7 @@ TEST_F(UnnestVariantTest, TypedOnlyShreddedElements) {
     MutableColumns typed;
     typed.emplace_back(NullableColumn::create(std::move(values), NullColumn::create(3, 0)));
     auto variants = VariantColumn::create();
-    variants->set_shredded_columns({"n"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+    variants->set_shredded_columns({"n"}, {TYPE_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
     auto elements = NullableColumn::create(std::move(variants), NullColumn::create(3, 0));
     auto arrays = ArrayColumn::create(elements, array_offsets({0, 2, 3}));
     auto nulls = NullColumn::create(2, 0);
