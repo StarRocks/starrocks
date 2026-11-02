@@ -1418,17 +1418,12 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
         return Status::InvalidArgument(
                 fmt::format("tablet_schema id {} mismatches schema_id {}", _tablet_schema->id(), _schema_id));
     }
-    auto impl = new DeltaWriterImpl(
-            _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
-            _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
-<<<<<<< HEAD
-            _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
-            _is_multi_statements_txn, _multi_node_write, _tablet_schema, _force_build_vector_index_inline);
-=======
-            _flexible_partial_update, _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
-            _global_dicts, _is_multi_statements_txn, _multi_node_write, _tablet_schema,
-            _force_build_vector_index_inline, _flat_json_config);
->>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
+    auto impl =
+            new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size, _mem_tracker,
+                                _max_buffer_size, _schema_id, _partial_update_mode, _column_to_expr_value, _load_id,
+                                _profile, _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn,
+                                _multi_node_write, _tablet_schema, _force_build_vector_index_inline, _flat_json_config);
     return std::make_unique<DeltaWriter>(impl);
 }
 

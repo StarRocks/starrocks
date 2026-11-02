@@ -263,20 +263,10 @@ struct TOlapTableSink {
     // combined txn logs (each writing CN produces a PARTIAL txn log for the tablet; the sender
     // aggregates them into one before writing the combined log).
     36: optional bool enable_multi_node_write
-<<<<<<< HEAD
-=======
     // Shared-data only: the destination table's flat_json.* properties, set when the table has any.
     // The CN writer takes them from here instead of from its tablet metadata cache, which is empty
     // for a tablet's first write under light_weight_tablet_creation.
     37: optional Descriptors.TFlatJsonConfig flat_json_config
-
-    // Enterprise-only fields start at 300, reserve some fields for upstream StarRocks so a sync
-    // never collides on ordinals.
-    // Flexible partial update (shared-data primary key tables only): different rows of one load may
-    // update different column subsets. The plan carries a hidden "__cset__" SMALLINT slot (the per-row
-    // column-set id) immediately before the "__op" slot, so "__op" stays the last column.
-    300: optional bool flexible_partial_update
->>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
 }
 
 struct TSchemaTableSink {
