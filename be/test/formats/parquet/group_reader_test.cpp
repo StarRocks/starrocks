@@ -248,7 +248,7 @@ public:
 
     Status read_range(const Range<uint64_t>& range, const Filter*, ColumnPtr& dst) override {
         if (_temp_col == nullptr) {
-            _temp_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+            _temp_col = ColumnHelper::create_column(TYPE_INT_DESC, true);
         }
         dst = _temp_col;
         _temp_col->as_mutable_raw_ptr()->append_datum(Datum(int32_t(42)));
@@ -386,11 +386,11 @@ static Status fill_dst_chunk_without_projected(GroupReader* group_reader, ChunkP
 static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
     auto variant = VariantColumn::create();
     MutableColumns typed_columns;
-    auto typed_col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto typed_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     typed_col->append_datum(int64_t(11));
     typed_col->append_datum(int64_t(22));
     typed_columns.emplace_back(typed_col->as_mutable_ptr());
-    variant->set_shredded_columns({"a.b.c"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns), nullptr, nullptr);
+    variant->set_shredded_columns({"a.b.c"}, {TYPE_BIGINT_DESC}, std::move(typed_columns), nullptr, nullptr);
     return variant;
 }
 
@@ -4850,7 +4850,7 @@ public:
 
     Status read_range(const Range<uint64_t>& range, const Filter*, ColumnPtr& dst) override {
         if (_code_column == nullptr) {
-            _code_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+            _code_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
         }
         _code_column->as_mutable_raw_ptr()->reset_column();
         _code_column->as_mutable_raw_ptr()->append_datum(Datum(int32_t(100)));
