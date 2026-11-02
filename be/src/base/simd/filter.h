@@ -95,9 +95,11 @@ size_t compress_neon_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selec
 // Stream compaction: copy the elements of `src` whose selector byte is non-zero,
 // over the index range [from, to), to the front of `dst` starting at index
 // `from`, and return the new end offset. Elements before `from` are left
-// untouched, and `dst` may alias `src` (in-place). 4- and 8-byte elements take a
-// vectorised path (AVX-512 vpcompress / AVX2 on x86, NEON on aarch64); other
-// sizes use a scalar byte copy.
+// untouched, and `dst` may alias `src` (in-place). `dst` must have capacity for
+// at least `to` elements; vectorised stores may overwrite dead slots in
+// `[returned_size, to)` before the caller resizes `dst`. 4- and 8-byte elements
+// take a vectorised path (AVX-512 vpcompress / AVX2 on x86, NEON on aarch64);
+// other sizes use a scalar byte copy.
 template <typename T>
 inline size_t filter_range(T* dst, const T* src, const uint8_t* selector, size_t from, size_t to) {
     return detail::filter_range(dst, src, sizeof(T), selector, from, to);
