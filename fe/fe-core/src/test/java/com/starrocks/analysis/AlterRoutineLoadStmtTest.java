@@ -124,6 +124,8 @@ public class AlterRoutineLoadStmtTest {
         AlterRoutineLoadAnalyzer.analyze(alterRoutineLoadStmt, connectContext);
         Assertions.assertNotNull(alterRoutineLoadStmt.getRoutineLoadDesc());
         Assertions.assertEquals(0, alterRoutineLoadStmt.getLoadPropertyList().size());
+        // nothing to apply to the job's load definition from a PROPERTIES-only ALTER
+        Assertions.assertTrue(alterRoutineLoadStmt.getRoutineLoadDesc().isEmpty());
     }
 
     @Test
