@@ -1,0 +1,83 @@
+-- name: test_ivm_time_function_rejected @cloud
+CREATE TABLE tf_b (k INT, ts DATETIME, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE tf_d (k INT, name VARCHAR(20)) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tf_where DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, COUNT(*) AS c FROM tf_b WHERE ts >= date_sub(now(), INTERVAL 1 DAY) GROUP BY k;
+-- result:
+[REGEX].*Incremental refresh does not support now\(\) in the materialized view definition.*
+-- !result
+CREATE MATERIALIZED VIEW mv_tf_select DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, ts, now() AS seen_at FROM tf_b;
+-- result:
+[REGEX].*Incremental refresh does not support now\(\) in the materialized view definition.*
+-- !result
+CREATE MATERIALIZED VIEW mv_tf_join DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT b.k, d.name FROM tf_b b JOIN tf_d d ON b.k = d.k AND b.ts >= date_sub(now(), INTERVAL 1 DAY);
+-- result:
+[REGEX].*Incremental refresh does not support now\(\) in the materialized view definition.*
+-- !result
+CREATE MATERIALIZED VIEW mv_tf_union DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, ts FROM tf_b WHERE ts >= date_sub(now(), INTERVAL 1 DAY) UNION ALL SELECT k, ts FROM tf_b WHERE v > 100;
+-- result:
+[REGEX].*Incremental refresh does not support now\(\) in the materialized view definition.*
+-- !result
+CREATE MATERIALIZED VIEW mv_tf_having DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, COUNT(*) AS c FROM tf_b GROUP BY k HAVING k < unix_timestamp();
+-- result:
+[REGEX].*Incremental refresh does not support unix_timestamp\(\) in the materialized view definition.*
+-- !result
+CREATE MATERIALIZED VIEW mv_tf_curdate DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, COUNT(*) AS c FROM tf_b WHERE ts >= current_date() GROUP BY k;
+-- result:
+[REGEX].*Incremental refresh does not support (?i:current_date)\(\) in the materialized view definition.*
+-- !result
+-- name: test_ivm_time_function_auto_falls_back_to_pct @cloud
+CREATE TABLE tfa_b (k INT, ts DATETIME, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO tfa_b VALUES (1, now(), 1), (2, date_sub(now(), INTERVAL 3 DAY), 2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tfa DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="AUTO")
+AS SELECT k, COUNT(*) AS c FROM tfa_b WHERE ts >= date_sub(now(), INTERVAL 1 DAY) GROUP BY k;
+-- result:
+-- !result
+SELECT REFRESH_MODE, EFFECTIVE_REFRESH_MODE, EFFECTIVE_REFRESH_MODE_REASON LIKE '%Incremental refresh does not support now()%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_tfa';
+-- result:
+AUTO	PCT	1
+-- !result
+REFRESH MATERIALIZED VIEW mv_tfa WITH SYNC MODE;
+SELECT k, c FROM mv_tfa ORDER BY k;
+-- result:
+1	1
+-- !result
+-- name: test_ivm_time_function_allowed_outside_incremental_query @cloud
+CREATE TABLE tfo_b (k INT, ts DATETIME, v BIGINT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE TABLE tfo_p (dt DATE NOT NULL, k INT, v BIGINT) DUPLICATE KEY(dt) PARTITION BY date_trunc('day', dt) DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tfo_pct DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="PCT")
+AS SELECT k, COUNT(*) AS c FROM tfo_b WHERE ts >= date_sub(now(), INTERVAL 1 DAY) GROUP BY k;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tfo_unix DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL PROPERTIES("refresh_mode"="INCREMENTAL")
+AS SELECT k, unix_timestamp(ts) AS u FROM tfo_b;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_tfo_retention PARTITION BY dt DISTRIBUTED BY HASH(k) BUCKETS 1 REFRESH DEFERRED MANUAL
+PROPERTIES("refresh_mode"="INCREMENTAL", "partition_retention_condition"="dt >= current_date() - interval 3 day")
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM tfo_p GROUP BY dt, k;
+-- result:
+-- !result
+SELECT TABLE_NAME, EFFECTIVE_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME LIKE 'mv_tfo_%' ORDER BY TABLE_NAME;
+-- result:
+mv_tfo_pct	PCT
+mv_tfo_retention	INCREMENTAL
+mv_tfo_unix	INCREMENTAL
+-- !result
