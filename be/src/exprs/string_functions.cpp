@@ -4225,22 +4225,13 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
         return ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), columns[0]->is_nullable());
     }
 
-    auto passthrough_input = [&]() -> ColumnPtr {
-        if (columns[0]->is_constant()) {
-            DCHECK(ColumnHelper::is_all_const(columns));
-            return columns[0];
-        }
-        if (columns[0]->is_nullable() && !columns[0]->has_null()) {
-            return down_cast<const NullableColumn*>(columns[0].get())->data_column();
-        }
-        return columns[0];
-    };
+    const bool is_src_const = columns[0]->is_constant();
+    DCHECK(!is_src_const || ColumnHelper::is_all_const(columns));
 
     if (UNLIKELY(tmpl.exceeds_groups(*const_re) || (!global_mode && tmpl.has_invalid_escape))) {
-        return passthrough_input();
+        return columns[0];
     }
 
-    const bool is_src_const = columns[0]->is_constant();
     const size_t eval_rows = is_src_const ? 1 : num_rows;
     const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
     const uint8_t* null_data =
@@ -4309,20 +4300,20 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
     });
 
     if (!any_match) {
-        return passthrough_input();
+        return columns[0];
     }
 
     dst->invalidate_slice_cache();
     THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
 
     if (is_src_const) {
-        DCHECK(ColumnHelper::is_all_const(columns));
         return ConstColumn::create(std::move(dst), num_rows);
     }
 
     if (null_data != nullptr) {
         const auto* src_nullable = down_cast<const NullableColumn*>(columns[0].get());
-        return NullableColumn::create(std::move(dst), src_nullable->null_column()->as_mutable_ptr());
+        return NullableColumn::create(
+                std::move(dst), NullColumn::static_pointer_cast(std::move(*src_nullable->null_column()).mutate()));
     }
     return dst;
 }

@@ -22,6 +22,7 @@
 
 #include "base/utility/defer_op.h"
 #include "bench/bench_util.h"
+#include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
@@ -329,12 +330,12 @@ TEST_F(StringFunctionRegexpReplaceTest, testZeroCopyPassthroughOnNoMatch) {
         ASSERT_EQ(res.value().get(), columns[0].get());
     }
 
-    // 5. NullableColumn with 0 nulls (!has_null()) -> unwraps and returns underlying data_column() pointer
+    // 5. NullableColumn with 0 nulls (!has_null()) -> retains NullableColumn wrapper so
+    //    ProjectOperator and Chunk deduplication do not alias underlying data_column()
     {
         auto data_col = BinaryColumn::create();
         data_col->append("not_a_url_1");
         data_col->append("not_a_url_2");
-        const Column* expected_data_ptr = data_col.get();
         auto null_col = NullColumn::create(2, 0);
         ColumnPtr nullable_str = NullableColumn::create(std::move(data_col), std::move(null_col));
         ASSERT_FALSE(nullable_str->has_null());
@@ -345,7 +346,15 @@ TEST_F(StringFunctionRegexpReplaceTest, testZeroCopyPassthroughOnNoMatch) {
 
         auto res = eval_regexp_replace(columns);
         ASSERT_TRUE(res.ok()) << res.status();
-        ASSERT_EQ(res.value().get(), expected_data_ptr);
+        ASSERT_EQ(res.value().get(), columns[0].get());
+
+        Chunk chunk;
+        chunk.append_column(ColumnPtr(nullable_str), SlotId(1));
+        chunk.append_column(std::move(res.value()), SlotId(2));
+        Filter selection = {1, 0};
+        ASSERT_EQ(chunk.filter_range(selection, 0, 2), 1u);
+        ASSERT_EQ(ColumnViewer<TYPE_VARCHAR>(chunk.get_column_by_slot_id(1)).value(0), Slice("not_a_url_1"));
+        ASSERT_EQ(ColumnViewer<TYPE_VARCHAR>(chunk.get_column_by_slot_id(2)).value(0), Slice("not_a_url_1"));
     }
 
     // 6. All ConstColumns with no match -> returns exact same ConstColumn pointer
@@ -370,6 +379,46 @@ TEST_F(StringFunctionRegexpReplaceTest, testZeroCopyPassthroughOnNoMatch) {
         auto res = eval_regexp_replace(columns);
         ASSERT_TRUE(res.ok()) << res.status();
         ASSERT_EQ(res.value()->size(), 0);
+    }
+
+    // 8. NullableColumn with nulls when a row matches -> clones null_column via COW so
+    //    in-place Chunk::filter_range on both source and result does not double-filter _null_column
+    {
+        auto data_col = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        data_col->append("https://www.starrocks.io/docs");
+        null_col->append(0);
+        data_col->append("");
+        null_col->append(1);
+        data_col->append("not_a_url");
+        null_col->append(0);
+        ColumnPtr nullable_str = NullableColumn::create(std::move(data_col), std::move(null_col));
+        ColumnPtr ptn_col =
+                ColumnHelper::create_const_column<TYPE_VARCHAR>("^https?://([^/]+)/.*$", nullable_str->size());
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("\\1", nullable_str->size());
+        Columns columns = {nullable_str, ptn_col, rpl_col};
+
+        auto res = eval_regexp_replace(columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        const auto* src_nullable = down_cast<const NullableColumn*>(nullable_str.get());
+        const auto* out_nullable = down_cast<const NullableColumn*>(res.value().get());
+        ASSERT_NE(out_nullable->null_column().get(), src_nullable->null_column().get());
+
+        Chunk chunk;
+        chunk.append_column(ColumnPtr(nullable_str), SlotId(1));
+        chunk.append_column(std::move(res.value()), SlotId(2));
+        Filter selection = {1, 0, 1};
+        ASSERT_EQ(chunk.filter_range(selection, 0, 3), 2u);
+        ColumnViewer<TYPE_VARCHAR> src_viewer(chunk.get_column_by_slot_id(1));
+        ColumnViewer<TYPE_VARCHAR> out_viewer(chunk.get_column_by_slot_id(2));
+        ASSERT_FALSE(src_viewer.is_null(0));
+        ASSERT_EQ(src_viewer.value(0), Slice("https://www.starrocks.io/docs"));
+        ASSERT_FALSE(src_viewer.is_null(1));
+        ASSERT_EQ(src_viewer.value(1), Slice("not_a_url"));
+        ASSERT_FALSE(out_viewer.is_null(0));
+        ASSERT_EQ(out_viewer.value(0), Slice("www.starrocks.io"));
+        ASSERT_FALSE(out_viewer.is_null(1));
+        ASSERT_EQ(out_viewer.value(1), Slice("not_a_url"));
     }
 }
 
