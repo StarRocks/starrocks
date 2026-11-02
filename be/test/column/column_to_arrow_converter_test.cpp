@@ -555,8 +555,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR)});
     auto column = ColumnHelper::create_column(struct_type_desc, false, false, 0, false);
 
     // {1, "test1"}
@@ -585,8 +584,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR)});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR)});
     auto column = ColumnHelper::create_column(struct_type_desc, true, false, 0, false);
 
     // {1, "test1"}
@@ -618,7 +616,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
-    auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+    auto map_type_desc = TypeDescriptor::create_map_type(TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR));
     auto column = ColumnHelper::create_column(map_type_desc, false, false, 0, false);
 
     // {1:"test1"},{2,"test2"}
@@ -660,7 +658,7 @@ TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
-    auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+    auto map_type_desc = TypeDescriptor::create_map_type(TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR));
     auto column = ColumnHelper::create_column(map_type_desc, true, false, 0, false);
 
     // {1:"test1"},{2,"test2"}
@@ -707,9 +705,9 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
     // ARRAY<STRUCT<INT,MAP<INT,CHAR>>>>
-    auto map_type_desc = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_CHAR));
+    auto map_type_desc = TypeDescriptor::create_map_type(TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR));
     std::vector<std::string> field_names{"id", "map"};
-    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TypeDescriptor(TYPE_INT), map_type_desc});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, map_type_desc});
     auto array_type_desc = TypeDescriptor::create_array_type(struct_type_desc);
     auto column = ColumnHelper::create_column(array_type_desc, true, false, 0, false);
     // [{"id": 1, "map": {11:"test11"},{111:"test111"}}, null]
