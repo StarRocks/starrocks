@@ -226,10 +226,10 @@ public:
 
         _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_VARCHAR});
         _partial_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_VARCHAR});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _partial_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _partial_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _slots.emplace_back(2, "c2", TYPE_INT_DESC);
+        _slots.emplace_back(3, "__op", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
         _partial_slot_pointers.emplace_back(&_partial_slots[0]);

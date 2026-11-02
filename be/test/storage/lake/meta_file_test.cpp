@@ -205,7 +205,7 @@ protected:
                                 int64_t txn_id, std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
         CHECK_EQ(2, sources.size());
         auto* split_key = sources[0]->mutable_range()->mutable_upper_bound()->add_values();
-        split_key->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+        split_key->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         split_key->set_value("0");
         split_key->set_variant_type(VariantTypePB::NORMAL_VALUE);
         sources[0]->mutable_range()->set_upper_bound_included(false);
