@@ -44,6 +44,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
@@ -2092,8 +2093,22 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
-                olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        // Only a range table can be in a range colocate group; getRangeColocateGroupId is null for one that is not.
+        ColocateTableIndex.GroupId groupId = olapTable.isRangeDistribution()
+                ? colocateTableIndex.getRangeColocateGroupId(olapTable.getId()) : null;
+        List<Column> distributionColumns;
+        if (groupId != null) {
+            // A range table has no distribution columns; its colocate group pins the types of the colocate columns,
+            // the first getColocateColumnCount() sort-key columns.
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+            int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+            distributionColumns = sortKeyColumns.subList(0, Math.min(colocateColumnCount, sortKeyColumns.size()));
+        } else {
+            distributionColumns = MetaUtils.getColumnsByColumnIds(
+                    olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
+        }
+        String columnKind = groupId != null ? "colocate column" : "distribution column";
         for (Column distributionCol : distributionColumns) {
             String colName = distributionCol.getName();
             String normalizedColName = Column.removeNamePrefix(colName);
@@ -2101,19 +2116,20 @@ public class SchemaChangeHandler extends AlterHandler {
             if (col.isPresent() && !col.get().equals(distributionCol)) {
                 if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
                     if (olapTable.hasColocateGroup()) {
-                        throw new DdlException("Can not modify distribution column[" + colName
+                        throw new DdlException("Can not modify " + columnKind + "[" + colName
                                 + "] for colocate table. index["
                                 + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
                     }
                     continue;
                 }
-                throw new DdlException("Can not modify distribution column[" + colName + "]. index["
+                throw new DdlException("Can not modify " + columnKind + "[" + colName + "]. index["
                         + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
             if (col.isEmpty() && alterIndexMetaId == olapTable.getBaseIndexMetaId()) {
                 // 2.2 distribution column cannot be deleted.
-                throw new DdlException("Distribution column[" + distributionCol.getName()
-                        + "] cannot be dropped. index[" + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
+                throw new DdlException((groupId != null ? "Colocate" : "Distribution") + " column["
+                        + distributionCol.getName() + "] cannot be dropped. index["
+                        + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
         } // end for distributionCols
     }
