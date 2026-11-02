@@ -57,7 +57,7 @@ ALTER MATERIALIZED VIEW [db_name.]<mv_name>
 | mv_name                 | 是       | 待变更的物化视图的名称。                                       |
 | new_refresh_scheme_desc | 否       | 新的刷新机制，详细信息请见 [SQL 参考 - CREATE MATERIALIZED VIEW - 参数](CREATE_MATERIALIZED_VIEW.md#参数)。 |
 | new_mv_name             | 否       | 新的物化视图的名称。                                           |
-| ACTIVE                  | 否       | 将物化视图的状态设置为 Active。如果物化视图的基表发生更改，例如被删除后重新创建，StarRocks 会自动将该物化视图的状态设置为 Inactive，以避免原始元数据与更改后的基表不匹配的情况。状态为 Inactive 的物化视图无法用于查询加速或改写。更改基表后，您可以使用此 SQL 将该物化视图的状态设置为 Active。 |
+| ACTIVE                  | 否       | 将物化视图的状态设置为 Active。如果物化视图的基表发生更改，例如被删除后重新创建，StarRocks 会自动将该物化视图的状态设置为 Inactive，以避免原始元数据与更改后的基表不匹配的情况。状态为 Inactive 的物化视图无法用于查询加速或改写。更改基表后，您可以使用此 SQL 将该物化视图的状态设置为 Active。如果该物化视图无法被激活（例如其分区列映射已无法从基表重建），该语句将返回错误，物化视图保持 Inactive 状态。 |
 | INACTIVE                | 否       | 将物化视图的状态设置为 Inactive。Inactive 状态的物化视图无法被刷新，但您仍然可以将其作为表直接查询。 |
 | SWAP WITH               | 否       | 同另一物化视图进行原子替换。替换前，StarRocks 会进行必要的一致性检查。|
 | ORDER BY                | 否       | 在线将物化视图的排序键变更为指定的列，无需重建物化视图。仅支持存算分离集群中 Range 分布的异步物化视图（自 v4.2 起支持）。指定的列必须是物化视图的输出列。对于明细（Duplicate Key）物化视图，排序键可以是任意列的子集；对于聚合（Aggregate）和更新（Unique Key）物化视图，排序键必须恰好由全部 Key 列组成。变更期间物化视图的刷新会被暂停，完成后自动恢复；变更期间物化视图仍可查询，新的排序顺序在切换时原子生效。 |
