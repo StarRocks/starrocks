@@ -20,8 +20,10 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
@@ -35,6 +37,7 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,6 +52,7 @@ import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletSchema;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -68,6 +72,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -701,6 +706,70 @@ public class LakeRollupJobTest {
             Assertions.assertNotNull(rollupIndex);
             Assertions.assertEquals(MaterializedIndex.IndexState.NORMAL, rollupIndex.getState());
         }
+    }
+
+    /**
+     * A load that commits while the job builds the rollup takes a version below the one the job commits, so the
+     * gtid that labels the job's version must be drawn after the load's: when the job reserves the version, and
+     * journaled with the reservation so that a new leader publishes the same gtid. The WAITING_TXN entry carries
+     * a gtid as well, so that an older FE resuming the job from it still publishes a positive one.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+        };
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       PublishProperty publishProperty) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        ConcurrentLoad.holdPublishDaemon();
+        starRocksAssert.withTable("CREATE TABLE base_table_gtid (k1 date, k2 int, k3 int) "
+                + "DISTRIBUTED BY HASH(k2) BUCKETS 3 PROPERTIES('file_bundling' = 'false')");
+        OlapTable baseTable = (OlapTable) db.getTable("base_table_gtid");
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        LakeRollupJob job = createJob("create materialized view mv_gtid as select k2, k1 from base_table_gtid order by k2;");
+
+        job.runPendingJob();
+        job.runWaitingTxnJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        TransactionState load = ConcurrentLoad.commit(db, baseTable);
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        runToFinished(job);
+
+        long loadVersion = ConcurrentLoad.versionIn(load, baseTable,
+                baseTable.getAllPhysicalPartitions().iterator().next().getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // The rollup tablets and the base tablets advance to the same version under one gtid.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.getGlobalTransactionId()
+                        + " of the load committed below it");
+
+        List<LakeRollupJob> entries = readJournaledEntries(job.getJobId());
+        LakeRollupJob waitingTxnEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.WAITING_TXN).findFirst().orElseThrow();
+        Assertions.assertTrue(waitingTxnEntry.commitGtid > 0);
+        LakeRollupJob finishedRewritingEntry = entries.stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(commitGtid, finishedRewritingEntry.commitGtid);
     }
 
     @Test

@@ -46,6 +46,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.lake.LakeTableHelper;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -195,7 +196,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // and getInfo dereferences the field, so fresh-empty rather than null. No AgentTaskQueue
         // cleanup needed - the demotion drain (abandonInFlightAgentTasks) already emptied the
         // queue before this hook runs, which is also why abandonCreateReplicaTasks() below just
-        // clears the PENDING-phase transients. watershedTxnId/Gtid stay - they are durable with
+        // clears the PENDING-phase transients. watershedTxnId and commitGtid stay - they are durable with
         // the WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
         schemaChangeBatchTask = new AgentBatchTask();
         abandonCreateReplicaTasks();
@@ -525,7 +526,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            commitGtid = getNextGtid();
             addShadowIndexToCatalog(table, watershedTxnId);
         }
 
@@ -890,6 +892,8 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            commitGtid = getNextGtid();
             commitVersionMap = new HashMap<>();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -981,20 +985,12 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
     protected boolean lakePublishVersion() {
         try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = watershedTxnId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-            txnInfo.commitTime = finishedTimeMs / 1000;
-            txnInfo.gtid = watershedGtid;
+            TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL, finishedTimeMs,
+                    commitGtid);
 
             // txnId is -1 means that BE do nothing, just upgrade the tablet_meta version
-            TxnInfoPB originTxnInfo = new TxnInfoPB();
-            originTxnInfo.txnId = -1L;
-            originTxnInfo.combinedTxnLog = false;
-            originTxnInfo.commitTime = finishedTimeMs / 1000;
-            originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
-            originTxnInfo.gtid = watershedGtid;
+            TxnInfoPB originTxnInfo = TxnInfoHelper.forJobPublish(-1L, TxnTypePB.TXN_EMPTY, finishedTimeMs,
+                    commitGtid);
 
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
@@ -1103,8 +1099,13 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             }
             tabletsByPartition.put(physicalPartitionId, regularTablets);
         }
+<<<<<<< HEAD
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
                 tabletsByPartition, computeResource, useAggregatePublish);
+=======
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid, commitVersionMap,
+                tabletsByPartition, computeResource, useAggregatePublish, publishProperty);
+>>>>>>> a828e97f23a... [BugFix][RB-490] Give alter and reshard versions a gtid that orders with the versions around it (#65687)
     }
 
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull OlapTable tbl) {
@@ -1173,7 +1174,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;

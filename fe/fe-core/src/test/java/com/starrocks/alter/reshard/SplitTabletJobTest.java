@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -51,12 +52,14 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -71,11 +74,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.stream.Collectors;
 
 public class SplitTabletJobTest {
     protected static ConnectContext connectContext;
@@ -160,6 +165,122 @@ public class SplitTabletJobTest {
         for (Tablet tablet : newMaterializedIndex.getTablets()) {
             Assertions.assertNotNull(invertedIndex.getTabletMeta(tablet.getId()));
         }
+<<<<<<< HEAD
+=======
+
+        Assertions.assertEquals(physicalPartition.getVisibleVersion(), newMaterializedIndex.getTakeoverVersion(),
+                "reshard-installed generation must be stamped with the reshard commit version");
+        Assertions.assertEquals(materializedIndex.getId(), newMaterializedIndex.getPredecessorIndexId());
+    }
+
+    /**
+     * A load that commits while the job creates the new shards takes a version below the one the job commits,
+     * so the gtid that labels the job's version must be drawn after the load's, when the job reserves the
+     * version.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        starRocksAssert.withTable("create table gtid_split_table (key1 int, key2 varchar(10)) order by(key1) "
+                + "properties('replication_num' = '1')");
+        OlapTable gtidTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "gtid_split_table");
+        PhysicalPartition physicalPartition = gtidTable.getAllPhysicalPartitions().iterator().next();
+        ConcurrentLoad.holdPublishDaemon();
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<MockLakeService>() {
+            @Mock
+            public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+                return CompletableFuture.completedFuture(
+                        recordPublish(List.of(request), publishedTxns, publishedVersions));
+            }
+
+            @Mock
+            public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
+                return CompletableFuture.completedFuture(
+                        recordPublish(request.publishReqs, publishedTxns, publishedVersions));
+            }
+        };
+        AtomicReference<TransactionState> load = new AtomicReference<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Invocation invocation, Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, Map<String, String> properties,
+                                             ComputeResource computeResource, boolean unpinPlacement)
+                    throws Exception {
+                load.set(ConcurrentLoad.commit(db, gtidTable));
+                invocation.proceed();
+            }
+        };
+        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
+        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
+                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
+        clause.setTabletReshardTargetSize(-2);
+        TabletReshardJob job = new SplitTabletJobFactory(db, gtidTable, clause).createTabletReshardJob();
+
+        job.init();
+        job.run();
+        // The job waits for the load, which holds the version below the one the job reserved.
+        Assertions.assertEquals(TabletReshardJob.JobState.PREPARING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load.get());
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (job.getJobState() != TabletReshardJob.JobState.FINISHED) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(10);
+        }
+
+        long loadVersion = ConcurrentLoad.versionIn(load.get(), gtidTable, physicalPartition.getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.get().getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.get().getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.get().getGlobalTransactionId()
+                        + " of the load committed below it");
+    }
+
+    /**
+     * Records the transactions and the version of each reshard publish, and answers it the way a BE splits the
+     * tablets by their data.
+     */
+    private PublishVersionResponse recordPublish(List<PublishVersionRequest> requests, List<TxnInfoPB> txns,
+                                                 List<Long> versions) {
+        PublishVersionResponse response = new PublishVersionResponse();
+        response.status = new StatusPB();
+        response.status.statusCode = TStatusCode.OK.getValue();
+        response.tabletRanges = new HashMap<>();
+        for (PublishVersionRequest request : requests) {
+            if (request.reshardingTabletInfos == null) {
+                continue;
+            }
+            txns.addAll(request.txnInfos);
+            versions.add(request.newVersion);
+            for (ReshardingTabletInfoPB info : request.reshardingTabletInfos) {
+                addDataDrivenRanges(info, response.tabletRanges);
+            }
+        }
+        return response;
+    }
+
+    @Test
+    public void testReshardLineageGsonRoundTrip() {
+        MaterializedIndex index = new MaterializedIndex(101, 100, MaterializedIndex.IndexState.NORMAL, 7);
+        index.setTakeoverVersion(42);
+        index.setPredecessorIndexId(99);
+        MaterializedIndex reloaded = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(index), MaterializedIndex.class);
+        Assertions.assertEquals(42, reloaded.getTakeoverVersion());
+        Assertions.assertEquals(99, reloaded.getPredecessorIndexId());
+        // Legacy JSON without the fields deserializes to 0.
+        MaterializedIndex legacy = GsonUtils.GSON.fromJson(
+                "{\"id\":1,\"metaId\":1,\"state\":\"NORMAL\",\"rowCount\":0,\"tablets\":[]}",
+                MaterializedIndex.class);
+        Assertions.assertEquals(0, legacy.getTakeoverVersion());
+        Assertions.assertEquals(0, legacy.getPredecessorIndexId());
+>>>>>>> a828e97f23a... [BugFix][RB-490] Give alter and reshard versions a gtid that orders with the versions around it (#65687)
     }
 
     @Test

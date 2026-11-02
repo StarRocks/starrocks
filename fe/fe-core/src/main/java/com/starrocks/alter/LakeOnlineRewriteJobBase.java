@@ -46,6 +46,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -849,7 +850,8 @@ public abstract class LakeOnlineRewriteJobBase
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == jobTableState(), table.getState());
             watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            commitGtid = getNextGtid();
             exposeShadowIndexToCatalog(table);
 
             // Getting the watershed and exposing the shadow are not atomic, and the id generator is shared
@@ -1565,6 +1567,9 @@ public abstract class LakeOnlineRewriteJobBase
         }
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            // Drawn first: a recorded commit version marks the reservation as done.
+            commitGtid = getNextGtid();
             for (long physicalPartitionId : partitionStates.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
@@ -1651,12 +1656,8 @@ public abstract class LakeOnlineRewriteJobBase
 
         try {
             // txnId == -1 means BE does nothing, just upgrades the tablet_meta version (no-op publish).
-            TxnInfoPB originTxnInfo = new TxnInfoPB();
-            originTxnInfo.txnId = -1L;
-            originTxnInfo.combinedTxnLog = false;
-            originTxnInfo.commitTime = finishedTimeMs / 1000;
-            originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
-            originTxnInfo.gtid = watershedGtid;
+            TxnInfoPB originTxnInfo = TxnInfoHelper.forJobPublish(-1L, TxnTypePB.TXN_EMPTY, finishedTimeMs,
+                    commitGtid);
 
             for (PartitionPublishInfo info : publishInfos) {
                 // The shadow tablets publish through the ordinary tablet_ids path (base_version 1); the
@@ -1664,12 +1665,8 @@ public abstract class LakeOnlineRewriteJobBase
                 // op_schema_change@watershedVersion and replay the post-watershed double-writes. So this
                 // reuses the same Utils.publishVersion / createSubRequestForAggregatePublish as any publish,
                 // just with a shadow-rewrite TxnInfoPB.
-                TxnInfoPB shadowTxnInfo = new TxnInfoPB();
-                shadowTxnInfo.txnId = info.rewriteTxnId;
-                shadowTxnInfo.txnType = TxnTypePB.TXN_SHADOW_REWRITE;
-                shadowTxnInfo.combinedTxnLog = false;
-                shadowTxnInfo.commitTime = finishedTimeMs / 1000;
-                shadowTxnInfo.gtid = watershedGtid;
+                TxnInfoPB shadowTxnInfo = TxnInfoHelper.forJobPublish(info.rewriteTxnId,
+                        TxnTypePB.TXN_SHADOW_REWRITE, finishedTimeMs, commitGtid);
                 shadowTxnInfo.shadowRewriteAlterVersion = info.watershedVersion;
                 // Empty at the watershed: BE synthesizes an empty op_schema_change@W with no source load.
                 shadowTxnInfo.shadowRewriteSourceEmpty = info.sourceEmpty;
@@ -1752,8 +1749,14 @@ public abstract class LakeOnlineRewriteJobBase
                 }
             }
         }
+<<<<<<< HEAD
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid,
                 commitVersionMapView(), tabletsByPartition, computeResource, useAggregatePublish);
+=======
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid,
+                commitVersionMapView(), tabletsByPartition, computeResource, useAggregatePublish,
+                publishProperty);
+>>>>>>> a828e97f23a... [BugFix][RB-490] Give alter and reshard versions a gtid that orders with the versions around it (#65687)
     }
 
     /**
@@ -2053,7 +2056,7 @@ public abstract class LakeOnlineRewriteJobBase
             this.shadowIndexName = other.shadowIndexName;
             this.partitionStates = other.partitionStates;
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
         }
 

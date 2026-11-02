@@ -830,6 +830,403 @@ public class LakeTableIndexFastPathJobTest {
         assertEquals(expectedRows, restoredRows);
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testAddIndexJobReplayedFromJournalSendsTheIndexes() throws Exception {
+        OlapTable table = createTable("t_add_index_journal", "c0 INT, c1 INT, c2 INT");
+        LakeTableIndexFastPathJobBase job = submitAlter(table,
+                "ADD INDEX idx_c1 (c1) USING BITMAP, ADD INDEX idx_c2 (c2) USING BITMAP");
+        // A follower that takes over as leader, or a restarted FE, holds the job its journal entry recorded.
+        LakeTableIndexFastPathJobBase replayed = replayFirstJournaledEntry(job.getJobId());
+
+        List<TAlterTabletReqV2> requests = runUntilDispatched(replayed);
+        try {
+            for (TAlterTabletReqV2 request : requests) {
+                assertTrue(request.isOnly_add_index());
+                assertEquals(2, request.getIndexes_to_addSize(), request.toString());
+                for (int i = 0; i < 2; i++) {
+                    TOlapTableIndex index = request.getIndexes_to_add().get(i);
+                    assertEquals("idx_c" + (i + 1), index.getIndex_name());
+                    assertEquals(TIndexType.BITMAP, index.getIndex_type());
+                    assertEquals(List.of("c" + (i + 1)), index.getColumns());
+                }
+                assertTrue(request.getNew_index_schema_id() > 0);
+            }
+        } finally {
+            assertTrue(replayed.cancel("test done"));
+        }
+    }
+
+    @Test
+    public void testDropIndexJobReplayedFromJournalSendsTheDroppedIndexes() throws Exception {
+        OlapTable table = createTable("t_drop_index_journal",
+                "c0 INT, c1 INT, c2 INT, INDEX idx_c1 (c1) USING BITMAP, INDEX idx_c2 (c2) USING BITMAP");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1, DROP INDEX idx_c2");
+        LakeTableIndexFastPathJobBase replayed = replayFirstJournaledEntry(job.getJobId());
+
+        List<TAlterTabletReqV2> requests = runUntilDispatched(replayed);
+        try {
+            for (TAlterTabletReqV2 request : requests) {
+                assertTrue(request.isOnly_drop_index());
+                assertEquals(2, request.getDrop_indexesSize(), request.toString());
+                assertDropEntry(request.getDrop_indexes().get(0), -1L, table.getColumn("c1").getUniqueId(),
+                        TIndexType.BITMAP);
+                assertDropEntry(request.getDrop_indexes().get(1), -1L, table.getColumn("c2").getUniqueId(),
+                        TIndexType.BITMAP);
+            }
+        } finally {
+            assertTrue(replayed.cancel("test done"));
+        }
+    }
+
+    @Test
+    public void testAddIndexJobReplayedFromJournalSkipsRollupWithoutTheColumn() throws Exception {
+        // The rollup does not carry c1: its tablets get an empty index set and keep their schema id, exactly as on
+        // the FE that built the job, while the base tablets build the index under the new schema id.
+        OlapTable table = createTable("t_add_index_rollup_journal", "c0 INT, c1 INT, c2 INT",
+                " ROLLUP (r1 (c0, c2))");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+        LakeTableIndexFastPathJobBase replayed = replayFirstJournaledEntry(job.getJobId());
+
+        List<TAlterTabletReqV2> requests = runUntilDispatched(replayed);
+        try {
+            long baseIndexMetaId = table.getBaseIndexMetaId();
+            int baseRequests = 0;
+            int rollupRequests = 0;
+            for (TAlterTabletReqV2 request : requests) {
+                if (replayed.tabletToIndexMetaId.get(request.getBase_tablet_id()) == baseIndexMetaId) {
+                    baseRequests++;
+                    assertEquals(1, request.getIndexes_to_addSize(), request.toString());
+                    assertEquals(List.of("c1"), request.getIndexes_to_add().get(0).getColumns());
+                    assertTrue(request.getNew_index_schema_id() > 0);
+                } else {
+                    rollupRequests++;
+                    assertEquals(0, request.getIndexes_to_addSize(), request.toString());
+                    assertFalse(request.isSetNew_index_schema_id(), request.toString());
+                }
+            }
+            assertTrue(baseRequests > 0 && rollupRequests > 0, requests.toString());
+        } finally {
+            assertTrue(replayed.cancel("test done"));
+        }
+    }
+
+    @Test
+    public void testAddBloomFilterJobReplayedFromJournalSendsTheBloomFilter() throws Exception {
+        OlapTable table = createTable("t_add_bf_journal", "c0 INT, c1 INT");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "SET (\"bloom_filter_columns\" = \"c1\")");
+        assertInstanceOf(LakeTableAddIndexJob.class, job);
+        LakeTableIndexFastPathJobBase replayed = replayFirstJournaledEntry(job.getJobId());
+
+        List<TAlterTabletReqV2> requests = runUntilDispatched(replayed);
+        try {
+            for (TAlterTabletReqV2 request : requests) {
+                assertEquals(1, request.getIndexes_to_addSize(), request.toString());
+                TOlapTableIndex index = request.getIndexes_to_add().get(0);
+                assertEquals(TIndexType.BLOOM_FILTER, index.getIndex_type());
+                assertEquals(List.of("c1"), index.getColumns());
+                assertEquals(Double.toString(FeConstants.DEFAULT_BLOOM_FILTER_FPP),
+                        index.getIndex_properties().get("bloom_filter_fpp"));
+            }
+        } finally {
+            assertTrue(replayed.cancel("test done"));
+        }
+    }
+
+    @Test
+    public void testDropBloomFilterJobLoadedFromImageSendsTheDroppedBloomFilter() throws Exception {
+        OlapTable table = createTable("t_drop_bf_image", "c0 INT, c1 INT, c2 INT",
+                " PROPERTIES (\"bloom_filter_columns\" = \"c1,c2\")");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "SET (\"bloom_filter_columns\" = \"c2\")");
+        assertInstanceOf(LakeTableDropIndexJob.class, job);
+        // A restarted FE holds the job its image recorded.
+        LakeTableIndexFastPathJobBase loaded = saveAndLoadThroughImage(job);
+
+        List<TAlterTabletReqV2> requests = runUntilDispatched(loaded);
+        try {
+            for (TAlterTabletReqV2 request : requests) {
+                assertEquals(1, request.getDrop_indexesSize(), request.toString());
+                assertDropEntry(request.getDrop_indexes().get(0), -1L, table.getColumn("c1").getUniqueId(),
+                        TIndexType.BLOOM_FILTER);
+            }
+        } finally {
+            assertTrue(loaded.cancel("test done"));
+        }
+    }
+
+    @Test
+    public void testAddIndexJobJournaledByOlderVersionSendsTheIndex() throws Exception {
+        // An older FE journaled the payload under "indexesToAdd", each element an empty object: all Gson kept of
+        // a Thrift struct. The job loaded from such an entry rebuilds the payload, so a job in flight across the
+        // upgrade builds its index instead of finishing as a no-op.
+        OlapTable table = createTable("t_add_index_old_journal", "c0 INT, c1 INT");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        followerHandler.replayAlterJobV2(asWrittenByOlderVersion(job, "indexesToAdd", false));
+        LakeTableIndexFastPathJobBase replayed =
+                (LakeTableIndexFastPathJobBase) followerHandler.getAlterJobsV2().get(job.getJobId());
+
+        List<TAlterTabletReqV2> requests = runUntilDispatched(replayed);
+        try {
+            for (TAlterTabletReqV2 request : requests) {
+                assertEquals(1, request.getIndexes_to_addSize(), request.toString());
+                assertEquals("idx_c1", request.getIndexes_to_add().get(0).getIndex_name());
+                assertEquals(List.of("c1"), request.getIndexes_to_add().get(0).getColumns());
+            }
+        } finally {
+            assertTrue(replayed.cancel("test done"));
+        }
+    }
+
+    @Test
+    public void testDropIndexJobJournaledByOlderVersionSendsTheDroppedIndex() throws Exception {
+        // Same for "dropInfos": BE rejects an empty entry, which used to cancel the job. An older FE also left the
+        // index names out of every entry after the submitting one (its copyForPersist did not copy them); the
+        // follower keeps the job of the first entry it replays and copies only the base fields of later ones, so
+        // the names the payload is rebuilt from survive.
+        OlapTable table = createTable("t_drop_index_old_journal", "c0 INT, c1 INT, INDEX idx_c1 (c1) USING BITMAP");
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1");
+        SchemaChangeHandler followerHandler = new SchemaChangeHandler();
+        followerHandler.replayAlterJobV2(asWrittenByOlderVersion(job, "dropInfos", false));
+        followerHandler.replayAlterJobV2(asWrittenByOlderVersion(job, "dropInfos", true));
+        LakeTableIndexFastPathJobBase replayed =
+                (LakeTableIndexFastPathJobBase) followerHandler.getAlterJobsV2().get(job.getJobId());
+
+        List<TAlterTabletReqV2> requests = runUntilDispatched(replayed);
+        try {
+            for (TAlterTabletReqV2 request : requests) {
+                assertEquals(1, request.getDrop_indexesSize(), request.toString());
+                assertDropEntry(request.getDrop_indexes().get(0), -1L, table.getColumn("c1").getUniqueId(),
+                        TIndexType.BITMAP);
+            }
+        } finally {
+            assertTrue(replayed.cancel("test done"));
+        }
+    }
+
+    @Test
+    public void testIndexJobThatCannotRebuildItsPayloadIsCancelled() throws Exception {
+        // The job names an index the table does not have, so there is no payload to send. It must end CANCELLED and
+        // give the table back, rather than wait in RUNNING or send BE requests it rejects.
+        OlapTable table = createTable("t_drop_index_unresolvable", "c0 INT, c1 INT");
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME).getId();
+        LakeTableDropIndexJob job = new LakeTableDropIndexJob(GlobalStateMgr.getCurrentState().getNextId(), dbId,
+                table.getId(), table.getName(), 60_000L, List.of(-1L), List.of("idx_gone"));
+        job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (!job.isDone()) {
+            assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
+            job.run();
+            Thread.sleep(10);
+        }
+
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertTrue(job.errMsg.contains("idx_gone"), job.errMsg);
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    /**
+     * An FE from before the payload rebuild sends BE empty requests for a fast-path job it takes over. So while
+     * such an FE can become leader (FEs are being upgraded one by one), an index alter takes the regular schema
+     * change, and it takes the fast path again once no such FE is left.
+     */
+    @Test
+    public void testIndexAlterTakesRegularSchemaChangeWhileAFollowerCannotRebuildThePayload() throws Exception {
+        OlapTable table = createTable("t_add_index_rolling_upgrade", "c0 INT, c1 INT");
+        NodeMgr nodeMgr = GlobalStateMgr.getCurrentState().getNodeMgr();
+        // It answers its heartbeats without reporting the rebuild.
+        Frontend follower = new Frontend(nodeMgr.allocateNextFrontendId(), FrontendNodeType.FOLLOWER,
+                "fe_not_upgraded", "192.0.2.1", 9010);
+        follower.setAlive(true);
+        nodeMgr.replayAddFrontend(follower);
+        try {
+            AlterJobV2 job = submitAlterJob(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+            assertInstanceOf(LakeTableSchemaChangeJob.class, job);
+            assertTrue(job.cancel("test done"));
+            assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+        } finally {
+            nodeMgr.replayDropFrontend(new DropFrontendInfo(follower.getNodeName()));
+        }
+
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "ADD INDEX idx_c1 (c1) USING BITMAP");
+        assertInstanceOf(LakeTableAddIndexJob.class, job);
+        assertTrue(job.cancel("test done"));
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    /**
+     * A load that begins after the job's watershed can commit while the tablets are being altered. It then holds
+     * the version just below the commit version the job reserves at FINISHED_REWRITING, and it can only finish
+     * while that version is the partition's next one. So the job must not publish on top of the load's version,
+     * nor make its own commit version visible, before the load is visible; otherwise the load and every later one
+     * on the table stay COMMITTED forever. A new leader resumes the job from its journal entry and must wait too.
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testFinishWaitsForLoadCommittedDuringAlter(boolean resumeOnNewLeader) throws Exception {
+        OlapTable table = createTable("t_drop_index_concurrent_load_" + resumeOnNewLeader,
+                "c0 INT, c1 INT, INDEX idx_c1 (c1) USING BITMAP");
+        PhysicalPartition partition = table.getAllPhysicalPartitions().iterator().next();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        // The test finishes the load itself, at the point its publish would.
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public void runAfterLeaseValid() {
+            }
+        };
+        // The alter tasks are sent, and finish only once the load has committed.
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask batchTask) {
+            }
+        };
+        List<long[]> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       PublishProperty publishProperty) {
+                publishedVersions.add(new long[] {baseVersion, newVersion});
+            }
+        };
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1");
+        job.run();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        long loadTxnId = txnMgr.beginTransaction(db.getId(), List.of(table.getId()), "load_" + UUIDUtil.genUUID(),
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe"),
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        assertTrue(loadTxnId > job.getTransactionId().orElseThrow());
+        long loadVersion = partition.getNextVersion();
+        commitLoad(db, table, loadTxnId);
+        assertEquals(loadVersion - 1, partition.getVisibleVersion());
+        assertEquals(loadVersion + 1, partition.getNextVersion());
+
+        job.batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+        job.run();
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        long commitVersion = job.commitVersionMap.get(partition.getId());
+        assertEquals(loadVersion + 1, commitVersion);
+        if (resumeOnNewLeader) {
+            job = (LakeTableIndexFastPathJobBase) gsonCopy(job);
+        }
+        // Before the load is visible, give the job the rounds it would need to publish and finish.
+        for (int i = 0; i < 20 && !job.isDone(); i++) {
+            job.run();
+            Thread.sleep(10);
+        }
+        int publishesBeforeLoadVisible = publishedVersions.size();
+        long visibleVersionBeforeLoadVisible = partition.getVisibleVersion();
+
+        // The load's publish succeeds, so it finishes at its own version.
+        txnMgr.finishTransaction(db.getId(), loadTxnId, null);
+        TransactionState loadState = txnMgr.getTransactionState(db.getId(), loadTxnId);
+        assertEquals(TransactionStatus.VISIBLE, loadState.getTransactionStatus(),
+                () -> "the load committed below the job's commit version is stranded: " + loadState.getErrMsg());
+        assertEquals(0, publishesBeforeLoadVisible);
+        assertEquals(loadVersion - 1, visibleVersionBeforeLoadVisible);
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        assertEquals(loadVersion, partition.getVisibleVersion());
+
+        runToFinished(job);
+        assertFalse(publishedVersions.isEmpty());
+        for (long[] versions : publishedVersions) {
+            assertEquals(loadVersion, versions[0]);
+            assertEquals(commitVersion, versions[1]);
+        }
+        assertEquals(commitVersion, partition.getVisibleVersion());
+        assertTrue(indexNames(table).isEmpty());
+    }
+
+    /**
+     * A load that commits while the job alters the tablets takes a version below the one the job commits, so the
+     * gtid that labels the job's version must be drawn after the load's: when the job reserves the version, and
+     * journaled with the reservation so that a job resumed from that entry, or a force cancel of it, publishes
+     * the version under the same gtid.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        OlapTable table = createTable("t_commit_version_gtid", "c0 INT, c1 INT, INDEX idx_c1 (c1) USING BITMAP");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        ConcurrentLoad.holdPublishDaemon();
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask batchTask) {
+            }
+        };
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish,
+                                       PublishProperty publishProperty) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1");
+        job.run();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        TransactionState load = ConcurrentLoad.commit(db, table);
+        job.batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+        job.run();
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        runToFinished(job);
+
+        long loadVersion = ConcurrentLoad.versionIn(load, table, table.getAllPhysicalPartitions().iterator().next().getId());
+        assertFalse(publishedTxns.isEmpty());
+        assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // BE reads an unset gtid as 0.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid == null ? 0L : txn.gtid)
+                .collect(Collectors.toSet());
+        assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        assertTrue(load.getGlobalTransactionId() > 0);
+        assertTrue(commitGtid > load.getGlobalTransactionId(), "commit version gtid " + commitGtid
+                + " is not after the gtid " + load.getGlobalTransactionId() + " of the load committed below it");
+
+        LakeTableIndexFastPathJobBase finishedRewritingEntry = readJournaledEntries(job.getJobId()).stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        publishedTxns.clear();
+        assertTrue(finishedRewritingEntry.lakePublishVersion());
+        assertTrue(finishedRewritingEntry.lakePublishVersionWithSkip("force cancel"));
+        assertTrue(publishedTxns.stream().anyMatch(txn -> Boolean.TRUE.equals(txn.noOpPublish)));
+        assertEquals(Set.of(commitGtid), publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet()));
+    }
+
+    /**
+     * Commits the load on every tablet of the table, holding the table WRITE lock as a load does.
+     */
+    private static void commitLoad(Database db, OlapTable table, long txnId) throws Exception {
+        long backendId = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds().get(0);
+        List<TabletCommitInfo> commitInfos = new ArrayList<>();
+        for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
+            for (MaterializedIndex index : partition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (Tablet tablet : index.getTablets()) {
+                    commitInfos.add(new TabletCommitInfo(tablet.getId(), backendId));
+                }
+            }
+        }
+        Locker locker = new Locker();
+        locker.lockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.WRITE);
+        try {
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitTransaction(db.getId(), txnId,
+                    commitInfos, new ArrayList<>(), null);
+        } finally {
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), List.of(table.getId()), LockType.WRITE);
+        }
+    }
+
+>>>>>>> a828e97f23a... [BugFix][RB-490] Give alter and reshard versions a gtid that orders with the versions around it (#65687)
     private static OlapTable createTable(String tableName, String columns) throws Exception {
         String sql = "CREATE TABLE " + tableName + " (" + columns + ") DUPLICATE KEY(c0) "
                 + "DISTRIBUTED BY HASH(c0) BUCKETS 2";

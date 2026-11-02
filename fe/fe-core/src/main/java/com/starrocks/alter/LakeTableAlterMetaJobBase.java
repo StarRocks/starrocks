@@ -35,6 +35,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
@@ -68,8 +69,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
+    // Gtid of the versions the job publishes, journaled under its old name.
     @SerializedName(value = "watershedGtid")
-    private long watershedGtid = -1;
+    private long commitGtid = 0;
     // PhysicalPartitionId -> indexId -> MaterializedIndex
     @SerializedName(value = "partitionIndexMap")
     private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
@@ -109,7 +111,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected LakeTableAlterMetaJobBase(LakeTableAlterMetaJobBase job) {
         super(job);
         this.watershedTxnId = job.watershedTxnId;
-        this.watershedGtid = job.watershedGtid;
+        this.commitGtid = job.commitGtid;
         if (job.physicalPartitionIndexMap != null) {
             this.physicalPartitionIndexMap = HashBasedTable.create();
             this.physicalPartitionIndexMap.putAll(job.physicalPartitionIndexMap);
@@ -169,7 +171,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         if (this.watershedTxnId == -1) {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
-            this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            this.commitGtid = globalStateMgr.getGtidGenerator().nextGtid();
             persistStateChange(this, this.jobState);
         }
 
@@ -237,6 +240,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         try {
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            commitGtid = GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
             commitVersionMap.clear();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
@@ -348,12 +353,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected boolean lakePublishVersion() {
         try {
-            TxnInfoPB txnInfo = new TxnInfoPB();
-            txnInfo.txnId = watershedTxnId;
-            txnInfo.combinedTxnLog = false;
-            txnInfo.commitTime = finishedTimeMs / 1000;
-            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
-            txnInfo.gtid = watershedGtid;
+            TxnInfoPB txnInfo = TxnInfoHelper.forJobPublish(watershedTxnId, TxnTypePB.TXN_NORMAL, finishedTimeMs,
+                    commitGtid);
             // there are two scenario we should use aggregate_publish
             // 1. this task is change `file_bundling` to true
             // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
@@ -705,8 +706,13 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             }
             tabletsByPartition.put(physicalPartitionId, tablets);
         }
+<<<<<<< HEAD
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
                 tabletsByPartition, computeResource, useAggregatePublish);
+=======
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid, commitVersionMap,
+                tabletsByPartition, computeResource, useAggregatePublish, publishProperty);
+>>>>>>> a828e97f23a... [BugFix][RB-490] Give alter and reshard versions a gtid that orders with the versions around it (#65687)
     }
 
     private void updateErrorInfo(String errMsg) {
@@ -768,7 +774,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
             this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.commitVersionMap = other.commitVersionMap;
             // FORCE-cancel audit marker. Must be copied here so the
             // CANCELLED branch below (which reads `this.forceSkippedAtCommitted`)
