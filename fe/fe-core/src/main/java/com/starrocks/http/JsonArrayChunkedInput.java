@@ -72,8 +72,8 @@ public class JsonArrayChunkedInput<T> implements ChunkedInput<ByteBuf> {
         elements = Collections.emptyIterator();
     }
 
-    @Deprecated
     @Override
+    @SuppressWarnings("deprecation")
     public ByteBuf readChunk(ChannelHandlerContext ctx) throws Exception {
         return readChunk(ctx.alloc());
     }
@@ -85,10 +85,9 @@ public class JsonArrayChunkedInput<T> implements ChunkedInput<ByteBuf> {
         }
         ByteBuf chunk = allocator.buffer(chunkSize);
         boolean done = false;
-        try {
-            // Encodes straight into the chunk; the writer is flushed after every element so the size check
-            // sees the element's bytes.
-            Writer writer = new OutputStreamWriter(new ByteBufOutputStream(chunk), StandardCharsets.UTF_8);
+        // Encodes straight into the chunk; the writer is flushed after every element so the size check sees the
+        // element's bytes. Closing the writer leaves the chunk alone.
+        try (Writer writer = new OutputStreamWriter(new ByteBufOutputStream(chunk), StandardCharsets.UTF_8)) {
             if (!opened) {
                 writer.write('[');
                 opened = true;
@@ -105,14 +104,14 @@ public class JsonArrayChunkedInput<T> implements ChunkedInput<ByteBuf> {
                 endOfInput = true;
             }
             writer.flush();
-            progress += chunk.readableBytes();
             done = true;
-            return chunk;
         } finally {
             if (!done) {
                 chunk.release();
             }
         }
+        progress += chunk.readableBytes();
+        return chunk;
     }
 
     @Override

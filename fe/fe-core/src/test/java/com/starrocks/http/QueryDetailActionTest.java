@@ -19,6 +19,9 @@ import com.google.gson.Gson;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
+import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.MetricVisitor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
@@ -38,12 +41,18 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -115,6 +124,60 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
             Assertions.assertEquals(200, response.code(), body);
             return body;
         }
+    }
+
+    private String readBody(OkHttpClient client, String uri) throws IOException {
+        try (Response response = client.newCall(request(uri)).execute()) {
+            return response.body().string();
+        }
+    }
+
+    // A client of its own connection pool that records the connection and the content encoding of each response,
+    // and never retries on a fresh connection, so a connection left unusable fails the test.
+    private OkHttpClient recordingClient(List<Connection> connections, List<String> encodings) {
+        return networkClient.newBuilder()
+                .connectionPool(new ConnectionPool())
+                .retryOnConnectionFailure(false)
+                .addNetworkInterceptor(chain -> {
+                    connections.add(chain.connection());
+                    Response response = chain.proceed(chain.request());
+                    encodings.add(String.valueOf(response.header("Content-Encoding")));
+                    return response;
+                })
+                .build();
+    }
+
+    // Reads one HTTP/1.1 response with a chunked body off the stream and returns the body.
+    private static String readChunkedBody(InputStream in) throws IOException {
+        String statusLine = readLine(in);
+        Assertions.assertTrue(statusLine.startsWith("HTTP/1.1 200"), statusLine);
+        boolean chunked = false;
+        for (String header = readLine(in); !header.isEmpty(); header = readLine(in)) {
+            chunked |= header.equalsIgnoreCase("transfer-encoding: chunked");
+        }
+        Assertions.assertTrue(chunked, "not a chunked response");
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        for (int size = Integer.parseInt(readLine(in), 16); size > 0; size = Integer.parseInt(readLine(in), 16)) {
+            byte[] chunk = in.readNBytes(size);
+            Assertions.assertEquals(size, chunk.length);
+            body.write(chunk);
+            Assertions.assertEquals("", readLine(in));
+        }
+        Assertions.assertEquals("", readLine(in));
+        return body.toString(StandardCharsets.UTF_8);
+    }
+
+    private static String readLine(InputStream in) throws IOException {
+        StringBuilder line = new StringBuilder();
+        for (int c = in.read(); c != '\n'; c = in.read()) {
+            if (c < 0) {
+                throw new EOFException("connection closed in the middle of a response");
+            }
+            if (c != '\r') {
+                line.append((char) c);
+            }
+        }
+        return line.toString();
     }
 
     // Several chunks' worth of records with multi-byte statement text, about 480 KB in all.
@@ -209,15 +272,7 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
         stubOperate(true);
         addLargeWindow();
         List<Connection> connections = new ArrayList<>();
-        // No silent retry on a fresh connection, so a connection left unusable fails the test.
-        OkHttpClient client = networkClient.newBuilder()
-                .connectionPool(new ConnectionPool())
-                .retryOnConnectionFailure(false)
-                .addNetworkInterceptor(chain -> {
-                    connections.add(chain.connection());
-                    return chain.proceed(chain.request());
-                })
-                .build();
+        OkHttpClient client = recordingClient(connections, new ArrayList<>());
 
         String first = getAsRoot(client, "/api/query_detail");
         String second = getAsRoot(client, "/api/query_detail");
@@ -229,6 +284,73 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
         Assertions.assertEquals(3, connections.size());
         Assertions.assertSame(connections.get(0), connections.get(1));
         Assertions.assertSame(connections.get(0), connections.get(2));
+    }
+
+    @Test
+    public void testPipelinedRequestsEachGetAWholeResponse() throws IOException {
+        stubOperate(true);
+        addLargeWindow();
+        String expected = new Gson().toJson(QueryDetailQueue.getQueryDetailsAfterTime(0));
+        String get = "GET /api/query_detail?event_time=0 HTTP/1.1\r\nHost: localhost\r\nAuthorization: " + rootAuth
+                + "\r\n\r\n";
+
+        try (Socket socket = new Socket("localhost", HTTP_PORT)) {
+            socket.setSoTimeout(20_000);
+            OutputStream out = socket.getOutputStream();
+            // Both requests are sent before either response is read, so they are handled at the same time; the
+            // header, body and end of one response must not be split by the other.
+            out.write((get + get).getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+            InputStream in = new BufferedInputStream(socket.getInputStream());
+            Assertions.assertEquals(expected, readChunkedBody(in));
+            Assertions.assertEquals(expected, readChunkedBody(in));
+        }
+    }
+
+    @Test
+    public void testStreamedResponseDecodesAfterMetricsOnTheSameConnection() throws IOException {
+        stubOperate(true);
+        addLargeWindow();
+        String expected = new Gson().toJson(QueryDetailQueue.getQueryDetailsAfterTime(0));
+        // An empty body is never compressed, and the test FE has no metrics registered.
+        new MockUp<MetricRepo>() {
+            @Mock
+            public String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
+                return "starrocks_fe_query_total 1\n";
+            }
+        };
+        List<Connection> connections = new ArrayList<>();
+        List<String> encodings = new ArrayList<>();
+        // OkHttp asks for gzip and decodes it. /metrics is compressed, and its flag stays set on the connection.
+        OkHttpClient client = recordingClient(connections, encodings);
+
+        readBody(client, "/metrics");
+        String body = getAsRoot(client, "/api/query_detail");
+
+        Assertions.assertEquals(List.of("gzip", "null"), encodings);
+        Assertions.assertSame(connections.get(0), connections.get(1));
+        Assertions.assertEquals(expected, body);
+    }
+
+    @Test
+    public void testBodyIsProducedOnTheHandlerThreadRatherThanTheEventLoop() throws IOException {
+        stubOperate(true);
+        addLargeWindow();
+        Set<String> producers = ConcurrentHashMap.newKeySet();
+        new MockUp<JsonArrayChunkedInput<?>>() {
+            @Mock
+            public ByteBuf readChunk(Invocation invocation, ByteBufAllocator allocator) {
+                producers.add(Thread.currentThread().getName());
+                return invocation.proceed(allocator);
+            }
+        };
+
+        getAsRoot("/api/query_detail");
+
+        Assertions.assertFalse(producers.isEmpty());
+        for (String producer : producers) {
+            Assertions.assertTrue(producer.startsWith("starrocks-http-pool"), producers.toString());
+        }
     }
 
     @Test
@@ -248,11 +370,7 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
 
         // The status line is already out, so the connection is closed: the client must not get a body that
         // looks complete.
-        Assertions.assertThrows(IOException.class, () -> {
-            try (Response response = networkClient.newCall(request("/api/query_detail")).execute()) {
-                response.body().string();
-            }
-        });
+        Assertions.assertThrows(IOException.class, () -> readBody(networkClient, "/api/query_detail"));
         Assertions.assertEquals(2, chunks.get());
     }
 
