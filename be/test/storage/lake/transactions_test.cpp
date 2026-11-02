@@ -159,7 +159,7 @@ TEST(TransactionsLoadIdsTest, AllMissingReturnsNotFound_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, TabletWithoutAnyLogReturnsNotFound_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id_1 = 1012;
     const int64_t tablet_id_2 = 1013;
     const int64_t txn_id = 2010;
