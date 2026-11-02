@@ -158,6 +158,21 @@ public:
                                                     int64_t expected_gtid = 0,
                                                     const std::shared_ptr<FileSystem>& fs = nullptr);
 
+    // Same as the overload above, except that every storage access -- resolving the partition's
+    // physical directory, reading the tablet's own object, the bundle, or the shared version-1 object --
+    // goes through |anchor_tablet_id| instead of |tablet_id|. The metacache is still keyed by
+    // |tablet_id|'s own metadata path, so this read hits and fills the same entries as the overload above.
+    //
+    // On a node that handles a whole partition on behalf of every tablet in it (the file-bundling vacuum
+    // and drop-tablet aggregators), most tablets are not held locally, and resolving one through its own
+    // shard costs a StarMgr GetShard RPC each time. Passing a locally held tablet of the same partition,
+    // e.g. one returned by pick_local_anchor_tablet_id(), resolves everything from the local shard cache.
+    //
+    // Precondition: |anchor_tablet_id| belongs to the same physical partition as |tablet_id|.
+    StatusOr<TabletMetadataPtr> get_tablet_metadata_via_anchor(int64_t tablet_id, int64_t version,
+                                                               int64_t anchor_tablet_id,
+                                                               const CacheOptions& cache_opts);
+
     // Reads the tablet metadata named by |path|, but resolves it through this TabletManager's own
     // LocationProvider: the tablet id comes from the filename, and a bundled partition is then read via
     // bundle_tablet_metadata_location(tablet_id, version). The bundle path, the
@@ -391,6 +406,50 @@ private:
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+<<<<<<< HEAD
+=======
+    // Read the physical partition's shared initial-metadata object (tablet id 0, version 1) and
+    // return it stamped with |tablet_id|. |sibling_path| is any per-tablet metadata path in that
+    // partition; only its directory is used.
+    //
+    // The object is per partition, not per tablet, so it is cached under its RESOLVED path whatever
+    // |cache_opts.fill_meta_cache| says, and concurrent misses on one partition collapse into a single
+    // remote read through _shared_initial_metadata_group. Only |skip_meta_cache| (bypass the lookup)
+    // and |fill_data_cache| are honored. The definition says why.
+    StatusOr<TabletMetadataPtr> load_shared_initial_metadata(const std::string& sibling_path, int64_t tablet_id,
+                                                             const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                             const std::shared_ptr<FileSystem>& fs);
+    // Shared body of the get_tablet_metadata() overloads. |path| names the metadata to read and keys
+    // the metacache; storage is resolved through |anchor_tablet_id|, which every public overload
+    // except get_tablet_metadata_via_anchor() sets to the tablet id parsed from |path|.
+    StatusOr<TabletMetadataPtr> get_tablet_metadata_impl(const std::string& path, int64_t anchor_tablet_id,
+                                                         const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                         const std::shared_ptr<FileSystem>& fs,
+                                                         InitialMetadataOrder initial_order);
+    // Shared body of the get_single_tablet_metadata() overloads. The metacache is keyed by |tablet_id|;
+    // the bundle is read through |anchor_tablet_id|.
+    StatusOr<TabletMetadataPtr> get_single_tablet_metadata_impl(int64_t tablet_id, int64_t version,
+                                                                int64_t anchor_tablet_id,
+                                                                const CacheOptions& cache_opts, int64_t expected_gtid,
+                                                                const std::shared_ptr<FileSystem>& fs);
+    // Returns |metadata| with its id set to |tablet_id|, copying only when the id differs: the PB may be
+    // shared through the metacache.
+    static TabletMetadataPtr stamp_tablet_id(TabletMetadataPtr metadata, int64_t tablet_id);
+    StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
+    // Build version 1 TabletMetadataPB from a FE response. Exposed for unit tests.
+    StatusOr<TabletMetadataPtr> build_initial_metadata(int64_t tablet_id, const TGetTabletMetadataResponse& resp);
+    // Parse (table_id, partition_id, index_id) from StarOS shard properties. Exposed for unit tests.
+    static Status parse_shard_properties(int64_t tablet_id,
+                                         const std::unordered_map<std::string, std::string>& properties,
+                                         int64_t* table_id, int64_t* partition_id, int64_t* index_id);
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // Resolve (table_id, partition_id, index_id) of |tablet_id| from its StarOS shard info. NotFound when
+    // the shard does not exist, so a dropped tablet's version 1 reads as missing like any other version.
+    // Exposed for unit tests.
+    static Status resolve_shard_properties(int64_t tablet_id, int64_t* table_id, int64_t* partition_id,
+                                           int64_t* index_id);
+#endif // USE_STAROS
+>>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);
