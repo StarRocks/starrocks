@@ -748,6 +748,8 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+For eligible `ORDER BY ... LIMIT` queries, Paimon scans support [TopN runtime filters](../../sql-reference/System_variable.md#enable_topn_runtime_filter). The filter uses the current TopN boundary during execution; it does not limit planning to the first N files. Queries with `WHERE` predicates still apply those predicates before determining the final TopN results.
+
 ## Load data from Paimon
 
 Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:
