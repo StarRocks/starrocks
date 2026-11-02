@@ -487,6 +487,23 @@ public:
               _null_first(sort_desc.null_first) {}
 
     Status do_visit(const NullableColumn& column) {
+        if (!column.has_null()) {
+            DCHECK_EQ(SIMD::count_zero(column.immutable_null_column_data()), column.size());
+            if (!_rhs_value.is_null()) {
+                _equal_count = compare_column(column.data_column(), _cmp_vector, _rhs_value,
+                                              SortDesc(_sort_order, _null_first));
+                return Status::OK();
+            }
+            const int8_t nan_cmp = static_cast<int8_t>(-(_sort_order * _null_first));
+            for (size_t i = 0; i < _cmp_vector.size(); ++i) {
+                if (_cmp_vector[i] == 0) {
+                    _cmp_vector[i] = nan_cmp;
+                }
+            }
+            _equal_count = 0;
+            return Status::OK();
+        }
+
         // Two step compare:
         // 1. Compare null values, store at temporary result
         // 2. Mask notnull values, and compare not-null values
