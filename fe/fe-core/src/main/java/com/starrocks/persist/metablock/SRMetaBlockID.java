@@ -110,6 +110,14 @@ public class SRMetaBlockID {
     // AIProviderMgr image block (SQL-managed embedding / rerank providers).
     public static final SRMetaBlockID AI_PROVIDER_MGR = new SRMetaBlockID(38);
 
+<<<<<<< HEAD
+=======
+    // ContextMgr image block (Context Base / semantic-context metadata).
+    public static final SRMetaBlockID CONTEXT_MGR = new SRMetaBlockID(39);
+
+    public static final SRMetaBlockID GTID_GENERATOR = new SRMetaBlockID(40);
+
+>>>>>>> 32dda137c26... [BugFix] Gtid may not be monotonic after leader failover (#62260)
     /**
      * NOTICE: SRMetaBlockID cannot use a value exceeding 20000, please follow the above sequence number
      */
