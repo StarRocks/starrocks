@@ -692,8 +692,7 @@ TEST_F(ParquetSchemaBuilderTest, MapGroupKey) {
     // Accepted by both resolvers; whether the key can be read is decided by the table key type at read time.
     check_inferred_type(
             create_map_node("my_map", ::parquet::Repetition::OPTIONAL, {kv}),
-            TypeDescriptor::create_map_type(TypeDescriptor::create_struct_type({"a"}, {TYPE_INT_DESC}),
-                                            TYPE_INT_DESC));
+            TypeDescriptor::create_map_type(TypeDescriptor::create_struct_type({"a"}, {TYPE_INT_DESC}), TYPE_INT_DESC));
 }
 
 TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {

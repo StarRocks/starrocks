@@ -555,8 +555,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR)});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR)});
     auto column = ColumnHelper::create_column(struct_type_desc, false, false, 0, false);
 
     // {1, "test1"}
@@ -585,8 +584,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
 
 TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::vector<std::string> field_names{"id", "name"};
-    auto struct_type_desc =
-            TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR)});
+    auto struct_type_desc = TypeDescriptor::create_struct_type(field_names, {TYPE_INT_DESC, TypeDescriptor(TYPE_CHAR)});
     auto column = ColumnHelper::create_column(struct_type_desc, true, false, 0, false);
 
     // {1, "test1"}

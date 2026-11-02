@@ -422,8 +422,7 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsMalformedAIThriftWithoutDelegatingT
             {"wrong arity", [](TExprNode& node) { node.num_children = 2; }},
             {"wrong argument count",
              [](TExprNode& node) { node.fn.arg_types.emplace_back(varchar_type().to_thrift()); }},
-            {"wrong argument type",
-             [](TExprNode& node) { node.fn.arg_types[0] = TYPE_INT_DESC.to_thrift(); }},
+            {"wrong argument type", [](TExprNode& node) { node.fn.arg_types[0] = TYPE_INT_DESC.to_thrift(); }},
             {"mismatched fid", [](TExprNode& node) { node.fn.fid = 200004; }},
     };
 
@@ -666,8 +665,7 @@ TEST_F(AIFunctionCallExprTest, PrepareRejectsFlattenedChildTypesThatDisagreeWith
     for (const auto& test_case : test_cases) {
         SCOPED_TRACE(test_case.fid);
         TExpr expression = make_ai_expression(test_case.fid);
-        expression.nodes[test_case.argument_index + 1] =
-                make_slot_ref(TYPE_INT_DESC, test_case.argument_index + 1);
+        expression.nodes[test_case.argument_index + 1] = make_slot_ref(TYPE_INT_DESC, test_case.argument_index + 1);
 
         ObjectPool pool;
         Expr* root = nullptr;

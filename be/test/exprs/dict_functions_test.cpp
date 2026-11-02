@@ -58,8 +58,7 @@ protected:
     std::unique_ptr<FunctionContext> makeContext(const TypeDescriptor& arg0_type, RuntimeState* rs,
                                                  const Columns& constant_columns) {
         std::vector<TypeDescriptor> arg_types = {arg0_type, TYPE_INT_DESC};
-        std::unique_ptr<FunctionContext> ctx(
-                FunctionContext::create_test_context(std::move(arg_types), TYPE_INT_DESC));
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), TYPE_INT_DESC));
         ctx->set_runtime_state(rs);
         ctx->set_constant_columns(constant_columns);
         return ctx;

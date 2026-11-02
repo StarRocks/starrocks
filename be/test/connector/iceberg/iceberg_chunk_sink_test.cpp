@@ -336,8 +336,7 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
-            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_TINYINT_DESC, true /*useless*/,
-                                                        true /*useless*/});
+            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_TINYINT_DESC, true /*useless*/, true /*useless*/});
         }
 
         {
@@ -347,8 +346,7 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
-            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_SMALLINT_DESC, true /*useless*/,
-                                                        true /*useless*/});
+            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_SMALLINT_DESC, true /*useless*/, true /*useless*/});
         }
 
         {
@@ -358,8 +356,7 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
-            extra_metas.push_back(
-                    ChunkExtraColumnsMeta{TYPE_INT_DESC, true /*useless*/, true /*useless*/});
+            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_INT_DESC, true /*useless*/, true /*useless*/});
         }
 
         {
@@ -369,8 +366,7 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
-            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_BIGINT_DESC, true /*useless*/,
-                                                        true /*useless*/});
+            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_BIGINT_DESC, true /*useless*/, true /*useless*/});
         }
 
         auto chunk_extra_data = std::make_shared<ChunkExtraColumnsData>(extra_metas, std::move(partition_key_columns));

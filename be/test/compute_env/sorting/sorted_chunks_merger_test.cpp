@@ -107,7 +107,7 @@ public:
 
         auto* expr1 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 2); // refer to region
         auto* expr2 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 1); // refer to nation
-        auto* expr3 = new ColumnRef(TYPE_INT_DESC, 0);     // refer to cust_key
+        auto* expr3 = new ColumnRef(TYPE_INT_DESC, 0);                // refer to cust_key
         _exprs.push_back(expr1);
         _exprs.push_back(expr2);
         _exprs.push_back(expr3);

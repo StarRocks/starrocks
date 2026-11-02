@@ -56,8 +56,8 @@ protected:
     // one. A literal per column is therefore enough, and an unprepared ExprContext destructs
     // cleanly.
     ExprContext* make_group_by_ctx() {
-        auto* literal = _pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
-                                                        TYPE_BIGINT_DESC));
+        auto* literal = _pool.add(
+                new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1), TYPE_BIGINT_DESC));
         return _pool.add(new ExprContext(literal));
     }
 

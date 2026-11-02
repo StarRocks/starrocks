@@ -47,8 +47,7 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     EXPECT_EQ(arrow::Type::STRING, map_type->key_type()->id());
     EXPECT_EQ(arrow::Type::DOUBLE, map_type->item_type()->id());
 
-    auto structure =
-            TypeDescriptor::create_struct_type({"k", "v"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_JSON)});
+    auto structure = TypeDescriptor::create_struct_type({"k", "v"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_JSON)});
     ASSERT_OK(convert_to_arrow_type(structure, &type));
     ASSERT_EQ(arrow::Type::STRUCT, type->id());
     auto struct_type = std::static_pointer_cast<arrow::StructType>(type);

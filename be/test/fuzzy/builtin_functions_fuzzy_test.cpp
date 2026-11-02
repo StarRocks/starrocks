@@ -220,8 +220,7 @@ protected:
         }
         case TYPE_MAP: {
             // For map type, use key and value types from TypeDescriptor
-            TypeDescriptor key_type =
-                    (type_desc.children.size() > 0) ? type_desc.children[0] : TYPE_INT_DESC;
+            TypeDescriptor key_type = (type_desc.children.size() > 0) ? type_desc.children[0] : TYPE_INT_DESC;
             TypeDescriptor value_type =
                     (type_desc.children.size() > 1) ? type_desc.children[1] : TypeDescriptor(TYPE_VARCHAR);
 
@@ -401,9 +400,8 @@ protected:
             } else if (name_str.find("ANY_STRUCT") != std::string::npos) {
                 // TODO: randomize
                 // Create a struct type with two INT fields named "field1" and "field2"
-                return TypeDescriptor::create_struct_type(
-                        std::vector<std::string>{"field1", "field2"},
-                        std::vector<TypeDescriptor>{TYPE_INT_DESC, TYPE_INT_DESC});
+                return TypeDescriptor::create_struct_type(std::vector<std::string>{"field1", "field2"},
+                                                          std::vector<TypeDescriptor>{TYPE_INT_DESC, TYPE_INT_DESC});
             } else if (name_str.find("ANY_MAP") != std::string::npos) {
                 // TODO: randomize
                 return TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_INT_DESC);

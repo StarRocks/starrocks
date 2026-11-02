@@ -498,7 +498,7 @@ public:
         _chunk_2 = std::make_shared<Chunk>(std::move(columns2), map);
         _chunk_3 = std::make_shared<Chunk>(std::move(columns3), map);
 
-        _expr_cust_key = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);     // refer to cust_key
+        _expr_cust_key = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);                // refer to cust_key
         _expr_nation = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 1);   // refer to nation
         _expr_region = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 2);   // refer to region
         _expr_mkt_sgmt = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 3); // refer to mkt_sgmt

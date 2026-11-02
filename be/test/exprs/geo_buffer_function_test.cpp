@@ -38,8 +38,7 @@ TypeDescriptor geo_type(std::string crs = "EPSG:3857") {
                             crs == "EPSG:4326" ? 4326 : 3857});
 }
 std::unique_ptr<FunctionContext> context(const TypeDescriptor& type = geo_type()) {
-    return std::unique_ptr<FunctionContext>(
-            FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
+    return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
 }
 ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescriptor& type = geo_type()) {
     auto text = BinaryColumn::create();

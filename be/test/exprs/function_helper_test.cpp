@@ -191,8 +191,7 @@ static const GeoColumn* check_geo_leaf(const Column* column, const GeoTypeDescri
 
 TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
     for (const auto& type :
-         {TypeDescriptor(TYPE_NULL),
-          TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC),
+         {TypeDescriptor(TYPE_NULL), TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC),
           TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), TypeDescriptor(TYPE_GEOGRAPHY),
           TypeDescriptor(TYPE_GEOMETRY)}) {
         for (bool nullable : {false, true}) {
@@ -593,8 +592,8 @@ TEST_P(GeoFunctionHelperTest, StructCallers) {
 TEST_F(FunctionHelperTest, ArrayV2ColumnCopyControls) {
     MemPool pool;
     ArrayAggAggregateFunctionV2<ArrayAggAggregateStateV2> current;
-    for (const auto& arg : {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR),
-                            TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
+    for (const auto& arg :
+         {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
@@ -639,8 +638,8 @@ TEST_F(FunctionHelperTest, MapColumnCopyControls) {
     ASSERT_NE(nullptr, map_function);
     auto keys = Int32Column::create();
     for (int key : {2, 1, 2}) keys->append(key);
-    for (const auto& arg : {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR),
-                            TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
+    for (const auto& arg :
+         {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
