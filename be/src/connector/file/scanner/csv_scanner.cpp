@@ -608,17 +608,17 @@ static TypeDescriptor get_type_desc(const Slice& field, const bool& sampleTypes)
 
     StringParser::string_to_int<int64_t>(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_BIGINT);
+        return TYPE_BIGINT_DESC;
     }
 
     StringParser::string_to_float<double>(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_DOUBLE);
+        return TYPE_DOUBLE_DESC;
     }
 
     StringParser::string_to_bool(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_BOOLEAN);
+        return TYPE_BOOLEAN_DESC;
     }
 
     // default VARCHAR.
