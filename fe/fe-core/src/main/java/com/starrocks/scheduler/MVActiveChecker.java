@@ -19,15 +19,14 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -161,9 +160,36 @@ public class MVActiveChecker extends LeaderDaemon {
             return;
         }
 
+<<<<<<< HEAD
         boolean activeOk = false;
         String mvFullName =
                 new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(), mv.getName()).toString();
+=======
+        boolean activeOk = executeActivate(mv, dbName.get());
+        if (activeOk) {
+            MV_ACTIVE_INFO.remove(mv.getMvId());
+        } else {
+            if (activeInfo != null) {
+                activeInfo.next();
+            } else {
+                MV_ACTIVE_INFO.put(mv.getMvId(), MvActiveInfo.firstFailure());
+            }
+        }
+    }
+
+    /**
+     * Runs ALTER MATERIALIZED VIEW ... ACTIVE whatever the view is inactive for, outside the backoff this checker
+     * keeps. Returns whether the view is active afterwards.
+     */
+    public static boolean activate(MaterializedView mv) {
+        Optional<String> dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(mv.getDbId())
+                .map(Database::getFullName);
+        return dbName.isPresent() && executeActivate(mv, dbName.get());
+    }
+
+    private static boolean executeActivate(MaterializedView mv, String dbName) {
+        String mvFullName = ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(mv.getName());
+>>>>>>> 489629bc8df... [BugFix] Quote the materialized view name when FORCE activates it and in its recovery hint (#64945)
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
         LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
                 mvFullName, mv.getInactiveReason());

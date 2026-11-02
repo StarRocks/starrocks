@@ -14,6 +14,11 @@
 
 package com.starrocks.common;
 
+<<<<<<< HEAD
+=======
+import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.common.util.ParseUtil;
+>>>>>>> 489629bc8df... [BugFix] Quote the materialized view name when FORCE activates it and in its recovery hint (#64945)
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.MVInactiveException;
 import org.apache.commons.lang3.StringUtils;
@@ -95,6 +100,29 @@ public class MaterializedViewExceptions {
         return inactiveReasonForIncrementalBreaking(mvName);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Every reason {@link #inactiveReasonForBreakingFailure} returns, mapped to whether REFRESH ... FORCE recovers a
+     * view inactive for it: a rebuild never reads the baseline, but derives the maintenance query a refresh does.
+     */
+    @VisibleForTesting
+    static final Map<String, Boolean> BREAKING_REASON_RECOVERED_BY_FORCE = Map.of(
+            INACTIVE_REASON_FOR_INCREMENTAL_BREAKING, true,
+            INACTIVE_REASON_FOR_BASELINE_UNREACHABLE, true,
+            INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH, false);
+
+    public static boolean isRecoveredByForceRefresh(String inactiveReason) {
+        return inactiveReason != null && BREAKING_REASON_RECOVERED_BY_FORCE.entrySet().stream()
+                .anyMatch(entry -> entry.getValue() && inactiveReason.startsWith(entry.getKey()));
+    }
+
+    public static String recoverByRebuildHint(String dbName, String mvName) {
+        return String.format("Drop and recreate the materialized view, or run REFRESH MATERIALIZED VIEW %s.%s FORCE, "
+                + "to recover.", ParseUtil.backquote(dbName), ParseUtil.backquote(mvName));
+    }
+
+>>>>>>> 489629bc8df... [BugFix] Quote the materialized view name when FORCE activates it and in its recovery hint (#64945)
     // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
     // its message from this constant and isIncrementalBreakingFailure matches it, so wording and detection can't drift.
     public static final String FE_NON_APPEND_ONLY_MARKER = "do not support non-append-only base changes";
