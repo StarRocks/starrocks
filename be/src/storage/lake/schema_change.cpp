@@ -114,6 +114,14 @@ public:
     Status init() override;
 
 protected:
+    // The table's flat_json.* settings for the rewritten segments, taken from the BASE tablet's
+    // version-pinned metadata. Not from the new tablet: a shadow tablet created before FE put
+    // flat_json_config in its create request has none, and reading it would leave the rewrite on the
+    // be.conf globals. Both tablets belong to the same table, so the config is the same. This mirrors
+    // the shared-nothing schema change (be/src/storage/schema_change.cpp). nullptr when the table
+    // sets no flat_json.* property, in which case the writer follows the globals.
+    std::shared_ptr<FlatJsonConfig> base_flat_json_config() const;
+
     VersionedTablet _base_tablet;
     // Schema from FE catalog for reading data from base tablet.
     // In Fast Schema Evolution v2, this may be newer than base_tablet.get_schema().
@@ -184,6 +192,16 @@ Status LinkedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     return Status::OK();
 }
 
+std::shared_ptr<FlatJsonConfig> ConvertedSchemaChange::base_flat_json_config() const {
+    const auto& metadata = _base_tablet.metadata();
+    if (metadata == nullptr || !metadata->has_flat_json_config()) {
+        return nullptr;
+    }
+    auto flat_json_config = std::make_shared<FlatJsonConfig>();
+    flat_json_config->update(metadata->flat_json_config());
+    return flat_json_config;
+}
+
 Status ConvertedSchemaChange::init() {
     _read_params.reader_type = ReaderType::READER_ALTER_TABLE;
     _read_params.skip_aggregation = false;
@@ -227,6 +245,9 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     // has_async_vector_index, and sync/no vector index already builds inline). Also a no-op for PK
     // tablet writers, which ignore this flag and always build the vector index inline.
     writer->force_set_build_vector_index_inline();
+    if (auto flat_json_config = base_flat_json_config(); flat_json_config != nullptr) {
+        writer->set_flat_json_config(std::move(flat_json_config));
+    }
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -323,6 +344,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
                                           // async-mode table's existing rows are fully indexed within the ALTER
                                           // (same invariant as DirectSchemaChange); new writes still go async.
                                           .set_force_build_vector_index_inline(true)
+                                          .set_flat_json_config(base_flat_json_config())
                                           .build());
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });

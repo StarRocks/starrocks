@@ -126,7 +126,8 @@ public:
                              const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
                              RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
                              GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn, bool multi_node_write,
-                             std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline)
+                             std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline,
+                             std::shared_ptr<FlatJsonConfig> flat_json_config)
             : _tablet_manager(tablet_manager),
               _tablet_id(tablet_id),
               _txn_id(txn_id),
@@ -149,7 +150,8 @@ public:
               _global_dicts(global_dicts),
               _is_multi_statements_txn(is_multi_statements_txn),
               _multi_node_write(multi_node_write),
-              _force_build_vector_index_inline(force_build_vector_index_inline) {}
+              _force_build_vector_index_inline(force_build_vector_index_inline),
+              _flat_json_config(std::move(flat_json_config)) {}
 
     ~DeltaWriterImpl() = default;
 
@@ -342,6 +344,8 @@ private:
     // index_build_mode). Set by lake schema-change conversions (SortedSchemaChange) so the
     // shadow tablet's existing data is fully indexed during the ALTER, matching DirectSchemaChange.
     bool _force_build_vector_index_inline = false;
+    // Table flat_json.* settings from the load request; forwarded to the tablet writer when set.
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
 
     // Record the time when DeltaWriter is opened
     int64_t _begin_time_ms = 0;
@@ -447,6 +451,23 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         }
         if (_force_build_vector_index_inline) {
             _tablet_writer->force_set_build_vector_index_inline();
+        }
+        // The load request carries the table's flat_json.* settings (TOlapTableSink.flat_json_config).
+        // A request without them comes from a table that sets none, or from an FE or sender CN that
+        // predates the field (rolling upgrade). Both fall back to the tablet metadata cache, which is
+        // what every load did before the field existed: for a table that sets none the cached metadata
+        // carries none either, so the writer still follows the be.conf globals, and an older sender's
+        // load keeps the table's settings whenever the cache is warm.
+        auto flat_json_config = _flat_json_config;
+        if (flat_json_config == nullptr) {
+            if (auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
+                metadata != nullptr && metadata->has_flat_json_config()) {
+                flat_json_config = std::make_shared<FlatJsonConfig>();
+                flat_json_config->update(metadata->flat_json_config());
+            }
+        }
+        if (flat_json_config != nullptr) {
+            _tablet_writer->set_flat_json_config(std::move(flat_json_config));
         }
         // A column partial-update publish routes through PrimaryKeyManager::_handle_delete_files, which erases
         // every del file via the memtable path and never reads op_write.del_ssts(). Building a tombstone
@@ -1400,8 +1421,14 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
     auto impl = new DeltaWriterImpl(
             _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
             _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
+<<<<<<< HEAD
             _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
             _is_multi_statements_txn, _multi_node_write, _tablet_schema, _force_build_vector_index_inline);
+=======
+            _flexible_partial_update, _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context,
+            _global_dicts, _is_multi_statements_txn, _multi_node_write, _tablet_schema,
+            _force_build_vector_index_inline, _flat_json_config);
+>>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
     return std::make_unique<DeltaWriter>(impl);
 }
 

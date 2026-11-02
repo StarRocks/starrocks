@@ -472,6 +472,42 @@ public class LakeRollupJobTest {
      * its tablets from one partition-shared version-1 object, named like the base index's one in the same
      * partition path, and overwrote it. The config is retired: every rollup tablet gets its own version-1 metadata.
      */
+    // The rollup tablets carry the table's flat_json.* settings in their create request, so their metadata
+    // has them for every later write and compaction of the new index.
+    @Test
+    public void testRollupTabletsCarryTableFlatJsonConfig() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_table_flat_json\n" +
+                "(\n" +
+                "    k1 date,\n" +
+                "    k2 int,\n" +
+                "    j1 json\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('flat_json.enable' = 'false', 'light_weight_tablet_creation' = 'false');");
+        OlapTable flatJsonTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getDb(DB).getTable("base_table_flat_json");
+        Assertions.assertNotNull(flatJsonTable.getFlatJsonConfig());
+
+        LakeRollupJob job = createJob("create materialized view mv_flat_json as\n" +
+                "select k2, k1 from base_table_flat_json order by k2;");
+        List<CreateReplicaTask> sent = new ArrayList<>();
+        new MockUp<LakeRollupJob>() {
+            @Mock
+            public void sendAgentTaskAndWait(AgentBatchTask batchTask,
+                                             com.starrocks.common.util.concurrent.MarkedCountDownLatch<Long, Long> latch,
+                                             long timeoutSeconds) {
+                batchTask.getAllTasks().forEach(task -> sent.add((CreateReplicaTask) task));
+            }
+        };
+
+        job.runPendingJob();
+        Assertions.assertEquals(3, sent.size());
+        for (CreateReplicaTask task : sent) {
+            Assertions.assertTrue(task.toThrift().isSetFlat_json_config());
+            Assertions.assertFalse(task.toThrift().getFlat_json_config().isFlat_json_enable());
+        }
+    }
+
     @Test
     public void testRollupTabletsAlwaysGetPerTabletMetadata() throws Exception {
         boolean savedOptimization = Config.lake_enable_tablet_creation_optimization;

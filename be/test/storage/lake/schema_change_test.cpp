@@ -17,6 +17,8 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <functional>
+#include <numeric>
 #include <thread>
 
 #include "base/testutil/assert.h"
@@ -27,8 +29,12 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
@@ -43,7 +49,14 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
+<<<<<<< HEAD
 #include "testutil/column_test_helper.h"
+=======
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/segment.h"
+#include "testutil/scoped_fail_point.h"
+#include "types/json_value.h"
+>>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
 
 namespace starrocks::lake {
 
@@ -3476,4 +3489,314 @@ TEST_F(DropIndexOnlyValidationTest, alter_version_propagates_to_op_drop_version)
     EXPECT_EQ(2, log->op_drop_index().dropped(0).col_unique_id());
 }
 
+<<<<<<< HEAD
+=======
+// =============================================================================
+// Fault-injection points on the lake schema-change path.
+//
+// Each test proves two things, and both matter:
+//
+//   1. the point is actually reached by an ordinary schema change -- a point
+//      that is registered but never hit is worse than no point at all, because
+//      the coverage matrix then shows a cell that can never turn green;
+//   2. the failure is recoverable -- after disarming, the same operation
+//      completes, i.e. the injected failure left nothing poisoned behind.
+//
+// The first assertion is not a formality. When the equivalent points were added
+// to the shared-data primary-key apply path, one of ten was armed and the
+// operation still succeeded: the branch it guarded required a precondition the
+// workload never met. Without this assertion that point would have been merged
+// as "covered" and stayed dead.
+// =============================================================================
+
+TEST_P(SchemaChangeAddColumnTest, test_alter_tablet_failpoints_reachable_and_recoverable) {
+    int64_t version = 1;
+    int64_t txn_id = 9000;
+    auto base_tablet_id = _base_tablet_metadata->id();
+    auto new_tablet_id = _new_tablet_metadata->id();
+
+    // One rowset, so the rewrite path has something to convert.
+    {
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        c0->append_datum(Datum(1));
+        c1->append_datum(Datum(2));
+        VChunk chunk({std::move(c0), std::move(c1)}, _base_schema);
+        uint32_t indexes[1] = {0};
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_manager.get())
+                                                   .set_tablet_id(base_tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_base_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes, 1));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
+        version++;
+        txn_id++;
+    }
+
+    auto make_request = [&](int64_t alter_txn_id) {
+        TAlterTabletReqV2 request;
+        request.base_tablet_id = base_tablet_id;
+        request.new_tablet_id = new_tablet_id;
+        request.alter_version = version;
+        request.txn_id = alter_txn_id;
+        return request;
+    };
+
+    // Every point on do_process_alter_tablet(), in the order the handler walks them.
+    const char* kPoints[] = {
+            "lake_sc_get_base_tablet_failed", "lake_sc_resolve_schema_failed", "lake_sc_parse_request_failed",
+            "lake_sc_convert_rowsets_failed", "lake_sc_put_txn_log_failed",
+    };
+
+    for (const auto* point : kPoints) {
+        SchemaChangeHandler handler(_tablet_manager.get());
+        {
+            ScopedFailPointArm arm(point);
+            Status st = handler.process_alter_tablet(make_request(txn_id++));
+            // Reachability: armed => the schema change must fail, and the message
+            // must name the point, so an injected failure is never mistaken for a
+            // real one when these are used by the soak framework.
+            ASSERT_FALSE(st.ok()) << "failpoint " << point
+                                  << " was armed but the schema change still succeeded; the guarded "
+                                     "branch is probably unreachable for this workload";
+            EXPECT_NE(std::string::npos, st.to_string().find(point)) << st.to_string();
+        }
+        // Recoverability: with the point disarmed the same schema change goes through.
+        Status st = handler.process_alter_tablet(make_request(txn_id++));
+        // ASSERT_OK is a do/while block (be/src/base/testutil/assert.h), so it cannot
+        // be streamed into; ASSERT_TRUE can, and it has to spell the status out
+        // because printing it was ASSERT_OK's job.
+        ASSERT_TRUE(st.ok()) << "after disarming " << point << " the retry still failed: " << st.to_string();
+    }
+}
+
+TEST_F(SchemaChangeAddIndexOnlyTest, drop_index_put_txn_log_failpoint_reachable) {
+    // do_process_drop_index_only() validates the request and writes a TxnLog; it
+    // never loads the tablet, so a well-formed request is all this needs.
+    TAlterTabletReqV2 request;
+    request.__set_base_tablet_id(7000);
+    request.__set_new_tablet_id(7000);
+    request.__set_only_drop_index(true);
+    TDropIndexInfo di;
+    di.__set_index_id(11);
+    di.__set_col_unique_id(1);
+    di.__set_index_type(TIndexType::BITMAP);
+    request.__set_drop_indexes({di});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    request.__set_txn_id(870001);
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    request.__set_txn_id(870002);
+    {
+        ScopedFailPointArm arm("lake_drop_index_put_txn_log_failed");
+        Status st = handler.process_alter_tablet(request);
+        ASSERT_FALSE(st.ok()) << "lake_drop_index_put_txn_log_failed was armed but DROP INDEX still succeeded";
+        EXPECT_NE(std::string::npos, st.to_string().find("lake_drop_index_put_txn_log_failed")) << st.to_string();
+    }
+
+    request.__set_txn_id(870003);
+    ASSERT_OK(handler.process_alter_tablet(request));
+}
+
+// A lake schema change rewrites the table's existing JSON columns with the table's flat_json.*
+// settings, read from the BASE tablet's metadata. The shadow tablet's own metadata may carry none: FE
+// created schema-change shadow tablets without flat_json_config, so reading the new tablet (or the
+// metadata cache) would rewrite a flat_json.enable=false table with the be.conf globals.
+class SchemaChangeFlatJsonConfigTest : public testing::Test {
+public:
+    SchemaChangeFlatJsonConfigTest() {
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _location_provider = std::make_unique<FixedLocationProvider>(kTestDirectory);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_schema_change_flat_json_config";
+    constexpr static int kNumRows = 256;
+
+    void SetUp() override {
+        (void)fs::remove_all(kTestDirectory);
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kTxnLogDirectoryName)));
+    }
+
+    void TearDown() override { (void)fs::remove_all(kTestDirectory); }
+
+    static void add_column(TabletSchemaPB* schema, int64_t unique_id, const std::string& name, const std::string& type,
+                           bool is_key) {
+        auto* column = schema->add_column();
+        column->set_unique_id(unique_id);
+        column->set_name(name);
+        column->set_type(type);
+        column->set_is_key(is_key);
+        column->set_is_nullable(false);
+        if (!is_key) {
+            column->set_aggregation("NONE");
+        }
+    }
+
+    // Base tablet: c0 INT key, c1 INT key, c2 INT value, j JSON value; created with
+    // flat_json.enable=false. New tablet: built by `make_new_schema`, without any flat_json_config.
+    // Loads rows whose JSON values the flattener does extract, runs the schema change, and returns
+    // whether each segment of the new tablet wrote the JSON column flat.
+    std::vector<bool> run_schema_change(
+            const std::function<void(TabletSchemaPB*, int64_t, int64_t, int64_t, int64_t)>& make_new_schema) {
+        const int64_t c0_id = next_id();
+        const int64_t c1_id = next_id();
+        const int64_t c2_id = next_id();
+        const int64_t j_id = next_id();
+
+        TabletMetadata base_metadata;
+        base_metadata.set_id(next_id());
+        base_metadata.set_version(1);
+        auto* base_schema = base_metadata.mutable_schema();
+        base_schema->set_id(next_id());
+        base_schema->set_num_short_key_columns(1);
+        base_schema->set_keys_type(DUP_KEYS);
+        base_schema->set_num_rows_per_row_block(65535);
+        add_column(base_schema, c0_id, "c0", "INT", true);
+        add_column(base_schema, c1_id, "c1", "INT", true);
+        add_column(base_schema, c2_id, "c2", "INT", false);
+        add_column(base_schema, j_id, "j", "JSON", false);
+        auto* flat_json_config = base_metadata.mutable_flat_json_config();
+        flat_json_config->set_flat_json_enable(false);
+        flat_json_config->set_flat_json_null_factor(config::json_flat_null_factor);
+        flat_json_config->set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+        flat_json_config->set_flat_json_max_column_max(config::json_flat_column_max);
+        CHECK_OK(_tablet_manager->put_tablet_metadata(base_metadata));
+
+        TabletMetadata new_metadata;
+        new_metadata.set_id(next_id());
+        new_metadata.set_version(1);
+        auto* new_schema = new_metadata.mutable_schema();
+        new_schema->set_id(next_id());
+        new_schema->set_num_short_key_columns(1);
+        new_schema->set_keys_type(DUP_KEYS);
+        new_schema->set_num_rows_per_row_block(65535);
+        make_new_schema(new_schema, c0_id, c1_id, c2_id, j_id);
+        CHECK_OK(_tablet_manager->put_tablet_metadata(new_metadata));
+
+        auto base_tablet_schema = TabletSchema::create(base_metadata.schema());
+        auto base_chunk_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        auto j = JsonColumn::create();
+        for (int i = 0; i < kNumRows; i++) {
+            c0->append(i % 7);
+            c1->append(i);
+            c2->append(i * 3);
+            auto json = JsonValue::parse(strings::Substitute(R"({"a": $0, "b": $1})", i, i * 3));
+            CHECK(json.ok());
+            j->append(&json.value());
+        }
+        VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(j)}, base_chunk_schema);
+        std::vector<uint32_t> indexes(kNumRows);
+        std::iota(indexes.begin(), indexes.end(), 0);
+
+        const int64_t base_tablet_id = base_metadata.id();
+        const int64_t load_txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_manager.get())
+                                    .set_tablet_id(base_tablet_id)
+                                    .set_txn_id(load_txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(base_tablet_schema->id())
+                                    .build()
+                                    .value();
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        CHECK_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, 2, load_txn_id).status());
+
+        // Nothing of either tablet is cached, as on a CN that did not serve their loads.
+        _tablet_manager->prune_metacache();
+
+        const int64_t new_tablet_id = new_metadata.id();
+        const int64_t alter_txn_id = next_id();
+        TAlterTabletReqV2 request;
+        request.base_tablet_id = base_tablet_id;
+        request.new_tablet_id = new_tablet_id;
+        request.alter_version = 2;
+        request.txn_id = alter_txn_id;
+        SchemaChangeHandler handler(_tablet_manager.get());
+        CHECK_OK(handler.process_alter_tablet(request));
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(alter_txn_id);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(time(nullptr));
+        CHECK_OK(publish_version(_tablet_manager.get(), lake::PublishTabletInfo(new_tablet_id), 1, 2,
+                                 std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt)
+                         .status());
+
+        auto metadata = _tablet_manager->get_tablet_metadata(new_tablet_id, 2).value();
+        auto new_tablet_schema = TabletSchema::create(metadata->schema());
+        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        std::vector<bool> flat;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& seg_meta : rowset.segment_metas()) {
+                auto path = _tablet_manager->segment_location(new_tablet_id, seg_meta.filename());
+                auto segment = Segment::open(fs, FileInfo{path}, 0, new_tablet_schema).value();
+                const ColumnReader* reader = segment->column_with_uid(j_id);
+                CHECK(reader != nullptr);
+                flat.push_back(reader->is_flat_json());
+            }
+        }
+        return flat;
+    }
+
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<FixedLocationProvider> _location_provider;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
+    std::unique_ptr<TabletManager> _tablet_manager;
+    int64_t _partition_id = next_id();
+};
+
+// Reordering the keys sorts the data: SortedSchemaChange, which writes through a DeltaWriter.
+TEST_F(SchemaChangeFlatJsonConfigTest, sorted_schema_change_keeps_base_flat_json_config) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    auto flat =
+            run_schema_change([](TabletSchemaPB* schema, int64_t c0_id, int64_t c1_id, int64_t c2_id, int64_t j_id) {
+                add_column(schema, c1_id, "c1", "INT", true);
+                add_column(schema, c0_id, "c0", "INT", true);
+                add_column(schema, c2_id, "c2", "INT", false);
+                add_column(schema, j_id, "j", "JSON", false);
+            });
+    ASSERT_FALSE(flat.empty());
+    for (bool is_flat : flat) {
+        EXPECT_FALSE(is_flat) << "the rewrite ignored the table's flat_json.enable=false";
+    }
+}
+
+// Widening a value column converts it in place: DirectSchemaChange, which writes through a
+// VersionedTablet writer of the new tablet.
+TEST_F(SchemaChangeFlatJsonConfigTest, direct_schema_change_keeps_base_flat_json_config) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    auto flat =
+            run_schema_change([](TabletSchemaPB* schema, int64_t c0_id, int64_t c1_id, int64_t c2_id, int64_t j_id) {
+                add_column(schema, c0_id, "c0", "INT", true);
+                add_column(schema, c1_id, "c1", "INT", true);
+                add_column(schema, c2_id, "c2", "BIGINT", false);
+                add_column(schema, j_id, "j", "JSON", false);
+            });
+    ASSERT_FALSE(flat.empty());
+    for (bool is_flat : flat) {
+        EXPECT_FALSE(is_flat) << "the rewrite ignored the table's flat_json.enable=false";
+    }
+}
+
+>>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
 } // namespace starrocks::lake
