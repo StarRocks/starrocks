@@ -1508,8 +1508,10 @@ public class DatabaseTransactionMgr {
                                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                     if (copiedState.isVersionOverwrite()) {
                                         // A replica whose overwrite failed lacks the versions it overwrites until a
-                                        // republish or a clone brings them.
-                                        if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                        // republish or a clone brings them, which its backend then reports. Its
+                                        // version in the catalog proves nothing: a double write to the temp
+                                        // partition published since moves it past them.
+                                        if (replica.getLastReportVersion() >= partitionCommitInfo.getVersion()) {
                                             errorReplicaIds.remove(replica.getId());
                                         }
                                         if (!errorReplicaIds.contains(replica.getId())) {

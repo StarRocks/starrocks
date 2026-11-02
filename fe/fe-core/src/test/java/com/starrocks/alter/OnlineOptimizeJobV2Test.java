@@ -894,18 +894,29 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
     @Test
     public void testFailedVersionOverwriteKeepsRewriteCommitted() throws Exception {
         // A replica whose overwrite failed lacks the rewritten versions: the rewrite must not become visible, which
-        // lets the job swap its temp partition in, until a republish, sent as an overwrite again, brings them.
+        // lets the job swap its temp partition in, until the backend of the replica reports them, after a republish
+        // sent as an overwrite again for example. A double write published meanwhile moves the version of the replica
+        // in the catalog past them.
         holdPublishDaemon();
         OlapTable table = createPartitionedTable("t_online_optimize_failed_overwrite");
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
-        PhysicalPartition partition = table.getPartition("p1").getDefaultPhysicalPartition();
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState seed = commitLoad(db, table, table.getPartition("p1"));
+        transactionMgr.finishTransaction(db.getId(), seed.getTransactionId(), new HashSet<>());
+        OnlineOptimizeJobV2 job = submitOptimize(table);
+        runToRunning(job);
+        job.runRunningJob();
+        OptimizeTask task = job.getOptimizeTasks().get(0);
+        Partition source = table.getPartition(task.getPartitionName());
+        Partition temp = table.getPartition(task.getTempPartitionName(), true);
+        PhysicalPartition partition = temp.getDefaultPhysicalPartition();
+        long rewriteVersion = table.getDoubleWriteRewriteVersion(temp.getId());
         long txnId = transactionMgr.beginTransaction(db.getId(), List.of(table.getId()),
                 "online_optimize_" + UUIDUtil.genUUID(),
                 new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
                 TransactionState.LoadJobSourceType.FRONTEND, 600);
-        transactionMgr.retryCommitOnRateLimitExceeded(db, txnId, tabletCommitInfos(table.getPartition("p1")),
-                List.of(), new InsertTxnCommitAttachment(0, 2), 60_000L);
+        transactionMgr.retryCommitOnRateLimitExceeded(db, txnId, tabletCommitInfos(temp),
+                List.of(), new InsertTxnCommitAttachment(0, rewriteVersion), 60_000L);
         Replica replica = ((LocalTablet) partition.getLatestBaseIndex().getTablets().get(0)).getImmutableReplicas().get(0);
 
         transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
@@ -915,7 +926,7 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         try (MockedStatic<AgentTaskExecutor> executor = Mockito.mockStatic(AgentTaskExecutor.class)) {
             Deencapsulation.invoke(ReportHandler.class, "handleRepublishVersionInfo",
                     Map.of(db.getId(), Map.of(txnId, Map.of(partition.getId(),
-                            new TPartitionVersionInfo(partition.getId(), 2, 0)))),
+                            new TPartitionVersionInfo(partition.getId(), rewriteVersion, 0)))),
                     Map.of(txnId, 0L), replica.getBackendId());
             ArgumentCaptor<AgentBatchTask> batchTask = ArgumentCaptor.forClass(AgentBatchTask.class);
             executor.verify(() -> AgentTaskExecutor.submit(batchTask.capture()));
@@ -924,7 +935,17 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
             Assertions.assertTrue(((PublishVersionTask) republish).toThrift().isIs_version_overwrite());
         }
 
-        replica.updateVersionInfo(2, -1, 2);
+        TransactionState later = commitLoad(db, table, source, temp);
+        transactionMgr.finishTransaction(db.getId(), later.getTransactionId(), new HashSet<>());
+        Assertions.assertEquals(TransactionStatus.VISIBLE,
+                transactionMgr.getTransactionState(db.getId(), later.getTransactionId()).getTransactionStatus());
+        Assertions.assertTrue(replica.getVersion() > rewriteVersion);
+        // The publish tasks of the rewrite keep reporting the failure.
+        transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+
+        replica.setLastReportVersion(rewriteVersion + 1);
         transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
         Assertions.assertEquals(TransactionStatus.VISIBLE,
                 transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
