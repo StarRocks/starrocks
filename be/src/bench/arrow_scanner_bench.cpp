@@ -316,6 +316,39 @@ public:
     bool is_discrete_message_pipe() const override { return true; }
 };
 
+bool g_bench_env_initialized = false;
+MemTracker* g_bench_process_mem_tracker = nullptr;
+
+bool is_bench_env_initialized() {
+    return g_bench_env_initialized;
+}
+
+MemTracker* bench_process_mem_tracker() {
+    return g_bench_process_mem_tracker;
+}
+
+class ScopedBenchMemTrackerSource {
+public:
+    ScopedBenchMemTrackerSource() : _process_tracker(-1, "arrow_scanner_bench") {
+        g_bench_process_mem_tracker = &_process_tracker;
+        g_bench_env_initialized = true;
+        tls_mem_tracker = nullptr;
+        CurrentThread::set_mem_tracker_source(is_bench_env_initialized, bench_process_mem_tracker);
+    }
+    ~ScopedBenchMemTrackerSource() {
+        CurrentThread::current().set_mem_tracker(nullptr);
+        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        tls_mem_tracker = nullptr;
+        g_bench_env_initialized = false;
+        g_bench_process_mem_tracker = nullptr;
+    }
+    ScopedBenchMemTrackerSource(const ScopedBenchMemTrackerSource&) = delete;
+    ScopedBenchMemTrackerSource& operator=(const ScopedBenchMemTrackerSource&) = delete;
+
+private:
+    MemTracker _process_tracker;
+};
+
 static void run_arrow_routine_load_pipe_benchmark(benchmark::State& state, const std::string& arrow_file_path) {
     std::ifstream file(arrow_file_path, std::ios::binary | std::ios::ate);
     if (!file.is_open()) {
@@ -330,6 +363,7 @@ static void run_arrow_routine_load_pipe_benchmark(benchmark::State& state, const
         return;
     }
 
+    ScopedBenchMemTrackerSource mem_tracker_source;
     LoadStreamMgr load_stream_mgr;
     RuntimeServices runtime_services;
     runtime_services.load_stream_mgr = &load_stream_mgr;
