@@ -1940,6 +1940,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         AtomicReference<Long> capturedRewriteTxnId = new AtomicReference<>();
         AtomicReference<Long> capturedAlterVersion = new AtomicReference<>();
         Map<Long, Boolean> capturedEmpty = new TreeMap<>();
+        List<Boolean> capturedRetry = new ArrayList<>();
         new MockUp<Utils>() {
             // Non-bundling path: both shadow and origin tablets go through the generic publishVersion.
             // The shadow publish is the one carrying a TXN_SHADOW_REWRITE TxnInfoPB; the origin no-op
@@ -1947,8 +1948,9 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, com.starrocks.proto.TxnInfoPB txnInfo,
                     long baseVersion, long newVersion, ComputeResource cr,
-                    boolean useAggregatePublish) {
+                    boolean useAggregatePublish, boolean isRetryPublish) {
                 if (txnInfo.txnType == com.starrocks.proto.TxnTypePB.TXN_SHADOW_REWRITE) {
+                    capturedRetry.add(isRetryPublish);
                     tablets.forEach(t -> publishedShadowTabletIds.add(t.getId()));
                     capturedEmpty.put(txnInfo.txnId, txnInfo.shadowRewriteSourceEmpty);
                     if (txnInfo.txnId == 123456L) {
@@ -1965,9 +1967,11 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                     List<com.starrocks.proto.TxnInfoPB> txnInfos, long baseVersion, long newVersion,
                     java.util.Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
                     ComputeResource cr,
-                    com.starrocks.proto.AggregatePublishVersionRequest req) {
+                    com.starrocks.proto.AggregatePublishVersionRequest req,
+                    boolean preferSharedInitialMetadata, boolean isRetryPublish) {
                 com.starrocks.proto.TxnInfoPB txnInfo = txnInfos.get(0);
                 if (txnInfo.txnType == com.starrocks.proto.TxnTypePB.TXN_SHADOW_REWRITE) {
+                    capturedRetry.add(isRetryPublish);
                     tablets.forEach(t -> publishedShadowTabletIds.add(t.getId()));
                     capturedEmpty.put(txnInfo.txnId, txnInfo.shadowRewriteSourceEmpty);
                     if (txnInfo.txnId == 123456L) {
@@ -2011,6 +2015,8 @@ public class LakeRangeRewriteSchemaChangeJobTest {
         Assertions.assertEquals(7L, watershedVersion, "exercise the empty-at-W>1 publish path");
         Assertions.assertEquals(Map.of(123456L, true, 123457L, false), capturedEmpty,
                 "final TxnInfoPB must preserve both saved source-empty facts after eviction");
+        // One publish per partition, each a first attempt.
+        Assertions.assertEquals(List.of(false, false), capturedRetry);
     }
 
     /**

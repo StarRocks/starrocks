@@ -136,6 +136,45 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
+    public void testPublishRetrySetsIsRetryPublish() throws Exception {
+        job.runPendingJob();
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+
+        // The first attempt fails; the second one is a retry. Both publish paths are intercepted, whichever the
+        // table's file_bundling selects.
+        List<Boolean> flags = new ArrayList<>();
+        java.util.concurrent.atomic.AtomicBoolean fail = new java.util.concurrent.atomic.AtomicBoolean(true);
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                       boolean useAggregatePublish, boolean isRetryPublish) {
+                flags.add(isRetryPublish);
+                if (fail.getAndSet(false)) {
+                    throw new RuntimeException("injected publish failure");
+                }
+            }
+
+            @Mock
+            public void aggregatePublishVersion(List<Tablet> tablets, List<TxnInfoPB> txnInfos, long baseVersion,
+                                                long newVersion, Map<Long, Double> compactionScores,
+                                                Map<Long, com.starrocks.catalog.TabletRange> tabletRanges,
+                                                Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
+                                                com.starrocks.warehouse.cngroup.ComputeResource computeResource,
+                                                Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
+                                                List<com.starrocks.proto.VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                boolean preferSharedInitialMetadata, boolean isRetryPublish) {
+                publishVersion(tablets, txnInfos.get(0), baseVersion, newVersion, computeResource, true,
+                        isRetryPublish);
+            }
+        };
+        Assertions.assertFalse(job.lakePublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals(List.of(false, true), flags);
+    }
+
+    @Test
     public void testJobState() throws Exception {
         Assertions.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.runPendingJob();

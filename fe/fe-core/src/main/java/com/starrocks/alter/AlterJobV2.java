@@ -71,6 +71,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
@@ -146,6 +147,10 @@ public abstract class AlterJobV2 implements Writable {
 
     // Whether pruneMeta() has run on this in-memory job since it reached its final state. Not persisted.
     private transient volatile boolean metaPruned;
+
+    // Physical partitions this job has sent a lake publish request for, see PublishVersionRequest.is_retry_publish.
+    // Not persisted: a leader that has just taken over sends its first request as a first attempt.
+    private transient Set<Long> lakePublishSentPartitions;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -663,6 +668,16 @@ public abstract class AlterJobV2 implements Writable {
 
     protected boolean lakePublishVersion() {
         return true;
+    }
+
+    // Marks the publish request of |physicalPartitionId| as sent and returns whether an earlier request was already
+    // sent, i.e. whether this one is a retry that may find some tablets already at the new version. Call it right
+    // before sending, after every check that can still skip the send.
+    protected synchronized boolean getAndMarkLakePublishSent(long physicalPartitionId) {
+        if (lakePublishSentPartitions == null) {
+            lakePublishSentPartitions = Sets.newHashSet();
+        }
+        return !lakePublishSentPartitions.add(physicalPartitionId);
     }
 
     protected boolean publishVersion() {
