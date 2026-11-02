@@ -1393,6 +1393,37 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     ASSERT_EQ(1, shared_buffered_input_stream->shared_io_count());
 }
 
+TEST_F(FileReaderTest, TestDictFilterRegistersColumnOnceForMultipleConjuncts) {
+    auto file_reader = _create_file_reader(_file2_path);
+    auto* ctx = _create_file2_base_context();
+    std::vector<ExprContext*> ge_ctxs;
+    std::vector<ExprContext*> le_ctxs;
+    _create_string_conjunct_ctxs(TExprOpcode::GE, 2, "c", &ge_ctxs);
+    _create_string_conjunct_ctxs(TExprOpcode::LE, 2, "c", &le_ctxs);
+    auto& c3_ctxs = ctx->conjunct_ctxs_by_slot[2];
+    c3_ctxs.insert(c3_ctxs.end(), ge_ctxs.begin(), ge_ctxs.end());
+    c3_ctxs.insert(c3_ctxs.end(), le_ctxs.begin(), le_ctxs.end());
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    const auto& dict_column_indices = file_reader->_row_group_readers[0]->_column_materializer->dict_column_indices();
+    const auto& dict_column_sub_field_paths =
+            file_reader->_row_group_readers[0]->_column_materializer->dict_column_sub_field_paths();
+    ASSERT_EQ(1, dict_column_indices.size());
+    int col_idx = dict_column_indices[0];
+    ASSERT_EQ(2, file_reader->_row_group_readers[0]->_param.read_cols[col_idx].slot_id());
+    ASSERT_EQ(1, dict_column_sub_field_paths.at(col_idx).size());
+
+    auto chunk = _create_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(3, chunk->num_rows());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.is_end_of_file());
+}
+
 TEST_F(FileReaderTest, TestGetNextOtherFilter) {
     auto file_reader = _create_file_reader(_file2_path);
     // init
