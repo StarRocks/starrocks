@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.google.api.client.util.Lists;
 import com.staros.proto.PlacementPolicy;
+import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeMgr;
 import com.starrocks.catalog.ColocateTableIndex;
@@ -42,11 +43,14 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.OperationType;
+import com.starrocks.persist.RecoverInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -56,6 +60,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.AgentBatchTask;
@@ -72,6 +77,10 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -467,6 +476,91 @@ public class LakeTableSchemaChangeJobTest {
         Partition partition = table.getPartitions().stream().findFirst().get();
         Assertions.assertEquals(0, partition.getDefaultPhysicalPartition()
                 .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW).size());
+    }
+
+    @Test
+    public void testRecoverTableAfterDroppedSchemaChangeWarns() throws Exception {
+        EditLog originalEditLog = GlobalStateMgr.getCurrentState().getEditLog();
+        FrontendNodeType originalNodeType = GlobalStateMgr.getCurrentState().getFeType();
+        UtFrameUtils.setUpForPersistTest();
+        try {
+            LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();
+            new MockUp<LakeTableSchemaChangeJob>() {
+                @Mock
+                public void sendAgentTask(AgentBatchTask batchTask) {
+                    batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+                }
+            };
+            schemaChangeJob.runPendingJob();
+            Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
+            schemaChangeJob.runWaitingTxnJob();
+            Assertions.assertEquals(AlterJobV2.JobState.RUNNING, schemaChangeJob.getJobState());
+            schemaChangeJob.runRunningJob();
+            Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
+            PhysicalPartition partition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
+            long visibleVersion = partition.getVisibleVersion();
+            Assertions.assertEquals(3, partition.getNextVersion());
+            Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+
+            db.dropTable(table.getName(), false, false);
+            Assertions.assertNull(db.getTable(table.getName()));
+            Assertions.assertSame(table, GlobalStateMgr.getCurrentState().getRecycleBin().getTable(db.getId(), table.getId()));
+            schemaChangeJob.cancel("table does not exist anymore");
+            Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler().clearJobs();
+            Assertions.assertTrue(GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                    .getSchemaChangeHandler().getAlterJobsV2().isEmpty());
+            UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+            RecoverTableStmt recover = (RecoverTableStmt) UtFrameUtils.parseStmtWithNewParser("RECOVER TABLE t0", connectContext);
+
+            List<LogEvent> warnings = new ArrayList<>();
+            AbstractAppender appender = new AbstractAppender("schema-change-recovery-warnings", null, null) {
+                @Override
+                public void append(LogEvent event) {
+                    if (event.getLevel() == Level.WARN) {
+                        warnings.add(event.toImmutable());
+                    }
+                }
+            };
+            org.apache.logging.log4j.core.Logger logger =
+                    (org.apache.logging.log4j.core.Logger) LogManager.getLogger(CatalogRecycleBin.class);
+            Level oldLevel = logger.getLevel();
+            appender.start();
+            logger.addAppender(appender);
+            logger.setLevel(Level.WARN);
+            try {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().recoverTable(recover);
+            } finally {
+                logger.removeAppender(appender);
+                logger.setLevel(oldLevel);
+                appender.stop();
+            }
+
+            Assertions.assertSame(table, db.getTable(table.getName()));
+            Assertions.assertSame(table,
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()));
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getRecycleBin().getTable(db.getId(), table.getId()));
+            Assertions.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
+            Assertions.assertEquals(visibleVersion, partition.getVisibleVersion());
+            Assertions.assertEquals(3, partition.getNextVersion());
+            RecoverInfo journal = (RecoverInfo) UtFrameUtils.PseudoJournalReplayer
+                    .replayNextJournal(OperationType.OP_RECOVER_TABLE_V2);
+            Assertions.assertEquals(db.getId(), journal.getDbId());
+            Assertions.assertEquals(table.getId(), journal.getTableId());
+            List<LogEvent> recoveryWarnings = warnings.stream().filter(event -> event.getMessage().getFormattedMessage()
+                    .contains("Attempting to recover native table")).toList();
+            Assertions.assertEquals(1, recoveryWarnings.size());
+            Assertions.assertEquals(Level.WARN, recoveryWarnings.get(0).getLevel());
+            String message = recoveryWarnings.get(0).getMessage().getFormattedMessage();
+            for (String context : List.of(db.getFullName(), table.getName(), "dbId=" + db.getId(),
+                    "tableId=" + table.getId(), "SCHEMA_CHANGE", "not repaired", "may", "publication", "DDL")) {
+                Assertions.assertTrue(message.contains(context), message);
+            }
+        } finally {
+            UtFrameUtils.tearDownForPersisTest();
+            GlobalStateMgr.getCurrentState().setEditLog(originalEditLog);
+            GlobalStateMgr.getCurrentState().setFrontendNodeType(originalNodeType);
+        }
     }
 
     @Test
