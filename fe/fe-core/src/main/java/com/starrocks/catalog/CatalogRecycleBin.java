@@ -870,14 +870,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         }
 
         Table table = recycleTableInfo.getTable();
-<<<<<<< HEAD
+        warnIfRecoveringNonNormalTable(db, table);
         db.registerTableUnlocked(table);
         nameToTableInfoDbLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
         removeRecycleMarkers(table.getId());
-=======
-        warnIfRecoveringNonNormalTable(db, table);
->>>>>>> bec2e31 ([BugFix] Warn when recovering native tables in non-NORMAL state (#82042))
 
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), -1L);

@@ -22,10 +22,8 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -58,8 +56,7 @@ public class CatalogRecycleBinRecoveryStateTest {
     @BeforeEach
     public void setUp() throws Exception {
         UtFrameUtils.setUpForPersistTest();
-        recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
-        recycleBin.clear();
+        recycleBin = new CatalogRecycleBin();
         db = new Database(DB_ID, "recovery_state_db");
         warnings.clear();
         oldLevel = logger.getLevel();
@@ -92,7 +89,7 @@ public class CatalogRecycleBinRecoveryStateTest {
                 Arguments.of("lake_hash", OlapTableState.ROLLUP),
                 Arguments.of("mv", OlapTableState.SCHEMA_CHANGE),
                 Arguments.of("lake_mv", OlapTableState.ROLLUP),
-                Arguments.of("lake_range", OlapTableState.TABLET_RESHARD),
+                Arguments.of("lake_hash", OlapTableState.TABLET_RESHARD),
                 Arguments.of("olap_hash", OlapTableState.WAITING_STABLE),
                 Arguments.of("lake_hash", OlapTableState.OPTIMIZE),
                 Arguments.of("olap_hash", OlapTableState.RESTORE),
@@ -101,16 +98,14 @@ public class CatalogRecycleBinRecoveryStateTest {
     }
 
     private OlapTable nativeTable(String kind, long id) {
-        Column column = new Column("k", IntegerType.INT);
+        Column column = new Column("k", Type.INT);
         column.setIsKey(true);
         List<Column> columns = List.of(column);
         PartitionInfo partitionInfo = new SinglePartitionInfo();
-        DistributionInfo distribution = kind.equals("lake_range")
-                ? new RangeDistributionInfo() : new HashDistributionInfo(1, columns);
+        DistributionInfo distribution = new HashDistributionInfo(1, columns);
         OlapTable table;
         switch (kind) {
             case "lake_hash":
-            case "lake_range":
                 table = new LakeTable(id, kind + id, columns, KeysType.DUP_KEYS, partitionInfo, distribution);
                 break;
             case "mv":
@@ -127,7 +122,7 @@ public class CatalogRecycleBinRecoveryStateTest {
         }
         table.setIndexMeta(id + 1000, table.getName(), columns, 0, 0, (short) 1,
                 TStorageType.COLUMN, KeysType.DUP_KEYS);
-        table.setBaseIndexMetaId(id + 1000);
+        table.setBaseIndexId(id + 1000);
         MaterializedIndex baseIndex = new MaterializedIndex(id + 1000, MaterializedIndex.IndexState.NORMAL);
         Partition partition = new Partition(id + 2000, id + 3000, "p", baseIndex, distribution);
         partition.getDefaultPhysicalPartition().setNextVersion(3);
@@ -190,7 +185,7 @@ public class CatalogRecycleBinRecoveryStateTest {
     @Test
     public void testRecoverNormalNativeAndExternalTables() throws Exception {
         long id = TABLE_ID;
-        for (String kind : List.of("olap_hash", "lake_hash", "lake_range", "mv", "lake_mv")) {
+        for (String kind : List.of("olap_hash", "lake_hash", "mv", "lake_mv")) {
             OlapTable table = nativeTable(kind, id++);
             Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
             recycleBin.recycleTable(DB_ID, table, true);
@@ -330,7 +325,7 @@ public class CatalogRecycleBinRecoveryStateTest {
         Assertions.assertNull(recycleBin.getTable(DB_ID, TABLE_ID));
 
         Database recoveredDb = new Database(DB_ID + 1, "legacy_recovery_db");
-        OlapTable dbTable = nativeTable("lake_range", TABLE_ID + 1);
+        OlapTable dbTable = nativeTable("lake_hash", TABLE_ID + 1);
         dbTable.setState(OlapTableState.TABLET_RESHARD);
         recycleBin.recycleTable(recoveredDb.getId(), dbTable, true);
         recycleBin.recycleDatabase(recoveredDb, Set.of(dbTable.getName()), true);
