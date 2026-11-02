@@ -824,6 +824,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否允许批量发布（Batch Publish）将连续的多表事务合并为一次发布操作。该功能适用于以较高频率提交小型原子多表事务的负载（例如同时写入多张表的 CDC 数据管道）。在此类负载下，逐事务发布会在共享表的依赖链上串行执行，从而显著增加事务从提交到可见的延迟。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。请在所有 FE 节点都升级到支持该功能的版本之后再开启此参数：运行旧版本的 FE Follower 在回放多表事务批次时只会应用其中第一张表的 Visible Log。
 - 引入版本: v4.1.5
 
+### `lake_enable_batch_publish_retry_freeze`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离表的批量发布（Batch Publish）没有完成时，重试是否只包含上一次尝试中的事务，只包含一个事务的批次同样适用，这样重试不会把之后提交的事务加进来。不开启时，重试会重新攒批，把这些事务也加进来，各分区的新版本号随之改变，上一次尝试在旧版本号上已经完成的工作也就无法复用。设为 `false` 可恢复原来的攒批方式，从下一轮发布起生效。仅当 `lake_enable_batch_publish_version` 为 `true` 时生效。
+- 引入版本: v26.2
+
 ### `lake_enable_tablet_creation_optimization`
 
 - 默认值: false

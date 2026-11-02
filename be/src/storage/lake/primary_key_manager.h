@@ -283,7 +283,7 @@ private:
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
-                      LakePersistentIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
+                      LakePersistentIndex& index, DeletesMap* new_deletes, bool read_only);
     Status _do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
                       RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes);
 
