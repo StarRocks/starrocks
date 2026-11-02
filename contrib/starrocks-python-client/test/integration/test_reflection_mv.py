@@ -28,6 +28,7 @@ from starrocks.common.utils import TableAttributeNormalizer
 from starrocks.engine.interfaces import ReflectedMVState
 from starrocks.sql.ddl import CreateMaterializedView
 from starrocks.sql.schema import MaterializedView
+from test import conftest_sr
 
 
 logger = logging.getLogger(__name__)
@@ -240,7 +241,7 @@ class TestReflectionMaterializedViewsIntegration:
             connection.execute(text(f"""
                 CREATE MATERIALIZED VIEW {mv_name}
                 DISTRIBUTED BY HASH(id) BUCKETS 3
-                REFRESH ASYNC
+                {conftest_sr.refresh_clause_for_server(connection, "REFRESH ASYNC")}
                 PROPERTIES ("replication_num" = "1", "colocate_with" = "{group_name}")
                 AS SELECT id, sum(val) AS total FROM {base_table} GROUP BY id
             """))
@@ -275,7 +276,7 @@ class TestReflectionMaterializedViewsIntegration:
             connection.execute(text(f"DROP MATERIALIZED VIEW IF EXISTS {mv_name}"))
             connection.execute(text(f"""
                 CREATE MATERIALIZED VIEW {mv_name}
-                REFRESH ASYNC
+                {conftest_sr.refresh_clause_for_server(connection, "REFRESH ASYNC")}
                 PROPERTIES ("replication_num" = "1")
                 AS SELECT id, name FROM users
             """))
@@ -761,7 +762,7 @@ class TestReflectionMaterializedViewsIntegration:
 
             create_mv_sql = f"""
             CREATE MATERIALIZED VIEW {mv_name}
-            {refresh_clause}
+            {conftest_sr.refresh_clause_for_server(connection, refresh_clause)}
             AS SELECT id, name FROM users
             """
             logger.debug(f"Creating MV with refresh clause: {create_mv_sql}")

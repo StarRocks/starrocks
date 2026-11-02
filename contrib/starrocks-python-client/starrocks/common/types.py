@@ -143,12 +143,15 @@ class MVRefreshMoment:
 class MVRefreshType:
     """Supported StarRocks materialized view refresh schemes.
     """
+    # 26.2 renamed the untimed form of ASYNC to ON_CHANGE and rejects the old spelling.
     ASYNC = "ASYNC"
+    ON_CHANGE = "ON_CHANGE"
     MANUAL = "MANUAL"
     INCREMENTAL = "INCREMENTAL"
 
     ALLOWED_ITEMS = {
         ASYNC,
+        ON_CHANGE,
         MANUAL,
         INCREMENTAL,
     }
