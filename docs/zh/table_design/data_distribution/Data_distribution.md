@@ -906,6 +906,7 @@ PROPERTIES (
 | `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 同步物化视图本质上是一个普通同步 Rollup，受相同限制。 |
 | `ALTER TABLE ... MERGE TABLETS`（排序键与主键不同的主键表；基于大小的自动合并也会跳过该形态） | 这类表按主键空间的 range 路由数据，而 Segment 按排序键排列，因此合并时无法判定源 Tablet 之间共享的 Segment 中某一行仍归属于哪个源。SPLIT 不受影响；排序键即主键的主键表仍可正常 MERGE。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE 会对分区重新分布数据/重新分桶，与基于范围的 tablet 边界不兼容。 |
+| 在设置了 `colocate_with` 的表上使用 `CREATE TABLE ... ROLLUP (...)` | Rollup 的 tablet 按基表的排序键切分，数据却按 Rollup 自己的排序键分布，读取该 Rollup 的 Colocate Join 可能返回错误结果。这类表同样不支持 `ALTER TABLE ... ADD ROLLUP`。 |
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
 

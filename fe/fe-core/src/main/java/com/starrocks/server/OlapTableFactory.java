@@ -728,6 +728,10 @@ public class OlapTableFactory implements AbstractTableFactory {
                 if (!distributionInfo.supportColocate()) {
                     throw new DdlException("random distribution does not support 'colocate_with'");
                 }
+                if (table.isRangeDistribution() && !stmt.getRollupAlterClauseList().isEmpty()) {
+                    throw new DdlException("ROLLUP is not supported in CREATE TABLE for a range distribution table with "
+                            + "'colocate_with'");
+                }
 
                 colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* afterTabletCreation */);
             }

@@ -1,0 +1,31 @@
+-- name: test_colocate_range_create_table_rollup @cloud
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    rollup (r1 (k2, k1))
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+-- result:
+E: (1064, "ROLLUP is not supported in CREATE TABLE for a range distribution table with 'colocate_with'")
+-- !result
+show tables;
+-- result:
+-- !result
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+-- result:
+-- !result
+drop table t;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
