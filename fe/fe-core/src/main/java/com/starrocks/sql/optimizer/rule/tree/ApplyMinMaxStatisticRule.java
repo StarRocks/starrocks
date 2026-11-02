@@ -78,6 +78,11 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                 for (var entry : scanOperator.getProjection().getColumnRefMap().entrySet()) {
                     if (groupByRefSets.contains(entry.getKey()) &&
                             entry.getValue() instanceof DictMappingOperator mappingOperator) {
+                        // A mapping that keeps its expression's type (DictDecode) outputs the expression's
+                        // values, not codes of a derived dict, so the dict size says nothing about its range.
+                        if (mappingOperator.getType().matchesType(mappingOperator.getOriginScalaOperator().getType())) {
+                            continue;
+                        }
                         ColumnRefOperator column = mappingOperator.getDictColumn();
                         if (!column.getType().isNumericType() && !column.getType().isDate()) {
                             continue;
