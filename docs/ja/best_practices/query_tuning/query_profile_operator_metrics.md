@@ -205,7 +205,8 @@ OLAP_SCAN オペレーターに似ていますが、Iceberg/Hive/Hudi/Detal な�
 | DataSourceType | データソースタイプ。HiveDataSource、ESDataSource などが含まれます。 |
 | Table | テーブル名。 |
 | TabletCount | タブレットの数。 |
-| MorselsCount | モーセルの数。 |
+| MorselsCount | モーセル数。lake のグループスキャンでは、ルートクリップタスクと生成された I/O 子タスクを含みます。 |
+| RangeClipTasks | 正常にオープンされた lake のグループルート範囲クリップタスク数。`DataSource` 配下に表示されます。検証済みルートごとに 1 回だけカウントし、行を返さないルートや物理行 ID 子タスクのみを生成するルートも含みます。子タスク、セグメントの読み取り、Reader の再オープンでは増加しません。 |
 | Predicates | 述語式。 |
 | PredicatesPartition | パーティションに適用される述語式。 |
 | SharedScan | `enable_shared_scan` セッション変数が有効かどうか。 |

@@ -29,6 +29,8 @@
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
+
+struct RangeGroupTask;
 class Conditions;
 class KVStore;
 struct OlapReaderStatistics;
@@ -51,6 +53,9 @@ class RowsetReadOptions {
     using PredicateList = std::vector<const ColumnPredicate*>;
 
 public:
+    // Immutable ownership clip, independent of predicate ranges.
+    std::shared_ptr<const RangeGroupTask> grouped_range_task;
+
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
 

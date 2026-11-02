@@ -213,7 +213,8 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | DataSourceType | Data source type, can be HiveDataSource, ESDataSource, and so on. | 
 | Table | Table name. | 
 | TabletCount | Number of tablets. | 
-| MorselsCount | Number of morsels. | 
+| MorselsCount | Number of morsels, including root clip tasks and generated I/O children for grouped lake scans. |
+| RangeClipTasks | Number of grouped lake root range-clip tasks successfully opened, reported under `DataSource`. Counted once per validated root, including roots that return no rows or only publish physical rowid children. Children, segment reads and reader reopens do not add to this count. |
 | Predicates | Predicate expression. | 
 | PredicatesPartition | Predicate expression applied to partitions. | 
 | SharedScan | Whether the `enable_shared_scan` Session variable is enabled. | 

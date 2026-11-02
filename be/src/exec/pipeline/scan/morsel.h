@@ -301,7 +301,7 @@ public:
     Status append_morsels(int driver_seq, Morsels&& morsels) override;
     StatusOr<int> next_driver_seq() override;
     bool enable_random_append_split_morsel() const override {
-        DCHECK(_could_local_shuffle);
+        DCHECK(!_enable_random_append_split_morsel || _could_local_shuffle);
         return _enable_random_append_split_morsel;
     }
     void set_has_more_scan_ranges(bool v) override;

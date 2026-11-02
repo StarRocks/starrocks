@@ -14,6 +14,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <vector>
@@ -40,7 +41,10 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
+#include "storage/query/range_group_task.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/rowset/rowid_range_option.h"
+#include "storage/rowset/short_key_range_option.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -183,6 +187,460 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
 };
+
+// Keep the ordinary two-INT fixture intact: grouped scans have a separate schema contract.
+class LakeGroupedDataSourceTest : public LakeDataSourceTest {
+public:
+    LakeGroupedDataSourceTest() {
+        auto* schema = _tablet_metadata->mutable_schema();
+        schema->clear_column();
+        for (int i = 0; i < 4; ++i) {
+            auto* col = schema->add_column();
+            col->set_unique_id(100 + i);
+            col->set_name("c" + std::to_string(i));
+            col->set_type("BIGINT");
+            col->set_is_key(i < 3);
+            col->set_is_nullable(i == 3);
+            col->set_aggregation("NONE");
+            if (i < 3) schema->add_sort_key_idxes(i);
+        }
+        _tablet_schema = TabletSchema::create(*schema);
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
+    }
+
+protected:
+    pipeline::FragmentContext _fragment_context;
+    TPlanNode grouped_plan() {
+        auto plan = *create_tplan_node_cloud();
+        TLakeScanNode lake;
+        lake.__set_tuple_id(0);
+        plan.__set_lake_scan_node(lake);
+        plan.__set_node_type(TPlanNodeType::LAKE_GROUPED_SCAN_NODE);
+        return plan;
+    }
+    std::unique_ptr<ConnectorScanNode> grouped_node(const TPlanNode& plan, RuntimeState* state) {
+        auto node = std::make_unique<ConnectorScanNode>(state->obj_pool(), plan, state->desc_tbl());
+        node->_estimated_scan_row_bytes = 4 * sizeof(int64_t);
+        return node;
+    }
+    TScanRangeParams grouped_range(int group = 0) {
+        std::vector<TabletMetadata*> tablets{_tablet_metadata.get()};
+        auto range = create_scan_ranges_cloud(tablets)[0];
+        range.scan_range.internal_scan_range.__set_bucket_sequence(group);
+        TGroupedRangeTask task;
+        task.__set_group_id(group);
+        task.__set_key_range(TTabletRange{});
+        task.__set_sort_key_unique_ids({100, 101, 102});
+        range.scan_range.__set_grouped_range_task(task);
+        return range;
+    }
+    std::shared_ptr<RuntimeState> grouped_state() {
+        auto state = create_runtime_state();
+        state->set_enable_pipeline_engine(true);
+        state->set_fragment_ctx(&_fragment_context);
+        TDescriptorTableBuilder builder;
+        TTupleDescriptorBuilder tuple;
+        for (int i = 0; i < 4; ++i) {
+            TSlotDescriptorBuilder slot;
+            tuple.add_slot(
+                    slot.type(TYPE_BIGINT).column_name("c" + std::to_string(i)).column_pos(i).nullable(i == 3).build());
+        }
+        tuple.build(&builder);
+        DescriptorTbl* desc = nullptr;
+        CHECK_OK(DescriptorTbl::create(state.get(), state->obj_pool(), builder.desc_tbl(), &desc,
+                                       config::vector_chunk_size));
+        state->set_desc_tbl(desc);
+        TTableDescriptor table;
+        table.__set_id(0);
+        table.__set_tableType(TTableType::OLAP_TABLE);
+        table.__set_tableName("grouped_table");
+        table.__set_dbName("test_db");
+        desc->get_tuple_descriptor(0)->set_table_desc(state->obj_pool()->add(new OlapTableDescriptor(table)));
+        return state;
+    }
+};
+
+TEST_F(LakeGroupedDataSourceTest, AutoGroupedScanUsesDynamicLocalQueues) {
+    auto state = grouped_state();
+    for (int dop : {1, 2, 3}) {
+        auto plan = grouped_plan();
+        auto scan_node = grouped_node(plan, state.get());
+        connector::LakeDataSourceProvider provider(scan_node.get(), plan);
+        provider.set_lake_tablet_manager(_tablet_mgr);
+        ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+        for (int driver = 0; driver < dop; ++driver) {
+            const auto range = grouped_range(driver);
+            std::vector<TScanRangeParams> roots(4, range);
+            ASSIGN_OR_ABORT(auto queue, provider.convert_scan_range_to_morsel_queue(
+                                                roots, 1, dop, true, TTabletInternalParallelMode::AUTO, 4 * dop));
+            EXPECT_TRUE(provider.could_split());
+            EXPECT_TRUE(provider.could_split_physically());
+            EXPECT_FALSE(queue->has_more_from_split());
+            EXPECT_FALSE(queue->has_more_scan_ranges());
+            EXPECT_EQ(pipeline::MorselQueue::DYNAMIC, queue->type());
+            EXPECT_EQ(4, queue->num_original_morsels());
+            for (int root = 0; root < 4; ++root) {
+                ASSIGN_OR_ABORT(auto morsel, queue->try_get());
+                ASSERT_NE(nullptr, morsel);
+                EXPECT_EQ(range.scan_range, *morsel->get_scan_range());
+            }
+            EXPECT_TRUE(queue->empty());
+            EXPECT_FALSE(queue->has_more());
+        }
+    }
+}
+
+TEST_F(LakeGroupedDataSourceTest, InternalParallelDisabledKeepsFixedQueues) {
+    auto state = grouped_state();
+    auto plan = grouped_plan();
+    auto scan_node = grouped_node(plan, state.get());
+    connector::LakeDataSourceProvider provider(scan_node.get(), plan);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+    auto range = grouped_range();
+    ASSIGN_OR_ABORT(auto queue, provider.convert_scan_range_to_morsel_queue({range, range}, 1, 2, false,
+                                                                            TTabletInternalParallelMode::AUTO, 2));
+    EXPECT_FALSE(provider.could_split());
+    EXPECT_FALSE(provider.could_split_physically());
+    EXPECT_FALSE(queue->has_more_from_split());
+    EXPECT_FALSE(queue->has_more_scan_ranges());
+    EXPECT_EQ(pipeline::MorselQueue::FIXED, queue->type());
+    EXPECT_EQ(2, queue->num_original_morsels());
+}
+
+TEST_F(LakeGroupedDataSourceTest, EmptyPaddingDoesNotResetGroupedProviderPolicy) {
+    auto state = grouped_state();
+    // Include padding before, between and after real drivers, reversing real-driver conversion order.
+    for (auto order : {std::vector<int>{-1, 0, 1, -1}, std::vector<int>{1, -1, 0, -1}}) {
+        auto plan = grouped_plan();
+        auto scan_node = grouped_node(plan, state.get());
+        connector::LakeDataSourceProvider provider(scan_node.get(), plan);
+        provider.set_lake_tablet_manager(_tablet_mgr);
+        ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+        int64_t split_rows = 0;
+        for (int driver : order) {
+            TScanRangeParams padding;
+            padding.__set_empty(true);
+            auto ranges = driver < 0 ? std::vector<TScanRangeParams>{padding}
+                                     : std::vector<TScanRangeParams>(4, grouped_range(driver));
+            ASSIGN_OR_ABORT(auto queue, provider.convert_scan_range_to_morsel_queue(
+                                                ranges, 1, 3, true, TTabletInternalParallelMode::AUTO, 8));
+            EXPECT_TRUE(provider.could_split());
+            EXPECT_TRUE(provider.could_split_physically());
+            EXPECT_GT(provider.get_splitted_scan_rows(), 0);
+            if (split_rows != 0) EXPECT_EQ(split_rows, provider.get_splitted_scan_rows());
+            split_rows = provider.get_splitted_scan_rows();
+            EXPECT_EQ(driver < 0 ? 0 : 4, queue->num_original_morsels());
+            EXPECT_FALSE(queue->has_more());
+            if (driver < 0) EXPECT_TRUE(queue->empty());
+        }
+    }
+}
+
+TEST_F(LakeGroupedDataSourceTest, OrdinaryPhysicalChildrenPreserveSnapshotClipAndRootCounter) {
+    // Repeated C values cannot be usefully divided by logical short keys.
+    constexpr int rows = 8192;
+    auto chunk = ChunkHelper::new_chunk(*_schema, rows);
+    for (int i = 0; i < rows; ++i) {
+        chunk->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(int64_t{7}));
+        chunk->get_column_by_index(1)->as_mutable_ptr()->append_datum(Datum(int64_t{8}));
+        chunk->get_column_by_index(2)->as_mutable_ptr()->append_datum(Datum(int64_t{i < rows / 2 ? 9 : 10}));
+        chunk->get_column_by_index(3)->as_mutable_ptr()->append_datum(Datum(int64_t{i}));
+    }
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
+    ASSERT_OK(writer->open());
+    ASSERT_OK(writer->write(*chunk));
+    ASSERT_OK(writer->finish());
+    auto* rowset = _tablet_metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(rows);
+    for (const auto& file : writer->segments()) rowset->add_segment_metas()->set_filename(file.path);
+    writer->close();
+    _tablet_metadata->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    const auto old_min = config::tablet_internal_parallel_min_splitted_scan_rows;
+    const auto old_max = config::tablet_internal_parallel_max_splitted_scan_rows;
+    DeferOp restore([&] {
+        config::tablet_internal_parallel_min_splitted_scan_rows = old_min;
+        config::tablet_internal_parallel_max_splitted_scan_rows = old_max;
+    });
+    config::tablet_internal_parallel_min_splitted_scan_rows = 1024;
+    config::tablet_internal_parallel_max_splitted_scan_rows = 1024;
+    auto state = grouped_state();
+    auto plan = grouped_plan();
+    auto scan_node = grouped_node(plan, state.get());
+    connector::LakeDataSourceProvider provider(scan_node.get(), plan);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+    auto tuple = [](int64_t bucket) {
+        TTuple result;
+        for (int64_t v : {int64_t{7}, int64_t{8}, bucket}) {
+            TScalarType scalar;
+            scalar.__set_type(TPrimitiveType::BIGINT);
+            TTypeNode node;
+            node.__set_type(TTypeNodeType::SCALAR);
+            node.__set_scalar_type(scalar);
+            TTypeDesc type;
+            type.__set_types({node});
+            type.__isset.types = true;
+            TVariant value;
+            value.__set_type(type);
+            value.__set_variant_type(TVariantType::NORMAL_VALUE);
+            value.__set_value(std::to_string(v));
+            result.values.push_back(value);
+        }
+        return result;
+    };
+    RuntimeProfile profile("grouped-physical-children");
+    int total_children = 0;
+    for (int group : {0, 1}) {
+        auto range = grouped_range(group);
+        range.scan_range.grouped_range_task.key_range.__set_lower_bound(tuple(9 + group));
+        range.scan_range.grouped_range_task.key_range.__set_upper_bound(tuple(10 + group));
+        range.scan_range.grouped_range_task.key_range.__set_lower_bound_included(true);
+        range.scan_range.grouped_range_task.key_range.__set_upper_bound_included(false);
+        ASSIGN_OR_ABORT(auto queue, provider.convert_scan_range_to_morsel_queue({range}, 1, 2, true,
+                                                                                TTabletInternalParallelMode::AUTO, 2));
+        pipeline::ScanMorsel root(1, range);
+        connector::LakeDataSource source(&provider, range.scan_range);
+        source.set_runtime_profile(&profile);
+        source.set_morsel(&root);
+        ASSERT_OK(source.open(state.get()));
+        // Publish a newer version after capturing v2; every child must still read v2.
+        _tablet_metadata->set_version(3);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+        std::vector<pipeline::ScanSplitContextPtr> splits;
+        source.get_split_tasks(&splits);
+        ASSERT_GT(splits.size(), 1);
+        total_children += splits.size();
+        ChunkPtr output;
+        EXPECT_TRUE(source.get_next(state.get(), &output).is_end_of_file());
+        source.close(state.get());
+        std::vector<int64_t> actual;
+        for (auto& split : splits) {
+            auto* physical = dynamic_cast<pipeline::LakeSplitContext*>(split.get());
+            ASSERT_NE(nullptr, physical);
+            ASSERT_NE(nullptr, physical->rowid_range);
+            EXPECT_EQ(nullptr, physical->short_key_range);
+            pipeline::ScanMorsel child(1, range.scan_range);
+            child.set_split_context(std::move(split));
+            connector::LakeDataSource reader(&provider, *child.get_scan_range());
+            reader.set_runtime_profile(&profile);
+            reader.set_morsel(&child);
+            reader.set_split_context(child.get_split_context());
+            DeferOp close([&] { reader.close(state.get()); });
+            ASSERT_OK(reader.open(state.get()));
+            EXPECT_EQ(2, reader._tablet.version());
+            EXPECT_EQ(physical->rowid_range, reader._params.rowid_range_option);
+            EXPECT_EQ(group, reader._params.grouped_range_task->group_id);
+            EXPECT_EQ(range.scan_range, *child.get_scan_range());
+            while (true) {
+                auto st = reader.get_next(state.get(), &output);
+                if (st.is_end_of_file()) break;
+                ASSERT_OK(st);
+                for (size_t i = 0; i < output->num_rows(); ++i) {
+                    actual.push_back(output->get_column_by_index(3)->get(i).get_int64());
+                }
+            }
+            std::vector<pipeline::ScanSplitContextPtr> grandchildren;
+            reader.get_split_tasks(&grandchildren);
+            EXPECT_TRUE(grandchildren.empty());
+        }
+        // Keep the original internal-parallel-off path as an independent reader baseline.
+        connector::LakeDataSourceProvider unsplit_provider(scan_node.get(), plan);
+        unsplit_provider.set_lake_tablet_manager(_tablet_mgr);
+        ASSERT_OK(unsplit_provider.init(state->obj_pool(), state.get()));
+        ASSIGN_OR_ABORT(auto unsplit_queue, unsplit_provider.convert_scan_range_to_morsel_queue(
+                                                    {range}, 1, 2, false, TTabletInternalParallelMode::AUTO, 2));
+        pipeline::ScanMorsel unsplit_root(1, range);
+        connector::LakeDataSource unsplit(&unsplit_provider, range.scan_range);
+        RuntimeProfile baseline_profile("unsplit-baseline");
+        unsplit.set_runtime_profile(&baseline_profile);
+        unsplit.set_morsel(&unsplit_root);
+        ASSERT_OK(unsplit.open(state.get()));
+        DeferOp close_baseline([&] { unsplit.close(state.get()); });
+        std::vector<int64_t> baseline;
+        while (true) {
+            auto st = unsplit.get_next(state.get(), &output);
+            if (st.is_end_of_file()) break;
+            ASSERT_OK(st);
+            for (size_t i = 0; i < output->num_rows(); ++i) {
+                baseline.push_back(output->get_column_by_index(3)->get(i).get_int64());
+            }
+        }
+        std::vector<pipeline::ScanSplitContextPtr> no_splits;
+        unsplit.get_split_tasks(&no_splits);
+        EXPECT_TRUE(no_splits.empty());
+        std::sort(baseline.begin(), baseline.end());
+        std::sort(actual.begin(), actual.end());
+        EXPECT_EQ(baseline, actual);
+        ASSERT_EQ(rows / 2, actual.size());
+        for (int i = 0; i < rows / 2; ++i) EXPECT_EQ(i + group * (rows / 2), actual[i]);
+        auto* counter = profile.get_child(connector::DataSource::PROFILE_NAME)->get_counter("RangeClipTasks");
+        ASSERT_NE(nullptr, counter);
+        EXPECT_EQ(group + 1, counter->value());
+        _tablet_metadata->set_version(2);
+    }
+    EXPECT_GT(total_children, 2);
+    RecordProperty("PhysicalChildren", total_children);
+    RecordProperty("RootClipTasks", 2);
+    RecordProperty("ExactRows", rows);
+}
+
+TEST_F(LakeGroupedDataSourceTest, RejectsIncompatibleChildContextsIncludingParallelOff) {
+    auto state = grouped_state();
+    auto plan = grouped_plan();
+    auto scan_node = grouped_node(plan, state.get());
+    connector::LakeDataSourceProvider provider(scan_node.get(), plan);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+    auto range = grouped_range();
+    for (int kind = 0; kind < 5; ++kind) {
+        ASSIGN_OR_ABORT(auto queue, provider.convert_scan_range_to_morsel_queue({range}, 1, 1, kind != 4,
+                                                                                TTabletInternalParallelMode::AUTO, 1));
+        pipeline::ScanSplitContextPtr context;
+        if (kind == 0) {
+            context = std::make_unique<pipeline::ScanSplitContext>();
+        } else {
+            auto lake = std::make_unique<pipeline::LakeSplitContext>();
+            if (kind != 1 && kind != 3) lake->rowid_range = std::make_shared<RowidRangeOption>();
+            if (kind == 1 || kind == 2)
+                lake->short_key_range =
+                        std::make_shared<ShortKeyRangesOption>(std::vector<ShortKeyRangeOptionPtr>{}, true);
+            context = std::move(lake);
+        }
+        pipeline::ScanMorsel child(1, range);
+        child.set_split_context(std::move(context));
+        connector::LakeDataSource source(&provider, range.scan_range);
+        RuntimeProfile profile("incompatible-child");
+        source.set_runtime_profile(&profile);
+        source.set_morsel(&child);
+        source.set_split_context(child.get_split_context());
+        EXPECT_FALSE(source.open(state.get()).ok()) << kind;
+        source.close(state.get());
+    }
+}
+
+TEST_F(LakeGroupedDataSourceTest, validates_node_envelope_and_bucket_at_both_boundaries) {
+    auto state = grouped_state();
+    auto check = [&](TPlanNode plan, TScanRangeParams range) {
+        connector::LakeDataSourceProvider provider(nullptr, plan);
+        provider.set_lake_tablet_manager(_tablet_mgr);
+        auto builder =
+                provider.convert_scan_range_to_morsel_queue({range}, 1, 2, false, TTabletInternalParallelMode::AUTO, 1);
+        EXPECT_FALSE(builder.ok());
+        pipeline::ScanMorsel morsel(1, range);
+        connector::LakeDataSource source(&provider, range.scan_range);
+        RuntimeProfile profile("grouped-invalid");
+        source.set_runtime_profile(&profile);
+        source.set_morsel(&morsel);
+        EXPECT_FALSE(source.open(state.get()).ok());
+        source.close(state.get());
+        EXPECT_EQ(nullptr, profile.get_child(connector::DataSource::PROFILE_NAME)->get_counter("RangeClipTasks"));
+    };
+    auto missing = grouped_range();
+    missing.scan_range.__isset.grouped_range_task = false;
+    check(grouped_plan(), missing);
+    auto old_plan = grouped_plan();
+    old_plan.__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
+    check(old_plan, grouped_range());
+    auto mismatch = grouped_range();
+    mismatch.scan_range.internal_scan_range.__set_bucket_sequence(1);
+    check(grouped_plan(), mismatch);
+    auto missing_internal = grouped_range();
+    missing_internal.scan_range.__isset.internal_scan_range = false;
+    check(grouped_plan(), missing_internal);
+    auto malformed = grouped_range();
+    malformed.scan_range.grouped_range_task.__isset.group_id = false;
+    check(grouped_plan(), malformed);
+}
+
+TEST_F(LakeGroupedDataSourceTest, rejects_sort_and_bucket_plan_flags) {
+    auto state = grouped_state();
+    for (int i = 0; i < 2; ++i) {
+        auto plan = grouped_plan();
+        if (i == 0) plan.lake_scan_node.__set_sorted_by_keys_per_tablet(true);
+        if (i == 1) plan.lake_scan_node.__set_output_chunk_by_bucket(true);
+        connector::LakeDataSourceProvider provider(nullptr, plan);
+        provider.set_lake_tablet_manager(_tablet_mgr);
+        EXPECT_FALSE(provider.init(state->obj_pool(), state.get()).ok());
+    }
+}
+
+TEST_F(LakeGroupedDataSourceTest, captured_schema_and_source_version_reach_reader_and_profile_once) {
+    auto state = grouped_state();
+    auto plan = grouped_plan();
+    connector::LakeDataSourceProvider provider(nullptr, plan);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+    // A newer visible metadata version must not replace the request's captured version.
+    _tablet_metadata->set_version(2);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    auto range = grouped_range();
+    range.scan_range.internal_scan_range.__set_version("1");
+    pipeline::ScanMorsel morsel(1, range);
+    connector::LakeDataSource source(&provider, range.scan_range);
+    RuntimeProfile profile("grouped-valid");
+    source.set_runtime_profile(&profile);
+    source.set_morsel(&morsel);
+    DeferOp close([&] { source.close(state.get()); });
+    ASSERT_OK(source.open(state.get()));
+    ASSERT_NE(nullptr, source._params.grouped_range_task);
+    EXPECT_EQ(0, source._params.grouped_range_task->group_id);
+    EXPECT_EQ(1, source._tablet.version());
+    auto* counter = profile.get_child(connector::DataSource::PROFILE_NAME)->get_counter("RangeClipTasks");
+    ASSERT_NE(nullptr, counter);
+    EXPECT_EQ(1, counter->value());
+    ChunkPtr chunk;
+    EXPECT_TRUE(source.get_next(state.get(), &chunk).is_end_of_file());
+    EXPECT_EQ(1, counter->value());
+    std::vector<pipeline::ScanSplitContextPtr> splits;
+    source.get_split_tasks(&splits);
+    EXPECT_TRUE(splits.empty());
+}
+
+TEST_F(LakeGroupedDataSourceTest, rejects_schema_mismatch_and_injected_split_child) {
+    auto state = grouped_state();
+    auto plan = grouped_plan();
+    connector::LakeDataSourceProvider provider(nullptr, plan);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+    for (int i = 0; i < 2; ++i) {
+        auto range = grouped_range();
+        if (i == 0) range.scan_range.grouped_range_task.__set_sort_key_unique_ids({200, 201, 202});
+        pipeline::ScanMorsel morsel(1, range);
+        if (i == 1) morsel.set_split_context(std::make_unique<pipeline::LakeSplitContext>());
+        connector::LakeDataSource source(&provider, range.scan_range);
+        RuntimeProfile profile("grouped-invalid-schema");
+        source.set_runtime_profile(&profile);
+        source.set_morsel(&morsel);
+        EXPECT_FALSE(source.open(state.get()).ok());
+        EXPECT_EQ(nullptr, profile.get_child(connector::DataSource::PROFILE_NAME)->get_counter("RangeClipTasks"));
+        source.close(state.get());
+    }
+}
+
+TEST_F(LakeGroupedDataSourceTest, rejects_non_pipeline_and_incremental_history) {
+    auto state = grouped_state();
+    auto plan = grouped_plan();
+    connector::LakeDataSourceProvider provider(nullptr, plan);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    state->set_enable_pipeline_engine(false);
+    EXPECT_FALSE(provider.init(state->obj_pool(), state.get()).ok());
+    state->set_enable_pipeline_engine(true);
+    ASSERT_OK(provider.init(state->obj_pool(), state.get()));
+    auto range = grouped_range();
+    pipeline::ScanMorsel morsel(1, range);
+    morsel.set_from_version(1);
+    connector::LakeDataSource source(&provider, range.scan_range);
+    RuntimeProfile profile("grouped-incremental-invalid");
+    source.set_runtime_profile(&profile);
+    source.set_morsel(&morsel);
+    EXPECT_FALSE(source.open(state.get()).ok());
+    source.close(state.get());
+    EXPECT_EQ(nullptr, profile.get_child(connector::DataSource::PROFILE_NAME)->get_counter("RangeClipTasks"));
+}
 
 TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     create_rowsets_for_testing(_tablet_metadata.get(), 2);
