@@ -20,6 +20,7 @@ import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.DeleteFileIndexCache;
 import org.apache.iceberg.Schema;
 
 import java.util.Map;
@@ -33,6 +34,7 @@ public class StarRocksIcebergTableScanContext {
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
+    private DeleteFileIndexCache deleteFileIndexCache;
     private Map<IcebergTableName, Set<String>> metaFileCacheMap;
     private boolean onlyReadCache;
     private int localParallelism;
@@ -83,6 +85,14 @@ public class StarRocksIcebergTableScanContext {
 
     public Cache<String, Set<DeleteFile>> getDeleteFileCache() {
         return deleteFileCache;
+    }
+
+    public DeleteFileIndexCache getDeleteFileIndexCache() {
+        return deleteFileIndexCache;
+    }
+
+    public void setDeleteFileIndexCache(DeleteFileIndexCache deleteFileIndexCache) {
+        this.deleteFileIndexCache = deleteFileIndexCache;
     }
 
     public Map<IcebergTableName, Set<String>> getMetaFileCacheMap() {
