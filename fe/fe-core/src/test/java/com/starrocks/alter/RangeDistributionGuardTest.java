@@ -113,8 +113,283 @@ public class RangeDistributionGuardTest {
      * as a thrown exception (and returns the job when the alter is accepted) without scheduling
      * the asynchronous schema-change job.
      */
+<<<<<<< HEAD
     private static AlterJobV2 createJob(String tableName, String alterSql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
+=======
+    private static AlterJobV2 fetchAndClearRollupJob() {
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        List<AlterJobV2> jobs = new java.util.ArrayList<>(handler.getAlterJobsV2().values());
+        handler.clearJobs();
+        assertEquals(1, jobs.size(), "expected exactly one rollup job to be constructed");
+        return jobs.get(0);
+    }
+
+    /**
+     * Inject a "finished" rollup into the table: register its meta + a NORMAL {@link MaterializedIndex}
+     * in every physical partition (mirrors the post-FINISHED catalog state {@code visualiseShadowIndex}
+     * produces). {@code schema} must have at least two columns (used as the sort-key prefix [0,1]).
+     */
+    private static long injectFinishedRollup(OlapTable table, String name, List<Column> schema) {
+        long metaId = GlobalStateMgr.getCurrentState().getNextId();
+        table.setIndexMeta(metaId, name, schema, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, List.of(0, 1));
+        for (PhysicalPartition pp : table.getPhysicalPartitions()) {
+            long physId = GlobalStateMgr.getCurrentState().getNextId();
+            pp.createRollupIndex(new MaterializedIndex(physId, metaId,
+                    MaterializedIndex.IndexState.NORMAL, PhysicalPartition.INVALID_SHARD_GROUP_ID));
+        }
+        return metaId;
+    }
+
+    /**
+     * On a shared-data (lake) range DUP table, {@code ADD ROLLUP ... ORDER BY (...)} is now allowed:
+     * the handler constructs a {@link LakeRangeRollupJob} (the additive range-rollup path) instead of
+     * rejecting it. The job is constructed (not run); we inspect its routing then clear it.
+     */
+    @Test
+    public void testLakeRangeRollupAllowed() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup"));
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup add rollup r2(k1, k2, v1) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob,
+                "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r2", ((LakeRangeRollupJob) job).getRollupIndexName());
+    }
+
+    /**
+     * The constructed rollup's schema is stored in SORT-KEY order ({@code [k2, k1, v1]} for ORDER BY
+     * (k2, k1) over selected (k1, k2, v1)) with the sort-key columns as the leading prefix
+     * ({@code sortKeyIdxes == [0, 1]}). This makes the optimizer's prefix-index scorer (which scores by
+     * schema column order) select the rollup for {@code WHERE k2 = ...}.
+     */
+    @Test
+    public void testLakeRangeRollupSchemaStoredInSortKeyOrder() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_order"));
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_order add rollup r_sk(k1, k2, v1) order by (k2, k1)");
+        LakeRangeRollupJob job = (LakeRangeRollupJob) fetchAndClearRollupJob();
+
+        List<Column> rollupSchema = Deencapsulation.getField(job, "rollupSchema");
+        List<String> schemaNames = rollupSchema.stream().map(Column::getName).collect(
+                java.util.stream.Collectors.toList());
+        assertEquals(List.of("k2", "k1", "v1"), schemaNames, "rollup schema must be in sort-key order");
+        // The sort-key columns are the leading prefix and are keys; the rest are values.
+        assertTrue(rollupSchema.get(0).isKey() && rollupSchema.get(1).isKey());
+        assertTrue(!rollupSchema.get(2).isKey());
+
+        List<Integer> sortKeyIdxes = Deencapsulation.getField(job, "rollupSortKeyIdxes");
+        assertEquals(List.of(0, 1), sortKeyIdxes, "sort key must be the leading schema prefix");
+    }
+
+    /**
+     * A shared-nothing range table rollup stays rejected: the additive range-rollup path is
+     * shared-data only (it builds a K-tablet shadow via the lake online-rewrite machinery), so the
+     * routing predicate requires {@code isCloudNativeTable()}. This is asserted on the predicate
+     * directly because a SHARED_DATA test cluster cannot host a genuine shared-nothing OLAP table.
+     */
+    @Test
+    public void testSharedNothingRangeRollupRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_sn"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_sn");
+        // Sanity: the real (cloud-native) range table IS routable.
+        assertTrue(MaterializedViewHandler.isRangeRollupRoutable(table));
+        // A shared-nothing table (isCloudNativeTable() == false) is NOT routable -> stays rejected.
+        new MockUp<OlapTable>() {
+            @Mock
+            public boolean isCloudNativeTable() {
+                return false;
+            }
+        };
+        assertTrue(!MaterializedViewHandler.isRangeRollupRoutable(table),
+                "shared-nothing range table must not be routed to LakeRangeRollupJob");
+    }
+
+    /**
+     * A colocate range table rollup stays rejected (parallel to the sort-key-reorder colocate
+     * rejection): the rollup would build a fresh K-tablet layout independent of the colocate range
+     * manager's expected ranges.
+     */
+    @Test
+    public void testRangeRollupOnColocateRejected() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_colocate"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_colocate");
+        // Simulate colocate membership via the table's group property: the routing predicate now reads
+        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
+        table.setColocateGroup("t_guard_rollup_colocate_group");
+        assertAlterRejectedWithRangeDistribution(
+                "alter table t_guard_rollup_colocate add rollup r1(k1, k2, v1) order by (k2, k1)");
+    }
+
+    private static final String CREATE_ROLLUP_ON_COLOCATE_ERROR =
+            "ROLLUP is not supported in CREATE TABLE for a range distribution table with 'colocate_with'";
+
+    private static String colocateRangeTableWithRollupDdl(String name, String rollup, String group) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "rollup (" + rollup + ")\n"
+                + "properties('replication_num' = '1', 'colocate_with' = '" + group + ":k1');";
+    }
+
+    private static boolean tableExists(String name) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(name) != null;
+    }
+
+    private static boolean colocateGroupExists(String group) {
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId();
+        return GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                .getGroupSchema(ColocateTableIndex.getFullGroupName(dbId, group)) != null;
+    }
+
+    /**
+     * CREATE TABLE ... ROLLUP on a range table with colocate_with is rejected, and the rejected CREATE
+     * leaves no colocate group behind.
+     */
+    @Test
+    public void testCreateTableRollupOnRangeColocateRejected() throws Exception {
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_colocate", "r1 (k2, k1)", "g_ctr")));
+        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertFalse(tableExists("t_ctr_colocate"));
+        assertFalse(colocateGroupExists("g_ctr"));
+    }
+
+    /** A rollup that leads on the colocate column is rejected as well: no colocate rollup is supported yet. */
+    @Test
+    public void testCreateTableRollupLeadingOnColocateColumnRejected() throws Exception {
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_colocate_lead", "r1 (k1, v1)", "g_ctr_lead")));
+        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertFalse(tableExists("t_ctr_colocate_lead"));
+        assertFalse(colocateGroupExists("g_ctr_lead"));
+    }
+
+    /** A range table without colocate_with keeps accepting ROLLUP in CREATE TABLE. */
+    @Test
+    public void testCreateTableRollupOnRangeNonColocateAllowed() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_plain (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "rollup (r1 (k2, k1))\n"
+                + "properties('replication_num' = '1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_plain");
+        assertNotNull(table.getIndexMetaIdByName("r1"));
+    }
+
+    /**
+     * Joining an existing group: the rejected CREATE must not add a member or change the group's
+     * ColocateRanges.
+     */
+    @Test
+    public void testCreateTableRollupIntoExistingRangeColocateGroupRejected() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_ok (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'g_ctr_exist:k1');");
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        OlapTable okTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_ok");
+        ColocateTableIndex.GroupId groupId = colocateIndex.getGroup(okTable.getId());
+        assertNotNull(groupId);
+        List<Long> membersBefore = colocateIndex.getAllTableIds(groupId);
+        assertEquals(List.of(okTable.getId()), membersBefore);
+        List<?> rangeListBefore = colocateIndex.getColocateRanges(groupId.grpId);
+
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_candidate", "r3 (k2, k1, v1)", "g_ctr_exist")));
+        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertFalse(tableExists("t_ctr_candidate"));
+        assertEquals(membersBefore, colocateIndex.getAllTableIds(groupId));
+        assertEquals(rangeListBefore, colocateIndex.getColocateRanges(groupId.grpId));
+    }
+
+    /** Hash colocate tables are aligned by bucket and keep accepting ROLLUP in CREATE TABLE. */
+    @Test
+    public void testCreateTableRollupOnHashColocateAllowed() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_hash (k1 int, k2 int, v1 int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "distributed by hash(k1) buckets 2\n"
+                + "rollup (r1 (k2, k1))\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'g_ctr_hash');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_hash");
+        assertNotNull(table.getIndexMetaIdByName("r1"));
+    }
+
+    /**
+     * A range table carrying an AUTO_INCREMENT column is routed to {@link LakeRangeRollupJob}, both for
+     * a rollup that omits the column and for one that stores it. Two tables are used so the second
+     * ALTER does not depend on resetting the first table's state.
+     */
+    @Test
+    public void testRangeRollupWithAutoIncrementRouted() throws Exception {
+        for (String name : List.of("t_guard_rollup_autoinc", "t_guard_rollup_autoinc2")) {
+            starRocksAssert.withTable("create table " + name + " "
+                    + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                    + "duplicate key(k1, k2)\n"
+                    + "order by(k1, k2)\n"
+                    + "properties('replication_num' = '1');");
+        }
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_autoinc add rollup r1(k1, k2) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r1", ((LakeRangeRollupJob) job).getRollupIndexName());
+
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_autoinc2 add rollup r2(k2, id) order by (k2)");
+        job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r2", ((LakeRangeRollupJob) job).getRollupIndexName());
+    }
+
+    /**
+     * A PRIMARY KEY range table rollup stays rejected. ADD ROLLUP on a PK table is rejected up front
+     * by {@code process} ("Do not support add rollup on primary key table"); the range-rollup guard
+     * additionally excludes PRIMARY_KEYS. Either way the ALTER must throw.
+     */
+    @Test
+    public void testRangeRollupOnPrimaryKeyRejected() throws Exception {
+        starRocksAssert.withTable("create table t_guard_rollup_pk "
+                + "(k1 int not null, k2 int not null, v1 int)\n"
+                + "primary key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        assertThrows(Throwable.class, () ->
+                starRocksAssert.alterTable(
+                        "alter table t_guard_rollup_pk add rollup r1(k1, k2) order by (k2, k1)"));
+    }
+
+    /**
+     * Force-drop / CANCEL must recognize an in-flight {@link LakeRangeRollupJob} by its rollup index
+     * name (parallel to {@code RollupJobV2}/{@code LakeRollupJob}). The job is constructed by the
+     * ALTER, then {@code cancelRollupJobsForForceDrop} finds and cancels it.
+     */
+    @Test
+    public void testCancelRecognizesLakeRangeRollupJob() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_rollup_cancel"));
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_rollup_cancel");
+        try {
+            starRocksAssert.alterTable(
+                    "alter table t_guard_rollup_cancel add rollup r_cancel(k1, k2, v1) order by (k2, k1)");
+            // The job is registered (unfinished) under the table id; cancel must match it by name.
+            boolean cancelled = handler.cancelRollupJobsForForceDrop(table.getId(), "r_cancel", "test");
+            assertTrue(cancelled, "cancelRollupJobsForForceDrop must recognize the LakeRangeRollupJob");
+            // A non-matching name must NOT be recognized.
+            assertTrue(!handler.cancelRollupJobsForForceDrop(table.getId(), "no_such_rollup", "test"));
+        } finally {
+            handler.clearJobs();
+        }
+    }
+
+    @Test
+    public void testSyncCreateMaterializedViewRoutedToRangeJob() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_syncmv"));
+>>>>>>> 437d171 ([BugFix][RB-97] Reject ROLLUP in CREATE TABLE for range distribution tables with colocate_with (#82068))
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         OlapTable table = (OlapTable) db.getTable(tableName);
         return GlobalStateMgr.getCurrentState().getSchemaChangeHandler()

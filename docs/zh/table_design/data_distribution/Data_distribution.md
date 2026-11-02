@@ -857,10 +857,14 @@ PRIMARY KEY (tenant_id, created_time, id);
 | `CREATE MATERIALIZED VIEW ... AS ...`（同步物化视图，未指定 `REFRESH` 和 `DISTRIBUTED BY` 子句） | 与 `ADD ROLLUP` 走同一套代码路径。 |
 | `ALTER TABLE ... ORDER BY (...)`（修改排序键） | sort key 决定了 tablet 的边界，修改 sort key 会使现有范围 tablet 失效。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE 会对分区重新分布数据/重新分桶，与基于范围的 tablet 边界不兼容。 |
+<<<<<<< HEAD
 | `ALTER TABLE ... ADD COLUMN <col> KEY ...` | 在聚合表/更新表，或未显式指定 `ORDER BY` 的表上，新增的 KEY 列会被自动追加到（隐式推导的）范围排序键中。 |
 | `ALTER TABLE ... DROP COLUMN <col>`，且 `<col>` 是范围排序键的一部分 | 删除排序键列会使已存储的 tablet 范围边界值失效。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ...`，且 `<col>` 是范围排序键的一部分 | 修改列类型/语义会破坏已存储的 tablet 范围边界值。 |
 | `ALTER TABLE ... MODIFY COLUMN <col> ... KEY`（或任意键类型下将值列提升为键列）触发 keyness 翻转 | 在聚合表/更新表，或未显式指定 `ORDER BY` 的表上，keyness 翻转会改变由键列推导出的范围排序键。 |
+=======
+| 在设置了 `colocate_with` 的表上使用 `CREATE TABLE ... ROLLUP (...)` | Rollup 的 tablet 按基表的排序键切分，数据却按 Rollup 自己的排序键分布，读取该 Rollup 的 Colocate Join 可能返回错误结果。这类表同样不支持 `ALTER TABLE ... ADD ROLLUP`。 |
+>>>>>>> 437d171 ([BugFix][RB-97] Reject ROLLUP in CREATE TABLE for range distribution tables with colocate_with (#82068))
 
 对于类似 Rollup 的聚合场景，请使用**异步物化视图**，并显式指定 `REFRESH` 子句或 `DISTRIBUTED BY` 子句，例如：
 
