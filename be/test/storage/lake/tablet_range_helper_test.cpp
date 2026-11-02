@@ -1389,10 +1389,10 @@ TEST(TabletRangeHelperTest, validate_range_transition_accepts_reencoded_prefix) 
     old_schema->to_schema_pb(old_meta.mutable_schema());
     auto* old_range = old_meta.mutable_range();
     auto* lo = old_range->mutable_lower_bound()->add_values();
-    lo->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    lo->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     lo->set_value("1"); // variant_type intentionally left unset (defaults to NORMAL_VALUE)
     auto* hi = old_range->mutable_upper_bound()->add_values();
-    hi->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    hi->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     hi->set_value("2");
     old_range->set_lower_bound_included(true);
     old_range->set_upper_bound_included(false);
