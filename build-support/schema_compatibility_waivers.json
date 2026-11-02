@@ -9,5 +9,56 @@
     "reason": "Reviewed compatibility exception after a multi-release deprecation window.",
     "owner": "engprod"
   },
-  "waivers": []
+  "waivers": [
+    {
+      "path": "gensrc/thrift/Types.thrift",
+      "container_or_method": "TGeoColumnDesc",
+      "field_number": 1,
+      "field_name": "type",
+      "rule": "field_deleted",
+      "base_signature": "1: optional TGeoTypeDesc type",
+      "reason": "Native GEO is unreleased; TGeoColumnDesc/TGeoStorageDesc were never part of an FE/BE message (columns travel as GeoColumnDescPB). Remove this waiver once the comparison base no longer has the field.",
+      "owner": "trueeyu"
+    },
+    {
+      "path": "gensrc/thrift/Types.thrift",
+      "container_or_method": "TGeoColumnDesc",
+      "field_number": 2,
+      "field_name": "storage",
+      "rule": "field_deleted",
+      "base_signature": "2: optional TGeoStorageDesc storage",
+      "reason": "Native GEO is unreleased; TGeoColumnDesc/TGeoStorageDesc were never part of an FE/BE message (columns travel as GeoColumnDescPB). Remove this waiver once the comparison base no longer has the field.",
+      "owner": "trueeyu"
+    },
+    {
+      "path": "gensrc/thrift/Types.thrift",
+      "container_or_method": "TGeoStorageDesc",
+      "field_number": 1,
+      "field_name": "encoding",
+      "rule": "field_deleted",
+      "base_signature": "1: optional TGeoEncoding encoding",
+      "reason": "Native GEO is unreleased; TGeoColumnDesc/TGeoStorageDesc were never part of an FE/BE message (columns travel as GeoColumnDescPB). Remove this waiver once the comparison base no longer has the field.",
+      "owner": "trueeyu"
+    },
+    {
+      "path": "gensrc/thrift/Types.thrift",
+      "container_or_method": "TGeoStorageDesc",
+      "field_number": 2,
+      "field_name": "dimension",
+      "rule": "field_deleted",
+      "base_signature": "2: optional TGeoDimension dimension",
+      "reason": "Native GEO is unreleased; TGeoColumnDesc/TGeoStorageDesc were never part of an FE/BE message (columns travel as GeoColumnDescPB). Remove this waiver once the comparison base no longer has the field.",
+      "owner": "trueeyu"
+    },
+    {
+      "path": "gensrc/thrift/Types.thrift",
+      "container_or_method": "TGeoStorageDesc",
+      "field_number": 3,
+      "field_name": "validation_state",
+      "rule": "field_deleted",
+      "base_signature": "3: optional TGeoValidationState validation_state",
+      "reason": "Native GEO is unreleased; TGeoColumnDesc/TGeoStorageDesc were never part of an FE/BE message (columns travel as GeoColumnDescPB). Remove this waiver once the comparison base no longer has the field.",
+      "owner": "trueeyu"
+    }
+  ]
 }
