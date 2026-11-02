@@ -19,6 +19,8 @@ VARCHAR ST_GeometryFromText(VARCHAR wkt)
 
 ネイティブ形式では、`crs` は空でない文字列リテラルである必要があります。デフォルト CRS はなく、暗黙的な座標変換や再投影も行いません。7 種類すべての 2D OGC ジオメトリ、`EMPTY`、および空の子要素をサポートします。無効な WKT または `NULL` の WKT は `NULL` を返します。
 
+ネイティブの `GEOGRAPHY` と `GEOMETRY` は、`ARRAY`、`MAP`、`STRUCT` 内にネストできません。外側の式がスカラーを返す場合や、地理空間値が `NULL` の場合も、解析時に拒否されます。
+
 ## 例
 
 ```Plain Text

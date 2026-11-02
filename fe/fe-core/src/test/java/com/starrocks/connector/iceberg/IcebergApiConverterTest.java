@@ -223,21 +223,21 @@ public class IcebergApiConverterTest {
     }
 
     @Test
-    public void testNestedGeographyUsesSharedTypeConversion() {
+    public void testNestedGeographyIsUnsupported() {
         Schema schema = new Schema(
                 Types.NestedField.optional(1, "array_geo",
                         Types.ListType.ofOptional(2, Types.GeographyType.crs84())),
                 Types.NestedField.optional(3, "struct_geo", Types.StructType.of(
                         Types.NestedField.optional(4, "shape", Types.GeographyType.crs84()))),
                 Types.NestedField.optional(5, "map_geo", Types.MapType.ofOptional(
-                        6, 7, Types.IntegerType.get(), Types.GeographyType.crs84())));
-        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
-        assertEquals(PrimitiveType.GEOGRAPHY,
-                ((ArrayType) columns.get(0).getType()).getItemType().getPrimitiveType());
-        assertEquals(PrimitiveType.GEOGRAPHY,
-                ((StructType) columns.get(1).getType()).getField("shape").getType().getPrimitiveType());
-        assertEquals(PrimitiveType.GEOGRAPHY,
-                ((MapType) columns.get(2).getType()).getValueType().getPrimitiveType());
+                        6, 7, Types.IntegerType.get(), Types.GeographyType.crs84())),
+                Types.NestedField.optional(8, "list_struct_geo", Types.ListType.ofOptional(9, Types.StructType.of(
+                        Types.NestedField.optional(10, "shape", Types.GeographyType.crs84())))),
+                Types.NestedField.optional(11, "geo_key", Types.MapType.ofOptional(
+                        12, 13, Types.GeographyType.crs84(), Types.IntegerType.get())));
+        for (Column column : IcebergApiConverter.toFullSchemas(schema)) {
+            assertTrue(column.getType().isUnknown(), column.getName());
+        }
     }
 
     @Test

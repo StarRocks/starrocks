@@ -34,6 +34,8 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 :::
 
+An Iceberg column containing nested geography in a list, map, or struct is exposed as `UNKNOWN_TYPE` and cannot be queried, including its non-geo subfields. Other supported columns and scalar geography remain readable.
+
 ## Usage notes
 
 Take note of the following points when you use StarRocks to query data from Iceberg:
