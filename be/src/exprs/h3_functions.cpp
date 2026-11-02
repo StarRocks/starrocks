@@ -114,10 +114,13 @@ StatusOr<H3GeoInput> h3_geo_input(const ColumnPtr& column) {
     const auto* geo = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
     const auto& descriptor = geo->descriptor();
     const auto& type = descriptor.type;
+    const auto dimension = descriptor.storage.dimension;
+    // As for the other GEO kernels, h3_parse_geo checks each row's own WKB dimension, so an
+    // UNKNOWN or MIXED column label (e.g. an Iceberg GEOGRAPHY read) is admitted here.
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
         type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL || type.crs != "OGC:CRS84" ||
         (type.srid.has_value() && type.srid.value() != 4326) || descriptor.storage.encoding != GEO_ENCODING_WKB ||
-        descriptor.storage.dimension != GEO_DIMENSION_XY) {
+        (dimension != GEO_DIMENSION_UNKNOWN && dimension != GEO_DIMENSION_XY && dimension != GEO_DIMENSION_MIXED)) {
         return Status::NotSupported("H3 requires XY CRS84 GEOGRAPHY with spherical edges");
     }
     return H3GeoInput{geo, nullable, constant};

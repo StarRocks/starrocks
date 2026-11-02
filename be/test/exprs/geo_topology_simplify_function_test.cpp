@@ -189,13 +189,14 @@ TEST(GeoTopologySimplifyFunctionTest, InvalidToleranceAndTopologyAreRejectedBefo
     auto wkb = ColumnViewer<TYPE_VARBINARY>(bytes).value(0).to_string();
     GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    // UNKNOWN/MIXED labels are admitted because each row's WKB is checked; non-XY labels stay rejected.
     for (auto dim :
          {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
         auto other = descriptor;
         other.storage.dimension = dim;
-        EXPECT_FALSE(
-                GeoFunctions::st_geometry_simplify_preserve_topology(ctx.get(), {raw_geometry(wkb, other), radius(0)})
-                        .ok());
+        auto result =
+                GeoFunctions::st_geometry_simplify_preserve_topology(ctx.get(), {raw_geometry(wkb, other), radius(0)});
+        EXPECT_EQ(dim == GEO_DIMENSION_UNKNOWN || dim == GEO_DIMENSION_MIXED, result.ok()) << dim;
     }
     auto other = descriptor;
     other.type.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
