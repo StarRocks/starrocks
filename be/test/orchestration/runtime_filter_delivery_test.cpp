@@ -42,6 +42,7 @@
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "storage_primitive/runtime_filter_predicate.h"
+#include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
 
 namespace starrocks {
@@ -337,9 +338,7 @@ TEST_F(RuntimeFilterPublishTest, always_true_keeps_descriptors) {
         merger.incr_builder();
 
         auto add_built = [&]() {
-            auto column = Int32Column::create();
-            column->append(0);
-            column->append(7);
+            auto column = ColumnTestHelper::build_column<int32_t>({0, 7});
             pipeline::OpTRuntimeBloomFilterBuildParams params;
             params.emplace_back(pipeline::RuntimeMembershipFilterBuildParam(false, false, false, {std::move(column)},
                                                                             nullptr, TypeDescriptor(TYPE_INT)));
@@ -440,9 +439,7 @@ protected:
     }
 
     static PTransmitRuntimeFilterParams make_skew_material() {
-        auto mutable_column = Int32Column::create();
-        mutable_column->append(0);
-        mutable_column->append(100);
+        auto mutable_column = ColumnTestHelper::build_column<int32_t>({0, 100});
         ColumnPtr column = std::move(mutable_column);
         std::string data(RuntimeFilterSerde::skew_max_size(column), '\0');
         auto size = RuntimeFilterSerde::skew_serialize(column, false, reinterpret_cast<uint8_t*>(data.data()));

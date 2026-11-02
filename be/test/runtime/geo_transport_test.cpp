@@ -28,6 +28,7 @@
 #include "column/serde/column_array_serde.h"
 #include "column/struct_column.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::serde {
 namespace {
@@ -439,8 +440,7 @@ TEST(GeoTransportTest, ConstantNullRetainsLegacyWireFormat) {
 }
 
 TEST(GeoTransportTest, SchemaReaderKeepsVersionOne) {
-    auto data = Int32Column::create();
-    data->append(42);
+    auto data = ColumnTestHelper::build_column<int32_t>({42});
     Chunk chunk;
     chunk.append_column(std::move(data), 1);
     auto wire = ProtobufChunkSerde::serialize_without_meta(chunk);

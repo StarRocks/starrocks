@@ -15,6 +15,7 @@
 #include "storage/lake/schema_change.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <thread>
 
@@ -32,6 +33,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
@@ -41,6 +43,7 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::lake {
 
@@ -72,7 +75,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(test_dir);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -289,7 +293,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change_2";
+    inline static const std::string kTestGroupPath = "test_lake_direct_schema_change_2_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -701,7 +705,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change";
+    inline static const std::string kTestGroupPath = "test_lake_direct_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -969,7 +973,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sorted_schema_change";
+    inline static const std::string kTestGroupPath = "test_lake_sorted_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1228,7 +1232,8 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_multi_segment_sorted_schema_change";
+    inline static const std::string kTestGroupPath =
+            "test_lake_multi_segment_sorted_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1458,7 +1463,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_1";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_1_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1696,7 +1701,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_2";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_2_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1932,7 +1937,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_3";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_3_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -2065,7 +2070,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(_test_dir);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -2290,7 +2296,7 @@ protected:
     std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 
-    constexpr static const char* const _test_dir = "test_lake_base_tablet_read_schema";
+    inline static const std::string _test_dir = "test_lake_base_tablet_read_schema_" + std::to_string(getpid());
     int64_t _partition_id = 100;
 };
 
@@ -2321,16 +2327,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_fallback_to_tablet_metadata_sc
     auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
-    auto c0 = Int32Column::create();
-    auto c1 = BinaryColumn::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    auto c4 = Int32Column::create();
-    c0->append_datum(Datum(1));
-    c1->append_datum(Datum("test"));
-    c2->append_datum(Datum(100));
-    c3->append_datum(Datum(200));
-    c4->append_datum(Datum(300));
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"test"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({100});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({200});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({300});
 
     VChunk chunk0({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
     uint32_t indexes[1] = {0};
@@ -2831,16 +2832,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
     auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
-    auto col_c0 = Int32Column::create();
-    auto col_c1 = BinaryColumn::create();
-    auto col_c2 = Int32Column::create();
-    auto col_c3 = Int32Column::create();
-    auto col_c4 = Int32Column::create();
-    col_c0->append_datum(Datum(1));
-    col_c1->append_datum(Datum(Slice("row0")));
-    col_c2->append_datum(Datum(100));
-    col_c3->append_datum(Datum(1000));
-    col_c4->append_datum(Datum(10));
+    auto col_c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto col_c1 = ColumnTestHelper::build_column<Slice>({"row0"});
+    auto col_c2 = ColumnTestHelper::build_column<int32_t>({100});
+    auto col_c3 = ColumnTestHelper::build_column<int32_t>({1000});
+    auto col_c4 = ColumnTestHelper::build_column<int32_t>({10});
     VChunk chunk0({std::move(col_c0), std::move(col_c1), std::move(col_c2), std::move(col_c3), std::move(col_c4)},
                   base_schema);
     uint32_t indexes[1] = {0};
@@ -2864,7 +2860,8 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
     // Drop the BE schema cache so the only way DeltaWriter could resolve the new schema is
     // an FE RPC. With the fix, the schema is preset and the lookup is skipped, so the hook
     // above must observe zero invocations.
-    _tablet_manager->update_metacache_limit(0);
+    _tablet_manager->metacache()->update_tablet_metadata_capacity(0);
+    _tablet_manager->metacache()->update_segment_metadata_capacity(0);
     _tablet_manager->prune_metacache();
 
     auto new_tablet_id = new_metadata->id();
@@ -2979,21 +2976,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, delete_predicate_rowset_is_not_conv
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
     // Two data rows: c2 = 100 survives, c2 = 200 is deleted below.
-    auto c0 = Int32Column::create();
-    auto c1 = BinaryColumn::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    auto c4 = Int32Column::create();
-    c0->append_datum(Datum(1));
-    c1->append_datum(Datum("keep"));
-    c2->append_datum(Datum(100));
-    c3->append_datum(Datum(1));
-    c4->append_datum(Datum(1));
-    c0->append_datum(Datum(2));
-    c1->append_datum(Datum("drop"));
-    c2->append_datum(Datum(200));
-    c3->append_datum(Datum(2));
-    c4->append_datum(Datum(2));
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"keep", "drop"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({100, 200});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({1, 2});
 
     VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
     uint32_t indexes[2] = {0, 1};
@@ -3097,16 +3084,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, fully_deleted_rowset_contributes_no
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
     // A single row, which the delete below removes entirely.
-    auto c0 = Int32Column::create();
-    auto c1 = BinaryColumn::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    auto c4 = Int32Column::create();
-    c0->append_datum(Datum(1));
-    c1->append_datum(Datum("gone"));
-    c2->append_datum(Datum(42));
-    c3->append_datum(Datum(1));
-    c4->append_datum(Datum(1));
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"gone"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({42});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({1});
 
     VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
     uint32_t indexes[1] = {0};
@@ -3229,7 +3211,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(_test_dir);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -3241,7 +3224,7 @@ protected:
 
     void TearDown() override { ASSERT_OK(fs::remove_all(_test_dir)); }
 
-    std::string _test_dir = "./test_add_index_only_validation";
+    std::string _test_dir = "./test_add_index_only_validation_" + std::to_string(getpid());
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<LocationProvider> _location_provider;
     std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
@@ -3360,7 +3343,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(_test_dir);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -3372,7 +3356,7 @@ protected:
 
     void TearDown() override { ASSERT_OK(fs::remove_all(_test_dir)); }
 
-    std::string _test_dir = "./test_drop_index_only_validation";
+    std::string _test_dir = "./test_drop_index_only_validation_" + std::to_string(getpid());
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<LocationProvider> _location_provider;
     std::unique_ptr<PrimaryKeyManager> _primary_key_manager;

@@ -30,6 +30,7 @@
 #include "exprs/agg/combinator/state_function.h"
 #include "exprs/agg/combinator/state_merge_function.h"
 #include "exprs/agg/combinator/state_union_function.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -853,8 +854,7 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_column) {
 
     // avg_state(38) evaluated over a 5-row chunk: the argument is a ConstColumn.
     const size_t chunk_size = 5;
-    auto data_column = Int64Column::create();
-    data_column->append(38);
+    auto data_column = ColumnTestHelper::build_column<int64_t>({38});
     ColumnPtr const_column = ConstColumn::create(std::move(data_column), chunk_size);
 
     Columns input_columns = {const_column};

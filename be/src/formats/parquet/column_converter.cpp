@@ -42,7 +42,6 @@
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/config_scan_io_fwd.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "gutil/casts.h"
@@ -873,8 +872,8 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
             }
         }
     };
-    // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
-    if (config::parquet_fast_timezone_conversion || _as_timestamp_ntz) {
+    // a TIMESTAMP (NTZ) keeps its wall clock, so no offset is needed
+    if (_as_timestamp_ntz) {
         fill_dst_fn.operator()<true>();
     } else {
         // One offset for the whole batch when its days lie within one offset window, else one per value.
@@ -961,7 +960,7 @@ Status Int64ToDateTimeConverter::convert_min_max(const Column* min_src, const Co
     RETURN_IF_ERROR(convert(max_src, max_dst));
     // A fixed offset (or none) keeps the order; offsets at each instant do not across a backward shift, so widen
     // each pair by the least and greatest offsets in force between its bounds.
-    if (!_is_adjusted_to_utc || config::parquet_fast_timezone_conversion) {
+    if (!_is_adjusted_to_utc) {
         return Status::OK();
     }
     const auto* min_nullable = ColumnHelper::as_raw_column<NullableColumn>(min_src);
@@ -1072,37 +1071,30 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     };
 
     if (_is_adjusted_to_utc) {
-        // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
-        if (config::parquet_fast_timezone_conversion) {
+        // One offset for the whole batch when it lies within one offset window (always for a zone without
+        // daylight saving time), else one per value. Floor division keeps the order, so the seconds of the
+        // min and max ticks bound the seconds of every value.
+        auto floor_seconds = [&](int64_t ticks) { return ticks / _second_mask - (ticks % _second_mask < 0 ? 1 : 0); };
+        int64_t lo = std::numeric_limits<int64_t>::max();
+        int64_t hi = std::numeric_limits<int64_t>::min();
+        for (size_t i = 0; i < size; i++) {
+            if (!src_null_data[i]) {
+                lo = std::min(lo, src_data[i]);
+                hi = std::max(hi, src_data[i]);
+            }
+        }
+        if (lo > hi ||
+            _offset_cache.uniform_offset_for_unix(floor_seconds(lo), floor_seconds(hi), _ctz, &fixed_offset)) {
             fill_dst_by_unit.operator()<true, true>();
         } else {
-            // One offset for the whole batch when it lies within one offset window (always for a zone without
-            // daylight saving time), else one per value. Floor division keeps the order, so the seconds of the
-            // min and max ticks bound the seconds of every value.
-            auto floor_seconds = [&](int64_t ticks) {
-                return ticks / _second_mask - (ticks % _second_mask < 0 ? 1 : 0);
-            };
-            int64_t lo = std::numeric_limits<int64_t>::max();
-            int64_t hi = std::numeric_limits<int64_t>::min();
+            _seconds.resize(size);
             for (size_t i = 0; i < size; i++) {
-                if (!src_null_data[i]) {
-                    lo = std::min(lo, src_data[i]);
-                    hi = std::max(hi, src_data[i]);
-                }
+                _seconds[i] = src_null_data[i] ? 0 : floor_seconds(src_data[i]);
             }
-            if (lo > hi ||
-                _offset_cache.uniform_offset_for_unix(floor_seconds(lo), floor_seconds(hi), _ctz, &fixed_offset)) {
-                fill_dst_by_unit.operator()<true, true>();
-            } else {
-                _seconds.resize(size);
-                for (size_t i = 0; i < size; i++) {
-                    _seconds[i] = src_null_data[i] ? 0 : floor_seconds(src_data[i]);
-                }
-                _offsets.resize(size);
-                _offset_cache.offsets_for_unix(_seconds.data(), src_null_data.data(), size, _ctz, _offsets.data());
-                offsets = _offsets.data();
-                fill_dst_by_unit.operator()<true, false>();
-            }
+            _offsets.resize(size);
+            _offset_cache.offsets_for_unix(_seconds.data(), src_null_data.data(), size, _ctz, _offsets.data());
+            offsets = _offsets.data();
+            fill_dst_by_unit.operator()<true, false>();
         }
     } else {
         fill_dst_by_unit.operator()<false, true>();

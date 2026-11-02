@@ -36,6 +36,7 @@
 #include "exprs/literal.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -71,8 +72,7 @@ public:
         _array_expr.push_back(const_null);
 
         // [null]
-        array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
-        array->append_datum(DatumArray{Datum()});
+        array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, true, {{std::nullopt}});
         auto* null_array = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT_DESC);
         _array_expr.push_back(null_array);
 
@@ -443,10 +443,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
                 ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
             } else if (i == 6) { // array_map(x -> x || x->x is null || x -> x+a, array<const(null...)>)
-                ASSERT_EQ(3, result->size());
-                ASSERT_TRUE(result->is_null(0));
-                ASSERT_TRUE(result->is_null(1));
-                ASSERT_TRUE(result->is_null(2));
+                ASSERT_EQ("[NULL, NULL, NULL]", result->debug_string());
             } else if (i == 7 && (j == 0 || j == 2)) { // array_map(x -> x || x-> x+a,array<const([null]...)>)
                 ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
@@ -492,33 +489,22 @@ TEST_F(VectorizedLambdaFunctionExprTest, test_lambda_common_expr_slot_conflict) 
     cur_chunk->append_column(build_int_column(vec_a), 1);
 
     // Create a string column for length function
-    auto string_col = BinaryColumn::create();
-    string_col->append("abc");
-    string_col->append("def");
-    string_col->append("ghi");
+    auto string_col = ColumnTestHelper::build_column<Slice>({"abc", "def", "ghi"});
     cur_chunk->append_column(string_col, 2); // slot_id = 2 for captured column z
 
-    auto fake_col = BinaryColumn::create();
-    fake_col->append("abc");
-    fake_col->append("def");
-    fake_col->append("ghi");
+    auto fake_col = ColumnTestHelper::build_column<Slice>({"abc", "def", "ghi"});
     // fake column, which will conflict with the slot id of the common expr extracted by the lambda function
     cur_chunk->append_column(fake_col, 100002);
 
     // Create two array columns for testing
 
     // col1: [1,2], [3,4], [5,6]
-    auto array1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
-    array1->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)});
-    array1->append_datum(DatumArray{Datum((int32_t)3), Datum((int32_t)4)});
-    array1->append_datum(DatumArray{Datum((int32_t)5), Datum((int32_t)6)});
+    auto array1 = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{1, 2}, {3, 4}, {5, 6}});
     auto* col1_expr = new_fake_const_expr(std::move(array1), TYPE_ARRAY_INT_DESC);
 
     // col2: [10,20], [30,40], [50,60]
-    auto array2 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
-    array2->append_datum(DatumArray{Datum((int32_t)10), Datum((int32_t)20)});
-    array2->append_datum(DatumArray{Datum((int32_t)30), Datum((int32_t)40)});
-    array2->append_datum(DatumArray{Datum((int32_t)50), Datum((int32_t)60)});
+    auto array2 =
+            ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{10, 20}, {30, 40}, {50, 60}});
     auto* col2_expr = new_fake_const_expr(std::move(array2), TYPE_ARRAY_INT_DESC);
 
     // Create lambda function: (x,y) -> x + y + length(z)

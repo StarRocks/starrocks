@@ -138,6 +138,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             db.registerTableUnlocked(table);
             updateTaskDefinition((MaterializedView) table);
         });
+        inactiveRelatedMaterializedViewsForRename(table,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldMvName));
         LOG.info("rename materialized view[{}] to {}, id: {}", oldMvName, newMvName, table.getId());
         return null;
     }
@@ -1598,6 +1600,22 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     "table:{}, reason:{}", olapTable.getName(), reason);
             return;
         }
+        doInactiveRelatedMaterializedViewsRecursive(olapTable, reason);
+    }
+
+    /**
+     * {@link #inactiveRelatedMaterializedViewsRecursive} for a rename or swap of {@code table}, regardless of
+     * enable_mv_automatic_inactive_by_base_table_changes: the views track it by id but read it by name, and only
+     * activation rebinds them to the table that has the name.
+     */
+    public static void inactiveRelatedMaterializedViewsForRename(Table table, String reason) {
+        if (table == null) {
+            return;
+        }
+        doInactiveRelatedMaterializedViewsRecursive(table, reason);
+    }
+
+    private static void doInactiveRelatedMaterializedViewsRecursive(Table olapTable, String reason) {
         // Only check this in leader to avoid duplicate inactive
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
             LOG.warn("Skip to inactive related materialized views because of base table/view {} is " +

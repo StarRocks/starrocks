@@ -31,6 +31,7 @@
 #include "column/serde/column_array_serde.h"
 #include "column/variant_encoder.h"
 #include "column/variant_path_parser.h"
+#include "testutil/column_test_helper.h"
 #include "testutil/type_test_helper.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
@@ -272,8 +273,7 @@ PARALLEL_TEST(VariantColumnTest, test_remove_first_n_values_from_shredded_varian
 
 PARALLEL_TEST(VariantColumnTest, test_remove_values_from_const_typed_variant) {
     auto column = VariantColumn::create();
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
     column->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
@@ -964,8 +964,7 @@ PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_scalar_materializat
 // Verifies single-path typed-only supports const typed column row access (row index should map to 0 for const data).
 PARALLEL_TEST(VariantColumnTest, test_single_path_typed_only_const_typed_column) {
     auto col = VariantColumn::create();
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
     col->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
@@ -1358,8 +1357,7 @@ PARALLEL_TEST(VariantColumnTest, test_base_shredded_const_typed_column_materiali
     std::string metadata(base.get_metadata().raw());
     std::string value(base.get_value().raw());
 
-    auto typed_data = Int64Column::create();
-    typed_data->append(42);
+    auto typed_data = ColumnTestHelper::build_column<int64_t>({42});
     MutableColumns typed;
     typed.emplace_back(ConstColumn::create(std::move(typed_data), 2));
     auto metadata_col = BinaryColumn::create();

@@ -54,6 +54,7 @@
 #include "common/thread/priority_thread_pool.hpp"
 #include "common/util/bthreads/executor.h"
 #include "compute_env/ai/ai_executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "compute_env/compute_env.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "compute_env/workgroup/scan_executor.h"
@@ -68,6 +69,7 @@
 #include "storage/index/vector/vector_index_cache.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -454,9 +456,28 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                                                             std::max(1, config::update_tablet_meta_info_worker_count));
         return Status::OK();
     });
-    registry->register_callback("lake_metadata_cache_limit", [=]() -> Status {
+    registry->register_callback("lake_tablet_metadata_cache_limit_percent", [=]() -> Status {
         auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
-        if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
+        if (tablet_mgr != nullptr) {
+            auto* metacache = tablet_mgr->metacache();
+            metacache->update_tablet_metadata_capacity(lake::metacache_capacity(
+                    runtime_env_ptr->process_mem_limit(), config::lake_tablet_metadata_cache_limit_percent));
+            LOG(INFO) << "Set lake_tablet_metadata_cache_limit_percent: "
+                      << config::lake_tablet_metadata_cache_limit_percent
+                      << ", tablet metadata cache capacity: " << metacache->tablet_metadata_capacity();
+        }
+        return Status::OK();
+    });
+    registry->register_callback("lake_segment_metadata_cache_limit_percent", [=]() -> Status {
+        auto tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+        if (tablet_mgr != nullptr) {
+            auto* metacache = tablet_mgr->metacache();
+            metacache->update_segment_metadata_capacity(lake::metacache_capacity(
+                    runtime_env_ptr->process_mem_limit(), config::lake_segment_metadata_cache_limit_percent));
+            LOG(INFO) << "Set lake_segment_metadata_cache_limit_percent: "
+                      << config::lake_segment_metadata_cache_limit_percent
+                      << ", segment metadata cache capacity: " << metacache->segment_metadata_capacity();
+        }
         return Status::OK();
     });
     registry->register_callback("pk_index_parallel_execution_threadpool_max_threads", [=]() -> Status {
@@ -555,6 +576,9 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
                     config::pipeline_connector_scan_thread_num_per_cpu * CpuInfo::num_cores());
         }
         return Status::OK();
+    });
+    registry->register_callback("arrow_io_thread_pool_size", [=]() -> Status {
+        return apply_arrow_io_thread_pool_size(config::arrow_io_thread_pool_size);
     });
     registry->register_callback("enable_resource_group_cpu_borrowing", [=]() -> Status {
         LOG(INFO) << "set enable_resource_group_cpu_borrowing:" << config::enable_resource_group_cpu_borrowing;

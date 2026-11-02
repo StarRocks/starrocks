@@ -1496,10 +1496,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+        dropPartition(dbId, partitionName, isForceDrop, 0L);
+    }
+
+    /**
+     * A force drop of an mv partition always keeps its tablets for a while: for `retentionPeriod` seconds
+     * when the caller gives one (e.g. partition TTL), otherwise for partition_recycle_retention_period_secs.
+     */
+    @Override
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop, long retentionPeriod) {
         if (isForceDrop) {
-            super.dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
+            long period = retentionPeriod > 0 ? retentionPeriod : Config.partition_recycle_retention_period_secs;
+            super.dropPartitionWithRetention(dbId, partitionName, period);
         } else {
-            super.dropPartition(dbId, partitionName, isForceDrop);
+            super.dropPartition(dbId, partitionName, false);
         }
 
         // if mv's partition is dropped, we need to update mv's timeliness.

@@ -256,11 +256,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_bigint_prese
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
-    ASSERT_EQ(4, nullable->size());
-    EXPECT_EQ(1, nullable->get(0).get_int64());
-    EXPECT_TRUE(nullable->get(1).is_null());
-    EXPECT_EQ(3, nullable->get(2).get_int64());
-    EXPECT_TRUE(nullable->get(3).is_null());
+    ASSERT_EQ("[1, NULL, 3, NULL]", nullable->debug_string());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, cast_const_variant_typed_column_uses_outer_constness) {
@@ -271,10 +267,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_const_variant_typed_column_uses_oute
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const Column* result = casted.value().get();
-    ASSERT_EQ(3, result->size());
-    EXPECT_EQ(1, result->get(0).get_int64());
-    EXPECT_EQ(1, result->get(1).get_int64());
-    EXPECT_EQ(1, result->get(2).get_int64());
+    ASSERT_EQ("[1, 1, 1]", result->debug_string());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_varchar_formats_rows) {
@@ -284,10 +277,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_varchar_form
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
-    ASSERT_EQ(3, nullable->size());
-    EXPECT_EQ("dept_0", nullable->get(0).get_slice().to_string());
-    EXPECT_EQ("100", nullable->get(1).get_slice().to_string());
-    EXPECT_TRUE(nullable->get(2).is_null());
+    ASSERT_EQ("['dept_0', '100', NULL]", nullable->debug_string());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_datetime_requires_explicit_timezone_context) {

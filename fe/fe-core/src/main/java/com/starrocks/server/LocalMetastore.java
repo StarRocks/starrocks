@@ -1608,6 +1608,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     @Override
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
+        dropPartition(db, table, clause, 0L);
+    }
+
+    /**
+     * Same as {@link #dropPartition(Database, Table, DropPartitionClause)}, but a force drop keeps the
+     * dropped partitions' tablets in the recycle bin, non-recoverable, for `retentionPeriod` seconds, so
+     * that statements already running against them can finish.
+     */
+    public void dropPartition(Database db, Table table, DropPartitionClause clause, long retentionPeriod)
+            throws DdlException {
         CatalogUtils.checkTableExist(db, table.getName());
         Locker locker = new Locker();
         OlapTable olapTable = (OlapTable) table;
@@ -1676,26 +1686,29 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
         }
 
-        DropPartitionsInfo info =
-                new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), existPartitions);
+        DropPartitionsInfo info = new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(),
+                existPartitions, false, retentionPeriod);
         editLog.logDropPartitions(info, wal -> {
-            dropPartitionInternal(olapTable, db, existPartitions, isTempPartition, clause.isForceDrop());
+            dropPartitionInternal(olapTable, db, existPartitions, isTempPartition, clause.isForceDrop(), retentionPeriod);
         });
 
         if (!isTempPartition) {
             LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
         }
-        LOG.info("succeed in dropping partitions[{}], db: {}, table: {}, is temp : {}, is force : {}", existPartitions,
+        LOG.info("succeed in dropping partitions[{}], db: {}, table: {}, is temp : {}, is force : {}, " +
+                        "retention period : {}s", existPartitions,
                 db.getFullName(), olapTable.getName(),
                 isTempPartition,
-                clause.isForceDrop());
+                clause.isForceDrop(),
+                retentionPeriod);
     }
 
     protected void dropPartitionInternal(OlapTable olapTable,
                                        Database db,
                                        List<String> partitionNames,
                                        boolean isTempPartition,
-                                       boolean isForceDrop) {
+                                       boolean isForceDrop,
+                                       long retentionPeriod) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         for (String partitionName : partitionNames) {
             // drop
@@ -1710,7 +1723,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
                     }
                 }
-                olapTable.dropPartition(db.getId(), partitionName, isForceDrop);
+                olapTable.dropPartition(db.getId(), partitionName, isForceDrop, retentionPeriod);
                 if (olapTable instanceof MaterializedView mv) {
                     try {
                         SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
@@ -1743,13 +1756,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     + " partitionNames = " + info.getPartitionNames()
                     + " isTempPartition = " + info.isTempPartition()
                     + " isForceDrop = " + info.isForceDrop()
-                    + " isDropAll = " + info.isDropAll());
+                    + " isDropAll = " + info.isDropAll()
+                    + " retentionPeriod = " + info.getRetentionPeriod());
             List<String> partitionNames = info.getPartitionNames();
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
             boolean isTempPartition = info.isTempPartition();
             long dbId = info.getDbId();
             boolean isForceDrop = info.isForceDrop();
             boolean isDropAll = info.isDropAll();
+            long retentionPeriod = info.getRetentionPeriod();
             if (isDropAll && isTempPartition) {
                 olapTable.dropAllTempPartitions();
                 return;
@@ -1758,7 +1773,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 if (isTempPartition) {
                     olapTable.dropTempPartition(partitionName, true);
                 } else {
-                    olapTable.dropPartition(dbId, partitionName, isForceDrop);
+                    olapTable.dropPartition(dbId, partitionName, isForceDrop, retentionPeriod);
                 }
             });
         }
@@ -4085,7 +4100,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             db.dropTable(oldTableName);
             db.registerTableUnlocked(olapTable);
         });
-        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsForRename(olapTable,
                 MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
     }

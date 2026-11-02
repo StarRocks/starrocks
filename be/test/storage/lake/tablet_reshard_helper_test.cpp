@@ -1129,7 +1129,8 @@ TEST_F(TabletReshardHelperTest, has_shared_files_empty_metadata) {
 TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_parallel_without_new_segment_count) {
     const int64_t tablet_id = 10001;
     TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
-                                 /*cache_capacity=*/1024);
+                                 /*tablet_metadata_cache_capacity=*/1024,
+                                 /*segment_metadata_cache_capacity=*/1024);
     TxnLogPB log;
     log.set_tablet_id(tablet_id);
     auto* op_parallel_compaction = log.mutable_op_parallel_compaction();
@@ -1154,7 +1155,8 @@ TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_parallel_wi
 TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_partial_compaction) {
     const int64_t tablet_id = 10001;
     TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
-                                 /*cache_capacity=*/1024);
+                                 /*tablet_metadata_cache_capacity=*/1024,
+                                 /*segment_metadata_cache_capacity=*/1024);
     TxnLogPB log;
     log.set_tablet_id(tablet_id);
     auto* op_compaction = log.mutable_op_compaction();
@@ -1182,7 +1184,8 @@ TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_partial_com
 TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_covers_all_kinds) {
     const int64_t tablet_id = 10001;
     TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
-                                 /*cache_capacity=*/1024);
+                                 /*tablet_metadata_cache_capacity=*/1024,
+                                 /*segment_metadata_cache_capacity=*/1024);
     TxnLogPB log;
     log.set_tablet_id(tablet_id);
 
@@ -1228,7 +1231,8 @@ TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_covers_all_
 TEST_F(TabletReshardHelperTest, test_collect_compaction_output_files_skips_passthrough_reused_sstables) {
     const int64_t tablet_id = 10001;
     TabletManager tablet_manager(std::make_shared<FixedLocationProvider>("test_collect_compaction_output_files"),
-                                 /*cache_capacity=*/1024);
+                                 /*tablet_metadata_cache_capacity=*/1024,
+                                 /*segment_metadata_cache_capacity=*/1024);
     TxnLogPB log;
     log.set_tablet_id(tablet_id);
 

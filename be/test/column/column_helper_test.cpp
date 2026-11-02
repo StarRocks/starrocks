@@ -70,7 +70,7 @@ protected:
 };
 
 TEST_F(ColumnHelperTest, mark_binary_columns_skips_const_null) {
-    const auto binary_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    const auto binary_type = TYPE_VARBINARY_DESC;
     for (const auto& type : {binary_type, TypeDescriptor::create_array_type(binary_type)}) {
         ColumnPtr column = ColumnHelper::create_const_null_column(1);
         ColumnHelper::mark_binary_columns(column, type);
@@ -94,10 +94,52 @@ TEST_F(ColumnHelperTest, align_return_type) {
     auto nullable_column = create_nullable_column();
     auto not_null_column = create_column();
     auto col_size = not_null_column->size();
-    nullable_column->append(*ColumnHelper::align_return_type(
-            std::move(not_null_column), TypeDescriptor::from_logical_type(TYPE_VARCHAR), col_size, true));
+    nullable_column->append(
+            *ColumnHelper::align_return_type(std::move(not_null_column), TYPE_VARCHAR_DESC, col_size, true));
     ASSERT_TRUE(nullable_column->is_nullable());
     ASSERT_FALSE(nullable_column->is_constant());
+}
+
+TEST_F(ColumnHelperTest, materialize_const_column) {
+    // A NULL literal is a Nullable(Int8) column; materializing it must give an all-NULL column of the given type.
+    auto null_col =
+            ColumnHelper::materialize_const_column(TYPE_VARCHAR_DESC, 3, ColumnHelper::create_const_null_column(1));
+    ASSERT_FALSE(null_col->is_constant());
+    ASSERT_FALSE(null_col->only_null());
+    ASSERT_EQ(3, null_col->size());
+    ASSERT_TRUE(down_cast<const NullableColumn*>(null_col.get())->data_column()->is_binary());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_TRUE(null_col->is_null(i));
+    }
+
+    // A non-NULL constant is duplicated, and a shared reference to it is left untouched.
+    auto inner = Int32Column::create();
+    inner->append(7);
+    ColumnPtr const_col = ConstColumn::create(std::move(inner), 1);
+    ColumnPtr shared = const_col;
+    auto col = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(const_col));
+    ASSERT_FALSE(col->is_constant());
+    ASSERT_EQ(3, col->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, col->get(i).get_int32());
+    }
+    ASSERT_EQ(1, shared->size());
+    ASSERT_EQ(1, down_cast<const ConstColumn*>(shared.get())->data_column()->size());
+
+    // A shared non-constant column is copied on write: the result keeps the contents, and the other owner is untouched.
+    const Column* plain_addr = col.get();
+    ColumnPtr plain = col;
+    auto copied = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(col));
+    ASSERT_NE(plain_addr, copied.get());
+    ASSERT_EQ(plain_addr, plain.get());
+    ASSERT_EQ(3, copied->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, copied->get(i).get_int32());
+        ASSERT_EQ(7, plain->get(i).get_int32());
+    }
+
+    // A non-constant column owned only by the caller is returned as is.
+    ASSERT_EQ(plain_addr, ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
 }
 
 TEST_F(ColumnHelperTest, get_data_column_by_type) {
@@ -171,8 +213,7 @@ TEST_F(ColumnHelperTest, get_container_get_data_with_row_nullable) {
 }
 
 TEST_F(ColumnHelperTest, get_data_column_from_const_nullable_column) {
-    auto data_column = BinaryColumn::create();
-    data_column->append(Slice("v1"));
+    auto data_column = ColumnTestHelper::build_column<Slice>({"v1"});
     auto null_column = NullColumn::create();
     null_column->append(0);
     ColumnPtr nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
@@ -233,8 +274,7 @@ TEST_F(ColumnHelperTest, build_slices_nullable_column) {
 }
 
 TEST_F(ColumnHelperTest, build_slices_const_column) {
-    auto inner = BinaryColumn::create();
-    inner->append(Slice("const"));
+    auto inner = ColumnTestHelper::build_column<Slice>({"const"});
     ColumnPtr const_col = ConstColumn::create(std::move(inner), 3);
 
     Buffer<Slice> slices;

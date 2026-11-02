@@ -38,6 +38,7 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
 
@@ -970,7 +971,7 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenFalseReturnElse) {
     bo->append_datum(Datum(true));  // [true]
     bo->append_datum(Datum(false)); // [false]
     bo->append_datum(Datum(false)); // [false]
-    auto when0 = MockExpr(TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN), bo);
+    auto when0 = MockExpr(TYPE_BOOLEAN_DESC, bo);
 
     expr->_children.push_back(&when0);       // when1
     expr->_children.push_back(&array_expr0); // then1
@@ -1088,11 +1089,7 @@ TEST_F(VectorizedCaseExprTest, simpleCaseReturnsVariant) {
     std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_VARIANT, TYPE_INT));
     ASSERT_NE(nullptr, expr);
 
-    auto case_column = Int32Column::create();
-    case_column->append(1);
-    case_column->append(2);
-    case_column->append(3);
-    case_column->append(4);
+    auto case_column = ColumnTestHelper::build_column<int32_t>({1, 2, 3, 4});
     MockExpr case_expr(TypeDescriptor(TYPE_INT), case_column);
 
     auto when1_column = Int32Column::create();

@@ -96,7 +96,8 @@ protected:
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
+        _tablet_mgr =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_tablet_metadata(GetParam());
@@ -756,7 +757,8 @@ protected:
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
+        _tablet_mgr =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         // Create a simple tablet metadata for testing
@@ -1109,7 +1111,8 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, does_not_hide_corrupt_source_me
 
 TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasses_metacache) {
     _replication_txn_manager.reset();
-    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+    _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                        1024 * 1024);
     _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
     const std::string meta_dir = "/remote/source/meta";
@@ -1155,7 +1158,8 @@ protected:
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
+        _tablet_mgr =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
     }
 
@@ -2135,8 +2139,8 @@ protected:
         _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_mgr =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                            1024 * 1024);
         _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
 
         _src_tablet_metadata = generate_simple_tablet_metadata(_src_tablet_id);

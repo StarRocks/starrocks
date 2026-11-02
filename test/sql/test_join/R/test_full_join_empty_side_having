@@ -1,0 +1,41 @@
+-- name: test_full_join_empty_side_having
+create table t_left (k int, s varchar(10), x double)
+duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+create table t_empty (k int, s varchar(10), v double)
+duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into t_left values (1, 'x', 1), (2, 'y', 2), (3, NULL, 3);
+-- result:
+-- !result
+select b.s, a.s, sum(a.x) from t_empty b full outer join t_left a on a.k = b.k
+group by b.s, a.s having b.s <> a.s or sum(a.x) > 1 order by a.s;
+-- result:
+None	None	3.0
+None	y	2.0
+-- !result
+select b.s, a.s, sum(a.x) from t_empty b full outer join t_left a on a.k = b.k
+group by b.s, a.s, b.v having round(coalesce(b.v, 0) - sum(a.x), 2) <> 0 or b.s <> a.s order by a.s;
+-- result:
+None	None	3.0
+None	x	1.0
+None	y	2.0
+-- !result
+select a.s, b.s, count(*) from t_left a full outer join t_empty b on a.k = b.k
+group by a.s, b.s having a.s = b.s or count(*) > 0 order by a.s;
+-- result:
+None	None	1
+x	None	1
+y	None	1
+-- !result
+select b.s, a.s, count(*) from t_empty b full outer join t_left a on a.k = b.k
+group by b.s, a.s having b.s <> a.s order by a.s;
+-- result:
+-- !result
+select b.s, a.s from t_empty b full outer join t_left a on a.k = b.k where b.s <> a.s or a.x > 1 order by a.s;
+-- result:
+None	None
+None	y
+-- !result

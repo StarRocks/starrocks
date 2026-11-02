@@ -17,6 +17,7 @@
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_string.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
@@ -47,27 +48,7 @@ TEST(BooleanConverterTest, test_read_string) {
     EXPECT_TRUE(conv->read_string(col.get(), "9999999999999999999999999.999", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "0.000000000000001", Converter::Options()));
 
-    EXPECT_EQ(20, col->size());
-    EXPECT_EQ(1, col->get(0).get_int8());
-    EXPECT_EQ(1, col->get(1).get_int8());
-    EXPECT_EQ(1, col->get(2).get_int8());
-    EXPECT_EQ(0, col->get(3).get_int8());
-    EXPECT_EQ(1, col->get(4).get_int8());
-    EXPECT_EQ(1, col->get(5).get_int8());
-    EXPECT_EQ(1, col->get(6).get_int8());
-    EXPECT_EQ(1, col->get(7).get_int8());
-    EXPECT_EQ(0, col->get(8).get_int8());
-    EXPECT_EQ(0, col->get(9).get_int8());
-    EXPECT_EQ(0, col->get(10).get_int8());
-    EXPECT_EQ(1, col->get(11).get_int8());
-    EXPECT_EQ(1, col->get(12).get_int8());
-    EXPECT_EQ(1, col->get(13).get_int8());
-    EXPECT_EQ(1, col->get(14).get_int8());
-    EXPECT_EQ(1, col->get(15).get_int8());
-    EXPECT_EQ(1, col->get(16).get_int8());
-    EXPECT_EQ(0, col->get(17).get_int8());
-    EXPECT_EQ(1, col->get(18).get_int8());
-    EXPECT_EQ(1, col->get(19).get_int8());
+    EXPECT_EQ("[1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1]", col->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -100,21 +81,7 @@ TEST(BooleanConverterTest, test_read_quoted_string) {
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "0.00001", Converter::Options()));
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "0.0", Converter::Options()));
 
-    EXPECT_EQ(14, col->size());
-    EXPECT_EQ(1, col->get(0).get_int8());
-    EXPECT_EQ(1, col->get(1).get_int8());
-    EXPECT_EQ(1, col->get(2).get_int8());
-    EXPECT_EQ(0, col->get(3).get_int8());
-    EXPECT_EQ(1, col->get(4).get_int8());
-    EXPECT_EQ(1, col->get(5).get_int8());
-    EXPECT_EQ(0, col->get(6).get_int8());
-    EXPECT_EQ(0, col->get(7).get_int8());
-    EXPECT_EQ(0, col->get(8).get_int8());
-    EXPECT_EQ(1, col->get(9).get_int8());
-    EXPECT_EQ(1, col->get(10).get_int8());
-    EXPECT_EQ(1, col->get(11).get_int8());
-    EXPECT_EQ(1, col->get(12).get_int8());
-    EXPECT_EQ(0, col->get(13).get_int8());
+    EXPECT_EQ("[1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 1, 1, 1, 0]", col->debug_string());
 }
 
 // NOLINTNEXTLINE
@@ -134,12 +101,7 @@ TEST(BooleanConverterTest, test_read_quoted_string_invalid_value) {
 TEST(BooleanConverterTest, test_write_string_as_integral_value) {
     csv::Converter::Options opts{.bool_alpha = false};
     auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-
-    col->append_datum(true);
-    col->append_datum(false);
-    col->append_datum(true);
-    col->append_datum(false);
+    auto col = ColumnTestHelper::build_column<uint8_t>({true, false, true, false});
 
     formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());
@@ -161,12 +123,7 @@ TEST(BooleanConverterTest, test_write_string_as_integral_value) {
 TEST(BooleanConverterTest, test_write_string_as_textual_value) {
     csv::Converter::Options opts{.bool_alpha = true};
     auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-
-    col->append_datum(true);
-    col->append_datum(false);
-    col->append_datum(true);
-    col->append_datum(false);
+    auto col = ColumnTestHelper::build_column<uint8_t>({true, false, true, false});
 
     formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());

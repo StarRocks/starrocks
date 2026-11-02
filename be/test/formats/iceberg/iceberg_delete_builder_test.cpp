@@ -93,8 +93,7 @@ protected:
     // Writes a 2-column (file_path, pos) parquet position-delete file into `fs`.
     void write_parquet_delete_file(MemoryFileSystem& fs, const std::string& path,
                                    const std::vector<std::pair<std::string, int64_t>>& rows) {
-        std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                               TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
         auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
         auto writer_options = std::make_shared<ParquetWriterOptions>();
         writer_options->column_ids = {FileColumnId{IcebergDeleteFileMeta::get_delete_file_path_slot().id(), {}},
@@ -112,8 +111,7 @@ protected:
 
     // Writes a 2-column (file_path, pos) orc position-delete file under _tmp_dir (default fs).
     void write_orc_delete_file(const std::string& path, const std::vector<std::pair<std::string, int64_t>>& rows) {
-        std::vector type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR),
-                               TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+        std::vector type_descs{TYPE_VARCHAR_DESC, TYPE_BIGINT_DESC};
         auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
         ASSIGN_OR_ABORT(auto writable_file, FileSystem::Default()->new_writable_file(path));
         auto stream = std::make_unique<AsyncFlushOutputStream>(std::move(writable_file), nullptr, _runtime_state.get());
@@ -242,6 +240,7 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsVisitsRuns) {
     std::vector<std::pair<std::string, std::vector<int64_t>>> runs;
     ASSERT_OK(IcebergPositionDeleteReader::read_rows(
             file.get(), _parquet_delete_path, delete_file_size, "parquet", 2, "UTC", FormatScannerOptions{}, nullptr,
+            /*encryption_info=*/nullptr,
             IcebergPositionDeleteReader::RangeCallback(
                     [&](const Slice& file_path, const int64_t* pos, size_t num_rows) {
                         runs.emplace_back(file_path.to_string(), std::vector<int64_t>(pos, pos + num_rows));
@@ -314,6 +313,7 @@ TEST_F(IcebergDeleteBuilderTest, TestReadPositionsSkipsFilePath) {
         std::vector<int64_t> positions;
         CHECK_OK(IcebergPositionDeleteReader::read_positions(
                 file.get(), path, size, format, 4096, "UTC", FormatScannerOptions{}, nullptr,
+                /*encryption_info=*/nullptr,
                 [&](const int64_t* pos, size_t num_rows) { positions.insert(positions.end(), pos, pos + num_rows); }));
         return positions;
     };
@@ -410,6 +410,7 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsVisitsAllRows) {
     std::vector<std::pair<std::string, int64_t>> rows;
     ASSERT_OK(IcebergPositionDeleteReader::read_rows(
             file.get(), _parquet_delete_path, delete_file_size, "parquet", 4096, "UTC", FormatScannerOptions{}, nullptr,
+            /*encryption_info=*/nullptr,
             [&](const Slice& file_path, int64_t pos) { rows.emplace_back(file_path.to_string(), pos); }));
 
     const std::vector<std::pair<std::string, int64_t>> expected{{"dataA", 1}, {"dataB", 2}, {"dataA", 3}};
@@ -424,7 +425,7 @@ TEST_F(IcebergDeleteBuilderTest, TestReadRowsRejectsUnknownFormat) {
 
     auto status = IcebergPositionDeleteReader::read_rows(file.get(), _parquet_delete_path, delete_file_size, "avro",
                                                          4096, "UTC", FormatScannerOptions{}, nullptr,
-                                                         [](const Slice&, int64_t) {});
+                                                         /*encryption_info=*/nullptr, [](const Slice&, int64_t) {});
     EXPECT_FALSE(status.ok());
 }
 

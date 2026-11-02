@@ -21,6 +21,7 @@ set(FORMAT_CORE_TEST_FILES
     parquet/meta_helper_test.cpp
     parquet/parquet_schema_test.cpp
     parquet/stored_column_reader_test.cpp
+    parquet/parquet_timezone_conversion_test.cpp
     file_input_stream_test.cpp
     io/async_flush_output_stream_test.cpp
     io/async_flush_stream_poller_test.cpp

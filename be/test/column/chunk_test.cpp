@@ -130,8 +130,8 @@ TEST_F(ChunkTest, test_remove_column_by_slot_id) {
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_is_column_nullable) {
     Chunk chunk;
-    ColumnPtr c1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
-    ColumnPtr c2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    ColumnPtr c1 = ColumnHelper::create_column(TYPE_INT_DESC, false);
+    ColumnPtr c2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     chunk.append_column(std::move(c1), 1);
     chunk.append_column(std::move(c2), 2);
 
@@ -515,9 +515,9 @@ TEST_F(ChunkTest, test_check_or_die_after_clone) {
 TEST_F(ChunkTest, test_check_or_die_nullable_columns) {
     // Test chunk with nullable columns
     auto chunk = std::make_unique<Chunk>();
-    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col1 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col1->append_default(100);
-    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col2->append_default(100);
 
     chunk->append_column(std::move(col1), 0);
@@ -1117,9 +1117,9 @@ TEST_F(ChunkTest, test_mutable_chunk_has_const_column) {
 
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_mutable_chunk_materialized_nullable) {
-    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col1 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col1->append_default();
-    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
     col2->append_default();
 
     MutableColumns mutable_columns;
@@ -1135,8 +1135,8 @@ TEST_F(ChunkTest, test_mutable_chunk_materialized_nullable) {
 
 // NOLINTNEXTLINE
 TEST_F(ChunkTest, test_mutable_chunk_is_column_nullable) {
-    auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
-    auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    auto col1 = ColumnHelper::create_column(TYPE_INT_DESC, false);
+    auto col2 = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     MutableColumns mutable_columns;
     mutable_columns.push_back(Column::mutate(std::move(col1)));

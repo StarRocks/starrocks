@@ -74,6 +74,7 @@
 #include "storage/variant_tuple.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "testutil/chunk_assert.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::lake {
 
@@ -259,8 +260,7 @@ public:
 
     std::string encoded_primary_key(int32_t key) {
         auto chunk = std::make_unique<Chunk>();
-        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        column->append_datum(Datum(key));
+        auto column = ColumnTestHelper::build_column<int32_t>({key});
         chunk->append_column(std::move(column), 0);
 
         std::vector<ColumnId> pk_columns = {0};
@@ -687,7 +687,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
     _tablet_mgr->prune_metacache();
     // fill delvec cache again
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-    EXPECT_TRUE(_tablet_mgr->metacache()->memory_usage() > 0);
+    EXPECT_TRUE(_tablet_mgr->metacache()->segment_metadata_memory_usage() > 0);
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);

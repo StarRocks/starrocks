@@ -39,6 +39,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "testutil/type_test_helper.h"
 #include "types/logical_type.h"
 #include "types/type_descriptor.h"
@@ -237,24 +238,18 @@ TEST(SortingTest, materialize_by_permutation_binary) {
     auto merged = BinaryColumn::create();
     Permutation perm{{0, 0}, {1, 0}};
     materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
-    ASSERT_EQ(2, merged->size());
-    ASSERT_EQ("star", merged->get(0).get_slice());
-    ASSERT_EQ("rock", merged->get(1).get_slice());
+    ASSERT_EQ("['star', 'rock']", merged->debug_string());
 }
 
 TEST(SortingTest, materialize_by_permutation_int) {
-    auto input1 = Int32Column::create();
-    auto input2 = Int32Column::create();
-    input1->append(1024);
-    input2->append(2048);
+    auto input1 = ColumnTestHelper::build_column<int32_t>({1024});
+    auto input2 = ColumnTestHelper::build_column<int32_t>({2048});
 
     {
         auto merged = Int32Column::create();
         Permutation perm{{0, 0}, {1, 0}};
         materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
-        ASSERT_EQ(2, merged->size());
-        ASSERT_EQ(1024, merged->get(0).get_int32());
-        ASSERT_EQ(2048, merged->get(1).get_int32());
+        ASSERT_EQ("[1024, 2048]", merged->debug_string());
     }
     // Empty permutation
     {
@@ -278,11 +273,7 @@ TEST(SortingTest, materialize_by_permutation_decimalv3) {
         auto merged = input1->clone_empty();
         Permutation perm{{0, 1}, {1, 1}, {1, 0}, {0, 0}};
         materialize_column_by_permutation(merged.get(), {input1, input2}, perm);
-        ASSERT_EQ(4, merged->size());
-        ASSERT_EQ(1337, merged->get(0).get_int32());
-        ASSERT_EQ(2456, merged->get(1).get_int32());
-        ASSERT_EQ(2048, merged->get(2).get_int32());
-        ASSERT_EQ(1024, merged->get(3).get_int32());
+        ASSERT_EQ("[1337, 2456, 2048, 1024]", merged->debug_string());
     }
     // Empty permutation
     {

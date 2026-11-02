@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <arrow/io/interfaces.h>
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
@@ -42,6 +43,7 @@
 #include "common/system/cpu_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/bthreads/executor.h"
+#include "compute_env/arrow_io_thread_pool.h"
 #include "data_workflows/load/tablet_writer/load_channel_mgr.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
@@ -51,7 +53,9 @@
 #include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
@@ -168,6 +172,37 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percen
     ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
 }
 
+TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_cache_limit_percent) {
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+    ASSERT_NE(nullptr, tablet_mgr);
+    auto* metacache = tablet_mgr->metacache();
+    const int64_t process_mem_limit = _runtime_env->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    const std::string saved_tablet_percent = std::to_string(config::lake_tablet_metadata_cache_limit_percent);
+    const std::string saved_segment_percent = std::to_string(config::lake_segment_metadata_cache_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent",
+                                                                 saved_tablet_percent));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent",
+                                                                 saved_segment_percent));
+    });
+
+    // Each knob resizes only its own LRU.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "5"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent", "7"));
+    ASSERT_EQ(process_mem_limit * 5 / 100, metacache->tablet_metadata_capacity());
+    ASSERT_EQ(process_mem_limit * 7 / 100, metacache->segment_metadata_capacity());
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "3"));
+    ASSERT_EQ(process_mem_limit * 3 / 100, metacache->tablet_metadata_capacity());
+    ASSERT_EQ(process_mem_limit * 7 / 100, metacache->segment_metadata_capacity());
+
+    // Out-of-range percentages are clamped to [0, 100].
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "150"));
+    ASSERT_EQ(process_mem_limit, metacache->tablet_metadata_capacity());
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent", "-1"));
+    ASSERT_EQ(0, metacache->segment_metadata_capacity());
+}
+
 TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
     const int64_t process_mem_limit = _runtime_env->process_mem_limit();
     ASSERT_GT(process_mem_limit, 0);
@@ -241,6 +276,27 @@ TEST_F(ConfigUpdateHooksTest, test_update_number_tablet_writer_threads) {
         // only matches on hosts with at least 32 cores.
         ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_arrow_io_thread_pool_size) {
+    auto* registry = ConfigUpdateRegistry::instance();
+    const int default_capacity = arrow_io_thread_pool_default_capacity();
+    DeferOp restore([&]() { CHECK_OK(registry->update_config("arrow_io_thread_pool_size", "0")); });
+
+    const int32_t size = default_capacity + 4;
+    ASSERT_OK(registry->update_config("arrow_io_thread_pool_size", std::to_string(size)));
+    EXPECT_EQ(size, arrow::io::GetIOThreadPoolCapacity());
+
+    // An out-of-range value is rejected and rolled back, and the pool keeps its size.
+    for (const std::string& value : {std::string("-1"), std::to_string(kMaxArrowIOThreadPoolSize + 1)}) {
+        EXPECT_TRUE(registry->update_config("arrow_io_thread_pool_size", value).is_invalid_argument()) << value;
+        EXPECT_EQ(size, config::arrow_io_thread_pool_size) << value;
+        EXPECT_EQ(size, arrow::io::GetIOThreadPoolCapacity()) << value;
+    }
+
+    // 0 goes back to the size Arrow chose for itself.
+    ASSERT_OK(registry->update_config("arrow_io_thread_pool_size", "0"));
+    EXPECT_EQ(default_capacity, arrow::io::GetIOThreadPoolCapacity());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_transaction_publish_version_worker_count) {
