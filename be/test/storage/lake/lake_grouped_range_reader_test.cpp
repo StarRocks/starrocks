@@ -18,8 +18,11 @@
 #include <set>
 #include <tuple>
 
+#include "cache/mem_cache/lrucache_engine.h"
+#include "cache/mem_cache/page_cache.h"
 #include "column/datum_tuple.h"
 #include "exec/pipeline/scan/morsel.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/rowset.h"
@@ -30,6 +33,7 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "test_util.h"
@@ -67,6 +71,12 @@ RangeGroupTaskPtr task(std::optional<int64_t> lower, std::optional<int64_t> uppe
 using Row = std::tuple<int64_t, int64_t, int64_t, std::optional<int64_t>, int64_t>;
 using Rows = std::multiset<Row>;
 
+struct PhysicalSplitWork {
+    size_t children = 0;
+    size_t candidate_rows = 0;
+    int64_t cached_pages = 0;
+};
+
 } // namespace
 
 class LakeGroupedRangeReaderTest : public TestBase {
@@ -76,7 +86,8 @@ public:
     void TearDown() override { remove_test_dir_ignore_error(); }
 
     std::shared_ptr<TabletMetadata> write_source(int64_t source, const std::vector<int64_t>& keys, bool bundle = false,
-                                                 int num_rowsets = 1) {
+                                                 int num_rowsets = 1, int num_key_columns = 3,
+                                                 int num_short_key_columns = 3) {
         auto meta = std::make_shared<TabletMetadata>();
         meta->set_id(next_id());
         meta->set_version(2);
@@ -84,14 +95,14 @@ public:
         auto* pb = meta->mutable_schema();
         pb->set_id(next_id());
         pb->set_keys_type(DUP_KEYS);
-        pb->set_num_short_key_columns(3);
+        pb->set_num_short_key_columns(num_short_key_columns);
         pb->set_num_rows_per_row_block(4);
         for (int i = 0; i < 5; ++i) {
             auto* col = pb->add_column();
             col->set_name("c" + std::to_string(i));
             col->set_unique_id(100 + i);
             col->set_type("BIGINT");
-            col->set_is_key(i < 3);
+            col->set_is_key(i < num_key_columns);
             col->set_is_nullable(i == 3);
             col->set_aggregation("NONE");
             if (i < 3) pb->add_sort_key_idxes(i);
@@ -159,14 +170,46 @@ public:
         return meta;
     }
 
+    std::shared_ptr<TabletMetadata> insert_non_sort_column(const std::shared_ptr<TabletMetadata>& original) {
+        auto meta = std::make_shared<TabletMetadata>(*original);
+        const auto archived = original->schema();
+        auto* current = meta->mutable_schema();
+        current->set_id(next_id());
+        current->clear_column();
+        for (int i = 0; i < archived.column_size(); ++i) {
+            *current->add_column() = archived.column(i);
+            if (i == 0) {
+                auto* added = current->add_column();
+                added->set_unique_id(999);
+                added->set_name("added_value");
+                added->set_type("BIGINT");
+                added->set_is_key(false);
+                added->set_is_nullable(false);
+                added->set_aggregation("NONE");
+                added->set_default_value("0");
+            }
+        }
+        current->clear_sort_key_idxes();
+        for (int idx : {0, 2, 3}) current->add_sort_key_idxes(idx);
+        (*meta->mutable_historical_schemas())[archived.id()] = archived;
+        for (const auto& rowset : meta->rowsets()) {
+            (*meta->mutable_rowset_to_schema())[rowset.id()] = archived.id();
+        }
+        _tablet_mgr->prune_metacache();
+        return meta;
+    }
+
     Status read(const std::shared_ptr<TabletMetadata>& meta, RangeGroupTaskPtr group, Rows* rows) {
         TabletReaderParams params;
         params.grouped_range_task = std::move(group);
         return read_with_params(meta, params, rows);
     }
 
-    Status read_with_params(const std::shared_ptr<TabletMetadata>& meta, const TabletReaderParams& params, Rows* rows) {
-        auto schema = ChunkHelper::convert_schema(TabletSchema::create(meta->schema()));
+    Status read_with_params(const std::shared_ptr<TabletMetadata>& meta, const TabletReaderParams& params, Rows* rows,
+                            const std::vector<ColumnId>& projection = {}) {
+        auto tablet_schema = TabletSchema::create(meta->schema());
+        auto schema = projection.empty() ? ChunkHelper::convert_schema(tablet_schema)
+                                         : ChunkHelper::convert_schema(tablet_schema, projection);
         TabletReader reader(_tablet_mgr.get(), meta, schema);
         RETURN_IF_ERROR(reader.prepare());
         RETURN_IF_ERROR(reader.open(params));
@@ -187,11 +230,13 @@ public:
     }
 
     // Drive the ordinary root's real PhysicalSplitMorselQueue, then reconstruct children as the connector does.
-    void read_physical_children(const std::shared_ptr<TabletMetadata>& meta, TabletReaderParams params, Rows* rows) {
+    void read_physical_children(const std::shared_ptr<TabletMetadata>& meta, TabletReaderParams params, Rows* rows,
+                                const std::vector<ColumnId>& projection = {}, PhysicalSplitWork* work = nullptr) {
         const auto original_meta = meta->SerializeAsString();
         const auto original_group = params.grouped_range_task;
-        const auto original_clip = original_group->key_range.SerializeAsString();
-        const auto original_uids = original_group->sort_key_unique_ids;
+        const auto original_clip = original_group != nullptr ? original_group->key_range.SerializeAsString() : "";
+        const auto original_uids =
+                original_group != nullptr ? original_group->sort_key_unique_ids : std::array<int32_t, 3>{};
         TInternalScanRange internal;
         internal.__set_tablet_id(meta->id());
         internal.__set_version(std::to_string(meta->version()));
@@ -201,8 +246,10 @@ public:
         params.plan_node_id = 1;
         params.scan_dop = 4;
         // A scoped reader parameter: no process-wide split-row setting survives this helper.
-        params.splitted_scan_rows = 4;
-        auto schema = ChunkHelper::convert_schema(TabletSchema::create(meta->schema()));
+        if (params.splitted_scan_rows == 0) params.splitted_scan_rows = 4;
+        auto tablet_schema = TabletSchema::create(meta->schema());
+        auto schema = projection.empty() ? ChunkHelper::convert_schema(tablet_schema)
+                                         : ChunkHelper::convert_schema(tablet_schema, projection);
         TabletReader root(_tablet_mgr.get(), meta, schema, true, true);
         ASSERT_OK(root.prepare());
         ASSERT_OK(root.open(params));
@@ -212,7 +259,10 @@ public:
         ASSERT_EQ(0, root.stats().raw_rows_read);
         std::vector<pipeline::ScanSplitContextPtr> children;
         root.get_split_tasks(&children);
-        ASSERT_GT(children.size(), 1);
+        if (work != nullptr) {
+            work->children += children.size();
+            work->cached_pages += root.stats().cached_pages_num;
+        }
         root.close();
         for (auto& child : children) {
             auto* ctx = dynamic_cast<pipeline::LakeSplitContext*>(child.get());
@@ -220,16 +270,26 @@ public:
             ASSERT_NE(nullptr, dynamic_cast<pipeline::PhysicalSplitMorselQueue*>(ctx->split_morsel_queue.get()));
             ASSERT_NE(nullptr, ctx->rowid_range);
             ASSERT_EQ(nullptr, ctx->short_key_range);
+            if (work != nullptr) {
+                for (const auto& [rowset, segments] : ctx->rowid_range->rowid_range_per_segment_per_rowset) {
+                    for (const auto& [segment, split] : segments) {
+                        ASSERT_NE(nullptr, split.row_id_range);
+                        work->candidate_rows += split.row_id_range->span_size();
+                    }
+                }
+            }
             params.rowid_range_option = ctx->rowid_range;
             Rows output;
-            ASSERT_OK(read_with_params(meta, params, &output));
+            ASSERT_OK(read_with_params(meta, params, &output, projection));
             for (const auto& row : output) {
                 ASSERT_EQ(0, rows->count(row)) << "physical row appears in more than one child/clip";
                 rows->insert(row);
             }
             EXPECT_EQ(original_group, params.grouped_range_task);
-            EXPECT_EQ(original_clip, original_group->key_range.SerializeAsString());
-            EXPECT_EQ(original_uids, original_group->sort_key_unique_ids);
+            if (original_group != nullptr) {
+                EXPECT_EQ(original_clip, original_group->key_range.SerializeAsString());
+                EXPECT_EQ(original_uids, original_group->sort_key_unique_ids);
+            }
         }
         EXPECT_EQ(original_meta, meta->SerializeAsString());
     }
@@ -347,6 +407,58 @@ TEST_F(LakeGroupedRangeReaderTest, DeleteAndCapturedVersionVisibility) {
     EXPECT_EQ(after, clipped);
 }
 
+// Keeping archive ordinals for task seeks reads the newly inserted value column instead of c1.
+TEST_F(LakeGroupedRangeReaderTest, ArchivedClipsUseCurrentReaderColumnIds) {
+    // DUP KEY(c0), ORDER BY(c0,c1,c2) permits adding a non-key column after c0.
+    auto old = write_source(1, {0, 1, 2, 3}, false, 1, /*num_key_columns=*/1,
+                            /*num_short_key_columns=*/1);
+    auto current = insert_non_sort_column(old);
+    const std::vector<ColumnId> projection{0, 2, 3, 4, 5};
+    TabletReaderParams params;
+    Rows baseline;
+    ASSERT_OK(read_with_params(current, params, &baseline, projection));
+    ASSERT_EQ(24, baseline.size());
+
+    const Rows expected{{7, 8, 1, 42, 100003}, {7, 8, 1, 42, 100004}, {7, 8, 1, std::nullopt, 100005},
+                        {7, 8, 2, 42, 100006}, {7, 8, 2, 42, 100007}, {7, 8, 2, std::nullopt, 100008},
+                        {7, 8, 1, 42, 110003}, {7, 8, 1, 42, 110004}, {7, 8, 1, std::nullopt, 110005},
+                        {7, 8, 2, 42, 110006}, {7, 8, 2, 42, 110007}, {7, 8, 2, std::nullopt, 110008}};
+    params.grouped_range_task = task(1, 3);
+    Rows grouped;
+    ASSERT_OK(read_with_params(current, params, &grouped, projection));
+    EXPECT_EQ(expected, grouped);
+    Rows children;
+    ASSERT_NO_FATAL_FAILURE(read_physical_children(current, params, &children, projection));
+    EXPECT_EQ(expected, children);
+}
+
+TEST_F(LakeGroupedRangeReaderTest, ArchivedPhysicalOwnershipUsesCurrentReaderColumnIds) {
+    auto old = write_source(1, {0, 1, 2, 3}, false, 1, /*num_key_columns=*/1,
+                            /*num_short_key_columns=*/1);
+    Rows original;
+    ASSERT_OK(read(old, nullptr, &original));
+    ASSERT_EQ(24, original.size());
+    const Rows expected{{7, 8, 1, 42, 100003}, {7, 8, 1, 42, 100004}, {7, 8, 1, std::nullopt, 100005},
+                        {7, 8, 2, 42, 100006}, {7, 8, 2, 42, 100007}, {7, 8, 2, std::nullopt, 100008},
+                        {7, 8, 1, 42, 110003}, {7, 8, 1, 42, 110004}, {7, 8, 1, std::nullopt, 110005},
+                        {7, 8, 2, 42, 110006}, {7, 8, 2, 42, 110007}, {7, 8, 2, std::nullopt, 110008}};
+
+    auto current = insert_non_sort_column(old);
+    *current->mutable_range() = clip(1, 3);
+    const std::vector<ColumnId> projection{0, 2, 3, 4, 5};
+    // Each task includes the same physical-owner interval, but has a different finite side.
+    for (auto group : {task(std::nullopt, std::nullopt), task(0, std::nullopt), task(std::nullopt, 4)}) {
+        TabletReaderParams params;
+        params.grouped_range_task = group;
+        Rows grouped;
+        ASSERT_OK(read_with_params(current, params, &grouped, projection));
+        EXPECT_EQ(expected, grouped);
+        Rows children;
+        ASSERT_NO_FATAL_FAILURE(read_physical_children(current, params, &children, projection));
+        EXPECT_EQ(expected, children);
+    }
+}
+
 TEST_F(LakeGroupedRangeReaderTest, RejectsArchivedUidAndSortOrderMismatch) {
     auto meta = write_source(1, {0, 1});
     for (bool changed_uid : {false, true}) {
@@ -418,6 +530,122 @@ TEST_F(LakeGroupedRangeReaderTest, PhysicalRootsValidateArchivedSchemaBeforeEmpt
     }
 }
 
+TEST_F(LakeGroupedRangeReaderTest, PhysicalRootPrepassPreservesColdCachePolicyAndFooterStats) {
+    auto meta = write_source(1, {20, 21, 22, 23});
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), meta);
+    auto schema = ChunkHelper::convert_schema(TabletSchema::create(meta->schema()));
+    TabletReader root(_tablet_mgr.get(), meta, schema, true, true, rowsets);
+    ASSERT_OK(root.prepare());
+    _tablet_mgr->prune_metacache();
+    TInternalScanRange internal;
+    internal.__set_tablet_id(meta->id());
+    internal.__set_version(std::to_string(meta->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    TabletReaderParams params;
+    params.scan_range = &scan;
+    params.plan_node_id = 1;
+    params.grouped_range_task = task(std::nullopt, std::nullopt);
+    params.scan_dop = 4;
+    params.splitted_scan_rows = 4;
+    params.lake_io_opts.fill_data_cache = false;
+    params.lake_io_opts.fill_metadata_cache = false;
+    ASSERT_OK(root.open(params));
+    EXPECT_GT(root.stats().io_ns, 0);
+    for (const auto& sm : meta->rowsets(0).segment_metas()) {
+        EXPECT_EQ(nullptr,
+                  _tablet_mgr->metacache()->lookup_segment(_tablet_mgr->segment_location(meta->id(), sm.filename())));
+    }
+    // Physical planning has already consumed the prepass's memo, without a second footer load.
+    ASSIGN_OR_ABORT(auto memo, rowsets[0]->get_segments_checked());
+    ASSERT_EQ(2, memo.size());
+    std::vector<pipeline::ScanSplitContextPtr> children;
+    root.get_split_tasks(&children);
+    EXPECT_GT(children.size(), 1);
+    root.close();
+}
+
+// Cancellation must stop the grouped prepass before it opens captured source files.
+TEST_F(LakeGroupedRangeReaderTest, CancelledPhysicalRootPublishesNoChildren) {
+    auto meta = write_source(1, {0, 1, 2, 3});
+    auto schema = ChunkHelper::convert_schema(TabletSchema::create(meta->schema()));
+    TabletReader root(_tablet_mgr.get(), meta, schema, true, true);
+    ASSERT_OK(root.prepare());
+    RuntimeState state;
+    state.set_is_cancelled(true);
+    TInternalScanRange internal;
+    internal.__set_tablet_id(meta->id());
+    internal.__set_version(std::to_string(meta->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    TabletReaderParams params;
+    params.scan_range = &scan;
+    params.runtime_state = &state;
+    params.grouped_range_task = task(0, 2);
+    params.scan_dop = 4;
+    params.splitted_scan_rows = 4;
+    EXPECT_TRUE(root.open(params).is_cancelled());
+    std::vector<pipeline::ScanSplitContextPtr> children;
+    root.get_split_tasks(&children);
+    EXPECT_TRUE(children.empty());
+    EXPECT_EQ(0, root.stats().raw_rows_read);
+    root.close();
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), meta);
+    ASSIGN_OR_ABORT(auto segments, rowsets[0]->get_segments_checked());
+    ASSIGN_OR_ABORT(auto seek,
+                    decode_range_group_seek(*params.grouped_range_task, segments[0]->tablet_schema_share_ptr()));
+    OlapReaderStatistics helper_stats;
+    const auto result = segment_seek_range_to_rowid_range(segments[0], seek, params.lake_io_opts, &helper_stats, false,
+                                                          &state.cancelled_ref());
+    EXPECT_TRUE(result.status().is_cancelled());
+    EXPECT_EQ(0, helper_stats.io_ns);
+}
+
+// The footer and short-key index are held, but the exact boundary key pages cannot be read.
+TEST_F(LakeGroupedRangeReaderTest, ExactCandidateReadErrorPublishesNoChildren) {
+    auto meta = write_source(1, {0, 1, 2, 3}, false, 1, 3, 1);
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), meta);
+    ASSIGN_OR_ABORT(auto segments, rowsets[0]->get_segments_checked());
+    for (const auto& segment : segments) ASSERT_OK(segment->load_index());
+    auto fs = FileSystem::CreateSharedFromString(_test_dir).value();
+    auto path = segments[0]->file_name();
+    ASSIGN_OR_ABORT(auto input, fs->new_random_access_file(path));
+    ASSIGN_OR_ABORT(auto original, input->read_all());
+    input.reset();
+    ASSIGN_OR_ABORT(auto truncated,
+                    fs->new_writable_file(WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE}, path));
+    ASSERT_OK(truncated->close());
+    DeferOp restore([&] {
+        ASSIGN_OR_ABORT(
+                auto output,
+                fs->new_writable_file(WritableFileOptions{.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE}, path));
+        CHECK_OK(output->append(Slice(original)));
+        CHECK_OK(output->close());
+    });
+    auto schema = ChunkHelper::convert_schema(TabletSchema::create(meta->schema()));
+    TabletReader root(_tablet_mgr.get(), meta, schema, true, true, rowsets);
+    ASSERT_OK(root.prepare());
+    TInternalScanRange internal;
+    internal.__set_tablet_id(meta->id());
+    internal.__set_version(std::to_string(meta->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    TabletReaderParams params;
+    params.scan_range = &scan;
+    params.grouped_range_task = task(1, 3);
+    params.scan_dop = 4;
+    params.splitted_scan_rows = 4;
+    params.use_page_cache = false;
+    const auto status = root.open(params);
+    EXPECT_FALSE(status.ok());
+    EXPECT_GT(root.stats().io_ns, 0);
+    std::vector<pipeline::ScanSplitContextPtr> children;
+    root.get_split_tasks(&children);
+    EXPECT_TRUE(children.empty());
+    EXPECT_EQ(0, root.stats().raw_rows_read);
+    root.close();
+}
+
 TEST_F(LakeGroupedRangeReaderTest, PhysicalRootsValidateHeldSegmentSchemaBeforeEmptyPruning) {
     auto meta = write_source(1, {20, 21, 22, 23}, false, 2);
     auto bad_pb = meta->schema();
@@ -445,6 +673,83 @@ TEST_F(LakeGroupedRangeReaderTest, PhysicalRootsValidateHeldSegmentSchemaBeforeE
     ASSERT_NO_FATAL_FAILURE(check_empty_query_schema_status(meta, Rowset::get_rowsets(_tablet_mgr.get(), meta), false));
 }
 
+TEST_F(LakeGroupedRangeReaderTest, SegmentMemoRetriesFilesAndKeepsHeldSegments) {
+    auto meta = write_source(1, {0, 1, 2, 3});
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), meta);
+    auto fs = FileSystem::CreateSharedFromString(_test_dir).value();
+    const auto path = _tablet_mgr->segment_location(meta->id(), meta->rowsets(0).segment_metas(1).filename());
+    ASSERT_OK(fs->rename_file(path, path + ".held"));
+    bool restore_needed = true;
+    DeferOp restore([&] {
+        if (restore_needed) CHECK_OK(fs->rename_file(path + ".held", path));
+    });
+    LakeIOOptions options;
+    OlapReaderStatistics failed_stats;
+    auto failed = rowsets[0]->get_segments_checked(options, &failed_stats, nullptr);
+    EXPECT_TRUE(failed.status().is_not_found()) << failed.status();
+    EXPECT_GT(failed_stats.io_ns, 0);
+    ASSERT_OK(fs->rename_file(path + ".held", path));
+    restore_needed = false;
+    OlapReaderStatistics retry_stats;
+    ASSIGN_OR_ABORT(auto loaded, rowsets[0]->get_segments_checked(options, &retry_stats, nullptr));
+    ASSERT_EQ(2, loaded.size());
+    EXPECT_GT(retry_stats.io_ns, 0);
+    for (const auto& segment : loaded) ASSERT_OK(fs->delete_file(segment->file_name()));
+    _tablet_mgr->prune_metacache();
+    // Neither a new cache policy nor the ordinary caller may reopen the memoized files.
+    OlapReaderStatistics memo_stats;
+    std::atomic<bool> cancelled{false};
+    ASSIGN_OR_ABORT(auto memo, rowsets[0]->get_segments_checked(options, &memo_stats, &cancelled));
+    EXPECT_EQ(loaded, memo);
+    EXPECT_EQ(0, memo_stats.io_ns);
+    ASSIGN_OR_ABORT(auto ordinary, rowsets[0]->get_segments_checked());
+    EXPECT_EQ(loaded, ordinary);
+    cancelled.store(true);
+    EXPECT_TRUE(rowsets[0]->get_segments_checked(options, &memo_stats, &cancelled).status().is_cancelled());
+}
+
+// A present mask with no entry for the second real segment must exclude that segment.
+TEST_F(LakeGroupedRangeReaderTest, PhysicalQueueMissingCandidateEntryIsEmpty) {
+    auto meta = write_source(1, {0, 1, 2, 3});
+    auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), meta);
+    ASSIGN_OR_ABORT(auto segments, rowsets[0]->get_segments_checked());
+    auto mask = std::make_shared<RowidRangeOption>();
+    mask->add(rowsets[0].get(), segments[0].get(), std::make_shared<SparseRange<>>(3, 9), true);
+    TInternalScanRange internal;
+    internal.__set_tablet_id(meta->id());
+    internal.__set_version(std::to_string(meta->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    pipeline::Morsels morsels;
+    morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(1, scan));
+    pipeline::PhysicalSplitMorselQueue queue(std::move(morsels), 4, 4);
+    auto tablet = std::make_shared<Tablet>(_tablet_mgr.get(), meta->id());
+    tablet->set_version_hint(meta->version());
+    queue.set_tablets({tablet});
+    queue.set_tablet_rowsets({std::vector<BaseRowsetSharedPtr>(rowsets.begin(), rowsets.end())});
+    queue.set_tablet_schema(TabletSchema::create(meta->schema()));
+    queue.set_candidate_rowid_ranges(std::move(mask));
+    TabletReaderParams params;
+    params.grouped_range_task = task(1, 3);
+    Rows rows;
+    size_t candidate_rows = 0;
+    while (true) {
+        ASSIGN_OR_ABORT(auto morsel, queue.try_get());
+        if (morsel == nullptr) break;
+        auto* physical = dynamic_cast<pipeline::PhysicalSplitScanMorsel*>(morsel.get());
+        ASSERT_NE(nullptr, physical);
+        params.rowid_range_option = physical->get_rowid_range_option();
+        for (const auto& [rowset, segment_ranges] : params.rowid_range_option->rowid_range_per_segment_per_rowset) {
+            for (const auto& [segment, split] : segment_ranges) candidate_rows += split.row_id_range->span_size();
+        }
+        ASSERT_OK(read_with_params(meta, params, &rows));
+    }
+    const Rows expected{{7, 8, 1, 42, 100003}, {7, 8, 1, 42, 100004}, {7, 8, 1, std::nullopt, 100005},
+                        {7, 8, 2, 42, 100006}, {7, 8, 2, 42, 100007}, {7, 8, 2, std::nullopt, 100008}};
+    EXPECT_EQ(6, candidate_rows);
+    EXPECT_EQ(expected, rows);
+}
+
 // A missing split guard narrowing fails at root open; missing rowid intersection duplicates physical rows.
 TEST_F(LakeGroupedRangeReaderTest, PhysicalSplitChildrenTileExactOccurrences) {
     auto meta = write_source(1, {0, 0, 0, 0, 1, 1, 2, 3}, false, 2);
@@ -457,6 +762,82 @@ TEST_F(LakeGroupedRangeReaderTest, PhysicalSplitChildrenTileExactOccurrences) {
     EXPECT_EQ(baseline, children);
     EXPECT_EQ(32, std::count_if(children.begin(), children.end(),
                                 [](const Row& row) { return !std::get<3>(row).has_value(); }));
+}
+
+TEST_F(LakeGroupedRangeReaderTest, GroupedClipsBoundPhysicalChildCandidates) {
+    // Like PageIOTest, use an isolated real cache: standard UT initialization leaves it unavailable.
+    const bool saved_disable_page_cache = config::disable_storage_page_cache;
+    auto previous_cache = DataCache::GetInstance()->page_cache_ptr();
+    auto cache_engine = std::make_shared<LRUCacheEngine>();
+    ASSERT_OK(cache_engine->init(MemCacheOptions{.mem_space_size = 10 * 1024 * 1024}));
+    auto cache = std::make_shared<StoragePageCache>(cache_engine.get());
+    DataCache::GetInstance()->set_page_cache(cache);
+    config::disable_storage_page_cache = false;
+    DeferOp restore_cache([&] {
+        // Cached segment indexes may retain page handles into this test's cache engine.
+        _tablet_mgr->prune_metacache();
+        DataCache::GetInstance()->set_page_cache(previous_cache);
+        config::disable_storage_page_cache = saved_disable_page_cache;
+    });
+    std::vector<int64_t> keys;
+    for (int key = 0; key < 256; ++key) keys.push_back(key);
+    auto meta = write_source(1, keys, false, 1, /*num_key_columns=*/3, /*num_short_key_columns=*/1);
+    Rows baseline;
+    TabletReaderParams baseline_params;
+    baseline_params.use_page_cache = true;
+    ASSERT_OK(read_with_params(meta, baseline_params, &baseline));
+    Rows expected;
+    for (int key = 0; key < 256; ++key) {
+        for (int segment = 0; segment < 2; ++segment) {
+            const int64_t id = 100000 + segment * 10000 + key * 3;
+            expected.emplace(7, 8, key, 42, id);
+            expected.emplace(7, 8, key, 42, id + 1);
+            expected.emplace(7, 8, key, std::nullopt, id + 2);
+        }
+    }
+    ASSERT_EQ(1536, baseline.size());
+    ASSERT_EQ(expected, baseline);
+
+    TabletReaderParams params;
+    params.splitted_scan_rows = 24;
+    params.use_page_cache = true;
+    params.lake_io_opts.fill_data_cache = false;
+    params.grouped_range_task = task(0, 32);
+    Rows warmed;
+    PhysicalSplitWork warm_work;
+    ASSERT_NO_FATAL_FAILURE(read_physical_children(meta, params, &warmed, {}, &warm_work));
+    ASSERT_EQ(192, warmed.size());
+    EXPECT_GT(warm_work.cached_pages, 0);
+
+    params.use_page_cache = false;
+    Rows grouped;
+    PhysicalSplitWork work;
+    for (int lo = 0; lo < 256; lo += 32) {
+        params.grouped_range_task = task(lo, lo + 32);
+        ASSERT_NO_FATAL_FAILURE(read_physical_children(meta, params, &grouped, {}, &work));
+    }
+    EXPECT_EQ(baseline, grouped);
+    RecordProperty("PhysicalChildren", work.children);
+    RecordProperty("CandidateRows", work.candidate_rows);
+    EXPECT_EQ(1536, work.candidate_rows);
+    EXPECT_LE(work.children, 64);
+    EXPECT_EQ(0, work.cached_pages);
+
+    params.grouped_range_task = nullptr;
+    Rows ordinary;
+    PhysicalSplitWork ordinary_work;
+    ASSERT_NO_FATAL_FAILURE(read_physical_children(meta, params, &ordinary, {}, &ordinary_work));
+    EXPECT_EQ(expected, ordinary);
+    EXPECT_EQ(1536, ordinary_work.candidate_rows);
+    EXPECT_EQ(64, ordinary_work.children);
+
+    params.grouped_range_task = task(-100, -1);
+    Rows empty;
+    PhysicalSplitWork empty_work;
+    ASSERT_NO_FATAL_FAILURE(read_physical_children(meta, params, &empty, {}, &empty_work));
+    EXPECT_TRUE(empty.empty());
+    EXPECT_EQ(0, empty_work.children);
+    EXPECT_EQ(0, empty_work.candidate_rows);
 }
 
 // Removing any independent AND, collapsing query OR, or refreshing the snapshot changes literal coverage.

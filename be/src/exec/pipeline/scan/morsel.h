@@ -522,6 +522,9 @@ public:
     std::string name() const override { return "physical_split_morsel_queue"; }
     Type type() const override { return PHYSICAL_SPLIT; }
 
+    // Independent AND on the query's key-range union, before physical child slicing.
+    void set_candidate_rowid_ranges(RowidRangeOptionPtr ranges) { _candidate_rowid_ranges = std::move(ranges); }
+
 private:
     rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
     rowid_t _upper_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) const;
@@ -556,6 +559,7 @@ private:
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
     std::vector<SeekRange> _tablet_seek_ranges;
+    RowidRangeOptionPtr _candidate_rowid_ranges;
     SparseRange<> _segment_scan_range;
     SparseRangeIterator<> _segment_range_iter;
     // The number of unprocessed rows of the current segment.

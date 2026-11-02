@@ -3764,39 +3764,49 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
     }
 }
 
-StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const std::shared_ptr<Segment>& segment,
-                                                                          const SeekRange& range,
-                                                                          const LakeIOOptions& lake_io_opts) {
+StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(
+        const std::shared_ptr<Segment>& segment, const SeekRange& range, const LakeIOOptions& lake_io_opts,
+        OlapReaderStatistics* stats, bool use_page_cache, const std::atomic<bool>* is_cancelled) {
     if (segment == nullptr) {
         return Status::InvalidArgument("segment is null");
     }
-    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
+    auto check_cancelled = [&]() -> Status {
+        if (is_cancelled != nullptr && is_cancelled->load(std::memory_order_acquire)) {
+            return Status::Cancelled("cancelled while resolving segment key range");
+        }
+        return Status::OK();
+    };
+    RETURN_IF_ERROR(check_cancelled());
+    OlapReaderStatistics local_stats;
+    auto* read_stats = stats != nullptr ? stats : &local_stats;
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts, read_stats));
+    RETURN_IF_ERROR(check_cancelled());
 
-    // Schema is only used by the iterator's constructor; _seek_range_to_rowid_range
-    // picks the right schema from range.lower()/range.upper() on each side.
+    // Each bound carries IDs in this actual segment's schema, independently of reader IDs.
     Schema iterator_schema;
     if (!range.upper().empty()) {
         iterator_schema = range.upper().schema();
     } else if (!range.lower().empty()) {
         iterator_schema = range.lower().schema();
     } else {
-        // (-inf, +inf): the full segment.
         return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
     }
 
-    // SegmentReadOptions::stats is documented as required by ColumnIterator init
-    // (sanity_check() CHECK_NOTNULLs it). SegmentReadOptions::fs is required by
-    // _init_column_iterator_by_cid, which opens a RandomAccessFile on the
-    // segment's file. Supply both from locals — nothing downstream inspects the
-    // accumulated stats here.
-    OlapReaderStatistics local_stats;
-    ASSIGN_OR_RETURN(auto file_system, FileSystem::CreateSharedFromString(segment->file_info().path));
+    ASSIGN_OR_RETURN(auto file_system, lake_io_opts.fs != nullptr
+                                               ? StatusOr<std::shared_ptr<FileSystem>>(lake_io_opts.fs)
+                                               : FileSystem::CreateSharedFromString(segment->file_info().path));
     SegmentReadOptions read_options;
     read_options.lake_io_opts = lake_io_opts;
-    read_options.stats = &local_stats;
+    read_options.stats = read_stats;
+    read_options.use_page_cache = use_page_cache;
+    read_options.is_cancelled = is_cancelled;
     read_options.fs = std::move(file_system);
     SegmentIterator iterator(segment, iterator_schema, read_options);
-    return iterator.resolve_range_to_rowid_range(range);
+    // close() collects column-file I/O, including reads incurred by a failed seek.
+    DeferOp close_iterator([&] { iterator.close(); });
+    ASSIGN_OR_RETURN(auto rowids, iterator.resolve_range_to_rowid_range(range));
+    RETURN_IF_ERROR(check_cancelled());
+    return rowids;
 }
 
 } // namespace starrocks
