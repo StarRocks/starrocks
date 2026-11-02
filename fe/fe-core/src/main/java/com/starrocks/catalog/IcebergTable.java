@@ -407,7 +407,10 @@ public class IcebergTable extends Table {
         Schema schema = getReadSchema();
         for (Pair<Integer, Integer> bucket : bucketSourceIdWithBucketNums) {
             Column column = getColumn(schema.findColumnName(bucket.first));
-            if (!bucketPropertySupported(column.getType())) {
+            // Iceberg buckets a uuid by its 16 bytes, but StarRocks reads it as a 36-char string and the BE
+            // would hash the string when it shuffles the other side, sending rows to the wrong bucket.
+            if (!bucketPropertySupported(column.getType())
+                    || schema.findField(bucket.first).type() instanceof Types.UUIDType) {
                 continue;
             }
             bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, bucket.second, column));

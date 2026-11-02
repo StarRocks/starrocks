@@ -615,12 +615,14 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         if (requireColumnRefSet.isEmpty()) {
             return Optional.empty();
         } else {
-            // respect the order of column shuffle
-            List<BucketProperty> usedBP = require.getDistributionCols().stream()
+            // respect the order of column shuffle: the i-th column is hashed with the i-th bucket property,
+            // so both lists must follow the same (required) order, not the column-id order
+            List<Integer> usedColumnIds = require.getDistributionCols().stream()
                     .map(DistributionCol::getColId).filter(requireColumnRefSet::contains)
+                    .distinct().toList();
+            List<BucketProperty> usedBP = usedColumnIds.stream()
                     .map(id2Index::get).map(bucketProperties::get).toList();
-            return Optional.of(new HashDistributionDescBP(
-                    requireColumnRefSet.getStream().toList(), LOCAL, usedBP));
+            return Optional.of(new HashDistributionDescBP(usedColumnIds, LOCAL, usedBP));
         }
     }
 
