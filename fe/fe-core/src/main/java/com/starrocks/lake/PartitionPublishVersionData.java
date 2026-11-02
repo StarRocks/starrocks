@@ -32,13 +32,10 @@ public class PartitionPublishVersionData {
     private final List<Long> commitVersions = new ArrayList<>();
     private final List<PartitionCommitInfo> partitionCommitInfos = new ArrayList<>();
     private final List<TxnInfoPB> txnInfos = new ArrayList<>();
-    // Whether an earlier attempt already sent this batch, see PublishVersionRequest.is_retry_publish.
-    private final boolean retryPublish;
 
-    public PartitionPublishVersionData(long tableId, long partitionId, boolean retryPublish) {
+    public PartitionPublishVersionData(long tableId, long partitionId) {
         this.tableId = tableId;
         this.partitionId = partitionId;
-        this.retryPublish = retryPublish;
     }
 
     public long getTableId() {
@@ -47,10 +44,6 @@ public class PartitionPublishVersionData {
 
     public long getPartitionId() {
         return partitionId;
-    }
-
-    public boolean isRetryPublish() {
-        return retryPublish;
     }
 
     public void addTransaction(@NotNull TransactionState txnState) {
