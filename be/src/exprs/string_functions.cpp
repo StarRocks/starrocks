@@ -3879,6 +3879,72 @@ StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context
     return regexp_extract_all_general(context, options, columns);
 }
 
+void RegexpReplaceTemplate::parse(const Slice& rpl) {
+    literal_bytes.clear();
+    segments.clear();
+    nsubmatch = 1;
+    max_submatch = 0;
+    has_invalid_escape = false;
+
+    literal_bytes.reserve(rpl.size);
+    const char* const begin = rpl.data;
+    const char* const end = begin + rpl.size;
+    uint32_t lit_start = 0;
+
+    auto flush_literal = [&]() {
+        const auto lit_len = static_cast<uint32_t>(literal_bytes.size()) - lit_start;
+        if (lit_len > 0) {
+            segments.push_back(Segment{-1, lit_start, lit_len});
+            lit_start = static_cast<uint32_t>(literal_bytes.size());
+        }
+    };
+
+    for (const char* s = begin; s < end; ++s) {
+        if (*s != '\\') {
+            if (!has_invalid_escape) {
+                literal_bytes.push_back(*s);
+            }
+            continue;
+        }
+        ++s;
+        if (s == end) {
+            // Trailing '\': RE2::Rewrite treats this as an invalid escape and stops.
+            // Break here so the loop increment does not advance `s` past `end`.
+            if (!has_invalid_escape) {
+                flush_literal();
+                has_invalid_escape = true;
+            }
+            break;
+        }
+        const auto c = static_cast<unsigned char>(*s);
+        if (c >= '0' && c <= '9') {
+            const int grp = c - '0';
+            if (grp > max_submatch) {
+                max_submatch = grp;
+            }
+            if (!has_invalid_escape) {
+                flush_literal();
+                segments.push_back(Segment{grp, 0, 0});
+            }
+        } else if (c == '\\') {
+            if (!has_invalid_escape) {
+                literal_bytes.push_back('\\');
+            }
+        } else {
+            // Invalid escape: RE2::Rewrite stops emitting further tokens here,
+            // while RE2::MaxSubmatch continues scanning the rest of `rpl` for `\d`.
+            if (!has_invalid_escape) {
+                flush_literal();
+                has_invalid_escape = true;
+            }
+        }
+    }
+    if (!has_invalid_escape) {
+        flush_literal();
+    }
+    nsubmatch = 1 + max_submatch;
+}
+
 static ALWAYS_INLINE uint8_t* copy_bytes_to_ptr(uint8_t* dst, const char* data, size_t size) {
     if (size > 0) {
         strings::memcpy_inlined(dst, data, size);
@@ -4069,18 +4135,17 @@ static ALWAYS_INLINE bool regexp_replace_match_and_append(const re2::RE2* re, co
 
 static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2::RE2::Options* options,
                                                   const Columns& columns) {
+    DCHECK(!ColumnHelper::is_all_const(columns));
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    const size_t size = columns[0]->size();
-    const bool all_const = ColumnHelper::is_all_const(columns);
-    const size_t eval_rows = all_const ? std::min<size_t>(size, 1) : size;
+    const size_t eval_rows = columns[0]->size();
 
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
     const size_t initial_bytes =
-            all_const ? (eval_rows > 0 ? src_binary->get_slice(0).size : 0) : src_binary->get_offset().back();
+            columns[0]->is_constant() ? src_binary->get_slice(0).size * eval_rows : src_binary->get_offset().back();
     auto& dst_bytes = dst->get_bytes();
     auto& dst_offsets = dst->get_offset();
     dst_offsets.reserve(eval_rows + 1);
@@ -4143,12 +4208,6 @@ static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2:
     dst->invalidate_slice_cache();
     THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
 
-    if (all_const) {
-        if (null_col != nullptr) {
-            return ColumnHelper::create_const_null_column(size);
-        }
-        return ConstColumn::create(std::move(dst), size);
-    }
     if (null_col != nullptr) {
         return NullableColumn::create(std::move(dst), std::move(null_col));
     }
@@ -4165,10 +4224,8 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
 
     auto passthrough_input = [&]() -> ColumnPtr {
         if (columns[0]->is_constant()) {
-            return ColumnHelper::is_all_const(columns)
-                           ? columns[0]
-                           : ColumnHelper::copy_and_unfold_const_column(
-                                     TypeDescriptor(TYPE_VARCHAR), columns[0]->is_nullable(), columns[0], num_rows);
+            DCHECK(ColumnHelper::is_all_const(columns));
+            return columns[0];
         }
         if (columns[0]->is_nullable() && !columns[0]->has_null()) {
             return down_cast<const NullableColumn*>(columns[0].get())->data_column();
@@ -4253,11 +4310,8 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
     THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
 
     if (is_src_const) {
-        if (ColumnHelper::is_all_const(columns)) {
-            return ConstColumn::create(std::move(dst), num_rows);
-        }
-        dst->assign(num_rows, 0);
-        return dst;
+        DCHECK(ColumnHelper::is_all_const(columns));
+        return ConstColumn::create(std::move(dst), num_rows);
     }
 
     if (null_data != nullptr) {
@@ -4269,17 +4323,16 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
 
 template <bool global_mode>
 static StatusOr<ColumnPtr> regexp_replace_const(re2::RE2* const_re, const Columns& columns) {
+    DCHECK(!ColumnHelper::is_all_const(columns));
     auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto rpl_viewer = ColumnViewer<TYPE_VARCHAR>(columns[2]);
 
-    const size_t size = columns[0]->size();
-    const bool all_const = ColumnHelper::is_all_const(columns);
-    const size_t eval_rows = all_const ? std::min<size_t>(size, 1) : size;
+    const size_t eval_rows = columns[0]->size();
 
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     const BinaryColumn* src_binary = ColumnHelper::get_binary_column(columns[0].get());
     const size_t initial_bytes =
-            all_const ? (eval_rows > 0 ? src_binary->get_slice(0).size : 0) : src_binary->get_offset().back();
+            columns[0]->is_constant() ? src_binary->get_slice(0).size * eval_rows : src_binary->get_offset().back();
     auto& dst_bytes = dst->get_bytes();
     auto& dst_offsets = dst->get_offset();
     dst_offsets.reserve(eval_rows + 1);
@@ -4330,12 +4383,6 @@ static StatusOr<ColumnPtr> regexp_replace_const(re2::RE2* const_re, const Column
     dst->invalidate_slice_cache();
     THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(dst, regexp_replace);
 
-    if (all_const) {
-        if (null_col != nullptr) {
-            return ColumnHelper::create_const_null_column(size);
-        }
-        return ConstColumn::create(std::move(dst), size);
-    }
     if (null_col != nullptr) {
         return NullableColumn::create(std::move(dst), std::move(null_col));
     }

@@ -650,4 +650,82 @@ TEST_F(StringFunctionRegexpReplaceTest, testShrinkingReplacementDoesNotOverReser
     }
 }
 
+TEST_F(StringFunctionRegexpReplaceTest, testVariablePatternAndReplacementEdgeCases) {
+    // 1. regexp_replace_general: non-constant pattern with invalid regex on row 0,
+    //    null str on row 1, valid matching regex on row 2, valid non-matching regex on row 3.
+    {
+        auto str_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        str_col->append_datum(Datum(Slice("abc123")));
+        str_col->append_nulls(1);
+        str_col->append_datum(Datum(Slice("abc123")));
+        str_col->append_datum(Datum(Slice("abc123")));
+
+        auto ptn_col = BinaryColumn::create();
+        ptn_col->append(Slice("["));      // invalid regex
+        ptn_col->append(Slice("[0-9]+")); // skipped due to null str
+        ptn_col->append(Slice("[0-9]+")); // matches
+        ptn_col->append(Slice("XYZ+"));   // does not match
+
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("X", 4);
+        Columns columns = {str_col, ptn_col, rpl_col};
+
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ctx->set_constant_columns(columns);
+        ASSERT_TRUE(
+                StringFunctions::regexp_replace_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+        DeferOp close_op([&] {
+            (void)StringFunctions::regexp_close(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        });
+
+        auto res = StringFunctions::regexp_replace(ctx.get(), columns);
+        ASSERT_TRUE(res.ok()) << res.status();
+        ASSERT_TRUE(ctx->has_error());
+        ColumnViewer<TYPE_VARCHAR> viewer(res.value());
+        ASSERT_TRUE(viewer.is_null(0));
+        ASSERT_TRUE(viewer.is_null(1));
+        ASSERT_FALSE(viewer.is_null(2));
+        ASSERT_EQ(viewer.value(2), Slice("abcX"));
+        ASSERT_FALSE(viewer.is_null(3));
+        ASSERT_EQ(viewer.value(3), Slice("abc123"));
+    }
+
+    // 2. regexp_replace_const (global_mode = true and false): constant pattern,
+    //    variable replacement with nulls, and constant str column with variable replacement.
+    for (const char* ptn : {"[0-9]+", "^[a-z]+[0-9]+$"}) {
+        auto str_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        str_col->append_datum(Datum(Slice("abc123")));
+        str_col->append_nulls(1);
+        str_col->append_datum(Datum(Slice("abc123")));
+        str_col->append_datum(Datum(Slice("no_digits")));
+
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(ptn), 4);
+
+        auto rpl_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        rpl_col->append_nulls(1);
+        rpl_col->append_datum(Datum(Slice("R1")));
+        rpl_col->append_datum(Datum(Slice("R2")));
+        rpl_col->append_datum(Datum(Slice("R3")));
+
+        auto res = eval_regexp_replace({str_col, ptn_col, rpl_col});
+        ASSERT_TRUE(res.ok()) << res.status();
+        ColumnViewer<TYPE_VARCHAR> viewer(res.value());
+        ASSERT_TRUE(viewer.is_null(0));
+        ASSERT_TRUE(viewer.is_null(1));
+        ASSERT_FALSE(viewer.is_null(2));
+        ASSERT_EQ(viewer.value(2), Slice(std::string(ptn) == "[0-9]+" ? "abcR2" : "R2"));
+        ASSERT_FALSE(viewer.is_null(3));
+        ASSERT_EQ(viewer.value(3), Slice("no_digits"));
+
+        // Constant str column with variable replacement
+        ColumnPtr const_str = ColumnHelper::create_const_column<TYPE_VARCHAR>("abc123", 4);
+        auto res_const_str = eval_regexp_replace({const_str, ptn_col, rpl_col});
+        ASSERT_TRUE(res_const_str.ok()) << res_const_str.status();
+        ColumnViewer<TYPE_VARCHAR> viewer_const_str(res_const_str.value());
+        ASSERT_TRUE(viewer_const_str.is_null(0));
+        ASSERT_FALSE(viewer_const_str.is_null(1));
+        ASSERT_EQ(viewer_const_str.value(1), Slice(std::string(ptn) == "[0-9]+" ? "abcR1" : "R1"));
+    }
+}
+
 } // namespace starrocks
