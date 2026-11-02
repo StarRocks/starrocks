@@ -30,6 +30,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
@@ -141,8 +142,12 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         // metrics entity
         this.mvMetricsEntity = MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
         if (!mv.isActive()) {
+<<<<<<< HEAD
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     mv.getName(), mvId, mv.getInactiveReason());
+=======
+            String errorMsg = notActiveError(db.getFullName(), mv);
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
             logger.warn(errorMsg);
             mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
             MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
@@ -176,6 +181,94 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         return mvTaskRunContext;
     }
 
+<<<<<<< HEAD
+=======
+    static String notActiveError(String dbName, MaterializedView mv) {
+        String reason = mv.getInactiveReason();
+        String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
+                mv.getName(), mv.getId(), reason);
+        if (MaterializedViewExceptions.invalidatesBaseline(reason)
+                || StringUtils.startsWith(reason, MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES)) {
+            errorMsg += " " + MaterializedViewExceptions.recoverByActivateHint(dbName, mv.getName());
+        }
+        return errorMsg;
+    }
+
+    @Override
+    public Exception onFailure(Task task, Exception e) {
+        if (mv == null || observedStatusEpoch.isEmpty()) {
+            MaterializedView view = TaskBuilder.getMvFromTask(task);
+            if (view == null) {
+                return onConsecutiveFailures(task, null, e);
+            }
+            try (AutoCloseableLock ignored = new AutoCloseableLock(view.getDbId(), view.getId(), LockType.WRITE)) {
+                return isStillInCatalog(view) ? onConsecutiveFailures(task, view, e) : e;
+            }
+        }
+        try (AutoCloseableLock ignored = new AutoCloseableLock(mv.getDbId(), mv.getId(), LockType.WRITE)) {
+            // A drop leaves the epoch as it is, and anything journaled for the view now would follow the drop.
+            if (!isStillInCatalog(mv)) {
+                LOG.warn("mv {} was dropped while this refresh ran, skipping the failure handling of this run",
+                        mv.getName());
+                return e;
+            }
+            MaterializedView.StatusSnapshot status = mv.getStatusSnapshot();
+            if (status.epoch() != observedStatusEpoch.getAsLong()) {
+                LOG.warn("status of mv {} changed since this refresh observed it, skipping the failure handling of "
+                        + "this run", mv.getName());
+                return e;
+            }
+            // Permanent breakage: inactivate for its own reason, not through the consecutive-failure path.
+            Optional<RefreshFailureKind> kind = MaterializedViewExceptions.kindOf(e);
+            if (status.active() && kind.isPresent() && kind.get().isBreaking()) {
+                AlterMVJobExecutor.inactiveMvAndSuspendTaskUnlessAutoRecoversLocked(mv, kind.get());
+                return e;
+            }
+            return onConsecutiveFailures(task, mv, e);
+        }
+    }
+
+    private static boolean isStillInCatalog(MaterializedView view) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(view.getDbId(), view.getId()) == view;
+    }
+
+    /** The caller holds the write lock of {@code view} when it is not null. */
+    private Exception onConsecutiveFailures(Task task, MaterializedView view, Exception e) {
+        if (Config.max_task_consecutive_fail_count <= 0
+                || task.getConsecutiveFailCount() < Config.max_task_consecutive_fail_count) {
+            return e;
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        // A task dropped with its view: no replay could apply a pause journaled for it.
+        if (taskManager.getTask(task.getName()) == null) {
+            return e;
+        }
+        // An earlier run already gave up on the view: this one failed only because of that, and says how to recover.
+        if (task.getState() == Constants.TaskState.PAUSE && view != null && !view.isActive()) {
+            return e;
+        }
+        LOG.warn("Task {} has failed {} times continuously, so we disable it",
+                task.getName(), task.getConsecutiveFailCount());
+        taskManager.suspendTaskWithoutKilling(task);
+        StringBuilder message = new StringBuilder(String.format(
+                "Task %s has continuously failed %d times and has been suspended",
+                task.getName(), task.getConsecutiveFailCount()));
+        if (view != null) {
+            // An inactive view keeps the reason it has: that one may still recover on its own.
+            if (view.isActive()) {
+                AlterMVJobExecutor.inactiveForConsecutiveFailures(view);
+            }
+            message.append(String.format(", and materialized view %s.%s is inactive. %s",
+                    ParseUtil.backquote(task.getDbName()), ParseUtil.backquote(view.getName()),
+                    MaterializedViewExceptions.recoverByActivateHint(task.getDbName(), view.getName())));
+        } else {
+            message.append('.');
+        }
+        message.append(" Last error: ").append(e.getMessage());
+        return new StarRocksException(message.toString(), e);
+    }
+
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
     /**
      * Build the refresh plan for the materialized view, keeping the skip reason so the caller can tell why
      * there is no plan.
@@ -309,6 +402,10 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             Tracers.record("MVRefreshPartitionInfo", mvRefreshInfo);
         }
 
+        // task_runs.QUERY_ID, which stays put while a retry changes the execution id: the error names it so that the
+        // warnings below, which carry the stack trace, can be found in fe.log.
+        TaskRunStatus status = taskRunContext.getStatus();
+        String queryId = status == null ? null : status.getQueryId();
         Throwable lastException = null;
         int lockFailedTimes = 0;
         int refreshFailedTimes = 0;
@@ -329,19 +426,29 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             } catch (LockTimeoutException e) {
                 // if lock timeout, retry to refresh
                 lockFailedTimes += 1;
-                logger.warn("refresh mv failed at {}th time because try lock failed: {}",
-                        lockFailedTimes, DebugUtil.getStackTrace(e));
+                logger.warn("refresh mv failed at {}th time because try lock failed, query_id: {}",
+                        lockFailedTimes, queryId, e);
                 lastException = e;
             } catch (Throwable e) {
                 // A lock timeout raised where a checked exception cannot propagate arrives wrapped, e.g. from the
                 // non-ref base table check of change detection; it is still lock contention.
                 if (Throwables.getCausalChain(e).stream().anyMatch(t -> t instanceof LockTimeoutException)) {
                     lockFailedTimes += 1;
+<<<<<<< HEAD
                     logger.warn("refresh mv failed at {}th time because try lock failed: {}",
                             lockFailedTimes, DebugUtil.getStackTrace(e));
+=======
+                    logger.warn("refresh mv failed at {}th time because try lock failed, query_id: {}",
+                            lockFailedTimes, queryId, e);
+                } else if (canRetryOnNewBookmark(e)
+                        && unreadableBookmarkTimes < Config.max_mv_check_base_table_change_retry_times) {
+                    unreadableBookmarkTimes += 1;
+                    logger.warn("refresh mv plans again on a new bookmark at {}th time: {}", unreadableBookmarkTimes,
+                            e.getMessage());
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
                 } else {
                     refreshFailedTimes += 1;
-                    logger.warn("refresh mv failed at {}th time: {}", refreshFailedTimes, e);
+                    logger.warn("refresh mv failed at {}th time, query_id: {}", refreshFailedTimes, queryId, e);
                 }
                 lastException = e;
             }
@@ -351,9 +458,17 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         }
 
         // throw the last exception if all retries failed
+<<<<<<< HEAD
         String errorMsg = MvUtils.shrinkToSize(DebugUtil.getRootStackTrace(lastException), MAX_FIELD_VARCHAR_LENGTH);
         throw new DmlException("Refresh mv %s failed after %s times, try lock failed: %s, error-msg : " +
                 "%s", lastException, mv.getName(), refreshFailedTimes, lockFailedTimes, errorMsg);
+=======
+        String errorMsg = MvUtils.shrinkToSize(MaterializedViewExceptions.refreshFailureMessage(lastException, queryId),
+                MAX_FIELD_VARCHAR_LENGTH);
+        throw new DmlException("Refresh mv %s failed after %s times, try lock failed: %s, " +
+                "planned again on a new bookmark: %s, error-msg : %s", lastException, mv.getName(),
+                refreshFailedTimes, lockFailedTimes, unreadableBookmarkTimes, errorMsg);
+>>>>>>> fa899f92593... [Enhancement][RB-754] Make materialized view refresh failures say what failed and how to recover (#66969)
     }
 
     /**
