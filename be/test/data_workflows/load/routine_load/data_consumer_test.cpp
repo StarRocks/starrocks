@@ -17,10 +17,12 @@
 #include <chrono>
 #include <map>
 #include <thread>
+#include <vector>
 
 #include "gtest/gtest.h"
 
 // Routine load dependencies.
+#include "base/concurrency/stopwatch.hpp"
 #include "base/testutil/assert.h"
 #include "data_workflows/load/routine_load/data_consumer_group.h"
 #include "exec/exec_env.h"
@@ -228,6 +230,73 @@ TEST_F(KafkaDataConsumerEofTest, closed_queue_keeps_message_ownership_with_consu
     RdKafka::Message* message = nullptr;
     EXPECT_FALSE(queue.blocking_get(&message));
     EXPECT_EQ(nullptr, message);
+}
+
+// A partition the consumer does not know makes it refresh the topic metadata once and query again, because a pooled
+// consumer misses the partitions added since its last refresh. A partition the topic really lacks still fails, and
+// fails fast rather than after the timeout.
+TEST_F(KafkaDataConsumerEofTest, partition_offset_of_a_missing_partition_fails_after_a_metadata_refresh) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(0, 3));
+    std::vector<int32_t> partitions{0, 7};
+    std::vector<int64_t> beginning_offsets;
+    std::vector<int64_t> latest_offsets;
+    MonotonicStopWatch watch;
+    watch.start();
+    auto status = _consumer->get_partition_offset(&partitions, &beginning_offsets, &latest_offsets, 30000);
+    ASSERT_FALSE(status.ok());
+    EXPECT_NE(std::string::npos, status.to_string().find("failed to get offset of partition: 7")) << status;
+    EXPECT_NE(std::string::npos, status.to_string().find("Unknown partition")) << status;
+    EXPECT_LT(watch.elapsed_time() / 1000 / 1000, 10000);
+    ASSERT_EQ(1, latest_offsets.size());
+    EXPECT_EQ(0, beginning_offsets[0]);
+    EXPECT_EQ(3, latest_offsets[0]);
+}
+
+// The case the refresh is for: a consumer answers "Unknown partition" from its metadata cache until librdkafka
+// refreshes it, for example after partitions were added to the topic. The mock broker cannot add partitions, so here
+// the consumer caches the topic as missing before the topic is created. The offset query must refresh the metadata
+// once and find the partitions.
+TEST_F(KafkaDataConsumerEofTest, partition_offset_is_found_after_refreshing_stale_metadata) {
+    auto* cluster = rd_kafka_handle_mock_cluster(_producer->c_ptr());
+    ASSERT_NE(nullptr, cluster);
+    const std::string topic = "routine_load_late_topic";
+    TKafkaLoadInfo info;
+    info.brokers = rd_kafka_mock_cluster_bootstraps(cluster);
+    info.topic = topic;
+    info.properties = {{"group.id", "routine-load-late-topic-test"}, {"enable.auto.commit", "false"}};
+    auto context = std::make_unique<StreamLoadContext>(nullptr);
+    context->kafka_info = std::make_unique<KafkaLoadInfo>(info);
+    auto consumer = std::make_unique<KafkaDataConsumer>(context.get());
+    ASSERT_OK(consumer->init(context.get()));
+
+    std::vector<int32_t> partitions{0};
+    std::vector<int64_t> beginning_offsets;
+    std::vector<int64_t> latest_offsets;
+    ASSERT_FALSE(consumer->get_partition_offset(&partitions, &beginning_offsets, &latest_offsets, 10000).ok());
+
+    ASSERT_EQ(RD_KAFKA_RESP_ERR_NO_ERROR, rd_kafka_mock_topic_create(cluster, topic.c_str(), 2, 1));
+    partitions = {0, 1};
+    beginning_offsets.clear();
+    latest_offsets.clear();
+    ASSERT_OK(consumer->get_partition_offset(&partitions, &beginning_offsets, &latest_offsets, 10000));
+    EXPECT_EQ((std::vector<int64_t>{0, 0}), beginning_offsets);
+    EXPECT_EQ((std::vector<int64_t>{0, 0}), latest_offsets);
+}
+
+// Querying the metadata creates the consumer's topic object, which consuming the topic then reuses. An offset out of
+// range must still fail the consumption, as auto.offset.reset=error asks, rather than jump to the end of the partition
+// and skip what is there.
+TEST_F(KafkaDataConsumerEofTest, out_of_range_offset_fails_after_a_metadata_query) {
+    ASSERT_EQ(RdKafka::ERR_NO_ERROR, produce(0, 3));
+    std::vector<int32_t> partitions;
+    ASSERT_OK(_consumer->get_partition_meta(&partitions, 10000));
+    ASSERT_EQ(3, partitions.size());
+
+    auto result = consume_batch({{0, 100}});
+    ASSERT_FALSE(result.status.ok());
+    EXPECT_NE(std::string::npos, result.status.to_string().find("out of range")) << result.status;
+    EXPECT_TRUE(result.data_rows.empty());
+    EXPECT_TRUE(result.eof_events.empty());
 }
 
 // A minimal RdKafka::Message stand-in for build_kafka_message_meta: only the fields the builder reads
