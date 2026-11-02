@@ -690,13 +690,23 @@ TEST(HashMapTest, FixedSize8NonNullSub8ByteNoprefetchToPrefetchTransitionAndSetR
     }
     EXPECT_EQ(expected, actual);
 
-    // Also verify SerializedKeyAggHashSetFixedSize8 staging buffer growth (chunk_size > _chunk_size).
-    SerializedKeyAggHashSetFixedSize8<PhmapSeed1> hash_set(8, &statis);
+    // Also verify SerializedKeyAggHashSetFixedSize8 prefetch and deserialization.
+    SerializedKeyAggHashSetFixedSize8<PhmapSeed1> hash_set(kChunkRows, &statis);
     hash_set.has_null_column = false;
     hash_set.fixed_byte_size = 6;
     Filter not_founds;
+    config::agg_prefetch_l2_ratio = 0.0;
     hash_set.build_set<true>(kChunkRows, key_columns, &pool, &not_founds);
     EXPECT_EQ(static_cast<size_t>(kChunkRows), hash_set.hash_set.size());
+    hash_set.results.clear();
+    for (const auto& key : hash_set.hash_set) {
+        hash_set.results.push_back(key);
+    }
+    MutableColumns set_out_cols;
+    set_out_cols.push_back(Int32Column::create());
+    set_out_cols.push_back(Int16Column::create());
+    hash_set.insert_keys_to_columns(hash_set.results, set_out_cols, kChunkRows);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), set_out_cols[0]->size());
 }
 
 class AggHashMapKeyNotFoundsTest : public ::testing::Test {

@@ -699,18 +699,13 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
     template <bool compute_and_allocate>
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool, Filter* not_founds) {
         DCHECK(has_null_column || fixed_byte_size != -1);
+        DCHECK_LE(chunk_size, static_cast<size_t>(_chunk_size));
         slice_sizes.assign(chunk_size, 0);
         if constexpr (!compute_and_allocate) {
             DCHECK(not_founds);
             not_founds->assign(chunk_size, 0);
         }
 
-        if (UNLIKELY(chunk_size > static_cast<size_t>(_chunk_size))) {
-            _mem_pool->clear();
-            buffer = _mem_pool->allocate(max_fixed_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            memset(buffer, 0x0, max_fixed_size * chunk_size);
-            _chunk_size = chunk_size;
-        }
         if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }

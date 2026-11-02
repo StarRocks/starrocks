@@ -1168,12 +1168,9 @@ struct AggHashMapWithSerializedKeyFixedSize
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         DCHECK(has_null_column || fixed_byte_size != -1);
+        DCHECK_LE(chunk_size, caches.size());
         slice_sizes.assign(chunk_size, 0);
 
-        if (UNLIKELY(chunk_size > caches.size())) {
-            caches.resize(chunk_size);
-            memset(reinterpret_cast<uint8_t*>(caches.data()), 0x0, max_fixed_size * chunk_size);
-        }
         auto* buffer = reinterpret_cast<uint8_t*>(caches.data());
         if (has_null_column) {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
