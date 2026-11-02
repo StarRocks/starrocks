@@ -146,6 +146,7 @@ public:
     }
 
     static void insert_to_cache(BlockCache* cache, size_t count);
+    static StatusOr<bool> adjust_quota_once(DiskSpaceMonitor* monitor);
 
 protected:
     std::shared_ptr<MockFileSystem> _mock_fs;
@@ -165,6 +166,14 @@ void DiskSpaceMonitorTest::insert_to_cache(BlockCache* cache, size_t count) {
         Status st = cache->write(cache_key + std::to_string(i), 0, batch_size, value.c_str());
         ASSERT_TRUE(st.ok()) << st.message();
     }
+}
+
+StatusOr<bool> DiskSpaceMonitorTest::adjust_quota_once(DiskSpaceMonitor* monitor) {
+    bool changed = monitor->_adjust_spaces_by_disk_usage();
+    if (changed) {
+        RETURN_IF_ERROR(monitor->_update_cache_quota(monitor->all_dir_spaces()));
+    }
+    return changed;
 }
 
 TEST_F(DiskSpaceMonitorTest, adjust_for_empty_cache_dir) {
