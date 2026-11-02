@@ -1,4 +1,7 @@
 -- name: test_transparent_mv_union_hive2
+-- Test Point: Checked uses current Hive data; loose preserves existing snapshots and compensates missing coverage.
+-- Method: Assert refresh success, snapshot/current result differences and genuine new-partition UNION results.
+-- Scope: Hive transparent union rewrite mode 0; checked and loose consistency.
 create external catalog mv_hive_${uuid0}
 properties
 (
@@ -35,6 +38,9 @@ INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES
   (2,"2024-12-02"),(3,"2024-12-05"),(4,"2024-12-08"),(5,"2024-12-11");
 -- result:
 -- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
 CREATE TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 (
   num int,
   dt date
@@ -50,6 +56,9 @@ INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES
   (2,"2024-12-02"),(3,"2024-12-05"),(4,"2024-12-08"),(5,"2024-12-11");
 -- result:
 -- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2;
+-- result:
+-- !result
 set catalog default_catalog;
 -- result:
 -- !result
@@ -57,6 +66,12 @@ create database db_${uuid0};
 -- result:
 -- !result
 use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite=true;
+-- result:
+-- !result
+set materialized_view_union_rewrite_mode=0;
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_mv1 
@@ -70,11 +85,58 @@ PROPERTIES (
 AS SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (1, "2024-11-18"), (1, "2024-11-23"), (4, "2024-12-25");
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;", "test_mv1", "UNION")
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
+-- Full partition results include the appended tail partition; the Hive oracle disables rewrite.
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2024-11-15	3	4
+2024-11-18	3	6
+2024-11-21	2	7
+2024-11-23	1	1
+2024-11-24	2	9
+2024-12-02	2	3
+2024-12-05	2	5
+2024-12-08	2	7
+2024-12-11	2	9
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	2	8
+-- !result
+function: check_no_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;", "TABLE: test_mv1")
+-- result:
+None
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2024-11-15	3	4
+2024-11-18	3	6
+2024-11-21	2	7
+2024-11-23	1	1
+2024-11-24	2	9
+2024-12-02	2	3
+2024-12-05	2	5
+2024-12-08	2	7
+2024-12-11	2	9
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	2	8
+-- !result
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;")
+-- result:
+None
+-- !result
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;", "test_mv1", "UNION", "TABLE: t1")
 -- result:
 True
 -- !result
@@ -154,9 +216,32 @@ PROPERTIES (
 AS SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (1, "2024-11-18"), (1, "2024-11-23"), (4, "2024-12-25");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
+-- Loose keeps existing partition snapshots: MV 24 rows, current Hive 28 rows.
+function: print_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;", "test_mv1")
+-- result:
+True
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+24	65
+-- !result
+function: check_no_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;", "TABLE: test_mv1")
+-- result:
+None
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+28	72
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:
@@ -238,9 +323,32 @@ PROPERTIES (
 AS SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01';
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (1, "2024-11-18"), (1, "2024-11-23"), (4, "2024-12-25");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
+-- The filtered loose MV supplies December snapshots; November is current Hive compensation.
+function: print_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;", "test_mv1")
+-- result:
+True
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+31	75
+-- !result
+function: check_no_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;", "TABLE: test_mv1")
+-- result:
+None
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+32	79
 -- !result
 function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:
@@ -262,7 +370,8 @@ function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db
 -- result:
 True
 -- !result
-function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;", "test_mv1", "UNION")
+-- The original negative contract excludes this combined MV+UNION shape, not either marker alone.
+function: print_hit_materialized_view("SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where num > 3 order by 1, 2 limit 3;", "test_mv1", "UNION", expect_hit=False)
 -- result:
 False
 -- !result
@@ -318,9 +427,56 @@ REFRESH DEFERRED MANUAL
 AS SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01' GROUP BY dt;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (4, "2024-12-25");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
+-- Full partition results include the appended tail partition; the Hive oracle disables rewrite.
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2024-11-15	6	7
+2024-11-18	5	8
+2024-11-21	2	7
+2024-11-23	3	3
+2024-11-24	2	9
+2024-12-02	2	3
+2024-12-05	2	5
+2024-12-08	2	7
+2024-12-11	2	9
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	5	20
+-- !result
+function: check_no_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;", "TABLE: test_mv1")
+-- result:
+None
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2024-11-15	6	7
+2024-11-18	5	8
+2024-11-21	2	7
+2024-11-23	3	3
+2024-11-24	2	9
+2024-12-02	2	3
+2024-12-05	2	5
+2024-12-08	2	7
+2024-12-11	2	9
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	5	20
+-- !result
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;")
+-- result:
+None
 -- !result
 function: print_hit_materialized_view("SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 where dt > '2024-12-01'  GROUP BY dt order by 1, 2 limit 3;", "test_mv1", "UNION")
 -- result:
@@ -395,9 +551,91 @@ REFRESH DEFERRED MANUAL
 AS SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt=t2.dt where t2.dt > '2024-12-01' GROUP BY t2.dt;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+function: refresh_mv_manual("db_${uuid0}", "test_mv1")
+-- result:
+True
+-- !result
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (1, "2024-11-15"), (4, "2024-12-25");
 -- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1;
+-- result:
+-- !result
+-- Full partition results include the appended tail partition; the Hive oracle disables rewrite.
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2024-11-15	7	8
+2024-11-18	5	8
+2024-11-21	2	7
+2024-11-23	3	3
+2024-11-24	2	9
+2024-12-02	2	3
+2024-12-05	2	5
+2024-12-08	2	7
+2024-12-11	2	9
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	6	24
+-- !result
+function: check_no_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;", "TABLE: test_mv1")
+-- result:
+None
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2024-11-15	7	8
+2024-11-18	5	8
+2024-11-21	2	7
+2024-11-23	3	3
+2024-11-24	2	9
+2024-12-02	2	3
+2024-12-05	2	5
+2024-12-08	2	7
+2024-12-11	2	9
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	6	24
+-- !result
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt, count(*), sum(num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;")
+-- result:
+None
+-- !result
+-- Join multiplicity must include the latest t1 insert and the unchanged t2 rows.
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ t2.dt, count(*), sum(t2.num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 JOIN mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 ON t1.dt=t2.dt GROUP BY t2.dt ORDER BY t2.dt;
+-- result:
+2024-11-15	14	21
+2024-11-18	10	25
+2024-11-21	4	14
+2024-11-24	4	18
+2024-12-02	4	6
+2024-12-05	4	10
+2024-12-08	4	14
+2024-12-11	4	18
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	6	24
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ t2.dt, count(*), sum(t2.num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 JOIN mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 ON t1.dt=t2.dt GROUP BY t2.dt ORDER BY t2.dt;
+-- result:
+2024-11-15	14	21
+2024-11-18	10	25
+2024-11-21	4	14
+2024-11-24	4	18
+2024-12-02	4	6
+2024-12-05	4	10
+2024-12-08	4	14
+2024-12-11	4	18
+2024-12-16	1	1
+2024-12-19	1	2
+2024-12-22	1	3
+2024-12-25	6	24
+-- !result
+function: assert_equal_result("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ t2.dt, count(*), sum(t2.num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 JOIN mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 ON t1.dt=t2.dt GROUP BY t2.dt ORDER BY t2.dt;", "SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ t2.dt, count(*), sum(t2.num) FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 JOIN mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 ON t1.dt=t2.dt GROUP BY t2.dt ORDER BY t2.dt;")
+-- result:
+None
 -- !result
 function: print_hit_materialized_view("SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 join mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 on t1.dt = t2.dt where t2.dt > '2024-12-01' GROUP BY t2.dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
@@ -462,6 +700,67 @@ SELECT * FROM (SELECT t2.dt, sum(t2.num) as num FROM mv_hive_${uuid0}.mv_hive_db
 DROP MATERIALIZED VIEW test_mv1;
 -- result:
 -- !result
+
+-- Loose permits an old partition snapshot, but a genuinely new partition must be compensated.
+CREATE TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition (num int, dt date) PARTITION BY (dt);
+-- result:
+-- !result
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition VALUES (1, '2025-01-01');
+-- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv_loose_new_partition
+PARTITION BY dt
+REFRESH DEFERRED MANUAL
+PROPERTIES ("replication_num"="1", "query_rewrite_consistency"="loose")
+AS SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition;
+-- result:
+-- !result
+function: refresh_mv_manual("db_${uuid0}", "test_mv_loose_new_partition")
+-- result:
+True
+-- !result
+INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition VALUES (2, '2025-01-01'), (3, '2025-01-02');
+-- result:
+-- !result
+REFRESH EXTERNAL TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition;
+-- result:
+-- !result
+function: check_mv_to_refresh_contains("test_mv_loose_new_partition", "p20250102")
+-- result:
+True
+-- !result
+function: check_mv_to_refresh_not_contains("test_mv_loose_new_partition", "p20250101")
+-- result:
+True
+-- !result
+function: print_hit_materialized_view("SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ num, dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition ORDER BY dt, num;", "test_mv_loose_new_partition", "UNION", "TABLE: loose_new_partition")
+-- result:
+True
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=true) */ num, dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition ORDER BY dt, num;
+-- result:
+1	2025-01-01
+3	2025-01-02
+-- !result
+[ORDER]SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ num, dt FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition ORDER BY dt, num;
+-- result:
+1	2025-01-01
+2	2025-01-01
+3	2025-01-02
+-- !result
+DROP MATERIALIZED VIEW test_mv_loose_new_partition;
+-- result:
+-- !result
+DROP TABLE mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition FORCE;
+-- result:
+-- !result
+
+drop database db_${uuid0};
+-- result:
+-- !result
 drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 force;
 -- result:
 -- !result
@@ -471,3 +770,23 @@ drop table mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 force;
 drop database mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
 -- result:
 -- !result
+drop catalog mv_hive_${uuid0};
+-- result:
+-- !result
+
+CLEANUP {
+  set catalog default_catalog;
+  create database if not exists db_${uuid0};
+  drop materialized view if exists db_${uuid0}.test_mv1;
+  drop materialized view if exists db_${uuid0}.test_mv_loose_new_partition;
+  drop database if exists db_${uuid0} force;
+  -- Recreate only the invocation-owned handle so external cleanup also works after normal catalog removal.
+  create external catalog if not exists mv_hive_${uuid0}
+  properties ("type"="hive", "hive.catalog.type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+  create database if not exists mv_hive_${uuid0}.mv_hive_db_${uuid0};
+  drop table if exists mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 force;
+  drop table if exists mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 force;
+  drop table if exists mv_hive_${uuid0}.mv_hive_db_${uuid0}.loose_new_partition force;
+  drop database if exists mv_hive_${uuid0}.mv_hive_db_${uuid0} force;
+  drop catalog if exists mv_hive_${uuid0};
+} END CLEANUP
