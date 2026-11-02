@@ -1556,10 +1556,10 @@ public class GlobalTransactionMgrTest {
         Assertions.assertEquals(Map.of(physicalPartitionId, Lists.newArrayList(transactionId)),
                 masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds));
 
-        // a transaction that ended no longer blocks, even while its explicit state, which the abort does not
-        // touch, is still around
+        // a transaction that ended no longer blocks, even while its explicit state is still around. On this
+        // branch the abort changes that state in place: the explicit state and the manager hold the same object.
         masterTransMgr.abortTransaction(dbId, transactionId, "test");
-        Assertions.assertTrue(explicitTxn.isRunning());
+        Assertions.assertFalse(explicitTxn.isRunning());
         Assertions.assertTrue(
                 masterTransMgr.getConflictingTxnIdsByPartition(dbId, tableId, replacedPartitionIds).isEmpty());
         masterTransMgr.clearExplicitTxnState(transactionId);
@@ -1584,8 +1584,9 @@ public class GlobalTransactionMgrTest {
                 new TabletCommitInfo(GlobalStateMgrTestUtil.testTabletId1, GlobalStateMgrTestUtil.testBackendId3));
         try {
             masterTransMgr.commitTransaction(dbId, transactionId, transTablets, Lists.newArrayList(), null);
-            // Commit is copy-on-write: the explicit layout reservation still holds the PREPARE object.
-            Assertions.assertEquals(TransactionStatus.PREPARE, plannedTxn.getTransactionStatus());
+            // On this branch the commit changes the state in place: the explicit layout reservation holds the
+            // object the manager committed, with its unwritten planned partition still registered.
+            Assertions.assertSame(plannedTxn, masterTransMgr.getTransactionState(dbId, transactionId));
             Assertions.assertEquals(TransactionStatus.COMMITTED,
                     masterTransMgr.getTransactionState(dbId, transactionId).getTransactionStatus());
             Assertions.assertEquals(Map.of(writtenPartitionId, Lists.newArrayList(transactionId)),
