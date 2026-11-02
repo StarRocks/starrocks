@@ -305,8 +305,8 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_sync_rewrite_builds_vi_for_unmodif
 
     // Partial update of (c0, c1): the vector column c2 is unmodified and re-materialized.
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    slots.emplace_back(1, "c1", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
     std::vector<int> v0(kChunkSize);
     std::vector<int64_t> v1(kChunkSize);
@@ -339,8 +339,8 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_async_rewrite_above_threshold_reco
     auto version = write_full(1);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    slots.emplace_back(1, "c1", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
     std::vector<int> v0(kChunkSize);
     std::vector<int64_t> v1(kChunkSize);
@@ -371,8 +371,8 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_async_rewrite_below_threshold_mark
     auto version = write_full(1);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    slots.emplace_back(1, "c1", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
     std::vector<int> v0(kChunkSize);
     std::vector<int64_t> v1(kChunkSize);
@@ -401,7 +401,7 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_sync_rewrite_carries_vi_for_update
 
     // Partial update of (c0, c2): the vector column is load-provided; c1 is re-materialized.
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     TypeDescriptor array_type(LogicalType::TYPE_ARRAY);
     array_type.children.emplace_back(LogicalType::TYPE_FLOAT);
     slots.emplace_back(1, "c2", array_type);
@@ -447,8 +447,8 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_auto_increment_rewrite_keeps_async
     // Partial update of (c0, c1) with c1 = 0 meaning "fill from the auto-increment allocator";
     // the vector column c2 is unmodified and re-materialized by rewrite_auto_increment_lake.
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    slots.emplace_back(1, "c1", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
     std::vector<int> v0(kChunkSize);
     std::vector<int64_t> v1(kChunkSize, 0);
@@ -489,8 +489,8 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_auto_increment_rewrite_builds_sync
     });
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    slots.emplace_back(1, "c1", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> slot_ptrs{&slots[0], &slots[1]};
     std::vector<int> v0(kChunkSize);
     std::vector<int64_t> v1(kChunkSize, 0);
@@ -530,8 +530,8 @@ TEST_F(LakePartialUpdateVectorIndexTest, test_async_copy_only_rewrite_keeps_sche
     // Partial update covering c0..c2 (c3 stays unmodified), including the vector column, so the
     // src partial segment records the async index id at write time (rows >= threshold).
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    slots.emplace_back(1, "c1", TYPE_BIGINT_DESC);
     TypeDescriptor array_type(LogicalType::TYPE_ARRAY);
     array_type.children.emplace_back(LogicalType::TYPE_FLOAT);
     slots.emplace_back(2, "c2", array_type);

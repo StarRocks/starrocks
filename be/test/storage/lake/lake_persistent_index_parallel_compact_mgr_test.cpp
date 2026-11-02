@@ -172,7 +172,7 @@ protected:
 
         for (int i = 0; i < count; i++) {
             auto chunk = std::make_unique<Chunk>();
-            auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+            auto col = ColumnHelper::create_column(TYPE_INT_DESC, false);
             col->append_datum(Datum((int32_t)(start_key + i)));
             chunk->append_column(std::move(col), (SlotId)0);
 
@@ -1381,13 +1381,13 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range
     auto* range = _tablet_metadata->mutable_range();
     auto* lower = range->mutable_lower_bound();
     auto* v_lower = lower->add_values();
-    v_lower->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_lower->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_lower->set_value("100");
     range->set_lower_bound_included(true);
 
     auto* upper = range->mutable_upper_bound();
     auto* v_upper = upper->add_values();
-    v_upper->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_upper->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_upper->set_value("200");
     range->set_upper_bound_included(false);
 
@@ -1473,7 +1473,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     auto* range = _tablet_metadata->mutable_range();
     auto* lower = range->mutable_lower_bound();
     auto* v_lower1 = lower->add_values();
-    v_lower1->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_lower1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_lower1->set_value("100");
     auto* v_lower2 = lower->add_values();
     v_lower2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
@@ -1482,7 +1482,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
 
     auto* upper = range->mutable_upper_bound();
     auto* v_upper1 = upper->add_values();
-    v_upper1->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_upper1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_upper1->set_value("200");
     auto* v_upper2 = upper->add_values();
     v_upper2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
