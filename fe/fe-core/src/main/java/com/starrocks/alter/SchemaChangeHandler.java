@@ -2640,7 +2640,7 @@ public class SchemaChangeHandler extends AlterHandler {
      *
      * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the AUTO_INCREMENT gate from
      * {@link #needsRangeRewriteSchemaChange}: an AUTO_INCREMENT row-id column implies a PRIMARY_KEYS MV,
-     * which {@code AlterMVClauseAnalyzer#validateKeysTypeRule} already rejects. The colocate gate is re-checked
+     * which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects. The colocate gate is re-checked
      * here because the statement resolves the MV by name again under the lock, and
      * {@code ALTER MATERIALIZED VIEW ... SWAP WITH} can have put a different MV under the analyzed name.
      */
