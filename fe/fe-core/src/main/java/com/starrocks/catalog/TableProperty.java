@@ -220,6 +220,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // It represents the mode selected to determine how to refresh the materialized view
     private String mvRefreshMode = "";
 
+    // A materialized view created without the refresh_mode property is always PCT (IVMAnalyzer#getRefreshMode),
+    // so its declared mode must not follow default_mv_refresh_mode.
+    private static final String UNSPECIFIED_MV_REFRESH_MODE = "pct";
+
     // This property only applies to materialized views
     // When using the system to automatically refresh, the maximum range of the most recent partitions will be refreshed.
     // By default, all partitions will be refreshed.
@@ -727,7 +731,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildMVRefreshMode() {
         mvRefreshMode = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_MV_REFRESH_MODE,
-                Config.default_mv_refresh_mode);
+                UNSPECIFIED_MV_REFRESH_MODE);
         return this;
     }
 
@@ -1207,7 +1211,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public String getMvRefreshMode() {
-        return Strings.isNullOrEmpty(mvRefreshMode) ? Config.default_mv_refresh_mode : mvRefreshMode;
+        return Strings.isNullOrEmpty(mvRefreshMode) ? UNSPECIFIED_MV_REFRESH_MODE : mvRefreshMode;
     }
 
     public void setResourceGroup(String resourceGroup) {
