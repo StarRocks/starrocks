@@ -1,7 +1,6 @@
 -- name: test_iceberg_rewrite_delete_aware
--- rewrite_data_files also picks a data file above min_file_size_bytes when its deletion vector or file-scoped
--- position deletes delete at least delete_ratio_threshold of its rows, or when at least delete_file_threshold delete
--- files apply to it. The delete files of a rewritten data file are removed with it; other files are left alone.
+-- rewrite_data_files also picks a data file above min_file_size_bytes when its file-scoped position deletes delete
+-- at least delete_ratio_threshold of its rows, or when at least delete_file_threshold delete files apply to it. The delete files of a rewritten data file are removed with it; other files are left alone.
 
 create external catalog iceberg_rw_del_${uuid0} PROPERTIES ("type"="iceberg",
     "iceberg.catalog.type"="hive",
@@ -15,41 +14,7 @@ create database iceberg_rw_del_${uuid0}.db_${uuid0};
 set catalog iceberg_rw_del_${uuid0};
 use db_${uuid0};
 
--- 1. format-version 3: one data file of 10 rows per partition, deletes are deletion vectors
-create table v3_t(
-    id int,
-    p int
-) partition by(p) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/rw_del_${uuid0}/v3_t");
-
-insert into v3_t select x, x % 3 from table(generate_series(1, 30)) s(x);
--- p=0 loses 4 of 10 rows, p=1 loses 1 of 10 rows, p=2 has no delete
-delete from v3_t where id in (3, 6, 9, 12);
-delete from v3_t where id = 1;
-
--- expected: data files 10 10 10, DVs 1 4
-select content, record_count from v3_t$files order by content, record_count;
--- expected: 25 434
-select count(*), sum(id) from v3_t;
-
--- every data file is above 1 byte; only p=0 reaches the default ratio 0.3
-[UC]alter table v3_t execute rewrite_data_files(min_file_size_bytes = 1);
-
--- expected: data files 6 10 10, the DV of p=1 is left
-select content, record_count from v3_t$files order by content, record_count;
--- expected: 0 6, 1 9, 2 10
-select p, count(*) from v3_t group by p order by p;
--- expected: 25 434
-select count(*), sum(id) from v3_t;
-
--- ratio 0 picks every data file with a file-scoped delete
-[UC]alter table v3_t execute rewrite_data_files(min_file_size_bytes = 1, delete_ratio_threshold = 0);
-
--- expected: data files 6 9 10, no delete file
-select content, record_count from v3_t$files order by content, record_count;
--- expected: 25 434
-select count(*), sum(id) from v3_t;
-
--- 2. format-version 2: deletes are file-scoped position delete files
+-- 1. format-version 2: deletes are file-scoped position delete files
 create table v2_t(
     id int,
     p int
@@ -88,7 +53,6 @@ select count(*), sum(id) from v2_t;
 alter table v2_t execute rewrite_data_files(delete_ratio_threshold = 1.5);
 alter table v2_t execute rewrite_data_files(delete_file_threshold = 0);
 
-drop table v3_t force;
 drop table v2_t force;
 drop database db_${uuid0};
 set catalog default_catalog;

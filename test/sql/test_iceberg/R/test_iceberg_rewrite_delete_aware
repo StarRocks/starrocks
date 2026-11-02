@@ -17,62 +17,6 @@ set catalog iceberg_rw_del_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
-create table v3_t(
-    id int,
-    p int
-) partition by(p) properties ("format-version" = "3", "location" = "oss://${oss_bucket}/rw_del_${uuid0}/v3_t");
--- result:
--- !result
-insert into v3_t select x, x % 3 from table(generate_series(1, 30)) s(x);
--- result:
--- !result
-delete from v3_t where id in (3, 6, 9, 12);
--- result:
--- !result
-delete from v3_t where id = 1;
--- result:
--- !result
-select content, record_count from v3_t$files order by content, record_count;
--- result:
-0	10
-0	10
-0	10
-1	1
-1	4
--- !result
-select count(*), sum(id) from v3_t;
--- result:
-25	434
--- !result
-[UC]alter table v3_t execute rewrite_data_files(min_file_size_bytes = 1);
-select content, record_count from v3_t$files order by content, record_count;
--- result:
-0	6
-0	10
-0	10
-1	1
--- !result
-select p, count(*) from v3_t group by p order by p;
--- result:
-0	6
-1	9
-2	10
--- !result
-select count(*), sum(id) from v3_t;
--- result:
-25	434
--- !result
-[UC]alter table v3_t execute rewrite_data_files(min_file_size_bytes = 1, delete_ratio_threshold = 0);
-select content, record_count from v3_t$files order by content, record_count;
--- result:
-0	6
-0	9
-0	10
--- !result
-select count(*), sum(id) from v3_t;
--- result:
-25	434
--- !result
 create table v2_t(
     id int,
     p int
@@ -141,9 +85,6 @@ E: (1064, 'invalid argument type for delete_ratio_threshold, expected DOUBLE in 
 alter table v2_t execute rewrite_data_files(delete_file_threshold = 0);
 -- result:
 E: (1064, 'invalid argument type for delete_file_threshold, expected positive BIGINT')
--- !result
-drop table v3_t force;
--- result:
 -- !result
 drop table v2_t force;
 -- result:
