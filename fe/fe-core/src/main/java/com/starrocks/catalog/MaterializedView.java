@@ -2136,7 +2136,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             // Build the relationship
             MvId mvId = getMvId();
             table.addRelatedMaterializedView(mvId);
-            if (!table.isNativeTableOrMaterializedView() && !table.isView()) {
+            // Connector tables and views may be rebuilt on lookup, so keep the relation where the lookup restores it from.
+            // Connector views need it too: view-based rewrite only triggers for views that have related MVs.
+            if (!table.isNativeTableOrMaterializedView() && !table.isOlapView()) {
                 GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
                         baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
                         baseTableInfo.getTableIdentifier(),

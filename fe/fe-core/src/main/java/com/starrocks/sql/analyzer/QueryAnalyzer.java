@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.authorization.SecurityPolicyRewriteRule;
+import com.starrocks.catalog.AnalyzedConnectorView;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
@@ -925,9 +926,7 @@ public class QueryAnalyzer {
                     checkNoTemporalClauseOnNonTableRelation(tableRelation, table.getType().name());
 
                     ConnectorView connectorView = (ConnectorView) table;
-                    View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
-                            connectorView.getType());
-                    view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
+                    View view = new AnalyzedConnectorView(connectorView);
                     QueryStatement queryStatement = takePreResolvedViewBody(view);
                     if (queryStatement == null) {
                         queryStatement = connectorView.getQueryStatement();
@@ -2556,10 +2555,7 @@ public class QueryAnalyzer {
          * the body is filed under the same identity and definition text the expansion will look it up with.
          */
         private View asViewForPreResolve(ConnectorView connectorView) {
-            View view = new View(connectorView.getId(), connectorView.getName(), connectorView.getFullSchema(),
-                    connectorView.getType());
-            view.setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
-            return view;
+            return new AnalyzedConnectorView(connectorView);
         }
 
         private Table refreshFilesystemExternalTable(String catalogName, String dbName,
