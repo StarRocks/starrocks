@@ -706,6 +706,7 @@ struct AggHashSetOfSerializedKeyFixedSize : public AggHashSet<HashSet, AggHashSe
         }
 
         if (UNLIKELY(chunk_size > static_cast<size_t>(_chunk_size))) {
+            _mem_pool->clear();
             buffer = _mem_pool->allocate(max_fixed_size * chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
             memset(buffer, 0x0, max_fixed_size * chunk_size);
             _chunk_size = chunk_size;

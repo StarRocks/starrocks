@@ -631,6 +631,74 @@ TEST(HashMapTest, FixedSize16NonNullSub16ByteNoprefetchToPrefetchTransition) {
     EXPECT_EQ(expected, actual);
 }
 
+// Regression test: non-nullable FixedSize8 keys shorter than 8 bytes (e.g. INT + SMALLINT = 6B)
+// must not leave dirty bytes in bytes 6..7 of caches[i].key when transitioning from compute_agg_noprefetch
+// to compute_agg_prefetch, and FixedSize8 hash sets must cleanly release previous staging buffers on resize.
+TEST(HashMapTest, FixedSize8NonNullSub8ByteNoprefetchToPrefetchTransitionAndSetResize) {
+    constexpr int kChunkRows = 64;
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    DeferOp restore_ratio([&]() { config::agg_prefetch_l2_ratio = saved_ratio; });
+
+    RuntimeProfile profile("FixedSize8NonNullSub8ByteNoprefetchToPrefetchTransitionAndSetResize");
+    AggStatistics statis(&profile);
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(kChunkRows);
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int16Column::create();
+    using RowPair = std::pair<int32_t, int16_t>;
+    std::set<RowPair> expected;
+    for (int i = 0; i < kChunkRows; ++i) {
+        const int32_t v0 = static_cast<int32_t>(0x12345600 + i);
+        const int16_t v1 = static_cast<int16_t>(0x1200 + i * 3);
+        c0->append(v0);
+        c1->append(v1);
+        expected.emplace(v0, v1);
+    }
+    Columns key_columns{c0, c1};
+
+    SerializedKeyFixedSize8AggHashMap<PhmapSeed1> map(kChunkRows, &statis);
+    map.has_null_column = false;
+    map.fixed_byte_size = 6;
+
+    // Chunk 1: force compute_agg_noprefetch.
+    config::agg_prefetch_l2_ratio = 1e9;
+    map.build_hash_map(
+            kChunkRows, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), map.hash_map.size());
+
+    // Chunk 2: force compute_agg_prefetch on the exact same 6-byte keys.
+    config::agg_prefetch_l2_ratio = 0.0;
+    map.build_hash_map(
+            kChunkRows, key_columns, &pool, [&](const auto&) { return pool.allocate(sizeof(int64_t)); }, &agg_states);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), map.hash_map.size());
+
+    map.results.clear();
+    for (const auto& kv : map.hash_map) {
+        map.results.push_back(kv.first);
+    }
+    ASSERT_EQ(static_cast<size_t>(kChunkRows), map.results.size());
+    MutableColumns out_cols;
+    out_cols.push_back(Int32Column::create());
+    out_cols.push_back(Int16Column::create());
+    map.insert_keys_to_columns(map.results, out_cols, kChunkRows);
+    std::set<RowPair> actual;
+    const auto* out0 = down_cast<const Int32Column*>(out_cols[0].get());
+    const auto* out1 = down_cast<const Int16Column*>(out_cols[1].get());
+    for (int i = 0; i < kChunkRows; ++i) {
+        actual.emplace(out0->get_data()[i], out1->get_data()[i]);
+    }
+    EXPECT_EQ(expected, actual);
+
+    // Also verify SerializedKeyAggHashSetFixedSize8 staging buffer growth (chunk_size > _chunk_size).
+    SerializedKeyAggHashSetFixedSize8<PhmapSeed1> hash_set(8, &statis);
+    hash_set.has_null_column = false;
+    hash_set.fixed_byte_size = 6;
+    Filter not_founds;
+    hash_set.build_set<true>(kChunkRows, key_columns, &pool, &not_founds);
+    EXPECT_EQ(static_cast<size_t>(kChunkRows), hash_set.hash_set.size());
+}
+
 class AggHashMapKeyNotFoundsTest : public ::testing::Test {
 public:
     template <typename HashMapWithKey>
