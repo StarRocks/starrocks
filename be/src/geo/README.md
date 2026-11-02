@@ -66,16 +66,25 @@ the same category.
    `NotSupported`, but must admit `UNKNOWN` and `MIXED`. For example, columns produced by Iceberg GEOGRAPHY scans are
    `UNKNOWN`.
 
-3. **Topological validity is not a precondition of general functions.**
-   Functions that only read a geometry (coordinate accessors, output, measurements such as area and length, distance)
-   compute on whatever geometry they receive. With invalid topology the result may be meaningless, but the function
-   must never crash or cause undefined behavior.
+3. **Topological validity is decided per kernel, not by the decoder.**
+   `parse_wkb` checks structure only. Each kernel either requires valid topology or does not; a kernel that does not
+   check it must still never crash or cause undefined behavior on topologically invalid input.
 
-4. **Only functions whose algorithm requires valid topology check it, before computing, and return
-   `InvalidArgument` on invalid input.**
-   Examples: the overlays (`ST_Intersection` / `ST_Union` / `ST_Difference` / `ST_SymDifference`), `ST_Buffer`,
-   `ST_SimplifyPreserveTopology`, `H3_PolygonToCells`, and the GEOGRAPHY predicates that build polygons through S2.
-   New functions of this kind must check up front in the same way.
+4. **Kernels that require valid topology check it before computing and return `InvalidArgument` on invalid input.**
+   Today this includes:
+   - the measurements `ST_Area` / `ST_Length` / `ST_Perimeter`, for both GEOMETRY and GEOGRAPHY
+     (`planar_measurement` / `spherical_measurement` in `geo_measurements.cpp`);
+   - `ST_Centroid` (`planar_centroid` / `spherical_centroid`);
+   - the overlays (`ST_Intersection` / `ST_Union` / `ST_Difference` / `ST_SymDifference`), `ST_Buffer` and
+     `ST_SimplifyPreserveTopology`;
+   - `H3_PolygonToCells`;
+   - GEOGRAPHY kernels that build S2 polygons or lines (`prepare_spherical_polygon`,
+     `prepare_spherical_line_family`), such as the GEOGRAPHY containment and intersection predicates.
+
+   Kernels that only access coordinates or serialize a geometry (`ST_X` / `ST_Y`, `ST_GeometryType`, `ST_AsText` /
+   `ST_AsBinary`) do not check topology. A new kernel must state which group it belongs to; if it requires valid
+   topology, check it up front with `planar_is_valid` / `spherical_is_valid` (or the equivalent preparation) and test
+   that invalid input returns `InvalidArgument`.
 
 5. **Coverage validity is the user's responsibility.**
    `ST_CoverageSimplify` keeps its structural and safety checks (ring closure, degenerate rings, zero-area rings, the
