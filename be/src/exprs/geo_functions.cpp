@@ -55,14 +55,13 @@ namespace {
 
 constexpr int32_t kCrs84Srid = 4326;
 
+// The storage dimension label is not checked: kernels decode each row's own WKB header and reject Z/M rows.
 Status check_geography_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    const auto dimension = descriptor.storage.dimension;
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
         type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL || type.crs != "OGC:CRS84" ||
-        (type.srid.has_value() && type.srid.value() != kCrs84Srid) || descriptor.storage.encoding != GEO_ENCODING_WKB ||
-        (dimension != GEO_DIMENSION_UNKNOWN && dimension != GEO_DIMENSION_XY && dimension != GEO_DIMENSION_MIXED)) {
+        (type.srid.has_value() && type.srid.value() != kCrs84Srid) || descriptor.storage.encoding != GEO_ENCODING_WKB) {
         return Status::NotSupported("Unsupported GEOGRAPHY SQL boundary descriptor");
     }
     return Status::OK();
@@ -82,11 +81,9 @@ std::optional<int32_t> derive_srid(std::string_view crs) {
 Status check_geometry_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    const auto dimension = descriptor.storage.dimension;
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
         type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.srid != derive_srid(type.crs) ||
-        descriptor.storage.encoding != GEO_ENCODING_WKB ||
-        (dimension != GEO_DIMENSION_UNKNOWN && dimension != GEO_DIMENSION_XY && dimension != GEO_DIMENSION_MIXED)) {
+        descriptor.storage.encoding != GEO_ENCODING_WKB) {
         return Status::NotSupported("Unsupported GEOMETRY SQL boundary descriptor");
     }
     return Status::OK();
