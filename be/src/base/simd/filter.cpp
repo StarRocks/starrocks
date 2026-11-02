@@ -329,7 +329,7 @@ size_t compress_neon_w4(uint32_t* dst, const uint32_t* src, const uint8_t* selec
     return result;
 }
 
-inline constexpr int kNeonCompressMinBitsW8 = 6; // initial value = x86 kCompressMinBits; tuned by gate G1
+inline constexpr int kNeonCompressMinBitsW8 = 6; // matches x86 kCompressMinBits; validated on Arm Neoverse-V2 (c4a)
 
 size_t compress_neon_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selector, size_t from, size_t to) {
     constexpr size_t kNeonBatchNums = 16;
@@ -348,7 +348,7 @@ size_t compress_neon_w8(uint64_t* dst, const uint64_t* src, const uint8_t* selec
             result += kNeonBatchNums;
         } else if (__builtin_popcountll(nibble_mask & 0x8888'8888'8888'8888ull) < kNeonCompressMinBitsW8) {
             // Sparse guard (mirrors x86 compress_w8 kCompressMinBits): 2-lane TBL steps are barely better than
-            // scalar copies, so sparse batches use the ctz bit-walk. Threshold tuned by benchmark gate G1.
+            // scalar copies, so sparse batches (< 6 survivors) use the ctz bit-walk.
             for (uint64_t m = nibble_mask & 0x8888'8888'8888'8888ull; m != 0; m &= m - 1) {
                 dst[result++] = src[start + (__builtin_ctzll(m) >> 2)];
             }

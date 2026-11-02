@@ -17,10 +17,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstring>
 #include <functional>
-#include <limits>
 #include <random>
 #include <vector>
 
