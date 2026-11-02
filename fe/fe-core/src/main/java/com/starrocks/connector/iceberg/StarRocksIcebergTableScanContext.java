@@ -32,6 +32,7 @@ public class StarRocksIcebergTableScanContext {
     private final String dbName;
     private final String tableName;
     private boolean dataFileCacheWithMetrics;
+    private int dataFileCacheStatsColumnLimit;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
     private DeleteFileIndexCache deleteFileIndexCache;
@@ -101,6 +102,14 @@ public class StarRocksIcebergTableScanContext {
 
     public void setDataFileCacheWithMetrics(boolean dataFileCacheWithMetrics) {
         this.dataFileCacheWithMetrics = dataFileCacheWithMetrics;
+    }
+
+    public int getDataFileCacheStatsColumnLimit() {
+        return dataFileCacheStatsColumnLimit;
+    }
+
+    public void setDataFileCacheStatsColumnLimit(int dataFileCacheStatsColumnLimit) {
+        this.dataFileCacheStatsColumnLimit = dataFileCacheStatsColumnLimit;
     }
 
     public void setDataFileCache(Cache<String, Set<DataFile>> dataFileCache) {
