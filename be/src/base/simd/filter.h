@@ -73,13 +73,19 @@ alignas(16) inline constexpr uint8_t kPermuteLut8B[4][16] = {
 
 inline constexpr uint8_t kPopcountLut8B[4] = {0, 1, 1, 2};
 
-// Extract 4-bit mask for sub-batch k in {0, 1, 2, 3} (4 lanes of 4B each) from 64-bit nibble_mask
+// Extract 4-bit mask for sub-batch k in {0, 1, 2, 3} (4 lanes of 4B each) from 64-bit nibble_mask.
+// SIMD::get_nibble_mask sets one nibble (0xF or 0x0) per selector byte. Shifting by (k * 16 + 3) and
+// masking with 0x1111 isolates bit 3 of the 4 nibbles at bit positions {0, 4, 8, 12}. Multiplying by
+// 0x1248 ((1<<3) | (1<<6) | (1<<9) | (1<<12)) gathers those 4 spaced bits into bit positions {12..15}
+// without carry collisions, and >> 12 extracts the contiguous 4-bit LUT index.
 constexpr uint32_t extract_neon_mask4(uint64_t nibble_mask, int k) noexcept {
     uint32_t c = static_cast<uint32_t>(nibble_mask >> (k * 16 + 3)) & 0x1111u;
     return ((c * 0x1248u) >> 12) & 0xFu;
 }
 
-// Extract 2-bit mask for sub-batch k in {0..7} (2 lanes of 8B each) from 64-bit nibble_mask
+// Extract 2-bit mask for sub-batch k in {0..7} (2 lanes of 8B each) from 64-bit nibble_mask.
+// Shifting by (k * 8 + 3) and masking with 0x11 isolates bit 3 of the two nibbles at bit positions {0, 4};
+// (pair_bits | (pair_bits >> 3)) & 0x3 folds bit 4 down to bit 1 to form the 2-bit LUT index.
 constexpr uint32_t extract_neon_mask2(uint64_t nibble_mask, int k) noexcept {
     uint32_t pair_bits = static_cast<uint32_t>(nibble_mask >> (k * 8 + 3)) & 0x11u;
     return (pair_bits | (pair_bits >> 3)) & 0x3u;
