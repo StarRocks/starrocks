@@ -428,6 +428,32 @@ BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint64_t)->ArgsProduct({{0, 1, 10, 25, 50
 BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint32_t)->ArgsProduct({{0, 10, 50, 90, 100}, {0, 16}});
 BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint64_t)->ArgsProduct({{0, 10, 50, 90, 100}, {0, 16}});
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+template <typename T, size_t (*Kernel)(T*, const T*, const uint8_t*, size_t, size_t)>
+static void BM_SimdFilterKernel(benchmark::State& state) {
+    const int keep_pct = static_cast<int>(state.range(0));
+    const int cluster = static_cast<int>(state.range(1));
+    std::vector<T> src(kChunk), dst(kChunk);
+    for (size_t i = 0; i < kChunk; ++i) src[i] = static_cast<T>(i * 2654435761ull + 1);
+    const auto sel_ring = make_filter_selector_ring(kChunk, keep_pct, cluster, 42);
+    size_t idx = 0;
+    for (auto _ : state) {
+        const auto& sel = sel_ring[(idx++) & (kSelectorRingSize - 1)];
+        size_t n = Kernel(dst.data(), src.data(), sel.data(), 0, kChunk);
+        benchmark::DoNotOptimize(n);
+        benchmark::DoNotOptimize(dst.data());
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * kChunk);
+    state.SetBytesProcessed(state.iterations() * kChunk * sizeof(T));
+}
+
+BENCHMARK_TEMPLATE(BM_SimdFilterKernel, uint32_t, SIMD::Filter::detail::compress_neon_w4)
+        ->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+BENCHMARK_TEMPLATE(BM_SimdFilterKernel, uint64_t, SIMD::Filter::detail::compress_neon_w8)
+        ->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+#endif
+
 } // namespace starrocks
 
 BENCHMARK_MAIN();

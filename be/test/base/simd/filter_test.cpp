@@ -16,6 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <functional>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -149,5 +154,327 @@ PARALLEL_TEST(SimdFilterTest, vectorized_path_matches_scalar) {
         }
     }
 }
+
+template <typename T>
+using FilterFn = std::function<size_t(T*, const T*, const uint8_t*, size_t, size_t)>;
+
+template <typename T>
+static T make_value(uint64_t i) {
+    uint64_t bits = i * 0x9E3779B97F4A7C15ull + 1;
+    T v;
+    std::memcpy(&v, &bits, sizeof(T));
+    return v;
+}
+
+template <typename T>
+static void expect_matches_reference(const FilterFn<T>& fn, size_t n, size_t from, size_t to,
+                                     const std::vector<uint8_t>& sel, bool in_place, const char* what) {
+    std::vector<T> expected;
+    for (size_t i = from; i < to; ++i) {
+        if (sel[i]) expected.push_back(make_value<T>(i));
+    }
+
+    // Pass 1: Exact-size buffers (length == to) so ASAN redzones trap any 1-byte over-read/over-write past `to`.
+    {
+        std::vector<T> src_exact(to);
+        for (size_t i = 0; i < to; ++i) src_exact[i] = make_value<T>(i);
+        std::vector<uint8_t> sel_exact(sel.begin(), sel.begin() + to);
+        std::vector<T> dst_exact = src_exact;
+        if (!in_place) {
+            for (auto& v : dst_exact) v = make_value<T>(0xDEAD0000ull);
+        }
+        const std::vector<T> ref_head = in_place ? src_exact : dst_exact;
+        T* d = in_place ? src_exact.data() : dst_exact.data();
+        std::vector<T>& out = in_place ? src_exact : dst_exact;
+        const size_t got = fn(d, src_exact.data(), sel_exact.data(), from, to);
+        ASSERT_EQ(from + expected.size(), got) << what << " exact n=" << n << " from=" << from << " to=" << to;
+        for (size_t i = 0; i < expected.size(); ++i) {
+            ASSERT_EQ(0, std::memcmp(&expected[i], &out[from + i], sizeof(T))) << what << " exact at " << i;
+        }
+        for (size_t i = 0; i < from; ++i) {
+            ASSERT_EQ(0, std::memcmp(&ref_head[i], &out[i], sizeof(T))) << what << " exact head " << i;
+        }
+    }
+
+    // Pass 2: Canary-padded buffers (length == n + 16) verifying [to, n + 16) is never mutated.
+    {
+        std::vector<T> src(n + 16);
+        for (size_t i = 0; i < src.size(); ++i) src[i] = make_value<T>(i);
+        std::vector<T> dst = src;
+        if (!in_place) {
+            for (auto& v : dst) v = make_value<T>(0xDEAD0000ull);
+        }
+        const std::vector<T> ref_outside = in_place ? src : dst;
+        T* d = in_place ? src.data() : dst.data();
+        std::vector<T>& out = in_place ? src : dst;
+        const size_t got = fn(d, src.data(), sel.data(), from, to);
+        ASSERT_EQ(from + expected.size(), got) << what << " padded n=" << n << " from=" << from << " to=" << to;
+        for (size_t i = 0; i < expected.size(); ++i) {
+            ASSERT_EQ(0, std::memcmp(&expected[i], &out[from + i], sizeof(T))) << what << " padded at " << i;
+        }
+        for (size_t i = 0; i < from; ++i) {
+            ASSERT_EQ(0, std::memcmp(&ref_outside[i], &out[i], sizeof(T))) << what << " padded head " << i;
+        }
+        for (size_t i = to; i < out.size(); ++i) {
+            ASSERT_EQ(0, std::memcmp(&ref_outside[i], &out[i], sizeof(T))) << what << " padded tail " << i;
+        }
+    }
+}
+
+template <typename T>
+static FilterFn<T> public_api() {
+    return [](T* d, const T* s, const uint8_t* sel, size_t f, size_t t) {
+        return SIMD::Filter::detail::filter_range(d, s, sizeof(T), sel, f, t);
+    };
+}
+
+PARALLEL_TEST(SimdFilterTest, neon_lut_and_bit_condensation_invariants) {
+    // 1. Verify all 16 rows of 4-byte permutation LUT and popcount LUT.
+    for (uint32_t m = 0; m < 16; ++m) {
+        ASSERT_EQ(static_cast<uint8_t>(__builtin_popcount(m)), SIMD::Filter::detail::kPopcountLut4B[m]);
+        size_t pos = 0;
+        for (uint32_t lane = 0; lane < 4; ++lane) {
+            if ((m >> lane) & 1u) {
+                for (uint32_t b = 0; b < 4; ++b) {
+                    ASSERT_EQ(static_cast<uint8_t>(lane * 4 + b), SIMD::Filter::detail::kPermuteLut4B[m][pos++]);
+                }
+            }
+        }
+        while (pos < 16) {
+            ASSERT_EQ(0xFFu, SIMD::Filter::detail::kPermuteLut4B[m][pos++]);
+        }
+    }
+
+    // 2. Verify all 4 rows of 8-byte permutation LUT and popcount LUT.
+    for (uint32_t m = 0; m < 4; ++m) {
+        ASSERT_EQ(static_cast<uint8_t>(__builtin_popcount(m)), SIMD::Filter::detail::kPopcountLut8B[m]);
+        size_t pos = 0;
+        for (uint32_t lane = 0; lane < 2; ++lane) {
+            if ((m >> lane) & 1u) {
+                for (uint32_t b = 0; b < 8; ++b) {
+                    ASSERT_EQ(static_cast<uint8_t>(lane * 8 + b), SIMD::Filter::detail::kPermuteLut8B[m][pos++]);
+                }
+            }
+        }
+        while (pos < 16) {
+            ASSERT_EQ(0xFFu, SIMD::Filter::detail::kPermuteLut8B[m][pos++]);
+        }
+    }
+
+    // 3. Exhaustively verify bit-condensation across all 2^16 = 65,536 16-bit masks.
+    for (uint32_t mask16 = 0; mask16 < (1u << 16); ++mask16) {
+        uint64_t nibble_mask = 0;
+        for (uint32_t bit = 0; bit < 16; ++bit) {
+            if ((mask16 >> bit) & 1u) {
+                nibble_mask |= (0xFull << (bit * 4));
+            }
+        }
+        for (int k = 0; k < 4; ++k) {
+            const uint32_t expected4 = (mask16 >> (k * 4)) & 0xFu;
+            ASSERT_EQ(expected4, SIMD::Filter::detail::extract_neon_mask4(nibble_mask, k))
+                    << "mask16=" << mask16 << " k=" << k;
+        }
+        for (int k = 0; k < 8; ++k) {
+            const uint32_t expected2 = (mask16 >> (k * 2)) & 0x3u;
+            ASSERT_EQ(expected2, SIMD::Filter::detail::extract_neon_mask2(nibble_mask, k))
+                    << "mask16=" << mask16 << " k=" << k;
+        }
+    }
+}
+
+PARALLEL_TEST(SimdFilterTest, exact_batch_multiples_and_unaligned_ranges) {
+    const size_t sizes[] = {0, 1, 15, 16, 17, 31, 32, 33, 48, 63, 64, 65, 1024};
+    const size_t froms[] = {0, 1, 3, 7, 15, 16, 31};
+    const uint8_t truthy_bytes[] = {1, 0x02, 0x7F, 0x80, 0xFF};
+
+    for (size_t n : sizes) {
+        for (size_t from : froms) {
+            if (from > n) continue;
+            for (int pattern = 0; pattern < 4; ++pattern) {
+                std::vector<uint8_t> sel(n, 0);
+                for (size_t i = 0; i < n; ++i) {
+                    const uint8_t t = truthy_bytes[i % 5];
+                    if (pattern == 0) {
+                        sel[i] = 0;
+                    } else if (pattern == 1) {
+                        sel[i] = t;
+                    } else if (pattern == 2) {
+                        sel[i] = ((i & 1u) == 0) ? t : 0;
+                    } else {
+                        sel[i] = (((i * 7 + 3) % 5) < 3) ? t : 0;
+                    }
+                }
+                for (bool in_place : {false, true}) {
+                    expect_matches_reference<uint32_t>(public_api<uint32_t>(), n, from, n, sel, in_place, "u32_batch");
+                    expect_matches_reference<uint64_t>(public_api<uint64_t>(), n, from, n, sel, in_place, "u64_batch");
+                    expect_matches_reference<uint8_t>(public_api<uint8_t>(), n, from, n, sel, in_place, "u8_batch");
+                    expect_matches_reference<uint16_t>(public_api<uint16_t>(), n, from, n, sel, in_place, "u16_batch");
+                }
+            }
+        }
+    }
+}
+
+PARALLEL_TEST(SimdFilterTest, exhaustive_subbatch_patterns_and_float_bits) {
+    // 1. All 16 4-bit patterns repeated across 16-row batches and tails, plus all 4 2-bit patterns.
+    constexpr size_t kN = 37;
+    for (uint32_t p4 = 0; p4 < 16; ++p4) {
+        std::vector<uint8_t> sel(kN, 0);
+        for (size_t i = 0; i < kN; ++i) {
+            sel[i] = ((p4 >> (i & 3u)) & 1u) ? static_cast<uint8_t>(0x80u | (i & 0x7Fu)) : 0;
+        }
+        for (bool in_place : {false, true}) {
+            expect_matches_reference<uint32_t>(public_api<uint32_t>(), kN, 0, kN, sel, in_place, "subbatch_u32");
+            expect_matches_reference<float>(public_api<float>(), kN, 0, kN, sel, in_place, "subbatch_f32");
+            expect_matches_reference<uint64_t>(public_api<uint64_t>(), kN, 0, kN, sel, in_place, "subbatch_u64");
+            expect_matches_reference<double>(public_api<double>(), kN, 0, kN, sel, in_place, "subbatch_f64");
+        }
+    }
+
+    // 2. Explicit IEEE-754 special values (-0.0, +0.0, +/-inf, distinct NaN payloads) verified via std::memcmp.
+    {
+        constexpr size_t kSpecialN = 32;
+        std::vector<uint32_t> f32_bits(kSpecialN);
+        std::vector<uint64_t> f64_bits(kSpecialN);
+        for (size_t i = 0; i < kSpecialN; ++i) {
+            switch (i % 6) {
+            case 0:
+                f32_bits[i] = 0x80000000u;           // -0.0f
+                f64_bits[i] = 0x8000000000000000ull; // -0.0
+                break;
+            case 1:
+                f32_bits[i] = 0x00000000u;           // +0.0f
+                f64_bits[i] = 0x0000000000000000ull; // +0.0
+                break;
+            case 2:
+                f32_bits[i] = 0x7F800000u; // +inf
+                f64_bits[i] = 0x7FF0000000000000ull;
+                break;
+            case 3:
+                f32_bits[i] = 0xFF800000u; // -inf
+                f64_bits[i] = 0xFFF0000000000000ull;
+                break;
+            case 4:
+                f32_bits[i] = 0x7FC01234u | static_cast<uint32_t>(i); // quiet NaN payload
+                f64_bits[i] = 0x7FF8000012345678ull | static_cast<uint64_t>(i);
+                break;
+            default:
+                f32_bits[i] = 0xFFCABCDEu ^ static_cast<uint32_t>(i * 17); // negative NaN payload
+                f64_bits[i] = 0xFFF8ABCDE0123456ull ^ static_cast<uint64_t>(i * 17);
+                break;
+            }
+        }
+        std::vector<float> src_f32(kSpecialN), dst_f32(kSpecialN);
+        std::vector<double> src_f64(kSpecialN), dst_f64(kSpecialN);
+        std::memcpy(src_f32.data(), f32_bits.data(), kSpecialN * sizeof(float));
+        std::memcpy(src_f64.data(), f64_bits.data(), kSpecialN * sizeof(double));
+
+        std::vector<uint8_t> sel(kSpecialN);
+        std::vector<uint32_t> exp_f32;
+        std::vector<uint64_t> exp_f64;
+        for (size_t i = 0; i < kSpecialN; ++i) {
+            sel[i] = ((i * 5 + 1) % 3 != 0) ? 1 : 0;
+            if (sel[i]) {
+                exp_f32.push_back(f32_bits[i]);
+                exp_f64.push_back(f64_bits[i]);
+            }
+        }
+
+        size_t n32 = SIMD::Filter::filter_range(dst_f32.data(), src_f32.data(), sel.data(), 0, kSpecialN);
+        size_t n64 = SIMD::Filter::filter_range(dst_f64.data(), src_f64.data(), sel.data(), 0, kSpecialN);
+        ASSERT_EQ(exp_f32.size(), n32);
+        ASSERT_EQ(exp_f64.size(), n64);
+        ASSERT_EQ(0, std::memcmp(exp_f32.data(), dst_f32.data(), n32 * sizeof(float)));
+        ASSERT_EQ(0, std::memcmp(exp_f64.data(), dst_f64.data(), n64 * sizeof(double)));
+    }
+}
+
+PARALLEL_TEST(SimdFilterTest, sparse_eight_byte_batches) {
+    // Exercise 0, 1, 2, 5, 6, 7, 15, 16 survivors per 16-row batch at every rotation (0..15).
+    const int counts[] = {0, 1, 2, 5, 6, 7, 15, 16};
+    constexpr size_t kN = 32;
+    for (int cnt : counts) {
+        for (int rot = 0; rot < 16; ++rot) {
+            std::vector<uint8_t> sel(kN, 0);
+            for (int b = 0; b < cnt; ++b) {
+                size_t pos0 = (rot + b * 3) & 15;
+                size_t pos1 = 16 + ((rot + b * 5) & 15);
+                // Ensure exact popcount by falling back to linear scan if modular step collides
+                while (sel[pos0]) pos0 = (pos0 + 1) & 15;
+                while (sel[pos1]) pos1 = 16 + ((pos1 + 1) & 15);
+                sel[pos0] = 1;
+                sel[pos1] = 0x80;
+            }
+            for (bool in_place : {false, true}) {
+                expect_matches_reference<uint64_t>(public_api<uint64_t>(), kN, 0, kN, sel, in_place, "sparse_w8_api");
+#if defined(__ARM_NEON) && defined(__aarch64__)
+                expect_matches_reference<uint64_t>(SIMD::Filter::detail::compress_neon_w8, kN, 0, kN, sel, in_place,
+                                                   "sparse_w8_neon");
+#endif
+            }
+        }
+    }
+}
+
+PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz) {
+    std::mt19937 rng(0xC0FFEE42u);
+    constexpr int kIterations = 2000;
+    for (int iter = 0; iter < kIterations; ++iter) {
+        const size_t n = std::uniform_int_distribution<size_t>(0, 256)(rng);
+        const size_t from = (n == 0) ? 0 : std::uniform_int_distribution<size_t>(0, n)(rng);
+        const size_t to = (from == n) ? n : std::uniform_int_distribution<size_t>(from, n)(rng);
+        const int keep_pct = std::uniform_int_distribution<int>(0, 100)(rng);
+        const size_t cluster = (iter % 4 == 0) ? 16 : ((iter % 4 == 1) ? 4 : 1);
+        const bool in_place = (iter & 1) != 0;
+
+        std::vector<uint8_t> sel(n, 0);
+        std::uniform_int_distribution<int> pct_dist(0, 99);
+        std::uniform_int_distribution<int> byte_dist(1, 255);
+        for (size_t i = 0; i < n; i += cluster) {
+            const uint8_t keep = (pct_dist(rng) < keep_pct) ? static_cast<uint8_t>(byte_dist(rng)) : 0;
+            for (size_t j = i; j < std::min(n, i + cluster); ++j) {
+                sel[j] = keep;
+            }
+        }
+
+        expect_matches_reference<uint32_t>(public_api<uint32_t>(), n, from, to, sel, in_place, "fuzz_u32");
+        expect_matches_reference<uint64_t>(public_api<uint64_t>(), n, from, to, sel, in_place, "fuzz_u64");
+#if defined(__ARM_NEON) && defined(__aarch64__)
+        expect_matches_reference<uint32_t>(SIMD::Filter::detail::compress_neon_w4, n, from, to, sel, in_place,
+                                           "fuzz_neon_w4");
+        expect_matches_reference<uint64_t>(SIMD::Filter::detail::compress_neon_w8, n, from, to, sel, in_place,
+                                           "fuzz_neon_w8");
+#endif
+    }
+}
+
+#if defined(__ARM_NEON) && defined(__aarch64__)
+PARALLEL_TEST(SimdFilterTest, aarch64_explicit_neon_kernels) {
+    const size_t sizes[] = {0, 1, 7, 15, 16, 17, 31, 32, 33, 64, 129};
+    for (size_t n : sizes) {
+        for (size_t from : {size_t(0), size_t(1), size_t(15), size_t(16)}) {
+            if (from > n) continue;
+            for (int mode = 0; mode < 3; ++mode) {
+                std::vector<uint8_t> sel(n, 0);
+                for (size_t i = 0; i < n; ++i) {
+                    if (mode == 0) {
+                        sel[i] = 0;
+                    } else if (mode == 1) {
+                        sel[i] = 0xFF;
+                    } else {
+                        sel[i] = ((i * 11 + 3) % 7 < 4) ? static_cast<uint8_t>(1 + (i & 0x7F)) : 0;
+                    }
+                }
+                for (bool in_place : {false, true}) {
+                    expect_matches_reference<uint32_t>(SIMD::Filter::detail::compress_neon_w4, n, from, n, sel,
+                                                       in_place, "explicit_neon_w4");
+                    expect_matches_reference<uint64_t>(SIMD::Filter::detail::compress_neon_w8, n, from, n, sel,
+                                                       in_place, "explicit_neon_w8");
+                }
+            }
+        }
+    }
+}
+#endif
 
 } // namespace starrocks
