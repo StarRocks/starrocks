@@ -32,6 +32,7 @@
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <random>
@@ -41,6 +42,7 @@
 #include <immintrin.h>
 #endif
 
+#include "base/simd/filter.h"
 #include "base/simd/simd.h"
 #include "base/simd/simd_utils.h"
 
@@ -367,6 +369,64 @@ BENCHMARK_TEMPLATE(do_FillDefault, int64_t, fill_default_hoist<int64_t>)
         ->Arg(10)
         ->Arg(50)
         ->Arg(90);
+
+// ---- SIMD::Filter::filter_range stream compaction ---------------------------------------
+// Pre-generate a ring of 16 distinct 4096-row selector arrays (64 KB total = 65,536 rows)
+// and rotate across iterations so the CPU branch predictor cannot memorize a single 4096-row pattern.
+constexpr size_t kSelectorRingSize = 16;
+
+static std::vector<std::vector<uint8_t>> make_filter_selector_ring(size_t n, int keep_pct, int cluster, uint32_t seed) {
+    std::mt19937 rng(seed);
+    std::uniform_int_distribution<int> dist(0, 99);
+    std::vector<std::vector<uint8_t>> ring(kSelectorRingSize, std::vector<uint8_t>(n));
+    const size_t run = cluster > 0 ? static_cast<size_t>(cluster) : 1;
+    for (size_t r = 0; r < kSelectorRingSize; ++r) {
+        for (size_t i = 0; i < n; i += run) {
+            const uint8_t keep = dist(rng) < keep_pct ? 1 : 0;
+            for (size_t j = i; j < std::min(n, i + run); ++j) ring[r][j] = keep;
+        }
+    }
+    return ring;
+}
+
+template <typename T, bool InPlace>
+static void run_filter_range_bench(benchmark::State& state) {
+    const int keep_pct = static_cast<int>(state.range(0));
+    const int cluster = static_cast<int>(state.range(1));
+    std::vector<T> src(kChunk);
+    for (size_t i = 0; i < kChunk; ++i) src[i] = static_cast<T>(i * 2654435761ull + 1);
+    std::vector<T> dst;
+    if constexpr (!InPlace) {
+        dst.resize(kChunk);
+    }
+    const auto sel_ring = make_filter_selector_ring(kChunk, keep_pct, cluster, 42);
+    size_t idx = 0;
+    for (auto _ : state) {
+        const auto& sel = sel_ring[(idx++) & (kSelectorRingSize - 1)];
+        T* dst_ptr = InPlace ? src.data() : dst.data();
+        size_t n = SIMD::Filter::filter_range(dst_ptr, src.data(), sel.data(), 0, kChunk);
+        benchmark::DoNotOptimize(n);
+        benchmark::DoNotOptimize(dst_ptr);
+        benchmark::ClobberMemory();
+    }
+    state.SetItemsProcessed(state.iterations() * kChunk);
+    state.SetBytesProcessed(state.iterations() * kChunk * sizeof(T));
+}
+
+template <typename T>
+static void BM_SimdFilterRange(benchmark::State& state) {
+    run_filter_range_bench<T, false>(state);
+}
+
+template <typename T>
+static void BM_SimdFilterRange_InPlace(benchmark::State& state) {
+    run_filter_range_bench<T, true>(state);
+}
+
+BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint32_t)->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+BENCHMARK_TEMPLATE(BM_SimdFilterRange, uint64_t)->ArgsProduct({{0, 1, 10, 25, 50, 75, 90, 99, 100}, {0, 16, 32}});
+BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint32_t)->ArgsProduct({{0, 10, 50, 90, 100}, {0, 16}});
+BENCHMARK_TEMPLATE(BM_SimdFilterRange_InPlace, uint64_t)->ArgsProduct({{0, 10, 50, 90, 100}, {0, 16}});
 
 } // namespace starrocks
 
