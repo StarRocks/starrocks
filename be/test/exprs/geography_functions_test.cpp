@@ -5478,7 +5478,10 @@ void expect_rejects_non_xy(const TypeDescriptor& type, WkbGeometryType kind, con
         SCOPED_TRACE(label);
         auto output = call(labelled_xy(type, payload));
         if (predicate && output.ok()) {
-            EXPECT_FALSE(ColumnViewer<TYPE_BOOLEAN>(*output).value(0));
+            // value() ignores the null flag and reads a default false for an all-NULL column.
+            ColumnViewer<TYPE_BOOLEAN> valid(*output);
+            EXPECT_FALSE(valid.is_null(0)) << "non-XY payload returned NULL instead of false or an error";
+            if (!valid.is_null(0)) EXPECT_FALSE(valid.value(0));
         } else {
             EXPECT_FALSE(output.ok()) << "non-XY payload was computed as XY";
         }
