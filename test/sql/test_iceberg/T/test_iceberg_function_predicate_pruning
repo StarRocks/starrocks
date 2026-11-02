@@ -1,0 +1,106 @@
+-- name: test_iceberg_function_predicate_pruning
+-- A predicate on a function of a column (year(), to_date(), date_trunc(), date_format(), datediff(), hours_sub(),
+-- year() and month(), left(), starts_with()) prunes data files on the column: through every partition spec of an
+-- evolved table (day -> month -> year) and through a truncate partition. Each data file of t holds one row, so
+-- the expected file counts below are exact.
+
+create external catalog iceberg_fn_pred_${uuid0} PROPERTIES ("type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+
+create database iceberg_fn_pred_${uuid0}.db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_function_predicate_pruning/${uuid0}/db_${uuid0}"
+);
+set catalog iceberg_fn_pred_${uuid0};
+use db_${uuid0};
+
+create table t (
+    id int,
+    ts datetime
+) partition by day(ts);
+insert into t values (1, '2023-12-31 10:00:00'), (2, '2024-01-01 10:00:00'), (3, '2024-02-01 10:00:00');
+
+alter table t drop partition column day(ts);
+alter table t add partition column month(ts);
+insert into t values (4, '2024-02-10 10:00:00'), (5, '2024-03-05 10:00:00'), (6, '2025-01-01 10:00:00');
+
+alter table t drop partition column month(ts);
+alter table t add partition column year(ts);
+insert into t values (7, '2023-06-01 10:00:00'), (8, '2024-07-01 10:00:00'), (9, '2025-07-01 10:00:00');
+
+set enable_profile = true;
+set enable_async_profile = false;
+
+-- expected: 2,3,4,5,8 then 5 files
+select group_concat(id order by id) from t where year(ts) = 2024;
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 3,4 then 2 files
+select group_concat(id order by id) from t where date_trunc('month', ts) = '2024-02-01 00:00:00';
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 1,6 then 2 files
+select group_concat(id order by id) from t where to_date(ts) in ('2023-12-31', '2025-01-01');
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 1,7 then 2 files
+select group_concat(id order by id) from t where year(ts) between 2020 and 2023;
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 3,4 then 2 files
+select group_concat(id order by id) from t where date_format(ts, '%Y-%m') = '2024-02';
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 5 then 1 file
+select group_concat(id order by id) from t where datediff('2024-03-06', ts) between 0 and 5;
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 1,7 then 2 files
+select group_concat(id order by id) from t where ts - interval 12 hour < '2023-12-31 00:00:00';
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 2,8 then 2 files
+select group_concat(id order by id) from t where year(ts) = 2024 and month(ts) in (1, 7);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- one file per truncate(s, 2) partition: UN (UNITED, UNIX), UK, CH, 中国
+create table s_t (
+    id int,
+    s string
+) partition by truncate(s, 2);
+insert into s_t values (1, 'UNITED'), (2, 'UNIX'), (3, 'UK'), (4, 'CHINA'), (5, '中国人');
+
+-- expected: 1 then 1 file
+select group_concat(id order by id) from s_t where left(s, 4) = 'UNIT';
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 5 then 1 file
+select group_concat(id order by id) from s_t where starts_with(s, '中国');
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- expected: 3 then 1 file
+select group_concat(id order by id) from s_t where substr(s, 1, 3) = 'UK';
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- a non-aligned constant never equals date_trunc(): nothing is derived. expected: empty then 9 files
+select group_concat(id order by id) from t where date_trunc('month', ts) = '2024-02-15 00:00:00';
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- NOT is never pruned by the derived range. expected: 1,6,7,9 then 9 files
+select group_concat(id order by id) from t where not (year(ts) = 2024);
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+
+-- switched off: same rows, no pruning. expected: 2,3,4,5,8 then 9 files
+set enable_iceberg_function_predicate_pruning = false;
+select group_concat(id order by id) from t where year(ts) = 2024;
+select cast(regexp_extract(get_query_profile(last_query_id()), 'resultDataFiles=CounterResult.unit=COUNT, value=([0-9]+)', 1) as bigint);
+set enable_iceberg_function_predicate_pruning = true;
+
+drop table t force;
+drop table s_t force;
+drop database db_${uuid0};
+drop catalog iceberg_fn_pred_${uuid0};

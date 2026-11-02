@@ -20,6 +20,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.BinaryType;
+>>>>>>> f209b0cf3c5... [Enhancement][RB-225] Prune Iceberg files on predicates over functions of a column (#67660)
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -134,6 +139,17 @@ public class ScalarOperatorToIcebergExpr {
                 }
                 LOG.error("binding to the table schema failed, cannot be pushed down scanOperator: {}",
                         operator.debugString());
+            }
+        }
+        if (usePreimage(effectiveContext)) {
+            // preimages that need several conjuncts together, e.g. year(c) = 2024 and month(c) = 3
+            for (Expression expr : IcebergFunctionPreimage.deriveConjuncts(operators, resolver(effectiveContext))) {
+                try {
+                    Binder.bind(context.getSchema(), expr, false);
+                    expressions.add(expr);
+                } catch (ValidationException e) {
+                    LOG.debug("binding the conjunct preimage {} failed", expr);
+                }
             }
         }
 
@@ -255,7 +271,12 @@ public class ScalarOperatorToIcebergExpr {
         public Expression visitBinaryPredicate(BinaryPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
             if (columnName == null) {
+<<<<<<< HEAD
                 return null;
+=======
+                return derivePreimage(operator.getChild(0), operator.getBinaryType(),
+                        List.of(operator.getChild(1)), context);
+>>>>>>> f209b0cf3c5... [Enhancement][RB-225] Prune Iceberg files on predicates over functions of a column (#67660)
             }
 
             Type icebergType = getResultType(columnName, context);
@@ -299,7 +320,8 @@ public class ScalarOperatorToIcebergExpr {
         public Expression visitInPredicate(InPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
             if (columnName == null) {
-                return null;
+                return operator.isNotIn() ? null : derivePreimage(operator.getChild(0), BinaryType.EQ,
+                        operator.getListChildren(), context);
             }
 
             Type icebergType = getResultType(columnName, context);
@@ -352,9 +374,44 @@ public class ScalarOperatorToIcebergExpr {
         }
 
         @Override
+        public Expression visitCall(CallOperator call, IcebergContext context) {
+            return usePreimage(context) ? IcebergFunctionPreimage.derivePredicateCall(call, resolver(context)) : null;
+        }
+
+        @Override
         public Expression visit(ScalarOperator scalarOperator, IcebergContext context) {
             return null;
         }
+
+        /**
+         * A function of a column compared with constants: prune on the preimage of the comparison on the column.
+         */
+        private Expression derivePreimage(ScalarOperator call, BinaryType op, List<ScalarOperator> values,
+                                          IcebergContext context) {
+            return usePreimage(context)
+                    ? IcebergFunctionPreimage.deriveComparison(call, op, values, resolver(context)) : null;
+        }
+    }
+
+    /**
+     * A preimage is a pruning-only superset, so it is not valid under NOT or for strict conversion.
+     */
+    private static boolean usePreimage(IcebergContext context) {
+        if (context.isStrict() || context.isInsideNot()) {
+            return false;
+        }
+        // Without a session (e.g. a metadata-prefetch thread) neither the switch nor the session time zone is known.
+        ConnectContext connectContext = ConnectContext.get();
+        return connectContext != null
+                && connectContext.getSessionVariable().isEnableIcebergFunctionPredicatePruning();
+    }
+
+    private static IcebergFunctionPreimage.ColumnResolver resolver(IcebergContext context) {
+        return operand -> {
+            String columnName = getColumnName(operand);
+            Type type = columnName == null ? null : IcebergExprVisitor.getResultType(columnName, context);
+            return type == null ? null : new IcebergFunctionPreimage.Column(columnName, type);
+        };
     }
 
     private static Object getLiteralValue(ScalarOperator operator, Type icebergType) {

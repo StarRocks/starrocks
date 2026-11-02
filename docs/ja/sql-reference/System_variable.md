@@ -685,6 +685,12 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **デフォルト**: true
 * **導入バージョン**: v26.2
 
+### enable_iceberg_function_predicate_pruning
+
+* **説明**: Iceberg テーブルの列に関数を適用した述語を、データファイルのスキップに使用するかどうか。StarRocks はこのような述語を列自体の条件に変換します。たとえば `year(dt) = 2024` は `dt >= '2024-01-01' AND dt < '2025-01-01'` に変換され、列の任意のパーティション変換（`year`、`month`、`day`、`hour`、`truncate`）およびファイルの列統計情報によってファイルをスキップできます。対象は `year()`、`to_date()`、`date()`、`date_trunc()`、`'%Y-%m'` などのゼロ埋め形式の `date_format()`、`datediff()`、`weeks_add()`/`hours_add()`/`minutes_add()`/`seconds_add()` とそれぞれの `_sub` 形式、`year() = ... AND month()/quarter() = ...`、等値比較の `left()`/`substr(s, 1, n)`、および `starts_with()` です。元の述語は引き続き各行に対して評価されます。`false` に設定すると、このようなクエリを従来どおりにプランします。たとえば結果を比較する場合に使用します。
+* **デフォルト**: true
+* **導入バージョン**: v26.2
+
 ### enable_incremental_mv
 
 * **説明**: セッションフラグで、サーバーが増分リフレッシュを使用するマテリアライズドビューに対してプランを生成し、インメモリのプランを保持するかを制御します。有効にすると、`MaterializedViewAnalyzer.planMVQuery` はリフレッシュスキームが `IncrementalRefreshSchemeDesc` である create-MV ステートメントに対して処理を行います：ビュークエリの論理・物理プランを構築し、セッションの `enableMVPlanner` フラグを設定します（`setMVPlanner(true)`）。無効にすると、増分リフレッシュ MV のプラン作成はスキップされます。`SessionVariable` の `isEnableIncrementalRefreshMV()` および `setEnableIncrementalRefreshMv(boolean)` からアクセス可能です。
