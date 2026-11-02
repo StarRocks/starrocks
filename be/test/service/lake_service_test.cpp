@@ -58,6 +58,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/schema_change.h"
+#include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -829,6 +830,55 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
 // whose shadow_rewrite_alter_version carries the watershed W. This exercises the TXN_SHADOW_REWRITE
 // branch in publish_version that anchors the historical rewrite as an op_schema_change@W during the
 // flip publish, including the W == 1 skip-load (empty partition) path.
+#ifdef WITH_STARCACHE
+// A bundled publish request keeps a tablet's result as its partial_meta only when the result may never reach the
+// bundle: here, a retry that had to apply again. A later retry that finds neither the metacache entry nor the txn
+// log answers from it.
+TEST_F(LakeServiceTest, test_publish_version_keeps_partial_meta_for_retry) {
+    const bool old_enable = config::lake_enable_publish_partial_meta;
+    config::lake_enable_publish_partial_meta = true;
+    DeferOp restore([&]() { config::lake_enable_publish_partial_meta = old_enable; });
+    lake::ScopedLocalDiskCache local_disk_cache(std::string(kRootLocation) + "_partial_meta_cache");
+
+    auto txn_log = generate_write_txn_log(2, 101, 4096);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    PublishVersionRequest request;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(_tablet_id);
+    request.add_txn_ids(txn_log.txn_id());
+    request.set_enable_aggregate_publish(true);
+
+    // A first attempt that finishes in time keeps nothing.
+    {
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        EXPECT_TRUE(_tablet_mgr->get_partial_tablet_metadata(_tablet_id, 2, 0).status().is_not_found());
+    }
+    request.set_is_retry_publish(true);
+    // A retry after the metacache lost the version applies again and keeps the result.
+    {
+        _tablet_mgr->prune_metacache();
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        ASSIGN_OR_ABORT(auto partial, _tablet_mgr->get_partial_tablet_metadata(_tablet_id, 2, 0));
+        EXPECT_EQ(2, partial->version());
+    }
+    // The next retry answers from it, without the txn log.
+    {
+        ASSERT_OK(fs::delete_file(_tablet_mgr->txn_log_location(_tablet_id, txn_log.txn_id())));
+        _tablet_mgr->prune_metacache();
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        ASSERT_EQ(1, response.tablet_metas().count(_tablet_id));
+        EXPECT_EQ(2, response.tablet_metas().at(_tablet_id).version());
+    }
+}
+#endif
+
 TEST_F(LakeServiceTest, test_publish_version_shadow_rewrite) {
     // Each shadow tablet is freshly created at version 1; W (alter_version) is the base partition's
     // watershed, independent of the shadow tablet's base_version and always < new_version.
