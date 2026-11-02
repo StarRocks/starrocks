@@ -38,6 +38,8 @@ import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -62,6 +64,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -1355,5 +1358,39 @@ public class TabletStatMgrTest {
             }
         };
         return manager;
+    }
+
+    @Test
+    public void testTotalRowsCountsBaseIndexOnly() {
+        // BasicStatsMeta.totalRows is compared against base index row counts by the optimizer, so the rows of a
+        // rollups which should not be counted again.
+        LakeTable table = createLakeTableForTest();
+        PhysicalPartition physicalPartition = table.getPartition(PARTITION_ID).getDefaultPhysicalPartition();
+        for (Tablet tablet : physicalPartition.getLatestBaseIndex().getTablets()) {
+            ((LakeTablet) tablet).setRowCount(100);
+        }
+
+        MaterializedIndex rollupIndex = new MaterializedIndex(INDEX_ID + 100, MaterializedIndex.IndexState.NORMAL);
+        LakeTablet rollupTablet = new LakeTablet(30L);
+        rollupTablet.setRowCount(7);
+        rollupIndex.addTablet(rollupTablet, null, false);
+        physicalPartition.createRollupIndex(rollupIndex);
+
+        registeredDb = new Database(SCAN_DB_ID, SCAN_DB_NAME);
+        registeredDb.registerTableUnlocked(table);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().unprotectCreateDb(registeredDb);
+
+        BasicStatsMeta meta = new BasicStatsMeta(SCAN_DB_ID, TABLE_ID, Lists.newArrayList(),
+                StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddBasicStatsMeta(meta);
+        try {
+            new TabletStatMgr().runAfterCatalogReady();
+
+            assertEquals(200, physicalPartition.getLatestBaseIndex().getRowCount());
+            assertEquals(7, rollupIndex.getRowCount());
+            assertEquals(200, meta.getTotalRows());
+        } finally {
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().remove(TABLE_ID);
+        }
     }
 }
