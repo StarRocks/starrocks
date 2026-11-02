@@ -135,6 +135,11 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         // Create new added materialized views' ranges
         PCellSortedSet adds = result.diff.getAdds();
         PCellSortedSet mvPartitionToCells = result.mvPartitionToCells;
+        // Dropped cells no longer exist in the MV. Keeping them in the published topology would let
+        // potential-partition expansion add a nonexistent partition back to the insert targets.
+        for (String mvPartitionName : deletes.getPartitionNames()) {
+            mvPartitionToCells.removeByName(mvPartitionName);
+        }
         // filter partition ttl for all add ranges
         filterPartitionsByTTL(adds, true);
         Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
