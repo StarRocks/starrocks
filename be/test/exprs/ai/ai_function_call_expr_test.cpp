@@ -1130,8 +1130,6 @@ std::vector<AIOverloadCase> ai_overload_cases() {
     const TypeDescriptor text = varchar_type();
     const TypeDescriptor strings = TypeDescriptor::create_array_type(text);
     const TypeDescriptor json(TYPE_JSON);
-    const TypeDescriptor similarity(TYPE_FLOAT);
-    const TypeDescriptor boolean(TYPE_BOOLEAN);
     const TypeDescriptor options = options_type();
     const TypeDescriptor file(TYPE_FILE);
     using Result = AIFunctionResultKind;
@@ -1144,9 +1142,9 @@ std::vector<AIOverloadCase> ai_overload_cases() {
             {200007, "ai_fix_grammar", text, {text, text, text}, Result::STRING, 2, 1},
             {200008, "ai_redact", text, {text, strings, text, text}, Result::STRING, 3, 2},
             {200009, "ai_translate", text, {text, text, text, text, text}, Result::STRING, 4, 3},
-            {200010, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
+            {200010, "ai_similarity", TYPE_FLOAT_DESC, {text, text, text, text}, Result::SIMILARITY, 3, 2},
             {200011, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
-            {200012, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
+            {200012, "ai_filter", TYPE_BOOLEAN_DESC, {text, text, text, text}, Result::BOOLEAN, 3, 2},
             {200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {text, text, text, options}, Result::EMBEDDING, 2, 1},
             {200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {file, text, text, options}, Result::EMBEDDING, 2, 1},
     };

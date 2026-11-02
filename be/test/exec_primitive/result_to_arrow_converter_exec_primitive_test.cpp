@@ -71,8 +71,7 @@ TEST(ResultToArrowConverterExecPrimitiveTest, ConvertsChunkBySlotIds) {
     chunk.append_column(std::move(column), kSlotId);
 
     auto schema = arrow::schema({arrow::field("v", arrow::int32(), false)});
-    TypeDescriptor type(TYPE_INT);
-    std::vector<const TypeDescriptor*> slot_types{&type};
+    std::vector<const TypeDescriptor*> slot_types{&TYPE_INT_DESC};
     std::vector<SlotId> slot_ids{kSlotId};
 
     std::shared_ptr<arrow::RecordBatch> batch;
