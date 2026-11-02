@@ -18,6 +18,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
+import com.starrocks.connector.iceberg.IcebergRewriteFileSelector;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.qe.ConnectContext;
@@ -30,6 +31,7 @@ import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
@@ -54,8 +56,9 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
     private static final String MIN_FILE_SIZE_BYTES = "min_file_size_bytes";
     private static final String BATCH_SIZE = "batch_size";
     private static final String BATCH_PARALLELISM = "batch_parallelism";
+    private static final String DELETE_RATIO_THRESHOLD = "delete_ratio_threshold";
+    private static final String DELETE_FILE_THRESHOLD = "delete_file_threshold";
 
-    private static final long DEFAULT_MIN_FILE_SIZE_BYTES = 256L * 1024 * 1024;
     private static final long DEFAULT_BATCH_SIZE = 10L * 1024 * 1024 * 1024;
     private static final long DEFAULT_BATCH_PARALLELISM = 1L;
 
@@ -72,7 +75,9 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
                         new NamedArgument(REWRITE_ALL, BooleanType.BOOLEAN, false),
                         new NamedArgument(MIN_FILE_SIZE_BYTES, IntegerType.BIGINT, false),
                         new NamedArgument(BATCH_SIZE, IntegerType.BIGINT, false),
-                        new NamedArgument(BATCH_PARALLELISM, IntegerType.BIGINT, false)
+                        new NamedArgument(BATCH_PARALLELISM, IntegerType.BIGINT, false),
+                        new NamedArgument(DELETE_RATIO_THRESHOLD, FloatType.DOUBLE, false),
+                        new NamedArgument(DELETE_FILE_THRESHOLD, IntegerType.BIGINT, false)
                 ),
                 IcebergTableOperation.REWRITE_DATA_FILES
         );
@@ -80,9 +85,10 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
 
     @Override
     public ShowResultSet execute(IcebergTableProcedureContext context, Map<String, ConstantOperator> args) {
-        if (args.size() > 4) {
+        if (args.size() > 6) {
             throw new StarRocksConnectorException("invalid args. only support `rewrite_all`, " +
-                    "`min_file_size_bytes`, `batch_size` and `batch_parallelism` in the rewrite data files operation");
+                    "`min_file_size_bytes`, `batch_size`, `batch_parallelism`, `delete_ratio_threshold` and " +
+                    "`delete_file_threshold` in the rewrite data files operation");
         }
 
         boolean rewriteAll = args.get(REWRITE_ALL) != null && args.get(REWRITE_ALL)
@@ -96,7 +102,7 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
                 .filter(v -> v > 0)
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         MIN_FILE_SIZE_BYTES))
-                : DEFAULT_MIN_FILE_SIZE_BYTES;
+                : IcebergRewriteFileSelector.DEFAULT_MIN_FILE_SIZE_BYTES;
         long batchSize = args.get(BATCH_SIZE) != null ? args.get(BATCH_SIZE)
                 .castTo(IntegerType.BIGINT)
                 .map(ConstantOperator::getBigint)
@@ -111,6 +117,22 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
                 .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
                         BATCH_PARALLELISM))
                 : DEFAULT_BATCH_PARALLELISM;
+        double deleteRatioThreshold = args.get(DELETE_RATIO_THRESHOLD) != null ? args.get(DELETE_RATIO_THRESHOLD)
+                .castTo(FloatType.DOUBLE)
+                .map(ConstantOperator::getDouble)
+                .filter(v -> v >= 0 && v <= 1)
+                .orElseThrow(() -> new StarRocksConnectorException(
+                        "invalid argument type for %s, expected DOUBLE in [0, 1]", DELETE_RATIO_THRESHOLD))
+                : IcebergRewriteFileSelector.DEFAULT_DELETE_RATIO_THRESHOLD;
+        long deleteFileThreshold = args.get(DELETE_FILE_THRESHOLD) != null ? args.get(DELETE_FILE_THRESHOLD)
+                .castTo(IntegerType.BIGINT)
+                .map(ConstantOperator::getBigint)
+                .filter(v -> v > 0)
+                .orElseThrow(() -> new StarRocksConnectorException("invalid argument type for %s, expected positive BIGINT",
+                        DELETE_FILE_THRESHOLD))
+                : IcebergRewriteFileSelector.DEFAULT_DELETE_FILE_THRESHOLD;
+        IcebergRewriteFileSelector fileSelector = new IcebergRewriteFileSelector(rewriteAll, minFileSizeBytes,
+                deleteRatioThreshold, deleteFileThreshold);
 
         AlterTableStmt stmt = context.stmt();
         Expr partitionFilter = context.clause().getWhere();
@@ -146,8 +168,8 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
                 || sessionVariable.getEnableIcebergCompactionWithRowLineage());
         long durationMs = 0L;
         try {
-            IcebergRewriteDataJob job = newRewriteJob(velCtx, writeRowLineage, rewriteAll,
-                    minFileSizeBytes, batchSize, batchParallelism, context.context(), stmt);
+            IcebergRewriteDataJob job = newRewriteJob(velCtx, writeRowLineage, fileSelector,
+                    batchSize, batchParallelism, context.context(), stmt);
             job.prepare();
             metrics = job.execute();
             success = true;
@@ -164,8 +186,9 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         return getRewriteResult(context, metrics, durationMs);
     }
 
-    private IcebergRewriteDataJob newRewriteJob(VelocityContext velCtx, boolean writeRowLineage, boolean rewriteAll,
-                                                long minFileSizeBytes, long batchSize, long batchParallelism,
+    private IcebergRewriteDataJob newRewriteJob(VelocityContext velCtx, boolean writeRowLineage,
+                                                IcebergRewriteFileSelector fileSelector, long batchSize,
+                                                long batchParallelism,
                                                 ConnectContext context, AlterTableStmt stmt) {
         // The filter selects which files are rewritten; it must not filter rows inside those files, otherwise the
         // non-matching rows of a partially matched file are dropped when the whole file is removed at commit time.
@@ -179,8 +202,8 @@ public class RewriteDataFilesProcedure extends IcebergTableProcedure {
         execVelCtx.put("partitionFilterSql", null);
         String executionSql = buildInsertSelectSql(execVelCtx, writeRowLineage);
         boolean hasPartitionFilter = velCtx.get("partitionFilterSql") != null;
-        return new IcebergRewriteDataJob(planningSql, executionSql, hasPartitionFilter, rewriteAll,
-                minFileSizeBytes, batchSize, batchParallelism, writeRowLineage, context, stmt);
+        return new IcebergRewriteDataJob(planningSql, executionSql, hasPartitionFilter, fileSelector,
+                batchSize, batchParallelism, writeRowLineage, context, stmt);
     }
 
     private String buildInsertSelectSql(VelocityContext velCtx, boolean writeRowLineage) {
