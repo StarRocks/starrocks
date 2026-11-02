@@ -75,7 +75,8 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384);
+        _tablet_manager =
+                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 16384, 16384);
         _replication_txn_manager =
                 std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get(), local_snapshot_client_for_test());
 
@@ -946,7 +947,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
     auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
     auto primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(location_provider, mem_tracker.get());
-    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384);
+    auto tablet_manager =
+            std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384, 16384);
 
     TReplicateSnapshotRequest request;
     request.tablet_id = 1;
@@ -997,7 +999,8 @@ TEST_F(LakeReplicationTxnManagerStaticFunctionTest, test_build_file_converters_d
     ASSERT_TRUE(FileSystem::Default()->create_dir_recursive(location_provider->segment_root_location(1)).ok());
     auto mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
     auto primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(location_provider, mem_tracker.get());
-    auto tablet_manager = std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384);
+    auto tablet_manager =
+            std::make_unique<lake::TabletManager>(location_provider, primary_key_manager.get(), 16384, 16384);
 
     TReplicateSnapshotRequest request;
     request.tablet_id = 1;

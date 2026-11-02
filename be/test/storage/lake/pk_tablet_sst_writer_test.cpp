@@ -1739,8 +1739,8 @@ TEST_F(PkTabletUnsortWriterE2ETest, test_load_spill_op_aware_delete) {
 
     std::vector<SlotDescriptor> op_slots;
     op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_VARCHAR});
-    op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-    op_slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+    op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+    op_slots.emplace_back(2, "__op", TYPE_TINYINT_DESC);
     std::vector<SlotDescriptor*> op_slot_ptrs{&op_slots[0], &op_slots[1], &op_slots[2]};
 
     // rows: (pk, sort_key, op). The chunk carries c0, c1 and the trailing __op column.

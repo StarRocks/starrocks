@@ -723,7 +723,7 @@ TEST_F(PersistentIndexSstableTest, test_metric_sst_open_read_error) {
 TEST_F(PersistentIndexSstableTest, test_sst_open_retry_after_clear_corrupted_cache) {
     auto location_provider = std::make_shared<FixedLocationProvider>(kTestDir);
     auto metadata = std::make_shared<TabletMetadata>();
-    TabletManager tablet_mgr(location_provider, 1024);
+    TabletManager tablet_mgr(location_provider, 1024, 1024);
     metadata->set_id(10001);
     ASSERT_OK(fs::create_directories(lake::join_path(kTestDir, lake::kSegmentDirectoryName)));
 

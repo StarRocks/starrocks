@@ -73,8 +73,8 @@ public:
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1638400000, 1638400000);
     }
 
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -205,7 +205,7 @@ protected:
                                 int64_t txn_id, std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
         CHECK_EQ(2, sources.size());
         auto* split_key = sources[0]->mutable_range()->mutable_upper_bound()->add_values();
-        split_key->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+        split_key->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         split_key->set_value("0");
         split_key->set_variant_type(VariantTypePB::NORMAL_VALUE);
         sources[0]->mutable_range()->set_upper_bound_included(false);

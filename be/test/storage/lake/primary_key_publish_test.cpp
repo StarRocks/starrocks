@@ -85,9 +85,9 @@ public:
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _slots.emplace_back(2, "__op", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
         _slot_pointers.emplace_back(&_slots[2]);
@@ -687,7 +687,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
     _tablet_mgr->prune_metacache();
     // fill delvec cache again
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-    EXPECT_TRUE(_tablet_mgr->metacache()->memory_usage() > 0);
+    EXPECT_TRUE(_tablet_mgr->metacache()->segment_metadata_memory_usage() > 0);
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
