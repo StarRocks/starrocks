@@ -2141,27 +2141,46 @@ static StatusOr<TabletMetadataPtr> get_tablet_metadata(const string& metadata_lo
 }
 
 StatusOr<std::pair<std::list<std::string>, std::list<std::string>>> list_meta_files(
-        FileSystem* fs, const std::string& metadata_root_location) {
+        FileSystem* fs, const std::string& metadata_root_location,
+        std::unordered_map<std::string, int64_t>* bundle_meta_mtimes) {
     LOG(INFO) << "Start to list " << metadata_root_location;
     std::list<std::string> meta_files;
     std::list<std::string> bundle_meta_files;
-    RETURN_IF_ERROR_WITH_WARN(
-            ignore_not_found(fs->iterate_dir(metadata_root_location,
-                                             [&](std::string_view name) {
-                                                 if (!is_tablet_metadata(name)) {
-                                                     return true;
-                                                 }
-                                                 auto [tablet_id, version] =
-                                                         parse_tablet_metadata_filename(basename(name));
-                                                 if (tablet_id == 0 && version != kInitialVersion) {
-                                                     // This is a bundle tablet metadata file
-                                                     bundle_meta_files.emplace_back(name);
-                                                 } else {
-                                                     meta_files.emplace_back(name);
-                                                 }
-                                                 return true;
-                                             })),
-            "Failed to list " + metadata_root_location);
+    auto add = [&](std::string_view name, const std::optional<int64_t>& mtime) {
+        if (!is_tablet_metadata(name)) {
+            return true;
+        }
+        auto [tablet_id, version] = parse_tablet_metadata_filename(basename(name));
+        if (tablet_id == 0 && version != kInitialVersion) {
+            // This is a bundle tablet metadata file
+            bundle_meta_files.emplace_back(name);
+            if (bundle_meta_mtimes != nullptr && mtime.has_value()) {
+                bundle_meta_mtimes->emplace(std::string(name), *mtime);
+            }
+        } else {
+            meta_files.emplace_back(name);
+        }
+        return true;
+    };
+    auto list_names = [&] {
+        return fs->iterate_dir(metadata_root_location, [&](std::string_view name) { return add(name, {}); });
+    };
+    // Only ask for the modification times when the caller wants them, so other callers list exactly as before.
+    Status st;
+    if (bundle_meta_mtimes == nullptr) {
+        st = list_names();
+    } else {
+        st = fs->iterate_dir2(metadata_root_location, [&](DirEntry entry) { return add(entry.name, entry.mtime); });
+        if (st.is_not_found()) {
+            // The posix listing stats every entry and gives up with NotFound if a file is deleted meanwhile. A
+            // partial listing could hide live metadata from the orphan scan, so list again by name instead.
+            meta_files.clear();
+            bundle_meta_files.clear();
+            bundle_meta_mtimes->clear();
+            st = list_names();
+        }
+    }
+    RETURN_IF_ERROR_WITH_WARN(ignore_not_found(st), "Failed to list " + metadata_root_location);
     LOG(INFO) << "Found " << meta_files.size() << " meta files, " << bundle_meta_files.size() << " bundle meta files";
     return std::make_pair(std::move(meta_files), std::move(bundle_meta_files));
 }

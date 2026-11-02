@@ -14,8 +14,10 @@
 
 #include "storage/lake/vacuum_full.h"
 
+#include <algorithm>
 #include <set>
 #include <string_view>
+#include <vector>
 
 #include "common/config_lake_fwd.h"
 #include "common/status.h"
@@ -34,6 +36,7 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
                                              int64_t grace_timestamp, int64_t* vacuumed_files,
                                              std::list<std::string>* meta_files,
                                              std::list<std::string>* bundle_meta_files,
+                                             const std::unordered_map<std::string, int64_t>& bundle_meta_mtimes,
                                              const std::unordered_set<int64_t>& retain_versions,
                                              int64_t min_check_version, int64_t max_check_version) {
     DCHECK(tablet_mgr != nullptr);
@@ -86,6 +89,17 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     }
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
+    // A bundle file is written when its version is published, after every transaction in it has committed,
+    // so a file last modified at least |mtime_margin| seconds before |grace_timestamp| only holds metadata
+    // committed before it. Such files are judged by the listing alone instead of being downloaded. The
+    // margin absorbs clock skew between the FE, which sets the commit times, and the object store.
+    const int64_t mtime_margin = config::lake_fullvacuum_meta_mtime_margin_seconds;
+    int64_t judged_by_mtime = 0;
+    int64_t judged_by_content = 0;
+    // Bundle pages are cached under each tablet's own location. A file expired by its modification time is not
+    // read, so its version is evicted after the loop, for the tablets of the bundle files that were read.
+    std::set<int64_t> bundle_tablet_ids;
+    std::vector<int64_t> versions_expired_by_mtime;
     for (const auto& name : *bundle_meta_files) {
         auto [tablet_id, version] = parse_tablet_metadata_filename(name);
         if (!meta_ver_checker(version)) {
@@ -93,17 +107,29 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
         }
         auto path = join_path(metadata_root_location, name);
         bool need_clear = true;
-        ASSIGN_OR_RETURN(auto metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(path, fs.get()));
-        // metadatas parsed from bundle files should alwasy have version >= 2
-        for (const auto& metadata : metadatas) {
-            if (metadata->commit_time() >= grace_timestamp) {
-                need_clear = false;
-                break;
+        TabletMetadataPtrs metadatas;
+        auto mtime = bundle_meta_mtimes.find(name);
+        const bool by_mtime = mtime_margin >= 0 && mtime != bundle_meta_mtimes.end() &&
+                              mtime->second + mtime_margin < grace_timestamp;
+        if (by_mtime) {
+            ++judged_by_mtime;
+        } else {
+            ++judged_by_content;
+            ASSIGN_OR_RETURN(metadatas, TabletManager::get_metas_from_bundle_tablet_metadata(path, fs.get()));
+            // metadatas parsed from bundle files should alwasy have version >= 2
+            for (const auto& metadata : metadatas) {
+                bundle_tablet_ids.insert(metadata->id());
+                if (metadata->commit_time() >= grace_timestamp) {
+                    need_clear = false;
+                }
             }
         }
         if (need_clear) {
             LOG(INFO) << "Try delete for full vacuum: " << path;
             RETURN_IF_ERROR(metafile_deleter.delete_file(path));
+            if (by_mtime) {
+                versions_expired_by_mtime.push_back(version);
+            }
             for (const auto& metadata : metadatas) {
                 tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(metadata->id(), version));
             }
@@ -113,6 +139,32 @@ static Status vacuum_expired_tablet_metadata(TabletManager* tablet_mgr, std::str
     for (const auto& bundle_expired_meta : bundle_expired_metas) {
         bundle_meta_files->remove(bundle_expired_meta);
     }
+    if (!versions_expired_by_mtime.empty() && bundle_tablet_ids.empty()) {
+        // No bundle file was read: take the tablets from the newest one left.
+        auto newest = std::max_element(
+                bundle_meta_files->begin(), bundle_meta_files->end(), [](const std::string& a, const std::string& b) {
+                    return parse_tablet_metadata_filename(a).second < parse_tablet_metadata_filename(b).second;
+                });
+        if (newest != bundle_meta_files->end()) {
+            auto res = TabletManager::get_metas_from_bundle_tablet_metadata(join_path(metadata_root_location, *newest),
+                                                                            fs.get());
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to read " << *newest << " to evict cached bundle pages: " << res.status();
+            } else {
+                for (const auto& metadata : *res) {
+                    bundle_tablet_ids.insert(metadata->id());
+                }
+            }
+        }
+    }
+    for (auto version : versions_expired_by_mtime) {
+        for (auto id : bundle_tablet_ids) {
+            tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(id, version));
+        }
+    }
+    LOG(INFO) << metadata_root_location << ": full vacuum judged " << judged_by_mtime
+              << " bundle meta files by modification time and read " << judged_by_content << ", "
+              << bundle_expired_metas.size() << " expired";
 
     RETURN_IF_ERROR(metafile_deleter.finish());
     (*vacuumed_files) += metafile_deleter.delete_count();
@@ -194,15 +246,17 @@ Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& requ
     const std::string root_loc = tablet_mgr->tablet_root_location(request.tablet_id());
     const auto metadata_root_location = join_path(root_loc, kMetadataDirectoryName);
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root_loc));
-    ASSIGN_OR_RETURN(auto meta_files_and_bundle_files, list_meta_files(fs.get(), metadata_root_location));
+    std::unordered_map<std::string, int64_t> bundle_meta_mtimes;
+    ASSIGN_OR_RETURN(auto meta_files_and_bundle_files,
+                     list_meta_files(fs.get(), metadata_root_location, &bundle_meta_mtimes));
     auto& meta_files = meta_files_and_bundle_files.first;
     auto& bundle_meta_files = meta_files_and_bundle_files.second;
 
     // 1. Delete all metadata files associated with the given partition which have tabletmeta.commit_time < grace_timestamp
     // and the checked version of tablet meta should not be found in retain_versions and should in [min_check_version, max_check_version)
     RETURN_IF_ERROR(vacuum_expired_tablet_metadata(tablet_mgr, root_loc, grace_timestamp, &vacuumed_files, &meta_files,
-                                                   &bundle_meta_files, retain_versions, min_check_version,
-                                                   max_check_version));
+                                                   &bundle_meta_files, bundle_meta_mtimes, retain_versions,
+                                                   min_check_version, max_check_version));
 
     // 2. Determine and delete orphaned data files. We use min_active_txn_id to filter out new data files, then we open
     // any remaining metadata files and note that the data files referenced are not orphans.
