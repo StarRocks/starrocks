@@ -564,6 +564,86 @@ TEST(GeoTransportTest, SharedSerdeSupportsNestedGeometry) {
     EXPECT_EQ(point(), values->get_wkb(0).to_string());
 }
 
+namespace {
+
+void check_empty_array_transport(bool copy_rows) {
+    for (auto desc : {descriptor(), geometry_descriptor()}) {
+        desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED};
+        const auto primitive = desc.type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
+        const auto type = TypeDescriptor::create_array_type(TypeDescriptor::create_geo_type(primitive, desc.type));
+        auto leaf = [](const Column* column) {
+            const auto* array = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(column));
+            return down_cast<const GeoColumn*>(ColumnHelper::get_data_column(array->elements_column_raw_ptr()));
+        };
+        for (bool all_null : {false, true}) {
+            for (int operation = 0; operation < (copy_rows ? 3 : 1); ++operation) {
+                SCOPED_TRACE(::testing::Message() << primitive << ":" << all_null << ":" << operation);
+                // Reproduce 7.1b physical_input(array_type, 3): bind XY, clear the leaf, add NULL arrays.
+                auto source = ColumnHelper::create_column(type, true);
+                auto* array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(source.get()));
+                auto geo = GeoColumn::create(desc);
+                geo->append_wkb(Slice(point()));
+                array->elements_column_raw_ptr()->append(*geo, 0, 1);
+                array->offsets_column_raw_ptr()->append(1);
+                down_cast<NullableColumn*>(source.get())->null_column_data().push_back(0);
+                source->resize(0);
+                if (all_null) {
+                    source->append_nulls(3);
+                } else {
+                    array->append_default(3);
+                    down_cast<NullableColumn*>(source.get())->null_column_data().assign(3, 0);
+                }
+                EXPECT_EQ(desc, leaf(source.get())->descriptor());
+                ASSERT_EQ(0, leaf(source.get())->size());
+                auto copied = ColumnHelper::create_column(type, true);
+                if (copy_rows) {
+                    const uint32_t indexes[] = {2, 0, 1};
+                    if (operation == 0)
+                        copied->append(*source, 0, 3);
+                    else if (operation == 1)
+                        copied->append_selective(*source, indexes, 0, 3);
+                    else
+                        copied->append_value_multiple_times(*source, 1, 3);
+                    EXPECT_EQ(desc, leaf(copied.get())->descriptor());
+                }
+                const ColumnPtr column = copy_rows ? copied : source;
+                Chunk chunk;
+                chunk.append_column(column, 1);
+                ProtobufChunkMeta meta;
+                meta.types = {type};
+                meta.is_nulls = {true};
+                meta.is_consts = {false};
+                meta.slot_id_to_index[1] = 0;
+                auto wire = ProtobufChunkSerde::serialize(chunk);
+                ASSERT_TRUE(wire.ok()) << wire.status();
+                ProtobufChunkDeserializer reader(meta);
+                auto restored = reader.deserialize(wire->data());
+                ASSERT_TRUE(restored.ok()) << restored.status();
+                auto out = restored->get_column_by_slot_id(1);
+                EXPECT_EQ(desc, leaf(out.get())->descriptor());
+                EXPECT_EQ(0, leaf(out.get())->size());
+                ASSERT_EQ(3, out->size());
+                for (size_t row = 0; row < out->size(); ++row) {
+                    EXPECT_EQ(all_null, out->is_null(row));
+                    EXPECT_EQ(0, down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(out.get()))
+                                         ->get_element_size(row));
+                }
+                out->check_or_die();
+            }
+        }
+    }
+}
+
+} // namespace
+
+TEST(GeoTransportTest, EmptyArrayTransportPreservesStorage) {
+    check_empty_array_transport(false);
+}
+
+TEST(GeoTransportTest, EmptyArrayCopiesPreserveStorageThroughTransport) {
+    check_empty_array_transport(true);
+}
+
 TEST(GeoTransportTest, RejectsConflictingReceiverPrimitive) {
     auto column = GeoColumn::create(descriptor());
     column->append_wkb(Slice(point()));
