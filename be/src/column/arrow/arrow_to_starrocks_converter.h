@@ -144,6 +144,10 @@ const arrow::DataType* unwrap_arrow_dictionary_type(const arrow::DataType* type)
 // over a NullArray child is tiny on the wire yet expands into a full column. Positions are logical positions of
 // `array`. The array must already have passed arrow::Array::ValidateFull(); the result saturates at INT64_MAX.
 int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t begin, int64_t length);
+int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t begin, int64_t length,
+                                          const TypeDescriptor* dst_type);
+int64_t estimate_default_column_output_bytes(const TypeDescriptor& dst_type, int64_t length,
+                                             bool include_null_byte = false);
 
 Status validate_arrow_column_type(const arrow::DataType* arrow_type, const TypeDescriptor& slot_type,
                                   std::string_view col_name);

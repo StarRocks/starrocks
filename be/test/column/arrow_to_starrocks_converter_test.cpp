@@ -2946,4 +2946,90 @@ TEST(ArrowOutputSizeEstimateTest, UnknownLayoutsAndLimitsAreConservative) {
     EXPECT_EQ(std::numeric_limits<int64_t>::max(), estimate_all(nested));
 }
 
+TEST(ArrowOutputSizeEstimateTest, DestinationTypeAwareEstimation) {
+    // Case 1 (Reviewer's exact scenario): 1-row list<null> with 60,000,000 children targeting ARRAY<BIGINT>.
+    {
+        constexpr int32_t kChildren = 60'000'000;
+        auto null_child = std::make_shared<arrow::NullArray>(kChildren);
+        auto list = arrow::ListArray::FromArrays(*make_offsets32({0, kChildren}), *null_child).ValueOrDie();
+        auto arr_bigint_type = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_BIGINT));
+
+        EXPECT_EQ(60'000'004, estimate_arrow_array_output_bytes(*list, 0, 1));
+        const int64_t dst_est = estimate_arrow_array_output_bytes(*list, 0, 1, &arr_bigint_type);
+        EXPECT_EQ(600'000'004, dst_est);
+        EXPECT_GT(dst_est, 64LL * 1024 * 1024);
+    }
+
+    // Case 2 (Narrow nested element widening): 1-row list<int8> with 1,000 children targeting ARRAY<LARGEINT>
+    // and ARRAY<DECIMAL256>.
+    std::shared_ptr<arrow::Array> int8_child;
+    {
+        arrow::Int8Builder int8_builder;
+        ASSERT_TRUE(int8_builder.AppendValues(std::vector<int8_t>(1000, 1)).ok());
+        ASSERT_TRUE(int8_builder.Finish(&int8_child).ok());
+        auto list_int8 = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *int8_child).ValueOrDie();
+
+        auto arr_largeint_type = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_LARGEINT));
+        EXPECT_EQ(18'004, estimate_arrow_array_output_bytes(*list_int8, 0, 1, &arr_largeint_type));
+
+        auto arr_dec256_type =
+                TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DECIMAL256, 76, 10));
+        // int8 -> DECIMAL256 uses a two-phase cast (phase-1 TINYINT (1+1) + phase-2 DECIMAL256 (32+1) + 1 filter = 36B/elem).
+        EXPECT_EQ(36'004, estimate_arrow_array_output_bytes(*list_int8, 0, 1, &arr_dec256_type));
+
+        arrow::Decimal32Builder dec32_builder(arrow::decimal32(5, 2));
+        for (int i = 0; i < 1000; ++i) {
+            ASSERT_TRUE(dec32_builder.Append(arrow::Decimal32(1)).ok());
+        }
+        std::shared_ptr<arrow::Array> dec32_child;
+        ASSERT_TRUE(dec32_builder.Finish(&dec32_child).ok());
+        auto list_dec32 = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *dec32_child).ValueOrDie();
+        // decimal32 -> DECIMAL256 has a direct converter (32B value + 1B null + 1B filter = 34B/elem).
+        EXPECT_EQ(34'004, estimate_arrow_array_output_bytes(*list_dec32, 0, 1, &arr_dec256_type));
+    }
+
+    // Case 3 (Nested struct with missing fields): 1-row list<struct<a: int8>> with 1,000 children targeting
+    // ARRAY<STRUCT<a BIGINT, b BIGINT>> (where field b is absent in Arrow).
+    {
+        auto struct_child = arrow::StructArray::Make({int8_child}, std::vector<std::string>{"a"}).ValueOrDie();
+        auto list_struct = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *struct_child).ValueOrDie();
+        auto dst_struct_type = TypeDescriptor::create_struct_type(
+                {"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)});
+        auto arr_struct_type = TypeDescriptor::create_array_type(dst_struct_type);
+        EXPECT_EQ(20'004, estimate_arrow_array_output_bytes(*list_struct, 0, 1, &arr_struct_type));
+    }
+
+    // Case 4 (Map with narrow/null children and pruned TYPE_UNKNOWN child): 1-row map<int8, null> with 1,000 entries
+    // targeting MAP<BIGINT, BIGINT> and MAP<BIGINT, UNKNOWN>.
+    {
+        auto null_items = std::make_shared<arrow::NullArray>(1000);
+        auto map_arr = arrow::MapArray::FromArrays(make_offsets32({0, 1000}), int8_child, null_items).ValueOrDie();
+
+        auto map_bigint_bigint =
+                TypeDescriptor::create_map_type(TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT));
+        EXPECT_EQ(20'004, estimate_arrow_array_output_bytes(*map_arr, 0, 1, &map_bigint_bigint));
+
+        auto map_bigint_unknown =
+                TypeDescriptor::create_map_type(TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_UNKNOWN));
+        EXPECT_EQ(12'004, estimate_arrow_array_output_bytes(*map_arr, 0, 1, &map_bigint_unknown));
+    }
+
+    // Case 5 (Nested two-phase cast): 1-row list<int32> with 1,000 children targeting ARRAY<VARCHAR>.
+    {
+        auto int32_child = make_int32_array(std::vector<int32_t>(1000, 42));
+        auto list_int32 = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *int32_child).ValueOrDie();
+        auto arr_varchar_type = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+        EXPECT_EQ(11'004, estimate_arrow_array_output_bytes(*list_int32, 0, 1, &arr_varchar_type));
+    }
+
+    // Case 6 (Missing top-level column default estimation): BIGINT, LARGEINT, and STRUCT<a BIGINT, b LARGEINT>.
+    {
+        EXPECT_EQ(800, estimate_default_column_output_bytes(TypeDescriptor(TYPE_BIGINT), 100));
+        EXPECT_EQ(1600, estimate_default_column_output_bytes(TypeDescriptor(TYPE_LARGEINT), 100));
+        auto struct_type = TypeDescriptor::create_struct_type(
+                {"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_LARGEINT)});
+        EXPECT_EQ(2600, estimate_default_column_output_bytes(struct_type, 100));
+    }
+}
+
 } // namespace starrocks

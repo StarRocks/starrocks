@@ -1486,65 +1486,219 @@ int64_t saturating_mul(int64_t a, int64_t b) {
 
 constexpr int kMaxEstimateDepth = 64;
 
-int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t length, int depth) {
+int64_t estimate_logical_type_elem_bytes(LogicalType lt) {
+    switch (lt) {
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+    case TYPE_UNSIGNED_TINYINT:
+    case TYPE_NULL:
+    case TYPE_UNKNOWN:
+        return 1;
+    case TYPE_SMALLINT:
+    case TYPE_UNSIGNED_SMALLINT:
+        return 2;
+    case TYPE_INT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_FLOAT:
+    case TYPE_DATE:
+    case TYPE_DECIMAL32:
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+    case TYPE_VARBINARY:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+        return 4;
+    case TYPE_BIGINT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DOUBLE:
+    case TYPE_DATETIME:
+    case TYPE_TIME:
+    case TYPE_DECIMAL64:
+        return 8;
+    case TYPE_LARGEINT:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL128:
+        return 16;
+    case TYPE_DECIMAL256:
+        return 32;
+    case TYPE_JSON:
+        return 24;
+    case TYPE_VARIANT:
+        return 32;
+    default:
+        return 8;
+    }
+}
+
+int64_t estimate_default_column_bytes(const TypeDescriptor& dst_type, int64_t length, bool include_null_byte,
+                                      int depth) {
     if (length <= 0) {
         return 0;
     }
     if (depth > kMaxEstimateDepth) {
         return std::numeric_limits<int64_t>::max();
     }
+    const int64_t null_bytes = include_null_byte ? length : 0;
+    if (dst_type.type == TYPE_STRUCT) {
+        if (dst_type.children.empty()) {
+            return saturating_add(null_bytes, length);
+        }
+        int64_t total = null_bytes;
+        for (const auto& child : dst_type.children) {
+            total = saturating_add(total,
+                                   estimate_default_column_bytes(child, length, /*include_null_byte=*/true, depth + 1));
+        }
+        return total;
+    }
+    return saturating_add(null_bytes, saturating_mul(length, estimate_logical_type_elem_bytes(dst_type.type)));
+}
+
+int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t length, const TypeDescriptor* dst_type,
+                              int depth) {
+    if (length <= 0) {
+        return 0;
+    }
+    if (depth > kMaxEstimateDepth) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    const bool nested = depth > 0;
     const arrow::Type::type type_id = array.type_id();
+    int64_t untyped_bytes = 0;
+    int64_t variable_value_bytes = 0;
+
     switch (type_id) {
     case arrow::Type::NA:
-        return length;
+        if (dst_type == nullptr) {
+            return length;
+        }
+        return estimate_default_column_bytes(
+                *dst_type, length,
+                /*include_null_byte=*/nested || estimate_logical_type_elem_bytes(dst_type->type) > 1, depth);
     case arrow::Type::BINARY:
     case arrow::Type::STRING: {
         const auto& a = static_cast<const arrow::BinaryArray&>(array);
         const int64_t value_bytes = a.value_offset(begin + length) - a.value_offset(begin);
-        return saturating_add(saturating_mul(length, sizeof(int32_t)), value_bytes);
+        untyped_bytes = saturating_add(saturating_mul(length, sizeof(int32_t)), value_bytes);
+        variable_value_bytes = value_bytes;
+        break;
     }
     case arrow::Type::LARGE_BINARY:
     case arrow::Type::LARGE_STRING: {
         const auto& a = static_cast<const arrow::LargeBinaryArray&>(array);
         const int64_t value_bytes = a.value_offset(begin + length) - a.value_offset(begin);
-        return saturating_add(saturating_mul(length, sizeof(int64_t)), value_bytes);
+        untyped_bytes = saturating_add(saturating_mul(length, sizeof(int64_t)), value_bytes);
+        variable_value_bytes = value_bytes;
+        break;
     }
     case arrow::Type::STRING_VIEW: {
         const auto& a = static_cast<const arrow::StringViewArray&>(array);
-        int64_t total = saturating_mul(length, sizeof(arrow::BinaryViewType::c_type));
+        int64_t value_bytes = 0;
         for (int64_t i = begin; i < begin + length; ++i) {
-            if (!a.IsNull(i)) total = saturating_add(total, static_cast<int64_t>(a.GetView(i).size()));
+            if (!a.IsNull(i)) value_bytes = saturating_add(value_bytes, static_cast<int64_t>(a.GetView(i).size()));
         }
-        return total;
+        untyped_bytes = saturating_add(saturating_mul(length, sizeof(arrow::BinaryViewType::c_type)), value_bytes);
+        variable_value_bytes = value_bytes;
+        break;
     }
     case arrow::Type::LIST:
-    case arrow::Type::MAP: {
-        const auto& a = static_cast<const arrow::ListArray&>(array);
-        const int64_t first = a.value_offset(begin);
-        const int64_t last = a.value_offset(begin + length);
-        return saturating_add(saturating_mul(length, sizeof(int32_t)),
-                              estimate_output_bytes(*a.values(), first, last - first, depth + 1));
-    }
-    case arrow::Type::LARGE_LIST: {
-        const auto& a = static_cast<const arrow::LargeListArray&>(array);
-        const int64_t first = a.value_offset(begin);
-        const int64_t last = a.value_offset(begin + length);
-        return saturating_add(saturating_mul(length, sizeof(int64_t)),
-                              estimate_output_bytes(*a.values(), first, last - first, depth + 1));
-    }
+    case arrow::Type::LARGE_LIST:
     case arrow::Type::FIXED_SIZE_LIST: {
-        const auto& a = static_cast<const arrow::FixedSizeListArray&>(array);
+        int64_t first = 0;
+        int64_t last = 0;
+        const arrow::Array* values = nullptr;
+        int64_t untyped_outer_bytes = 0;
+        int64_t dst_outer_bytes = 0;
+        if (type_id == arrow::Type::LIST) {
+            const auto& a = static_cast<const arrow::ListArray&>(array);
+            first = a.value_offset(begin);
+            last = a.value_offset(begin + length);
+            values = a.values().get();
+            untyped_outer_bytes = saturating_mul(length, sizeof(int32_t));
+            dst_outer_bytes = saturating_add(untyped_outer_bytes, nested ? length : 0);
+        } else if (type_id == arrow::Type::LARGE_LIST) {
+            const auto& a = static_cast<const arrow::LargeListArray&>(array);
+            first = a.value_offset(begin);
+            last = a.value_offset(begin + length);
+            values = a.values().get();
+            untyped_outer_bytes = saturating_mul(length, sizeof(int64_t));
+            dst_outer_bytes = saturating_add(untyped_outer_bytes, nested ? length : 0);
+        } else {
+            const auto& a = static_cast<const arrow::FixedSizeListArray&>(array);
+            first = a.value_offset(begin);
+            last = a.value_offset(begin + length);
+            values = a.values().get();
+            untyped_outer_bytes = length;
+            dst_outer_bytes = saturating_mul(length, nested ? 5 : 4);
+        }
+        const int64_t child_len = last - first;
+        if (dst_type == nullptr) {
+            return saturating_add(untyped_outer_bytes,
+                                  estimate_output_bytes(*values, first, child_len, nullptr, depth + 1));
+        }
+        if (dst_type->type == TYPE_ARRAY && !dst_type->children.empty()) {
+            const int64_t child_bytes =
+                    estimate_output_bytes(*values, first, child_len, &dst_type->children[0], depth + 1);
+            return saturating_add(dst_outer_bytes, saturating_add(child_len, child_bytes));
+        }
+        const int64_t untyped_child = estimate_output_bytes(*values, first, child_len, nullptr, depth + 1);
+        return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth),
+                              std::max(untyped_child, saturating_mul(child_len, 8)));
+    }
+    case arrow::Type::MAP: {
+        const auto& a = static_cast<const arrow::MapArray&>(array);
         const int64_t first = a.value_offset(begin);
         const int64_t last = a.value_offset(begin + length);
-        return saturating_add(length, estimate_output_bytes(*a.values(), first, last - first, depth + 1));
+        const int64_t child_len = last - first;
+        const int64_t untyped_map_bytes =
+                saturating_add(saturating_mul(length, sizeof(int32_t)),
+                               estimate_output_bytes(*a.values(), first, child_len, nullptr, depth + 1));
+        if (dst_type == nullptr) {
+            return untyped_map_bytes;
+        }
+        const int64_t outer_bytes = saturating_add(saturating_mul(length, sizeof(int32_t)), nested ? length : 0);
+        if (dst_type->type == TYPE_MAP && dst_type->children.size() == 2) {
+            int64_t total = outer_bytes;
+            for (size_t i = 0; i < 2; ++i) {
+                if (dst_type->children[i].is_unknown_type()) {
+                    total = saturating_add(total, saturating_mul(child_len, 2));
+                } else {
+                    const arrow::Array& child_arr = (i == 0) ? *a.keys() : *a.items();
+                    const int64_t child_bytes =
+                            estimate_output_bytes(child_arr, first, child_len, &dst_type->children[i], depth + 1);
+                    total = saturating_add(total, saturating_add(child_len, child_bytes));
+                }
+            }
+            return std::max(untyped_map_bytes, total);
+        }
+        return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth),
+                              std::max(untyped_map_bytes, saturating_mul(child_len, 16)));
     }
     case arrow::Type::STRUCT: {
         const auto& a = static_cast<const arrow::StructArray&>(array);
-        int64_t total = length;
+        int64_t untyped_struct_bytes = length;
         for (int i = 0; i < a.num_fields(); ++i) {
-            total = saturating_add(total, estimate_output_bytes(*a.field(i), begin, length, depth + 1));
+            untyped_struct_bytes = saturating_add(
+                    untyped_struct_bytes, estimate_output_bytes(*a.field(i), begin, length, nullptr, depth + 1));
         }
-        return total;
+        if (dst_type == nullptr) {
+            return untyped_struct_bytes;
+        }
+        if (dst_type->type == TYPE_STRUCT) {
+            int64_t total = length;
+            for (size_t i = 0; i < dst_type->children.size(); ++i) {
+                std::shared_ptr<arrow::Array> child_array =
+                        (i < dst_type->field_names.size()) ? a.GetFieldByName(dst_type->field_names[i]) : nullptr;
+                if (child_array == nullptr) {
+                    total = saturating_add(total, estimate_default_column_bytes(dst_type->children[i], length,
+                                                                                /*include_null_byte=*/true, depth + 1));
+                } else {
+                    total = saturating_add(total, estimate_output_bytes(*child_array, begin, length,
+                                                                        &dst_type->children[i], depth + 1));
+                }
+            }
+            return std::max(untyped_struct_bytes, total);
+        }
+        return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth), untyped_struct_bytes);
     }
     case arrow::Type::DICTIONARY: {
         const auto& a = static_cast<const arrow::DictionaryArray&>(array);
@@ -1554,7 +1708,10 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
         const std::shared_ptr<arrow::Array> dictionary = a.dictionary();
         const int64_t dictionary_length = dictionary->length();
         if (dictionary_length <= 0) {
-            return index_bytes;
+            if (dst_type == nullptr) {
+                return index_bytes;
+            }
+            return saturating_add(index_bytes, estimate_default_column_bytes(*dst_type, length, nested, depth));
         }
         // Expansion is what the converters materialize per row. Binary-like dictionaries are summed exactly because
         // a single huge value repeated by many indices is the classic amplification.
@@ -1577,29 +1734,55 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
                 expanded = saturating_add(expanded, saturating_add(values.value_length(idx), sizeof(int64_t)));
             }
         } else {
-            const int64_t dictionary_bytes = estimate_output_bytes(*dictionary, 0, dictionary_length, depth + 1);
+            const int64_t dictionary_bytes =
+                    estimate_output_bytes(*dictionary, 0, dictionary_length, dst_type, depth + 1);
             const int64_t per_value = dictionary_bytes == std::numeric_limits<int64_t>::max()
                                               ? dictionary_bytes
                                               : (dictionary_bytes + dictionary_length - 1) / dictionary_length;
             expanded = saturating_mul(length, per_value);
         }
-        return saturating_add(index_bytes, expanded);
-    }
-    default:
+        untyped_bytes = saturating_add(index_bytes, expanded);
         break;
     }
-    if (arrow::is_fixed_width(type_id)) {
-        const auto& fixed = static_cast<const arrow::FixedWidthType&>(*array.type());
-        return saturating_mul(length, std::max<int64_t>(1, fixed.bit_width() / 8));
+    default:
+        if (arrow::is_fixed_width(type_id)) {
+            const auto& fixed = static_cast<const arrow::FixedWidthType&>(*array.type());
+            untyped_bytes = saturating_mul(length, std::max<int64_t>(1, fixed.bit_width() / 8));
+        } else {
+            // Layouts without a dedicated rule: charge a pointer-sized value per row.
+            untyped_bytes = saturating_mul(length, 8);
+        }
+        break;
     }
-    // Layouts without a dedicated rule: charge a pointer-sized value per row.
-    return saturating_mul(length, 8);
+
+    if (dst_type == nullptr) {
+        return untyped_bytes;
+    }
+    int64_t dst_elem_bytes = estimate_logical_type_elem_bytes(dst_type->type) + (nested ? 1 : 0);
+    if (type_id != arrow::Type::DICTIONARY &&
+        get_arrow_converter(type_id, dst_type->type, /*is_nullable=*/true, /*is_strict=*/false) == nullptr) {
+        LogicalType raw_lt = get_strict_type(type_id);
+        if (raw_lt != TYPE_UNKNOWN && raw_lt != dst_type->type && nested) {
+            dst_elem_bytes += estimate_logical_type_elem_bytes(raw_lt) + 1;
+        }
+    }
+    const int64_t dst_bytes = saturating_add(saturating_mul(length, dst_elem_bytes), variable_value_bytes);
+    return std::max(saturating_add(untyped_bytes, nested ? length : 0), dst_bytes);
 }
 
 } // namespace
 
 int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t begin, int64_t length) {
-    return estimate_output_bytes(array, begin, length, 0);
+    return estimate_output_bytes(array, begin, length, nullptr, 0);
+}
+
+int64_t estimate_arrow_array_output_bytes(const arrow::Array& array, int64_t begin, int64_t length,
+                                          const TypeDescriptor* dst_type) {
+    return estimate_output_bytes(array, begin, length, dst_type, 0);
+}
+
+int64_t estimate_default_column_output_bytes(const TypeDescriptor& dst_type, int64_t length, bool include_null_byte) {
+    return estimate_default_column_bytes(dst_type, length, include_null_byte, 0);
 }
 
 void ArrowConvertContext::clear_current_column() {

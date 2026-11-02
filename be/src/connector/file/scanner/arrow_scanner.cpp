@@ -46,6 +46,7 @@
 #include "formats/arrow/arrow_column_converter.h"
 #include "gutil/strings/substitute.h"
 #include "platform/fs_broker.h"
+#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -529,9 +530,10 @@ int64_t ArrowScanner::estimate_batch_output_bytes(const arrow::RecordBatch& batc
             continue;
         }
         auto array = batch.GetColumnByName(std::string(slot_desc->col_name()));
-        total = saturating_add(total, array == nullptr
-                                              ? batch.num_rows()
-                                              : estimate_arrow_array_output_bytes(*array, 0, batch.num_rows()));
+        total = saturating_add(
+                total, array == nullptr
+                               ? estimate_default_column_output_bytes(slot_desc->type(), batch.num_rows())
+                               : estimate_arrow_array_output_bytes(*array, 0, batch.num_rows(), &slot_desc->type()));
     }
     // Rows are materialized even when no projected column is present in the batch (all-NULL rows).
     return std::max<int64_t>(total, batch.num_rows());
@@ -560,7 +562,8 @@ Status ArrowScanner::decode_and_convert_discrete_message(int64_t* filtered_rows)
 
     int64_t rows = 0;
     RETURN_IF_ERROR(decode_discrete_message(&pool, &batches, &rows, filtered_rows));
-    Status convert_status = convert_discrete_batches(&batches, max_decoded_bytes);
+    Status convert_status;
+    TRY_CATCH_BAD_ALLOC(convert_status = convert_discrete_batches(&batches, max_decoded_bytes));
     if (!convert_status.ok()) {
         *filtered_rows = std::max<int64_t>(rows, 1);
         return convert_status;

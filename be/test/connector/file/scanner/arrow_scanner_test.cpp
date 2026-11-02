@@ -5626,4 +5626,230 @@ TEST_F(ArrowScannerTest, TestStreamRecordsReadBatchAndFileReadCounters) {
     scanner.close();
 }
 
+TEST_F(ArrowScannerTest, TestStreamRejectsNestedDestinationTypeExpansionInPreflight) {
+    auto make_good_bigint_list_batch = [](const std::shared_ptr<arrow::Schema>& schema) {
+        arrow::Int64Builder child_builder;
+        EXPECT_TRUE(child_builder.AppendValues({1, 2, 3}).ok());
+        std::shared_ptr<arrow::Array> child;
+        EXPECT_TRUE(child_builder.Finish(&child).ok());
+        arrow::Int32Builder offsets_builder;
+        EXPECT_TRUE(offsets_builder.AppendValues({0, 2, 3}).ok());
+        std::shared_ptr<arrow::Array> offsets;
+        EXPECT_TRUE(offsets_builder.Finish(&offsets).ok());
+        auto list = arrow::ListArray::FromArrays(*offsets, *child).ValueOrDie();
+        return arrow::RecordBatch::Make(schema, 2, {list});
+    };
+
+    // Subcase A: Default 64 MiB cap. 1-row list<null> with 60,000,000 children targeting ARRAY<BIGINT>
+    // (untyped estimate ~60 MB < 64 MiB, destination-aware estimate ~600 MB > 64 MiB).
+    {
+        const int64_t old_limit = config::routine_load_arrow_max_decoded_bytes_per_message;
+        config::routine_load_arrow_max_decoded_bytes_per_message = 64 * 1024 * 1024;
+        DeferOp restore_limit([&]() { config::routine_load_arrow_max_decoded_bytes_per_message = old_limit; });
+
+        SlotTypeDescInfoArray slots;
+        slots.emplace_back("c0_arr", TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_BIGINT)),
+                           true);
+
+        auto hostile_schema = arrow::schema({arrow::field("c0_arr", arrow::list(arrow::null()))});
+        auto hostile_batch = make_null_list_batch(hostile_schema, {0, 60'000'000});
+
+        // First: send only the hostile message to prove preflight rejection (init_chunk_ns == 0 && fill_ns == 0).
+        {
+            auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+            auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+            ASSERT_OK(ctx_res.status());
+            auto& ctx = ctx_res.value();
+
+            append_ipc_message(pipe, hostile_schema, {hostile_batch});
+            ASSERT_OK(pipe->finish());
+
+            ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+            ASSERT_OK(scanner.open());
+            EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+            EXPECT_EQ(0, ctx->counter->init_chunk_ns);
+            EXPECT_EQ(0, ctx->counter->fill_ns);
+            EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+            EXPECT_EQ(1, ctx->counter->num_rows_filtered);
+            EXPECT_EQ(0, ctx->counter->arrow_messages_read);
+            scanner.close();
+        }
+
+        // Second: hostile message followed by a valid 2-row ARRAY<BIGINT> message ([[1, 2], [3]]).
+        {
+            auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+            auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+            ASSERT_OK(ctx_res.status());
+            auto& ctx = ctx_res.value();
+
+            auto good_schema = arrow::schema({arrow::field("c0_arr", arrow::list(arrow::int64()))});
+            append_ipc_message(pipe, hostile_schema, {hostile_batch});
+            append_ipc_message(pipe, good_schema, {make_good_bigint_list_batch(good_schema)});
+            ASSERT_OK(pipe->finish());
+
+            ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+            ASSERT_OK(scanner.open());
+            auto res = scanner.get_next();
+            ASSERT_OK(res.status());
+            ASSERT_NE(nullptr, res.value());
+            ASSERT_EQ(2, res.value()->num_rows());
+            auto row0 = res.value()->columns()[0]->get(0).get_array();
+            ASSERT_EQ(2u, row0.size());
+            EXPECT_EQ(1, row0[0].get_int64());
+            EXPECT_EQ(2, row0[1].get_int64());
+            auto row1 = res.value()->columns()[0]->get(1).get_array();
+            ASSERT_EQ(1u, row1.size());
+            EXPECT_EQ(3, row1[0].get_int64());
+
+            EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+            EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+            EXPECT_EQ(1, ctx->counter->num_rows_filtered);
+            EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+            scanner.close();
+        }
+    }
+
+    // Subcase B: 1 MiB cap.
+    //  1) 1-row list<int8> with 100,000 children targeting ARRAY<LARGEINT> (1,800,004 B > 1 MiB).
+    //  2) 1-row list<struct<a: int8>> with 100,000 children targeting ARRAY<STRUCT<a BIGINT, b BIGINT>>
+    //     (2,000,004 B > 1 MiB).
+    {
+        const int64_t old_limit = config::routine_load_arrow_max_decoded_bytes_per_message;
+        config::routine_load_arrow_max_decoded_bytes_per_message = 1024 * 1024;
+        DeferOp restore_limit([&]() { config::routine_load_arrow_max_decoded_bytes_per_message = old_limit; });
+
+        arrow::Int8Builder int8_builder;
+        ASSERT_ARROW_OK(int8_builder.AppendValues(std::vector<int8_t>(100'000, 1)));
+        std::shared_ptr<arrow::Array> int8_child;
+        ASSERT_ARROW_OK(int8_builder.Finish(&int8_child));
+
+        arrow::Int32Builder offsets_builder;
+        ASSERT_ARROW_OK(offsets_builder.AppendValues({0, 100'000}));
+        std::shared_ptr<arrow::Array> offsets_100k;
+        ASSERT_ARROW_OK(offsets_builder.Finish(&offsets_100k));
+
+        // B1: list<int8> -> ARRAY<LARGEINT>
+        {
+            SlotTypeDescInfoArray slots;
+            slots.emplace_back("c0_arr",
+                               TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_LARGEINT)),
+                               true);
+            auto hostile_schema = arrow::schema({arrow::field("c0_arr", arrow::list(arrow::int8()))});
+            auto hostile_list = arrow::ListArray::FromArrays(*offsets_100k, *int8_child).ValueOrDie();
+            auto hostile_batch = arrow::RecordBatch::Make(hostile_schema, 1, {hostile_list});
+
+            // Hostile only -> preflight rejection
+            {
+                auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+                auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+                ASSERT_OK(ctx_res.status());
+                auto& ctx = ctx_res.value();
+
+                append_ipc_message(pipe, hostile_schema, {hostile_batch});
+                ASSERT_OK(pipe->finish());
+
+                ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+                ASSERT_OK(scanner.open());
+                EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+                EXPECT_EQ(0, ctx->counter->init_chunk_ns);
+                EXPECT_EQ(0, ctx->counter->fill_ns);
+                EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+                scanner.close();
+            }
+
+            // Hostile followed by valid
+            {
+                auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+                auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+                ASSERT_OK(ctx_res.status());
+                auto& ctx = ctx_res.value();
+
+                auto good_schema = arrow::schema({arrow::field("c0_arr", arrow::list(arrow::int64()))});
+                append_ipc_message(pipe, hostile_schema, {hostile_batch});
+                append_ipc_message(pipe, good_schema, {make_good_bigint_list_batch(good_schema)});
+                ASSERT_OK(pipe->finish());
+
+                ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+                ASSERT_OK(scanner.open());
+                auto res = scanner.get_next();
+                ASSERT_OK(res.status());
+                ASSERT_EQ(2, res.value()->num_rows());
+                EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+                EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+                EXPECT_EQ(1, ctx->counter->num_rows_filtered);
+                EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+                scanner.close();
+            }
+        }
+
+        // B2: list<struct<a: int8>> -> ARRAY<STRUCT<a BIGINT, b BIGINT>>
+        {
+            auto dst_struct = TypeDescriptor::create_struct_type(
+                    {"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)});
+            SlotTypeDescInfoArray slots;
+            slots.emplace_back("c0_arr", TypeDescriptor::create_array_type(dst_struct), true);
+
+            auto struct_child = arrow::StructArray::Make({int8_child}, std::vector<std::string>{"a"}).ValueOrDie();
+            auto hostile_list = arrow::ListArray::FromArrays(*offsets_100k, *struct_child).ValueOrDie();
+            auto hostile_schema = arrow::schema({arrow::field("c0_arr", hostile_list->type())});
+            auto hostile_batch = arrow::RecordBatch::Make(hostile_schema, 1, {hostile_list});
+
+            arrow::Int64Builder small_a_builder;
+            ASSERT_ARROW_OK(small_a_builder.AppendValues({10, 20}));
+            std::shared_ptr<arrow::Array> small_a;
+            ASSERT_ARROW_OK(small_a_builder.Finish(&small_a));
+            auto good_struct = arrow::StructArray::Make({small_a}, std::vector<std::string>{"a"}).ValueOrDie();
+            arrow::Int32Builder small_offsets_builder;
+            ASSERT_ARROW_OK(small_offsets_builder.AppendValues({0, 1, 2}));
+            std::shared_ptr<arrow::Array> small_offsets;
+            ASSERT_ARROW_OK(small_offsets_builder.Finish(&small_offsets));
+            auto good_list = arrow::ListArray::FromArrays(*small_offsets, *good_struct).ValueOrDie();
+            auto good_schema = arrow::schema({arrow::field("c0_arr", good_list->type())});
+            auto good_batch = arrow::RecordBatch::Make(good_schema, 2, {good_list});
+
+            // Hostile only -> preflight rejection
+            {
+                auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+                auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+                ASSERT_OK(ctx_res.status());
+                auto& ctx = ctx_res.value();
+
+                append_ipc_message(pipe, hostile_schema, {hostile_batch});
+                ASSERT_OK(pipe->finish());
+
+                ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+                ASSERT_OK(scanner.open());
+                EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+                EXPECT_EQ(0, ctx->counter->init_chunk_ns);
+                EXPECT_EQ(0, ctx->counter->fill_ns);
+                EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+                scanner.close();
+            }
+
+            // Hostile followed by valid
+            {
+                auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+                auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+                ASSERT_OK(ctx_res.status());
+                auto& ctx = ctx_res.value();
+
+                append_ipc_message(pipe, hostile_schema, {hostile_batch});
+                append_ipc_message(pipe, good_schema, {good_batch});
+                ASSERT_OK(pipe->finish());
+
+                ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+                ASSERT_OK(scanner.open());
+                auto res = scanner.get_next();
+                ASSERT_OK(res.status());
+                ASSERT_EQ(2, res.value()->num_rows());
+                EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+                EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+                EXPECT_EQ(1, ctx->counter->num_rows_filtered);
+                EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+                scanner.close();
+            }
+        }
+    }
+}
+
 } // namespace starrocks
