@@ -1025,10 +1025,21 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
+<<<<<<< HEAD
+=======
+        // Refuse before recoverAllTables consumes any recycle marker or registers a table.
+        Database db = dbInfo.getDb();
+        ReservedDatabases.rejectDatabaseOperation(null, db.getFullName(), "RECOVER DATABASE");
+        for (RecycleTableInfo tableInfo : idToTableInfo.row(db.getId()).values()) {
+            if (tableInfo.getDbId() == db.getId() && dbInfo.getTableNames().contains(tableInfo.getTable().getName())
+                    && tableInfo.isRecoverable()) {
+                warnIfRecoveringNonNormalTable(db, tableInfo.getTable());
+            }
+        }
+>>>>>>> acd19838ecc... [BugFix][RB-866] Warn when recovering native tables in non-NORMAL state (#67396)
         // 1. recover all tables in this db
         recoverAllTables(dbInfo);
 
-        Database db = dbInfo.getDb();
         // 2. remove db from idToDatabase and idToRecycleTime
         idToDatabase.remove(db.getId());
         removeRecycleMarkers(db.getId());
@@ -1089,6 +1100,18 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         }
     }
 
+    private static void warnIfRecoveringNonNormalTable(Database db, Table table) {
+        if (table.isNativeTableOrMaterializedView()) {
+            OlapTable.OlapTableState state = ((OlapTable) table).getState();
+            if (state != OlapTable.OlapTableState.NORMAL) {
+                LOG.warn("Attempting to recover native table {}.{} (dbId={}, tableId={}) in state {}; "
+                                + "unfinished alter/reshard metadata is not repaired and may leave version publication "
+                                + "or subsequent DDL blocked.",
+                        db.getFullName(), table.getName(), db.getId(), table.getId(), state);
+            }
+        }
+    }
+
     public synchronized boolean recoverTable(Database db, String tableName) {
         // make sure to get db lock
         long dbId = db.getId();
@@ -1099,6 +1122,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable, MemoryT
         }
 
         Table table = recycleTableInfo.getTable();
+        warnIfRecoveringNonNormalTable(db, table);
 
         // log
         RecoverInfo recoverInfo = new RecoverInfo(dbId, table.getId(), -1L);
