@@ -1649,7 +1649,8 @@ public class GlobalTransactionMgrTest {
                 transactionSource, LoadJobSourceType.INSERT_STREAMING, Config.stream_load_default_timeout_second);
         InsertTxnCommitAttachment plainInsert2 = new InsertTxnCommitAttachment(1);
         plainInsert2.setRequireEmptyPartitions(true);
-        TransactionCommitFailedException e = Assertions.assertThrows(TransactionCommitFailedException.class,
+        PlainInsertOnEmptyPartitionsConflictException e = Assertions.assertThrows(
+                PlainInsertOnEmptyPartitionsConflictException.class,
                 () -> masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txn2, transTablets,
                         Lists.newArrayList(), plainInsert2));
         assertTrue(e.getMessage().contains("retry the statement"), e.getMessage());

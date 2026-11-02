@@ -1032,7 +1032,8 @@ public class StatementPlanner {
         stmt.setTxnId(txnId);
     }
 
-    private static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
+    /** Aborts the transaction {@link #beginTransaction} opened for stmt, if it opened one. */
+    public static void abortTransaction(DmlStmt stmt, ConnectContext session, String errMsg) {
         long txnId = stmt.getTxnId();
         if (txnId == DmlStmt.INVALID_TXN_ID) {
             return;
