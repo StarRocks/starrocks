@@ -18,6 +18,7 @@
 #include <unistd.h>
 
 #include <ctime>
+#include <map>
 #include <set>
 
 #include "common/config.h"
@@ -2904,6 +2905,63 @@ TEST_P(LakeVacuumTest, test_vacuum_deadline_window_too_small_to_start) {
     EXPECT_EQ(0, response.vacuumed_files());
     EXPECT_TRUE(file_exist(tablet_metadata_filename(20003, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(20003, 3)));
+}
+
+// FE sends a file-bundling partition's whole tablet set to one aggregator node, which holds few of its
+// tablets. Every metadata read of the vacuum must resolve storage through the anchor tablet alone:
+// resolving any other tablet would cost a StarMgr GetShard RPC on a real cluster. The provider below
+// serves only the anchor from the partition directory, so a read that went through another tablet's
+// location would also miss its metadata.
+TEST_P(LakeVacuumTest, test_bundled_vacuum_resolves_only_the_anchor) {
+    constexpr int64_t kAnchor = 31001;
+    constexpr int64_t kOther = 31002;
+    TabletSchemaPB schema;
+    schema.set_id(31000);
+    schema.set_keys_type(DUP_KEYS);
+    for (int64_t version = 2; version <= 5; version++) {
+        std::map<int64_t, TabletMetadataPB> bundle;
+        for (int64_t tablet_id : {kAnchor, kOther}) {
+            auto& metadata = bundle[tablet_id];
+            metadata.set_id(tablet_id);
+            metadata.set_version(version);
+            metadata.set_prev_garbage_version(version == 2 ? 0 : version - 1);
+            metadata.set_commit_time(1000 + version);
+            metadata.mutable_schema()->CopyFrom(schema);
+        }
+        ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(bundle));
+    }
+
+    auto location_provider =
+            std::make_shared<AnchorOnlyLocationProvider>(kTestDir, join_path(kTestDir, "unreachable"), kAnchor);
+    auto old_location_provider = _tablet_mgr->TEST_set_location_provider(location_provider);
+    DeferOp restore([&]() { _tablet_mgr->TEST_set_location_provider(std::move(old_location_provider)); });
+    _tablet_mgr->prune_metacache();
+
+    auto fill_request = [&](VacuumRequest* request, int64_t min_retain_version) {
+        request->set_partition_id(31000);
+        request->set_min_retain_version(min_retain_version);
+        request->set_grace_timestamp(4000000000);
+        request->set_enable_file_bundling(true);
+        for (int64_t tablet_id : {kAnchor, kOther}) {
+            auto* info = request->add_tablet_infos();
+            info->set_tablet_id(tablet_id);
+            info->set_min_version(2);
+        }
+    };
+
+    // Version 3 is the retain boundary, so the bundle of version 2 is deleted.
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        fill_request(&request, 3);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 3)));
+    }
+
+    auto outside = location_provider->resolved_outside_partition();
+    EXPECT_TRUE(outside.empty()) << outside.size() << " resolutions outside the anchor, first: " << outside.front();
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,

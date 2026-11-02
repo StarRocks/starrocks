@@ -34,6 +34,7 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_retain_info.h"
@@ -330,14 +331,26 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     return Status::OK();
 }
 
+// Reads |tablet_id|'s metadata at |version| for vacuum, resolving storage through |anchor_tablet_id|, a
+// tablet of the same partition that this node preferably holds (see pick_local_anchor_tablet_id). The FE
+// sends a file-bundling partition's whole tablet set to one aggregator node, which holds few of them, and
+// resolving every other tablet through its own shard costs StarMgr GetShard RPCs on each read.
+static StatusOr<TabletMetadataPtr> get_tablet_metadata_for_vacuum(TabletManager* tablet_mgr, int64_t anchor_tablet_id,
+                                                                  int64_t tablet_id, int64_t version,
+                                                                  bool fill_data_cache) {
+    CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = fill_data_cache};
+    return tablet_mgr->get_tablet_metadata_via_anchor(tablet_id, version, anchor_tablet_id, cache_opts);
+}
+
 static Status collect_alive_bundle_files(TabletManager* tablet_mgr, const std::vector<TabletInfoPB>& tablet_infos,
-                                         int64_t version, std::string_view root_dir, AsyncBundleFileDeleter* deleter) {
+                                         int64_t version, std::string_view root_dir, int64_t anchor_tablet_id,
+                                         AsyncBundleFileDeleter* deleter) {
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     for (const auto& tablet_info : tablet_infos) {
         auto tablet_id = tablet_info.tablet_id();
         // fill data cache to avoid read bundle meta file from remote storage repeatedly.
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* Not need to fill meta cache */,
-                                                   true /* fill data cache when enable file bundle */);
+        auto res = get_tablet_metadata_for_vacuum(tablet_mgr, anchor_tablet_id, tablet_id, version,
+                                                  true /* fill data cache when enable file bundle */);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (!res.ok()) {
             // must exist.
@@ -371,8 +384,8 @@ static size_t collect_extra_files_size(const TabletMetadataPB& metadata, int64_t
     return extra_file_size;
 }
 
-static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, TabletInfoPB& tablet_info,
-                                      int64_t grace_timestamp, int64_t min_retain_version,
+static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, int64_t anchor_tablet_id,
+                                      TabletInfoPB& tablet_info, int64_t grace_timestamp, int64_t min_retain_version,
                                       VacuumTabletMetaVerionRange* vacuum_version_range,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
                                       AsyncBundleFileDeleter* bundle_file_deleter, int64_t* total_datafile_size,
@@ -402,8 +415,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
         }
         // fill data cache to avoid read bundle meta file from remote storage repeatedly.
-        auto res = tablet_mgr->get_tablet_metadata(
-                tablet_id, version, false /* Not need to fill meta cache */,
+        auto res = get_tablet_metadata_for_vacuum(
+                tablet_mgr, anchor_tablet_id, tablet_id, version,
                 vacuum_version_range != nullptr /* fill data cache when enable file bundle */);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
@@ -518,7 +531,7 @@ void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::
     }
 }
 
-static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
+static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir, int64_t anchor_tablet_id,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
                                      int64_t grace_timestamp, bool enable_file_bundling, int64_t* vacuumed_files,
                                      int64_t* vacuumed_file_size, int64_t* vacuumed_version, int64_t* extra_file_size,
@@ -543,15 +556,16 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     int64_t max_vacuum_version = 0;
     for (auto& tablet_info : tablet_infos) {
         TabletRetainInfo tablet_retain_info;
-        RETURN_IF_ERROR(tablet_retain_info.init(tablet_info.tablet_id(), retain_versions, tablet_mgr));
+        RETURN_IF_ERROR(
+                tablet_retain_info.init(tablet_info.tablet_id(), retain_versions, tablet_mgr, anchor_tablet_id));
 
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
-                                                vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
-                                                &bundle_file_deleter, vacuumed_file_size, &tablet_vacuumed_version,
-                                                extra_file_size, tablet_retain_info, deadline_ms));
+        RETURN_IF_ERROR(collect_files_to_vacuum(
+                tablet_mgr, root_dir, anchor_tablet_id, tablet_info, grace_timestamp, min_retain_version,
+                vacuum_version_range.get(), &datafile_deleter, &metafile_deleter, &bundle_file_deleter,
+                vacuumed_file_size, &tablet_vacuumed_version, extra_file_size, tablet_retain_info, deadline_ms));
         RETURN_IF_ERROR(datafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
         if (!enable_file_bundling) {
@@ -572,7 +586,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     // delete bundle files
     if (max_vacuum_version > 0 && !bundle_file_deleter.is_empty()) {
         RETURN_IF_ERROR(collect_alive_bundle_files(tablet_mgr, tablet_infos, max_vacuum_version, root_dir,
-                                                   &bundle_file_deleter));
+                                                   anchor_tablet_id, &bundle_file_deleter));
         RETURN_IF_ERROR(bundle_file_deleter.finish());
         (*vacuumed_files) += bundle_file_deleter.delete_count();
     }
@@ -816,7 +830,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     for (const auto& info : tablet_infos) {
         candidate_tablet_ids.push_back(info.tablet_id());
     }
-    auto root_loc = tablet_mgr->tablet_root_location(tablet_mgr->pick_local_anchor_tablet_id(candidate_tablet_ids));
+    // The same anchor resolves every tablet's metadata read, not just |root_loc|; see
+    // get_tablet_metadata_for_vacuum().
+    const int64_t anchor_tablet_id = tablet_mgr->pick_local_anchor_tablet_id(candidate_tablet_ids);
+    auto root_loc = tablet_mgr->tablet_root_location(anchor_tablet_id);
     auto min_retain_version = request.min_retain_version();
     auto grace_timestamp = request.grace_timestamp();
     auto min_active_txn_id = request.min_active_txn_id();
@@ -833,9 +850,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     std::sort(tablet_infos.begin(), tablet_infos.end(),
               [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); });
 
-    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
-                                           request.enable_file_bundling(), &vacuumed_files, &vacuumed_file_size,
-                                           &vacuumed_version, &extra_file_size, retain_versions, deadline_ms));
+    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, anchor_tablet_id, tablet_infos, min_retain_version,
+                                           grace_timestamp, request.enable_file_bundling(), &vacuumed_files,
+                                           &vacuumed_file_size, &vacuumed_version, &extra_file_size, retain_versions,
+                                           deadline_ms));
     extra_file_size -= vacuumed_file_size;
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
@@ -1139,7 +1157,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         for (int64_t garbage_version = *versions_to_delete.rbegin(), min_v = *versions_to_delete.begin();
              garbage_version >= min_v;
              /**/) {
-            auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
+            auto res = tablet_mgr->get_tablet_metadata_via_anchor(
+                    tablet_id, garbage_version, anchor_tablet_id,
+                    CacheOptions{.fill_meta_cache = false, .fill_data_cache = false});
             if (res.status().is_not_found()) {
                 break;
             } else if (!res.ok()) {

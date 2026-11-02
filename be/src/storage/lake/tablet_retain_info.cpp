@@ -15,16 +15,18 @@
 #include "storage/lake/tablet_retain_info.h"
 
 #include "common/status.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 
 namespace starrocks::lake {
 
 Status TabletRetainInfo::init(int64_t tablet_id, const std::unordered_set<int64_t>& retain_versions,
-                              TabletManager* tablet_mgr) {
+                              TabletManager* tablet_mgr, int64_t anchor_tablet_id) {
     _tablet_id = tablet_id;
     for (const auto& version : retain_versions) {
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false);
+        auto res = tablet_mgr->get_tablet_metadata_via_anchor(
+                tablet_id, version, anchor_tablet_id, CacheOptions{.fill_meta_cache = false, .fill_data_cache = false});
         if (!res.status().ok()) {
             return res.status();
         }

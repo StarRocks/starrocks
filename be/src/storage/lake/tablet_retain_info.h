@@ -35,7 +35,10 @@ public:
     TabletRetainInfo() = default;
     ~TabletRetainInfo() = default;
 
-    Status init(int64_t tablet_id, const std::unordered_set<int64_t>& retain_versions, TabletManager* tablet_mgr);
+    // |anchor_tablet_id| resolves the storage of every metadata read; see
+    // TabletManager::get_tablet_metadata_via_anchor().
+    Status init(int64_t tablet_id, const std::unordered_set<int64_t>& retain_versions, TabletManager* tablet_mgr,
+                int64_t anchor_tablet_id);
 
     bool contains_file(const std::string& file_name) const;
 
