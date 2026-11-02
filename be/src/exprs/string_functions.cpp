@@ -4184,6 +4184,7 @@ static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2:
         const auto rpl_value = rpl_viewer.value(row);
         tmpl.parse(rpl_value);
         const auto str_value = str_viewer.value(row);
+        const char* const str_data = str_value.data != nullptr ? str_value.data : "";
         auto ensure_dst = [&](size_t first_out_row_hint) -> BinaryColumn::Bytes& {
             if (!bytes_reserved) {
                 dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, first_out_row_hint,
@@ -4192,13 +4193,13 @@ static StatusOr<ColumnPtr> regexp_replace_general(FunctionContext* context, re2:
             }
             return dst_bytes;
         };
-        if (!regexp_replace_match_and_append<true>(&local_re, str_value.data, str_value.size, tmpl, vec, ensure_dst)) {
+        if (!regexp_replace_match_and_append<true>(&local_re, str_data, str_value.size, tmpl, vec, ensure_dst)) {
             if (!bytes_reserved) {
                 dst_bytes.reserve(regexp_replace_initial_reserve(0, initial_bytes, str_value.size, str_value.size,
                                                                  eval_rows - row));
                 bytes_reserved = true;
             }
-            append_bytes(dst_bytes, str_value.data, str_value.size);
+            append_bytes(dst_bytes, str_data, str_value.size);
         }
         dst_offsets.push_back(dst_bytes.size());
     }
@@ -4254,6 +4255,7 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
 
     src_binary->get_offset().visit_storage([&](const auto& src_offsets) {
         const size_t src_total_bytes = static_cast<size_t>(src_offsets[eval_rows]);
+        size_t non_null_prefix_bytes = 0;
         for (size_t row = 0; row < eval_rows; ++row) {
             if (null_data != nullptr && null_data[row]) {
                 if (any_match) {
@@ -4270,7 +4272,7 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
                     dst = RunTimeColumnType<TYPE_VARCHAR>::create();
                     const size_t remaining_src_bytes = src_total_bytes - row_start;
                     const size_t reserve_bytes = regexp_replace_initial_reserve(
-                            row_start, remaining_src_bytes, row_size, first_out_row_hint, eval_rows - row);
+                            non_null_prefix_bytes, remaining_src_bytes, row_size, first_out_row_hint, eval_rows - row);
                     dst->reserve(eval_rows, reserve_bytes);
                     if (row > 0) {
                         if (null_data == nullptr) {
@@ -4300,6 +4302,8 @@ static StatusOr<ColumnPtr> regexp_replace_const_pattern_and_rpl(re2::RE2* const_
             } else if (any_match) {
                 append_bytes(dst->get_bytes(), row_data, row_size);
                 dst->get_offset().push_back(dst->get_bytes().size());
+            } else {
+                non_null_prefix_bytes += row_size;
             }
         }
     });
