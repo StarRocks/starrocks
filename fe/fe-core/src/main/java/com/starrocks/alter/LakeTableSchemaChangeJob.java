@@ -638,16 +638,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             .setId(shadowIdxMetaId) // For newly create materialized index, schema id equals to index meta id
                             .setKeysType(originKeysType)
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
-<<<<<<< HEAD
-                            .setSortKeyIndexes(originIndexMetaId == baseIndexMetaId ? sortKeyIdxes : null)
-                            .setSortKeyUniqueIds(originIndexMetaId == baseIndexMetaId ? sortKeyUniqueIds : null)
-                            .setIndexes(originIndexMetaId == baseIndexMetaId ?
-                                        indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
-=======
                             .setSortKeyIndexes(shadowSortKeyIdxes(shadowIdxMetaId, isBaseIndex))
                             .setSortKeyUniqueIds(shadowSortKeyUniqueIds(shadowIdxMetaId, isBaseIndex))
-                            .setIndexes(shadowIndexes(isBaseIndex, shadowSchema))
->>>>>>> f713ffe7b66... [BugFix][RB-424] Keep a range rollup's sort key across schema change and protect its sort-key columns (#67425)
+                            .setIndexes(originIndexMetaId == baseIndexMetaId ?
+                                        indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
                             .setZstdCompressionColumns(zstdCompressionColumns, zstdCompressionPageSizes)
