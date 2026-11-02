@@ -29,6 +29,7 @@
 #include "base/bthreads/util.h"
 #include "base/coding.h"
 #include "base/failpoint/fail_point.h"
+#include "base/hash/crc32c.h"
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -226,6 +227,41 @@ TEST_F(LakeTabletManagerTest, partial_meta_in_local_disk_cache) {
     // Written again for the same version, as a later retry that had to apply again does.
     ASSERT_OK(_tablet_manager->put_partial_tablet_metadata(metadata));
     ASSERT_OK(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status());
+}
+
+// The header and the payload of a partial_meta entry are two reads, and a retry can overwrite the entry in between.
+// A header of one write in front of the longer payload of another is rejected instead of being read as a prefix.
+TEST_F(LakeTabletManagerTest, partial_meta_rejects_payload_of_another_write) {
+    auto tablet_id = next_id();
+    TabletMetadataPB first;
+    first.set_id(tablet_id);
+    first.set_version(3);
+    first.set_gtid(77);
+    first.add_rowsets()->set_id(5);
+    TabletMetadataPB second = first;
+    second.mutable_rowsets(0)->set_id(6);
+    second.add_rowsets()->set_id(7);
+    const std::string first_payload = first.SerializeAsString();
+    const std::string second_payload = second.SerializeAsString();
+    ASSERT_GT(second_payload.size(), first_payload.size());
+
+    lake::ScopedLocalDiskCache local_disk_cache(_test_dir + "/partial_meta_torn_read");
+    const uint64_t first_size = first_payload.size();
+    const uint32_t first_crc = crc32c::Value(first_payload.data(), first_payload.size());
+    IOBuffer entry;
+    entry.raw_buf().append(&first_size, sizeof(first_size));
+    entry.raw_buf().append(&first_crc, sizeof(first_crc));
+    entry.raw_buf().append(second_payload);
+    DiskCacheWriteOptions options;
+    options.overwrite = true;
+    ASSERT_OK(DataCache::GetInstance()->local_disk_cache()->write(fmt::format("lake_partial_meta/{}/{}", tablet_id, 3),
+                                                                  entry, &options));
+    EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_corruption());
+
+    // A consistent entry for the same version reads back.
+    ASSERT_OK(_tablet_manager->put_partial_tablet_metadata(std::make_shared<TabletMetadataPB>(second)));
+    ASSIGN_OR_ABORT(auto read, _tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77));
+    EXPECT_EQ(2, read->rowsets_size());
 }
 #endif
 
