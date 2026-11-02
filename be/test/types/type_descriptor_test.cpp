@@ -916,7 +916,7 @@ TEST_F(TypeDescriptorTest, ObjectTypesAreHugeAndUnusableAsKeys) {
 
     // MAP is joinable and groupable but has no ordering; the nested types otherwise delegate to
     // their children, so an ARRAY<JSON> is no more usable as a key than a bare JSON.
-    auto map_of_int = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT));
+    auto map_of_int = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_INT_DESC);
     EXPECT_TRUE(map_of_int.support_groupby());
     EXPECT_FALSE(map_of_int.support_orderby());
 

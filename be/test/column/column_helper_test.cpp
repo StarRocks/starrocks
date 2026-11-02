@@ -489,7 +489,7 @@ TEST_F(ColumnHelperTest, create_nested_geo_columns) {
     for (const auto primitive : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
         const auto type = geo_type(primitive);
         const auto array_type = TypeDescriptor::create_array_type(type);
-        const auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), array_type);
+        const auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, array_type);
         const auto struct_type =
                 TypeDescriptor::create_struct_type({"direct", "array", "map"}, {type, array_type, map_type});
         auto column = ColumnHelper::create_column(struct_type, false);

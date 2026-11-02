@@ -32,7 +32,7 @@ TEST(RecordBatchConverterTest, ConvertsColumnsAndSerializesBatches) {
 
     Columns columns;
     columns.emplace_back(std::move(column));
-    TypeDescriptor type_descs[] = {TypeDescriptor(TYPE_INT)};
+    TypeDescriptor type_descs[] = {TYPE_INT_DESC};
     auto schema = arrow::schema({arrow::field("c0", arrow::int32(), false)});
 
     std::shared_ptr<arrow::RecordBatch> batch;
