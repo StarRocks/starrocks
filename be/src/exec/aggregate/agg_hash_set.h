@@ -15,6 +15,7 @@
 #pragma once
 
 #include <any>
+#include <limits>
 
 #include "base/container/fixed_hash_map.h"
 #include "base/failpoint/fail_point.h"
@@ -29,6 +30,7 @@
 #include "exec/aggregate/agg_profile.h"
 #include "exec/aggregate/serialized_key_buffer.h"
 #include "gutil/casts.h"
+#include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
@@ -74,10 +76,131 @@ inline size_t agg_hash_map_default_prefetch_dist() {
         this->hash_set.prefetch_hash(hashes[i + __prefetch_dist]);  \
     }
 
-#define AGG_STRING_HASH_SET_PREFETCH_HASH_VAL()                        \
-    if (__prefetch_dist != 0 && i + __prefetch_dist < chunk_size) {    \
-        this->hash_set.prefetch_hash(cache[i + __prefetch_dist].hash); \
+#define AGG_STRING_HASH_SET_PREFETCH_HASH_VAL()                     \
+    if (__prefetch_dist != 0 && i + __prefetch_dist < chunk_size) { \
+        this->hash_set.prefetch(cache[i + __prefetch_dist]);        \
     }
+
+// Key of the slice agg hash maps and sets. It is exactly sizeof(Slice): `size` is narrowed to 32 bits and the freed
+// 4 bytes cache the key's crc, so a rehash never walks the key bytes again. The size of the map/set slot and of the
+// agg state prefix (which holds a copy of the key, see AllocateState) stay unchanged, and SliceAggHashSet /
+// SliceAggTwoLevelHashSet shrink from 24-byte TSliceWithHash slots to 16-byte SliceWithHash32 slots.
+//
+// A key of kEscape bytes or more stores kEscape in `size` and its real length in the kEscapeHeader bytes in front of
+// `data`. Such keys are always materialized by make_agg_slice_key() or persist_agg_slice_key().
+template <PhmapSeed seed>
+struct SliceWithHash32 {
+    static constexpr uint32_t kEscape = std::numeric_limits<uint32_t>::max();
+    static constexpr size_t kEscapeHeader = sizeof(uint64_t);
+
+    const char* data = nullptr;
+    uint32_t size = 0;
+    uint32_t hash = 0;
+
+    SliceWithHash32() = default;
+    // Only for keys shorter than kEscape.
+    explicit SliceWithHash32(const Slice& s) : data(s.data), size(static_cast<uint32_t>(s.size)), hash(hash_of(s)) {
+        DCHECK_LT(s.size, kEscape);
+    }
+
+    static uint32_t hash_of(const Slice& s) {
+        if (LIKELY(s.size <= kMaxHashPiece)) {
+            return static_cast<uint32_t>(SliceHashWithSeed<seed>()(s));
+        }
+        return hash_of_huge(s);
+    }
+
+    ALWAYS_INLINE size_t real_size() const {
+        if (LIKELY(size != kEscape)) {
+            return size;
+        }
+        uint64_t v;
+        memcpy(&v, data - kEscapeHeader, sizeof(v));
+        return v;
+    }
+    ALWAYS_INLINE Slice slice() const { return {data, real_size()}; }
+    // convert_hash_map_to_chunk copies the key into a Buffer<Slice>.
+    operator Slice() const { return slice(); }
+
+private:
+    // SliceHashWithSeed takes an int32 length.
+    static constexpr size_t kMaxHashPiece = std::numeric_limits<int32_t>::max();
+
+    // Hashes the key in int32-sized pieces, chaining each piece's hash into the next one's seed.
+    static ALWAYS_NOINLINE uint32_t hash_of_huge(const Slice& s) {
+        size_t h = SliceHashWithSeed<seed>()(Slice(s.data, kMaxHashPiece));
+        for (size_t offset = kMaxHashPiece; offset < s.size; offset += kMaxHashPiece) {
+            const size_t piece = std::min(kMaxHashPiece, s.size - offset);
+            h = crc_hash_64(s.data + offset, static_cast<int32_t>(piece), h);
+        }
+        return static_cast<uint32_t>(h);
+    }
+};
+static_assert(sizeof(SliceWithHash32<PhmapSeed1>) == sizeof(Slice));
+static_assert(alignof(SliceWithHash32<PhmapSeed1>) == alignof(Slice));
+
+template <PhmapSeed seed>
+struct SliceWithHash32Hash {
+    // The crc has 32 bits of entropy, the mix spreads them over 64 bits so H1 keeps its high bits.
+    size_t operator()(const SliceWithHash32<seed>& s) const { return phmap_mix_with_seed<8, seed>()(s.hash); }
+};
+
+template <PhmapSeed seed>
+struct SliceWithHash32Equal {
+    bool operator()(const SliceWithHash32<seed>& x, const SliceWithHash32<seed>& y) const {
+        return x.hash == y.hash && memequal(x.data, x.real_size(), y.data, y.real_size());
+    }
+};
+
+// Builds the key of `data[0, size)`. A key of kEscape bytes or more is copied into `scratch` behind its length
+// header, because the bytes in front of `data` are not ours to write.
+template <typename Key>
+ALWAYS_INLINE Key make_agg_slice_key(const char* data, size_t size, uint32_t hash, MemPool* scratch) {
+    Key key;
+    if (LIKELY(size < Key::kEscape)) {
+        key.data = data;
+        key.size = static_cast<uint32_t>(size);
+    } else {
+        uint8_t* pos = scratch->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        uint64_t real_size = size;
+        memcpy(pos, &real_size, sizeof(real_size));
+        strings::memcpy_inlined(pos + Key::kEscapeHeader, data, size);
+        key.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
+        key.size = Key::kEscape;
+    }
+    key.hash = hash;
+    return key;
+}
+
+template <typename Key>
+ALWAYS_INLINE Key make_agg_slice_key(const Slice& s, MemPool* scratch) {
+    return make_agg_slice_key<Key>(s.data, s.size, Key::hash_of(s), scratch);
+}
+
+// Copies the key bytes into `pool` so the key can live in the hash map or set.
+template <typename Key>
+ALWAYS_INLINE Key persist_agg_slice_key(const Key& key, MemPool* pool) {
+    const size_t size = key.real_size();
+    Key pk = key;
+    if (LIKELY(key.size != Key::kEscape)) {
+        uint8_t* pos = pool->allocate_with_reserve(size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        strings::memcpy_inlined(pos, key.data, size);
+        pk.data = reinterpret_cast<const char*>(pos);
+    } else {
+        uint8_t* pos = pool->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        strings::memcpy_inlined(pos, key.data - Key::kEscapeHeader, Key::kEscapeHeader + size);
+        pk.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
+    }
+    return pk;
+}
+
+// Frees the escaped probe keys once the chunk is probed: a single one holds 4 GiB or more, which must not outlive the
+// chunk that needed it.
+inline void reset_agg_escape_pool(MemPool* pool) {
+    if (UNLIKELY(pool->total_reserved_bytes() > 0)) {
+        pool->free_all();
+    }
+}
 
 // =====================
 // one level agg hash set
@@ -99,7 +222,7 @@ template <PhmapSeed seed>
 using TimeStampAggHashSet = phmap::flat_hash_set<TimestampValue, StdHashWithSeed<TimestampValue, seed>>;
 template <PhmapSeed seed>
 using SliceAggHashSet =
-        phmap::flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>>;
+        phmap::flat_hash_set<SliceWithHash32<seed>, SliceWithHash32Hash<seed>, SliceWithHash32Equal<seed>>;
 
 // ==================
 // one level fixed size slice hash set
@@ -117,8 +240,8 @@ using Int32AggTwoLevelHashSet = phmap::parallel_flat_hash_set<int32_t, StdHashWi
 
 template <PhmapSeed seed>
 using SliceAggTwoLevelHashSet =
-        phmap::parallel_flat_hash_set<TSliceWithHash<seed>, THashOnSliceWithHash<seed>, TEqualOnSliceWithHash<seed>,
-                                      phmap::priv::Allocator<Slice>, 4>;
+        phmap::parallel_flat_hash_set<SliceWithHash32<seed>, SliceWithHash32Hash<seed>, SliceWithHash32Equal<seed>,
+                                      phmap::priv::Allocator<SliceWithHash32<seed>>, 4>;
 
 // ==============================================================
 
@@ -363,50 +486,49 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_noprefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                               Filter* not_founds) {
-        auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
-        for (size_t i = 0; i < chunk_size; ++i) {
-            auto tmp = column->get_slice(i);
-            if constexpr (compute_and_allocate) {
-                KeyType key(tmp);
-                this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
-                    // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
-            } else {
-                (*not_founds)[i] = !this->hash_set.contains(tmp);
+        const auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
+        const uint8_t* base = column->raw_bytes();
+        column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
+                if constexpr (compute_and_allocate) {
+                    this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
+                } else {
+                    (*not_founds)[i] = !this->hash_set.contains(key);
+                }
             }
-        }
+        });
+        reset_agg_escape_pool(&_escape_pool);
     }
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                             Filter* not_founds) {
         const auto* column = down_cast<const BinaryColumn*>(key_columns[0].get());
-        // emplace_back, not cache[i] after reserve(): KeyType has no default constructor, and
-        // assigning past size() writes into elements that were never constructed.
+        const uint8_t* base = column->raw_bytes();
         cache.clear();
         cache.reserve(chunk_size);
-        for (size_t i = 0; i < chunk_size; ++i) {
-            cache.emplace_back(column->get_slice(i));
-        }
+        column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                cache.push_back(make_agg_slice_key<KeyType>(s, &_escape_pool));
+            }
+        });
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
             if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
-                    // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
+                this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
             } else {
-                (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
+                (*not_founds)[i] = !this->hash_set.contains(key);
             }
         }
+        reset_agg_escape_pool(&_escape_pool);
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
@@ -419,6 +541,7 @@ struct AggHashSetOfOneStringKey : public AggHashSet<HashSet, AggHashSetOfOneStri
     bool has_null_key = false;
     ResultVector results;
     std::vector<KeyType> cache;
+    MemPool _escape_pool;
 };
 
 template <typename HashSet>
@@ -459,28 +582,39 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
         const auto& null_data = nullable_column->null_column_data();
+        const uint8_t* base = data_column->raw_bytes();
 
-        if (nullable_column->has_null()) {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if (null_data[i]) {
-                    has_null_key = true;
-                } else {
-                    if constexpr (compute_and_allocate) {
-                        _handle_data_key_column(data_column, i, pool, not_founds);
+        data_column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            if (nullable_column->has_null()) {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    if (null_data[i]) {
+                        has_null_key = true;
                     } else {
-                        _handle_data_key_column(data_column, i, not_founds);
+                        const Slice s(base + off[i], off[i + 1] - off[i]);
+                        const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
+                        if constexpr (compute_and_allocate) {
+                            this->hash_set.lazy_emplace(
+                                    key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
+                        } else {
+                            (*not_founds)[i] = !this->hash_set.contains(key);
+                        }
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    const Slice s(base + off[i], off[i + 1] - off[i]);
+                    const KeyType key = make_agg_slice_key<KeyType>(s, &_escape_pool);
+                    if constexpr (compute_and_allocate) {
+                        this->hash_set.lazy_emplace(key,
+                                                    [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
+                    } else {
+                        (*not_founds)[i] = !this->hash_set.contains(key);
                     }
                 }
             }
-        } else {
-            for (size_t i = 0; i < chunk_size; ++i) {
-                if constexpr (compute_and_allocate) {
-                    _handle_data_key_column(data_column, i, pool, not_founds);
-                } else {
-                    _handle_data_key_column(data_column, i, not_founds);
-                }
-            }
-        }
+        });
+        reset_agg_escape_pool(&_escape_pool);
     }
 
     template <bool compute_and_allocate>
@@ -488,43 +622,28 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
                                             Filter* not_founds) {
         const auto* nullable_column = down_cast<const NullableColumn*>(key_columns[0].get());
         const auto* data_column = down_cast<const BinaryColumn*>(nullable_column->data_column().get());
+        const uint8_t* base = data_column->raw_bytes();
 
-        // See the one-string set above: emplace_back, not cache[i] after reserve().
         cache.clear();
         cache.reserve(chunk_size);
-        for (size_t i = 0; i < chunk_size; ++i) {
-            cache.emplace_back(data_column->get_slice(i));
-        }
+        data_column->get_offset().visit_storage([&](const auto& offsets) {
+            const auto* off = offsets.data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                const Slice s(base + off[i], off[i + 1] - off[i]);
+                cache.push_back(make_agg_slice_key<KeyType>(s, &_escape_pool));
+            }
+        });
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
         for (size_t i = 0; i < chunk_size; ++i) {
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
             if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
+                this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
             } else {
-                (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
+                (*not_founds)[i] = !this->hash_set.contains(key);
             }
         }
-    }
-
-    void _handle_data_key_column(const BinaryColumn* data_column, size_t row, MemPool* pool, Filter* not_founds) {
-        const auto tmp = data_column->get_slice(row);
-        KeyType key(tmp);
-
-        this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
-            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            memcpy(pos, key.data, key.size);
-            ctor(pos, key.size, key.hash);
-        });
-    }
-
-    void _handle_data_key_column(const BinaryColumn* data_column, size_t row, Filter* not_founds) {
-        const auto key = data_column->get_slice(row);
-        (*not_founds)[row] = !this->hash_set.contains(key);
+        reset_agg_escape_pool(&_escape_pool);
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, size_t chunk_size) {
@@ -540,6 +659,7 @@ struct AggHashSetOfOneNullableStringKey : public AggHashSet<HashSet, AggHashSetO
     bool has_null_key = false;
     ResultVector results;
     std::vector<KeyType> cache;
+    MemPool _escape_pool;
 };
 
 template <typename HashSet>
@@ -581,6 +701,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
         for (size_t i = 0; i < chunk_size; ++i) {
             _probe_or_insert<compute_and_allocate>(i, _key_buffer.key(i), pool, not_founds);
         }
+        reset_agg_escape_pool(&_escape_pool);
     }
 
     // A chunk whose keys do not fit one batch (see SerializedKeyBuffer::serialize()): serialize
@@ -597,30 +718,25 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             DCHECK(cursor <= buffer + max_one_row_size);
             _probe_or_insert<compute_and_allocate>(i, Slice(buffer, cursor - buffer), pool, not_founds);
         }
+        reset_agg_escape_pool(&_escape_pool);
     }
 
     template <bool compute_and_allocate>
     ALWAYS_INLINE void _probe_or_insert(size_t i, const Slice& tmp, MemPool* pool, Filter* not_founds) {
+        const KeyType key = make_agg_slice_key<KeyType>(tmp, &_escape_pool);
         if constexpr (compute_and_allocate) {
-            KeyType key(tmp);
-            this->hash_set.lazy_emplace(key, [&](const auto& ctor) {
-                // we must persist the slice before insert
-                uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                memcpy(pos, key.data, key.size);
-                ctor(pos, key.size, key.hash);
-            });
+            this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
         } else {
-            (*not_founds)[i] = !this->hash_set.contains(tmp);
+            (*not_founds)[i] = !this->hash_set.contains(key);
         }
     }
 
     template <bool compute_and_allocate>
     ALWAYS_NOINLINE void build_set_prefetch(size_t chunk_size, MemPool* pool, Filter* not_founds) {
-        // See the one-string set above: emplace_back, not cache[i] after reserve().
         cache.clear();
         cache.reserve(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
-            cache.emplace_back(_key_buffer.key(i));
+            cache.push_back(make_agg_slice_key<KeyType>(_key_buffer.key(i), &_escape_pool));
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
@@ -628,16 +744,12 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
             AGG_STRING_HASH_SET_PREFETCH_HASH_VAL();
             const auto& key = cache[i];
             if constexpr (compute_and_allocate) {
-                this->hash_set.lazy_emplace_with_hash(key, key.hash, [&](const auto& ctor) {
-                    // we must persist the slice before insert
-                    uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                    memcpy(pos, key.data, key.size);
-                    ctor(pos, key.size, key.hash);
-                });
+                this->hash_set.lazy_emplace(key, [&](const auto& ctor) { ctor(persist_agg_slice_key(key, pool)); });
             } else {
-                (*not_founds)[i] = this->hash_set.find(key, key.hash) == this->hash_set.end();
+                (*not_founds)[i] = !this->hash_set.contains(key);
             }
         }
+        reset_agg_escape_pool(&_escape_pool);
     }
 
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
@@ -669,6 +781,7 @@ struct AggHashSetOfSerializedKey : public AggHashSet<HashSet, AggHashSetOfSerial
 
     int32_t _chunk_size;
     std::vector<KeyType> cache;
+    MemPool _escape_pool;
 };
 
 template <typename HashSet>

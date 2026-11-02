@@ -15,6 +15,8 @@
 #include "exec/aggregate/agg_hash_map.h"
 
 #include <gtest/gtest.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <any>
@@ -1027,12 +1029,20 @@ TEST(SliceWithHash32Test, EscapedKeyEqualsPlainKey) {
     EXPECT_EQ(Slice(value), persisted.slice());
     EXPECT_TRUE(SliceWithHash32Equal<PhmapSeed1>()(plain, persisted));
 
+    static_assert(sizeof(SliceAggHashSet<PhmapSeed1>::key_type) == sizeof(Slice));
+    static_assert(sizeof(SliceAggTwoLevelHashSet<PhmapSeed2>::key_type) == sizeof(Slice));
+
     SliceAggHashMap<PhmapSeed1> map;
     int64_t state = 7;
     map.emplace(persisted, reinterpret_cast<AggDataPtr>(&state));
     auto it = map.find(plain);
     ASSERT_TRUE(it != map.end());
     EXPECT_EQ(&state, reinterpret_cast<int64_t*>(it->second));
+
+    SliceAggHashSet<PhmapSeed1> set;
+    set.emplace(persisted);
+    EXPECT_TRUE(set.contains(plain));
+    EXPECT_TRUE(set.contains(escaped));
 
     // A plain key is never copied into the scratch pool.
     MemPool scratch;
@@ -1111,6 +1121,155 @@ TEST(SliceWithHash32Test, OneStringKeyGroupsSurviveRehash) {
     check_slice_map_groups_survive_rehash<OneStringAggHashMap<PhmapSeed1>>(make_string_chunk);
     check_slice_map_groups_survive_rehash<OneStringAggHashMap<PhmapSeed2>>(make_string_chunk);
     check_slice_map_groups_survive_rehash<OneStringTwoLevelAggHashMap<PhmapSeed2>>(make_string_chunk);
+}
+
+static void make_nullable_string_chunk(int begin, int n, Columns* columns) {
+    auto strings = BinaryColumn::create();
+    auto nulls = NullColumn::create();
+    for (int i = begin; i < begin + n; i++) {
+        strings->append("nullable-string-key-" + std::to_string(i));
+        nulls->append(0);
+    }
+    columns->emplace_back(NullableColumn::create(std::move(strings), std::move(nulls)));
+}
+
+template <typename SetWithKey>
+void check_slice_set_groups_survive_rehash(void (*make_chunk)(int, int, Columns*)) {
+    constexpr int kGroups = 200000;
+    constexpr int kChunkSize = 4096;
+    RuntimeProfile profile("check_slice_set_groups_survive_rehash");
+    AggStatistics statistics(&profile);
+    SetWithKey set(kChunkSize, &statistics);
+    MemPool pool;
+
+    for (int pass = 0; pass < 2; pass++) {
+        for (int begin = 0; begin < kGroups; begin += kChunkSize) {
+            const int n = std::min(kChunkSize, kGroups - begin);
+            Columns columns;
+            make_chunk(begin, n, &columns);
+            set.build_hash_set(n, columns, &pool);
+        }
+        ASSERT_EQ(static_cast<size_t>(kGroups), set.hash_set.size());
+    }
+
+    // Verify selection probe (compute_and_allocate == false) finds every existing group and misses unseen groups.
+    for (int begin = 0; begin < kGroups; begin += kChunkSize) {
+        const int n = std::min(kChunkSize, kGroups - begin);
+        Columns columns;
+        make_chunk(begin, n, &columns);
+        Filter not_founds;
+        set.build_hash_set_with_selection(n, columns, &pool, &not_founds);
+        ASSERT_EQ(static_cast<size_t>(n), not_founds.size());
+        for (int i = 0; i < n; i++) {
+            ASSERT_EQ(0, not_founds[i]) << "group " << begin + i;
+        }
+    }
+    Columns unseen_columns;
+    make_chunk(kGroups, 128, &unseen_columns);
+    Filter unseen_not_founds;
+    set.build_hash_set_with_selection(128, unseen_columns, &pool, &unseen_not_founds);
+    for (int i = 0; i < 128; i++) {
+        ASSERT_EQ(1, unseen_not_founds[i]) << "unseen " << i;
+    }
+}
+
+TEST(SliceWithHash32Test, SliceSetGroupsSurviveRehash) {
+    check_slice_set_groups_survive_rehash<OneStringAggHashSet<PhmapSeed1>>(make_string_chunk);
+    check_slice_set_groups_survive_rehash<OneStringTwoLevelAggHashSet<PhmapSeed1>>(make_string_chunk);
+    check_slice_set_groups_survive_rehash<NullOneStringAggHashSet<PhmapSeed1>>(make_nullable_string_chunk);
+    check_slice_set_groups_survive_rehash<SerializedKeyAggHashSet<PhmapSeed1>>(make_string_int_chunk);
+    check_slice_set_groups_survive_rehash<SerializedTwoLevelKeyAggHashSet<PhmapSeed2>>(make_string_int_chunk);
+}
+
+TEST(SliceWithHash32Test, LargeOffsetBinaryColumnAggMapAndSet) {
+    constexpr int kRows = 256;
+    auto make_large_binary_col = []() {
+        auto col = BinaryColumn::create();
+        for (int i = 0; i < kRows; ++i) {
+            std::string s = "large-offset-key-" + std::to_string(i % 64);
+            col->append(Slice(s));
+        }
+        col->get_offset().ensure_width_for_value(static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1);
+        return col;
+    };
+
+    auto bin_col = make_large_binary_col();
+    ASSERT_TRUE(bin_col->get_offset().is_large());
+    Columns non_null_cols{bin_col};
+
+    auto null_flags = NullColumn::create();
+    for (int i = 0; i < kRows; ++i) {
+        null_flags->append(i % 16 == 0 ? 1 : 0);
+    }
+    auto nullable_with_nulls = NullableColumn::create(make_large_binary_col(), std::move(null_flags));
+    Columns nullable_cols_with_nulls{nullable_with_nulls};
+
+    auto no_null_flags = NullColumn::create(kRows, 0);
+    auto nullable_without_nulls_data = make_large_binary_col();
+    auto nullable_without_nulls = NullableColumn::create(nullable_without_nulls_data, std::move(no_null_flags));
+    Columns nullable_cols_without_nulls{nullable_without_nulls};
+
+    RuntimeProfile profile("LargeOffsetBinaryColumnAggMapAndSet");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+    struct Alloc {
+        MemPool* pool;
+        AggDataPtr operator()(const SliceWithHash32<PhmapSeed1>&) { return pool->allocate(8); }
+        AggDataPtr operator()(std::nullptr_t) { return pool->allocate(8); }
+    };
+
+    ExtraAggParam extra;
+
+    // 1. OneStringAggHashMap (noprefetch + prefetch)
+    {
+        OneStringAggHashMap<PhmapSeed1> map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows, nullptr);
+        map.compute_agg_noprefetch<Alloc, HTBuildOp<true, false, false, false>>(bin_col.get(), &states, &pool,
+                                                                                Alloc{&pool}, &extra);
+        EXPECT_EQ(64u, map.hash_map.size());
+        Buffer<AggDataPtr> prefetch_states(kRows, nullptr);
+        map.compute_agg_prefetch<Alloc, HTBuildOp<true, false, false, false>>(bin_col.get(), &prefetch_states, &pool,
+                                                                              Alloc{&pool}, &extra);
+        for (int i = 0; i < kRows; ++i) {
+            EXPECT_EQ(states[i], prefetch_states[i]);
+        }
+    }
+
+    // 2. NullOneStringAggHashMap (with nulls and without nulls)
+    {
+        NullOneStringAggHashMap<PhmapSeed1> map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows, nullptr);
+        map.build_hash_map(kRows, nullable_cols_with_nulls, &pool, Alloc{&pool}, &states);
+        EXPECT_NE(nullptr, map.null_key_data);
+        EXPECT_EQ(60u, map.hash_map.size());
+
+        Buffer<AggDataPtr> prefetch_states(kRows, nullptr);
+        map.compute_agg_prefetch<Alloc, HTBuildOp<true, false, false, false>>(
+                nullable_without_nulls_data.get(), &prefetch_states, &pool, Alloc{&pool}, &extra);
+        EXPECT_EQ(64u, map.hash_map.size());
+    }
+
+    // 3. OneStringAggHashSet (noprefetch + prefetch + selection)
+    {
+        OneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_set_noprefetch<true>(kRows, non_null_cols, &pool, nullptr);
+        EXPECT_EQ(64u, set.hash_set.size());
+        Filter not_founds(kRows, 0);
+        set.build_set_prefetch<false>(kRows, non_null_cols, &pool, &not_founds);
+        for (int i = 0; i < kRows; ++i) {
+            EXPECT_EQ(0, not_founds[i]);
+        }
+    }
+
+    // 4. NullOneStringAggHashSet (with nulls + without nulls + prefetch)
+    {
+        NullOneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_set_noprefetch<true>(kRows, nullable_cols_with_nulls, &pool, nullptr);
+        EXPECT_TRUE(set.has_null_key);
+        EXPECT_EQ(60u, set.hash_set.size());
+        set.build_set_prefetch<true>(kRows, nullable_cols_without_nulls, &pool, nullptr);
+        EXPECT_EQ(64u, set.hash_set.size());
+    }
 }
 
 // Writes the key into the state prefix, as AllocateState does, so a test can read it back the way
@@ -1430,6 +1589,221 @@ TEST(SliceWithHash32Test, BuildContinuesAfterTwoLevelConversion) {
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         EXPECT_TRUE((std::is_same_v<MapType, TwoLevel>));
     });
+}
+
+// Zero-length keys take the size == 0 branch in memequal and hash through crc_hash_32 with no words; they must group
+// as one key distinct from the non-empty keys, in both the map and the set.
+TEST(SliceWithHash32Test, EmptyStringKeysGroupTogether) {
+    constexpr int kRows = 64;
+    auto make_chunk = []() {
+        auto column = BinaryColumn::create();
+        for (int i = 0; i < kRows; i++) {
+            column->append(i % 2 == 0 ? std::string() : std::string("non-empty"));
+        }
+        return Columns{std::move(column)};
+    };
+    RuntimeProfile profile("EmptyStringKeysGroupTogether");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+    {
+        using Map = OneStringAggHashMap<PhmapSeed1>;
+        Map map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows);
+        map.build_hash_map(kRows, make_chunk(), &pool, KeyPrefixAlloc<Map>{&pool}, &states);
+        ASSERT_EQ(2u, map.hash_map.size());
+        for (int i = 2; i < kRows; i++) {
+            ASSERT_EQ(states[i % 2], states[i]) << "row " << i;
+        }
+        ASSERT_NE(states[0], states[1]);
+    }
+    {
+        OneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_hash_set(kRows, make_chunk(), &pool);
+        ASSERT_EQ(2u, set.hash_set.size());
+    }
+}
+
+// A nullable column whose rows are all NULL never reaches the string table: the NULL group is the only group.
+TEST(SliceWithHash32Test, AllNullStringColumnOnlyCreatesNullGroup) {
+    constexpr int kRows = 128;
+    auto make_chunk = []() {
+        auto data = BinaryColumn::create();
+        auto nulls = NullColumn::create();
+        for (int i = 0; i < kRows; i++) {
+            data->append(std::string());
+            nulls->append(1);
+        }
+        return Columns{NullableColumn::create(std::move(data), std::move(nulls))};
+    };
+    RuntimeProfile profile("AllNullStringColumnOnlyCreatesNullGroup");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+    {
+        using Map = NullOneStringAggHashMap<PhmapSeed1>;
+        Map map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows);
+        map.build_hash_map(kRows, make_chunk(), &pool, KeyPrefixAlloc<Map>{&pool}, &states);
+        ASSERT_NE(nullptr, map.get_null_key_data());
+        ASSERT_EQ(0u, map.hash_map.size());
+        for (int i = 0; i < kRows; i++) {
+            ASSERT_EQ(map.get_null_key_data(), states[i]) << "row " << i;
+        }
+    }
+    {
+        NullOneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_hash_set(kRows, make_chunk(), &pool);
+        ASSERT_TRUE(set.has_null_key);
+        ASSERT_EQ(0u, set.hash_set.size());
+    }
+}
+
+// Probe keys constructed directly from unpadded Slice buffers (e.g. find(SliceWithHash32(slice)) or
+// build_hash_map_with_selection) do not carry MEMEQUAL_MAX_PADDING_SIZE trailing padding bytes.
+// Place both stored and probe buffers flush against PROT_NONE guard pages across lengths 0..48 to verify
+// SliceWithHash32Equal never reads past real_size().
+TEST(SliceWithHash32Test, UnpaddedProbeKeyAtPageBoundary) {
+    const size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    auto* pages = static_cast<char*>(
+            mmap(nullptr, 4 * page_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+    ASSERT_NE(MAP_FAILED, pages);
+    DeferOp unmap([&]() { munmap(pages, 4 * page_size); });
+    ASSERT_EQ(0, mprotect(pages + page_size, page_size, PROT_NONE));
+    ASSERT_EQ(0, mprotect(pages + 3 * page_size, page_size, PROT_NONE));
+
+    char* const end_a = pages + page_size;
+    char* const end_b = pages + 3 * page_size;
+    SliceWithHash32Equal<PhmapSeed1> equal;
+
+    for (size_t len = 0; len <= 48; ++len) {
+        SCOPED_TRACE(len);
+        char* buf_a = end_a - len;
+        char* buf_b = end_b - len;
+        for (size_t i = 0; i < len; ++i) {
+            const char c = static_cast<char>('a' + (i % 26));
+            buf_a[i] = c;
+            buf_b[i] = c;
+        }
+
+        SliceWithHash32<PhmapSeed1> key_a(Slice(buf_a, len));
+        SliceWithHash32<PhmapSeed1> key_b(Slice(buf_b, len));
+        EXPECT_TRUE(equal(key_a, key_b));
+
+        SliceAggHashSet<PhmapSeed1> hash_set;
+        hash_set.emplace(key_a);
+        EXPECT_NE(hash_set.end(), hash_set.find(key_b));
+
+        int64_t state_val = 42;
+        SliceAggHashMap<PhmapSeed1> hash_map;
+        hash_map.emplace(key_a, reinterpret_cast<AggDataPtr>(&state_val));
+        auto it = hash_map.find(key_b);
+        ASSERT_NE(hash_map.end(), it);
+        EXPECT_EQ(reinterpret_cast<AggDataPtr>(&state_val), it->second);
+
+        if (len > 0) {
+            for (size_t diff_pos : {size_t{0}, len / 2, len - 1}) {
+                buf_b[diff_pos] = static_cast<char>(buf_a[diff_pos] ^ 0x01);
+                SliceWithHash32<PhmapSeed1> key_diff(Slice(buf_b, len));
+                // Force a 32-bit hash collision so SliceWithHash32Equal::operator() cannot short-circuit on
+                // x.value != y.value and must compare the underlying bytes right up to the guard page.
+                key_diff.hash = key_a.hash;
+                EXPECT_FALSE(equal(key_a, key_diff));
+                EXPECT_EQ(hash_set.end(), hash_set.find(key_diff));
+                EXPECT_EQ(hash_map.end(), hash_map.find(key_diff));
+                buf_b[diff_pos] = buf_a[diff_pos];
+            }
+        }
+    }
+}
+
+TEST(SliceWithHash32Test, NullableAndNonNullableSelectionAndLimitPaths) {
+    constexpr int kRows = 128;
+    const double saved_ratio = config::agg_prefetch_l2_ratio;
+    DeferOp restore_ratio([&]() { config::agg_prefetch_l2_ratio = saved_ratio; });
+
+    auto make_non_null_cols = [](int offset) {
+        auto col = BinaryColumn::create();
+        for (int i = 0; i < kRows; ++i) {
+            col->append("sel-key-" + std::to_string(offset + (i % 32)));
+        }
+        return Columns{std::move(col)};
+    };
+
+    auto make_nullable_cols = [](int offset, bool include_nulls) {
+        auto data = BinaryColumn::create();
+        auto nulls = NullColumn::create();
+        for (int i = 0; i < kRows; ++i) {
+            data->append("null-sel-key-" + std::to_string(offset + (i % 32)));
+            nulls->append(include_nulls && (i % 8 == 0) ? 1 : 0);
+        }
+        return Columns{NullableColumn::create(std::move(data), std::move(nulls))};
+    };
+
+    RuntimeProfile profile("NullableAndNonNullableSelectionAndLimitPaths");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+
+    // 1. OneStringAggHashSet noprefetch selection path
+    {
+        config::agg_prefetch_l2_ratio = 1e9;
+        OneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_hash_set(kRows, make_non_null_cols(0), &pool);
+        ASSERT_EQ(32u, set.hash_set.size());
+        Filter not_founds;
+        set.build_hash_set_with_selection(kRows, make_non_null_cols(16), &pool, &not_founds);
+        for (int i = 0; i < kRows; ++i) {
+            EXPECT_EQ((i % 32) < 16 ? 0 : 1, not_founds[i]);
+        }
+    }
+
+    // 2. NullOneStringAggHashSet noprefetch (with and without nulls) + prefetch (without nulls)
+    for (double ratio : {1e9, 0.0}) {
+        config::agg_prefetch_l2_ratio = ratio;
+        NullOneStringAggHashSet<PhmapSeed1> set(kRows, &statistics);
+        set.build_hash_set(kRows, make_nullable_cols(0, false), &pool);
+        ASSERT_FALSE(set.has_null_key);
+        ASSERT_EQ(32u, set.hash_set.size());
+
+        Filter not_founds;
+        set.build_hash_set_with_selection(kRows, make_nullable_cols(16, false), &pool, &not_founds);
+        for (int i = 0; i < kRows; ++i) {
+            EXPECT_EQ((i % 32) < 16 ? 0 : 1, not_founds[i]);
+        }
+
+        set.build_hash_set(kRows, make_nullable_cols(0, true), &pool);
+        EXPECT_TRUE(set.has_null_key);
+        set.build_hash_set_with_selection(kRows, make_nullable_cols(16, true), &pool, &not_founds);
+        for (int i = 0; i < kRows; ++i) {
+            if (i % 8 == 0) {
+                EXPECT_EQ(0, not_founds[i]);
+            } else {
+                EXPECT_EQ((i % 32) < 16 ? 0 : 1, not_founds[i]);
+            }
+        }
+    }
+
+    // 3. NullOneStringAggHashMap limit and selection paths with nulls
+    {
+        using Map = NullOneStringAggHashMap<PhmapSeed1>;
+        Map map(kRows, &statistics);
+        Buffer<AggDataPtr> states(kRows, nullptr);
+        Filter not_founds;
+        // Limit of 10 non-null groups; row 0 is NULL and marks null_key_data on first encounter.
+        map.build_hash_map_with_limit(kRows, make_nullable_cols(0, true), &pool, KeyPrefixAlloc<Map>{&pool}, &states,
+                                      &not_founds, 10);
+        EXPECT_NE(nullptr, map.get_null_key_data());
+        EXPECT_EQ(10u, map.hash_map.size());
+
+        Filter sel_not_founds;
+        map.build_hash_map_with_selection(kRows, make_nullable_cols(0, true), &pool, KeyPrefixAlloc<Map>{&pool},
+                                          &states, &sel_not_founds);
+        int found_non_null = 0;
+        for (int i = 0; i < 32; ++i) {
+            if (i % 8 != 0 && sel_not_founds[i] == 0) {
+                ++found_non_null;
+            }
+        }
+        EXPECT_EQ(10, found_non_null);
+    }
 }
 
 } // namespace starrocks

@@ -380,6 +380,34 @@ TEST(HashUtilTest, CrcHash64UnmixedGoldenVectors) {
     EXPECT_EQ(crc_hash_64_unmixed(s2.data(), static_cast<int32_t>(s2.size()), seed), 0x6a03190bULL);
     EXPECT_EQ(crc_hash_64_unmixed(s3.data(), static_cast<int32_t>(s3.size()), seed), 0xf369fa27ULL);
 }
+
+TEST(HashUtilTest, CrcHashUnalignedAndLengthBoundaries) {
+    alignas(64) std::array<uint8_t, 256> raw{};
+    for (size_t i = 0; i < raw.size(); ++i) {
+        raw[i] = static_cast<uint8_t>((i * 131 + 19) & 0xff);
+    }
+
+    const uint32_t seed32 = 0x9e3779b9u;
+    const uint64_t seed64 = 0x12345678abcdef90ULL;
+
+    for (int32_t len = 0; len <= 128; ++len) {
+        alignas(64) std::array<uint8_t, 128> aligned_ref{};
+        std::memcpy(aligned_ref.data(), raw.data(), len);
+        const uint32_t expected32 = crc_hash_32(aligned_ref.data(), len, seed32);
+        const uint64_t expected64_unmixed = crc_hash_64_unmixed(aligned_ref.data(), len, seed64);
+        const uint64_t expected64 = crc_hash_64(aligned_ref.data(), len, seed64);
+
+        for (size_t offset = 0; offset < 16; ++offset) {
+            std::memcpy(raw.data() + offset, aligned_ref.data(), len);
+            EXPECT_EQ(expected32, crc_hash_32(raw.data() + offset, len, seed32))
+                    << "crc_hash_32 mismatch at len=" << len << ", offset=" << offset;
+            EXPECT_EQ(expected64_unmixed, crc_hash_64_unmixed(raw.data() + offset, len, seed64))
+                    << "crc_hash_64_unmixed mismatch at len=" << len << ", offset=" << offset;
+            EXPECT_EQ(expected64, crc_hash_64(raw.data() + offset, len, seed64))
+                    << "crc_hash_64 mismatch at len=" << len << ", offset=" << offset;
+        }
+    }
+}
 #endif
 
 } // namespace
