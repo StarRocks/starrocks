@@ -232,13 +232,13 @@ protected:
         auto* range = _tablet_metadata->mutable_range();
         if (lower.has_value()) {
             auto* value = range->mutable_lower_bound()->add_values();
-            value->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+            value->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
             value->set_value(std::to_string(*lower));
             range->set_lower_bound_included(true);
         }
         if (upper.has_value()) {
             auto* value = range->mutable_upper_bound()->add_values();
-            value->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+            value->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
             value->set_value(std::to_string(*upper));
             range->set_upper_bound_included(false);
         }
