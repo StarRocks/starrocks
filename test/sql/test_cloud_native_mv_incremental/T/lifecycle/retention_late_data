@@ -1,0 +1,645 @@
+-- A row arriving for a partition the mv's retention has already expired has no mv partition to land in.
+-- Partition sync will not create one (that is what retention means) and the mv sink will not auto-create it,
+-- so the row is rejected and insert_max_filter_ratio = 0 fails the whole round -- and, because the bookmark
+-- never advances past it, every later round too. The delta has to be bounded by the mv's retained range
+-- instead, the way pct bounds its insert.
+
+-- name: test_ivm_retention_late_data_ttl_number @cloud
+CREATE TABLE lr_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO lr_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_lr
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM lr_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_lr WITH SYNC MODE;
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_lr' ORDER BY PARTITION_NAME;
+-- 2026-08-10 is outside the retained range, so this row is correct to drop, not to fail on
+INSERT INTO lr_base VALUES ('2026-08-10',9,99);
+REFRESH MATERIALIZED VIEW mv_lr WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_lr';
+-- the round after the late row still has to ingest: a wedged mv freezes here instead
+INSERT INTO lr_base VALUES ('2026-08-12',4,40);
+REFRESH MATERIALIZED VIEW mv_lr WITH SYNC MODE;
+SELECT dt, k, v FROM mv_lr ORDER BY dt, k;
+SELECT dt, k, SUM(v) FROM lr_base WHERE dt >= '2026-08-11' GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_retention_condition @cloud
+-- Second of the three retention knobs.
+CREATE TABLE rc_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO rc_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_rc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental',
+            'partition_retention_condition' = 'dt >= "2026-08-11"')
+AS SELECT dt, k, SUM(v) AS v FROM rc_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_rc WITH SYNC MODE;
+INSERT INTO rc_base VALUES ('2026-08-10',9,99);
+INSERT INTO rc_base VALUES ('2026-08-12',4,40);
+REFRESH MATERIALIZED VIEW mv_rc WITH SYNC MODE;
+SELECT dt, k, v FROM mv_rc ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_auto_mode @cloud
+-- A late row is a plain append, so auto has no non-append-only signal to fall back on: it stays on the
+-- incremental path and must survive there. Assert the executed mode, or a pct fallback reports green
+-- without ever running the code under test.
+CREATE TABLE au_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO au_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_au
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM au_base GROUP BY dt, k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_au';
+[UC]REFRESH MATERIALIZED VIEW mv_au WITH SYNC MODE;
+INSERT INTO au_base VALUES ('2026-08-10',9,99);
+INSERT INTO au_base VALUES ('2026-08-12',4,40);
+REFRESH MATERIALIZED VIEW mv_au WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs
+WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+SELECT dt, k, v FROM mv_au ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_agg_base @cloud
+-- An AGGREGATE KEY base produces its delta through a different path than DUPLICATE; the pre-aggregated
+-- value merging (30 + 5) is what proves that path ran.
+CREATE TABLE ag_base (dt date NOT NULL, k int NOT NULL, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ag_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_ag
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM ag_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+INSERT INTO ag_base VALUES ('2026-08-10',9,99);
+INSERT INTO ag_base VALUES ('2026-08-12',4,40);
+INSERT INTO ag_base VALUES ('2026-08-12',3,5);
+REFRESH MATERIALIZED VIEW mv_ag WITH SYNC MODE;
+SELECT dt, k, v FROM mv_ag ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_pk_passthrough @cloud
+-- Retractable base: the delta carries a DELETE for a refused partition alongside a late INSERT there, and
+-- a good INSERT into a retained one. dt is in the primary key, so every op on one row id shares one partition.
+CREATE TABLE pk_base (dt date, k int, v bigint) PRIMARY KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO pk_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_pk
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, v FROM pk_base;
+[UC]REFRESH MATERIALIZED VIEW mv_pk WITH SYNC MODE;
+DELETE FROM pk_base WHERE dt = '2026-08-10' AND k = 1;
+INSERT INTO pk_base VALUES ('2026-08-10',9,99);
+INSERT INTO pk_base VALUES ('2026-08-12',4,40);
+REFRESH MATERIALIZED VIEW mv_pk WITH SYNC MODE;
+SELECT dt, k, v FROM mv_pk ORDER BY dt, k;
+-- a second round with no new data must settle, not fail again
+REFRESH MATERIALIZED VIEW mv_pk WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_pk';
+
+-- name: test_ivm_retention_late_data_pk_retractable_aggregate @cloud
+-- An UPDATE inside a retained group and a DELETE inside a refused one in the same round: the retained
+-- group's aggregate has to end up exact while the refused partition's ops are dropped.
+CREATE TABLE ra_base (dt date, k int, v bigint) PRIMARY KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO ra_base VALUES ('2026-08-10',1,10),('2026-08-10',2,11),('2026-08-11',1,20),('2026-08-12',1,30),('2026-08-12',2,31);
+CREATE MATERIALIZED VIEW mv_ra
+PARTITION BY dt
+DISTRIBUTED BY HASH(dt) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, SUM(v) AS sv, COUNT(*) AS c FROM ra_base GROUP BY dt;
+[UC]REFRESH MATERIALIZED VIEW mv_ra WITH SYNC MODE;
+UPDATE ra_base SET v = 300 WHERE dt = '2026-08-12' AND k = 1;
+DELETE FROM ra_base WHERE dt = '2026-08-10' AND k = 2;
+INSERT INTO ra_base VALUES ('2026-08-10',7,77),('2026-08-12',3,32);
+REFRESH MATERIALIZED VIEW mv_ra WITH SYNC MODE;
+SELECT dt, sv, c FROM mv_ra ORDER BY dt;
+SELECT dt, SUM(v), COUNT(*) FROM ra_base WHERE dt >= '2026-08-11' GROUP BY dt ORDER BY dt;
+
+-- name: test_ivm_retention_late_data_pk_join_dim_only @cloud
+-- Only the dimension changes, so the fact table has no delta at all: the rows come from the
+-- Version(TO, fact) join Delta(dim) branch and still carry refused fact partitions. Bounding the delta by
+-- the fact's changed partitions instead of by the topology would miss exactly these.
+CREATE TABLE jf_fact (dt date, k int, v bigint) PRIMARY KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+CREATE TABLE jf_dim (k int, name varchar(32)) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+PROPERTIES ('replication_num' = '1', 'enable_change_data_capture' = 'true');
+INSERT INTO jf_fact VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+INSERT INTO jf_dim VALUES (1,'a'),(2,'b'),(3,'c');
+CREATE MATERIALIZED VIEW mv_jf
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT a.dt, a.k, a.v, b.name FROM jf_fact a JOIN jf_dim b ON a.k = b.k;
+[UC]REFRESH MATERIALIZED VIEW mv_jf WITH SYNC MODE;
+UPDATE jf_dim SET name = 'A2' WHERE k = 1;
+UPDATE jf_dim SET name = 'C2' WHERE k = 3;
+REFRESH MATERIALIZED VIEW mv_jf WITH SYNC MODE;
+SELECT dt, k, v, name FROM mv_jf ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_null_key_refused @cloud
+-- A NULL partition key belongs to the MIN-bounded partition. Here retention refuses that partition, so the
+-- NULL row is provably out of scope and must be dropped -- an escape keyed on the column rather than on the
+-- membership predicate re-admits it and wedges the refresh.
+CREATE TABLE nr_base (dt date NULL, k int NOT NULL, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+  PARTITION p0 VALUES LESS THAN ('2026-08-11'),
+  PARTITION p1 VALUES LESS THAN ('2026-08-12'),
+  PARTITION p2 VALUES LESS THAN ('2026-08-13'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO nr_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30),(NULL,9,99);
+CREATE MATERIALIZED VIEW mv_nr
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM nr_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_nr WITH SYNC MODE;
+INSERT INTO nr_base VALUES (NULL,10,100);
+INSERT INTO nr_base VALUES ('2026-08-12',4,40);
+REFRESH MATERIALIZED VIEW mv_nr WITH SYNC MODE;
+SELECT ifnull(cast(dt as varchar),'NULL') AS dt, k, v FROM mv_nr ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_null_key_retained @cloud
+-- The mirror image: the MIN-bounded partition survives retention, so membership is genuinely unknown for a
+-- NULL key and the row must be kept. Dropping it would be data loss unrelated to retention.
+CREATE TABLE nk_base (dt date NULL, k int NOT NULL, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (
+  PARTITION p0 VALUES LESS THAN ('2026-08-11'),
+  PARTITION p1 VALUES LESS THAN ('2026-08-12'),
+  PARTITION p2 VALUES LESS THAN ('2026-08-13'))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO nk_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30),(NULL,9,99);
+CREATE MATERIALIZED VIEW mv_nk
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental',
+            'partition_retention_condition' = 'dt < "2026-08-12"')
+AS SELECT dt, k, SUM(v) AS v FROM nk_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_nk WITH SYNC MODE;
+INSERT INTO nk_base VALUES (NULL,10,100);
+INSERT INTO nk_base VALUES ('2026-08-12',8,88);
+REFRESH MATERIALIZED VIEW mv_nk WITH SYNC MODE;
+SELECT ifnull(cast(dt as varchar),'NULL') AS dt, k, v FROM mv_nk ORDER BY dt NULLS FIRST, k;
+
+-- name: test_ivm_retention_late_data_null_key_auto_partition @cloud
+-- The production shape: date_trunc auto partitioning also accepts a NULL key, routing it to p00000101,
+-- whose lower bound is the DATE minimum. That partition sorts oldest, so any retention refuses it first --
+-- this case is the common one, not an exotic explicit-RANGE arrangement.
+CREATE TABLE na_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO na_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),(NULL,9,99);
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'na_base' AND PARTITION_NAME NOT LIKE '$%' ORDER BY PARTITION_NAME;
+CREATE MATERIALIZED VIEW mv_na
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM na_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_na WITH SYNC MODE;
+INSERT INTO na_base VALUES (NULL,10,100);
+INSERT INTO na_base VALUES ('2026-08-11',3,30);
+REFRESH MATERIALIZED VIEW mv_na WITH SYNC MODE;
+SELECT ifnull(cast(dt as varchar),'NULL') AS dt, k, v FROM mv_na ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_list_partition @cloud
+-- List partitioning reaches a different predicate builder; a partition whose value list holds NULL is the
+-- list-side counterpart of a MIN-bounded range.
+CREATE TABLE li_base (region varchar(16) NULL, k int NOT NULL, v bigint) DUPLICATE KEY(region, k)
+PARTITION BY (region)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO li_base VALUES ('a',1,10),('b',2,20),(NULL,9,99);
+CREATE MATERIALIZED VIEW mv_li
+PARTITION BY region
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental',
+            'partition_retention_condition' = 'region = "a"')
+AS SELECT region, k, SUM(v) AS v FROM li_base GROUP BY region, k;
+[UC]REFRESH MATERIALIZED VIEW mv_li WITH SYNC MODE;
+INSERT INTO li_base VALUES (NULL,10,100);
+INSERT INTO li_base VALUES ('a',3,30);
+REFRESH MATERIALIZED VIEW mv_li WITH SYNC MODE;
+SELECT ifnull(region,'NULL') AS region, k, v FROM mv_li ORDER BY region, k;
+
+-- name: test_ivm_retention_late_data_list_partition_null_retained @cloud
+CREATE TABLE ln_base (region varchar(16) NULL, k int NOT NULL, v bigint) DUPLICATE KEY(region, k)
+PARTITION BY (region)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ln_base VALUES ('a',1,10),('b',2,20),(NULL,9,99);
+CREATE MATERIALIZED VIEW mv_ln
+PARTITION BY region
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental',
+            'partition_retention_condition' = 'region IS NULL OR region = "a"')
+AS SELECT region, k, SUM(v) AS v FROM ln_base GROUP BY region, k;
+[UC]REFRESH MATERIALIZED VIEW mv_ln WITH SYNC MODE;
+INSERT INTO ln_base VALUES (NULL,20,200);
+INSERT INTO ln_base VALUES ('b',21,210);
+REFRESH MATERIALIZED VIEW mv_ln WITH SYNC MODE;
+SELECT ifnull(region,'NULL') AS region, k, v FROM mv_ln ORDER BY region NULLS FIRST, k;
+
+-- name: test_ivm_retention_late_data_rollup_raw_column @cloud
+-- An mv coarser than its base, keeping the base-grained column in its output. The refused set is made of
+-- base day partitions and the predicate lands on that same day column, so the two agree.
+CREATE TABLE rr_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO rr_base VALUES ('2026-06-10',1,10),('2026-07-05',2,20),('2026-08-03',3,30);
+CREATE MATERIALIZED VIEW mv_rr
+PARTITION BY date_trunc('month', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM rr_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_rr WITH SYNC MODE;
+INSERT INTO rr_base VALUES ('2026-06-10',9,99);
+INSERT INTO rr_base VALUES ('2026-08-03',4,40);
+REFRESH MATERIALIZED VIEW mv_rr WITH SYNC MODE;
+SELECT dt, k, v FROM mv_rr ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_rollup_aliased_column @cloud
+-- The mv stores the rolled-up value itself, so a refused set carried in base partition ranges would compare
+-- months against day bounds: date_trunc('month','2026-06-10') = '2026-06-01' reads below '2026-06-10', the row
+-- goes through, and the sink rejects it. Bounding on mv cells keeps both sides in the same value space.
+CREATE TABLE ro_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ro_base VALUES ('2026-06-10',1,10),('2026-07-05',2,20),('2026-08-03',3,30);
+CREATE MATERIALIZED VIEW mv_ro
+PARTITION BY m
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT date_trunc('month', dt) AS m, k, SUM(v) AS v FROM ro_base GROUP BY 1, 2;
+[UC]REFRESH MATERIALIZED VIEW mv_ro WITH SYNC MODE;
+INSERT INTO ro_base VALUES ('2026-06-10',77,777);
+INSERT INTO ro_base VALUES ('2026-08-03',5,50);
+REFRESH MATERIALIZED VIEW mv_ro WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_ro';
+SELECT m, k, v FROM mv_ro ORDER BY m, k;
+
+-- name: test_pct_retention_late_data_control @cloud
+-- Control: the default refresh mode already drops a late row for an expired partition and keeps ingesting.
+-- A regression here would mean the fix bounded more than the incremental delta.
+CREATE TABLE ct_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ct_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_ct
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM ct_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_ct WITH SYNC MODE;
+INSERT INTO ct_base VALUES ('2026-08-10',9,99);
+REFRESH MATERIALIZED VIEW mv_ct WITH SYNC MODE;
+INSERT INTO ct_base VALUES ('2026-08-12',4,40);
+REFRESH MATERIALIZED VIEW mv_ct WITH SYNC MODE;
+SELECT dt, k, v FROM mv_ct ORDER BY dt, k;
+
+-- name: test_ivm_no_retention_unaffected @cloud
+-- The patch must stay inert without retention: nothing is refused, so no predicate is added and a late row
+-- lands in its own partition as before.
+CREATE TABLE nn_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO nn_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_nn
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM nn_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_nn WITH SYNC MODE;
+INSERT INTO nn_base VALUES ('2026-08-10',9,99);
+REFRESH MATERIALIZED VIEW mv_nn WITH SYNC MODE;
+SELECT dt, k, v FROM mv_nn ORDER BY dt, k;
+
+-- name: test_ivm_non_partitioned_mv_unaffected @cloud
+CREATE TABLE np_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO np_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20);
+CREATE MATERIALIZED VIEW mv_np
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM np_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_np WITH SYNC MODE;
+INSERT INTO np_base VALUES ('2026-08-10',9,99);
+REFRESH MATERIALIZED VIEW mv_np WITH SYNC MODE;
+SELECT dt, k, v FROM mv_np ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_multi_column_partition @cloud
+-- A multi-column partition key has no single ref column to read a predicate off, so a bound derived from one
+-- silently skips these mvs. The list predicate builder carries a per-column branch; this keeps it wired up.
+CREATE TABLE mc_base (region varchar(16) NOT NULL, dt date NOT NULL, k int NOT NULL, v bigint)
+DUPLICATE KEY(region, dt, k)
+PARTITION BY (region, dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO mc_base VALUES ('a','2026-08-10',1,10),('a','2026-08-11',2,20),('a','2026-08-12',3,30),('b','2026-08-12',4,40);
+CREATE MATERIALIZED VIEW mv_mc
+PARTITION BY (region, dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental',
+            'partition_retention_condition' = 'dt >= "2026-08-11"')
+AS SELECT region, dt, k, SUM(v) AS v FROM mc_base GROUP BY region, dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_mc WITH SYNC MODE;
+INSERT INTO mc_base VALUES ('a','2026-08-10',9,99);
+INSERT INTO mc_base VALUES ('a','2026-08-12',5,50);
+REFRESH MATERIALIZED VIEW mv_mc WITH SYNC MODE;
+SELECT region, dt, k, v FROM mv_mc ORDER BY region, dt, k;
+
+-- name: test_ivm_retention_late_data_union_all @cloud
+-- Two ref base tables with different partition layouts: the bound is built per base table and combined, so a
+-- range only one of them refuses must not take out the other's rows in a partition that is still kept.
+CREATE TABLE ua_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+CREATE TABLE ub_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ua_base VALUES ('2026-08-09',1,10),('2026-08-12',3,30);
+INSERT INTO ub_base VALUES ('2026-08-11',102,120),('2026-08-12',103,130);
+CREATE MATERIALIZED VIEW mv_ua
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, v FROM ua_base UNION ALL SELECT dt, k, v FROM ub_base;
+[UC]REFRESH MATERIALIZED VIEW mv_ua WITH SYNC MODE;
+-- only ua_base has 2026-08-09, so only its bound names that range
+INSERT INTO ua_base VALUES ('2026-08-09',9,99);
+INSERT INTO ub_base VALUES ('2026-08-11',109,190);
+REFRESH MATERIALIZED VIEW mv_ua WITH SYNC MODE;
+SELECT dt, k, v FROM mv_ua ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_ttl_duration @cloud
+-- Third retention knob, and a different applyRetention predicate than ttl_number. It is measured from now,
+-- so the partition names shift with the calendar and only the counts can be asserted.
+CREATE TABLE td_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO td_base VALUES (date_sub(current_date(), INTERVAL 30 DAY),1,10),(current_date(),2,20);
+CREATE MATERIALIZED VIEW mv_td
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl' = '3 day')
+AS SELECT dt, k, SUM(v) AS v FROM td_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_td WITH SYNC MODE;
+SELECT count(*) FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_td';
+INSERT INTO td_base VALUES (date_sub(current_date(), INTERVAL 30 DAY),9,99);
+REFRESH MATERIALIZED VIEW mv_td WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_td';
+INSERT INTO td_base VALUES (current_date(),4,40);
+REFRESH MATERIALIZED VIEW mv_td WITH SYNC MODE;
+SELECT count(*), sum(v) FROM mv_td;
+SELECT count(*), sum(v) FROM td_base WHERE dt > date_sub(current_date(), INTERVAL 3 DAY);
+
+-- name: test_ivm_retention_late_data_expired_partition_not_yet_dropped @cloud
+-- A refused cell whose partition still exists: the refresh drops only partitions the base no longer implies,
+-- so an expired one waits for the ttl scheduler. Until it goes, the late row has a home and keeping it out
+-- would lose data the mv can still hold.
+CREATE TABLE nd_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO nd_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20);
+CREATE MATERIALIZED VIEW mv_nd
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM nd_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_nd WITH SYNC MODE;
+-- the third day pushes 2026-08-10 past ttl_number without dropping it
+INSERT INTO nd_base VALUES ('2026-08-12',3,30);
+REFRESH MATERIALIZED VIEW mv_nd WITH SYNC MODE;
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_nd' ORDER BY PARTITION_NAME;
+INSERT INTO nd_base VALUES ('2026-08-10',9,99);
+REFRESH MATERIALIZED VIEW mv_nd WITH SYNC MODE;
+SELECT dt, k, v FROM mv_nd ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_list_partition_null_only_refused @cloud
+-- Retention refuses the null partition and nothing else. The membership predicate is built from the value
+-- list, which is then empty, and an empty list reads as "every row" -- so the bound would keep nothing at
+-- all and drop the retained partition's rows too, silently, with the refresh still reporting SUCCESS.
+CREATE TABLE no_base (region varchar(16) NULL, k int NOT NULL, v bigint) DUPLICATE KEY(region, k)
+PARTITION BY (region)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO no_base VALUES ('a',1,10),(NULL,2,20);
+CREATE MATERIALIZED VIEW mv_no
+PARTITION BY region
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental',
+            'partition_retention_condition' = 'region = "a"')
+AS SELECT region, k, SUM(v) AS v FROM no_base GROUP BY region, k;
+[UC]REFRESH MATERIALIZED VIEW mv_no WITH SYNC MODE;
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_no' ORDER BY PARTITION_NAME;
+-- one row for the refused partition and one for the retained one, in the same delta
+INSERT INTO no_base VALUES (NULL,9,99);
+INSERT INTO no_base VALUES ('a',3,30);
+REFRESH MATERIALIZED VIEW mv_no WITH SYNC MODE;
+SELECT ifnull(region,'NULL') AS region, k, v FROM mv_no ORDER BY region, k;
+SELECT region, k, SUM(v) FROM no_base WHERE region = 'a' GROUP BY region, k ORDER BY region, k;
+
+-- name: test_ivm_retention_late_data_unaliased_agg_column @cloud
+-- Left unaliased, the aggregate's mv column is named after the expression that built it, parentheses and
+-- qualified base column included. The bound projects every output name as a slot, so a name that is not a
+-- bare identifier has to survive that; only the partition column reaches the predicate itself.
+CREATE TABLE ua2_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ua2_base VALUES ('2026-08-10',1,10),('2026-08-11',2,20),('2026-08-12',3,30);
+CREATE MATERIALIZED VIEW mv_ua2
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) FROM ua2_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_ua2 WITH SYNC MODE;
+INSERT INTO ua2_base VALUES ('2026-08-10',9,99);
+REFRESH MATERIALIZED VIEW mv_ua2 WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_ua2';
+INSERT INTO ua2_base VALUES ('2026-08-12',4,40);
+REFRESH MATERIALIZED VIEW mv_ua2 WITH SYNC MODE;
+SELECT count(*), sum(k) FROM mv_ua2;
+SELECT count(*), sum(k) FROM (SELECT dt, k FROM ua2_base WHERE dt >= '2026-08-11' GROUP BY dt, k) t;
+
+-- name: test_ivm_retention_late_data_datetime_partition_column @cloud
+-- A DATETIME partition column: the retention window and the bound's range endpoints are datetime keys
+-- rather than dates, and partition_ttl's own branch splits on that type.
+CREATE TABLE dtm_base (ts datetime, k int, v bigint) DUPLICATE KEY(ts, k)
+PARTITION BY date_trunc('day', ts)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO dtm_base VALUES ('2026-08-10 01:00:00',1,10),('2026-08-11 02:00:00',2,20),('2026-08-12 03:00:00',3,30);
+CREATE MATERIALIZED VIEW mv_dtm
+PARTITION BY ts
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT ts, k, SUM(v) AS v FROM dtm_base GROUP BY ts, k;
+[UC]REFRESH MATERIALIZED VIEW mv_dtm WITH SYNC MODE;
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_dtm' ORDER BY PARTITION_NAME;
+INSERT INTO dtm_base VALUES ('2026-08-10 09:00:00',9,99);
+REFRESH MATERIALIZED VIEW mv_dtm WITH SYNC MODE;
+SELECT ts, k, v FROM mv_dtm ORDER BY ts, k;
+
+-- name: test_ivm_retention_late_data_int_partition_column @cloud
+-- An INT partition column. partition_ttl rejects a non-date type outright and ttl_number's shadow and
+-- in-the-future predicates only apply to date types, so partition_retention_condition is the knob that
+-- reaches this shape -- and the bound has to compare integers rather than dates.
+CREATE TABLE ipc_base (pid int NOT NULL, k int, v bigint) DUPLICATE KEY(pid, k)
+PARTITION BY (pid)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO ipc_base VALUES (10,1,10),(20,2,20),(30,3,30);
+CREATE MATERIALIZED VIEW mv_ipc
+PARTITION BY pid
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental',
+            'partition_retention_condition' = 'pid >= 20')
+AS SELECT pid, k, SUM(v) AS v FROM ipc_base GROUP BY pid, k;
+[UC]REFRESH MATERIALIZED VIEW mv_ipc WITH SYNC MODE;
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_ipc' ORDER BY PARTITION_NAME;
+INSERT INTO ipc_base VALUES (10,9,99);
+INSERT INTO ipc_base VALUES (30,4,40);
+REFRESH MATERIALIZED VIEW mv_ipc WITH SYNC MODE;
+SELECT pid, k, v FROM mv_ipc ORDER BY pid, k;
+SELECT pid, k, SUM(v) FROM ipc_base WHERE pid >= 20 GROUP BY pid, k ORDER BY pid, k;
+
+-- name: test_ivm_retention_late_data_large_refused_set @cloud
+-- The bound carries one range term per refused cell, and every case above refuses one or two. Sixty days
+-- against ttl_number = 2 refuses fifty-eight, which is the shape a real retention window reaches: the
+-- predicate has to survive being that wide without being truncated in either direction.
+CREATE TABLE lrs_base (dt date, k int, v bigint) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO lrs_base
+SELECT date_add('2026-01-01', INTERVAL generate_series DAY), generate_series, generate_series * 10
+FROM TABLE(generate_series(0, 59));
+CREATE MATERIALIZED VIEW mv_lrs
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM lrs_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_lrs WITH SYNC MODE;
+SELECT count(*) FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_lrs';
+-- one row far inside the refused range and one in a partition the mv keeps, in the same delta
+INSERT INTO lrs_base VALUES ('2026-01-05',999,9990);
+INSERT INTO lrs_base VALUES ('2026-03-01',777,7770);
+REFRESH MATERIALIZED VIEW mv_lrs WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_lrs';
+SELECT count(*), sum(v) FROM mv_lrs;
+SELECT count(*), sum(v) FROM (SELECT dt, k, SUM(v) v FROM lrs_base WHERE dt >= '2026-02-28' GROUP BY dt, k) t;
+
+-- name: test_ivm_retention_late_data_iceberg_base @cloud
+-- An external base. Ivm accepts ICEBERG and CLOUD_NATIVE only, so this is the whole of the external
+-- surface: the delta arrives from iceberg snapshots rather than an olap bookmark, while the bound is
+-- still built from the mv's own cells.
+create external catalog ice_${uuid0} properties (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ice_${uuid0};
+create database ice_db_${uuid0};
+CREATE TABLE ice_${uuid0}.ice_db_${uuid0}.ib_base (k int, v bigint, dt date) PARTITION BY (dt);
+INSERT INTO ice_${uuid0}.ice_db_${uuid0}.ib_base VALUES (1,10,'2026-08-10'),(2,20,'2026-08-11'),(3,30,'2026-08-12');
+set catalog default_catalog;
+create database mvdb_${uuid0};
+use mvdb_${uuid0};
+CREATE MATERIALIZED VIEW mv_ib
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT dt, k, SUM(v) AS v FROM ice_${uuid0}.ice_db_${uuid0}.ib_base GROUP BY dt, k;
+[UC]REFRESH MATERIALIZED VIEW mv_ib WITH SYNC MODE;
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_ib' ORDER BY PARTITION_NAME;
+INSERT INTO ice_${uuid0}.ice_db_${uuid0}.ib_base VALUES (9,99,'2026-08-10');
+INSERT INTO ice_${uuid0}.ice_db_${uuid0}.ib_base VALUES (4,40,'2026-08-12');
+REFRESH MATERIALIZED VIEW mv_ib WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_ib';
+SELECT dt, k, v FROM mv_ib ORDER BY dt, k;
+SELECT dt, k, SUM(v) FROM ice_${uuid0}.ice_db_${uuid0}.ib_base WHERE dt >= '2026-08-11' GROUP BY dt, k ORDER BY dt, k;
+
+-- name: test_ivm_retention_late_data_iceberg_str2date @cloud
+-- str2date is the transform an external string partition column needs, and it is rejected everywhere else
+-- (a list mv's partition expression may not carry a transform). The mv partitions by the parsed date, so
+-- the bound's endpoints are compared against str2date(ds) rather than against a stored column.
+create external catalog ices_${uuid0} properties (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ices_${uuid0};
+create database ices_db_${uuid0};
+CREATE TABLE ices_${uuid0}.ices_db_${uuid0}.sd_base (k int, v bigint, ds string) PARTITION BY (ds);
+INSERT INTO ices_${uuid0}.ices_db_${uuid0}.sd_base VALUES (1,10,'2026-08-10'),(2,20,'2026-08-11'),(3,30,'2026-08-12');
+set catalog default_catalog;
+create database mvsd_${uuid0};
+use mvsd_${uuid0};
+CREATE MATERIALIZED VIEW mv_sd
+PARTITION BY str2date(ds,'%Y-%m-%d')
+DISTRIBUTED BY HASH(k) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_ttl_number' = '2')
+AS SELECT ds, k, SUM(v) AS v FROM ices_${uuid0}.ices_db_${uuid0}.sd_base GROUP BY ds, k;
+[UC]REFRESH MATERIALIZED VIEW mv_sd WITH SYNC MODE;
+SELECT PARTITION_NAME FROM information_schema.partitions_meta
+WHERE DB_NAME = database() AND TABLE_NAME = 'mv_sd' ORDER BY PARTITION_NAME;
+INSERT INTO ices_${uuid0}.ices_db_${uuid0}.sd_base VALUES (9,99,'2026-08-10');
+INSERT INTO ices_${uuid0}.ices_db_${uuid0}.sd_base VALUES (4,40,'2026-08-12');
+REFRESH MATERIALIZED VIEW mv_sd WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views
+WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_sd';
+SELECT ds, k, v FROM mv_sd ORDER BY ds, k;
+SELECT ds, k, SUM(v) FROM ices_${uuid0}.ices_db_${uuid0}.sd_base WHERE ds >= '2026-08-11' GROUP BY ds, k ORDER BY ds, k;

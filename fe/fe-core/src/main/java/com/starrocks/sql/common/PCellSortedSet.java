@@ -63,6 +63,12 @@ public class PCellSortedSet {
         return new PCellSortedSet(new TreeSet<>(other.pCellWithNames));
     }
 
+    public static PCellSortedSet minusByName(PCellSortedSet from, PCellSortedSet remove) {
+        PCellSortedSet res = PCellSortedSet.of(from);
+        remove.getPartitionNames().forEach(res::removeByName);
+        return res;
+    }
+
     public static PCellSortedSet of() {
         return new PCellSortedSet(new TreeSet<>());
     }

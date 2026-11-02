@@ -41,6 +41,21 @@ public class MvTaskRunContextTest {
     }
 
     @Test
+    public void testRetentionRefusedMvCellsDefaultsToEmptyAndRoundTrips() {
+        MvTaskRunContext context = new MvTaskRunContext(new TaskRunContext());
+
+        // The incremental refresh reads this before partition sync has published anything, and an mv without
+        // retention never publishes at all, so the default has to be empty rather than null.
+        Assertions.assertTrue(context.getRetentionRefusedMvCells().isEmpty());
+
+        PCellSortedSet refused = PCellSortedSet.of();
+        refused.add(PCellWithName.of("p20260810", new PCellNone()));
+        context.setRetentionRefusedMvCells(refused);
+
+        Assertions.assertEquals(Set.of("p20260810"), context.getRetentionRefusedMvCells().getPartitionNames());
+    }
+
+    @Test
     public void testSetPartitionTopologyStoresTopologyAndSupportsPartitionLookups() {
         MvTaskRunContext context = new MvTaskRunContext(new TaskRunContext());
 

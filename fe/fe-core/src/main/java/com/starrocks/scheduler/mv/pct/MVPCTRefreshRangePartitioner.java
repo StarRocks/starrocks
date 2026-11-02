@@ -136,7 +136,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         PCellSortedSet adds = result.diff.getAdds();
         PCellSortedSet mvPartitionToCells = result.mvPartitionToCells;
         // filter partition ttl for all add ranges
-        filterPartitionsByTTL(adds, true);
+        filterAddsByRetention(result.diff, adds);
         Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
         DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         addRangePartitions(db, mv, adds, partitionProperties, distributionDesc);
