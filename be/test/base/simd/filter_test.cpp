@@ -153,14 +153,25 @@ PARALLEL_TEST(SimdFilterTest, vectorized_path_matches_scalar) {
     }
 }
 
+struct Bytes16 {
+    uint64_t lo;
+    uint64_t hi;
+};
+
 template <typename T>
 using FilterFn = std::function<size_t(T*, const T*, const uint8_t*, size_t, size_t)>;
 
 template <typename T>
 static T make_value(uint64_t i) {
-    uint64_t bits = i * 0x9E3779B97F4A7C15ull + 1;
+    uint64_t bits[4] = {
+            i * 0x9E3779B97F4A7C15ull + 1,
+            (i ^ 0xBF58476D1CE4E5B9ull) * 0x94D049BB133111EBull + 3,
+            (i + 7) * 0xD6E8FEB86659FD93ull + 5,
+            (i ^ 0xA5A5A5A55A5A5A5Aull) + 7,
+    };
+    static_assert(sizeof(T) <= sizeof(bits));
     T v;
-    std::memcpy(&v, &bits, sizeof(T));
+    std::memcpy(&v, bits, sizeof(T));
     return v;
 }
 
@@ -307,6 +318,13 @@ PARALLEL_TEST(SimdFilterTest, exact_batch_multiples_and_unaligned_ranges) {
                     expect_matches_reference<uint64_t>(public_api<uint64_t>(), n, from, n, sel, in_place, "u64_batch");
                     expect_matches_reference<uint8_t>(public_api<uint8_t>(), n, from, n, sel, in_place, "u8_batch");
                     expect_matches_reference<uint16_t>(public_api<uint16_t>(), n, from, n, sel, in_place, "u16_batch");
+                    expect_matches_reference<Bytes16>(public_api<Bytes16>(), n, from, n, sel, in_place, "b16_batch");
+                    if (from > 0 && from < n) {
+                        expect_matches_reference<uint32_t>(public_api<uint32_t>(), n, from, from, sel, in_place,
+                                                           "u32_empty_mid_range");
+                        expect_matches_reference<Bytes16>(public_api<Bytes16>(), n, from, from, sel, in_place,
+                                                          "b16_empty_mid_range");
+                    }
 #if defined(__ARM_NEON) && defined(__aarch64__)
                     expect_matches_reference<uint32_t>(SIMD::Filter::detail::compress_neon_w4, n, from, n, sel,
                                                        in_place, "u32_batch_neon");
