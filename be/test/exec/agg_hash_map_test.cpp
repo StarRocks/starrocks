@@ -227,6 +227,14 @@ static_assert(
         agg_key_state_is_convertible<NullOneStringAggHashSet<PhmapSeed1>, NullOneStringTwoLevelAggHashSet<PhmapSeed1>>);
 static_assert(
         agg_key_state_is_convertible<NullOneStringAggHashSet<PhmapSeed2>, NullOneStringTwoLevelAggHashSet<PhmapSeed2>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashMapWithOneNumberKey<PhmapSeed1>,
+                                           Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashMapWithOneNumberKey<PhmapSeed2>,
+                                           Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashSetOfOneNumberKey<PhmapSeed1>,
+                                           Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>>);
+static_assert(agg_key_state_is_convertible<Int32AggHashSetOfOneNumberKey<PhmapSeed2>,
+                                           Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>>);
 
 // ...and every way of silently dropping out-of-table state has to be rejected. Without these the
 // guard could be vacuously true and nobody would notice.
@@ -240,6 +248,15 @@ static_assert(!agg_key_state_is_convertible<SerializedKeyAggHashSetFixedSize16<P
                                             SerializedTwoLevelKeyAggHashSet<PhmapSeed1>>); // fixed_byte_size
 static_assert(!agg_key_state_is_convertible<CompressedFixedSize8AggHashMap<PhmapSeed1>,
                                             Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>); // compression ctx
+
+template <typename KeyType>
+KeyType make_two_level_test_key(int i, const std::vector<std::string>& key_storage) {
+    if constexpr (std::is_integral_v<KeyType>) {
+        return static_cast<KeyType>(i);
+    } else {
+        return KeyType(Slice(key_storage[i]));
+    }
+}
 
 // Drives one declared (src, dst) pair end to end: fill the single-level container, convert, then
 // require that the active alternative really is the two-level one and that nothing was lost.
@@ -265,7 +282,7 @@ void check_map_converts_to_two_level(const char* what, AggHashMapVariant::Type s
         using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
         if constexpr (std::is_same_v<MapType, SrcWithKey>) {
             for (int i = 0; i < kNumKeys; i++) {
-                hash_map_with_key->hash_map.emplace(typename MapType::KeyType(Slice(key_storage[i])),
+                hash_map_with_key->hash_map.emplace(make_two_level_test_key<typename MapType::KeyType>(i, key_storage),
                                                     (AggDataPtr)(&values[i]));
             }
             if constexpr (MapType::has_single_null_key) {
@@ -285,7 +302,8 @@ void check_map_converts_to_two_level(const char* what, AggHashMapVariant::Type s
         if constexpr (std::is_same_v<MapType, DstWithKey>) {
             ASSERT_EQ(static_cast<size_t>(kNumKeys), hash_map_with_key->hash_map.size());
             for (int i = 0; i < kNumKeys; i++) {
-                auto it = hash_map_with_key->hash_map.find(typename MapType::KeyType(Slice(key_storage[i])));
+                auto it = hash_map_with_key->hash_map.find(
+                        make_two_level_test_key<typename MapType::KeyType>(i, key_storage));
                 ASSERT_TRUE(it != hash_map_with_key->hash_map.end()) << "missing key " << key_storage[i];
                 EXPECT_EQ(values[i], *(int64_t*)it->second);
             }
@@ -318,7 +336,7 @@ void check_set_converts_to_two_level(const char* what, AggHashSetVariant::Type s
         using SetType = std::remove_reference_t<decltype(*hash_set_with_key)>;
         if constexpr (std::is_same_v<SetType, SrcWithKey>) {
             for (int i = 0; i < kNumKeys; i++) {
-                hash_set_with_key->hash_set.emplace(typename SetType::KeyType(Slice(key_storage[i])));
+                hash_set_with_key->hash_set.emplace(make_two_level_test_key<typename SetType::KeyType>(i, key_storage));
             }
             if constexpr (SetType::has_single_null_key) {
                 hash_set_with_key->has_null_key = true;
@@ -337,7 +355,8 @@ void check_set_converts_to_two_level(const char* what, AggHashSetVariant::Type s
         if constexpr (std::is_same_v<SetType, DstWithKey>) {
             ASSERT_EQ(static_cast<size_t>(kNumKeys), hash_set_with_key->hash_set.size());
             for (int i = 0; i < kNumKeys; i++) {
-                EXPECT_TRUE(hash_set_with_key->hash_set.contains(typename SetType::KeyType(Slice(key_storage[i]))));
+                EXPECT_TRUE(hash_set_with_key->hash_set.contains(
+                        make_two_level_test_key<typename SetType::KeyType>(i, key_storage)));
             }
             if constexpr (SetType::has_single_null_key) {
                 EXPECT_TRUE(hash_set_with_key->has_null_key);
@@ -362,6 +381,12 @@ TEST(HashMapTest, ConvertToTwoLevelPreservesEveryDeclaredMapPair) {
             "phase1_null_string", Type::phase1_null_string);
     check_map_converts_to_two_level<NullOneStringAggHashMap<PhmapSeed2>, NullOneStringTwoLevelAggHashMap<PhmapSeed2>>(
             "phase2_null_string", Type::phase2_null_string);
+    check_map_converts_to_two_level<Int32AggHashMapWithOneNumberKey<PhmapSeed1>,
+                                    Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>("phase1_int32",
+                                                                                         Type::phase1_int32);
+    check_map_converts_to_two_level<Int32AggHashMapWithOneNumberKey<PhmapSeed2>,
+                                    Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed2>>("phase2_int32",
+                                                                                         Type::phase2_int32);
 }
 
 TEST(HashMapTest, ConvertToTwoLevelPreservesEveryDeclaredSetPair) {
@@ -378,6 +403,12 @@ TEST(HashMapTest, ConvertToTwoLevelPreservesEveryDeclaredSetPair) {
             "phase1_null_string", Type::phase1_null_string);
     check_set_converts_to_two_level<NullOneStringAggHashSet<PhmapSeed2>, NullOneStringTwoLevelAggHashSet<PhmapSeed2>>(
             "phase2_null_string", Type::phase2_null_string);
+    check_set_converts_to_two_level<Int32AggHashSetOfOneNumberKey<PhmapSeed1>,
+                                    Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed1>>("phase1_int32",
+                                                                                       Type::phase1_int32);
+    check_set_converts_to_two_level<Int32AggHashSetOfOneNumberKey<PhmapSeed2>,
+                                    Int32TwoLevelAggHashSetOfOneNumberKey<PhmapSeed2>>("phase2_int32",
+                                                                                       Type::phase2_int32);
 }
 
 // Guards the latent trap: a combined fixed-size key whose has_null_column is dropped stops
