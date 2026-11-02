@@ -1774,8 +1774,106 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
         seedTvrBaselineAtVersionZero(mv);
         advanceTableVersionTo(1);
+<<<<<<< HEAD
         mockListTableDeltaTraitsThrowsConnector(
                 "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1");
+=======
+
+        // Iceberg: the recorded baseline snapshot is no longer an ancestor of the head.
+        assertBaselineUnreachable(mv, new StarRocksConnectorException(
+                "Starting snapshot (exclusive) 0 is not a parent ancestor of end snapshot 1"));
+    }
+
+    /**
+     * On Lake the baseline goes unreachable a second way: its bookmark's lease ran out and the
+     * cleanup sweep reclaimed it. Needs a view of its own -- the first failure of this class
+     * inactivates the view, so a second attempt never reaches the planner.
+     */
+    @Test
+    public void testIncrementalRefreshSurfacesBaselineBookmarkReclaimed() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+
+        assertBaselineUnreachable(mv, new BaselineBookmarkMissingException(
+                MaterializedViewExceptions.BASELINE_BOOKMARK_MISSING_MARKER + ": db=1, table=2, id=3"));
+    }
+
+    @Test
+    public void testIncrementalRefreshInactivatesWhenBaseTableIsRecreated() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+        BaseTableInfo recreated = mv.getBaseTableInfos().get(0);
+        BaseTableInfo dropped = new BaseTableInfo(recreated.getCatalogName(), recreated.getDbName(),
+                recreated.getTableName(), "t0:uuid-of-the-dropped-table");
+        mv.setBaseTableInfos(new ArrayList<>(List.of(dropped)));
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+
+        TaskRun taskRun = buildMVTaskRun(mv, "test");
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getMVRefreshExecPlan(taskRun));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("was dropped and re-created"), chain);
+        Assertions.assertTrue(chain.contains(MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER), chain);
+        Assertions.assertTrue(chain.contains("ALTER MATERIALIZED VIEW `test`.`test_mv1` ACTIVE"), chain);
+        Assertions.assertEquals(Optional.of(RefreshFailureKind.BASELINE_UNREACHABLE),
+                MaterializedViewExceptions.kindOf(thrown));
+        Assertions.assertEquals(MaterializedView.RefreshModeReason.BASELINE_UNREACHABLE.name(),
+                taskRun.getStatus().getMvTaskRunExtraMessage().getRefreshModeReason());
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertEquals(RefreshFailureKind.BASELINE_UNREACHABLE.inactiveReason(mv.getName()),
+                mv.getInactiveReason());
+
+        starRocksAssert.ddl("ALTER MATERIALIZED VIEW test_mv1 ACTIVE");
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(List.of(recreated), mv.getBaseTableInfos());
+        Assertions.assertTrue(
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap().isEmpty());
+        Assertions.assertInstanceOf(MVHybridRefreshProcessor.class,
+                getMVTaskRunProcessor(mv).getMVRefreshProcessor());
+    }
+
+    @Test
+    public void testAutoRefreshReactivatesOnNextRefreshWhenBaseTableIsRecreated() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        BaseTableInfo recreated = mv.getBaseTableInfos().get(0);
+        BaseTableInfo dropped = new BaseTableInfo(recreated.getCatalogName(), recreated.getDbName(),
+                recreated.getTableName(), "t0:uuid-of-the-dropped-table");
+        mv.setBaseTableInfos(new ArrayList<>(List.of(dropped)));
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1);
+
+        TaskRun failedRun = buildMVTaskRun(mv, "test");
+        Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getMVRefreshExecPlan(failedRun));
+        String chain = collectMessages(thrown);
+        Assertions.assertTrue(chain.contains("not supported for automatic meta repair"), chain);
+        Assertions.assertEquals(Optional.empty(), MaterializedViewExceptions.kindOf(thrown));
+        Assertions.assertEquals(MaterializedView.RefreshModeReason.BASELINE_UNREACHABLE.name(),
+                failedRun.getStatus().getMvTaskRunExtraMessage().getRefreshModeReason());
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertEquals(MaterializedViewExceptions.inactiveReasonForBaseTableChanged("t0"),
+                mv.getInactiveReason());
+
+        TaskRun nextRun = buildMVTaskRun(mv, "test");
+        getMVRefreshExecPlan(nextRun);
+        Assertions.assertTrue(mv.isActive(), mv.getInactiveReason());
+        Assertions.assertEquals(List.of(recreated), mv.getBaseTableInfos());
+        Assertions.assertEquals(MaterializedView.RefreshModeReason.BASELINE_MISSING.name(),
+                nextRun.getStatus().getMvTaskRunExtraMessage().getRefreshModeReason());
+    }
+
+    /**
+     * A connector reason that leaves the recorded baseline unreachable must reach the caller as a
+     * broken incremental chain -- typed so that a pure INCREMENTAL view is inactivated instead of
+     * failing the same way every round -- with the original reason still readable, and must inactivate
+     * the view under its own reason rather than blaming a base change that never happened.
+     */
+    private void assertBaselineUnreachable(MaterializedView mv, StarRocksConnectorException connectorFailure) {
+        String connectorMessage = connectorFailure.getMessage();
+        mockListTableDeltaTraitsThrowsConnector(connectorFailure);
+>>>>>>> a770cd5d292... [BugFix][RB-528] Inactivate an INCREMENTAL MV whose Iceberg base table was dropped and re-created (#65530)
 
         Throwable thrown = Assertions.assertThrows(Throwable.class, () -> getIVMRefreshedExecPlan(mv));
         String chain = collectMessages(thrown);

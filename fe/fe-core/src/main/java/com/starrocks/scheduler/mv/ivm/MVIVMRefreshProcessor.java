@@ -343,6 +343,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         return message != null && message.contains("is not a parent ancestor");
     }
 
+<<<<<<< HEAD
     private String formatNonAppendOnlyBreakingError(String reasonFragment) {
         return String.format(
                 "Cannot incrementally refresh materialized view %s: %s. "
@@ -352,6 +353,8 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                 mv.getName(), reasonFragment, MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
     }
 
+=======
+>>>>>>> a770cd5d292... [BugFix][RB-528] Inactivate an INCREMENTAL MV whose Iceberg base table was dropped and re-created (#65530)
     public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,
                                                      Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap) {
         Table snapshotTable = snapshotInfo.getBaseTable();
