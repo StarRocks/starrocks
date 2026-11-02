@@ -1360,23 +1360,23 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
                     AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
                     IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
+                    // Resolved in resolveBeforeLock: getTableChecked goes to the connector for
+                    // an external base table, and this runs under the MV's write lock.
+                    if (intervalLiteral == null && Boolean.TRUE.equals(preResolvedHasNonNativeBaseTable)) {
+                        throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
+                                "external table");
+                    }
+                    // Only the schedule changes: the version maps and the incremental baseline still describe the
+                    // MV's data, and dropping them would make the next refresh recompute every partition.
+                    final MaterializedView.AsyncRefreshContext asyncRefreshContext = copiedScheme.getAsyncRefreshContext();
+                    asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                    asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
                     if (intervalLiteral != null) {
-                        final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
-                        final MaterializedView.AsyncRefreshContext asyncRefreshContext =
-                                copiedScheme.getAsyncRefreshContext();
-                        asyncRefreshContext.setStartTime(
-                                Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-                        asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
-                        asyncRefreshContext.setStep(step.getLongValue());
+                        asyncRefreshContext.setStep(((IntLiteral) intervalLiteral.getValue()).getLongValue());
                         asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                     } else {
-                        // Resolved in resolveBeforeLock: getTableChecked goes to the connector for
-                        // an external base table, and this runs under the MV's write lock.
-                        if (Boolean.TRUE.equals(preResolvedHasNonNativeBaseTable)) {
-                            throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
-                                    "external table");
-                        }
-                        copiedScheme.setAsyncRefreshContext(new MaterializedView.AsyncRefreshContext());
+                        asyncRefreshContext.setStep(0);
+                        asyncRefreshContext.setTimeUnit(null);
                     }
                 }
 

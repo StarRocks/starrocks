@@ -1,0 +1,198 @@
+-- name: test_ivm_alter_on_change_keeps_incremental_baseline @cloud
+CREATE TABLE oc_inc_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO oc_inc_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_oc_inc
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM oc_inc_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_oc_inc';
+REFRESH MATERIALIZED VIEW mv_oc_inc WITH SYNC MODE;
+INSERT INTO oc_inc_base VALUES ('2026-10-02',2,20);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_oc_inc WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_oc_inc';
+-- result:
+INCREMENTAL
+-- !result
+INSERT INTO oc_inc_base VALUES ('2026-10-03',3,30);
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_oc_inc REFRESH ON_CHANGE;
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_oc_inc", 3)
+-- result:
+None
+-- !result
+SELECT LAST_EXECUTED_REFRESH_MODE, coalesce(nullif(LAST_REFRESH_MODE_REASON, ''), 'NONE') FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_oc_inc';
+-- result:
+INCREMENTAL	NONE
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+INSERT INTO oc_inc_base VALUES ('2026-10-01',1,10);
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_oc_inc", 4)
+-- result:
+None
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+function: assert_equal_result("SELECT dt, k, v, c FROM mv_oc_inc ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM oc_inc_base GROUP BY dt, k ORDER BY dt, k")
+-- result:
+None
+-- !result
+-- name: test_ivm_alter_on_change_keeps_auto_baseline @cloud
+CREATE TABLE oc_auto_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO oc_auto_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_oc_auto
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM oc_auto_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_oc_auto';
+REFRESH MATERIALIZED VIEW mv_oc_auto WITH SYNC MODE;
+INSERT INTO oc_auto_base VALUES ('2026-10-02',2,20);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_oc_auto WITH SYNC MODE;
+SELECT LAST_EXECUTED_REFRESH_MODE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_oc_auto';
+-- result:
+INCREMENTAL
+-- !result
+INSERT INTO oc_auto_base VALUES ('2026-10-03',3,30);
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_oc_auto REFRESH ON_CHANGE;
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_oc_auto", 3)
+-- result:
+None
+-- !result
+SELECT LAST_EXECUTED_REFRESH_MODE, coalesce(nullif(LAST_REFRESH_MODE_REASON, ''), 'NONE') FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_oc_auto';
+-- result:
+INCREMENTAL	NONE
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+INSERT INTO oc_auto_base VALUES ('2026-10-01',1,10);
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_oc_auto", 4)
+-- result:
+None
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+function: assert_equal_result("SELECT dt, k, v, c FROM mv_oc_auto ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM oc_auto_base GROUP BY dt, k ORDER BY dt, k")
+-- result:
+None
+-- !result
+-- name: test_mv_alter_on_change_refreshes_only_changed_partition @cloud
+CREATE TABLE oc_pct_base (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO oc_pct_base VALUES ('2026-10-01',1,10),('2026-10-02',2,20),('2026-10-03',3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_oc_pct
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'pct', 'partition_refresh_number' = '-1')
+AS SELECT dt, k, SUM(v) AS v, COUNT(*) AS c FROM oc_pct_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_oc_pct';
+REFRESH MATERIALIZED VIEW mv_oc_pct WITH SYNC MODE;
+INSERT INTO oc_pct_base VALUES ('2026-10-02',2,20);
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_oc_pct REFRESH ON_CHANGE;
+-- result:
+-- !result
+function: wait_mv_refresh_count("${db[0]}", "mv_oc_pct", 2)
+-- result:
+None
+-- !result
+SELECT array_join(array_sort(cast(json_query(parse_json(EXTRA_MESSAGE), '$.mvPartitionsToRefresh') as array<varchar>)), ',') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY get_json_double(EXTRA_MESSAGE, '$.processStartTime') DESC LIMIT 1;
+-- result:
+p20261002
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+function: assert_equal_result("SELECT dt, k, v, c FROM mv_oc_pct ORDER BY dt, k", "SELECT dt, k, SUM(v), COUNT(*) FROM oc_pct_base GROUP BY dt, k ORDER BY dt, k")
+-- result:
+None
+-- !result
+-- name: test_ivm_alter_on_change_still_detects_truncate @cloud
+CREATE TABLE oc_tr_base (dt date NOT NULL, k int NOT NULL, v int) DUPLICATE KEY(dt, k)
+PARTITION BY RANGE(dt) (START ('2024-01-01') END ('2024-01-04') EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO oc_tr_base SELECT date_add('2024-01-01', x % 3), x % 7, x FROM TABLE(generate_series(1, 300)) AS g(x);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_oc_tr PARTITION BY dt DISTRIBUTED BY HASH(dt) BUCKETS 2 REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS s, COUNT(*) AS c FROM oc_tr_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_oc_tr WITH SYNC MODE;
+TRUNCATE TABLE oc_tr_base PARTITION (p20240103);
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_oc_tr REFRESH ON_CHANGE;
+-- result:
+-- !result
+ALTER MATERIALIZED VIEW mv_oc_tr REFRESH MANUAL;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_oc_tr WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE 'incremental refresh broken by non-append-only base change:%' FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'mv_oc_tr';
+-- result:
+false	1
+-- !result
