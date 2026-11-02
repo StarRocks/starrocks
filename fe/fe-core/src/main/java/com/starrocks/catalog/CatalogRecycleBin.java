@@ -778,10 +778,16 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
+        Database db = dbInfo.getDb();
+        for (RecycleTableInfo tableInfo : idToTableInfo.row(db.getId()).values()) {
+            if (tableInfo.getDbId() == db.getId() && dbInfo.getTableNames().contains(tableInfo.getTable().getName())
+                    && tableInfo.isRecoverable()) {
+                warnIfRecoveringNonNormalTable(db, tableInfo.getTable());
+            }
+        }
         // 1. recover all tables in this db
         recoverAllTables(dbInfo);
 
-        Database db = dbInfo.getDb();
         // 2. remove db from idToDatabase and idToRecycleTime
         idToDatabase.remove(db.getId());
         removeRecycleMarkers(db.getId());
@@ -842,6 +848,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         }
     }
 
+    private static void warnIfRecoveringNonNormalTable(Database db, Table table) {
+        if (table.isNativeTableOrMaterializedView()) {
+            OlapTable.OlapTableState state = ((OlapTable) table).getState();
+            if (state != OlapTable.OlapTableState.NORMAL) {
+                LOG.warn("Attempting to recover native table {}.{} (dbId={}, tableId={}) in state {}; "
+                                + "unfinished alter/reshard metadata is not repaired and may leave version publication "
+                                + "or subsequent DDL blocked.",
+                        db.getFullName(), table.getName(), db.getId(), table.getId(), state);
+            }
+        }
+    }
+
     public synchronized boolean recoverTable(Database db, String tableName) {
         // make sure to get db lock
         long dbId = db.getId();
@@ -852,6 +870,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         }
 
         Table table = recycleTableInfo.getTable();
+        warnIfRecoveringNonNormalTable(db, table);
         db.registerTableUnlocked(table);
         nameToTableInfoDbLevel.remove(tableName);
         idToTableInfo.row(dbId).remove(table.getId());
