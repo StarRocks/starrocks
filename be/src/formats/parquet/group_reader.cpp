@@ -20,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <unordered_set>
 #include <utility>
 
@@ -697,6 +698,24 @@ Status GroupReader::_create_column_readers() {
     return Status::OK();
 }
 
+namespace {
+// The FE sends the single path /<col>/OFFSET when a column is used only through its length (cardinality,
+// array_length); any other use of the column adds paths, which the FE merges into a wider one.
+bool is_offsets_only_access(const FormatScanContext* scan_ctx, std::string_view col_name) {
+    if (scan_ctx == nullptr) {
+        return false;
+    }
+    for (const auto& path : scan_ctx->column_access_paths) {
+        if (path == nullptr || !path->is_root() || path->path() != col_name) {
+            continue;
+        }
+        return path->children().size() == 1 && path->children()[0]->is_offset() &&
+               path->children()[0]->children().empty();
+    }
+    return false;
+}
+} // namespace
+
 StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderParam::Column& column) {
     std::unique_ptr<ColumnReader> column_reader = nullptr;
     const auto* schema_node = _param.file_metadata->schema().get_stored_column_by_field_idx(column.idx_in_parquet);
@@ -712,10 +731,16 @@ StatusOr<ColumnReaderPtr> GroupReader::_create_column_reader(const GroupReaderPa
             ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_variant_column_reader(_column_reader_opts,
                                                                                               schema_node, hints));
         } else {
-            // t_lake_schema_field is nullptr outside the Iceberg (field id) path.
-            ASSIGN_OR_RETURN(column_reader,
-                             ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
-                                                         column.t_lake_schema_field));
+            if (schema_node != nullptr && is_offsets_only_access(_param.scan_ctx, column.slot_desc->col_name())) {
+                ASSIGN_OR_RETURN(column_reader, ColumnReaderFactory::create_array_offsets_only(
+                                                        _column_reader_opts, schema_node, column.slot_type()));
+            }
+            if (column_reader == nullptr) {
+                // t_lake_schema_field is nullptr outside the Iceberg (field id) path.
+                ASSIGN_OR_RETURN(column_reader,
+                                 ColumnReaderFactory::create(_column_reader_opts, schema_node, column.slot_type(),
+                                                             column.t_lake_schema_field));
+            }
         }
         auto* global_dictmaps = _param.scan_ctx->global_dictmaps;
         if (global_dictmaps->contains(column.slot_id())) {
