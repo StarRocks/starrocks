@@ -21,14 +21,18 @@ import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Uninterruptibles;
+import com.starrocks.alter.AlterMVJobExecutor;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -93,6 +97,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     // runtime profile
     @VisibleForTesting
     private RuntimeProfile runtimeProfile;
+    private String inactiveReasonBeforeRebuild;
+    private Map<BaseTableInfo, TvrVersionRange> baselineBeforeRebuild;
 
     public MVTaskRunProcessor() {
     }
@@ -134,8 +140,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
 
         // NOTE: mvId is set in Task's properties when creating
         if (!mv.isActive()) {
-            MVActiveChecker.tryToActivate(mv);
-            logger.info("Activated the MV before refreshing: {}", mv.getName());
+            if (Boolean.parseBoolean(properties.get(TaskRun.FORCE)) && !context.isExplain()
+                    && MaterializedViewExceptions.isRecoveredByForceRefresh(mv.getInactiveReason())) {
+                activateToRebuild();
+            } else {
+                MVActiveChecker.tryToActivate(mv);
+                logger.info("Activated the MV before refreshing: {}", mv.getName());
+            }
         }
 
         // metrics entity
@@ -143,6 +154,9 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         if (!mv.isActive()) {
             String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
                     mv.getName(), mvId, mv.getInactiveReason());
+            if (MaterializedViewExceptions.isRecoveredByForceRefresh(mv.getInactiveReason())) {
+                errorMsg += " " + MaterializedViewExceptions.recoverByRebuildHint(mv.getName());
+            }
             logger.warn(errorMsg);
             mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
             MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
@@ -174,6 +188,34 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         this.mvRefreshProcessor = MVRefreshProcessorFactory.INSTANCE.newProcessor(db, mv, mvTaskRunContext, mvMetricsEntity);
         logger.info("finish prepare refresh mv:{}, jobId: {}", mvId, jobId);
         return mvTaskRunContext;
+    }
+
+    // The rebuild never reads the baseline the view broke on, so it may activate a view the background check leaves.
+    private void activateToRebuild() {
+        String inactiveReason = mv.getInactiveReason();
+        if (!MVActiveChecker.activate(mv)) {
+            return;
+        }
+        logger.info("Activated materialized view {} to rebuild it, it was inactive because: {}",
+                mv.getName(), inactiveReason);
+        this.inactiveReasonBeforeRebuild = inactiveReason;
+        this.baselineBeforeRebuild = Map.copyOf(
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap());
+    }
+
+    /**
+     * Inactivates the view again, for the reason it had, and suspends its task, when the rebuild that activated it
+     * failed while the baseline was still in place: nothing was rewritten, and a plain refresh would break on that
+     * baseline again. Once the rebuild dropped the baseline the view stays active, and the next refresh finishes the
+     * rebuild.
+     */
+    public void restoreInactiveIfNotRebuilt() {
+        if (inactiveReasonBeforeRebuild == null || !mv.isActive() || !baselineBeforeRebuild.equals(
+                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap())) {
+            return;
+        }
+        logger.info("Rebuild of materialized view {} failed before it wrote, inactivate it again", mv.getName());
+        AlterMVJobExecutor.inactiveMvAndSuspendTask(mv, inactiveReasonBeforeRebuild);
     }
 
     /**
