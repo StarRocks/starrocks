@@ -65,8 +65,8 @@ TEST_F(NumericConverterTest, test_read_float_string) {
 
 // NOLINTNEXTLINE
 TEST_F(NumericConverterTest, test_int_read_float_string) {
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_INT), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+    auto conv = csv::get_converter(TYPE_INT_DESC, false);
+    auto col = ColumnHelper::create_column(TYPE_INT_DESC, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "2147483647.0", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "2147483647.000001", Converter::Options()));
@@ -86,8 +86,8 @@ TEST_F(NumericConverterTest, test_int_read_float_string) {
 
 // NOLINTNEXTLINE
 TEST_F(NumericConverterTest, test_bigint_read_float_string) {
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_BIGINT), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto conv = csv::get_converter(TYPE_BIGINT_DESC, false);
+    auto col = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "9223372036854775807.0", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "9223372036854775807.000001", Converter::Options()));

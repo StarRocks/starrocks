@@ -266,7 +266,7 @@ TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
         faststring backing;
         setup_slice_dict_decoder(&decoder, &inner_decoder, &backing);
 
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto dst = ColumnHelper::create_column(TYPE_INT_DESC, true);
         auto filter = std::make_unique<uint8_t[]>(count);
         memset(filter.get(), 0x01, count);
         auto st = decoder.next_batch(count, ColumnContentType::VALUE, dst.get(), filter.get());
@@ -290,7 +290,7 @@ TEST(DictEncodingReadTest, BinaryDestinationTypeGuard) {
         // num_ranges > 2 routes to next_value_batch_with_nulls() rather than the row-by-row fallback.
         infos.num_ranges = count / 2;
 
-        auto dst = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto dst = ColumnHelper::create_column(TYPE_INT_DESC, true);
         auto filter = std::make_unique<uint8_t[]>(count);
         memset(filter.get(), 0x01, count);
         auto st = decoder.next_batch_with_nulls(count, infos, ColumnContentType::VALUE, dst.get(), filter.get());
