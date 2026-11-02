@@ -287,6 +287,15 @@ WHERE name = "compact_threads";
 >
 > 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
+
 ### 手动触发 Compaction 任务
 
 ```SQL
