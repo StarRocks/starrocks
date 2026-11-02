@@ -463,7 +463,8 @@ class ChooseCase(object):
                     tools.ok_(False, "Case file loop struct illegal: file: %s, line: %s" % (file, line_id))
 
                 line_id += 1
-                tmp_loop_stat.clear()
+                # A new list, not clear(): every LOOP of the case keeps a reference to the list it was read into.
+                tmp_loop_stat = []
                 tmp_loop_prop = {}
 
                 # fetch property json
