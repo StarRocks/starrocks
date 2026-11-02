@@ -125,23 +125,6 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     return version;
 }
 
-// Answers "is |new_version| already written?" from storage (the datacache or object storage).
-//
-// The in-process answers to that question -- the metacache entry and the primary index data version
-// consulted by cal_new_base_version() -- are evictable. Once they are gone, a retry of a publish that
-// already finished on this node replays every txn log and, for a primary key table, reloads the index,
-// only to rebuild a version that is already written.
-//
-// skip_meta_cache for the same reason as in cal_new_base_version(): a metacache hit proves only that
-// some attempt cached the metadata, not that it was written. Costs one read, so only a retry asks.
-static StatusOr<TabletMetadataPtr> lookup_durable_new_version(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                              int64_t new_version, int64_t expected_gtid) {
-    TRACE_COUNTER_SCOPE_LATENCY_US("check_durable_new_version_latency_us");
-    return tablet_mgr->get_tablet_metadata(
-            tablet_id, new_version,
-            CacheOptions{.fill_meta_cache = true, .fill_data_cache = false, .skip_meta_cache = true}, expected_gtid);
-}
-
 namespace {
 std::ostream& operator<<(std::ostream& os, const std::span<const TxnInfoPB>& txns) {
     os << "[";
@@ -305,6 +288,74 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
     return schema_change_log;
 }
 
+// Returns the metadata of |new_version| when an earlier attempt already published it on this node, or nullptr
+// when this request has to apply its txns.
+//
+// The metacache answers first. Its entry is evictable, and so is the primary index data version consulted by
+// cal_new_base_version(); once they are gone, a retry of a publish that already finished here would replay every
+// txn log and, for a primary key table, reload the index, only to rebuild a version that is already written. So a
+// retry (FE sets is_retry_publish after a publish of this partition failed) also asks storage -- the datacache or
+// object storage -- at the cost of one read. A first attempt, where new_version cannot exist yet, does not.
+static TabletMetadataPtr lookup_published_new_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                                      int64_t base_version, int64_t new_version,
+                                                      std::span<const TxnInfoPB> txns, int64_t fe_built_version,
+                                                      bool is_retry_publish) {
+    auto tablet_id = tablet_info.get_tablet_id_in_metadata();
+    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    // If any txn in this batch is marked as no-op publish (admin escape hatch),
+    // a stale "V meta with txn data" left from a previous publish attempt could
+    // leak through the metacache. Actively erase the new_version entry for this
+    // tablet so that:
+    //   (a) the caller falls into the normal publish path which recomputes the
+    //       metadata from base_version and writes the no-op result;
+    //   (b) any concurrent reader (defensive: FE should not direct reads at a
+    //       not-yet-visible version, but mutex-free callers can race) gets a
+    //       clean cache miss rather than the stale entry;
+    //   (c) if this no-op publish itself fails, the cache is left in a clean
+    //       "no V entry" state instead of carrying poisoned data into the next
+    //       retry.
+    if (std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.no_op_publish(); })) {
+        tablet_mgr->metacache()->erase(new_metadata_path);
+        return nullptr;
+    }
+    if (auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
+        cached_new_metadata != nullptr) {
+        // The retries may be caused by some tablets failing to publish in a partition
+        // set the following log as debug log to prevent excessive logging
+        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_info=" << tablet_info
+                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
+        return cached_new_metadata;
+    }
+    // Metadata at new_version attests that the VERSION was written, not that THIS request's instructions were
+    // carried out. A requested primary index rebuild reaches the apply path only through new_txn_log_applier() and
+    // is encoded in neither new_version nor its gtid, so it never takes the shortcut. |fe_built_version| is honoured
+    // by inspecting the stored metadata: if a vector index build finished after the first attempt, the stored
+    // watermark is older and the apply has to persist the newer one.
+    if (!is_retry_publish ||
+        std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.rebuild_pindex(); })) {
+        return nullptr;
+    }
+    StatusOr<TabletMetadataPtr> durable_new_metadata;
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("check_durable_new_version_latency_us");
+        // skip_meta_cache for the same reason as in cal_new_base_version(): a metacache hit proves only that some
+        // attempt cached the metadata, not that it was written.
+        durable_new_metadata = tablet_mgr->get_tablet_metadata(
+                tablet_id, new_version,
+                CacheOptions{.fill_meta_cache = true, .fill_data_cache = false, .skip_meta_cache = true},
+                txns.back().gtid());
+    }
+    if (!durable_new_metadata.ok() || (*durable_new_metadata)->vector_index_built_version() < fe_built_version) {
+        return nullptr;
+    }
+    g_publish_skipped_durable_new_version << 1;
+    // Debug level like the metacache shortcut above: a retry of a large partition skips every tablet it already
+    // published, so INFO would log one line per tablet while the cluster recovers.
+    VLOG(1) << "Skipped publish version because target metadata is already written. tablet_info=" << tablet_info
+            << " base_version=" << base_version << " new_version=" << new_version;
+    return std::move(durable_new_metadata).value();
+}
+
 static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                                       int64_t base_version, int64_t new_version,
                                                       std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
@@ -353,58 +404,10 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
     VLOG(2) << "publish version tablet_info: " << tablet_info << ", txns: " << txns
             << ", base_version: " << base_version << ", new_version: " << new_version;
 
-    // If any txn in this batch is marked as no-op publish (admin escape hatch),
-    // a stale "V meta with txn data" left from a previous publish attempt could
-    // leak through the metacache. Actively erase the new_version entry for this
-    // tablet so that:
-    //   (a) the lookup below returns null and we fall into the normal publish
-    //       path which recomputes the metadata from base_version and writes the
-    //       no-op result;
-    //   (b) any concurrent reader (defensive: FE should not direct reads at a
-    //       not-yet-visible version, but mutex-free callers can race) gets a
-    //       clean cache miss rather than the stale entry;
-    //   (c) if this no-op publish itself fails, the cache is left in a clean
-    //       "no V entry" state instead of carrying poisoned data into the next
-    //       retry.
-    bool has_no_op_publish_in_batch =
-            std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.no_op_publish(); });
-    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_info.get_tablet_id_in_metadata(), new_version);
-    if (has_no_op_publish_in_batch) {
-        tablet_mgr->metacache()->erase(new_metadata_path);
-    }
-    auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
-    if (cached_new_metadata != nullptr && !has_no_op_publish_in_batch) {
-        // The retries may be caused by some tablets failing to publish in a partition
-        // set the following log as debug log to prevent excessive logging
-        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_info=" << tablet_info
-                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
-        return std::move(cached_new_metadata);
-    }
-
-    // The same question as the metacache lookup above, asked of storage. Only a retry asks (FE sets
-    // is_retry_publish after a publish of this partition failed), so a first attempt -- where
-    // new_version cannot exist yet -- issues no extra read.
-    //
-    // Two kinds of request never take the shortcut, because metadata at new_version attests that the
-    // VERSION was written, not that THIS request's instructions were carried out:
-    //   - a no-op publish, which deliberately rebuilds the target version (see the metacache erase above);
-    //   - a requested primary index rebuild, which reaches the apply path only through
-    //     new_txn_log_applier() and is encoded in neither new_version nor its gtid.
-    // |fe_built_version| is honoured by inspecting the stored metadata: if a vector index build finished
-    // after the first attempt, the stored watermark is older and the apply below has to persist the newer.
-    bool has_rebuild_pindex_in_batch =
-            std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.rebuild_pindex(); });
-    if (is_retry_publish && !has_no_op_publish_in_batch && !has_rebuild_pindex_in_batch) {
-        auto durable_new_metadata = lookup_durable_new_version(tablet_mgr, tablet_info.get_tablet_id_in_metadata(),
-                                                               new_version, txns.back().gtid());
-        if (durable_new_metadata.ok() && (*durable_new_metadata)->vector_index_built_version() >= fe_built_version) {
-            g_publish_skipped_durable_new_version << 1;
-            // Debug level like the metacache shortcut above: a retry of a large partition skips every
-            // tablet it already published, so INFO would log one line per tablet while the cluster recovers.
-            VLOG(1) << "Skipped publish version because target metadata is already written. tablet_info=" << tablet_info
-                    << " base_version=" << base_version << " new_version=" << new_version;
-            return std::move(durable_new_metadata).value();
-        }
+    if (auto published = lookup_published_new_version(tablet_mgr, tablet_info, base_version, new_version, txns,
+                                                      fe_built_version, is_retry_publish);
+        published != nullptr) {
+        return published;
     }
 
     auto new_version_metadata_or_error = [=](const Status& error) -> StatusOr<TabletMetadataPtr> {
