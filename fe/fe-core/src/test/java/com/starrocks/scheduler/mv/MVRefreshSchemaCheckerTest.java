@@ -32,6 +32,8 @@ import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -242,6 +244,27 @@ public class MVRefreshSchemaCheckerTest extends MVIVMIcebergTestBase {
             MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
             Assertions.assertTrue(mv.isActive(),
                     "AUTO-mode non-IVM MV (plain PCT schema) must not be re-derived / false-inactivated");
+        });
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = MaterializedView.RefreshMode.class, names = {"INCREMENTAL", "AUTO"})
+    public void testCheckerInactivatesWithWhyTheDefinitionIsNoLongerRewritable(MaterializedView.RefreshMode mode)
+            throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_checker_not_rewritable "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, count(data) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_checker_not_rewritable");
+            mv.setCurrentRefreshMode(mode);
+            // Stands in for a definition a newer analyzer no longer accepts for IVM.
+            mv.setViewDefineSql(
+                    "SELECT id, row_number() OVER (ORDER BY id) AS rn FROM `iceberg0`.`unpartitioned_db`.`t0`");
+            MVRefreshSchemaChecker.checkExternalBaseSchemaCompat(mv);
+            Assertions.assertFalse(mv.isActive());
+            Assertions.assertTrue(mv.getInactiveReason().contains("does not support window functions"),
+                    mv.getInactiveReason());
         });
     }
 }
