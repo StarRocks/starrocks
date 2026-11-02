@@ -55,7 +55,7 @@ import java.util.function.Function;
 
 import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 
-// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.11.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
+// copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.12.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
 // KEEP THIS TAG IN SYNC WITH ${iceberg.version} IN fe/pom.xml. This class shadows the one in
 // iceberg-core (identical FQN, and fe-core's classes precede the jar on the classpath), so if
 // upstream changes a constructor or method that iceberg-core itself calls, this copy still
@@ -65,6 +65,13 @@ import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         implements CloseableIterable<F> {
     static final ImmutableList<String> ALL_COLUMNS = ImmutableList.of("*");
+
+    private static final Types.NestedField UNPARTITIONED_PARTITION_FIELD =
+            Types.NestedField.optional(
+                    DataFile.PARTITION_ID,
+                    DataFile.PARTITION_NAME,
+                    Types.StructType.of(),
+                    DataFile.PARTITION_DOC);
 
     private static final Set<String> STATS_COLUMNS =
             ImmutableSet.of(
@@ -188,6 +195,12 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     }
 
     private static <T extends ContentFile<T>> Map<String, String> readMetadata(InputFile inputFile) {
+        FileFormat manifestFormat = FileFormat.fromFileName(inputFile.location());
+        Preconditions.checkArgument(
+                manifestFormat == FileFormat.AVRO,
+                "Reading manifest metadata is only supported for Avro manifests: %s",
+                inputFile.location());
+
         Map<String, String> metadata;
         try (CloseableIterable<ManifestEntry<T>> headerReader =
                      InternalData.read(FileFormat.AVRO, inputFile)
@@ -477,8 +490,21 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         Preconditions.checkArgument(
                 format != null, "Unable to determine format of manifest: %s", file.location());
 
+        boolean unpartitioned = spec.rawPartitionType().fields().isEmpty();
+
+        // V4+ manifests omit the partition field when unpartitioned (Parquet cannot represent
+        // empty structs, and the field is meaningless regardless of format). Mark it optional so
+        // the reader returns null for the missing field instead of throwing. The field must stay
+        // in the projection to preserve positional access for callers like StructProjection.
+        // For older versions where the empty struct is present, making it optional is harmless.
         List<Types.NestedField> fields = Lists.newArrayList();
-        fields.addAll(projection.asStruct().fields());
+        for (Types.NestedField field : projection.asStruct().fields()) {
+            if (unpartitioned && field.fieldId() == DataFile.PARTITION_ID) {
+                fields.add(UNPARTITIONED_PARTITION_FIELD);
+            } else {
+                fields.add(field);
+            }
+        }
         if (projection.findField(DataFile.RECORD_COUNT.fieldId()) == null) {
             fields.add(DataFile.RECORD_COUNT);
         }
