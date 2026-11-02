@@ -110,8 +110,8 @@ public:
             c2->set_default_value("10");
         }
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
 
@@ -317,7 +317,7 @@ public:
         Chunk key_chunk({std::move(key_column)}, key_slot_map);
         auto update_chunk = condition_update ? generate_data(kChunkSize, 0, true, 7) : std::move(key_chunk);
         std::vector<SlotDescriptor> key_slots;
-        key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        key_slots.emplace_back(0, "c0", TYPE_INT_DESC);
         std::vector<SlotDescriptor*> key_slot_pointers{&key_slots[0]};
         const auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
@@ -1095,7 +1095,7 @@ TEST_P(LakePartialUpdateTest, test_dcg_segment_missing_files_returns_error) {
     Chunk c0_only_chunk({std::move(c0_only)}, slot_only);
     // Build local slot descriptors with single column (c0) to match chunk schema
     std::vector<SlotDescriptor> local_slots;
-    local_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    local_slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> local_slot_ptrs;
     local_slot_ptrs.emplace_back(&local_slots[0]);
 
@@ -2374,9 +2374,9 @@ public:
             //c2->set_default_value("10");
         }
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _slots.emplace_back(2, "__op", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
         _slot_pointers.emplace_back(&_slots[2]);
@@ -2492,8 +2492,8 @@ public:
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
 
         // A DELETE hands the writer the key columns plus the trailing __op marker.
-        _delete_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _delete_slots.emplace_back(1, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        _delete_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _delete_slots.emplace_back(1, "__op", TYPE_TINYINT_DESC);
         for (auto& slot : _delete_slots) {
             _delete_slot_pointers.emplace_back(&slot);
         }
@@ -4240,7 +4240,7 @@ TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
     Chunk c0_chunk({std::move(c0_only)}, slot_only);
 
     std::vector<SlotDescriptor> key_slots;
-    key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    key_slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> key_slot_ptrs;
     key_slot_ptrs.emplace_back(&key_slots[0]);
 
@@ -4567,7 +4567,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -4936,8 +4936,8 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto chunk_update = Chunk({std::move(c0_update), std::move(c1_update)}, update_slot_map);
 
     std::vector<SlotDescriptor> update_slots;
-    update_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    update_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+    update_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    update_slots.emplace_back(1, "c1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> update_slot_pointers;
     update_slot_pointers.emplace_back(&update_slots[0]);
     update_slot_pointers.emplace_back(&update_slots[1]);
@@ -4994,9 +4994,9 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto chunk_insert = Chunk({std::move(c0_insert), std::move(c1_insert), std::move(c2_insert)}, insert_slot_map);
 
     std::vector<SlotDescriptor> insert_slots;
-    insert_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    insert_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-    insert_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    insert_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    insert_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+    insert_slots.emplace_back(2, "c2", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> insert_slot_pointers;
     insert_slot_pointers.emplace_back(&insert_slots[0]);
     insert_slot_pointers.emplace_back(&insert_slots[1]);
@@ -5160,10 +5160,10 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
 
         // Create slot descriptors including operation column
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(2, "c2", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -5326,7 +5326,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -5474,7 +5474,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -5876,9 +5876,9 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         for (int i = 0; i < kChunkSize; i++) idx[i] = i;
 
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -6051,9 +6051,9 @@ TEST_F(LakeColumnUpsertModeTest, test_no_del_tombstone_sstable_in_column_upsert_
         for (int i = 0; i < kChunkSize; i++) idx[i] = i;
 
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -6368,9 +6368,9 @@ protected:
         _tablet_schema = TabletSchema::create(*schema);
 
         // Build slot descriptors. Slot id <-> column id mapping mirrors LakePartialUpdateTestBase.
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "v_int", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TypeDescriptor{LogicalType::TYPE_INT}));
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "v_int", TYPE_INT_DESC);
+        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TYPE_INT_DESC));
 
         _slot_pointers_full.emplace_back(&_slots[0]);
         _slot_pointers_full.emplace_back(&_slots[1]);
