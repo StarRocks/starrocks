@@ -1302,6 +1302,7 @@ StarRocks 默认开启基于 Default Catalog 创建的异步物化视图查询�
 - StarRocks 不支持窗口函数的改写。
 - 如果物化视图定义语句中包含 LIMIT、ORDER BY、UNION、EXCEPT、INTERSECT、MINUS、GROUPING SETS、WITH CUBE 或 WITH ROLLUP，则无法用于改写。
 - 基于 External Catalog 的物化视图不保证查询结果强一致。
+- 如果物化视图在刷新时允许丢弃数据，即物化视图属性 `session.insert_max_filter_ratio` 大于 `0`，或未设置该属性且 FE 参数 `mv_refresh_fail_on_filter_data` 为 `false`，那么刷新时被丢弃的行，在改写到该物化视图的查询结果中同样缺失。如需保证查询结果完整，请将该物化视图的属性 `enable_query_rewrite` 设置为 `false`。
 - 基于 JDBC Catalog 表构建的异步物化视图暂不支持查询改写。
 
 针对基于视图的物化视图查询改写，StarRocks 目前存在以下限制：

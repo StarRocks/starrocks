@@ -1304,6 +1304,7 @@ In terms of materialized view query rewrite, StarRocks currently has the followi
 - StarRocks does not support rewriting queries with window functions.
 - Materialized views defined with statements containing LIMIT, ORDER BY, UNION, EXCEPT, INTERSECT, MINUS, GROUPING SETS, WITH CUBE, or WITH ROLLUP cannot be used for query rewrite.
 - Strong consistency of query results is not guaranteed between base tables and materialized views built on external catalogs.
+- If a materialized view is allowed to drop rows when it is refreshed, that is, its property `session.insert_max_filter_ratio` is greater than `0`, or it does not set that property and the FE parameter `mv_refresh_fail_on_filter_data` is `false`, the rows dropped by its refresh are also missing from the results of the queries rewritten to it. To keep query results complete, set the property `enable_query_rewrite` of the materialized view to `false`.
 - Asynchronous materialized views created on base tables in a JDBC catalog do not support query rewrite.
 
 In terms of view-based materialized view query rewrite, StarRocks currently has the following limitations:
