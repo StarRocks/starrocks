@@ -294,8 +294,9 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
 // The metacache answers first. Its entry is evictable, and so is the primary index data version consulted by
 // cal_new_base_version(); once they are gone, a retry of a publish that already finished here would replay every
 // txn log and, for a primary key table, reload the index, only to rebuild a version that is already written. So a
-// retry (FE sets is_retry_publish after a publish of this partition failed) also asks storage -- the datacache or
-// object storage -- at the cost of one read. A first attempt, where new_version cannot exist yet, does not.
+// retry (FE sets is_retry_publish when an earlier attempt was sent and did not finish) also asks storage -- the
+// datacache or object storage -- at the cost of one read. A first attempt, where new_version cannot exist yet, does
+// not.
 static TabletMetadataPtr lookup_published_new_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                                       int64_t base_version, int64_t new_version,
                                                       std::span<const TxnInfoPB> txns, int64_t fe_built_version,

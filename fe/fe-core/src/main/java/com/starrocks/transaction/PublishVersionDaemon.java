@@ -667,16 +667,19 @@ public class PublishVersionDaemon extends LeaderDaemon {
             return CompletableFuture.completedFuture(null);
         }
 
+        // Read before marking the txn as sent: sent before means an earlier attempt did not finish.
+        boolean isRetryPublish = txnState.hasSendTask();
         txnState.setHasSendTask(true);
         CompletableFuture<Boolean> publishFuture;
         Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
         if (tableCommitInfos.size() == 1) {
             TableCommitInfo tableCommitInfo = tableCommitInfos.iterator().next();
-            publishFuture = publishLakeTableAsync(db, txnState, tableCommitInfo);
+            publishFuture = publishLakeTableAsync(db, txnState, tableCommitInfo, isRetryPublish);
         } else {
             List<CompletableFuture<Boolean>> futureList = new ArrayList<>(tableCommitInfos.size());
             for (TableCommitInfo tableCommitInfo : tableCommitInfos) {
-                CompletableFuture<Boolean> future = publishLakeTableAsync(db, txnState, tableCommitInfo);
+                CompletableFuture<Boolean> future =
+                        publishLakeTableAsync(db, txnState, tableCommitInfo, isRetryPublish);
                 futureList.add(future);
             }
             publishFuture = CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0])).thenApply(
@@ -833,9 +836,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // Per-tablet stats for real-time reshard triggering (range-distribution tablets only).
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
-                // A failed earlier attempt may have finished some tablets: let them answer from storage.
-                boolean isRetryPublish = publishVersionData.getPartitionCommitInfos().stream()
-                        .anyMatch(info -> info.getLastPublishFailureTime() > 0);
+                // An earlier attempt may have finished some tablets: let them answer from storage.
+                boolean isRetryPublish = publishVersionData.isRetryPublish();
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, null, nodeToTablets,
@@ -1161,6 +1163,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
+        // Read before marking the batch as sent: a txn sent before belongs to an attempt that did not finish, so
+        // every partition of this one is a retry, including partitions that succeeded in that attempt.
+        boolean isRetryPublish = states.stream().anyMatch(TransactionState::hasSendTask);
         states.forEach(state -> state.setHasSendTask(true));
         for (TransactionState state : states) {
             for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
@@ -1168,7 +1173,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 Map<Long, PartitionCommitInfo> partitionCommitInfoMap = tableCommitInfo.getIdToPartitionCommitInfo();
                 for (Long partitionId : partitionCommitInfoMap.keySet()) {
                     if (!publishVersionDataMap.containsKey(partitionId)) {
-                        publishVersionDataMap.put(partitionId, new PartitionPublishVersionData(tableId, partitionId));
+                        publishVersionDataMap.put(partitionId,
+                                new PartitionPublishVersionData(tableId, partitionId, isRetryPublish));
                     }
                     PartitionPublishVersionData publishVersionData = publishVersionDataMap.get(partitionId);
                     publishVersionData.addTransaction(state);
@@ -1264,16 +1270,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
     }
 
     private CompletableFuture<Boolean> publishLakeTableAsync(Database db, TransactionState txnState,
-                                                             TableCommitInfo tableCommitInfo) {
+                                                             TableCommitInfo tableCommitInfo, boolean isRetryPublish) {
         Collection<PartitionCommitInfo> partitionCommitInfos = tableCommitInfo.getIdToPartitionCommitInfo().values();
         if (partitionCommitInfos.size() == 1) {
             PartitionCommitInfo partitionCommitInfo = partitionCommitInfos.iterator().next();
-            return publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
+            return publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState, isRetryPublish);
         } else {
             List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
             for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                CompletableFuture<Boolean> future =
-                        publishLakePartitionAsync(db, tableCommitInfo, partitionCommitInfo, txnState);
+                CompletableFuture<Boolean> future = publishLakePartitionAsync(db, tableCommitInfo,
+                        partitionCommitInfo, txnState, isRetryPublish);
                 futureList.add(future);
             }
             return CompletableFuture.allOf(futureList.toArray(new CompletableFuture[0]))
@@ -1284,7 +1290,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     private CompletableFuture<Boolean> publishLakePartitionAsync(@NotNull Database db,
                                                                  @NotNull TableCommitInfo tableCommitInfo,
                                                                  @NotNull PartitionCommitInfo partitionCommitInfo,
-                                                                 @NotNull TransactionState txnState) {
+                                                                 @NotNull TransactionState txnState,
+                                                                 boolean isRetryPublish) {
         if (partitionCommitInfo.getVersionTime() > 0) {
             return CompletableFuture.completedFuture(true);
         }
@@ -1297,7 +1304,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return CompletableFuture.supplyAsync(() -> {
             long lambdaEntryMs = System.currentTimeMillis();
             boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState,
-                    submitTimeMs, lambdaEntryMs);
+                    submitTimeMs, lambdaEntryMs, isRetryPublish);
             long now = System.currentTimeMillis();
             if (success) {
                 partitionCommitInfo.markPublishSucceeded(now);
@@ -1315,7 +1322,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
     private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
                                      @NotNull TransactionState txnState,
-                                     long submitTimeMs, long lambdaEntryMs) {
+                                     long submitTimeMs, long lambdaEntryMs, boolean isRetryPublish) {
         long tableId = tableCommitInfo.getTableId();
         long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
@@ -1410,8 +1417,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // collection, and range-distribution tablet sizes for real-time reshard triggering.
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
-                // A failed earlier attempt may have finished some tablets: let them answer from storage.
-                boolean isRetryPublish = partitionCommitInfo.getLastPublishFailureTime() > 0;
                 if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
                             baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,

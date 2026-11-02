@@ -69,8 +69,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1370,6 +1372,8 @@ public class LakePublishBatchTest {
 
             // A one-txn batch publishes through publishLakeTransactionAsync, which reaches Utils.publishVersion.
             AtomicBoolean failPublish = new AtomicBoolean(true);
+            Set<Long> partitionTablets = tabletIds(partition);
+            List<Boolean> retryFlags = new CopyOnWriteArrayList<>();
             new MockUp<Utils>() {
                 @Mock
                 public void publishVersion(Invocation invocation, @NotNull List<Tablet> tablets, TxnInfoPB txnInfo,
@@ -1379,6 +1383,9 @@ public class LakePublishBatchTest {
                                            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                            boolean preferSharedInitialMetadata, boolean isRetryPublish)
                         throws RpcException {
+                    if (tablets.stream().anyMatch(tablet -> partitionTablets.contains(tablet.getId()))) {
+                        retryFlags.add(isRetryPublish);
+                    }
                     if (failPublish.get()) {
                         throw new RpcException("injected publish failure");
                     }
@@ -1402,8 +1409,79 @@ public class LakePublishBatchTest {
 
             failPublish.set(false);
             awaitPublish(daemon, waiter1, waiter2, waiter3);
+            // Only the first attempt of the txn is not a retry publish.
+            assertFalse(retryFlags.get(0));
+            Assertions.assertTrue(retryFlags.size() > 1);
+            Assertions.assertTrue(retryFlags.subList(1, retryFlags.size()).stream().allMatch(flag -> flag),
+                    retryFlags.toString());
         } finally {
             Config.lake_batch_publish_min_version_num = oldMinVersionNum;
         }
+    }
+
+    private static Set<Long> tabletIds(Partition partition) {
+        return new HashSet<>(partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTabletIdsInOrder());
+    }
+
+    // A batch whose earlier attempt did not finish is a retry publish on every partition, including one that
+    // succeeded in that attempt; the first attempt is not.
+    @Test
+    public void testRetriedBatchIsRetryPublishOnEveryPartition() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        List<Partition> partitions = Lists.newArrayList(table.getPartitions());
+        Partition failing = partitions.get(2);
+        Partition succeeding = partitions.get(3);
+        Set<Long> failingTablets = tabletIds(failing);
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        List<VisibleStateWaiter> waiters = Lists.newArrayList();
+        for (int i = 0; i < 2; i++) {
+            long txnId = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                    "retry_publish_flag_" + i + "_" + UUIDUtil.genUUID(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            List<TabletCommitInfo> commitInfos = getPartitionTabletCommitInfos(failing);
+            commitInfos.addAll(getPartitionTabletCommitInfos(succeeding));
+            waiters.add(globalTransactionMgr.commitTransaction(db.getId(), txnId, commitInfos, Lists.newArrayList(),
+                    null));
+        }
+
+        AtomicBoolean failPublish = new AtomicBoolean(true);
+        List<Boolean> failingFlags = new CopyOnWriteArrayList<>();
+        List<Boolean> succeedingFlags = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersionBatch(Invocation invocation, @NotNull List<Tablet> tablets,
+                                            List<TxnInfoPB> txnInfos, long baseVersion, long newVersion,
+                                            Map<Long, Double> compactionScores, Map<Long, TabletRange> tabletRanges,
+                                            Map<ComputeNode, List<Long>> nodeToTablets,
+                                            ComputeResource computeResource, Map<Long, TabletStatPB> tabletStats,
+                                            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                            boolean isRetryPublish) throws RpcException {
+                if (failingTablets.contains(tablets.get(0).getId())) {
+                    failingFlags.add(isRetryPublish);
+                    if (failPublish.get()) {
+                        throw new RpcException("injected publish failure");
+                    }
+                } else {
+                    succeedingFlags.add(isRetryPublish);
+                }
+                invocation.proceed();
+            }
+        };
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+            daemon.runAfterLeaseValid();
+            return !failingFlags.isEmpty() && !succeedingFlags.isEmpty();
+        });
+        failPublish.set(false);
+        awaitPublish(daemon, waiters.toArray(new VisibleStateWaiter[0]));
+
+        assertFalse(failingFlags.get(0));
+        assertFalse(succeedingFlags.get(0));
+        Assertions.assertTrue(succeedingFlags.size() > 1, succeedingFlags.toString());
+        Assertions.assertTrue(succeedingFlags.subList(1, succeedingFlags.size()).stream().allMatch(flag -> flag),
+                succeedingFlags.toString());
+        Assertions.assertTrue(failingFlags.subList(1, failingFlags.size()).stream().allMatch(flag -> flag),
+                failingFlags.toString());
     }
 }

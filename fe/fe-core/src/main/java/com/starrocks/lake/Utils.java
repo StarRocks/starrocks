@@ -212,9 +212,9 @@ public class Utils {
     }
 
     /**
-     * @param isRetryPublish see {@code PublishVersionRequest.is_retry_publish}: true when an earlier publish of
-     *        this partition failed. It makes each tablet read the new version from storage on a metacache miss,
-     *        one read per tablet that is pure waste on a first attempt.
+     * @param isRetryPublish see {@code PublishVersionRequest.is_retry_publish}: true when an earlier attempt of
+     *        this publish was sent and did not finish. It makes each tablet read the new version from storage on a
+     *        metacache miss, one read per tablet that is pure waste on a first attempt.
      */
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                            long baseVersion, long newVersion,
@@ -351,8 +351,8 @@ public class Utils {
     }
 
     /**
-     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier publish of this partition
-     *        failed.
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier attempt of this publish
+     *        was sent and did not finish.
      */
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, Map<Long, Double> compactionScores,
@@ -788,8 +788,8 @@ public class Utils {
     }
 
     /**
-     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier publish of this partition
-     *        failed.
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier attempt of this publish
+     *        was sent and did not finish.
      */
     public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                                                long baseVersion, long newVersion,
