@@ -167,6 +167,7 @@ WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
+WITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE:-OFF}
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
 else
@@ -359,6 +360,7 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
             -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC} \
             -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
+            -DWITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_TENANN=${WITH_TENANN} \
             -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP} \
@@ -423,6 +425,9 @@ append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib"
+if [[ "${WITH_CONNECTOR_LANCE}" == "ON" ]]; then
+    append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lance/lib"
+fi
 
 while IFS= read -r runtime_lib_dir; do
     append_runtime_library_path "${runtime_lib_dir}"
