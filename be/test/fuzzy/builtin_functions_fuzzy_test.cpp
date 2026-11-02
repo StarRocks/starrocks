@@ -446,8 +446,7 @@ protected:
                 }
             }
             if (arg_count == 0) {
-                TypeDescriptor type_desc(TYPE_INT);
-                columns.emplace_back(make_const(create_random_column(type_desc, 1)));
+                columns.emplace_back(make_const(create_random_column(TYPE_INT_DESC, 1)));
             }
 
             // Create FunctionContext with proper argument types and return type

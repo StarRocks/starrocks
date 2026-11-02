@@ -222,47 +222,44 @@ std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDes
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanDirectScalar) {
     auto arrow_type = arrow::int32();
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, true, &raw_type_desc, &conv_func,
                                                      need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_INT, raw_type_desc.type);
     ASSERT_NE(nullptr, conv_func.func);
 
-    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, true);
+    auto column = create_arrow_column_convert_dest(TYPE_INT_DESC, raw_type_desc, need_cast, true);
     ASSERT_TRUE(column->is_nullable());
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanCastNeededScalar) {
     auto arrow_type = arrow::utf8();
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, false, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, false, &raw_type_desc,
+                                                     &conv_func, need_cast, false));
     ASSERT_TRUE(need_cast);
     ASSERT_EQ(TYPE_VARCHAR, raw_type_desc.type);
     ASSERT_EQ(TypeDescriptor::MAX_VARCHAR_LENGTH, raw_type_desc.len);
     ASSERT_NE(nullptr, conv_func.func);
 
-    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, false);
+    auto column = create_arrow_column_convert_dest(TYPE_INT_DESC, raw_type_desc, need_cast, false);
     ASSERT_TRUE(column->is_binary());
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanUnwrapsDictionary) {
     auto arrow_type = arrow::dictionary(arrow::int8(), arrow::int32());
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, true, &raw_type_desc, &conv_func,
                                                      need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_INT, raw_type_desc.type);
