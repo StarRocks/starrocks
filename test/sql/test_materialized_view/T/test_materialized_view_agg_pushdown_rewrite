@@ -1,4 +1,7 @@
 -- name: test_materialized_view_agg_pushdown_rewrite @slow
+-- Test Point: Aggregate pushdown preserves eligible rewrites and partition compensation.
+-- Method: Assert refresh success, plan eligibility and rewrite-disabled query results.
+[UC]db_name=SELECT DATABASE();
 CREATE TABLE IF NOT EXISTS `lineorder` (
     `lo_orderkey` int(11) NOT NULL COMMENT "",
     `lo_linenumber` int(11) NOT NULL COMMENT "",
@@ -132,8 +135,8 @@ set enable_materialized_view_agg_pushdown_rewrite=true;
 CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
 from lineorder l group by LO_ORDERDATE;
-[UC]refresh materialized view mv0 with sync mode;
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+function: refresh_mv_manual("${db_name}", "mv0")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0", expect_hit=False)
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
@@ -141,6 +144,8 @@ function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max
 
 select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;
@@ -150,9 +155,9 @@ drop materialized view mv0;
 CREATE MATERIALIZED VIEW mv1 REFRESH MANUAL AS
 select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), min(LO_REVENUE + 1), bitmap_union(to_bitmap(LO_REVENUE + 1)), hll_union(hll_hash(LO_REVENUE + 1)), percentile_union(percentile_hash(LO_REVENUE + 1)), any_value(LO_REVENUE + 1), bitmap_agg(LO_REVENUE + 1), array_agg_distinct(LO_REVENUE + 1) 
 from lineorder l group by LO_ORDERDATE;
-[UC]refresh materialized view mv1 with sync mode;
+function: refresh_mv_manual("${db_name}", "mv1")
 
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv1")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv1", expect_hit=False)
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv1")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), sum(LO_REVENUE + 1), max(LO_REVENUE + 1) , sum(LO_REVENUE + 1), max(LO_REVENUE + 1), count(distinct LO_REVENUE + 1), count(distinct LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv1")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1), min(LO_REVENUE + 1), bitmap_union_count(to_bitmap(LO_REVENUE + 1)), approx_count_distinct(LO_REVENUE + 1), PERCENTILE_APPROX(LO_REVENUE + 1, 0.5), PERCENTILE_APPROX(LO_REVENUE + 1, 0.7), sum(distinct LO_REVENUE + 1), count(distinct LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv1")
@@ -169,7 +174,7 @@ drop materialized view mv1;
 CREATE MATERIALIZED VIEW mv2 REFRESH MANUAL AS
 select LO_ORDERDATE, lo_custkey, lo_partkey, lo_suppkey, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
 from lineorder l GROUP BY LO_ORDERDATE, lo_custkey, lo_partkey, lo_suppkey;
-[UC]refresh materialized view mv2 with sync mode;
+function: refresh_mv_manual("${db_name}", "mv2")
 
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE) FROM lineorder AS l INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY INNER JOIN dates AS d ON l.lo_orderdate = d.d_date group by LO_ORDERDATE;", "mv2")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE)  FROM lineorder AS l INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY INNER JOIN dates AS d ON l.lo_orderdate = d.d_date group by LO_ORDERDATE;", "mv2")
@@ -183,9 +188,9 @@ PARTITION BY (LO_ORDERDATE)
 AS
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
 from lineorder l group by LO_ORDERDATE;
-[UC]refresh materialized view mv0 with sync mode;
+function: refresh_mv_manual("${db_name}", "mv0")
 
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0", expect_hit=False)
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
@@ -193,12 +198,14 @@ function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max
 
 select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE order by LO_ORDERDATE;
 select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE HAVING sum(LO_REVENUE) > 1 order by LO_ORDERDATE;
 
 -- test table with partition predciates
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", expect_hit=False)
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0")
@@ -230,7 +237,7 @@ VALUES
     (3, 3, 3, 3, 2, '1995-01-01', 'MEDIUM', 2, 20, 200, 180, 5, 175, 75, 7, 19940116, 'SHIP')
 ;
 
-function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
+function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE + 1), max(LO_REVENUE + 1) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION", expect_hit=False)
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), min(LO_REVENUE), bitmap_union_count(to_bitmap(LO_REVENUE)), approx_count_distinct(LO_REVENUE), PERCENTILE_APPROX(LO_REVENUE, 0.5), PERCENTILE_APPROX(LO_REVENUE, 0.7), sum(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date where l.LO_ORDERDATE >= '1993-01-01' group by LO_ORDERDATE order by LO_ORDERDATE;", "mv0", "UNION")
@@ -259,7 +266,7 @@ drop materialized view mv0;
 CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL AS
 select LO_ORDERDATE, sum(LO_REVENUE), count(LO_REVENUE), sum(lo_suppkey), count(lo_suppkey), max(LO_REVENUE), min(LO_REVENUE), bitmap_union(to_bitmap(LO_REVENUE)), hll_union(hll_hash(LO_REVENUE)), percentile_union(percentile_hash(LO_REVENUE)), any_value(LO_REVENUE), bitmap_agg(LO_REVENUE), array_agg_distinct(LO_REVENUE) 
 from lineorder l group by LO_ORDERDATE;
-[UC]refresh materialized view mv0 with sync mode;
+function: refresh_mv_manual("${db_name}", "mv0")
 
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
 function: print_hit_materialized_view("select LO_ORDERDATE, sum(LO_REVENUE), max(LO_REVENUE), avg(LO_REVENUE), avg(lo_suppkey), sum(LO_REVENUE), max(LO_REVENUE) , sum(LO_REVENUE), max(LO_REVENUE), count(distinct LO_REVENUE), count(distinct LO_REVENUE) from lineorder l join dates d on l.LO_ORDERDATE = d.d_date group by LO_ORDERDATE;", "mv0")
@@ -313,13 +320,18 @@ AS
 SELECT  `id`,`pt`,SUM((`gmv` + `gmv2`) * 0.01) AS `sum_channel_direct_indirect_gmv`
 FROM `test_pt8`
 GROUP BY  `id`,`pt`;
-[UC]REFRESH MATERIALIZED VIEW `test_mv1` WITH SYNC MODE;
+function: refresh_mv_manual("${db_name}", "test_mv1")
 
 function: print_hit_materialized_view("SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');", "test_mv1")
 SELECT SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ SUM((gmv+gmv2)*0.01) FROM test_pt8 WHERE pt = '20241126' AND id IN ( SELECT id FROM test_pt9 WHERE id = '1');
 
 
 -- name: test_materialized_view_agg_pushdown_rewrite_with_group_by_exprs @slow
+-- Test Point: Group-by expression rewrites respect fact and dimension updates.
+-- Method: Check refresh success and plan eligibility against rewrite-disabled results.
+[UC]db_name=SELECT DATABASE();
 
 CREATE TABLE fact_event_requests
 (
@@ -388,26 +400,34 @@ SELECT
 FROM fact_event_requests  
 WHERE event_type = 'TYPE_A'
 GROUP BY event_date, metric_time_1h, region_id, site_id, channel, last_geohash;
-[UC]REFRESH MATERIALIZED VIEW mv_hourly_events WITH SYNC MODE;
+function: refresh_mv_manual("${db_name}", "mv_hourly_events")
 
 function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
 SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
 
 
 -- upadte fact_event_requests
 INSERT INTO fact_event_requests values('20251001', '10', '20251001 10:00:00', 'SUCCESS', 1, 1, 'TYPE_A', ['1234567890'], 'mobile');
 
-function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
+function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events", expect_hit=False)
 SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
 
 -- update dim_location_area
 INSERT INTO dim_location_area values('1234567898', 'Zone-9');
-function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
+function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events", expect_hit=False)
 SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
 
-[UC]REFRESH MATERIALIZED VIEW mv_hourly_events WITH SYNC MODE;
+function: refresh_mv_manual("${db_name}", "mv_hourly_events")
 function: print_hit_materialized_view("SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;", "mv_hourly_events")
 SELECT DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ DATE_TRUNC('hour', event_time) as metric_time_1h, CAST(COUNT(request_id) AS DOUBLE) FROM fact_event_requests AS fact_data_source LEFT JOIN (SELECT geohash, max(area_name) AS area_name FROM dim_location_area GROUP BY 1) AS dim_location_area ON dim_location_area.geohash = location_path[cardinality(location_path)] WHERE event_date = 20251001 AND area_name IN ('Zone-1') AND event_type = 'TYPE_A' GROUP BY 1 ORDER BY 1 limit 3;
 
 drop materialized view mv_hourly_events;
 drop table fact_event_requests;

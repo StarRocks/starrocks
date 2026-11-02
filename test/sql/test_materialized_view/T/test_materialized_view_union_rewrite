@@ -1,4 +1,7 @@
 -- name: test_materialized_view_union_rewrite
+-- Test Point: Local MV rewrites compensate for newly written base-table partitions.
+-- Method: Assert refresh success, MV plus UNION plans and independent base results.
+[UC]db_name=SELECT DATABASE();
 CREATE TABLE `t1` (
   `k1` date NULL COMMENT "",
   `k2` datetime NULL COMMENT "",
@@ -35,21 +38,29 @@ REFRESH DEFERRED MANUAL
 PROPERTIES (
   "replication_num" = "1"
 )
-AS SELECT * FROM t1; 
-REFRESH MATERIALIZED VIEW test_mv0 WITH SYNC MODE;
+AS SELECT * FROM t1;
+function: refresh_mv_manual("${db_name}", "test_mv0")
 
 -- complete rewrite
 function: print_hit_materialized_view("select count(*) from t1", "test_mv0")
 function: print_hit_materialized_view("select * from t1", "test_mv0")
 select count(*) from t1;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ count(*) from t1;
 select * from t1 order by k1;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ * from t1 order by k1;
 
 -- union rewrite
 insert into t1 values ('2023-01-02', '2020-01-01 01:00:00', '1', '1', 1, 1, 1, 1, 1, 1, 1, 1, 1.0);
-function: print_hit_materialized_view("select count(*) from t1", "test_mv0")
-function: print_hit_materialized_view("select * from t1", "test_mv0")
+function: print_hit_materialized_view("select count(*) from t1", "test_mv0", "UNION")
+function: print_hit_materialized_view("select * from t1", "test_mv0", "UNION")
 select count(*) from t1;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ count(*) from t1;
 select * from t1 order by k1;
+-- Independent result oracle: read the base inputs without MV rewrite.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ * from t1 order by k1;
 
 drop materialized view test_mv0;
 drop table t1;

@@ -1,11 +1,7 @@
 -- name: test_mv_rewrite_with_iceberg @slow
-create external catalog mv_iceberg_${uuid0}
-properties
-(
-    "type" = "iceberg",
-    "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
-);
+-- Test Point: Cover MV rewrite over a multi-column partitioned Iceberg table.
+-- Method: Assert refresh success, plan selection, stale MV data, and independent base-table results.
+function: create_iceberg_catalog('mv_iceberg_${uuid0}', 'hive')
 -- result:
 -- !result
 set new_planner_optimize_timeout=10000;
@@ -48,9 +44,9 @@ AS
 SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt;
 -- result:
 -- !result
-REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+function: refresh_mv_manual('db_${uuid0}', 'mv1')
 -- result:
-019b0304-097c-7dad-a549-a9283324dc46
+True
 -- !result
 function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "mv1")
 -- result:
@@ -76,11 +72,18 @@ SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY d
 2020-06-18	5
 2020-06-21	7
 -- !result
+-- Read the source without MV rewrite to keep the data oracle independent.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
+-- result:
+2020-06-15	3
+2020-06-18	5
+2020-06-21	7
+-- !result
 INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1  VALUES
     (1,"2020-06-15", 1),(2,"2020-06-15", 1);
 -- result:
 -- !result
-function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "mv1", expect_hit=False)
 -- result:
 False
 -- !result
@@ -104,12 +107,19 @@ SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY d
 2020-06-18	5
 2020-06-21	7
 -- !result
-drop table mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 force;
+-- Read the source without MV rewrite to keep the data oracle independent.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ dt,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt ORDER BY dt;
 -- result:
+2020-06-15	6
+2020-06-18	5
+2020-06-21	7
 -- !result
-drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} force;
--- result:
--- !result
-drop database db_${uuid0} force;
--- result:
--- !result
+
+-- Release only this invocation's objects even when an earlier assertion fails.
+CLEANUP {
+  SET CATALOG default_catalog;
+  DROP DATABASE IF EXISTS default_catalog.db_${uuid0} FORCE;
+  DROP TABLE IF EXISTS mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 FORCE;
+  DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} FORCE;
+  DROP CATALOG IF EXISTS mv_iceberg_${uuid0};
+} END CLEANUP

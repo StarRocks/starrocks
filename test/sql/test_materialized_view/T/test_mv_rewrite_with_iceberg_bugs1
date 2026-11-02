@@ -1,12 +1,8 @@
 -- name: test_mv_rewrite_with_iceberg_bugs1 @slow
+-- Test Point: Cover month-partition MV rewrite over Iceberg string-date partitions.
+-- Method: Assert refresh success, plan selection, stale MV data, and independent base-table results.
 
-create external catalog mv_iceberg_${uuid0}
-properties
-(
-    "type" = "iceberg",
-    "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
-);
+function: create_iceberg_catalog('mv_iceberg_${uuid0}', 'hive')
 
 -- create iceberg table
 set catalog mv_iceberg_${uuid0};
@@ -31,17 +27,25 @@ use db_${uuid0};
 CREATE MATERIALIZED VIEW mv1 PARTITION BY dt1 REFRESH MANUAL AS 
 SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1;
 
-REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+function: refresh_mv_manual('db_${uuid0}', 'mv1')
 
 SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;
+-- Read the source without MV rewrite to keep the data oracle independent.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;
 function: print_hit_materialized_view("SELECT date_trunc('month',str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;", "mv1")
 
 INSERT INTO mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 VALUES (3,"2020-06-15");
 
 function: print_hit_materialized_view("SELECT date_trunc('month',str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;", "mv1")
 SELECT date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;
+-- Read the source without MV rewrite to keep the data oracle independent.
+SELECT /*+ SET_VAR(enable_materialized_view_rewrite=false) */ date_trunc("month",str2date(dt,'%Y-%m-%d')) as dt1,sum(num) FROM mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 GROUP BY dt1 order by 1;
 
-drop database default_catalog.db_${uuid0} force;
-DROP TABLE mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 FORCE;
-drop database mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} FORCE;
-DROP CATALOG mv_iceberg_${uuid0};
+-- Release only this invocation's objects even when an earlier assertion fails.
+CLEANUP {
+  SET CATALOG default_catalog;
+  DROP DATABASE IF EXISTS default_catalog.db_${uuid0} FORCE;
+  DROP TABLE IF EXISTS mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0}.t1 FORCE;
+  DROP DATABASE IF EXISTS mv_iceberg_${uuid0}.mv_iceberg_db_${uuid0} FORCE;
+  DROP CATALOG IF EXISTS mv_iceberg_${uuid0};
+} END CLEANUP
