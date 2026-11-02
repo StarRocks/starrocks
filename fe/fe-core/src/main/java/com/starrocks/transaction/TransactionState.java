@@ -37,6 +37,7 @@ package com.starrocks.transaction;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -74,6 +75,8 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -414,6 +417,11 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
     // no need to persist.
     private String errMsg = "";
 
+    // Tablets that the commit skipped because their physical partition no longer existed, reported under the
+    // TXN_ROWS_DROPPED marker only once the transaction is committed, see TxnStateLogUtils.
+    // table id -> (physical partition id -> tablet ids). Not persisted, the report is best effort.
+    private Map<Long, Map<Long, List<Long>>> ignoredTablets = Maps.newHashMap();
+
     private long lastErrTimeMs = 0;
 
     // used for PublishDaemon to check whether this txn can be published
@@ -537,6 +545,79 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         txnSpan.setAttribute("txn_id", transactionId);
         txnSpan.setAttribute("label", label);
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
+<<<<<<< HEAD
+=======
+        this.txnLock = new ReentrantReadWriteLock(true);
+    }
+
+    public TransactionState(TransactionState txnState) {
+        this.dbId = txnState.dbId;
+        this.tableIdList = txnState.tableIdList;
+        this.transactionId = txnState.transactionId;
+        this.label = txnState.label;
+        this.requestId = txnState.requestId;
+        this.idToTableCommitInfos = deepCopyIdToTableCommitInfos(txnState.idToTableCommitInfos);
+        this.txnCoordinator = txnState.txnCoordinator;
+        this.transactionStatus = txnState.transactionStatus;
+        this.sourceType = txnState.sourceType;
+        this.prepareTime = txnState.prepareTime;
+        this.preparedTime = txnState.preparedTime;
+        this.commitTime = txnState.commitTime;
+        this.finishTime = txnState.finishTime;
+        this.reason = txnState.reason;
+        this.globalTransactionId = txnState.globalTransactionId;
+        this.newFinish = txnState.newFinish;
+        this.finishState = txnState.finishState;
+        this.errorReplicas = txnState.errorReplicas;
+        this.tabletCommitInfos = txnState.tabletCommitInfos;
+        this.unknownReplicas = txnState.unknownReplicas;
+        this.useCombinedTxnLog = txnState.useCombinedTxnLog;
+        this.isNoOpPublish = txnState.isNoOpPublish;
+        this.noOpPublishReason = txnState.noOpPublishReason;
+        this.loadIds = txnState.loadIds;
+        this.latch = txnState.latch;
+        this.publishVersionTasks = txnState.publishVersionTasks;
+        this.hasSendTask = txnState.hasSendTask;
+        this.publishVersionTime = txnState.publishVersionTime;
+        this.publishVersionFinishTime = txnState.publishVersionFinishTime;
+        this.writeEndTimeMs = txnState.writeEndTimeMs;
+        this.writeDurationMs = txnState.writeDurationMs;
+        this.allowCommitTimeMs = txnState.allowCommitTimeMs;
+        this.callbackId = txnState.callbackId;
+        this.callbackIdList = txnState.callbackIdList;
+        this.timeoutMs = txnState.timeoutMs;
+        this.preparedTimeoutMs = txnState.preparedTimeoutMs;
+        this.txnPrepareMode = txnState.txnPrepareMode;
+        this.txnCommitAttachment = txnState.txnCommitAttachment;
+        this.warehouseId = txnState.warehouseId;
+        this.computeResource = txnState.computeResource;
+        this.loadedTblPartitionIndexes = txnState.loadedTblPartitionIndexes;
+        this.errMsg = txnState.errMsg;
+        this.ignoredTablets = Maps.newHashMap(txnState.getIgnoredTablets());
+        this.lastErrTimeMs = txnState.lastErrTimeMs;
+        this.finishChecker = txnState.finishChecker;
+        this.txnSpan = txnState.txnSpan;
+        this.traceParent = txnState.traceParent;
+        this.tableToPartitionNameToTPartition = txnState.tableToPartitionNameToTPartition;
+        this.tabletIdToTTabletLocation = txnState.tabletIdToTTabletLocation;
+        this.tableToMultiNodeWriteWidth.putAll(txnState.tableToMultiNodeWriteWidth);
+        this.tableToCreatedPartitionNames = txnState.tableToCreatedPartitionNames;
+        this.isCreatePartitionFailed = txnState.isCreatePartitionFailed;
+        this.txnLock = txnState.txnLock;
+    }
+
+    private Map<Long, TableCommitInfo> deepCopyIdToTableCommitInfos(Map<Long, TableCommitInfo> tableCommitInfos) {
+        Map<Long, TableCommitInfo> copiedTableCommitInfos = Maps.newHashMap();
+        if (tableCommitInfos == null) {
+            return copiedTableCommitInfos;
+        }
+
+        for (Map.Entry<Long, TableCommitInfo> tableCommitInfoEntry : tableCommitInfos.entrySet()) {
+            copiedTableCommitInfos.put(tableCommitInfoEntry.getKey(),
+                    tableCommitInfoEntry.getValue() == null ? null : new TableCommitInfo(tableCommitInfoEntry.getValue()));
+        }
+        return copiedTableCommitInfos;
+>>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
     }
 
     public void addCallbackId(long callbackId) {
@@ -994,6 +1075,34 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         loadedPartitionIndexes.putIfAbsent(physicalPartitionId, indexIds);
     }
 
+    /**
+     * Remember the tablets of the given table that the commit skipped because their physical partition no longer
+     * exists, so that they can be reported once the transaction is committed.
+     *
+     * @param ignoredTabletsByPartition physical partition id -> tablet ids, empty when nothing was skipped
+     */
+    public void setIgnoredTablets(long tableId, Map<Long, ? extends Collection<Long>> ignoredTabletsByPartition) {
+        if (ignoredTabletsByPartition.isEmpty()) {
+            getIgnoredTablets().remove(tableId);
+            return;
+        }
+        Map<Long, List<Long>> tabletIdsByPartition = Maps.newHashMap();
+        ignoredTabletsByPartition.forEach((physicalPartitionId, tabletIds) ->
+                tabletIdsByPartition.put(physicalPartitionId, Lists.newArrayList(tabletIds)));
+        getIgnoredTablets().put(tableId, tabletIdsByPartition);
+    }
+
+    /**
+     * @return table id -> (physical partition id -> tablet ids) skipped by the commit
+     */
+    public Map<Long, Map<Long, List<Long>>> getIgnoredTablets() {
+        if (ignoredTablets == null) {
+            // not persisted, so absent from a state read back from the image or the journal
+            ignoredTablets = Maps.newHashMap();
+        }
+        return ignoredTablets;
+    }
+
     public void addPartitionLoadedIndexes(long tableId, long physicalPartitionId, List<Long> indexIds) {
         writeLock();
         try {
@@ -1053,6 +1162,29 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
             return null;
         }
         return loadedPartitionIndexes.get(physicalPartitionId);
+    }
+
+    /**
+     * Get the physical partitions of the given table that this transaction may write to.
+     * <p>
+     * The returned set is filled in before any data is written to those partitions: the tablet sink
+     * registers its target partitions when the sink is built ({@link com.starrocks.planner.OlapTableSink}),
+     * and partitions opened later at runtime are registered by the FE before their location is handed
+     * back to the BE. A BE can only write to a partition present in the sink parameter, so this set is a
+     * superset of the partitions this transaction can touch. Callers rely on that contract to detect
+     * ingestion that is concurrent with a partition replacement.
+     *
+     * @return physical partition ids, empty if this transaction has not registered any partition yet
+     */
+    public Set<Long> getLoadedPhysicalPartitionIds(long tableId) {
+        readLock();
+        try {
+            Map<Long, List<Long>> loadedPartitionIndexes = loadedTblPartitionIndexes.get(tableId);
+            return loadedPartitionIndexes == null ? Collections.emptySet()
+                    : ImmutableSet.copyOf(loadedPartitionIndexes.keySet());
+        } finally {
+            readUnlock();
+        }
     }
 
     @Override
