@@ -14,18 +14,33 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2.JobState;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+>>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ThreadUtil;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.persist.AddPartitionsInfoV2;
+>>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
 import com.starrocks.persist.OperationType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -35,6 +50,10 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TabletCommitInfo;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -54,6 +73,8 @@ import java.util.stream.Collectors;
 public class OptimizeJobV2Test extends DDLTestBase {
     private static final String TEST_FILE_NAME = OptimizeJobV2Test.class.getCanonicalName();
     private AlterTableStmt alterTableStmt;
+    // transactions a test started, so that they can be driven to a final state afterwards
+    private final Map<Long, Long> testTxnIdToDbId = Maps.newLinkedHashMap();
 
     private static final Logger LOG = LogManager.getLogger(OptimizeJobV2Test.class);
 
@@ -89,7 +110,23 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     @AfterEach
-    public void clear() {
+    public void clear() throws Exception {
+        // transactions started by a test must reach a final state, a lingering COMMITTED one would keep
+        // the next test from dropping the database in setUp
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        for (Map.Entry<Long, Long> entry : testTxnIdToDbId.entrySet()) {
+            TransactionState txnState = transactionMgr.getTransactionState(entry.getValue(), entry.getKey());
+            if (txnState == null) {
+                continue;
+            }
+            if (txnState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                transactionMgr.finishTransaction(entry.getValue(), entry.getKey(), Sets.newHashSet());
+            } else if (txnState.isRunning()) {
+                transactionMgr.abortTransaction(entry.getValue(), entry.getKey(), "test cleanup");
+            }
+        }
+        testTxnIdToDbId.clear();
+
         GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
         Config.enable_online_optimize_table = true;
     }
@@ -221,13 +258,19 @@ public class OptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(JobState.FINISHED, optimizeJob.getJobState());
     }
 
+    /**
+     * A rewrite that is committed but not published yet must not be swapped in, and must not be thrown
+     * away either: the job waits for it and then finishes. Driven with a real transaction on the temp
+     * partition, so that the whole lookup path is exercised rather than stubbed away.
+     */
     @Test
-    public void testTaskSuccessButNotVisibleMarkedFailed() throws Exception {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+    public void testTempPartitionNotVisibleWaitsThenFinishes() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, alterTableStmt);
 
+<<<<<<< HEAD
         schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
@@ -251,6 +294,49 @@ public class OptimizeJobV2Test extends DDLTestBase {
             s.setState(Constants.TaskRunState.SUCCESS);
             GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getTaskRunHistory().addHistory(s);
         }
+=======
+        // the rewrite of the temp partition is committed but not published yet
+        List<Long> rewriteTxnIds = Lists.newArrayList();
+        for (Long tmpPartitionId : job.getTmpPartitionIds()) {
+            rewriteTxnIds.add(commitTxnWithoutPublish(db, olapTable, olapTable.getPartition(tmpPartitionId)));
+        }
+        markAllRewriteTasksSucceeded(db, job);
+
+        // the job keeps waiting instead of dropping a rewrite that only misses its publish
+        job.runRunningJob();
+        Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        for (Long tmpPartitionId : job.getTmpPartitionIds()) {
+            Assertions.assertNotNull(olapTable.getPartition(tmpPartitionId));
+        }
+
+        // once published, the same job goes through
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        for (Long txnId : rewriteTxnIds) {
+            transactionMgr.finishTransaction(db.getId(), txnId, Sets.newHashSet());
+        }
+        job.runRunningJob();
+        Assertions.assertEquals(JobState.FINISHED, job.getJobState());
+    }
+
+    /**
+     * Regression for silent data loss: a load that is still in flight on the source partition has written
+     * its rows into tablets that the replacement force deletes, while the load itself keeps reporting
+     * success. The job must give up instead of replacing the partition.
+     */
+    @Test
+    public void testInFlightIngestionOnSourcePartitionCancelsJob() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        Partition sourcePartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
+        long sourcePartitionId = sourcePartition.getId();
+
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, alterTableStmt);
+
+        // a load starts writing into the source partition while the rewrite is running
+        long txnId = beginTxnWriting(db, olapTable, sourcePartition);
+        markAllRewriteTasksSucceeded(db, job);
+>>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
 
         try {
             job.runRunningJob();
@@ -258,32 +344,193 @@ public class OptimizeJobV2Test extends DDLTestBase {
             job.cancel(e.getMessage());
         }
 
+<<<<<<< HEAD
         // All tasks should be turned to FAILED due to not visible
         for (OptimizeTask t : job.getOptimizeTasks()) {
             Assertions.assertEquals(Constants.TaskRunState.FAILED, t.getOptimizeTaskState());
         }
         // All partitions rewrite failed, job should be CANCELLED
+=======
+>>>>>>> 1c75d90 ([BugFix] Fix silent data loss when loading concurrently with ALTER TABLE OPTIMIZE (#77754))
         Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("has ingestion during optimize"), job.errMsg);
+        Assertions.assertTrue(job.errMsg.contains(String.valueOf(txnId)), job.errMsg);
+        // the source partition, and therefore the rows of the in flight load, must still be there
+        Partition survivingPartition = olapTable.getPartition(GlobalStateMgrTestUtil.testTable7);
+        Assertions.assertNotNull(survivingPartition);
+        Assertions.assertEquals(sourcePartitionId, survivingPartition.getId());
     }
 
     @Test
-    public void testTaskSuccessAndVisibleKeepsSuccess() throws Exception {
-        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+    public void testOptimizeTableFinishWithoutConcurrentIngestion() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable7);
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, alterTableStmt);
 
-        schemaChangeHandler.process(alterTableStmt.getAlterClauseList(), db, olapTable);
+        markAllRewriteTasksSucceeded(db, job);
+
+        job.runRunningJob();
+        Assertions.assertEquals(JobState.FINISHED, job.getJobState());
+    }
+
+    /**
+     * Ingestion into a partition that is not being optimized must not make the job give up: the detection
+     * is scoped to the physical partitions that are actually replaced.
+     */
+    @Test
+    public void testIngestionOnNonTargetPartitionDoesNotCancelJob() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `testOptimizePartitioned` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "PARTITION BY RANGE(`v1`)\n" +
+                "(PARTITION p1 VALUES LESS THAN (\"100\"),\n" +
+                " PARTITION p2 VALUES LESS THAN (\"200\"))\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "testOptimizePartitioned");
+        Partition optimizedPartition = olapTable.getPartition("p1");
+        Partition untouchedPartition = olapTable.getPartition("p2");
+
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table testOptimizePartitioned partition (p1) distributed by hash(v1) buckets 5",
+                starRocksAssert.getCtx());
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, stmt);
+
+        // a load is writing into p2, which this job does not replace
+        beginTxnWriting(db, olapTable, untouchedPartition);
+        markAllRewriteTasksSucceeded(db, job);
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(JobState.FINISHED, job.getJobState());
+        // p1 was replaced by its rewritten partition, p2 was left alone
+        Assertions.assertNotEquals(optimizedPartition.getId(), olapTable.getPartition("p1").getId());
+        Assertions.assertEquals(untouchedPartition.getId(), olapTable.getPartition("p2").getId());
+    }
+
+    @Test
+    public void testCommittedIngestionIgnoresPlannedButUnwrittenSourcePartition() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `testOptimizeCommittedPartitioned` (\n" +
+                "  `v1` bigint NULL,\n" +
+                "  `v2` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "PARTITION BY RANGE(`v1`)\n" +
+                "(PARTITION p1 VALUES LESS THAN (\"100\"),\n" +
+                " PARTITION p2 VALUES LESS THAN (\"200\"))\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "testOptimizeCommittedPartitioned");
+        Partition optimizedPartition = olapTable.getPartition("p1");
+        Partition untouchedPartition = olapTable.getPartition("p2");
+
+        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter table testOptimizeCommittedPartitioned partition (p1) distributed by hash(v1) buckets 5",
+                starRocksAssert.getCtx());
+        OptimizeJobV2 job = startOptimizeJobUpToRunning(db, olapTable, stmt);
+
+        // A load without a PARTITIONS clause plans both partitions, but only p2 receives rows.
+        // Register p1 before commit, as the sink does, and keep the committed load unpublished.
+        long txnId = commitTxnWithoutPublish(db, olapTable, untouchedPartition, optimizedPartition);
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState committedTxn = transactionMgr.getTransactionState(db.getId(), txnId);
+        Assertions.assertEquals(TransactionStatus.COMMITTED, committedTxn.getTransactionStatus());
+        Set<Long> plannedPhysicalPartitionIds = Lists.newArrayList(optimizedPartition, untouchedPartition).stream()
+                .flatMap(partition -> partition.getSubPartitions().stream())
+                .map(PhysicalPartition::getId).collect(Collectors.toSet());
+        Assertions.assertEquals(plannedPhysicalPartitionIds, committedTxn.getLoadedPhysicalPartitionIds(olapTable.getId()));
+        Set<Long> actualPhysicalPartitionIds = untouchedPartition.getSubPartitions().stream()
+                .map(PhysicalPartition::getId).collect(Collectors.toSet());
+        Assertions.assertEquals(actualPhysicalPartitionIds,
+                committedTxn.getTableCommitInfo(olapTable.getId()).getIdToPartitionCommitInfo().keySet());
+        markAllRewriteTasksSucceeded(db, job);
+
+        job.runRunningJob();
+
+        Assertions.assertEquals(JobState.FINISHED, job.getJobState());
+        Assertions.assertNotEquals(optimizedPartition.getId(), olapTable.getPartition("p1").getId());
+        Assertions.assertEquals(untouchedPartition.getId(), olapTable.getPartition("p2").getId());
+        Assertions.assertEquals(TransactionStatus.COMMITTED,
+                transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
+    }
+
+    /**
+     * Submit the given alter statement and drive its optimize job until the rewrite tasks are outstanding,
+     * which is the state every concurrency test starts from.
+     */
+    private OptimizeJobV2 startOptimizeJobUpToRunning(Database db, OlapTable olapTable, AlterTableStmt stmt)
+            throws Exception {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.process(stmt.getAlterClauseList(), db, olapTable);
         Map<Long, AlterJobV2> alterJobsV2 = schemaChangeHandler.getAlterJobsV2();
         Assertions.assertEquals(1, alterJobsV2.size());
         OptimizeJobV2 job = spyPreviousTxnFinished((OptimizeJobV2) alterJobsV2.values().stream().findAny().get());
-        // Visibility check returns false (no committed-not-visible), so SUCCESS remains SUCCESS
-        Mockito.doReturn(false).when(job).hasCommittedNotVisible(Mockito.anyLong());
 
         job.runPendingJob();
         job.runWaitingTxnJob();
         Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        return job;
+    }
 
+    /**
+     * Begin a real transaction and register the given partition as a write target, which is what the tablet
+     * sink does when a load plan is built, before any row reaches the backend.
+     */
+    private long beginTxnWriting(Database db, OlapTable table, Partition partition) throws Exception {
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = transactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "label_" + UUIDUtil.genUUID(), TransactionState.TxnCoordinator.fromThisFE(),
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionState txnState = transactionMgr.getTransactionState(db.getId(), txnId);
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                    Lists.newArrayList(table.getBaseIndexMetaId()));
+        }
+        testTxnIdToDbId.put(txnId, db.getId());
+        return txnId;
+    }
+
+    /**
+     * Write into the given partition and commit, without letting the transaction publish, which is the
+     * state a rewrite is in when its data is durable but not visible yet.
+     * Additional planned partitions are registered before commit without contributing any committed tablets.
+     */
+    private long commitTxnWithoutPublish(Database db, OlapTable table, Partition partition,
+                                         Partition... additionalPlannedPartitions) throws Exception {
+        long txnId = beginTxnWriting(db, table, partition);
+        TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), txnId);
+        for (Partition plannedPartition : additionalPlannedPartitions) {
+            for (PhysicalPartition physicalPartition : plannedPartition.getSubPartitions()) {
+                txnState.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
+                        Lists.newArrayList(table.getBaseIndexMetaId()));
+            }
+        }
+        List<TabletCommitInfo> tabletCommitInfos = Lists.newArrayList();
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            for (MaterializedIndex index : physicalPartition.getAllMaterializedIndices(IndexExtState.ALL)) {
+                for (Tablet tablet : index.getTablets()) {
+                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                        tabletCommitInfos.add(new TabletCommitInfo(tablet.getId(), replica.getBackendId()));
+                    }
+                }
+            }
+        }
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .commitTransaction(db.getId(), txnId, tabletCommitInfos, Lists.newArrayList(), null);
+        return txnId;
+    }
+
+    private void markAllRewriteTasksSucceeded(Database db, OptimizeJobV2 job) {
         for (OptimizeTask t : job.getOptimizeTasks()) {
             GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager()
                 .getTaskRunScheduler().removeRunningTask(t.getId());
@@ -295,10 +542,6 @@ public class OptimizeJobV2Test extends DDLTestBase {
             s.setState(Constants.TaskRunState.SUCCESS);
             GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getTaskRunHistory().addHistory(s);
         }
-
-        // Should proceed to finish
-        job.runRunningJob();
-        Assertions.assertEquals(JobState.FINISHED, job.getJobState());
     }
 
     @Test
