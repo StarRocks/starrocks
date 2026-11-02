@@ -137,6 +137,20 @@ EXECUTE rewrite_data_files
 - Type: Int
 - Default: 1
 
+###### `delete_ratio_threshold`
+
+- Description: Data files larger than `min_file_size_bytes` are also rewritten when the rows deleted by their deletion vector or file-scoped position delete files reach this fraction of their rows. Valid range: [0, 1]. Equality delete files and partition-scoped position delete files do not count towards the ratio.
+- Unit: -
+- Type: Double
+- Default: 0.3
+
+###### `delete_file_threshold`
+
+- Description: Data files larger than `min_file_size_bytes` are also rewritten when at least this number of delete files apply to them. It must be a positive integer.
+- Unit: -
+- Type: Int
+- Default: No limit
+
 ##### `WHERE` clause
 
 - Description: The filter predicate used to specify the partition(s) to be involved in the compaction.

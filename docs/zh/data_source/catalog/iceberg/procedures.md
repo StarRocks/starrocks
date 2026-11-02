@@ -137,6 +137,20 @@ EXECUTE rewrite_data_files
 - 类型：Int
 - 默认值：1
 
+###### `delete_ratio_threshold`
+
+- 说明：大于 `min_file_size_bytes` 的数据文件，如果其 Deletion Vector 或文件级 Position Delete 文件删除的行数占该文件行数的比例达到该值，也会被重写。取值范围：[0, 1]。Equality Delete 文件和分区级 Position Delete 文件不计入该比例。
+- 单位：-
+- 类型：Double
+- 默认值：0.3
+
+###### `delete_file_threshold`
+
+- 说明：大于 `min_file_size_bytes` 的数据文件，如果作用于它的 Delete 文件数量不少于该值，也会被重写。必须为正整数。
+- 单位：-
+- 类型：Int
+- 默认值：无限制
+
 ##### `WHERE` clause
 
 - Description: 用于指定参与 Compaction 的分区所使用的过滤条件。
