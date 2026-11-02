@@ -323,7 +323,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在备份或恢复特定数据库时，是否启用异步物化视图的 BACKUP 和 RESTORE。如果此项设置为 `false`，StarRocks 将跳过备份异步物化视图。
+- 描述: 未按名称指定异步物化视图时（即备份整个数据库，或使用 `ON (ALL MATERIALIZED VIEWS)`），BACKUP 是否包含异步物化视图。如果此项设置为 `false`，StarRocks 将跳过异步物化视图，`ON (ALL MATERIALIZED VIEWS)` 不会备份任何内容。按名称指定的异步物化视图不受此项影响，仍会被备份。此项不影响 RESTORE。
 - 引入版本: v3.2.0
 
 ### `enable_collect_full_statistic`

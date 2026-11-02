@@ -175,7 +175,7 @@ StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
 
 ### 备份数据库
 
-对数据库执行完全备份将备份数据库中的所有表、物化视图、逻辑视图和 UDF。
+对数据库执行完全备份将备份数据库中的所有表、同步物化视图、逻辑视图和 UDF。除非 FE 配置项 [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) 设置为 `true`（默认值为 `false`），否则会跳过异步物化视图。如需在默认配置下备份异步物化视图，请在 BACKUP 语句中指定其名称，参见[备份物化视图](#备份物化视图)。
 
 以下示例为数据库 `sr_hub` 创建数据快照 `sr_member_backup` 并备份至仓库 `test_repo` 中。
 
@@ -245,7 +245,10 @@ ON (sr_member PARTITION (p1));
 
 同步物化视图无需手动备份，备份基表时系统将同时备份其上建立的同步物化视图。
 
-异步物化视图可通过备份其所属数据库一起备份，也可以通过手动备份。
+默认情况下，备份数据库时不会同时备份其中的异步物化视图。您可以通过以下任一方式备份异步物化视图：
+
+- 在 `ON` 子句中指定物化视图名称，如下方示例。此方式不受 `enable_backup_materialized_view` 影响。
+- 将 FE 配置项 [`enable_backup_materialized_view`](../configuration/FE_parameters/user_query_loading.md#enable_backup_materialized_view) 设置为 `true`。此后，备份整个数据库以及 `ON (ALL MATERIALIZED VIEWS)` 都会包含异步物化视图。
 
 以下示例将数据库 `sr_hub` 中的异步物化视图 `sr_mv1` 备份到快照 `sr_mv1_backup` 中，并将快照上传到仓库 `test_repo`。
 
@@ -270,6 +273,12 @@ BACKUP DATABASE sr_hub SNAPSHOT sr_mv3_backup
 TO test_repo
 ON (ALL MATERIALIZED VIEWS);
 ```
+
+:::note
+
+如果 `enable_backup_materialized_view` 为 `false`（默认值），上述语句不会备份任何物化视图，但 BACKUP 作业仍会成功完成，不报错。
+
+:::
 
 ### 备份逻辑视图
 
