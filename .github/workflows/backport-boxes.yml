@@ -5,8 +5,8 @@ name: BACKPORT BOXES
 # in the PR template has no row for it. The assignees are told in a comment; if the author
 # unticks it afterwards it stays unticked. Older versions are left alone. Reverse-sync PRs from
 # CelerData are skipped (their versions come from the CelerData PR). Per PR on open/edit/push; a
-# daily sweep of the PRs updated in the last 30 days catches open PRs when a new branch is added
-# to the template (an idle PR is fixed when it is next pushed or edited). The body is written
+# daily sweep catches open PRs created at most 30 days before the newest branch was cut (an older
+# PR is fixed when it is next pushed or edited). The body is written
 # with the starrocks-bot token so the `edited` event re-runs pr-checker, which sets the label.
 # Thin caller: the logic is ci-tool lib/backport_boxes.py.
 
@@ -56,5 +56,5 @@ jobs:
           if [ -n "${PR_NUMBER}" ]; then
             python3 ci-tool/lib/backport_boxes.py --repo "${{ github.repository }}" --pr "${PR_NUMBER}"
           else
-            python3 ci-tool/lib/backport_boxes.py --repo "${{ github.repository }}" --sweep --updated-within 30 ${DRY_RUN}
+            python3 ci-tool/lib/backport_boxes.py --repo "${{ github.repository }}" --sweep --created-since-cut 30 ${DRY_RUN}
           fi
