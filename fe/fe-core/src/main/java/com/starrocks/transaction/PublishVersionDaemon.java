@@ -554,12 +554,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     continue;
                 }
                 // Skip backed-off transactions before logging a publish start or creating futures.
-                if (!batchHasPublishablePartition(List.of(txnState), System.currentTimeMillis())) {
-                    continue;
+                if (batchHasPublishablePartition(List.of(txnState), System.currentTimeMillis())) {
+                    publishingTransactions.add(txnId);
+                    CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
+                    future.thenRun(() -> publishingTransactions.remove(txnId));
                 }
-                publishingTransactions.add(txnId);
-                CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
-                future.thenRun(() -> publishingTransactions.remove(txnId));
             }
         }
     }
