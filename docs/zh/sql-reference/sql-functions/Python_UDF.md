@@ -150,10 +150,10 @@ symbol = "main.echo"
 | VARCHAR                              | STRING                  |
 | DATE                                 | DATETIME.DATE           |
 | DECIMAL                              | DECIMAL.DECIMAL         |
-| ARRAY                                | List                    |
-| MAP                                  | Dict                    |
-| STRUCT                               | COLLECTIONS.NAMEDTUPLE  |
-| JSON                                 | dict                    |
+| ARRAY                                | list                    |
+| MAP                                  | dict                    |
+| STRUCT                               | dict（按字段名作为键）     |
+| JSON                                 | str（使用 `json.loads` 解析） |
 | **VECTORIZED**                       |                         |
 | TYPE_BOOLEAN                         | pyarrow.lib.BoolArray   |
 | TYPE_TINYINT                         | pyarrow.lib.Int8Array   |
@@ -167,6 +167,15 @@ symbol = "main.echo"
 | DATE                                 | pyarrow.Date32Array     |
 | TYPE_TIME                            | pyarrow.TimeArray       |
 | ARRAY                                | pyarrow.ListArray       |
+| MAP                                  | pyarrow.MapArray        |
+| STRUCT                               | pyarrow.StructArray     |
+
+嵌套类型（`ARRAY`、`MAP`、`STRUCT`）可任意组合，例如
+`array<map<string,int>>`、`map<string,array<int>>`、
+`struct<a array<int>, b map<string,int>>` 或 `array<struct<...>>`。在 `scalar`
+模式下，每一行会被递归地转换为 Python `list` / `dict`。返回嵌套类型时，返回相应
+的 Python `list` / `dict`（`dict` 的键即为 struct 字段名）即可，`pyarrow` 会
+自动完成递归转换。
 
 ### 编译 Python
 
