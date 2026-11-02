@@ -181,6 +181,22 @@ public class IcebergTableTest extends TableTestBase {
     }
 
     @Test
+    public void testUuidBucketHasNoBucketProperty() {
+        // Iceberg buckets a uuid by its 16 bytes, StarRocks reads it as a string: no bucket property.
+        Schema uuidSchema = new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get()),
+                Types.NestedField.required(2, "u", Types.UUIDType.get()));
+        PartitionSpec spec = PartitionSpec.builderFor(uuidSchema).bucket("u", 4).build();
+        TestTables.TestTable nativeTable = create(uuidSchema, spec, "uuid_bucket", 2);
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("id", INT));
+        schema.add(new Column("u", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, nativeTable, Maps.newHashMap());
+        Assertions.assertTrue(icebergTable.hasBucketProperties());
+        Assertions.assertTrue(icebergTable.getBucketProperties().isEmpty());
+    }
+
+    @Test
     public void testHasBucketProperties() {
         // two specs
         new MockUp<TestTables.TestTable>() {
