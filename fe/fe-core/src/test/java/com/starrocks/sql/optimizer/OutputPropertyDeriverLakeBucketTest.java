@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.catalog.Type.INT;
 
 public class OutputPropertyDeriverLakeBucketTest {
 

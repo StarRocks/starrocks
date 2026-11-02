@@ -249,7 +249,7 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 // Match the partition field by its source column id and bucket count: the field name is not
                 // always <column>_bucket (a renamed source column keeps the old field name, or the name was set
                 // explicitly), and one column can have several bucket transforms with different counts.
-                Types.NestedField source = table.getReadSchema().findField(bucket.getColumn().getName());
+                Types.NestedField source = table.getNativeTable().schema().findField(bucket.getColumn().getName());
                 String transform = "bucket[" + bucket.getBucketNum() + "]";
                 for (int i = 0; source != null && i < fields.size(); i++) {
                     if (fields.get(i).sourceId() == source.fieldId()
