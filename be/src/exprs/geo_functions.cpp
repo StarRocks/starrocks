@@ -55,6 +55,7 @@ namespace {
 
 constexpr int32_t kCrs84Srid = 4326;
 
+// Structural vs. topological validity rules for GEO kernels: see be/src/geo/README.md.
 Status check_geography_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
