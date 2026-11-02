@@ -27,13 +27,10 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
-<<<<<<< HEAD
-#include "testutil/type_test_helper.h"
-=======
 #include "exprs/agg/base_aggregate_test.h"
 #include "exprs/agg/map_agg.h"
 #include "exprs/struct_functions.h"
->>>>>>> dd2248d ([Enhancement] Keep geo descriptors in FunctionHelper nested columns (#81775))
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 struct FunctionHelperTest : public ::testing::Test {};
@@ -179,24 +176,6 @@ TEST_F(FunctionHelperTest, testCreateColumnStruct) {
     ASSERT_TRUE(ColumnHelper::get_data_column(col->field_column_raw_ptr(1))->is_array());
 }
 
-<<<<<<< HEAD
-TEST_F(FunctionHelperTest, testCreateColumnMapUnknownFallbackToNull) {
-    TypeDescriptor map_type = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC);
-
-    auto map_column = FunctionHelper::create_column(map_type, false);
-    ASSERT_NE(map_column, nullptr);
-    ASSERT_TRUE(map_column->is_map());
-
-    auto* col = down_cast<MapColumn*>(map_column.get());
-    ASSERT_TRUE(col->keys().is_nullable());
-    ASSERT_TRUE(col->values().is_nullable());
-    auto* key_data = ColumnHelper::get_data_column(col->keys_column_raw_ptr());
-    auto* value_data = ColumnHelper::get_data_column(col->values_column_raw_ptr());
-    ASSERT_NE(dynamic_cast<const NullColumn*>(key_data), nullptr);
-    ASSERT_NE(dynamic_cast<const NullColumn*>(value_data), nullptr);
-    ASSERT_EQ(key_data->size(), 0);
-    ASSERT_EQ(value_data->size(), 0);
-=======
 static const GeoColumn* check_geo_leaf(const Column* column, const GeoTypeDescriptor& expected) {
     column = ColumnHelper::get_data_column(column);
     if (column->is_array())
@@ -207,7 +186,6 @@ static const GeoColumn* check_geo_leaf(const Column* column, const GeoTypeDescri
     const auto* geo = down_cast<const GeoColumn*>(column);
     EXPECT_EQ(expected, geo->descriptor().type);
     return geo;
->>>>>>> dd2248d ([Enhancement] Keep geo descriptors in FunctionHelper nested columns (#81775))
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
@@ -237,26 +215,6 @@ TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
             }
             column->check_or_die();
         }
-<<<<<<< HEAD
-
-        const auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, type);
-        const auto array_type = TypeDescriptor::create_array_type(map_type);
-        const auto struct_type = TypeDescriptor::create_struct_type({"nested"}, {array_type});
-        auto nested = FunctionHelper::create_column(struct_type, false);
-        const auto* structure = dynamic_cast<const StructColumn*>(nested.get());
-        ASSERT_NE(nullptr, structure);
-        const auto* array =
-                dynamic_cast<const ArrayColumn*>(ColumnHelper::get_data_column(structure->field_column_raw_ptr(0)));
-        ASSERT_NE(nullptr, array);
-        const auto* map =
-                dynamic_cast<const MapColumn*>(ColumnHelper::get_data_column(array->elements_column_raw_ptr()));
-        ASSERT_NE(nullptr, map);
-        const auto* geo = dynamic_cast<const GeoColumn*>(ColumnHelper::get_data_column(map->values_column_raw_ptr()));
-        ASSERT_NE(nullptr, geo);
-        EXPECT_EQ(GeoTypeDescriptor{}, geo->descriptor().type);
-        nested->check_or_die();
-=======
->>>>>>> dd2248d ([Enhancement] Keep geo descriptors in FunctionHelper nested columns (#81775))
     }
 }
 
