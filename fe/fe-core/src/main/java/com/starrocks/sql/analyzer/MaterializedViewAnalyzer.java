@@ -635,6 +635,27 @@ public class MaterializedViewAnalyzer {
         }
 
         /**
+         * The column list of a new incremental mv may name only the user query's columns, leaving the hidden ones
+         * the IVM rewrite added to their generated names. Not for re-analysis: an AUTO mv that settled on PCT stays
+         * PCT only because its stored list is too short for the incremental rewrite.
+         */
+        private static List<ColWithComment> withIvmInternalColumns(List<ColWithComment> colWithComments,
+                                                                   List<String> columnNames) {
+            long queryColumnCount = columnNames.stream().filter(name -> !IvmOpUtils.isIvmInternalColumn(name)).count();
+            if (colWithComments.size() != queryColumnCount) {
+                return colWithComments;
+            }
+            List<ColWithComment> fullList = Lists.newArrayList();
+            int next = 0;
+            for (String columnName : columnNames) {
+                fullList.add(IvmOpUtils.isIvmInternalColumn(columnName)
+                        ? new ColWithComment(columnName, null, NodePosition.ZERO)
+                        : colWithComments.get(next++));
+            }
+            return fullList;
+        }
+
+        /**
          * NOTE: order or column names of the defined query may be changed when generating.
          *
          * @return : Generate materialized view's columns and corresponding output expression index pair
@@ -654,6 +675,9 @@ public class MaterializedViewAnalyzer {
             Scope queryScope = queryStatement.getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             if (colWithComments != null) {
+                if (rowIdStrategy != null && !REANALYZING_EXISTING_MV.get()) {
+                    colWithComments = withIvmInternalColumns(colWithComments, columnNames);
+                }
                 if (colWithComments.size() != relationFields.size()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
                 }

@@ -2553,6 +2553,48 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         sb.append("\n)");
 
+<<<<<<< HEAD
+=======
+        return sb.toString();
+    }
+
+    public String getMaterializedViewDdlStmt(boolean simple, boolean isReplay) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
+        List<String> colDef = Lists.newArrayList();
+
+        // NOTE: only output non-generated columns, in query-output order.
+        // ALTER ... ACTIVE re-analyzes this DDL, and the analyzer requires one listed column per
+        // query output field, then re-appends storage-filled ones (AUTO_INCREMENT __ROW_ID__ on
+        // non-aggregate IVM) itself — listing those here breaks the round trip.
+        // The simple form, shown to users, leaves an incremental mv's hidden columns for the analyzer to regenerate.
+        boolean omitHiddenColumns = simple && getCurrentRefreshMode().isIncrementalOrAuto();
+        for (Column column : queryProducedColumns()) {
+            if (omitHiddenColumns && column.isHidden()) {
+                continue;
+            }
+            StringBuilder colSb = new StringBuilder();
+            // Since mv supports complex expressions as the output column, add `` to support to replay it.
+            colSb.append("`" + column.getName() + "`");
+            if (!Strings.isNullOrEmpty(column.getComment())) {
+                colSb.append(" COMMENT ").append("\"").append(column.getDisplayComment()).append("\"");
+            }
+            colDef.add(colSb.toString());
+        }
+        sb.append(Joiner.on(", ").join(colDef));
+
+        // bitmapIndex
+        if (CollectionUtils.isNotEmpty(getIndexes())) {
+            for (Index index : getIndexes()) {
+                sb.append(",\n");
+                sb.append("  ").append(index.toSql(this));
+            }
+        }
+
+        sb.append(")");
+        sb.append(getMaterializedViewDdlOptions(isReplay));
+
+>>>>>>> c0ebe81a83b... [BugFix][RB-922] Hide IVM hidden columns from DESC / SHOW CREATE and accept a column list of the query's columns (#67718)
         // use originalViewDefineSql first which it's user's original defined ddl which it is because original
         // defined ddl may contain some comments or formatting that we want to preserve.
         String define = this.getOriginalViewDefineSql();
