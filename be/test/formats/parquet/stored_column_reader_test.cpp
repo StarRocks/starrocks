@@ -28,8 +28,10 @@
 #include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "common/block_split_bloom_filter.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/parquet_block_split_bloom_filter.h"
 #include "formats/parquet/schema.h"
 #include "formats/scan_context.h"
 #include "fs/fs.h"
@@ -352,6 +354,78 @@ TEST_F(StoredColumnReaderTest, RepeatedUnselectedSegmentInsideLoadedPage) {
             EXPECT_EQ(expected_rep_levels, std::vector<level_t>(rep_levels, rep_levels + num_levels));
             EXPECT_EQ(expected_def_levels, std::vector<level_t>(def_levels, def_levels + num_levels));
         }
+    }
+}
+
+// Scalar reference matching Parquet block indexing and scalar _set_masks
+class ScalarParquetBloomFilter : public BlockSplitBloomFilter {
+public:
+    void add_hash(uint64_t hash) override {
+        uint32_t num_blocks = _num_bytes / BYTES_PER_BLOCK;
+        uint32_t block_index = (uint32_t)(((hash >> 32) * num_blocks) >> 32);
+        auto key = (uint32_t)hash;
+        uint32_t masks[BITS_SET_PER_BLOCK];
+        _set_masks(key, masks);
+        auto* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
+        for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
+            *(block_offset + i) |= masks[i];
+        }
+    }
+
+    bool test_hash(uint64_t hash) const override {
+        uint32_t num_blocks = _num_bytes / BYTES_PER_BLOCK;
+        uint32_t block_index = (uint32_t)(((hash >> 32) * num_blocks) >> 32);
+        auto key = (uint32_t)hash;
+        uint32_t masks[BITS_SET_PER_BLOCK];
+        _set_masks(key, masks);
+        auto* block_offset = (uint32_t*)(_data + BYTES_PER_BLOCK * block_index);
+        for (int i = 0; i < BITS_SET_PER_BLOCK; ++i) {
+            if ((*(block_offset + i) & masks[i]) == 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
+TEST(ParquetBloomFilterTest, avx2_scalar_parity) {
+    const uint32_t num_bytes = 4096;
+    std::vector<char> init_buf(num_bytes + 1, 0);
+
+    ParquetBlockSplitBloomFilter parquet_filter;
+    ASSERT_OK(parquet_filter.init(init_buf.data(), num_bytes + 1, Hasher::HashStrategy::XXHASH64, 0));
+
+    ScalarParquetBloomFilter scalar_filter;
+    ASSERT_OK(scalar_filter.init(init_buf.data(), num_bytes + 1, Hasher::HashStrategy::XXHASH64, 0));
+
+    // Initially both must be identical all-zero
+    ASSERT_EQ(0, memcmp(parquet_filter.data(), scalar_filter.data(), num_bytes));
+
+    // Insert 500 deterministic pseudo-random hashes
+    std::vector<uint64_t> inserted_hashes;
+    inserted_hashes.reserve(500);
+    uint64_t seed = 0x12345678ULL;
+    for (size_t i = 0; i < 500; ++i) {
+        seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+        inserted_hashes.push_back(seed);
+        parquet_filter.add_hash(seed);
+        scalar_filter.add_hash(seed);
+    }
+
+    // ParquetBlockSplitBloomFilter (fused AVX2 registers) and ScalarParquetBloomFilter (scalar reference)
+    // MUST match bit-for-bit across the entire 4KB buffer.
+    EXPECT_EQ(0, memcmp(parquet_filter.data(), scalar_filter.data(), num_bytes));
+
+    // All inserted hashes must test true in both
+    for (uint64_t h : inserted_hashes) {
+        EXPECT_TRUE(parquet_filter.test_hash(h));
+        EXPECT_TRUE(scalar_filter.test_hash(h));
+    }
+
+    // 1000 arbitrary test hashes must yield identical test_hash results in both
+    for (size_t i = 0; i < 1000; ++i) {
+        seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+        EXPECT_EQ(parquet_filter.test_hash(seed), scalar_filter.test_hash(seed));
     }
 }
 
