@@ -160,7 +160,7 @@ TEST_F(LakeTabletRetainInfoTest, test_tablet_retain_info_normal) {
     TabletRetainInfo tablet_retain_info = TabletRetainInfo();
     std::unordered_set<int64_t> set;
     set.insert(2);
-    tablet_retain_info.init(666, set, _tablet_mgr.get());
+    tablet_retain_info.init(666, set, _tablet_mgr.get(), 666);
 
     EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e11.dat"));
     EXPECT_FALSE(tablet_retain_info.contains_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b582.dat"));

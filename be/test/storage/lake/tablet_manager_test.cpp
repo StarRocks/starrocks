@@ -19,12 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <fstream>
-<<<<<<< HEAD
-=======
-#include <limits>
 #include <map>
-#include <thread>
->>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
 
 #include "common/config.h"
 #include "fs/fs.h"
