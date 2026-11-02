@@ -309,6 +309,12 @@ PARALLEL_TEST(SimdFilterTest, exact_batch_multiples_and_unaligned_ranges) {
                     expect_matches_reference<uint64_t>(public_api<uint64_t>(), n, from, n, sel, in_place, "u64_batch");
                     expect_matches_reference<uint8_t>(public_api<uint8_t>(), n, from, n, sel, in_place, "u8_batch");
                     expect_matches_reference<uint16_t>(public_api<uint16_t>(), n, from, n, sel, in_place, "u16_batch");
+#if defined(__ARM_NEON) && defined(__aarch64__)
+                    expect_matches_reference<uint32_t>(SIMD::Filter::detail::compress_neon_w4, n, from, n, sel,
+                                                       in_place, "u32_batch_neon");
+                    expect_matches_reference<uint64_t>(SIMD::Filter::detail::compress_neon_w8, n, from, n, sel,
+                                                       in_place, "u64_batch_neon");
+#endif
                 }
             }
         }
@@ -328,6 +334,12 @@ PARALLEL_TEST(SimdFilterTest, exhaustive_subbatch_patterns_and_float_bits) {
             expect_matches_reference<float>(public_api<float>(), kN, 0, kN, sel, in_place, "subbatch_f32");
             expect_matches_reference<uint64_t>(public_api<uint64_t>(), kN, 0, kN, sel, in_place, "subbatch_u64");
             expect_matches_reference<double>(public_api<double>(), kN, 0, kN, sel, in_place, "subbatch_f64");
+#if defined(__ARM_NEON) && defined(__aarch64__)
+            expect_matches_reference<uint32_t>(SIMD::Filter::detail::compress_neon_w4, kN, 0, kN, sel, in_place,
+                                               "subbatch_u32_neon");
+            expect_matches_reference<uint64_t>(SIMD::Filter::detail::compress_neon_w8, kN, 0, kN, sel, in_place,
+                                               "subbatch_u64_neon");
+#endif
         }
     }
 
@@ -449,8 +461,10 @@ PARALLEL_TEST(SimdFilterTest, randomized_differential_fuzz) {
 }
 
 #if defined(__ARM_NEON) && defined(__aarch64__)
+// Gate G2 note: 128-bit SVE2 svcompact_u32/u64 kernels were evaluated on Arm Neoverse-V2 (c4a) and pruned
+// because 4-pipe NEON vqtbl1q_u8 LUT compaction (compress_neon_w4/w8) outperformed 1-pipe 128-bit COMPACT.
 PARALLEL_TEST(SimdFilterTest, aarch64_explicit_neon_kernels) {
-    const size_t sizes[] = {0, 1, 7, 15, 16, 17, 31, 32, 33, 64, 129};
+    const size_t sizes[] = {0, 1, 3, 4, 7, 15, 16, 17, 31, 32, 33, 64, 129};
     for (size_t n : sizes) {
         for (size_t from : {size_t(0), size_t(1), size_t(15), size_t(16)}) {
             if (from > n) continue;

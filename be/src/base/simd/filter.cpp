@@ -383,6 +383,9 @@ size_t detail::filter_range(void* dst, const void* src, size_t element_size, con
 #if defined(__x86_64__)
     return filter_impl(dst, src, element_size, selector, from, to);
 #elif defined(__ARM_NEON) && defined(__aarch64__)
+    // Note: 128-bit SVE2 svcompact_u32/u64 + predicated svst1 was evaluated at Gate G2 on Arm Neoverse-V2 (c4a)
+    // and pruned because 4-pipe NEON vqtbl1q_u8 LUT compaction outperforms 1-pipe 128-bit COMPACT across mixed
+    // selectivities (914 ns vs 1325 ns at 50% 4B; 1529 ns vs 3297 ns at 50% 8B).
     if (element_size == 4) {
         return compress_neon_w4(reinterpret_cast<uint32_t*>(dst), reinterpret_cast<const uint32_t*>(src), selector,
                                 from, to);
