@@ -126,24 +126,35 @@ public class EquationRewriter {
             if (!shuttleContext.isUseEquivalent()) {
                 return null;
             }
-            if (type.isAny()) {
-                for (List<RewriteEquivalent> equivalents : rewriteEquivalents.values()) {
-                    for (RewriteEquivalent equivalent : equivalents) {
-                        ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
+            // Try states with sufficient percentile compression before lossy alternatives,
+            // including when both states are columns of the same materialized view.
+            for (boolean nonSubsume : new boolean[] {false, true}) {
+                if (type.isAny()) {
+                    for (List<RewriteEquivalent> equivalents : rewriteEquivalents.values()) {
+                        ScalarOperator replaced = rewriteByEquivalent(input, equivalents, nonSubsume);
                         if (replaced != null) {
                             return replaced;
                         }
                     }
-                }
-            } else {
-                if (!rewriteEquivalents.containsKey(type)) {
-                    return null;
-                }
-                for (RewriteEquivalent equivalent : rewriteEquivalents.get(type)) {
-                    ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
+                } else if (rewriteEquivalents.containsKey(type)) {
+                    ScalarOperator replaced = rewriteByEquivalent(input, rewriteEquivalents.get(type), nonSubsume);
                     if (replaced != null) {
                         return replaced;
                     }
+                }
+            }
+            return null;
+        }
+
+        private ScalarOperator rewriteByEquivalent(ScalarOperator input, List<RewriteEquivalent> equivalents,
+                                                   boolean nonSubsume) {
+            for (RewriteEquivalent equivalent : equivalents) {
+                if (equivalent.isNonSubsumePercentileRewrite(input) != nonSubsume) {
+                    continue;
+                }
+                ScalarOperator replaced = equivalent.rewrite(shuttleContext, columnMapping, input);
+                if (replaced != null) {
+                    return replaced;
                 }
             }
             return null;

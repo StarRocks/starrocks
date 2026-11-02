@@ -54,6 +54,17 @@ import static com.starrocks.sql.optimizer.rule.transformation.materialization.Mv
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule implements IMaterializedViewRewriteRule {
 
+    // Per-attempt rewrite output plus the boolean signal that BestMvSelector
+    // reads to prefer subsume percentile MVs over non-subsume fallbacks.
+    // The mismatch values (mvC, queryC) live on EquivalentShuttleContext
+    // where the strict-mode trace consumes them — no need to carry doubles
+    // further up the stack. Public-static so BestMvSelector can import it.
+    public static record RewriteResult(OptExpression expression, boolean hasPercentileNonSubsumeRewrite) {
+        public static RewriteResult of(OptExpression expression) {
+            return new RewriteResult(expression, false);
+        }
+    }
+
     protected BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }
@@ -118,12 +129,12 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         try {
-            List<OptExpression> expressions = doTransform(queryExpression, context);
-            if (expressions == null || expressions.isEmpty()) {
+            List<RewriteResult> results = doTransform(queryExpression, context);
+            if (results == null || results.isEmpty()) {
                 return Lists.newArrayList();
             }
             // in rbo/cbo phase, only return the best one result
-            BestMvSelector bestMvSelector = new BestMvSelector(expressions, context, queryExpression, this);
+            BestMvSelector bestMvSelector = new BestMvSelector(results, context, queryExpression, this);
             boolean isConsiderQueryDataLayout = isChooseBestMVBasedDataLayout(queryExpression);
             return bestMvSelector.selectBest(isConsiderQueryDataLayout);
         } catch (Exception e) {
@@ -142,7 +153,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         return mvCandidateContexts;
     }
 
-    public List<OptExpression> doTransform(OptExpression queryExpression, OptimizerContext context) {
+    public List<RewriteResult> doTransform(OptExpression queryExpression, OptimizerContext context) {
         // 1. collect all candidate mvs for the input
         List<MaterializationContext> mvCandidateContexts = Lists.newArrayList();
         if (queryExpression.getGroupExpression() != null) {
@@ -187,10 +198,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
      * @param context: optimizer context.
      * @return: the rewritten query opt expression and associated materialization context pair if rewrite success, otherwise null.
      */
-    protected List<OptExpression> doTransform(List<MaterializationContext> mvCandidateContexts,
+    protected List<RewriteResult> doTransform(List<MaterializationContext> mvCandidateContexts,
                                               OptExpression queryExpression,
                                               OptimizerContext context) {
-        List<OptExpression> results = Lists.newArrayList();
+        List<RewriteResult> results = Lists.newArrayList();
         // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
         // Compute Query queryPredicateSplit
         final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
@@ -246,7 +257,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             // NOTE: derive logical property is necessary for statistics calculation.
             deriveLogicalProperty(candidate);
 
-            results.add(candidate);
+            results.add(new RewriteResult(candidate, mvRewriteContext.hasPercentileNonSubsumeRewrite()));
             mvContext.updateMVUsedCount();
             IMaterializedViewMetricsEntity mvEntity =
                     MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
