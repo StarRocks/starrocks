@@ -48,9 +48,7 @@ struct GeoStorageDescriptor {
     GeoDimensionPB dimension = GEO_DIMENSION_UNKNOWN;
     GeoValidationStatePB validation_state = GEO_VALIDATION_STATE_UNKNOWN;
 
-    static GeoStorageDescriptor from_thrift(const TGeoStorageDesc& thrift);
     static GeoStorageDescriptor from_protobuf(const GeoStorageDescPB& protobuf);
-    TGeoStorageDesc to_thrift() const;
     GeoStorageDescPB to_protobuf() const;
 
     // Exact normalized metadata equality, not SQL type compatibility.
@@ -61,9 +59,7 @@ struct GeoColumnDescriptor {
     GeoTypeDescriptor type;
     GeoStorageDescriptor storage;
 
-    static GeoColumnDescriptor from_thrift(const TGeoColumnDesc& thrift);
     static GeoColumnDescriptor from_protobuf(const GeoColumnDescPB& protobuf);
-    TGeoColumnDesc to_thrift() const;
     GeoColumnDescPB to_protobuf() const;
 
     bool operator==(const GeoColumnDescriptor& rhs) const = default;

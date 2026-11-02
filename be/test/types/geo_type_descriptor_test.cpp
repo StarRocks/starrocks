@@ -50,17 +50,20 @@ Thrift thrift_wire_round_trip(const Thrift& input) {
 
 template <typename Descriptor>
 void check_round_trip(const Descriptor& expected) {
-    EXPECT_EQ(expected, Descriptor::from_thrift(thrift_wire_round_trip(expected.to_thrift())));
-    EXPECT_EQ(expected, Descriptor::from_thrift(thrift_wire_round_trip<TCompactProtocol>(expected.to_thrift())));
     auto protobuf = expected.to_protobuf();
     auto parsed = protobuf;
     parsed.Clear();
     ASSERT_TRUE(parsed.ParseFromString(protobuf.SerializeAsString()));
     EXPECT_EQ(expected, Descriptor::from_protobuf(parsed));
-    const auto from_thrift = Descriptor::from_thrift(thrift_wire_round_trip(expected.to_thrift()));
-    EXPECT_EQ(expected, Descriptor::from_protobuf(from_thrift.to_protobuf()));
-    const auto from_proto = Descriptor::from_protobuf(parsed);
-    EXPECT_EQ(expected, Descriptor::from_thrift(from_proto.to_thrift()));
+    // Only the semantic type crosses FE/BE Thrift; storage and column descriptors are protobuf-only.
+    if constexpr (std::is_same_v<Descriptor, GeoTypeDescriptor>) {
+        EXPECT_EQ(expected, Descriptor::from_thrift(thrift_wire_round_trip(expected.to_thrift())));
+        EXPECT_EQ(expected, Descriptor::from_thrift(thrift_wire_round_trip<TCompactProtocol>(expected.to_thrift())));
+        const auto from_thrift = Descriptor::from_thrift(thrift_wire_round_trip(expected.to_thrift()));
+        EXPECT_EQ(expected, Descriptor::from_protobuf(from_thrift.to_protobuf()));
+        const auto from_proto = Descriptor::from_protobuf(parsed);
+        EXPECT_EQ(expected, Descriptor::from_thrift(from_proto.to_thrift()));
+    }
 }
 
 TEST(GeoTypeDescriptorTest, AllAlgorithmsAndStorageStatesRoundTrip) {
@@ -117,29 +120,17 @@ TEST(GeoTypeDescriptorTest, WireOrdinalsRemainStable) {
     EXPECT_EQ(5, GEO_EDGE_ALGORITHM_KARNEY);
     EXPECT_EQ(6, TGeoEdgeAlgorithm::PLANAR);
     EXPECT_EQ(6, GEO_EDGE_ALGORITHM_PLANAR);
-    EXPECT_EQ(0, TGeoEncoding::UNKNOWN);
     EXPECT_EQ(0, GEO_ENCODING_UNKNOWN);
-    EXPECT_EQ(1, TGeoEncoding::WKB);
     EXPECT_EQ(1, GEO_ENCODING_WKB);
-    EXPECT_EQ(0, TGeoDimension::UNKNOWN);
     EXPECT_EQ(0, GEO_DIMENSION_UNKNOWN);
-    EXPECT_EQ(1, TGeoDimension::XY);
     EXPECT_EQ(1, GEO_DIMENSION_XY);
-    EXPECT_EQ(2, TGeoDimension::XYZ);
     EXPECT_EQ(2, GEO_DIMENSION_XYZ);
-    EXPECT_EQ(3, TGeoDimension::XYM);
     EXPECT_EQ(3, GEO_DIMENSION_XYM);
-    EXPECT_EQ(4, TGeoDimension::XYZM);
     EXPECT_EQ(4, GEO_DIMENSION_XYZM);
-    EXPECT_EQ(5, TGeoDimension::MIXED);
     EXPECT_EQ(5, GEO_DIMENSION_MIXED);
-    EXPECT_EQ(0, TGeoValidationState::UNKNOWN);
     EXPECT_EQ(0, GEO_VALIDATION_STATE_UNKNOWN);
-    EXPECT_EQ(1, TGeoValidationState::UNVALIDATED);
     EXPECT_EQ(1, GEO_VALIDATION_STATE_UNVALIDATED);
-    EXPECT_EQ(2, TGeoValidationState::STRUCTURALLY_VALIDATED);
     EXPECT_EQ(2, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED);
-    EXPECT_EQ(3, TGeoValidationState::SEMANTICALLY_VALIDATED);
     EXPECT_EQ(3, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED);
     EXPECT_EQ(1, GeoTypeDescPB::kLogicalTypeFieldNumber);
     EXPECT_EQ(2, GeoTypeDescPB::kCoordinateSystemFieldNumber);
@@ -168,9 +159,7 @@ TEST(GeoTypeDescriptorTest, AlgorithmsRemainDistinctForCompatibility) {
 TEST(GeoTypeDescriptorTest, MissingFieldsNormalizeWithoutGuessingSemantics) {
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_thrift(TGeoTypeDesc{}));
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_protobuf(GeoTypeDescPB{}));
-    EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_thrift(TGeoStorageDesc{}));
     EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_protobuf(GeoStorageDescPB{}));
-    EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_thrift(TGeoColumnDesc{}));
     EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_protobuf(GeoColumnDescPB{}));
     check_round_trip(GeoColumnDescriptor{});
 
@@ -191,10 +180,6 @@ TEST(GeoTypeDescriptorTest, MissingFieldsNormalizeWithoutGuessingSemantics) {
     unset.logical_type = TGeoLogicalType::GEOGRAPHY;
     unset.crs = "OGC:CRS84";
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_thrift(unset));
-    TGeoColumnDesc column;
-    column.__set_type(type);
-    column.__set_storage(TGeoStorageDesc{});
-    EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_thrift(column));
     EXPECT_FALSE(is_geo_compute_compatible({}, {}));
 }
 
@@ -244,11 +229,8 @@ TEST(GeoTypeDescriptorTest, WireFieldsUseDeclaredEnums) {
     static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.coordinate_system()), GeoCoordinateSystemPB>);
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.edge_algorithm), TGeoEdgeAlgorithm::type>);
     static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.edge_algorithm()), GeoEdgeAlgorithmPB>);
-    static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.encoding), TGeoEncoding::type>);
     static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.encoding()), GeoEncodingPB>);
-    static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.dimension), TGeoDimension::type>);
     static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.dimension()), GeoDimensionPB>);
-    static_assert(std::is_same_v<decltype(TGeoStorageDesc{}.validation_state), TGeoValidationState::type>);
     static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.validation_state()), GeoValidationStatePB>);
 }
 
@@ -262,21 +244,13 @@ TEST(GeoTypeDescriptorTest, UnknownThriftEnumsNormalizeToUnknown) {
             auto type_wire = thrift_enum_wire<TGeoTypeDesc>(field, value);
             type_wire.__set_crs("OGC:CRS84");
             type_wire.__set_srid(4326);
-            const auto storage_wire = thrift_enum_wire<TGeoStorageDesc>(field, value);
             const auto type = GeoTypeDescriptor::from_thrift(type_wire);
-            const auto storage = GeoStorageDescriptor::from_thrift(storage_wire);
             GeoTypeDescriptor expected;
             expected.crs = "OGC:CRS84";
             expected.srid = 4326;
             EXPECT_EQ(expected, type);
-            EXPECT_EQ(GeoStorageDescriptor{}, storage);
             check_round_trip(type);
-            check_round_trip(storage);
-            TGeoColumnDesc column;
-            column.__set_type(type_wire);
-            column.__set_storage(storage_wire);
             const GeoColumnDescriptor normalized{expected, {}};
-            EXPECT_EQ(normalized, GeoColumnDescriptor::from_thrift(column));
             check_round_trip(normalized);
             EXPECT_FALSE(is_geo_compute_compatible(normalized, normalized));
         }
