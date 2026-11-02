@@ -62,9 +62,14 @@ the same category.
 2. **Column-level storage metadata is not a substitute for the per-row check.**
    `storage.dimension` and `storage.validation_state` are claims made by the producer of the data and are not enforced
    on writes (`append_wkb*` never inspects the bytes). Do not skip the per-row check because a column is labelled XY or
-   validated. Boundary checks may reject explicitly unsupported labels (`XYZ` / `XYM` / `XYZM`) to report a clear
-   `NotSupported`, but must admit `UNKNOWN` and `MIXED`. For example, columns produced by Iceberg GEOGRAPHY scans are
-   `UNKNOWN`.
+   validated.
+
+   Boundary checks may reject explicitly unsupported labels (`XYZ` / `XYM` / `XYZM`) to report a clear `NotSupported`.
+   `check_geography_boundary`, `check_geometry_boundary` and the `ST_CoverageSimplify` window also admit `UNKNOWN` and
+   `MIXED`; for example, columns produced by Iceberg GEOGRAPHY scans are `UNKNOWN`. Two gates are current exceptions:
+   `check_geometry_compute_boundary` (GEOMETRY compute functions) and `h3_geo_input` (H3 functions) require an `XY`
+   label and return `NotSupported` for other labels, even when every row is XY. Admitting `UNKNOWN` and `MIXED` in every
+   kernel is the target contract (tracked in #82086); new boundary checks must not add further `XY`-only gates.
 
 3. **Topological validity is decided per kernel, not by the decoder.**
    `parse_wkb` checks structure only. Each kernel either requires valid topology or does not; a kernel that does not
@@ -96,7 +101,9 @@ the same category.
 
 ## When adding or changing a compute function
 
-- Decode each row's own WKB; never admit or reject rows based on the column's storage labels.
+- Decode each row's own WKB, and never admit a row because of the column's storage labels. Do not reject columns by
+  label beyond what the shared boundary checks already do (explicit `XYZ` / `XYM` / `XYZM` labels, plus the current
+  `XY`-only exceptions described in rule 2).
 - Add the function to `GeoNonXYPayloadTest` in `be/test/exprs/geography_functions_test.cpp`: an XY control input must
   compute, and Z / M inputs must be rejected even when the column is labelled `XY` and `SEMANTICALLY_VALIDATED`.
 - If the algorithm requires valid topology, add a test showing that topologically invalid input returns
