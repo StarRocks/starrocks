@@ -293,6 +293,27 @@ public class LoadPlanner {
         this.jsonOptions = options;
     }
 
+    /**
+     * {@link #plan()} under the destination table's READ lock, for a caller that holds no table or database lock of its
+     * own: the transaction stream load (StreamLoadTask).
+     *
+     * <p>The load's slots (the tuple descriptor) and the sink's schema param -- the index columns and the schema id the
+     * BE writes with, see OlapTableSink#complete -- must come from one version of the table schema. A fast schema
+     * change edits the catalog in place under the table WRITE lock; one that commits between the two reads gives the
+     * BE a write schema with a column no slot fills, which the memtable of a table that is not a primary key table
+     * keeps empty and then reads at flush. The other callers already plan under this lock or the database's; plan()
+     * does not take it itself because a file load's scan node set-up may reach remote storage.
+     */
+    public void planUnderTableLock() throws StarRocksException {
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
+        try {
+            plan();
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
+        }
+    }
+
     public void plan() throws StarRocksException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
@@ -571,6 +592,7 @@ public class LoadPlanner {
                     partitionIds.addAll(brokerFileGroup.getPartitionIds());
                 }
             }
+<<<<<<< HEAD
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == etlJobType.ROUTINE_LOAD) {
             PartitionNames partitionNames = streamLoadInfo.getPartitions();
             if (partitionNames != null) {
@@ -578,6 +600,26 @@ public class LoadPlanner {
                     Partition part = olapDestTable.getPartition(partName, partitionNames.isTemp());
                     if (part == null) {
                         throw new LoadException("unknown partition " + partName + " in table " + destTable.getName());
+=======
+        }
+
+        // Partition maps are plain HashMaps mutated in place under the table WRITE lock (e.g. an automatic
+        // partition added by a concurrent load). Read them under the READ lock, as OlapTableSink#complete does
+        // (#68853), or the loop throws ConcurrentModificationException. The callers of plan() hold this lock or the
+        // database's already; taking it again here keeps the read safe for any caller.
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
+        try {
+            if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
+                PartitionNames partitionNames = streamLoadInfo.getPartitions();
+                if (partitionNames != null) {
+                    for (String partName : partitionNames.getPartitionNames()) {
+                        Partition part = olapDestTable.getPartition(partName, partitionNames.isTemp());
+                        if (part == null) {
+                            throw new LoadException("unknown partition " + partName + " in table " + destTable.getName());
+                        }
+                        partitionIds.add(part.getId());
+>>>>>>> 56a72c7b802... [BugFix][RB-923] Plan a transaction stream load against one version of the table schema (#67724)
                     }
                     partitionIds.add(part.getId());
                 }

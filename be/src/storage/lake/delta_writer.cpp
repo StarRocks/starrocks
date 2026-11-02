@@ -535,20 +535,32 @@ Status DeltaWriterImpl::build_schema_and_writer() {
 
 inline Status DeltaWriterImpl::reset_memtable() {
     RETURN_IF_ERROR(build_schema_and_writer());
+    // Install the memtable only once prepare() accepts it. write() skips this function while _mem_table is set, so a
+    // memtable left behind by a failed prepare() -- e.g. slots that do not match the write schema -- would take the
+    // next write as is, from another sink instance or a later batch of this writer's queue.
+    std::unique_ptr<MemTable> mem_table;
     if (_slots != nullptr || !_merge_condition.empty()) {
-        _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _slots, _mem_table_sink.get(),
-                                                _merge_condition, _mem_tracker);
+        mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _slots, _mem_table_sink.get(),
+                                               _merge_condition, _mem_tracker);
     } else {
-        _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
-                                                _max_buffer_size, _mem_tracker);
+        mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
+                                               _max_buffer_size, _mem_tracker);
     }
 
+<<<<<<< HEAD
+=======
+    if (_flexible_row_merger != nullptr) {
+        mem_table->set_flexible_row_merger(_flexible_row_merger.get());
+    }
+
+>>>>>>> 56a72c7b802... [BugFix][RB-923] Plan a transaction stream load against one version of the table schema (#67724)
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         ASSIGN_OR_RETURN(pk_encoding_type, _tablet_schema->primary_key_encoding_type_or_error());
     }
-    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
-    _mem_table->set_write_buffer_row(_max_buffer_rows);
+    RETURN_IF_ERROR(mem_table->prepare(pk_encoding_type));
+    mem_table->set_write_buffer_row(_max_buffer_rows);
+    _mem_table = std::move(mem_table);
     return Status::OK();
 }
 

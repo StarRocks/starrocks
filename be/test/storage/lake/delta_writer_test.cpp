@@ -383,6 +383,46 @@ TEST_F(LakeDeltaWriterTest, test_close) {
     }));
 }
 
+// The load's slots cover one column fewer than the write schema: the plan was made before a fast ADD COLUMN and the
+// write schema after it. Every write must fail with the mismatch, not only the first: a memtable left behind by the
+// first failure would take the next write, and its flush would read the column no slot fills.
+TEST_F(LakeDeltaWriterTest, test_write_with_slots_missing_a_schema_column) {
+    static const int kChunkSize = 16;
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    std::vector<uint32_t> indexes(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        c0->append(i);
+        c1->append(i * 3);
+        indexes[i] = i;
+    }
+    Chunk chunk(Columns{std::move(c0), std::move(c1)}, Chunk::SlotHashMap{{0, 0}, {1, 1}});
+    // The tablet schema has c0 and c1; the load has a slot for c0 only.
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> slot_pointers{&slots[0]};
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&slot_pointers)
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 2; i++) {
+        auto st = delta_writer->write(chunk, indexes.data(), indexes.size());
+        ASSERT_TRUE(st.is_internal_error()) << "write " << i << ": " << st;
+        ASSERT_NE(std::string::npos, st.message().find("the load carries 1 columns but its write schema has 2")) << st;
+    }
+    delta_writer->close();
+}
+
 TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
     // Prepare data for writing
     static const int kChunkSize = 1;
