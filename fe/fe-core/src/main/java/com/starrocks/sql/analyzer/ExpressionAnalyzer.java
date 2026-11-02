@@ -933,7 +933,8 @@ public class ExpressionAnalyzer {
                         rightTypes.get(i).isStructType()) {
                     throw new SemanticException("InPredicate of JSON, Map, Struct types is not supported");
                 }
-                if (!TypeManager.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
+                if (leftTypes.get(i).hasNestedGeoType() || rightTypes.get(i).hasNestedGeoType() ||
+                        !TypeManager.canCastTo(leftTypes.get(i), rightTypes.get(i))) {
                     throw new SemanticException(
                             "in predicate type " + leftTypes.get(i).toSql() + " with type " + rightTypes.get(i).toSql()
                                     + " is invalid");
@@ -1647,7 +1648,8 @@ public class ExpressionAnalyzer {
 
             Type compatibleType = BooleanType.BOOLEAN;
             if (null != caseExpr) {
-                compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
+                compatibleType = whenTypes.stream().anyMatch(Type::hasNestedGeoType) ? InvalidType.INVALID :
+                        TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
 
             for (Type type : whenTypes) {

@@ -208,7 +208,7 @@ public abstract class Type implements Cloneable {
     }
 
     public boolean isValidMapKeyType() {
-        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType();
+        return !isComplexType() && !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isGeoType();
     }
 
     public boolean canApplyToNumeric() {
