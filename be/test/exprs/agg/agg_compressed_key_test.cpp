@@ -43,7 +43,7 @@ TEST(AggCompressedKey, could_bound) {
         bases.resize(1);
         used_bytes.resize(1);
 
-        auto type1 = TypeDescriptor(TYPE_INT);
+        auto type1 = TYPE_INT_DESC;
         groupby.emplace_back(ColumnType{type1, false});
         std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> ranges;
         auto* min = pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_INT>(0, 1), type1));
@@ -69,7 +69,7 @@ TEST(AggCompressedKey, could_bound) {
         bases.resize(2);
         used_bytes.resize(2);
 
-        auto type1 = TypeDescriptor(TYPE_INT);
+        auto type1 = TYPE_INT_DESC;
         groupby.emplace_back(ColumnType{type1, false});
         groupby.emplace_back(ColumnType{type1, true});
         std::vector<std::optional<std::pair<VectorizedLiteral*, VectorizedLiteral*>>> ranges;

@@ -1609,7 +1609,7 @@ TEST_F(TimeFunctionsTest, from_days) {
     DateValue date = DateValue::create(Year, Month, Day);
     // nullable
     {
-        auto tc = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+        auto tc = ColumnHelper::create_column(TYPE_INT_DESC, true);
         tc->append_datum((RunTimeTypeTraits<TYPE_INT>::CppType)dtv.daynr());
         (void)tc->append_nulls(1);
 
@@ -5264,7 +5264,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         DeferOp defer([&]() { state->set_timezone(prev_timezone); });
 
         // Create a nullable column with nulls interspersed
-        auto tc = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+        auto tc = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
 
         tc->append_datum((int64_t)0);     // hour 3
         tc->append_nulls(1);              // null
@@ -5304,7 +5304,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
         DeferOp defer([&]() { state->set_timezone(prev_timezone); });
 
         // Use a nullable column to allow negative input
-        auto tc = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+        auto tc = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
 
         // 1970-01-01 00:00:00 UTC, in UTC-2, it's 22:00:00 previous day, so hour = 22
         tc->append_datum((int64_t)0);
@@ -5349,7 +5349,7 @@ TEST_F(TimeFunctionsTest, hourFromUnixTime) {
 // Tests for sec_to_time function
 TEST_F(TimeFunctionsTest, secToTimeTest) {
     {
-        auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+        auto int_value = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
         int_value->append_datum(Datum(int64_t(0)));
         int_value->append_datum(Datum(int64_t(1)));
@@ -5377,7 +5377,7 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
         EXPECT_EQ(3023999, v->get_data()[7]);
     }
     {
-        auto int_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+        auto int_value = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
 
         int_value->append_datum(Datum(int64_t(0)));
         int_value->append_datum(Datum(int64_t(-1)));
@@ -5407,7 +5407,7 @@ TEST_F(TimeFunctionsTest, secToTimeTest) {
 
     {
         // Create null column
-        auto null_value = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+        auto null_value = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
 
         (void)null_value->append_nulls(1);
 

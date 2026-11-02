@@ -1144,7 +1144,7 @@ TEST_F(DataConverterTest, build_method_udf_type_descs_no_struct_short_circuit) {
     LOCAL_REF_GUARD(method);
 
     // SQL signature: udf(INT, BIGINT) -> VARCHAR — no STRUCT anywhere.
-    std::vector<TypeDescriptor> args = {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_BIGINT)};
+    std::vector<TypeDescriptor> args = {TYPE_INT_DESC, TYPE_BIGINT_DESC};
     TypeDescriptor ret(TYPE_VARCHAR);
 
     ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,

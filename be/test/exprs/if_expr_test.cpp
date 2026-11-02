@@ -59,7 +59,7 @@ TEST_F(VectorizedIfExprTest, ifArray) {
     std::unique_ptr<Expr> expr_ptr(expr);
 
     auto target = ColumnTestHelper::build_column<uint8_t>({0, 1, 0});
-    auto cond = MockExpr(TypeDescriptor(TYPE_BOOLEAN), target);
+    auto cond = MockExpr(TYPE_BOOLEAN_DESC, target);
 
     auto array0 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
@@ -94,7 +94,7 @@ TEST_F(VectorizedIfExprTest, ifConstTrue) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockConstVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, true);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -120,7 +120,7 @@ TEST_F(VectorizedIfExprTest, ifAllFalse) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, false);
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -146,7 +146,7 @@ TEST_F(VectorizedIfExprTest, ifNull) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
@@ -179,7 +179,7 @@ TEST_F(VectorizedIfExprTest, ifNullRightConst) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockMultiVectorizedExpr<TYPE_BOOLEAN> bol(expr_node, 10, true, false);
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);

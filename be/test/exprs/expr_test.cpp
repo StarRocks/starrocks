@@ -54,9 +54,9 @@ private:
 
 TEST(ExprTest, CopyDeepCopiesChildren) {
     ObjectPool pool;
-    auto* root = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
-    auto* child = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
-    auto* grandchild = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
+    auto* root = pool.add(new SimpleExpr(TYPE_INT_DESC));
+    auto* child = pool.add(new SimpleExpr(TYPE_INT_DESC));
+    auto* grandchild = pool.add(new SimpleExpr(TYPE_INT_DESC));
     child->add_child(grandchild);
     root->add_child(child);
 
@@ -73,8 +73,8 @@ TEST(ExprTest, CopyDeepCopiesChildren) {
 }
 
 TEST(ExprTest, TypeWithoutCastSkipsCastOpcode) {
-    SimpleExpr child(TypeDescriptor(TYPE_INT), TExprNodeType::INT_LITERAL, TExprOpcode::INVALID_OPCODE);
-    SimpleExpr cast(TypeDescriptor(TYPE_INT), TExprNodeType::CAST_EXPR, TExprOpcode::CAST);
+    SimpleExpr child(TYPE_INT_DESC, TExprNodeType::INT_LITERAL, TExprOpcode::INVALID_OPCODE);
+    SimpleExpr cast(TYPE_INT_DESC, TExprNodeType::CAST_EXPR, TExprOpcode::CAST);
     cast.add_child(&child);
 
     EXPECT_EQ(TExprNodeType::INT_LITERAL, Expr::type_without_cast(&cast));
@@ -90,7 +90,7 @@ TEST(ExprTest, GeoTypesDoNotRequireLiteralNode) {
 }
 
 TEST(ExprTest, EvaluateConstCachesResult) {
-    SimpleExpr expr{TypeDescriptor(TYPE_INT)};
+    SimpleExpr expr{TYPE_INT_DESC};
     RuntimeState state;
     ExprContext context(&expr);
     ASSERT_TRUE(context.prepare(&state).ok());

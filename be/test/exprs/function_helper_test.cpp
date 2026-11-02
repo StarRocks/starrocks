@@ -154,7 +154,7 @@ TEST_F(FunctionHelperTest, testCreateColumnArray) {
 
 TEST_F(FunctionHelperTest, testCreateColumnStruct) {
     std::vector<std::string> field_names{"c1", "c2"};
-    std::vector<TypeDescriptor> field_types{TypeDescriptor(TYPE_INT), TYPE_ARRAY_INT_DESC};
+    std::vector<TypeDescriptor> field_types{TYPE_INT_DESC, TYPE_ARRAY_INT_DESC};
     TypeDescriptor struct_type = TypeDescriptor::create_struct_type(field_names, field_types);
 
     auto struct_column = FunctionHelper::create_column(struct_type, false);
@@ -170,8 +170,7 @@ TEST_F(FunctionHelperTest, testCreateColumnStruct) {
 }
 
 TEST_F(FunctionHelperTest, testCreateColumnMapUnknownFallbackToNull) {
-    TypeDescriptor map_type =
-            TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), TypeDescriptor(TYPE_UNKNOWN));
+    TypeDescriptor map_type = TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC);
 
     auto map_column = FunctionHelper::create_column(map_type, false);
     ASSERT_NE(map_column, nullptr);
@@ -209,7 +208,7 @@ TEST_F(FunctionHelperTest, testCreateGeoColumnPlaceholder) {
             column->check_or_die();
         }
 
-        const auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), type);
+        const auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, type);
         const auto array_type = TypeDescriptor::create_array_type(map_type);
         const auto struct_type = TypeDescriptor::create_struct_type({"nested"}, {array_type});
         auto nested = FunctionHelper::create_column(struct_type, false);
