@@ -453,6 +453,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 jobProperties.put(CreateRoutineLoadStmt.JSONPATHS, "");
             }
             this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
+        } else if (stmt.getFormat().equalsIgnoreCase("arrow")) {
+            jobProperties.put(CreateRoutineLoadStmt.FORMAT, "arrow");
         } else {
             throw new StarRocksException("Invalid format type.");
         }
