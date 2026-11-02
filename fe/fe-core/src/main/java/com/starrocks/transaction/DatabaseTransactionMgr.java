@@ -1157,10 +1157,17 @@ public class DatabaseTransactionMgr {
                 List<Long> txnsWithDependency;
                 if (Config.lake_enable_batch_publish_multi_table) {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
+<<<<<<< HEAD
                             minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 } else {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
                             minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
+=======
+                            Config.lake_batch_publish_max_version_num, txnId);
+                } else {
+                    txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
+                            Config.lake_batch_publish_max_version_num, txnId);
+>>>>>>> ddbcba71d44... [BugFix][RB-953] Deprecate lake_batch_publish_min_version_num (#67961)
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
