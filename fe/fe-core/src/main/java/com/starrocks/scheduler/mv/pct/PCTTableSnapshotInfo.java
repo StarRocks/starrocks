@@ -40,10 +40,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+<<<<<<< HEAD
+=======
+import java.util.function.Function;
+import java.util.stream.Collectors;
+>>>>>>> 744bd06d01a... [BugFix] Record the Iceberg snapshot an incremental refresh read in the MV version map (#64125)
 
 /**
  * `PCTTableSnapshotInfo` represents a snapshot of the base table of materialized view.
@@ -212,26 +218,36 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
         // different in selectedPartitionNames and partitions and will lead to infinite partition refresh.
         Collections.sort(refreshedPartitionNames);
 
-        // When pinnedRange is set, read partition info at the frozen snapshot.
+        List<String> partitionNames = refreshedPartitionNames;
         List<com.starrocks.connector.PartitionInfo> partitions;
-        if (pinnedRange != null) {
-            ConnectorMetadataRequestContext rc = new ConnectorMetadataRequestContext();
-            rc.setTableVersionRange(pinnedRange);
-            partitions = GlobalStateMgr.getCurrentState()
-                    .getMetadataMgr()
-                    .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames, rc);
-        } else {
+        Optional<TvrVersionRange> snapshot = Optional.ofNullable(readSnapshot()).filter(range -> range.end().isPresent());
+        if (snapshot.isEmpty()) {
             partitions = GlobalStateMgr.getCurrentState()
                     .getMetadataMgr()
                     .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames);
+        } else {
+            ConnectorMetadataRequestContext requestContext = new ConnectorMetadataRequestContext();
+            requestContext.setTableVersionRange(snapshot.get());
+            try {
+                partitionNames = partitionNamesPresentAt(table, refreshedPartitionNames, requestContext);
+                partitions = GlobalStateMgr.getCurrentState()
+                        .getMetadataMgr()
+                        .getPartitions(baseTableInfo.getCatalogName(), table, partitionNames, requestContext);
+            } catch (Exception e) {
+                // The live partitions would claim changes this refresh never read; leaving the table out makes
+                // the next PCT check refresh its partitions instead.
+                LOG.warn("Failed to read the partitions of table {} at snapshot {}, they are left out of the MV " +
+                        "version map", table.getName(), snapshot.get(), e);
+                return;
+            }
         }
-        if (partitions.size() != refreshedPartitionNames.size()) {
+        if (partitions.size() != partitionNames.size()) {
             LOG.warn("Partition names size {} does not match partitions size {} for table {}",
-                    refreshedPartitionNames.size(), partitions.size(), table.getName());
+                    partitionNames.size(), partitions.size(), table.getName());
             return;
         }
-        for (int index = 0; index < refreshedPartitionNames.size(); ++index) {
-            String partitionName = refreshedPartitionNames.get(index);
+        for (int index = 0; index < partitionNames.size(); ++index) {
+            String partitionName = partitionNames.get(index);
             Preconditions.checkArgument(partitionName != null, "name should not be null");
             MaterializedView.BasePartitionInfo basePartitionInfo = MaterializedView.BasePartitionInfo.fromExternalTable(
                     partitions.get(index));
@@ -240,5 +256,25 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
             }
             refreshedPartitionInfos.put(partitionName, basePartitionInfo);
         }
+    }
+
+    /**
+     * The names in {@code partitionNames} that exist at the snapshot of {@code requestContext}: asking the connector
+     * for one that does not, such as a partition created after that snapshot, fails the whole read.
+     */
+    private List<String> partitionNamesPresentAt(Table table, List<String> partitionNames,
+                                                 ConnectorMetadataRequestContext requestContext) {
+        if (table.isUnPartitioned()) {
+            return partitionNames;
+        }
+        Set<String> present = new HashSet<>(GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                baseTableInfo.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName(), requestContext));
+        List<String> presentNames = partitionNames.stream().filter(present::contains).collect(Collectors.toList());
+        if (presentNames.size() < partitionNames.size()) {
+            LOG.info("Partitions {} of table {} are not in snapshot {}, they are left out of the MV version map",
+                    partitionNames.stream().filter(name -> !present.contains(name)).collect(Collectors.toList()),
+                    table.getName(), requestContext.getTableVersionRange());
+        }
+        return presentNames;
     }
 }
