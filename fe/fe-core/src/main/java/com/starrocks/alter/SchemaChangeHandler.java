@@ -2638,14 +2638,19 @@ public class SchemaChangeHandler extends AlterHandler {
      * Runs under the MV table WRITE lock already held by
      * {@code AlterJobExecutor.visitAlterMaterializedViewStatement} -- does NOT acquire a lock of its own.
      *
-     * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the colocate / AUTO_INCREMENT gates
-     * from {@link #needsRangeRewriteSchemaChange}: both are structurally unreachable for an MV here.
-     * Colocation requires hash distribution, but {@code AlterMVClauseAnalyzerVisitor} already requires
-     * range distribution before routing to this method. An AUTO_INCREMENT row-id column implies a
-     * PRIMARY_KEYS MV, which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects.
+     * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the AUTO_INCREMENT gate from
+     * {@link #needsRangeRewriteSchemaChange}: an AUTO_INCREMENT row-id column implies a PRIMARY_KEYS MV,
+     * which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects. The colocate gate is re-checked
+     * here because the statement resolves the MV by name again under the lock, and
+     * {@code ALTER MATERIALIZED VIEW ... SWAP WITH} can have put a different MV under the analyzed name.
      */
     void submitMvSortKeyRewriteJob(Database db, MaterializedView mv, List<Integer> sortKeyIdxes,
                                    List<Integer> sortKeyUniqueIds) throws StarRocksException {
+        // The analyzer already rejects this, but the MV under this name may have been swapped in since.
+        if (mv.hasColocateGroup()) {
+            throw new DdlException("ALTER MATERIALIZED VIEW ... ORDER BY is not supported on a materialized view "
+                    + "with 'colocate_with'");
+        }
         long baseIndexMetaId = mv.getBaseIndexMetaId();
         List<Column> newSchema = mv.getSchemaByIndexMetaId(baseIndexMetaId);
         short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes);
