@@ -393,17 +393,19 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                 }
             }
         } else if constexpr (sizeof(T) == 8) {
-            constexpr size_t kBlock = 2;
-            uint64x2_t rhs_vec = vdupq_n_u64(static_cast<uint64_t>(rhs_data));
-            const uint64x2_t sign_mask = std::is_unsigned_v<T> ? vdupq_n_u64(0x8000'0000'0000'0000ULL) : vdupq_n_u64(0);
-            // For unsigned compare, flip sign bit to reuse signed compares.
-            if constexpr (std::is_unsigned_v<T>) {
-                rhs_vec = veorq_u64(rhs_vec, sign_mask);
-            }
-            const uint64x2_t ones = vdupq_n_u64(1);
-            alignas(16) int64_t tmp[2];
+            constexpr size_t kBlock = 8;
+            auto narrow_mask_64_to_8 = [](uint64x2_t m0, uint64x2_t m1, uint64x2_t m2, uint64x2_t m3) -> int8x8_t {
+                uint32x4_t u01 = vuzp1q_u32(vreinterpretq_u32_u64(m0), vreinterpretq_u32_u64(m1));
+                uint32x4_t u23 = vuzp1q_u32(vreinterpretq_u32_u64(m2), vreinterpretq_u32_u64(m3));
+                uint16x8_t u0123 = vuzp1q_u16(vreinterpretq_u16_u32(u01), vreinterpretq_u16_u32(u23));
+                return vreinterpret_s8_u8(vmovn_u16(u0123));
+            };
+
+            const uint64x2_t rhs_u = vdupq_n_u64(static_cast<uint64_t>(rhs_data));
+            const int64x2_t rhs_s = vdupq_n_s64(static_cast<int64_t>(rhs_data));
+
             for (; i + kBlock <= size; i += kBlock) {
-                uint16_t block_mask = 0;
+                uint64_t block_mask = 0;
                 std::memcpy(&block_mask, cmp_vector.data() + i, sizeof(block_mask));
                 // Mixed block: fall back to scalar for elements still equal.
                 if (block_mask != 0) {
@@ -415,24 +417,40 @@ static inline size_t compare_integral_column_simd(CompareVector& cmp_vector, con
                     continue;
                 }
 
-                uint64x2_t lhs_u = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i));
+                uint64x2_t gt0, gt1, gt2, gt3;
+                uint64x2_t lt0, lt1, lt2, lt3;
                 if constexpr (std::is_unsigned_v<T>) {
-                    lhs_u = veorq_u64(lhs_u, sign_mask);
+                    uint64x2_t l0 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i));
+                    uint64x2_t l1 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i + 2));
+                    uint64x2_t l2 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i + 4));
+                    uint64x2_t l3 = vld1q_u64(reinterpret_cast<const uint64_t*>(lhs_data + i + 6));
+                    gt0 = vcgtq_u64(l0, rhs_u);
+                    gt1 = vcgtq_u64(l1, rhs_u);
+                    gt2 = vcgtq_u64(l2, rhs_u);
+                    gt3 = vcgtq_u64(l3, rhs_u);
+                    lt0 = vcgtq_u64(rhs_u, l0);
+                    lt1 = vcgtq_u64(rhs_u, l1);
+                    lt2 = vcgtq_u64(rhs_u, l2);
+                    lt3 = vcgtq_u64(rhs_u, l3);
+                } else {
+                    int64x2_t l0 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i));
+                    int64x2_t l1 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i + 2));
+                    int64x2_t l2 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i + 4));
+                    int64x2_t l3 = vld1q_s64(reinterpret_cast<const int64_t*>(lhs_data + i + 6));
+                    gt0 = vcgtq_s64(l0, rhs_s);
+                    gt1 = vcgtq_s64(l1, rhs_s);
+                    gt2 = vcgtq_s64(l2, rhs_s);
+                    gt3 = vcgtq_s64(l3, rhs_s);
+                    lt0 = vcgtq_s64(rhs_s, l0);
+                    lt1 = vcgtq_s64(rhs_s, l1);
+                    lt2 = vcgtq_s64(rhs_s, l2);
+                    lt3 = vcgtq_s64(rhs_s, l3);
                 }
-                int64x2_t lhs_s = vreinterpretq_s64_u64(lhs_u);
-                int64x2_t rhs_s = vreinterpretq_s64_u64(rhs_vec);
-                uint64x2_t gt = vcgtq_s64(lhs_s, rhs_s);
-                uint64x2_t lt = vcgtq_s64(rhs_s, lhs_s);
-                uint64x2_t gt01 = vandq_u64(gt, ones);
-                uint64x2_t lt01 = vandq_u64(lt, ones);
-                int64x2_t cmp = vreinterpretq_s64_u64(vsubq_u64(gt01, lt01));
-                if (sort_order < 0) {
-                    cmp = vnegq_s64(cmp);
-                }
-                vst1q_s64(tmp, cmp);
-                for (size_t k = 0; k < kBlock; ++k) {
-                    cmp_vector[i + k] = static_cast<int8_t>(tmp[k]);
-                }
+
+                int8x8_t gt_mask = narrow_mask_64_to_8(gt0, gt1, gt2, gt3);
+                int8x8_t lt_mask = narrow_mask_64_to_8(lt0, lt1, lt2, lt3);
+                int8x8_t cmp = (sort_order >= 0) ? vsub_s8(lt_mask, gt_mask) : vsub_s8(gt_mask, lt_mask);
+                vst1_s8(reinterpret_cast<int8_t*>(cmp_vector.data() + i), cmp);
             }
         }
 #endif
