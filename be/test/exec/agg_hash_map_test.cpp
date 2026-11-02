@@ -411,6 +411,70 @@ TEST(HashMapTest, ConvertToTwoLevelPreservesEveryDeclaredSetPair) {
                                                                                        Type::phase2_int32);
 }
 
+TEST(HashMapTest, ConvertToTwoLevelInt32IdempotentAndPreservesNullKeyData) {
+    constexpr int kNumKeys = 1000;
+    std::vector<int64_t> values(kNumKeys);
+    for (int i = 0; i < kNumKeys; i++) {
+        values[i] = 2000 + i;
+    }
+    int64_t null_key_value = 987654321;
+
+    RuntimeState state;
+    RuntimeProfile profile("dummy");
+    AggStatistics statis(&profile);
+
+    AggHashMapVariant variant;
+    variant.init(&state, AggHashMapVariant::Type::phase1_int32, &statis);
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (std::is_same_v<MapType, Int32AggHashMapWithOneNumberKey<PhmapSeed1>>) {
+            for (int32_t i = 0; i < kNumKeys; i++) {
+                hash_map_with_key->hash_map.emplace(i, reinterpret_cast<AggDataPtr>(&values[i]));
+            }
+            hash_map_with_key->set_null_key_data(reinterpret_cast<AggDataPtr>(&null_key_value));
+        } else {
+            FAIL() << "unexpected initial map alternative";
+        }
+    });
+
+    variant.convert_to_two_level(&state);
+    ASSERT_EQ(AggHashMapVariant::Type::phase1_int32_two_level, variant.type());
+
+    const void* first_two_level_ptr = nullptr;
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (std::is_same_v<MapType, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>) {
+            first_two_level_ptr = hash_map_with_key.get();
+            ASSERT_NE(nullptr, hash_map_with_key->get_null_key_data());
+            EXPECT_EQ(null_key_value, *reinterpret_cast<int64_t*>(hash_map_with_key->get_null_key_data()));
+        } else {
+            FAIL() << "expected phase1_int32_two_level after first conversion";
+        }
+    });
+
+    // Calling convert_to_two_level a second time on phase1_int32_two_level must be a no-op
+    // that preserves the wrapper instance, null_key_data, and all entries.
+    variant.convert_to_two_level(&state);
+    ASSERT_EQ(AggHashMapVariant::Type::phase1_int32_two_level, variant.type());
+    ASSERT_EQ(static_cast<size_t>(kNumKeys) + 1, variant.size());
+    variant.visit([&](auto& hash_map_with_key) {
+        using MapType = std::remove_reference_t<decltype(*hash_map_with_key)>;
+        if constexpr (std::is_same_v<MapType, Int32TwoLevelAggHashMapWithOneNumberKey<PhmapSeed1>>) {
+            EXPECT_EQ(first_two_level_ptr, hash_map_with_key.get());
+            ASSERT_EQ(static_cast<size_t>(kNumKeys), hash_map_with_key->hash_map.size());
+            for (int32_t i = 0; i < kNumKeys; i++) {
+                auto it = hash_map_with_key->hash_map.find(i);
+                ASSERT_TRUE(it != hash_map_with_key->hash_map.end()) << "missing key " << i;
+                EXPECT_EQ(values[i], *reinterpret_cast<int64_t*>(it->second));
+            }
+            ASSERT_NE(nullptr, hash_map_with_key->get_null_key_data());
+            EXPECT_EQ(null_key_value, *reinterpret_cast<int64_t*>(hash_map_with_key->get_null_key_data()));
+        } else {
+            FAIL() << "expected phase1_int32_two_level after idempotent second conversion";
+        }
+    });
+}
+
 // Guards the latent trap: a combined fixed-size key whose has_null_column is dropped stops
 // writing the null byte into the key and silently merges distinct groups.
 TEST(HashMapTest, CopyAggKeyStateCarriesCombinedFixedSizeFields) {
