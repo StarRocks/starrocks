@@ -730,10 +730,10 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 getPlanFragment(getDumpInfoFromFile("query_dump/nested_view_with_cte"),
                         null, TExplainLevel.NORMAL);
         PlanTestBase.assertContains(replayPair.second, "Project\n"
-                + "  |  <slot 7325> : 7325: count\n"
+                + "  |  <slot 7699> : 7699: count\n"
                 + "  |  limit: 100");
         PlanTestBase.assertContains(replayPair.second, "AGGREGATE (merge finalize)\n"
-                + "  |  output: count(7325: count)\n"
+                + "  |  output: count(7699: count)\n"
                 + "  |  group by: 24: mock_038, 15: mock_003, 108: mock_109, 4: mock_005, 2: mock_110, 2123: case\n"
                 + "  |  limit: 100");
     }
