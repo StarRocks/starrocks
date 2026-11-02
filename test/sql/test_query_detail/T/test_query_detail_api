@@ -11,4 +11,8 @@ shell: curl -s -0 -u 'root:' -D - -o /dev/null '${url}/api/query_detail?event_ti
 shell: curl -s -0 -u 'root:' '${url}/api/query_detail?event_time=0' | python3 -c "import json, sys; d = json.load(sys.stdin); print(len({x['queryId'] for x in d if 'qd_${uuid0}_' in (x.get('sql') or '')}))"
 -- The connection stays usable after a streamed response: the second request reuses it.
 shell: curl -s -u 'root:' -o /dev/null -o /dev/null -w '%{http_code} %{num_connects}\n' '${url}/api/query_detail?event_time=0' '${url}/api/query_detail?event_time=0'
-admin set frontend config ("enable_collect_query_detail_info" = "false");
+-- On a connection that asked for /metrics with gzip first, the streamed window still decodes.
+shell: curl -s --compressed -u 'root:' -o /dev/null '${url}/metrics' '${url}/api/query_detail?event_time=0' | python3 -c "import json, sys; d = json.load(sys.stdin); print(len({x['queryId'] for x in d if 'qd_${uuid0}_' in (x.get('sql') or '')}))"
+CLEANUP {
+    admin set frontend config ("enable_collect_query_detail_info" = "false");
+} END CLEANUP
