@@ -78,8 +78,10 @@ DD_TARGET_AVX2 void delta_decode_chain_int32_avx2(int32_t* buf, int n, int32_t m
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint32_t val =
+                static_cast<uint32_t>(buf[i]) + static_cast<uint32_t>(last_value) + static_cast<uint32_t>(min_delta);
+        buf[i] = static_cast<int32_t>(val);
+        last_value = static_cast<int32_t>(val);
     }
 }
 
@@ -116,8 +118,10 @@ DD_TARGET_AVX512VL void delta_decode_chain_int32_avx2x(int32_t* buf, int n, int3
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint32_t val =
+                static_cast<uint32_t>(buf[i]) + static_cast<uint32_t>(last_value) + static_cast<uint32_t>(min_delta);
+        buf[i] = static_cast<int32_t>(val);
+        last_value = static_cast<int32_t>(val);
     }
 }
 
@@ -158,8 +162,10 @@ DD_TARGET_AVX512F void delta_decode_chain_int32_avx512(int32_t* buf, int n, int3
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint32_t val =
+                static_cast<uint32_t>(buf[i]) + static_cast<uint32_t>(last_value) + static_cast<uint32_t>(min_delta);
+        buf[i] = static_cast<int32_t>(val);
+        last_value = static_cast<int32_t>(val);
     }
 }
 
@@ -200,8 +206,10 @@ DD_TARGET_AVX512F void delta_decode_chain_int64_avx512(int64_t* buf, int n, int6
     }
 
     for (int i = sz; i < n; i++) {
-        buf[i] += last_value + min_delta;
-        last_value = buf[i];
+        uint64_t val =
+                static_cast<uint64_t>(buf[i]) + static_cast<uint64_t>(last_value) + static_cast<uint64_t>(min_delta);
+        buf[i] = static_cast<int64_t>(val);
+        last_value = static_cast<int64_t>(val);
     }
 }
 
@@ -217,6 +225,14 @@ DD_TARGET_AVX512F void delta_decode_chain_int64_avx512(int64_t* buf, int n, int6
 // The AVX-512 path is skipped under ASan: it spills zmm registers to a stack slot ASan aligns to 32
 // (not 64) bytes, so the store touches the redzone and traps. See https://github.com/llvm/llvm-project/issues/91565.
 
+void delta_decode_chain_int32_scalar(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
+    delta_decode_chain_scalar_prefetch<int32_t>(buf, n, min_delta, last_value);
+}
+
+void delta_decode_chain_int64_scalar(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
+    delta_decode_chain_scalar_prefetch<int64_t>(buf, n, min_delta, last_value);
+}
+
 void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& last_value) {
 #if defined(__x86_64__)
 #if !defined(ADDRESS_SANITIZER)
@@ -230,7 +246,7 @@ void delta_decode_chain_int32(int32_t* buf, int n, int32_t min_delta, int32_t& l
         return;
     }
 #endif
-    delta_decode_chain_scalar_prefetch<int32_t>(buf, n, min_delta, last_value);
+    delta_decode_chain_int32_scalar(buf, n, min_delta, last_value);
 }
 
 void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& last_value) {
@@ -240,7 +256,7 @@ void delta_decode_chain_int64(int64_t* buf, int n, int64_t min_delta, int64_t& l
         return;
     }
 #endif
-    delta_decode_chain_scalar_prefetch<int64_t>(buf, n, min_delta, last_value);
+    delta_decode_chain_int64_scalar(buf, n, min_delta, last_value);
 }
 
 } // namespace starrocks
