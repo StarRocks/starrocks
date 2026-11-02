@@ -21,6 +21,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "column/sorting/sort_permute.h"
 #include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
@@ -556,6 +557,97 @@ static void BM_topn_buffered_chunks_tunned(benchmark::State& state) {
     do_bench(state, MergeSort, TYPE_INT, 4096, 2, params);
 }
 
+static void BM_topn_high_low_filter_short_circuit(benchmark::State& state) {
+    ChunkSorterBase suite;
+    suite.SetUp();
+    RuntimeState* runtime_state = suite._runtime_state.get();
+
+    const bool nullable = state.range(0) != 0;
+    const TypeDescriptor type_desc = TYPE_BIGINT_DESC;
+
+    auto expr = std::make_unique<ColumnRef>(type_desc, 0);
+    auto sort_expr = std::make_unique<ExprContext>(expr.get());
+    ASSERT_OK(sort_expr->prepare(runtime_state));
+    ASSERT_OK(sort_expr->open(runtime_state));
+    std::vector<ExprContext*> sort_exprs = {sort_expr.get()};
+    std::vector<bool> asc_arr = {true};
+    std::vector<bool> null_first = {true};
+
+    auto build_chunk = [&](const std::vector<int64_t>& values) -> ChunkPtr {
+        MutableColumnPtr col = ColumnHelper::create_column(type_desc, nullable);
+        for (int64_t v : values) {
+            col->append_datum(Datum(v));
+        }
+        if (nullable) {
+            down_cast<NullableColumn*>(col.get())->update_has_null();
+            DCHECK(!col->has_null());
+        }
+        Columns columns;
+        columns.push_back(std::move(col));
+        Chunk::SlotHashMap map;
+        map[0] = 0;
+        return std::make_shared<Chunk>(std::move(columns), map);
+    };
+
+    // Seed 1 chunk with low int64_t values [1..4096]
+    std::vector<int64_t> seed_values(kTestChunkSize);
+    for (int i = 0; i < kTestChunkSize; ++i) {
+        seed_values[i] = static_cast<int64_t>(i + 1);
+    }
+    ChunkPtr seed_chunk = build_chunk(seed_values);
+
+    // 64 chunks with higher int64_t values [100000..200000]
+    constexpr size_t num_high_chunks = 64;
+    std::vector<ChunkPtr> high_chunks;
+    high_chunks.reserve(num_high_chunks);
+    std::mt19937_64 rng(0x12345678DE);
+    std::uniform_int_distribution<int64_t> dist(100'000, 200'000);
+    std::vector<int64_t> high_values(kTestChunkSize);
+    for (size_t c = 0; c < num_high_chunks; ++c) {
+        for (int i = 0; i < kTestChunkSize; ++i) {
+            high_values[i] = dist(rng);
+        }
+        high_chunks.push_back(build_chunk(high_values));
+    }
+
+    constexpr int limit = 10;
+    constexpr int max_buffered_chunks = 16;
+    int64_t items_processed = 0;
+
+    for (auto _ : state) {
+        RuntimeProfile profile("dummy");
+        auto sorter = std::make_unique<ChunksSorterTopn>(runtime_state, &sort_exprs, &asc_arr, &null_first, "",
+                                                         /*offset=*/0, /*limit=*/limit, TTopNType::ROW_NUMBER,
+                                                         ChunksSorterTopn::kDefaultMaxBufferRows,
+                                                         ChunksSorterTopn::kDefaultMaxBufferBytes, max_buffered_chunks);
+        sorter->setup_runtime(runtime_state, &profile, runtime_state->instance_mem_tracker());
+
+        ASSERT_TRUE(sorter->update(runtime_state, seed_chunk).ok());
+
+        for (size_t c = 0; c < num_high_chunks; ++c) {
+            ASSERT_TRUE(sorter->update(runtime_state, high_chunks[c]).ok());
+        }
+
+        ASSERT_TRUE(sorter->done(runtime_state).ok());
+
+        bool eos = false;
+        size_t actual_rows = 0;
+        while (!eos) {
+            ChunkPtr page;
+            ASSERT_TRUE(sorter->get_next(&page, &eos).ok());
+            if (eos) break;
+            actual_rows += page->num_rows();
+        }
+        ASSERT_TRUE(eos);
+        ASSERT_EQ(limit, actual_rows);
+
+        items_processed += (1 + num_high_chunks) * kTestChunkSize;
+    }
+
+    state.SetItemsProcessed(items_processed);
+    suite.TearDown();
+}
+
 // Merge sorted runs
 static void BM_merge_heap(benchmark::State& state) {
     do_heap_merge(state, state.range(0), true);
@@ -633,6 +725,7 @@ BENCHMARK(BM_topn_limit_mergesort_nullable)->Apply(CustomArgsLimit);
 // Tunning the parameter buffered_chunks of TopN
 BENCHMARK(BM_topn_buffered_chunks)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
 BENCHMARK(BM_topn_buffered_chunks_tunned)->RangeMultiplier(4)->Ranges({{10, 10'000}, {100, 100'000}});
+BENCHMARK(BM_topn_high_low_filter_short_circuit)->Arg(0)->Arg(1);
 
 // Merge
 BENCHMARK(BM_merge_heap)->DenseRange(2, 64, 4);

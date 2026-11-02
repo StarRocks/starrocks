@@ -254,29 +254,29 @@ static void prepare_compare(std::vector<int8_t>& cmp, std::vector<T>& lhs, int z
     }
 }
 
-#define DEFINE_COMPARE_BENCH(TYPE, NAME)                                               \
-    static void BM_Compare##NAME##_Scalar(benchmark::State& state) {                   \
-        std::vector<int8_t> cmp_init;                                                  \
-        std::vector<TYPE> lhs;                                                         \
-        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));        \
-        for (auto _ : state) {                                                         \
-            std::vector<int8_t> cmp = cmp_init;                                        \
-            compare_integral_scalar<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);    \
-            benchmark::DoNotOptimize(cmp.data());                                      \
-        }                                                                              \
-    }                                                                                  \
-    static void BM_Compare##NAME##_SIMD(benchmark::State& state) {                     \
-        std::vector<int8_t> cmp_init;                                                  \
-        std::vector<TYPE> lhs;                                                         \
-        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));        \
-        for (auto _ : state) {                                                         \
-            std::vector<int8_t> cmp = cmp_init;                                        \
-            compare_integral_simd<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);      \
-            benchmark::DoNotOptimize(cmp.data());                                      \
-        }                                                                              \
-    }                                                                                  \
-    BENCHMARK(BM_Compare##NAME##_Scalar)->Arg(0)->Arg(50)->Arg(90)->Arg(99)->Arg(100); \
-    BENCHMARK(BM_Compare##NAME##_SIMD)->Arg(0)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
+#define DEFINE_COMPARE_BENCH(TYPE, NAME)                                                                \
+    static void BM_Compare##NAME##_Scalar(benchmark::State& state) {                                    \
+        std::vector<int8_t> cmp_init;                                                                   \
+        std::vector<TYPE> lhs;                                                                          \
+        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));                         \
+        for (auto _ : state) {                                                                          \
+            std::vector<int8_t> cmp = cmp_init;                                                         \
+            compare_integral_scalar<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);                     \
+            benchmark::DoNotOptimize(cmp.data());                                                       \
+        }                                                                                               \
+    }                                                                                                   \
+    static void BM_Compare##NAME##_SIMD(benchmark::State& state) {                                      \
+        std::vector<int8_t> cmp_init;                                                                   \
+        std::vector<TYPE> lhs;                                                                          \
+        prepare_compare<TYPE>(cmp_init, lhs, static_cast<int>(state.range(0)));                         \
+        for (auto _ : state) {                                                                          \
+            std::vector<int8_t> cmp = cmp_init;                                                         \
+            compare_integral_simd<TYPE>(cmp.data(), lhs.data(), TYPE{0}, kChunk);                       \
+            benchmark::DoNotOptimize(cmp.data());                                                       \
+        }                                                                                               \
+    }                                                                                                   \
+    BENCHMARK(BM_Compare##NAME##_Scalar)->Arg(0)->Arg(1)->Arg(12)->Arg(50)->Arg(90)->Arg(99)->Arg(100); \
+    BENCHMARK(BM_Compare##NAME##_SIMD)->Arg(0)->Arg(1)->Arg(12)->Arg(50)->Arg(90)->Arg(99)->Arg(100);
 
 DEFINE_COMPARE_BENCH(int8_t, Int8)
 DEFINE_COMPARE_BENCH(int32_t, Int32)
