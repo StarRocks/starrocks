@@ -39,8 +39,23 @@ the same category.
 ## Rules
 
 1. **Every function that reads coordinates checks structural validity per row, from the row's own WKB.**
-   This is mandatory: skipping it can misread coordinates or read out of bounds. Use `WkbCodec::parse_wkb`,
-   `inspect_geo_wkb`, or a fast path that checks the header first (for example `decode_canonical_xy_point`).
+   This is mandatory: skipping it can misread coordinates or read out of bounds. The helpers check different things:
+
+   - **Full validation: `WkbCodec::parse_wkb`** with the semantics of the column (`GEOGRAPHY_CRS84` or
+     `GEOMETRY_CARTESIAN`). It enforces every rule above: XY type codes only, lengths, ring closure and minimum
+     positions, finite coordinates (with the `POINT EMPTY` exception), and CRS84 ranges for GEOGRAPHY. This is the
+     reference a kernel must match.
+   - **Layout inspection: `inspect_geo_wkb`.** It walks headers and counts and bounds-checks lengths, and reports the
+     geometry type and dimension. It does **not** enforce the contract: it accepts Z/M payloads, and it skips coordinate
+     arrays without checking finiteness, CRS84 ranges or ring constraints. Use it only to look at a row's layout, and
+     then reject what the kernel does not support (for example `info.dimension != GEO_DIMENSION_XY`) and still run
+     full validation before using coordinates.
+   - **Fast paths** that read bytes directly (for example `decode_canonical_xy_point`) must enforce themselves
+     everything `parse_wkb` would for the rows they accept: the exact canonical header (byte order and XY type code),
+     the exact length, finite coordinates, and, for GEOGRAPHY, CRS84 ranges (`is_valid_crs84_coordinate`). Any row a
+     fast path does not fully handle, including `POINT EMPTY`, falls back to `parse_wkb`; a fast path may only accept
+     rows that `parse_wkb` accepts, with the same coordinates.
+
    A structurally invalid row makes a compute function return an error; constructors (`ST_GeomFromText/WKB`,
    `ST_GeogFromText/WKB`) turn unparseable input into NULL instead.
 
