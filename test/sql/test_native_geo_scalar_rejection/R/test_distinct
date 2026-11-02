@@ -5,15 +5,15 @@ CREATE TABLE geo_distinct_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id) D
 INSERT INTO geo_distinct_${uuid0} VALUES (1, 'POINT (1 2)'), (2, 'POINT (1 2)'), (3, 'POINT (3 4)'), (4, NULL), (5, 'POINT EMPTY');
 -- result:
 -- !result
-function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types")
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t where id >= 4", "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types")
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t where id >= 4", "DISTINCT aggregation is not supported for GEOGRAPHY type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select count(distinct id, g) over (partition by id) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types")
+function: assert_query_error_contains("select count(distinct id, g) over (partition by id) from (select id, ST_GeogFromText(wkt) g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY type")
 -- result:
 None
 -- !result
@@ -31,15 +31,15 @@ CREATE TABLE geo_distinct_${uuid0} (id INT, wkt VARCHAR(64)) DUPLICATE KEY(id) D
 INSERT INTO geo_distinct_${uuid0} VALUES (1, 'POINT (1 2)'), (2, 'POINT (1 2)'), (3, 'POINT (3 4)'), (4, NULL), (5, 'POINT EMPTY');
 -- result:
 -- !result
-function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types")
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOMETRY type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t where id >= 4", "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types")
+function: assert_query_error_contains("select count(distinct id, g) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t where id >= 4", "DISTINCT aggregation is not supported for GEOMETRY type")
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select count(distinct id, g) over (partition by id) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types")
+function: assert_query_error_contains("select count(distinct id, g) over (partition by id) from (select id, ST_GeomFromText(wkt, 'EPSG:3857') g from geo_distinct_${uuid0}) t", "DISTINCT aggregation is not supported for GEOMETRY type")
 -- result:
 None
 -- !result

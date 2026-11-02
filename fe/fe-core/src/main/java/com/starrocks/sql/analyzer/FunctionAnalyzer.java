@@ -84,6 +84,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -307,24 +308,15 @@ public class FunctionAnalyzer {
                     functionCallExpr.getPos());
         }
 
-        // DISTINCT aggregation over a PERCENTILE value has no meaning and no rewrite: unlike
-        // count(distinct bitmap) / count(distinct hll) -- which the optimizer rewrites to
-        // bitmap_union_count / hll cardinality -- a PERCENTILE cannot be de-duplicated, so the
-        // call reaches the BE as a raw distinct aggregate. There it is dispatched to the
-        // string/binary distinct path and down_casts the PercentileColumn to a BinaryColumn it is
-        // not, which aborts a debug build (casts.h down_cast on BinaryColumnBase) and dereferences
-        // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
-        // GEO has no equality/hash. The multi-argument COUNT DISTINCT rewrite would otherwise
-        // look up a missing IF overload for geo and NPE.
         if (fnParams.isDistinct()) {
             for (Expr child : functionCallExpr.getChildren()) {
                 Type type = child.getType();
-                boolean percentile = type.isPercentile();
-                if (percentile || type.isGeoType() || type.hasNestedGeoType()) {
-                    throw new SemanticException(
-                            "DISTINCT aggregation is not supported for " +
-                                    (percentile ? "PERCENTILE type" : "GEOGRAPHY/GEOMETRY types") + ": " +
-                                    ExprToSql.toSql(functionCallExpr),
+                // PERCENTILE has no distinct rewrite and would reach the BE's binary distinct path;
+                // GEO has no equality/hash (and the multi-argument COUNT DISTINCT rewrite would look up
+                // a missing IF overload).
+                if (type.isPercentile() || type.isGeoType() || type.hasNestedGeoType()) {
+                    throw new SemanticException("DISTINCT aggregation is not supported for " +
+                            type.toSql().toUpperCase(Locale.ROOT) + " type: " + ExprToSql.toSql(functionCallExpr),
                             functionCallExpr.getPos());
                 }
             }

@@ -647,8 +647,9 @@ public class AnalyzeAggregateTest {
 
     @Test
     public void testDistinctOverGeo() {
-        String error = "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types";
         for (String constructor : List.of("ST_GeogFromText(%s)", "ST_GeomFromText(%s, 'EPSG:3857')")) {
+            String geoName = constructor.startsWith("ST_Geog") ? "GEOGRAPHY" : "GEOMETRY";
+            String error = "DISTINCT aggregation is not supported for " + geoName + " type";
             String source = " from (select v1, v2, "
                     + String.format(constructor, "if(v1 IS NULL, NULL, 'POINT (1 2)')") + " g from t0) t";
             analyzeFail("select count(distinct v1, g)" + source, error);
@@ -677,6 +678,7 @@ public class AnalyzeAggregateTest {
                 "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
             Type geo = ((QueryStatement) analyzeSuccess("select " + geoSql)).getQueryRelation()
                     .getRelationFields().getFieldByIndex(0).getType();
+            String geoName = geo.getPrimitiveType().name();
             for (Type type : List.of(geo, new ArrayType(geo), new MapType(VarcharType.VARCHAR, geo),
                     new StructType(List.of(geo)), new ArrayType(new StructType(List.of(geo))))) {
                 SlotRef argument = new SlotRef(null, "g");
@@ -689,8 +691,14 @@ public class AnalyzeAggregateTest {
                 // Call the owning guard directly: SQL analysis rejects nested geo earlier via 7.0a.
                 SemanticException error = Assertions.assertThrows(SemanticException.class,
                         () -> FunctionAnalyzer.analyze(call));
-                Assertions.assertTrue(error.getMessage().contains(
-                        "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types"), error.getMessage());
+                String expectedPrefix = "DISTINCT aggregation is not supported for ";
+                if (type.isGeoType()) {
+                    expectedPrefix += geoName + " type";
+                } else if (type.isArrayType() && ((ArrayType) type).getItemType().isGeoType()) {
+                    expectedPrefix += "ARRAY<" + geoName + "> type";
+                }
+                Assertions.assertTrue(error.getMessage().contains(expectedPrefix), error.getMessage());
+                Assertions.assertTrue(error.getMessage().contains(geoName), error.getMessage());
             }
         }
     }
