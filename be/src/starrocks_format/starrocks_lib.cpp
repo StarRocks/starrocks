@@ -30,6 +30,7 @@
 #include "fs/fs_s3.h"
 #include "platform/aws/aws_sdk_guard.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "types/time_types.h"
 
@@ -78,7 +79,11 @@ void starrocks_format_initialize(void) {
         CHECK(ge_init_stat.ok()) << "init runtime env error";
 
         auto lake_location_provider = std::make_shared<FixedLocationProvider>("");
-        _lake_tablet_manager = new lake::TabletManager(lake_location_provider, config::lake_metadata_cache_limit);
+        const int64_t process_mem_limit = RuntimeEnv::GetInstance()->process_mem_limit();
+        _lake_tablet_manager = new lake::TabletManager(
+                lake_location_provider,
+                lake::metacache_capacity(process_mem_limit, config::lake_tablet_metadata_cache_limit_percent),
+                lake::metacache_capacity(process_mem_limit, config::lake_segment_metadata_cache_limit_percent));
         LOG(INFO) << "starrocks format module has been initialized successfully";
         _starrocks_format_inited = true;
     } else {

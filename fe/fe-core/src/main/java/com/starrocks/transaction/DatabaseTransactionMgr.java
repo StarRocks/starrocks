@@ -104,6 +104,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.LongPredicate;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
@@ -568,6 +569,8 @@ public class DatabaseTransactionMgr {
             } catch (Throwable t) {
                 LOG.warn("transaction after state transform failed: {}", transactionState, t);
             }
+            // the commit went through, so the rows of the tablets it skipped are lost now
+            TxnStateLogUtils.logIgnoredTablets(copiedState);
 
             // 6. update nextVersion because of the failure of persistent transaction resulting in error version
             Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
@@ -971,6 +974,117 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    /**
+     * Find, per physical partition, the running transactions of this database that may write to it.
+     * <p>
+     * A transaction is reported as conflicting when either
+     * <ul>
+     *   <li>it is already COMMITTED and its commit info covers the partition, or</li>
+     *   <li>it is still in flight (PREPARE/PREPARED) and its tablet sink has registered the partition as a
+     *       write target, see {@link TransactionState#getLoadedPhysicalPartitionIds}.</li>
+     * </ul>
+     * Each running transaction is looked at once whatever the number of partitions, so the cost stays linear
+     * even when a load targets every one of the thousands of partitions that a whole table optimize replaces.
+     * Callers that are about to replace or drop those partitions must invoke this while holding the table write
+     * lock, so that no transaction can commit in between.
+     * <p>
+     * An explicit transaction joins this manager only right before its statement starts writing, after its plan
+     * registered the write targets. Callers go through
+     * {@link GlobalTransactionMgr#getConflictingTxnIdsByPartition(long, long, Set)}, which covers that window.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     * @return physical partition id -> ids of the conflicting transactions, only for the partitions that have any
+     */
+    public Map<Long, List<Long>> getConflictingTxnIdsByPartition(long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<Long, List<Long>> conflictingTxnIds = Maps.newHashMap();
+        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
+            for (Long physicalPartitionId : getTouchedPartitions(txn, tableId, physicalPartitionIds)) {
+                conflictingTxnIds.computeIfAbsent(physicalPartitionId, id -> Lists.newArrayList())
+                        .add(txn.getTransactionId());
+            }
+        }
+        return conflictingTxnIds;
+    }
+
+    /**
+     * The given physical partitions that a COMMITTED, not yet VISIBLE transaction of the table covers.
+     * <p>
+     * One pass over one snapshot of the running transactions of the table, however many partitions are checked.
+     * Checking them one at a time with {@link GlobalTransactionMgr#existCommittedTxns} copies and sorts every
+     * committed transaction of the database for each of them, see {@link #getCommittedTxnList()}, which adds up
+     * while a caller holds the table lock over all the temp partitions of a job.
+     *
+     * @param physicalPartitionIds physical partition ids, NOT logical partition ids
+     */
+    public Set<Long> getPhysicalPartitionsWithCommittedTxns(long tableId, Set<Long> physicalPartitionIds) {
+        if (physicalPartitionIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        Set<Long> partitionsWithCommittedTxns = Sets.newHashSet();
+        for (TransactionState txn : getRunningTxnsOfTable(tableId)) {
+            if (txn.getTransactionStatus() != TransactionStatus.COMMITTED) {
+                continue;
+            }
+            TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+            if (tableCommitInfo != null && tableCommitInfo.getIdToPartitionCommitInfo() != null) {
+                addIntersection(tableCommitInfo.getIdToPartitionCommitInfo().keySet(), physicalPartitionIds,
+                        partitionsWithCommittedTxns);
+            }
+        }
+        return partitionsWithCommittedTxns;
+    }
+
+    private List<TransactionState> getRunningTxnsOfTable(long tableId) {
+        // Take a snapshot under the transaction manager lock and evaluate the candidates outside of it:
+        // transaction level locks are taken before the manager lock elsewhere (see abortTransaction),
+        // so holding both at the same time would invert the lock order.
+        readLock();
+        try {
+            return idToRunningTransactionState.values().stream()
+                    .filter(txn -> txn.isRunning() && txn.getTableIdList().contains(tableId))
+                    .collect(Collectors.toList());
+        } finally {
+            readUnlock();
+        }
+    }
+
+    /**
+     * The given physical partitions that the transaction committed into or may still write to.
+     */
+    static Set<Long> getTouchedPartitions(TransactionState txn, long tableId, Set<Long> physicalPartitionIds) {
+        Set<Long> touched = Sets.newHashSet();
+        TableCommitInfo tableCommitInfo = txn.getTableCommitInfo(tableId);
+        Map<Long, PartitionCommitInfo> committedPartitions = tableCommitInfo == null ? null
+                : tableCommitInfo.getIdToPartitionCommitInfo();
+        if (committedPartitions != null) {
+            addIntersection(committedPartitions.keySet(), physicalPartitionIds, touched);
+            // Once committed, no more partitions can be written. Planned targets may include partitions
+            // that received no rows, so the actual commit metadata (even an empty map) is authoritative.
+            if (txn.getTransactionStatus() == TransactionStatus.COMMITTED) {
+                return touched;
+            }
+        }
+        // Keep the conservative planning fallback while in flight or when commit metadata is missing.
+        addIntersection(txn.getLoadedPhysicalPartitionIds(tableId), physicalPartitionIds, touched);
+        return touched;
+    }
+
+    // Iterates the smaller set, so a load that targets every partition costs one pass over its targets
+    private static void addIntersection(Set<Long> left, Set<Long> right, Set<Long> intersection) {
+        Set<Long> smaller = left.size() <= right.size() ? left : right;
+        Set<Long> larger = smaller == left ? right : left;
+        for (Long id : smaller) {
+            if (larger.contains(id)) {
+                intersection.add(id);
+            }
+        }
+    }
+
     public Map<Long, Long> getLakeCompactionActiveTxnMap() {
         readLock();
         try {
@@ -1026,6 +1140,11 @@ public class DatabaseTransactionMgr {
     private record PartitionCommitState(long version, List<Long> loadedIndexIds) {
     }
 
+    private boolean hasSentPublishTask(long txnId) {
+        TransactionState state = idToRunningTransactionState.get(txnId);
+        return state != null && state.hasSendTask();
+    }
+
     public List<TransactionStateBatch> getReadyToPublishTxnListBatch() {
         List<TransactionStateBatch> result = new ArrayList<>();
         readLock();
@@ -1033,15 +1152,22 @@ public class DatabaseTransactionMgr {
         try {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
             for (long txnId : txnIds) {
+                // A head that was already sent belongs to a publish attempt that did not finish. Retry it with
+                // only the txns of that attempt, the only ones sent: taking in txns committed since would move
+                // every partition's new version and waste what the attempt already published. Such a retry is
+                // as big as the attempt was, even below lake_batch_publish_min_version_num.
+                TransactionState head = idToRunningTransactionState.get(txnId);
+                boolean retryLastAttempt = Config.lake_enable_batch_publish_retry_freeze
+                        && head != null && head.hasSendTask();
+                int minBatchSize = retryLastAttempt ? 1 : Config.lake_batch_publish_min_version_num;
+                LongPredicate canJoin = retryLastAttempt ? this::hasSentPublishTask : id -> true;
                 List<Long> txnsWithDependency;
                 if (Config.lake_enable_batch_publish_multi_table) {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
-                            Config.lake_batch_publish_min_version_num,
-                            Config.lake_batch_publish_max_version_num, txnId);
+                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 } else {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                            Config.lake_batch_publish_min_version_num,
-                            Config.lake_batch_publish_max_version_num, txnId);
+                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
@@ -1338,10 +1464,7 @@ public class DatabaseTransactionMgr {
                         // partition maybe dropped between commit and publish version, ignore this error
                         if (physicalPartition == null) {
                             droppedPartitionIds.add(physicalPartitionId);
-                            LOG.warn(
-                                    "partition {} is dropped, skip version check and remove it from transaction state {}",
-                                    physicalPartitionId,
-                                    copiedState);
+                            TxnStateLogUtils.logDroppedCommittedPartition(copiedState, tableId, physicalPartitionId);
                             continue;
                         }
                         // The version of a replication transaction may not continuously

@@ -86,8 +86,8 @@ public:
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                new starrocks::lake::TabletManager(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = new starrocks::lake::TabletManager(_location_provider, _primary_key_manager.get(),
+                                                             1024 * 1024, 1024 * 1024);
     }
 
     void TearDown() override {
@@ -2662,7 +2662,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
     EXPECT_EQ(std::vector<int32_t>({77, 77, 77}), hidden);
     for (bool fill_cache : {false, true}) {
         SCOPED_TRACE(fill_cache);
-        const auto cache_size = _tablet_manager->metacache()->memory_usage();
+        const auto cache_size = _tablet_manager->metacache()->segment_metadata_memory_usage();
         const auto rejected_before = segment_cache_schema_reject_count();
         auto requested_file = data.file_info;
         if (fill_cache) requested_file.fs.reset(); // Also exercise the cached Segment's shared filesystem.
@@ -2678,7 +2678,7 @@ TEST_F(LakeTabletManagerTest, load_segment_schema_mismatch_reads_physical_values
         EXPECT_EQ(std::vector<int32_t>({101, 102, 103}), values);
         EXPECT_EQ(fill_cache ? reopened.get() : cached.get(),
                   _tablet_manager->metacache()->lookup_segment(cache_key).get());
-        if (!fill_cache) EXPECT_EQ(cache_size, _tablet_manager->metacache()->memory_usage());
+        if (!fill_cache) EXPECT_EQ(cache_size, _tablet_manager->metacache()->segment_metadata_memory_usage());
 
         OlapReaderStatistics repeated_stats;
         ASSIGN_OR_ABORT(auto repeated, _tablet_manager->load_segment(data.file_info, 0, &footer_hint, options,

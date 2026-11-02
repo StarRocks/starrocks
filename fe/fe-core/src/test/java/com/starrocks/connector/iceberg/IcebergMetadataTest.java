@@ -4143,6 +4143,33 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testPositionDeleteAfterUpgradeToV3ExplainsStaleMetadata() throws Exception {
+        // Planned against format-version-2 metadata, so the BE wrote a Parquet position delete; another
+        // engine upgraded the table to v3 before the commit, and Iceberg now accepts only DVs.
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_upgraded_before_commit", 2);
+        table.newFastAppend().appendFile(FILE_A).commit();
+        long snapshotId = table.currentSnapshot().snapshotId();
+        table.updateProperties().set(TableProperties.FORMAT_VERSION, "3").commit();
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> commitPositionDeleteOfFileA(table, table.spec().specId(), "data_bucket=0/", "0"));
+        Assertions.assertTrue(ex.getMessage().contains("iceberg_db.iceberg_table was upgraded to a newer format " +
+                "version after this statement was planned"), ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Run REFRESH EXTERNAL TABLE " + CATALOG_NAME
+                + ".iceberg_db.iceberg_table and retry the statement."), ex.getMessage());
+        table.refresh();
+        Assertions.assertEquals(snapshotId, table.currentSnapshot().snapshotId());
+    }
+
+    @Test
+    public void testCommitFailureMessageKeepsOtherErrors() {
+        Assertions.assertEquals("boom", IcebergMetadata.commitFailureMessage(
+                new IllegalArgumentException("boom"), "c", "db", "t"));
+        Assertions.assertEquals("boom", IcebergMetadata.commitFailureMessage(
+                new RuntimeException("boom"), "c", "db", "t"));
+    }
+
+    @Test
     public void testOtherSpecLookupStopsAtFirstCompleteCacheHit() throws Exception {
         TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_other_spec_cache_hit", 2);
         // Two spec-0 manifests; the newest one, listed first, holds FILE_A.

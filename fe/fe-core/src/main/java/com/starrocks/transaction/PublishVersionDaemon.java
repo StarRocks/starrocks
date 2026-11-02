@@ -595,6 +595,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
+                    countBatchRetry(state);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
@@ -633,11 +634,19 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(batchTableIdList);
+                    countBatchRetry(txnStateBatch.transactionStates.get(0));
 
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
                     future.thenRun(() -> batchTableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             }
+        }
+    }
+
+    // A batch whose first txn was already sent retries an attempt that did not finish.
+    private static void countBatchRetry(TransactionState head) {
+        if (head.hasSendTask()) {
+            MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_RETRY.increase(1L);
         }
     }
 

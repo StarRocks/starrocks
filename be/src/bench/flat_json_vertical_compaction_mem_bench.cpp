@@ -411,7 +411,7 @@ public:
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
         _tablet_manager =
                 std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 512 * 1024 * 1024,
-                                                PlatformEnv::GetInstance()->store_path_registry());
+                                                512 * 1024 * 1024, PlatformEnv::GetInstance()->store_path_registry());
         return Status::OK();
     }
 

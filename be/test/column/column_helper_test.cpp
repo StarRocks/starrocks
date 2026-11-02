@@ -100,6 +100,48 @@ TEST_F(ColumnHelperTest, align_return_type) {
     ASSERT_FALSE(nullable_column->is_constant());
 }
 
+TEST_F(ColumnHelperTest, materialize_const_column) {
+    // A NULL literal is a Nullable(Int8) column; materializing it must give an all-NULL column of the given type.
+    auto null_col =
+            ColumnHelper::materialize_const_column(TYPE_VARCHAR_DESC, 3, ColumnHelper::create_const_null_column(1));
+    ASSERT_FALSE(null_col->is_constant());
+    ASSERT_FALSE(null_col->only_null());
+    ASSERT_EQ(3, null_col->size());
+    ASSERT_TRUE(down_cast<const NullableColumn*>(null_col.get())->data_column()->is_binary());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_TRUE(null_col->is_null(i));
+    }
+
+    // A non-NULL constant is duplicated, and a shared reference to it is left untouched.
+    auto inner = Int32Column::create();
+    inner->append(7);
+    ColumnPtr const_col = ConstColumn::create(std::move(inner), 1);
+    ColumnPtr shared = const_col;
+    auto col = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(const_col));
+    ASSERT_FALSE(col->is_constant());
+    ASSERT_EQ(3, col->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, col->get(i).get_int32());
+    }
+    ASSERT_EQ(1, shared->size());
+    ASSERT_EQ(1, down_cast<const ConstColumn*>(shared.get())->data_column()->size());
+
+    // A shared non-constant column is copied on write: the result keeps the contents, and the other owner is untouched.
+    const Column* plain_addr = col.get();
+    ColumnPtr plain = col;
+    auto copied = ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(col));
+    ASSERT_NE(plain_addr, copied.get());
+    ASSERT_EQ(plain_addr, plain.get());
+    ASSERT_EQ(3, copied->size());
+    for (size_t i = 0; i < 3; ++i) {
+        ASSERT_EQ(7, copied->get(i).get_int32());
+        ASSERT_EQ(7, plain->get(i).get_int32());
+    }
+
+    // A non-constant column owned only by the caller is returned as is.
+    ASSERT_EQ(plain_addr, ColumnHelper::materialize_const_column(TYPE_INT_DESC, 3, std::move(plain)).get());
+}
+
 TEST_F(ColumnHelperTest, get_data_column_by_type) {
     auto column = create_nullable_column();
     const auto* data_column = ColumnHelper::get_data_column_by_type<TYPE_VARCHAR>(column.get());

@@ -133,7 +133,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_shared<FixedLocationProvider>(_test_directory);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
         _schema_service = _tablet_manager->table_schema_service();
     }
 
