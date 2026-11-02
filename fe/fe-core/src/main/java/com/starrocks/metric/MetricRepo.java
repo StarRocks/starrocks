@@ -384,6 +384,9 @@ public final class MetricRepo {
     public static LeaderAwareCounterMetricLong COUNTER_LAKE_COMPACTION_FAILED;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING;
     public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_COMPACTION_RUNNING_TASKS;
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_COMMIT_THROTTLED;
+    public static LeaderAwareCounterMetricLong COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS;
+    public static LeaderAwareGaugeMetric<Long> GAUGE_LAKE_INGEST_SLOWDOWN_ACTIVE;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
@@ -1144,6 +1147,24 @@ public final class MetricRepo {
             }
         };
         STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_COMPACTION_RUNNING_TASKS);
+        // The ingestion slowdown (CommitRateLimiter) only logged until now, so a load slowed by a high
+        // compaction score was indistinguishable from one slowed by the write itself.
+        COUNTER_TXN_COMMIT_THROTTLED = new LeaderAwareCounterMetricLong("txn_commit_throttled_total",
+                MetricUnit.REQUESTS, "counter of transaction commits delayed by the lake ingestion slowdown");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_COMMIT_THROTTLED);
+        COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS = new LeaderAwareCounterMetricLong(
+                "txn_commit_throttle_delay_ms_total", MetricUnit.MILLISECONDS,
+                "total milliseconds transaction commits were delayed by the lake ingestion slowdown");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS);
+        GAUGE_LAKE_INGEST_SLOWDOWN_ACTIVE = new LeaderAwareGaugeMetricLong("lake_ingest_slowdown_active",
+                MetricUnit.NOUNIT,
+                "number of partitions whose compaction score currently delays or rejects commits into them") {
+            @Override
+            public Long getValueLeader() {
+                return GlobalStateMgr.getCurrentState().getCompactionMgr().getIngestSlowdownPartitionCount();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(GAUGE_LAKE_INGEST_SLOWDOWN_ACTIVE);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PUBLISH_VERSION_DAEMON_LOOP);
         COUNTER_ROUTINE_LOAD_ROWS =
                 new LongCounterMetric("routine_load_rows", MetricUnit.ROWS, "total rows of routine load");

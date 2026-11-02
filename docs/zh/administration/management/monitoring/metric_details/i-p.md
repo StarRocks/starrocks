@@ -354,6 +354,12 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 描述：成功的存算分离（lake）压缩任务计数。
 
+## `lake_ingest_slowdown_active`
+
+- 单位：计数
+- 类型：瞬时
+- 描述：存算分离（lake）表中，当前 Compaction Score 会导致写入该分区的提交被延迟或拒绝的分区数量，即 Compaction Score 高于 `lake_ingest_slowdown_threshold`（延迟）或 `lake_compaction_score_upper_bound`（拒绝）的分区数量。取值为 `0` 表示当前没有导入被导入限流（ingestion slowdown）减速；当 `lake_enable_ingest_slowdown` 为 `false` 时始终为 `0`。该指标带有 `is_leader` 标签；Follower FE 会以 `is_leader="false"` 导出该指标且取值为 0，因此面板应通过 `is_leader="true"` 进行筛选。
+
 ## `lake_pk_index_cache_delvec_bytes`
 
 - 单位：字节

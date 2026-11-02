@@ -20,6 +20,9 @@ import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.metric.LeaderAwareCounterMetricLong;
+import com.starrocks.metric.Metric.MetricUnit;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
@@ -386,6 +389,69 @@ public class CommitRateLimiterTest {
         // This time commit should be denied by the lake_compaction_score_upper_bound
         Assertions.assertThrows(CommitFailedException.class,
                 () -> limiter.check(partitions, newCurrentTimeMs));
+    }
+
+    @Test
+    public void testThrottleMetrics() throws CommitRateExceededException {
+        long partitionId = 54321;
+        Set<Long> partitions = new HashSet<>(Collections.singletonList(partitionId));
+
+        long currentTimeMs = System.currentTimeMillis();
+        transactionState.setPrepareTime(currentTimeMs - 100);
+        transactionState.setWriteEndTimeMs(currentTimeMs);
+        transactionState.setWriteDurationMs(10_000);
+        compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
+                Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+
+        boolean oldInit = MetricRepo.hasInit;
+        LeaderAwareCounterMetricLong oldThrottled = MetricRepo.COUNTER_TXN_COMMIT_THROTTLED;
+        LeaderAwareCounterMetricLong oldDelay = MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS;
+        try {
+            MetricRepo.COUNTER_TXN_COMMIT_THROTTLED = new LeaderAwareCounterMetricLong(
+                    "txn_commit_throttled_total", MetricUnit.REQUESTS, "");
+            MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS = new LeaderAwareCounterMetricLong(
+                    "txn_commit_throttle_delay_ms_total", MetricUnit.MILLISECONDS, "");
+            MetricRepo.hasInit = true;
+
+            CommitRateExceededException e = Assertions.assertThrows(CommitRateExceededException.class,
+                    () -> limiter.check(partitions, currentTimeMs));
+            long delayMs = e.getAllowCommitTime() - currentTimeMs;
+            Assertions.assertTrue(delayMs > 0);
+            Assertions.assertEquals(1L, MetricRepo.COUNTER_TXN_COMMIT_THROTTLED.getValueLeader());
+            Assertions.assertEquals(delayMs, MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS.getValueLeader());
+
+            // The retry once the delay has passed commits and is not counted as another throttle.
+            limiter.check(partitions, e.getAllowCommitTime());
+            Assertions.assertEquals(1L, MetricRepo.COUNTER_TXN_COMMIT_THROTTLED.getValueLeader());
+            Assertions.assertEquals(delayMs, MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS.getValueLeader());
+        } finally {
+            MetricRepo.hasInit = oldInit;
+            MetricRepo.COUNTER_TXN_COMMIT_THROTTLED = oldThrottled;
+            MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS = oldDelay;
+        }
+    }
+
+    @Test
+    public void testIngestSlowdownPartitionCount() {
+        boolean oldSlowdown = Config.lake_enable_ingest_slowdown;
+        try {
+            Config.lake_enable_ingest_slowdown = true;
+            long now = System.currentTimeMillis();
+            Assertions.assertEquals(0, compactionMgr.getIngestSlowdownPartitionCount());
+            // At the threshold is not throttled, anything above it is.
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 1), 3, now,
+                    Quantiles.compute(Lists.newArrayList(threshold)));
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 2), 3, now,
+                    Quantiles.compute(Lists.newArrayList(threshold + 1.0)));
+            compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, 3), 3, now,
+                    Quantiles.compute(Lists.newArrayList(threshold + 50.0)));
+            Assertions.assertEquals(2, compactionMgr.getIngestSlowdownPartitionCount());
+
+            Config.lake_enable_ingest_slowdown = false;
+            Assertions.assertEquals(0, compactionMgr.getIngestSlowdownPartitionCount());
+        } finally {
+            Config.lake_enable_ingest_slowdown = oldSlowdown;
+        }
     }
 
     @Test

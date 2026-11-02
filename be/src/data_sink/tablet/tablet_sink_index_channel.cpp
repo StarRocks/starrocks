@@ -14,6 +14,8 @@
 
 #include "data_sink/tablet/tablet_sink_index_channel.h"
 
+#include <bvar/bvar.h>
+
 #include <utility>
 
 #include "base/compression/compression_utils.h"
@@ -48,6 +50,13 @@
 #include "storage/lake/combined_txn_log_writer.h"
 
 namespace starrocks {
+
+// The coordinator's view of its tablet writer rpcs, which no other instrumentation covers: how long one
+// add_chunk(s) rpc takes end to end, how many are in flight, and how many failed at the rpc layer (timeout,
+// connection reset) rather than inside the receiving load channel.
+bvar::LatencyRecorder g_tablet_sink_send_chunk_latency("tablet_sink", "send_chunk");
+bvar::Adder<int64_t> g_tablet_sink_rpc_pending("tablet_sink_rpc_pending");
+bvar::Adder<int64_t> g_tablet_sink_rpc_failed_total("tablet_sink_rpc_failed_total");
 
 DEFINE_FAIL_POINT(node_channel_set_brpc_timeout);
 
@@ -204,6 +213,7 @@ Status NodeChannel::init(RuntimeState* state) {
     for (size_t i = 0; i < _max_parallel_request_size; i++) {
         auto closure = new ReusableClosure<PTabletWriterAddBatchResult>();
         closure->ref();
+        closure->set_inflight_counter(&g_tablet_sink_rpc_pending);
         _add_batch_closures.emplace_back(closure);
     }
 
@@ -405,6 +415,7 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
     TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::open_join", open_closure);
 #endif
     if (open_closure->cntl.Failed()) {
+        g_tablet_sink_rpc_failed_total << 1;
         _cancelled = true;
         _err_st = Status::InternalError(open_closure->cntl.ErrorText());
 
@@ -861,6 +872,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             serialize_to_iobuf<PTabletWriterAddChunksRequest>(request, &closure->cntl.request_attachment());
             FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
                                        TABLET_WRITER_ADD_CHUNKS_FP_ACTION(_node_info->host, closure, request));
+            closure->issued();
             http_stub->tablet_writer_add_chunks_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
@@ -868,6 +880,7 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
             FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
                                        TABLET_WRITER_ADD_CHUNKS_FP_ACTION(
                                                _node_info->host, _add_batch_closures[_current_request_index], request));
+            _add_batch_closures[_current_request_index]->issued();
             _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
                                             &_add_batch_closures[_current_request_index]->result,
                                             _add_batch_closures[_current_request_index]);
@@ -885,10 +898,12 @@ Status NodeChannel::_send_request(bool eos, bool finished) {
                                                              &closure->cntl.request_attachment());
             FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
                                        TABLET_WRITER_ADD_CHUNKS_FP_ACTION(_node_info->host, closure, request));
+            closure->issued();
             http_stub->tablet_writer_add_chunk_via_http(&closure->cntl, nullptr, &closure->result, closure);
             VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = "
                     << closure->cntl.request_attachment().size();
         } else {
+            _add_batch_closures[_current_request_index]->issued();
 #ifndef BE_TEST
             FAIL_POINT_TRIGGER_EXECUTE(load_tablet_writer_add_chunks,
                                        TABLET_WRITER_ADD_CHUNKS_FP_ACTION(
@@ -927,8 +942,10 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     _mem_tracker->release(closure->request_size);
 
     COUNTER_UPDATE(_ts_profile->client_rpc_timer, closure->latency());
+    g_tablet_sink_send_chunk_latency << closure->latency() / 1000;
 
     if (closure->cntl.Failed()) {
+        g_tablet_sink_rpc_failed_total << 1;
         _cancelled = true;
         auto error_text = closure->cntl.ErrorText();
         _err_st = Status::InternalError(error_text);

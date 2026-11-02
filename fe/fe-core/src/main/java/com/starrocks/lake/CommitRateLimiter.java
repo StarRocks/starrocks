@@ -21,6 +21,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.iceberg.exceptions.CommitFailedException;
@@ -130,13 +131,17 @@ public class CommitRateLimiter {
             throw new CommitFailedException("Txn " + txnId + " timed out due to ingestion slowdown", txnId);
         }
         if (transactionState.getAllowCommitTimeMs() > currentTimeMs) {
-            LOG.info("delay commit of txn {} for {}ms, write took {}ms", transactionState.getTransactionId(),
-                    transactionState.getAllowCommitTimeMs() - currentTimeMs,
+            long delayMs = transactionState.getAllowCommitTimeMs() - currentTimeMs;
+            LOG.info("delay commit of txn {} for {}ms, write took {}ms", txnId, delayMs,
                     transactionState.getWriteDurationMs());
+            // The caller sleeps for delayMs and retries, so each pass through here is one actual delay.
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_TXN_COMMIT_THROTTLED.increase(1L);
+                MetricRepo.COUNTER_TXN_COMMIT_THROTTLE_DELAY_MS.increase(delayMs);
+            }
             // it will show in `show proc '/transactions/xxx/running'`
             transactionState.setTemporaryReason("Partition's compaction score is larger than " + slowdownThreshold() +
-                    ", delay commit for " + (transactionState.getAllowCommitTimeMs() - currentTimeMs) + "ms." +
-                    " You can try to increase compaction concurrency.");
+                    ", delay commit for " + delayMs + "ms. You can try to increase compaction concurrency.");
             throw new CommitRateExceededException(txnId, transactionState.getAllowCommitTimeMs());
         }
         transactionState.clearTemporaryReason();

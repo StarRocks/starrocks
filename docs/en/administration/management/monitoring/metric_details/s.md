@@ -826,6 +826,18 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 - Type: Instantaneous
 - Description: Indicates the number of tablets on each BE node.
 
+## `starrocks_fe_txn_commit_throttle_delay_ms_total`
+
+- Unit: ms
+- Type: Cumulative
+- Description: Total time, in milliseconds, that transaction commits into shared-data (lake) tables were delayed by the ingestion slowdown, which holds a commit back while the compaction score of a partition it writes to is above `lake_ingest_slowdown_threshold`. Divide by `starrocks_fe_txn_commit_throttled_total` for the average delay per throttled commit. Only the Leader FE node counts (`is_leader="true"`).
+
+## `starrocks_fe_txn_commit_throttled_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of transaction commits into shared-data (lake) tables that the ingestion slowdown delayed because the compaction score of a partition they write to was above `lake_ingest_slowdown_threshold`. Commits rejected outright because the score was above `lake_compaction_score_upper_bound` are not counted here; they fail the load. Only the Leader FE node counts (`is_leader="true"`).
+
 ## `starrocks_fe_txn_max_committed_pending_publish_ms`
 
 - Unit: ms
@@ -836,43 +848,43 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 
 - Unit: ms
 - Type: Summary
-- Description: The final acknowledgment latency, from `ready-to-finish` time to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes final acknowledgment steps after the transaction is ready to finish.
+- Description: The final acknowledgment latency, from `ready-to-finish` time to the final `finish` time when the transaction is marked as `VISIBLE`. This metric includes final acknowledgment steps after the transaction is ready to finish. Carries a `status` label, `visible` or `aborted`; a transaction aborted after `commit` is recorded under `status="aborted"`.
 
 ## `starrocks_fe_txn_publish_can_finish_latency_ms`
 
 - Unit: ms
 - Type: Summary
-- Description: The latency from `publish` task completion to the moment `canTxnFinish()` first returns true, measured from `publish version finish` time to `ready-to-finish` time.
+- Description: The latency from `publish` task completion to the moment `canTxnFinish()` first returns true, measured from `publish version finish` time to `ready-to-finish` time. Carries a `status` label, `visible` or `aborted`; a transaction aborted after `commit` is recorded under `status="aborted"`.
 
 ## `starrocks_fe_txn_publish_execute_latency_ms`
 
 - Unit: ms
 - Type: Summary
-- Description: The active execution time of the `publish` task, from when the task is picked up to when it finishes. This metric represents the actual time being spent to make the transaction's changes visible.
+- Description: The active execution time of the `publish` task, from when the task is picked up to when it finishes. This metric represents the actual time being spent to make the transaction's changes visible. Carries a `status` label, `visible` or `aborted`; a transaction aborted after `commit` is recorded under `status="aborted"`.
 
 ## `starrocks_fe_txn_publish_latency_ms`
 
 - Unit: ms
 - Type: Summary
-- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, `can_finish`, and `ack` sub-phases.
+- Description: The latency of the `publish` phase, from `commit` time to `finish` time. This is the duration it takes for a committed transaction to become visible to queries. It is the sum of the `schedule`, `execute`, `can_finish`, and `ack` sub-phases. Carries a `status` label, `visible` or `aborted`; a transaction aborted after `commit` is recorded under `status="aborted"`.
 
 ## `starrocks_fe_txn_publish_schedule_latency_ms`
 
 - Unit: ms
 - Type: Summary
-- Description: The time a transaction spends waiting to be published after it has been committed, measured from `commit` time to when the publish task is picked up. This metric reflects scheduling delays or queueing time in the `publish` pipeline.
+- Description: The time a transaction spends waiting to be published after it has been committed, measured from `commit` time to when the publish task is picked up. This metric reflects scheduling delays or queueing time in the `publish` pipeline. Carries a `status` label, `visible` or `aborted`; a transaction aborted after `commit` is recorded under `status="aborted"`.
 
 ## `starrocks_fe_txn_total_latency_ms`
 
 - Unit: ms
 - Type: Summary
-- Description: The total latency for a transaction to complete, measured from the `prepare` time to the `finish` time. This metric represents the full end-to-end duration of a transaction.
+- Description: The total latency for a transaction to complete, measured from the `prepare` time to the `finish` time. This metric represents the full end-to-end duration of a transaction. Carries a `status` label, `visible` or `aborted`, so transactions that were aborted (for example after timing out) are recorded under `status="aborted"` instead of being left out of the distribution.
 
 ## `starrocks_fe_txn_write_latency_ms`
 
 - Unit: ms
 - Type: Summary
-- Description: The latency of the `write` phase of a transaction, from `prepare` time to `commit` time. This metric isolates the performance of the data writing and preparation stage before the transaction is ready to be published.
+- Description: The latency of the `write` phase of a transaction, from `prepare` time to `commit` time. This metric isolates the performance of the data writing and preparation stage before the transaction is ready to be published. Carries a `status` label, `visible` or `aborted`. For a transaction aborted before it reached `commit`, the phase ends at the abort time, so loads that timed out while writing are included.
 
 ## `starrocks_fe_unfinished_backup_job`
 
