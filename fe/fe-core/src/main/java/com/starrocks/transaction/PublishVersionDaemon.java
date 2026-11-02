@@ -765,18 +765,24 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // Per-tablet stats for real-time reshard triggering (range-distribution tablets only).
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                // An earlier request may have finished some tablets: let them answer from storage. Decided here,
+                // after the version-order check, so that waiting for an earlier version is not taken for a retry.
+                boolean isRetryPublish = false;
+                for (PartitionCommitInfo info : publishVersionData.getPartitionCommitInfos()) {
+                    isRetryPublish |= info.getAndMarkPublishSent();
+                }
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
-                            startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            computeResource, tabletStats, vectorIndexBuildInfos);
+                            startVersion - 1, endVersion, compactionScores, null, nodeToTablets,
+                            computeResource, tabletStats, vectorIndexBuildInfos, isRetryPublish);
                 } else if (CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(publishTablets, txnInfos, carryForwardTablets,
                             startVersion - 1, endVersion, nodeToTablets, computeResource, compactionScores,
-                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata, isRetryPublish);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
                             compactionScores, null, nodeToTablets, computeResource, tabletStats,
-                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            vectorIndexBuildInfos, preferSharedInitialMetadata, isRetryPublish);
                 }
 
                 // Mixed batches (rare) fall back to false so the load-tail delay protects
@@ -1339,14 +1345,17 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // collection, and range-distribution tablet sizes for real-time reshard triggering.
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                // An earlier request may have finished some tablets: let them answer from storage. Decided here,
+                // after the version-order check, so that waiting for an earlier version is not taken for a retry.
+                boolean isRetryPublish = partitionCommitInfo.getAndMarkPublishSent();
                 if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
                             baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,
-                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            vectorIndexBuildInfos, preferSharedInitialMetadata, isRetryPublish);
                 } else {
                     Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
                             null, computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos,
-                            preferSharedInitialMetadata);
+                            preferSharedInitialMetadata, isRetryPublish);
                 }
 
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
@@ -1415,11 +1424,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                                                  Map<Long, Double> compactionScores,
                                                  Map<Long, TabletStatPB> tabletStats,
                                                  List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                                 boolean preferSharedInitialMetadata)
+                                                 boolean preferSharedInitialMetadata,
+                                                 boolean isRetryPublish)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         Utils.createSubRequestForAggregatePublish(touchedTablets, txnInfos, baseVersion, newVersion,
-                nodeToTablets, computeResource, request, preferSharedInitialMetadata);
+                nodeToTablets, computeResource, request, preferSharedInitialMetadata, isRetryPublish);
 
         List<TxnInfoPB> carryForwardTxnInfos = Lists.newArrayListWithCapacity(txnInfos.size());
         for (TxnInfoPB txnInfo : txnInfos) {
@@ -1436,7 +1446,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // They belong to the same physical partition as |touchedTablets|, so the version-1 layout hint applies
         // to them identically.
         Utils.createSubRequestForAggregatePublish(carryForwardTablets, carryForwardTxnInfos, baseVersion, newVersion,
-                null, computeResource, request, preferSharedInitialMetadata);
+                null, computeResource, request, preferSharedInitialMetadata, isRetryPublish);
         Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
                 tabletStats, vectorIndexBuildInfos);
     }
