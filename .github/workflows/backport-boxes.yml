@@ -1,11 +1,11 @@
 name: BACKPORT BOXES
 
-# A main PR ticked for backport to an older release branch is ticked for every newer one too:
-# the newest branch is easy to miss, and a PR opened before it was in the PR template has no row
-# for it. The skipped versions are ticked in the description and the assignees are told in a
-# comment; a version the author unticks afterwards stays unticked. Reverse-sync PRs from
+# A main PR ticked for backport to the previous release branch (4.1) but not to the newest one
+# (4.2) gets the newest ticked: a PR opened before the newest branch was
+# in the PR template has no row for it. The assignees are told in a comment; if the author
+# unticks it afterwards it stays unticked. Older versions are left alone. Reverse-sync PRs from
 # CelerData are skipped (their versions come from the CelerData PR). Per PR on open/edit/push; a
-# daily sweep of the PRs updated in the last 30 days catches open PRs when a new version is added
+# daily sweep of the PRs updated in the last 30 days catches open PRs when a new branch is added
 # to the template (an idle PR is fixed when it is next pushed or edited). The body is written
 # with the starrocks-bot token so the `edited` event re-runs pr-checker, which sets the label.
 # Thin caller: the logic is ci-tool lib/backport_boxes.py.
