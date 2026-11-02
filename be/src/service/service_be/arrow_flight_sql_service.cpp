@@ -14,14 +14,14 @@
 
 #include "arrow_flight_sql_service.h"
 
-#include <fstream>
-#include <sstream>
-
 #include <arrow/array/builder_binary.h>
 #include <arrow/flight/server.h>
 #include <arrow/flight/types.h>
 #include <exec/pipeline/query_context.h>
 #include <util/arrow/utils.h>
+
+#include <fstream>
+#include <sstream>
 
 #include "common/config.h"
 #include "common/status.h"
@@ -34,15 +34,13 @@ namespace starrocks {
 
 static Status read_pem_file(const std::string& path, std::string& content) {
     if (path.empty()) {
-        return Status::InvalidArgument(
-            "PEM file path is empty.");
+        return Status::InvalidArgument("PEM file path is empty.");
     }
 
     std::ifstream input(path, std::ios::in | std::ios::binary);
     if (!input.is_open()) {
-        return Status::InvalidArgument(
-            "Failed to open PEM file '" + path +
-            "'. Verify that the file exists and is readable.");
+        return Status::InvalidArgument("Failed to open PEM file '" + path +
+                                       "'. Verify that the file exists and is readable.");
     }
 
     std::ostringstream ss;
@@ -50,8 +48,7 @@ static Status read_pem_file(const std::string& path, std::string& content) {
     content = ss.str();
 
     if (content.empty()) {
-        return Status::InvalidArgument(
-            "PEM file '" + path + "' is empty.");
+        return Status::InvalidArgument("PEM file '" + path + "' is empty.");
     }
 
     return Status::OK();
@@ -80,7 +77,8 @@ Status ArrowFlightSqlServer::start(int port) {
     if (tls_enabled) {
         if (config::arrow_flight_ssl_cert_file.empty() || config::arrow_flight_ssl_key_file.empty()) {
             return Status::InvalidArgument(
-                    "arrow_flight_ssl_enable=true requires both arrow_flight_ssl_cert_file and arrow_flight_ssl_key_file");
+                    "arrow_flight_ssl_enable=true requires both arrow_flight_ssl_cert_file and "
+                    "arrow_flight_ssl_key_file");
         }
 
         std::string pem_cert;
@@ -115,7 +113,6 @@ Status ArrowFlightSqlServer::start(int port) {
     LOG(INFO) << "[ARROW] Arrow Flight SQL server transport=" << (tls_enabled ? "TLS" : "PLAINTEXT")
               << " [mTLS=" << (flight_options.verify_client ? "enabled" : "disabled") << "]";
 
-    
     RETURN_STATUS_IF_ERROR(Init(flight_options));
     _running = true;
 
