@@ -63,7 +63,8 @@ Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet
                                        int64_t log_version);
 
 StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
-                                               int64_t new_version, std::vector<int64_t>& txn_ids);
+                                               int64_t new_version, std::vector<int64_t>& txn_ids,
+                                               bool is_retry_publish = false);
 
 std::shared_ptr<RuntimeState> create_runtime_state();
 
@@ -151,7 +152,7 @@ protected:
     Status publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version);
 
     StatusOr<TabletMetadataPtr> batch_publish(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                              std::vector<int64_t>& txn_ids);
+                                              std::vector<int64_t>& txn_ids, bool is_retry_publish = false);
 
     std::string _test_dir;
     std::unique_ptr<MemTracker> _parent_tracker;
@@ -261,14 +262,15 @@ inline Status TEST_aggregate_publish_version(TabletManager* tablet_mgr, std::vec
 
 inline StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr, int64_t tablet_id,
                                                       int64_t base_version, int64_t new_version,
-                                                      std::vector<int64_t>& txn_ids) {
+                                                      std::vector<int64_t>& txn_ids, bool is_retry_publish) {
     auto txns = std::vector<TxnInfoPB>();
     txns.reserve(txn_ids.size());
     auto commit_time = time(nullptr);
     for (auto& txn_id : txn_ids) {
         txns.emplace_back(TEST_txn_info(txn_id, commit_time));
     }
-    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), base_version, new_version, txns, false);
+    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), base_version, new_version, txns, false,
+                                  /*fe_built_version=*/0, InitialMetadataOrder::kPerTabletFirst, is_retry_publish);
     if (!result.ok()) {
         return Status::InternalError(
                 fmt::format("failed to publish version. tablet_id={} txn_ids={} base_version={} new_version={}: {}",
@@ -304,8 +306,8 @@ inline Status TestBase::publish_single_log_version(int64_t tablet_id, int64_t tx
 }
 
 inline StatusOr<TabletMetadataPtr> TestBase::batch_publish(int64_t tablet_id, int64_t base_version, int64_t new_version,
-                                                           std::vector<int64_t>& txn_ids) {
-    return TEST_batch_publish(_tablet_mgr.get(), tablet_id, base_version, new_version, txn_ids);
+                                                           std::vector<int64_t>& txn_ids, bool is_retry_publish) {
+    return TEST_batch_publish(_tablet_mgr.get(), tablet_id, base_version, new_version, txn_ids, is_retry_publish);
 }
 
 inline std::shared_ptr<TabletMetadataPB> generate_simple_tablet_metadata(KeysType keys_type, size_t num_of_columns) {

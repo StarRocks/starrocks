@@ -63,9 +63,20 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
 import java.util.concurrent.TimeUnit;
+=======
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+>>>>>>> 52693c9 ([Enhancement] Let a retried lake publish return a new version that is already written (#81773))
 import javax.validation.constraints.NotNull;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1170,4 +1181,378 @@ public class LakePublishBatchTest {
         }
         awaitPublish(daemon, waiter1, waiter2);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testBatchSnapshottedWhileItsTableIsInFlightIsNotRepublished() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+        List<TabletCommitInfo> tablets = getPartitionTabletCommitInfos(partition);
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "in_flight_1_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId1, tablets, Lists.newArrayList(), null);
+        long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                "in_flight_2_" + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
+                db.getId(), txnId2, tablets, Lists.newArrayList(), null);
+
+        // A previous round left a batch of this table in flight.
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        daemon.publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
+        daemon.publishingLakeTransactionsBatchTableId.add(table.getId());
+        // That batch finishes right after the daemon takes its snapshot, so its marker is gone by the time
+        // the daemon reaches the batch: this is the window that used to publish the transactions again.
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public List<TransactionStateBatch> getReadyPublishTransactionsBatch(Invocation invocation) {
+                List<TransactionStateBatch> ready = invocation.proceed();
+                daemon.publishingLakeTransactionsBatchTableId.remove(table.getId());
+                return ready;
+            }
+        };
+        List<Long> publishedTableIds = Lists.newArrayList();
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            void publishVersionForLakeTableBatch(Invocation invocation, List<TransactionStateBatch> batches) {
+                for (TransactionStateBatch batch : batches) {
+                    publishedTableIds.addAll(batch.getTableIdList());
+                }
+                invocation.proceed();
+            }
+        };
+
+        daemon.runAfterLeaseValid();
+        assertFalse(publishedTableIds.contains(table.getId()));
+        DatabaseTransactionMgr dbTxnMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
+        assertFalse(dbTxnMgr.getTransactionState(txnId1).hasSendTask());
+        assertFalse(dbTxnMgr.getTransactionState(txnId2).hasSendTask());
+
+        // Nothing is in flight when the next snapshot is taken, so the batch publishes and finishes.
+        awaitPublish(daemon, waiter1, waiter2);
+        Assertions.assertTrue(publishedTableIds.contains(table.getId()));
+    }
+
+    private VisibleStateWaiter commitOnPartition(Database db, Table table, Partition partition, String labelPrefix,
+                                                 List<Long> txnIds) throws Exception {
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        long txnId = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                labelPrefix + UUIDUtil.genUUID(), transactionSource,
+                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        txnIds.add(txnId);
+        return globalTransactionMgr.commitTransaction(db.getId(), txnId, getPartitionTabletCommitInfos(partition),
+                Lists.newArrayList(), null);
+    }
+
+    // While forcedResult holds a value every partition publish of a batch reports it (FAILED is thrown instead
+    // when throwOnFailure is set); otherwise it publishes for real. Records the txns of every batch it sees.
+    private void forcePartitionBatchPublish(AtomicReference<PublishVersionDaemon.BatchPublishResult> forcedResult,
+                                            boolean throwOnFailure, List<List<Long>> publishedBatches) {
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public PublishVersionDaemon.BatchPublishResult publishPartitionBatch(Invocation invocation, Database db,
+                    long tableId, PartitionPublishVersionData publishVersionData, TransactionStateBatch stateBatch) {
+                publishedBatches.add(stateBatch.getTxnIds());
+                PublishVersionDaemon.BatchPublishResult result = forcedResult.get();
+                if (result == null) {
+                    return invocation.proceed();
+                }
+                if (result == PublishVersionDaemon.BatchPublishResult.FAILED && throwOnFailure) {
+                    throw new RuntimeException("injected publish failure");
+                }
+                return result;
+            }
+        };
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testFailedBatchIsRetriedWithTheSameTxns(boolean throwOnFailure) throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        List<Long> txnIds = Lists.newArrayList();
+        VisibleStateWaiter waiter1 = commitOnPartition(db, table, partition, "frozen_retry_1_", txnIds);
+        VisibleStateWaiter waiter2 = commitOnPartition(db, table, partition, "frozen_retry_2_", txnIds);
+        List<Long> failedBatch = Lists.newArrayList(txnIds);
+        long headTxnId = txnIds.get(0);
+
+        AtomicReference<PublishVersionDaemon.BatchPublishResult> forcedResult =
+                new AtomicReference<>(PublishVersionDaemon.BatchPublishResult.FAILED);
+        List<List<Long>> publishedBatches = new CopyOnWriteArrayList<>();
+        forcePartitionBatchPublish(forcedResult, throwOnFailure, publishedBatches);
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+            daemon.runAfterLeaseValid();
+            return publishedBatches.stream().anyMatch(batch -> batch.contains(headTxnId));
+        });
+        assertEquals(failedBatch, publishedBatches.get(0));
+        long retriesBefore = MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_RETRY.getValue();
+
+        // Two more txns commit while the failed batch waits for its retry; they must not join it.
+        VisibleStateWaiter waiter3 = commitOnPartition(db, table, partition, "frozen_retry_3_", txnIds);
+        VisibleStateWaiter waiter4 = commitOnPartition(db, table, partition, "frozen_retry_4_", txnIds);
+        TransactionStateBatch retryBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().stream()
+                .filter(batch -> batch.getTxnIds().contains(headTxnId))
+                .findFirst().orElse(null);
+        assertNotNull(retryBatch);
+        assertEquals(failedBatch, retryBatch.getTxnIds());
+
+        forcedResult.set(null);
+        awaitPublish(daemon, waiter1, waiter2, waiter3, waiter4);
+        Assertions.assertTrue(MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_RETRY.getValue() > retriesBefore);
+        for (List<Long> batch : publishedBatches) {
+            if (batch.contains(headTxnId)) {
+                assertEquals(failedBatch, batch);
+            }
+        }
+        Assertions.assertTrue(publishedBatches.contains(txnIds.subList(2, 4)));
+    }
+
+    @Test
+    public void testFailedBatchTakesInNewTxnsWhenRetryFreezeIsOff() throws Exception {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = false;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                    TABLE_AGG_OFF);
+            Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            List<Long> txnIds = Lists.newArrayList();
+            VisibleStateWaiter waiter1 = commitOnPartition(db, table, partition, "unfrozen_retry_1_", txnIds);
+            VisibleStateWaiter waiter2 = commitOnPartition(db, table, partition, "unfrozen_retry_2_", txnIds);
+            long headTxnId = txnIds.get(0);
+
+            AtomicReference<PublishVersionDaemon.BatchPublishResult> forcedResult =
+                    new AtomicReference<>(PublishVersionDaemon.BatchPublishResult.FAILED);
+            List<List<Long>> publishedBatches = new CopyOnWriteArrayList<>();
+            forcePartitionBatchPublish(forcedResult, false, publishedBatches);
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+                daemon.runAfterLeaseValid();
+                return publishedBatches.stream().anyMatch(batch -> batch.contains(headTxnId));
+            });
+
+            // Two more txns commit while the failed batch waits for its retry: with the policy off they join it.
+            VisibleStateWaiter waiter3 = commitOnPartition(db, table, partition, "unfrozen_retry_3_", txnIds);
+            VisibleStateWaiter waiter4 = commitOnPartition(db, table, partition, "unfrozen_retry_4_", txnIds);
+            TransactionStateBatch retryBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().stream()
+                    .filter(batch -> batch.getTxnIds().contains(headTxnId))
+                    .findFirst().orElse(null);
+            assertNotNull(retryBatch);
+            assertEquals(txnIds, retryBatch.getTxnIds());
+
+            forcedResult.set(null);
+            awaitPublish(daemon, waiter1, waiter2, waiter3, waiter4);
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
+    }
+
+    @Test
+    public void testFailedSingleTxnBatchIsRetriedAlone() throws Exception {
+        // A lone txn is published only when a one-txn batch is allowed.
+        int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
+        Config.lake_batch_publish_min_version_num = 1;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                    TABLE_AGG_OFF);
+            Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+            List<Long> txnIds = Lists.newArrayList();
+            VisibleStateWaiter waiter1 = commitOnPartition(db, table, partition, "frozen_single_1_", txnIds);
+            long headTxnId = txnIds.get(0);
+
+            // A one-txn batch publishes through publishLakeTransactionAsync, which reaches Utils.publishVersion.
+            AtomicBoolean failPublish = new AtomicBoolean(true);
+            AtomicInteger injectedFailures = new AtomicInteger();
+            Set<Long> partitionTablets = tabletIds(partition);
+            List<Boolean> retryFlags = new CopyOnWriteArrayList<>();
+            new MockUp<Utils>() {
+                @Mock
+                public void publishVersion(Invocation invocation, @NotNull List<Tablet> tablets, TxnInfoPB txnInfo,
+                                           long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                           Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                           Map<Long, TabletStatPB> tabletStats, boolean useAggregatePublish,
+                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                           boolean preferSharedInitialMetadata, boolean isRetryPublish)
+                        throws RpcException {
+                    if (tablets.stream().anyMatch(tablet -> partitionTablets.contains(tablet.getId()))) {
+                        retryFlags.add(isRetryPublish);
+                    }
+                    if (failPublish.get()) {
+                        injectedFailures.incrementAndGet();
+                        throw new RpcException("injected publish failure");
+                    }
+                    invocation.proceed();
+                }
+            };
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            // Wait for a request that actually failed, not just for the txn to be picked up.
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+                daemon.runAfterLeaseValid();
+                return injectedFailures.get() > 0;
+            });
+
+            // Txns committed after the failure must not turn the retry into a bigger batch.
+            VisibleStateWaiter waiter2 = commitOnPartition(db, table, partition, "frozen_single_2_", txnIds);
+            VisibleStateWaiter waiter3 = commitOnPartition(db, table, partition, "frozen_single_3_", txnIds);
+            TransactionStateBatch retryBatch = globalTransactionMgr.getReadyPublishTransactionsBatch().stream()
+                    .filter(batch -> batch.getTxnIds().contains(headTxnId))
+                    .findFirst().orElse(null);
+            assertNotNull(retryBatch);
+            assertEquals(List.of(headTxnId), retryBatch.getTxnIds());
+
+            failPublish.set(false);
+            awaitPublish(daemon, waiter1, waiter2, waiter3);
+            // Only the first attempt of the txn is not a retry publish.
+            assertFalse(retryFlags.get(0));
+            Assertions.assertTrue(retryFlags.size() > 1);
+            Assertions.assertTrue(retryFlags.subList(1, retryFlags.size()).stream().allMatch(flag -> flag),
+                    retryFlags.toString());
+        } finally {
+            Config.lake_batch_publish_min_version_num = oldMinVersionNum;
+        }
+    }
+
+    private static Set<Long> tabletIds(Partition partition) {
+        return new HashSet<>(partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTabletIdsInOrder());
+    }
+
+    // A batch whose earlier attempt did not finish is a retry publish on every partition, including one that
+    // succeeded in that attempt; the first attempt is not.
+    @Test
+    public void testRetriedBatchIsRetryPublishOnEveryPartition() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        List<Partition> partitions = Lists.newArrayList(table.getPartitions());
+        Partition failing = partitions.get(2);
+        Partition succeeding = partitions.get(3);
+        Set<Long> failingTablets = tabletIds(failing);
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        List<VisibleStateWaiter> waiters = Lists.newArrayList();
+        for (int i = 0; i < 2; i++) {
+            long txnId = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
+                    "retry_publish_flag_" + i + "_" + UUIDUtil.genUUID(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            List<TabletCommitInfo> commitInfos = getPartitionTabletCommitInfos(failing);
+            commitInfos.addAll(getPartitionTabletCommitInfos(succeeding));
+            waiters.add(globalTransactionMgr.commitTransaction(db.getId(), txnId, commitInfos, Lists.newArrayList(),
+                    null));
+        }
+
+        AtomicBoolean failPublish = new AtomicBoolean(true);
+        AtomicInteger injectedFailures = new AtomicInteger();
+        List<Boolean> failingFlags = new CopyOnWriteArrayList<>();
+        List<Boolean> succeedingFlags = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersionBatch(Invocation invocation, @NotNull List<Tablet> tablets,
+                                            List<TxnInfoPB> txnInfos, long baseVersion, long newVersion,
+                                            Map<Long, Double> compactionScores, Map<Long, TabletRange> tabletRanges,
+                                            Map<ComputeNode, List<Long>> nodeToTablets,
+                                            ComputeResource computeResource, Map<Long, TabletStatPB> tabletStats,
+                                            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                            boolean isRetryPublish) throws RpcException {
+                if (failingTablets.contains(tablets.get(0).getId())) {
+                    failingFlags.add(isRetryPublish);
+                    if (failPublish.get()) {
+                        injectedFailures.incrementAndGet();
+                        throw new RpcException("injected publish failure");
+                    }
+                } else {
+                    succeedingFlags.add(isRetryPublish);
+                }
+                invocation.proceed();
+            }
+        };
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+            daemon.runAfterLeaseValid();
+            return injectedFailures.get() > 0 && !succeedingFlags.isEmpty();
+        });
+        failPublish.set(false);
+        awaitPublish(daemon, waiters.toArray(new VisibleStateWaiter[0]));
+
+        assertFalse(failingFlags.get(0));
+        assertFalse(succeedingFlags.get(0));
+        Assertions.assertTrue(succeedingFlags.size() > 1, succeedingFlags.toString());
+        Assertions.assertTrue(succeedingFlags.subList(1, succeedingFlags.size()).stream().allMatch(flag -> flag),
+                succeedingFlags.toString());
+        Assertions.assertTrue(failingFlags.subList(1, failingFlags.size()).stream().allMatch(flag -> flag),
+                failingFlags.toString());
+    }
+
+    // A txn that waits for the publish of an earlier version has not sent anything yet: its first request is not a
+    // retry publish.
+    @Test
+    public void testWaitForEarlierVersionIsNotRetryPublish() throws Exception {
+        boolean oldBatchPublish = Config.lake_enable_batch_publish_version;
+        boolean oldNewPublishMechanism = Config.enable_new_publish_mechanism;
+        // Publish each txn alone and pick up a txn whose earlier version is not visible yet.
+        Config.lake_enable_batch_publish_version = false;
+        Config.enable_new_publish_mechanism = false;
+        CountDownLatch releaseFirst = new CountDownLatch(1);
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(),
+                    TABLE_AGG_OFF);
+            Partition partition = Lists.newArrayList(table.getPartitions()).get(1);
+            DatabaseTransactionMgr dbTxnMgr =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getDatabaseTransactionMgr(db.getId());
+            List<Long> txnIds = Lists.newArrayList();
+            VisibleStateWaiter waiter1 = commitOnPartition(db, table, partition, "order_wait_1_", txnIds);
+            VisibleStateWaiter waiter2 = commitOnPartition(db, table, partition, "order_wait_2_", txnIds);
+            long firstTxnId = txnIds.get(0);
+            long secondTxnId = txnIds.get(1);
+            PartitionCommitInfo secondCommitInfo = dbTxnMgr.getTransactionState(secondTxnId)
+                    .getTableCommitInfo(table.getId())
+                    .getPartitionCommitInfo(partition.getDefaultPhysicalPartition().getId());
+
+            List<Boolean> secondFlags = new CopyOnWriteArrayList<>();
+            new MockUp<Utils>() {
+                @Mock
+                public void publishVersion(Invocation invocation, @NotNull List<Tablet> tablets, TxnInfoPB txnInfo,
+                                           long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                           Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                           Map<Long, TabletStatPB> tabletStats, boolean useAggregatePublish,
+                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                           boolean preferSharedInitialMetadata, boolean isRetryPublish)
+                        throws Exception {
+                    if (txnInfo.txnId == firstTxnId) {
+                        Assertions.assertTrue(releaseFirst.await(60, TimeUnit.SECONDS));
+                    } else if (txnInfo.txnId == secondTxnId) {
+                        secondFlags.add(isRetryPublish);
+                    }
+                    invocation.proceed();
+                }
+            };
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            // The first txn is held in its request, so the second one can only wait for its version.
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+                daemon.runAfterLeaseValid();
+                return secondCommitInfo.getLastPublishFailureTime() > 0;
+            });
+            Assertions.assertTrue(dbTxnMgr.getTransactionState(secondTxnId).hasSendTask());
+            Assertions.assertTrue(secondFlags.isEmpty(), secondFlags.toString());
+
+            releaseFirst.countDown();
+            awaitPublish(daemon, waiter1, waiter2);
+            Assertions.assertFalse(secondFlags.isEmpty());
+            assertFalse(secondFlags.get(0), secondFlags.toString());
+        } finally {
+            releaseFirst.countDown();
+            Config.lake_enable_batch_publish_version = oldBatchPublish;
+            Config.enable_new_publish_mechanism = oldNewPublishMechanism;
+        }
+    }
+>>>>>>> 52693c9 ([Enhancement] Let a retried lake publish return a new version that is already written (#81773))
 }

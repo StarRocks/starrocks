@@ -396,6 +396,21 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
 
+<<<<<<< HEAD
+=======
+## `lake_publish_batch_retry_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：存算分离集群中重试批量发布的次数，即批次的首个事务在之前的尝试中已经发出、但那次尝试没有完成。`lake_enable_batch_publish_retry_freeze` 为 `true` 时，这类重试只包含上一次尝试中的事务。仅 Leader FE 递增该计数器。
+
+## `lake_publish_version_skipped_durable`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，重试的 publish 直接使用存储中已写好的新版本 tablet 元数据、不再重新 apply 事务的 tablet 累积次数。只统计重试（该分区之前的 publish 失败过）且新版本不在元数据缓存中的情况；命中元数据缓存的 tablet 和首次 publish 都不计入。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+>>>>>>> 52693c9 ([Enhancement] Let a retried lake publish return a new version that is already written (#81773))
 ## `lake_segment_cache_hit_minute`
 
 - 单位：次数
