@@ -14,12 +14,8 @@
 
 #include "cache/disk_space_monitor.h"
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 
-#include "base/concurrency/await.h"
->>>>>>> 2f91a34 ([BugFix] Fix datacache disk quota not recovering after auto-adjust shrinks it to zero (#82040))
 #include "cache/datacache_utils.h"
 #include "common/config.h"
 #include "common/statusor.h"
