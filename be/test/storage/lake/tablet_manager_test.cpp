@@ -23,6 +23,7 @@
 #include <chrono>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <thread>
 
 #include "base/bthreads/util.h"
@@ -3321,5 +3322,85 @@ TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_prefers_borrowed_over_
 }
 
 #endif // USE_STAROS
+
+namespace {
+
+TabletMetadataPB build_bundle_member_metadata(int64_t tablet_id, int64_t version, const TabletSchemaPB& schema) {
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(version);
+    metadata.mutable_schema()->CopyFrom(schema);
+    (*metadata.mutable_historical_schemas())[schema.id()].CopyFrom(schema);
+    return metadata;
+}
+
+} // namespace
+
+// A vacuum or drop-tablet aggregator reads the metadata of every tablet in a partition but holds few of
+// them. get_tablet_metadata_via_anchor() must reach both the bundle and the per-tablet object through the
+// anchor alone, so that no non-anchor tablet location is resolved, while keying the metacache by the
+// requested tablet.
+TEST_F(LakeTabletManagerTest, get_tablet_metadata_via_anchor_resolves_only_the_anchor) {
+    const int64_t anchor_id = next_id();
+    const int64_t remote_id = next_id();
+    TabletSchemaPB schema;
+    schema.set_id(next_id());
+    schema.set_num_short_key_columns(1);
+    schema.set_keys_type(DUP_KEYS);
+    auto* c0 = schema.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    // Version 2 lives in the partition's bundle; version 3 of the remote tablet is a per-tablet object.
+    std::map<int64_t, TabletMetadataPB> bundle;
+    bundle.emplace(anchor_id, build_bundle_member_metadata(anchor_id, 2, schema));
+    bundle.emplace(remote_id, build_bundle_member_metadata(remote_id, 2, schema));
+    ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(bundle));
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(build_bundle_member_metadata(remote_id, 3, schema)));
+
+    auto location_provider = std::make_shared<lake::AnchorOnlyLocationProvider>(
+            _test_dir, lake::join_path(_test_dir, "unreachable"), anchor_id);
+    auto old_location_provider = _tablet_manager->TEST_set_location_provider(location_provider);
+    DeferOp restore([&]() { _tablet_manager->TEST_set_location_provider(std::move(old_location_provider)); });
+    _tablet_manager->metacache()->prune();
+
+    // The plain overload resolves the remote tablet through its own location and cannot find it.
+    EXPECT_FALSE(_tablet_manager->get_tablet_metadata(remote_id, 2, false).ok());
+    _tablet_manager->metacache()->prune();
+    auto plain_resolved = location_provider->resolved_outside_partition().size();
+    EXPECT_GT(plain_resolved, 0);
+
+    // A bundled version: the first read discovers the bundle, the second takes the cached marker path.
+    for (int i = 0; i < 2; i++) {
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->get_tablet_metadata_via_anchor(
+                                               remote_id, 2, anchor_id,
+                                               lake::CacheOptions{.fill_meta_cache = false, .fill_data_cache = false}));
+        EXPECT_EQ(remote_id, metadata->id());
+        EXPECT_EQ(2, metadata->version());
+        EXPECT_EQ(schema.id(), metadata->schema().id());
+    }
+
+    // A per-tablet version, cached under the requested tablet's own metadata path.
+    ASSIGN_OR_ABORT(auto metadata, _tablet_manager->get_tablet_metadata_via_anchor(
+                                           remote_id, 3, anchor_id,
+                                           lake::CacheOptions{.fill_meta_cache = true, .fill_data_cache = false}));
+    EXPECT_EQ(remote_id, metadata->id());
+    EXPECT_EQ(3, metadata->version());
+    EXPECT_NE(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
+                               _tablet_manager->tablet_metadata_location(remote_id, 3)));
+
+    // A missing version still reports NotFound, so vacuum can tell the chain bottom from an error.
+    EXPECT_TRUE(_tablet_manager
+                        ->get_tablet_metadata_via_anchor(
+                                remote_id, 4, anchor_id,
+                                lake::CacheOptions{.fill_meta_cache = false, .fill_data_cache = false})
+                        .status()
+                        .is_not_found());
+
+    EXPECT_EQ(plain_resolved, location_provider->resolved_outside_partition().size());
+}
 
 } // namespace starrocks
