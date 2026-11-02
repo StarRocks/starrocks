@@ -53,7 +53,9 @@
 #include "runtime/runtime_env.h"
 #include "service/service_be/config_update_hooks.h"
 #include "storage/index/vector/vector_index_cache.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
@@ -168,6 +170,37 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percen
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_index_block_cache_limit_percent", "5"));
     ASSERT_EQ(primary_key_mem_limit * 5 / 100, primary_key_mgr->block_cache()->cache()->get_capacity());
+}
+
+TEST_F(ConfigUpdateHooksTest, test_update_lake_metadata_cache_limit_percent) {
+    auto* tablet_mgr = StorageEnv::GetInstance()->lake_tablet_manager();
+    ASSERT_NE(nullptr, tablet_mgr);
+    auto* metacache = tablet_mgr->metacache();
+    const int64_t process_mem_limit = _runtime_env->process_mem_limit();
+    ASSERT_GT(process_mem_limit, 0);
+    const std::string saved_tablet_percent = std::to_string(config::lake_tablet_metadata_cache_limit_percent);
+    const std::string saved_segment_percent = std::to_string(config::lake_segment_metadata_cache_limit_percent);
+    DeferOp defer([&]() {
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent",
+                                                                 saved_tablet_percent));
+        CHECK_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent",
+                                                                 saved_segment_percent));
+    });
+
+    // Each knob resizes only its own LRU.
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "5"));
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent", "7"));
+    ASSERT_EQ(process_mem_limit * 5 / 100, metacache->tablet_metadata_capacity());
+    ASSERT_EQ(process_mem_limit * 7 / 100, metacache->segment_metadata_capacity());
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "3"));
+    ASSERT_EQ(process_mem_limit * 3 / 100, metacache->tablet_metadata_capacity());
+    ASSERT_EQ(process_mem_limit * 7 / 100, metacache->segment_metadata_capacity());
+
+    // Out-of-range percentages are clamped to [0, 100].
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_tablet_metadata_cache_limit_percent", "150"));
+    ASSERT_EQ(process_mem_limit, metacache->tablet_metadata_capacity());
+    ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_segment_metadata_cache_limit_percent", "-1"));
+    ASSERT_EQ(0, metacache->segment_metadata_capacity());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
