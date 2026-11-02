@@ -847,51 +847,6 @@ CREATE TABLE pk_table (
 PRIMARY KEY (tenant_id, created_time, id);
 ```
 
-<<<<<<< HEAD
-=======
-**Colocate Join 表：**
-
-:::note
-除了 Colocation Group 之外，您还必须在 `colocate_with` 属性中以 `<colocation_group>:<colocated_column>[,<colocated_column>]` 的格式指定 Colocated Column：
-- Colocated Column 必须是排序列的前缀。
-- 同一 Colocation Group 中的表必须具有相同类型的 Colocated Column，且 Colocated Column 的数量和顺序必须一致。
-- 建表后不能修改 Colocated Column 的类型，包括增加 VARCHAR 列的长度。
-- 默认的 Colocated Column 即为排序列。
-:::
-
-```SQL
--- 当指定了 colocate_with 属性时，在同列中具有相同值的数据将被分发到同一组 BE/CN 上。
-CREATE TABLE pk_table (
-    tenant_id varchar(128),
-    created_time datetime,
-    id int, 
-    name varchar(64)
-)
-PRIMARY KEY (tenant_id, created_time, id)
-PROPERTIES(
-    "colocate_with" = "colocation_group1:tenant_id,created_time"
-)
-```
-
-##### 通过拆分或合并 Tablet 优化现有表
-
-有关拆分或合并 Tablet 的详细指引，参考 [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size)。
-
-- 将表中所有符合条件的 Tablet 拆分，目标大小为 10 GB（默认值）。
-
-```SQL
-ALTER TABLE table1 SPLIT TABLETS;
-```
-
-- 将表中所有符合条件的 Tablet 合并，目标大小为 2 GB（默认值）。
-
-```SQL
-ALTER TABLE table1 MERGE TABLETS
-PROPERTIES (
-    "tablet_reshard_target_size"="2147483648");
-```
-
->>>>>>> 22b1d27 ([BugFix][RB-97] Reject widening a VARCHAR colocated column of a range colocate table (#82166))
 #### 限制
 
 基于范围分布的表不支持以下操作：

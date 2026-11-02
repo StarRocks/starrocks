@@ -862,52 +862,6 @@ CREATE TABLE pk_table (
 PRIMARY KEY (tenant_id, created_time, id);
 ```
 
-<<<<<<< HEAD
-=======
-**コロケーション結合を含むテーブル：**
-
-:::note
-コロケーショングループに加えて、`colocate_with` プロパティで、`<colocation_group>:<colocated_column>[,<colocated_column>]` という形式で、コロケーション対象の列を指定する必要があります。
-- コロケーション対象の列は、ソート列のプレフィックスでなければなりません。
-- 同じコロケーショングループ内のテーブルは、コロケーション対象の列の型、数、順序が同一でなければなりません。
-- テーブル作成後は、コロケーション対象の列の型を変更できません（VARCHAR 列の長さを増やす変更も含みます）。
-- デフォルトのコロケーション対象の列は、ソート列です。
-:::
-
-```SQL
--- `colocate_with` プロパティが指定されている場合、
--- コロケーション対象の列で同じ値を持つデータは、同じ BE/CN のセットに分散されます。
-CREATE TABLE pk_table (
-    tenant_id varchar(128),
-    created_time datetime,
-    id int, 
-    name varchar(64)
-)
-PRIMARY KEY (tenant_id, created_time, id)
-PROPERTIES(
-    "colocate_with" = "colocation_group1:tenant_id,created_time"
-)
-```
-
-##### タブレットを分割または統合して、既存のテーブルを最適化する
-
-タブレットの分割および統合に関する詳細な手順については、[ALTER TABLE - Split or merge tablets](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#split-or-merge-tablets) を参照してください。
-
-- 表内にあるすべての条件を満たすタブレットを、10 GB (デフォルト) を目標サイズとして分割する。
-
-```SQL
-ALTER TABLE table1 SPLIT TABLETS;
-```
-
-- 表内にあるすべての条件を満たすタブレットを、2 GB を目標サイズとして結合する。
-
-```SQL
-ALTER TABLE table1 MERGE TABLETS
-PROPERTIES (
-    "tablet_reshard_target_size"="2147483648");
-```
-
->>>>>>> 22b1d27 ([BugFix][RB-97] Reject widening a VARCHAR colocated column of a range colocate table (#82166))
 #### 制限事項
 
 レンジ分散方式のテーブルでは、以下の操作はサポートされていません：

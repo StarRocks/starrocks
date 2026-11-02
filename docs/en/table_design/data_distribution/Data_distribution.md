@@ -858,52 +858,6 @@ CREATE TABLE pk_table (
 PRIMARY KEY (tenant_id, created_time, id);
 ```
 
-<<<<<<< HEAD
-=======
-**Tables with Colocate Join:**
-
-:::note
-In addition to the colocation group, you must also specify the colocated columns in the `colocate_with` property in the format `<colocation_group>:<colocated_column>[,<colocated_column>]`:
-- The colocated columns must be a prefix of the sort columns.
-- Tables in the same colocation group must have the same type, number, and order of colocated columns.
-- The type of a colocated column cannot be changed after the table is created, including increasing the length of a VARCHAR column.
-- Default colocated columns are the sort columns.
-:::
-
-```SQL
--- When the colocate_with property is specified, 
--- data with the same value in the colocated columns will be distributed to the same set of BE/CN.
-CREATE TABLE pk_table (
-    tenant_id varchar(128),
-    created_time datetime,
-    id int, 
-    name varchar(64)
-)
-PRIMARY KEY (tenant_id, created_time, id)
-PROPERTIES(
-    "colocate_with" = "colocation_group1:tenant_id,created_time"
-)
-```
-
-##### Optimize existing tables by splitting or merging tablets
-
-For detailed instructions on splitting and merging tablets, see [ALTER TABLE - Modify the tablet size](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#modify-the-tablet-size).
-
-- Split all tablets that meet the conditions in the table to a target size of 10 GB (Default).
-
-```SQL
-ALTER TABLE table1 SPLIT TABLETS;
-```
-
-- Merge all tablets that meet the conditions in the table to a target size of 2 GB.
-
-```SQL
-ALTER TABLE table1 MERGE TABLETS
-PROPERTIES (
-    "tablet_reshard_target_size"="2147483648");
-```
-
->>>>>>> 22b1d27 ([BugFix][RB-97] Reject widening a VARCHAR colocated column of a range colocate table (#82166))
 #### Limitations
 
 The following operations are not supported on tables with range distribution:
