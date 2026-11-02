@@ -19,6 +19,7 @@
 #include <mutex>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "connector/connector.h"
 #include "fs/fs_util.h"
@@ -31,12 +32,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
-<<<<<<< HEAD
-=======
-#include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/location_provider.h"
-#include "storage/lake/primary_key_manager.h"
->>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
