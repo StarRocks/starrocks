@@ -696,12 +696,12 @@ public class MetadataMgr {
 
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> {
-                    Table.TableType tableType = metadata.getTableType();
-                    if (viewNames != null && viewNames.contains(tblName) && metadata.getViewType() != null) {
-                        tableType = metadata.getViewType();
-                    }
-                    return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, tableType);
-                })
+            Table.TableType tableType = metadata.getTableType();
+            if (viewNames != null && viewNames.contains(tblName) && metadata.getViewType() != null) {
+                tableType = metadata.getViewType();
+            }
+            return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, tableType);
+        })
                 .orElse(null);
     }
 
