@@ -44,6 +44,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.ColumnId;
@@ -2092,8 +2093,22 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        List<Column> distributionColumns = MetaUtils.getColumnsByColumnIds(
-                olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        // Only a range table can be in a range colocate group; getRangeColocateGroupId is null for one that is not.
+        ColocateTableIndex.GroupId groupId = olapTable.isRangeDistribution()
+                ? colocateTableIndex.getRangeColocateGroupId(olapTable.getId()) : null;
+        List<Column> distributionColumns;
+        if (groupId != null) {
+            // A range table has no distribution columns; its colocate group pins the types of the colocate columns,
+            // the first getColocateColumnCount() sort-key columns.
+            List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(olapTable);
+            int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+            distributionColumns = sortKeyColumns.subList(0, Math.min(colocateColumnCount, sortKeyColumns.size()));
+        } else {
+            distributionColumns = MetaUtils.getColumnsByColumnIds(
+                    olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
+        }
+        String columnKind = groupId != null ? "colocate column" : "distribution column";
         for (Column distributionCol : distributionColumns) {
             String colName = distributionCol.getName();
             String normalizedColName = Column.removeNamePrefix(colName);
@@ -2101,19 +2116,20 @@ public class SchemaChangeHandler extends AlterHandler {
             if (col.isPresent() && !col.get().equals(distributionCol)) {
                 if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
                     if (olapTable.hasColocateGroup()) {
-                        throw new DdlException("Can not modify distribution column[" + colName
+                        throw new DdlException("Can not modify " + columnKind + "[" + colName
                                 + "] for colocate table. index["
                                 + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
                     }
                     continue;
                 }
-                throw new DdlException("Can not modify distribution column[" + colName + "]. index["
+                throw new DdlException("Can not modify " + columnKind + "[" + colName + "]. index["
                         + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
             if (col.isEmpty() && alterIndexMetaId == olapTable.getBaseIndexMetaId()) {
                 // 2.2 distribution column cannot be deleted.
-                throw new DdlException("Distribution column[" + distributionCol.getName()
-                        + "] cannot be dropped. index[" + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
+                throw new DdlException((groupId != null ? "Colocate" : "Distribution") + " column["
+                        + distributionCol.getName() + "] cannot be dropped. index["
+                        + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
         } // end for distributionCols
     }
@@ -2298,6 +2314,108 @@ public class SchemaChangeHandler extends AlterHandler {
                         processDropColumn((DropColumnClause) alterClause, olapTable, indexMetaIdToSchema,
                                 newIndexes);
                 AlterMetricRegistry.getInstance().updateAlterOperation(AlterMetricRegistry.AlterOperationType.DROP_COLUMN);
+<<<<<<< HEAD
+=======
+
+                List<Column> postDropBaseSchema = indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId());
+                if (needsRangeRewriteSchemaChange(olapTable, dropColumnClause)) {
+                    // The routed early-return bypasses finalAnalyze, and the range-specific reject was
+                    // already relaxed above, so the finalAnalyze validations that still apply must be
+                    // re-run HERE and an invalid post-drop schema rejected with a precise error --
+                    // never fall through to the normal (non-rewrite) job, which for a range sort-key
+                    // change would produce invalid tablet boundaries.
+                    // (a) Partition column cannot be dropped -- finalAnalyze's checkPartitionColumnChange
+                    //     is bypassed by the early return. checkDistributionColumnChange checks nothing for a
+                    //     non-colocate range table (RangeDistributionInfo.getDistributionColumns() ==
+                    //     emptyList), and range colocate tables never take this routed path, so it is
+                    //     intentionally not re-run: dropping a range sort-key column IS the routed operation.
+                    checkPartitionColumnChange(olapTable, postDropBaseSchema, olapTable.getBaseIndexMetaId(), null);
+                    // (b) key-set invariants (>=1 key, keys form a prefix).
+                    if (!rangeRewriteKeySchemaIsValid(postDropBaseSchema)) {
+                        throw new DdlException("DROP COLUMN " + dropColumnClause.getColName()
+                                + " would leave no key column on range-distribution table " + olapTable.getName());
+                    }
+                    // (c) processDropColumn() above already removed any secondary index (BITMAP/GIN/NGRAM)
+                    //     on the dropped column from newIndexes -- a copy -- not from OlapTable.indexes
+                    //     itself. The routed early return never commits newIndexes back onto the table
+                    //     (that happens in finalAnalyze, which this path bypasses), so silently continuing
+                    //     would leave OlapTable.indexes referencing a now-missing column. Reject instead.
+                    Column droppedColumnForIndexCheck = olapTable.getColumn(dropColumnClause.getColName());
+                    if (droppedColumnForIndexCheck != null && olapTable.getIndexes().stream()
+                            .anyMatch(index -> index.getColumns().stream()
+                                    .anyMatch(c -> c.equalsIgnoreCase(droppedColumnForIndexCheck.getColumnId())))) {
+                        throw new DdlException("DROP COLUMN of a range sort-key column that has a secondary index "
+                                + "(BITMAP/GIN/NGRAM) is not supported on range-distribution tables; drop the index "
+                                + "first with DROP INDEX. Column: " + dropColumnClause.getColName());
+                    }
+                    // (c') A plain bloom filter is tracked on OlapTable.bfColumns, NOT in getIndexes(), so
+                    //     the secondary-index check above misses it. The routed early return never re-writes
+                    //     the bloom-filter set, so dropping a bloom-filter column would leave a dangling
+                    //     ColumnId after the flip. Reject; the user must remove it from bloom_filter_columns
+                    //     first.
+                    Set<String> bfColumnNames = olapTable.getBfColumnNames();
+                    if (bfColumnNames != null && bfColumnNames.stream()
+                            .anyMatch(n -> n.equalsIgnoreCase(dropColumnClause.getColName()))) {
+                        throw new DdlException("DROP COLUMN of a range sort-key column that has a bloom filter is "
+                                + "not supported on range-distribution tables; remove it from "
+                                + "bloom_filter_columns first. Column: " + dropColumnClause.getColName());
+                    }
+                    if (alterClauses.size() > 1) {
+                        throw new DdlException("DROP COLUMN that changes the range sort key on a "
+                                + "range-distribution table can not be combined with other alter operations");
+                    }
+                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
+                    // Compute the EXPLICIT post-drop range sort key = current range sort key minus the
+                    // dropped column, remapped to post-drop positions, and build the job directly. Do NOT
+                    // use createRangeRewriteJob(List<Column>) (it forces sortKeyIdxes=null ->
+                    // resolveSortKeyColumns derives from isKey()): a DUP table whose explicit ORDER BY is a
+                    // superset of KEY() (e.g. KEY(k1) ORDER BY(k1,k2,k3)) would silently lose its non-key
+                    // sort-key columns.
+                    List<String> oldSortKeyNames =
+                            MetaUtils.getPhysicalSortKeyColumns(olapTable, olapTable.getBaseIndexMetaId())
+                                    .stream().map(Column::getName).collect(Collectors.toList());
+                    List<Integer> dropSortKeyIdxes = new ArrayList<>();
+                    List<Integer> dropSortKeyUniqueIds = new ArrayList<>();
+                    boolean useSortKeyUniqueId = true;
+                    for (String skName : oldSortKeyNames) {
+                        if (skName.equalsIgnoreCase(dropColumnClause.getColName())) {
+                            continue;
+                        }
+                        for (int i = 0; i < postDropBaseSchema.size(); i++) {
+                            if (postDropBaseSchema.get(i).getName().equalsIgnoreCase(skName)) {
+                                dropSortKeyIdxes.add(i);
+                                // Mirror processModifySortKeyColumn: only carry sort-key unique ids when
+                                // every surviving sort-key column has one. A table whose columns predate
+                                // unique-id assignment (uniqueId == COLUMN_UNIQUE_ID_INIT_VALUE) must fall
+                                // back to positional idxes; otherwise the flipped index stores a bogus
+                                // sentinel [-1, ...] that a later alter would mis-resolve by uniqueId.
+                                if (useSortKeyUniqueId
+                                        && postDropBaseSchema.get(i).getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                                    dropSortKeyUniqueIds.add(postDropBaseSchema.get(i).getUniqueId());
+                                } else {
+                                    useSortKeyUniqueId = false;
+                                    dropSortKeyUniqueIds.clear();
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (dropSortKeyIdxes.isEmpty()) {
+                        // The dropped column was the entire explicit sort key (e.g. KEY(k1, k2)
+                        // ORDER BY(k1)); fall back to the key-derived sort key (the remaining key
+                        // columns), as a range table with no explicit ORDER BY resolves. Guaranteed
+                        // non-empty by the rangeRewriteKeySchemaIsValid check above (>=1 key remains).
+                        short fallbackShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null);
+                        return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
+                                olapTable.getKeysType(), null, null, fallbackShortKeyCount);
+                    }
+                    short dropShortKeyCount =
+                            GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null, dropSortKeyIdxes);
+                    return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
+                            olapTable.getKeysType(), dropSortKeyIdxes, dropSortKeyUniqueIds, dropShortKeyCount);
+                }
+>>>>>>> 22b1d27 ([BugFix][RB-97] Reject widening a VARCHAR colocated column of a range colocate table (#82166))
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
