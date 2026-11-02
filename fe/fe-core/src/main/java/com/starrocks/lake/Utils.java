@@ -207,6 +207,25 @@ public class Utils {
                                            Map<Long, TabletStatPB> tabletStats,
                                            List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
             throws NoAliveBackendException, RpcException {
+        publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, tabletRanges, nodeToTablets,
+                computeResource, tabletStats, vectorIndexBuildInfos, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@code PublishVersionRequest.is_retry_publish}: true when an earlier publish of
+     *        this partition failed. It makes each tablet read the new version from storage on a metacache miss,
+     *        one read per tablet that is pure waste on a first attempt.
+     */
+    public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                           long baseVersion, long newVersion,
+                                           Map<Long, Double> compactionScores,
+                                           Map<Long, TabletRange> tabletRanges,
+                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                           ComputeResource computeResource,
+                                           Map<Long, TabletStatPB> tabletStats,
+                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                           boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         // The brpc send is asynchronous, but this method waits for every response before
         // returning, so the wait is what a lock would be held across.
         BlockingCallValidator.validateNotUnderLock("lake-publish");
@@ -238,6 +257,7 @@ public class Utils {
             request.newVersion = newVersion;
             request.tabletIds = publishTabletInfo.getTabletIds(); // todo: limit the number of Tablets sent to a single node
             request.timeoutMs = timeoutMs;
+            request.isRetryPublish = isRetryPublish;
             request.txnInfos = txnInfos;
             if (!rebuildPindexTabletIds.isEmpty()) {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
@@ -326,15 +346,32 @@ public class Utils {
                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                       boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnInfo, baseVersion, newVersion, compactionScores, tabletRanges, computeResource,
+                tabletStats, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier publish of this partition
+     *        failed.
+     */
+    public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
+                                      long newVersion, Map<Long, Double> compactionScores,
+                                      Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                      Map<Long, TabletStatPB> tabletStats,
+                                      boolean useAggregatePublish,
+                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                      boolean preferSharedInitialMetadata,
+                                      boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         if (!useAggregatePublish) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion,
                     compactionScores, tabletRanges, null, computeResource, tabletStats,
-                    vectorIndexBuildInfos);
+                    vectorIndexBuildInfos, isRetryPublish);
         } else {
             aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores,
                     tabletRanges, null, computeResource, tabletStats, vectorIndexBuildInfos,
-                    preferSharedInitialMetadata);
+                    preferSharedInitialMetadata, isRetryPublish);
         }
     }
 
@@ -472,6 +509,22 @@ public class Utils {
                                                            AggregatePublishVersionRequest request,
                                                            boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
+        createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion, nodeToTablets, computeResource,
+                request, preferSharedInitialMetadata, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; set on every sub-request, so each node checks
+     *        its own tablets.
+     */
+    public static void createSubRequestForAggregatePublish(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                                           long baseVersion, long newVersion,
+                                                           Map<ComputeNode, List<Long>> nodeToTablets,
+                                                           ComputeResource computeResource,
+                                                           AggregatePublishVersionRequest request,
+                                                           boolean preferSharedInitialMetadata,
+                                                           boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
@@ -499,6 +552,7 @@ public class Utils {
             singleReq.setNewVersion(newVersion);
             singleReq.setTabletIds(publishTabletInfo.getTabletIds());
             singleReq.setTimeoutMs(timeoutMs);
+            singleReq.isRetryPublish = isRetryPublish;
             singleReq.setTxnInfos(txnInfos);
             singleReq.setEnableAggregatePublish(true);
             singleReq.setPreferSharedInitialMetadata(preferSharedInitialMetadata);
@@ -630,9 +684,11 @@ public class Utils {
         }
 
         LakeService lakeService = BrpcProxy.getLakeService(aggregatorNode.getHost(), aggregatorNode.getBrpcPort());
-        // Same per-call override as the non-aggregate path, see publishVersionBatch. The aggregator waits
-        // for every sub-request, each of which carries this same timeout, so FE must not wait for less.
-        TalkTimeoutController.setTalkTimeout(Config.lake_publish_version_timeout_ms);
+        // Same per-call override as the non-aggregate path, see publishVersionBatch. Each sub-request carries
+        // lake_publish_version_timeout_ms, so the aggregator has every node's outcome by about that time and
+        // then still writes the bundle, or lets the nodes keep what they finished, before it replies. Waiting
+        // twice as long makes FE start its retry only after that, never while this aggregator is still writing.
+        TalkTimeoutController.setTalkTimeout(2L * Config.lake_publish_version_timeout_ms);
         Future<PublishVersionResponse> future = lakeService.aggregatePublishVersion(request);
 
         try {
@@ -729,11 +785,30 @@ public class Utils {
                                                List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
                                                boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
+        aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, tabletRanges,
+                nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata, false);
+    }
+
+    /**
+     * @param isRetryPublish see {@link Utils#publishVersionBatch}; true when an earlier publish of this partition
+     *        failed.
+     */
+    public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                                               long baseVersion, long newVersion,
+                                               Map<Long, Double> compactionScores,
+                                               Map<Long, TabletRange> tabletRanges,
+                                               Map<ComputeNode, List<Long>> nodeToTablets,
+                                               ComputeResource computeResource,
+                                               Map<Long, TabletStatPB> tabletStats,
+                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                               boolean preferSharedInitialMetadata,
+                                               boolean isRetryPublish)
+            throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         try {
             createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion,
                                                 nodeToTablets, computeResource, request,
-                                                preferSharedInitialMetadata);
+                                                preferSharedInitialMetadata, isRetryPublish);
             sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
                                                tabletRanges, tabletStats, vectorIndexBuildInfos);
         } catch (Exception e) {

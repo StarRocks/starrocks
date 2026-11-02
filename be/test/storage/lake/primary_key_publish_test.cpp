@@ -59,6 +59,7 @@
 #include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
+#include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -2791,6 +2792,163 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(0, read_rows(tablet_id, new_version));
 }
+
+// A retry whose metadata and primary index were both evicted reads the already written new version instead of
+// re-applying the batch. Without is_retry_publish it re-applies, which reloads the index.
+TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_written_new_version) {
+    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 1, true, true);
+    auto base_version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<int64_t> txn_ids;
+    auto write_txn = [&](const Chunk& chunk, const std::vector<uint32_t>& indexes) {
+        auto txn_id = next_id();
+        txn_ids.emplace_back(txn_id);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    };
+    write_txn(*chunk0, indexes0);
+    write_txn(*chunk1, indexes1);
+
+    auto new_version = base_version + 2;
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
+
+    auto evict_caches = [&]() {
+        _tablet_mgr->prune_metacache();
+        _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+        ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+    };
+
+    // A retry answers from the written new version: the index stays unloaded.
+    evict_caches();
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids, /*is_retry_publish=*/true).status());
+    EXPECT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+
+    // A first attempt does not look: it re-applies the batch and loads the index on the way.
+    evict_caches();
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
+    EXPECT_GT(_primary_key_mgr->get_primary_index_data_version(tablet_id), 0);
+
+    // A newer vector index watermark from FE is not covered by the written metadata, so the retry re-applies
+    // to persist it.
+    evict_caches();
+    auto txns = std::vector<TxnInfoPB>();
+    auto commit_time = time(nullptr);
+    for (auto id : txn_ids) {
+        txns.emplace_back(TEST_txn_info(id, commit_time));
+    }
+    constexpr int64_t kBuiltVersion = 7;
+    auto new_metadata_path = _tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    // If that re-apply fails, the rejected metadata must not be left in the metacache for the next retry to take.
+    {
+        TEST_ENABLE_ERROR_POINT("TabletManager::put_tablet_metadata",
+                                Status::IOError("injected put tablet metadata error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::put_tablet_metadata");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        ASSERT_ERROR(publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
+                                     /*skip_write_tablet_metadata=*/false, kBuiltVersion,
+                                     InitialMetadataOrder::kPerTabletFirst, /*is_retry_publish=*/true));
+    }
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path));
+    evict_caches();
+    ASSIGN_OR_ABORT(auto republished,
+                    publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
+                                    /*skip_write_tablet_metadata=*/false, kBuiltVersion,
+                                    InitialMetadataOrder::kPerTabletFirst, /*is_retry_publish=*/true));
+    EXPECT_EQ(kBuiltVersion, republished->vector_index_built_version());
+
+    EXPECT_EQ(2 * kChunkSize, read_rows(tablet_id, new_version));
+}
+
+#ifdef WITH_STARCACHE
+// Under file bundling a version's metadata is written only inside its bundle, so a tablet that finished in an
+// earlier attempt keeps its result in a partial_meta in the local disk cache. A retry reads it back instead of
+// applying again; with lake_enable_publish_partial_meta off it applies.
+TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_partial_meta) {
+    ScopedLocalDiskCache local_disk_cache(lake::join_path(kTestGroupPath, "partial_meta_cache"));
+    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 1, true, true);
+    auto base_version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<int64_t> txn_ids;
+    auto write_txn = [&](const Chunk& chunk, const std::vector<uint32_t>& indexes) {
+        auto txn_id = next_id();
+        txn_ids.emplace_back(txn_id);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    };
+    write_txn(*chunk0, indexes0);
+    write_txn(*chunk1, indexes1);
+    auto txns = std::vector<TxnInfoPB>();
+    auto commit_time = time(nullptr);
+    for (auto id : txn_ids) {
+        txns.emplace_back(TEST_txn_info(id, commit_time));
+    }
+    auto new_version = base_version + 2;
+    auto publish = [&](bool is_retry_publish, bool* applied) {
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
+                               /*skip_write_tablet_metadata=*/true, /*fe_built_version=*/0,
+                               InitialMetadataOrder::kPerTabletFirst, is_retry_publish, applied);
+    };
+    auto evict_caches = [&]() {
+        _tablet_mgr->prune_metacache();
+        _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+        ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+    };
+
+    bool applied = false;
+    ASSIGN_OR_ABORT(auto metadata, publish(/*is_retry_publish=*/false, &applied));
+    EXPECT_TRUE(applied);
+    ASSERT_OK(_tablet_mgr->put_partial_tablet_metadata(metadata));
+
+    auto old_enable = config::lake_enable_publish_partial_meta;
+    DeferOp restore([&]() { config::lake_enable_publish_partial_meta = old_enable; });
+    config::lake_enable_publish_partial_meta = true;
+    evict_caches();
+    ASSIGN_OR_ABORT(auto from_partial, publish(/*is_retry_publish=*/true, &applied));
+    EXPECT_FALSE(applied);
+    EXPECT_EQ(new_version, from_partial->version());
+    EXPECT_EQ(metadata->rowsets_size(), from_partial->rowsets_size());
+    EXPECT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+
+    // A first attempt never reads it.
+    evict_caches();
+    ASSERT_OK(publish(/*is_retry_publish=*/false, &applied).status());
+    EXPECT_TRUE(applied);
+
+    config::lake_enable_publish_partial_meta = false;
+    evict_caches();
+    ASSERT_OK(publish(/*is_retry_publish=*/true, &applied).status());
+    EXPECT_TRUE(applied);
+}
+#endif
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
     auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, false, true);

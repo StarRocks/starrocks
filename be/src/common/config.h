@@ -1733,6 +1733,12 @@ CONF_mBool(lake_enable_pk_preserve_txn_delete_order, "true");
 // restore the static open everywhere.
 CONF_mBool(lake_pk_partial_update_use_segment_cache, "true");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+// Under file bundling, keep a tablet's publish result (partial_meta) in this node's local disk cache when the
+// aggregator cannot have received it (the publish ran past the RPC timeout plus 3 seconds) or when a retry
+// had to apply it again, and let a retry on this node read it back before applying. Never written to object
+// storage; the cache evicts it like any other entry. Keeps tablets that already finished from being re-applied
+// on every retry of a slow partition. Needs the datacache. Read on every BE; set it to the same value on all.
+CONF_mBool(lake_enable_publish_partial_meta, "false");
 // Timeout guard in milliseconds for writing txn log (put_txn_log / put_combined_txn_log).
 // When writing a txn log takes longer than this threshold, the stack trace of the slow thread
 // is dumped to the log to help diagnose slow object-storage writes.

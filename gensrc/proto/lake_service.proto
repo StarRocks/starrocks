@@ -72,6 +72,11 @@ message PublishVersionRequest {
     // never reach another index's tablets. Absent from an older FE, which simply keeps the default
     // order.
     optional bool prefer_shared_initial_metadata = 12;
+    // Set by FE when an earlier publish of this partition failed, so this request may repeat work that
+    // already finished. On a metacache miss the BE then reads |new_version| from storage before applying
+    // and returns it if it is already written. Absent from an older FE (a first attempt); an older BE
+    // ignores it and re-applies, as before.
+    optional bool is_retry_publish = 13;
 }
 
 // Per-tablet stats returned by the lake publish RPC. The FE also reuses this as a plain in-process

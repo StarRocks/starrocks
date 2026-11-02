@@ -400,7 +400,8 @@ public class UtilsTest {
         Assertions.assertEquals(1, sentRequests.size());
         Assertions.assertEquals(1, sentRequests.get(0).getPublishReqs().size());
         Assertions.assertEquals(23456L, (long) sentRequests.get(0).getPublishReqs().get(0).getTimeoutMs());
-        Assertions.assertEquals(23456L, talkTimeoutAtSend.get());
+        // FE waits twice as long as each sub-request may take, so the aggregator has replied before FE retries.
+        Assertions.assertEquals(2 * 23456L, talkTimeoutAtSend.get());
     }
 
     private void mockSingleNodePublish(ComputeNode node, PublishTabletsInfo tabletsInfo) {
