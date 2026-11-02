@@ -42,12 +42,7 @@ import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileMetadata;
 import org.apache.iceberg.FileScanTask;
-<<<<<<< HEAD
-=======
-import org.apache.iceberg.MetadataColumns;
-import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionData;
->>>>>>> 59be81d ([Enhancement][RB-225] Cut Iceberg FE cost of delete file indexing and scan-range deploy (#81796))
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
