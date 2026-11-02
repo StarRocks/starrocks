@@ -385,6 +385,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/flat_json_column_rw_test.cpp
     ./storage/rowset/frame_of_reference_page_test.cpp
     ./storage/rowset/index_page_test.cpp
+    ./storage/rowset/indexed_column_test.cpp
     ./storage/rowset/map_column_rw_test.cpp
     ./storage/rowset_merger_test.cpp
     ./storage/rowset/metadata_cache_test.cpp

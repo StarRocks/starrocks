@@ -199,8 +199,18 @@ Status IndexedColumnIterator::seek_at_or_after(const void* key, bool* exact_matc
     }
 
     // seek inside data page
-    RETURN_IF_ERROR(_data_page->data_decoder()->seek_at_or_after_value(key, exact_match));
-    RETURN_IF_ERROR(_data_page->seek(_data_page->data_decoder()->current_index()));
+    Status st = _data_page->data_decoder()->seek_at_or_after_value(key, exact_match);
+    if (st.is_not_found() && _reader->_has_index_page && _value_iter.move_next()) {
+        // The value index stores each page's first key. A key between pages is
+        // routed to the preceding page, so the next page's first value is its
+        // lower bound in the column.
+        RETURN_IF_ERROR(_read_data_page(_value_iter.current_page_pointer()));
+        RETURN_IF_ERROR(_data_page->seek(0));
+        *exact_match = false;
+    } else {
+        RETURN_IF_ERROR(st);
+        RETURN_IF_ERROR(_data_page->seek(_data_page->data_decoder()->current_index()));
+    }
     _current_ordinal = _data_page->first_ordinal() + _data_page->offset();
     DCHECK(_data_page->contains(_current_ordinal));
     _seeked = true;
