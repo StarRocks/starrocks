@@ -394,12 +394,7 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
 
 static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::vector<TabletInfoPB>& tablet_infos,
                                          int64_t version, int64_t max_empty_walk_versions, std::string_view root_dir,
-<<<<<<< HEAD
-                                         AsyncSharedFileDeleter* deleter) {
-=======
-                                         int64_t anchor_tablet_id, AsyncSharedFileDeleter* deleter,
-                                         int64_t deadline_ms) {
->>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
+                                         int64_t anchor_tablet_id, AsyncSharedFileDeleter* deleter) {
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     for (const auto& tablet_info : tablet_infos) {
         auto tablet_id = tablet_info.tablet_id();
@@ -428,13 +423,8 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
                     deleter->clear();
                     return Status::OK();
                 }
-<<<<<<< HEAD
-                res = tablet_mgr->get_tablet_metadata(tablet_id, ++v, false /* fill_meta */, true /* fill_data */);
-=======
-                RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
                 res = get_tablet_metadata_for_vacuum(tablet_mgr, anchor_tablet_id, tablet_id, ++v,
                                                      true /* fill_data */);
->>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
             }
             if (res.ok() && v != version) {
                 LOG(INFO) << "incremental vacuum shared-file cleanup: tablet " << tablet_id << " floor " << version
@@ -749,12 +739,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     if (max_vacuum_version > 0 && !shared_file_deleter.is_empty()) {
         RETURN_IF_ERROR(collect_alive_shared_files(tablet_mgr, tablet_infos, max_vacuum_version,
                                                    0 /* step-up bound (unused: floor is materialized here) */, root_dir,
-<<<<<<< HEAD
-                                                   &shared_file_deleter));
-=======
-                                                   anchor_tablet_id, &shared_file_deleter, deadline_ms));
-        RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
->>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
+                                                   anchor_tablet_id, &shared_file_deleter));
         RETURN_IF_ERROR(shared_file_deleter.finish());
         (*vacuumed_files) += shared_file_deleter.delete_count();
     }
@@ -1161,13 +1146,8 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
     }
     if (!shared_file_deleter.is_empty()) {
         RETURN_IF_ERROR(collect_alive_shared_files(tablet_mgr, tablet_infos, pass_start_version,
-<<<<<<< HEAD
-                                                   max_empty_walk_versions, root_dir, &shared_file_deleter));
-=======
                                                    max_empty_walk_versions, root_dir, anchor_tablet_id,
-                                                   &shared_file_deleter, deadline_ms));
-        RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
->>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
+                                                   &shared_file_deleter));
         RETURN_IF_ERROR(shared_file_deleter.finish());
         (*vacuumed_files) += shared_file_deleter.delete_count();
     }
@@ -1528,17 +1508,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         // extra_file_size is also left at 0: propose computes no orphan-size estimate, so the legacy
         // "extra minus vacuumed" adjustment below is skipped (it would otherwise report a negative).
     } else {
-<<<<<<< HEAD
-        RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
-                                               enable_file_bundling, enable_shared_file_cleanup, &vacuumed_files,
-                                               &vacuumed_file_size, &vacuumed_version, &extra_file_size,
-                                               retain_versions, deadline_ms));
-=======
         RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, anchor_tablet_id, tablet_infos, min_retain_version,
                                                grace_timestamp, enable_file_bundling, enable_shared_file_cleanup,
                                                &vacuumed_files, &vacuumed_file_size, &vacuumed_version,
-                                               &extra_file_size, retain_versions, deadline_ms, shared_file_deleter));
->>>>>>> 6914cfe ([BugFix] Resolve vacuum metadata reads through a local anchor tablet (#81901))
+                                               &extra_file_size, retain_versions, deadline_ms));
         extra_file_size -= vacuumed_file_size;
     }
     if (request.delete_txn_log()) {
