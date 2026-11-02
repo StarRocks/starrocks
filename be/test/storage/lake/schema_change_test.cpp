@@ -49,14 +49,10 @@
 #include "storage/lake/test_util.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
-<<<<<<< HEAD
-#include "testutil/column_test_helper.h"
-=======
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
-#include "testutil/scoped_fail_point.h"
+#include "testutil/column_test_helper.h"
 #include "types/json_value.h"
->>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
 
 namespace starrocks::lake {
 
@@ -3489,123 +3485,6 @@ TEST_F(DropIndexOnlyValidationTest, alter_version_propagates_to_op_drop_version)
     EXPECT_EQ(2, log->op_drop_index().dropped(0).col_unique_id());
 }
 
-<<<<<<< HEAD
-=======
-// =============================================================================
-// Fault-injection points on the lake schema-change path.
-//
-// Each test proves two things, and both matter:
-//
-//   1. the point is actually reached by an ordinary schema change -- a point
-//      that is registered but never hit is worse than no point at all, because
-//      the coverage matrix then shows a cell that can never turn green;
-//   2. the failure is recoverable -- after disarming, the same operation
-//      completes, i.e. the injected failure left nothing poisoned behind.
-//
-// The first assertion is not a formality. When the equivalent points were added
-// to the shared-data primary-key apply path, one of ten was armed and the
-// operation still succeeded: the branch it guarded required a precondition the
-// workload never met. Without this assertion that point would have been merged
-// as "covered" and stayed dead.
-// =============================================================================
-
-TEST_P(SchemaChangeAddColumnTest, test_alter_tablet_failpoints_reachable_and_recoverable) {
-    int64_t version = 1;
-    int64_t txn_id = 9000;
-    auto base_tablet_id = _base_tablet_metadata->id();
-    auto new_tablet_id = _new_tablet_metadata->id();
-
-    // One rowset, so the rewrite path has something to convert.
-    {
-        auto c0 = Int32Column::create();
-        auto c1 = Int32Column::create();
-        c0->append_datum(Datum(1));
-        c1->append_datum(Datum(2));
-        VChunk chunk({std::move(c0), std::move(c1)}, _base_schema);
-        uint32_t indexes[1] = {0};
-        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
-                                                   .set_tablet_manager(_tablet_manager.get())
-                                                   .set_tablet_id(base_tablet_id)
-                                                   .set_txn_id(txn_id)
-                                                   .set_partition_id(_partition_id)
-                                                   .set_mem_tracker(_mem_tracker.get())
-                                                   .set_schema_id(_base_tablet_schema->id())
-                                                   .build());
-        ASSERT_OK(delta_writer->open());
-        ASSERT_OK(delta_writer->write(chunk, indexes, 1));
-        ASSERT_OK(delta_writer->finish_with_txnlog());
-        delta_writer->close();
-        ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
-        version++;
-        txn_id++;
-    }
-
-    auto make_request = [&](int64_t alter_txn_id) {
-        TAlterTabletReqV2 request;
-        request.base_tablet_id = base_tablet_id;
-        request.new_tablet_id = new_tablet_id;
-        request.alter_version = version;
-        request.txn_id = alter_txn_id;
-        return request;
-    };
-
-    // Every point on do_process_alter_tablet(), in the order the handler walks them.
-    const char* kPoints[] = {
-            "lake_sc_get_base_tablet_failed", "lake_sc_resolve_schema_failed", "lake_sc_parse_request_failed",
-            "lake_sc_convert_rowsets_failed", "lake_sc_put_txn_log_failed",
-    };
-
-    for (const auto* point : kPoints) {
-        SchemaChangeHandler handler(_tablet_manager.get());
-        {
-            ScopedFailPointArm arm(point);
-            Status st = handler.process_alter_tablet(make_request(txn_id++));
-            // Reachability: armed => the schema change must fail, and the message
-            // must name the point, so an injected failure is never mistaken for a
-            // real one when these are used by the soak framework.
-            ASSERT_FALSE(st.ok()) << "failpoint " << point
-                                  << " was armed but the schema change still succeeded; the guarded "
-                                     "branch is probably unreachable for this workload";
-            EXPECT_NE(std::string::npos, st.to_string().find(point)) << st.to_string();
-        }
-        // Recoverability: with the point disarmed the same schema change goes through.
-        Status st = handler.process_alter_tablet(make_request(txn_id++));
-        // ASSERT_OK is a do/while block (be/src/base/testutil/assert.h), so it cannot
-        // be streamed into; ASSERT_TRUE can, and it has to spell the status out
-        // because printing it was ASSERT_OK's job.
-        ASSERT_TRUE(st.ok()) << "after disarming " << point << " the retry still failed: " << st.to_string();
-    }
-}
-
-TEST_F(SchemaChangeAddIndexOnlyTest, drop_index_put_txn_log_failpoint_reachable) {
-    // do_process_drop_index_only() validates the request and writes a TxnLog; it
-    // never loads the tablet, so a well-formed request is all this needs.
-    TAlterTabletReqV2 request;
-    request.__set_base_tablet_id(7000);
-    request.__set_new_tablet_id(7000);
-    request.__set_only_drop_index(true);
-    TDropIndexInfo di;
-    di.__set_index_id(11);
-    di.__set_col_unique_id(1);
-    di.__set_index_type(TIndexType::BITMAP);
-    request.__set_drop_indexes({di});
-
-    SchemaChangeHandler handler(_tablet_manager.get());
-    request.__set_txn_id(870001);
-    ASSERT_OK(handler.process_alter_tablet(request));
-
-    request.__set_txn_id(870002);
-    {
-        ScopedFailPointArm arm("lake_drop_index_put_txn_log_failed");
-        Status st = handler.process_alter_tablet(request);
-        ASSERT_FALSE(st.ok()) << "lake_drop_index_put_txn_log_failed was armed but DROP INDEX still succeeded";
-        EXPECT_NE(std::string::npos, st.to_string().find("lake_drop_index_put_txn_log_failed")) << st.to_string();
-    }
-
-    request.__set_txn_id(870003);
-    ASSERT_OK(handler.process_alter_tablet(request));
-}
-
 // A lake schema change rewrites the table's existing JSON columns with the table's flat_json.*
 // settings, read from the BASE tablet's metadata. The shadow tablet's own metadata may carry none: FE
 // created schema-change shadow tablets without flat_json_config, so reading the new tablet (or the
@@ -3616,7 +3495,8 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDirectory);
         _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -3739,7 +3619,7 @@ protected:
         txn_info.set_combined_txn_log(false);
         txn_info.set_commit_time(time(nullptr));
         CHECK_OK(publish_version(_tablet_manager.get(), lake::PublishTabletInfo(new_tablet_id), 1, 2,
-                                 std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt)
+                                 std::span<const TxnInfoPB>(&txn_info, 1), false)
                          .status());
 
         auto metadata = _tablet_manager->get_tablet_metadata(new_tablet_id, 2).value();
@@ -3798,5 +3678,4 @@ TEST_F(SchemaChangeFlatJsonConfigTest, direct_schema_change_keeps_base_flat_json
     }
 }
 
->>>>>>> 4857bba8a93... [BugFix][RB-802] Give lake writers the table flat JSON config instead of the metadata cache (#64542)
 } // namespace starrocks::lake
