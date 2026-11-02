@@ -83,71 +83,7 @@ struct RegexpReplaceTemplate {
     int max_submatch = 0;            // MaxSubmatch(rewrite), in [0, 9]
     bool has_invalid_escape = false; // true if trailing '\' or '\c' where c not in [0-9\]
 
-    void parse(const Slice& rpl) {
-        literal_bytes.clear();
-        segments.clear();
-        nsubmatch = 1;
-        max_submatch = 0;
-        has_invalid_escape = false;
-
-        literal_bytes.reserve(rpl.size);
-        const char* const begin = rpl.data;
-        const char* const end = begin + rpl.size;
-        uint32_t lit_start = 0;
-
-        auto flush_literal = [&]() {
-            const auto lit_len = static_cast<uint32_t>(literal_bytes.size()) - lit_start;
-            if (lit_len > 0) {
-                segments.push_back(Segment{-1, lit_start, lit_len});
-                lit_start = static_cast<uint32_t>(literal_bytes.size());
-            }
-        };
-
-        for (const char* s = begin; s < end; ++s) {
-            if (*s != '\\') {
-                if (!has_invalid_escape) {
-                    literal_bytes.push_back(*s);
-                }
-                continue;
-            }
-            ++s;
-            if (s == end) {
-                // Trailing '\': RE2::Rewrite treats this as an invalid escape and stops.
-                // Break here so the loop increment does not advance `s` past `end`.
-                if (!has_invalid_escape) {
-                    flush_literal();
-                    has_invalid_escape = true;
-                }
-                break;
-            }
-            const auto c = static_cast<unsigned char>(*s);
-            if (c >= '0' && c <= '9') {
-                const int grp = c - '0';
-                if (grp > max_submatch) {
-                    max_submatch = grp;
-                }
-                if (!has_invalid_escape) {
-                    flush_literal();
-                    segments.push_back(Segment{grp, 0, 0});
-                }
-            } else if (c == '\\') {
-                if (!has_invalid_escape) {
-                    literal_bytes.push_back('\\');
-                }
-            } else {
-                // Invalid escape: RE2::Rewrite stops emitting further tokens here,
-                // while RE2::MaxSubmatch continues scanning the rest of `rpl` for `\d`.
-                if (!has_invalid_escape) {
-                    flush_literal();
-                    has_invalid_escape = true;
-                }
-            }
-        }
-        if (!has_invalid_escape) {
-            flush_literal();
-        }
-        nsubmatch = 1 + max_submatch;
-    }
+    void parse(const Slice& rpl);
 
     bool exceeds_groups(const re2::RE2& re) const { return max_submatch > re.NumberOfCapturingGroups(); }
 
