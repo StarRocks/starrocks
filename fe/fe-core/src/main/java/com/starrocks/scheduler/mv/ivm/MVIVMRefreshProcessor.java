@@ -507,7 +507,11 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             && !mvContext.isPartitionLimitExcludedPartitions()
                             ? String.valueOf(processStartTime) : "0");
         }
+<<<<<<< HEAD
         TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
+=======
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
+>>>>>>> 3bbab2120ae... [Enhancement] Record MV refresh job duration without querying task-run history (#62162)
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
