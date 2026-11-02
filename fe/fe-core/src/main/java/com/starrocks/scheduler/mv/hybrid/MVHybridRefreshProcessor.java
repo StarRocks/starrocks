@@ -31,6 +31,11 @@ import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
+<<<<<<< HEAD
+=======
+import com.starrocks.scheduler.mv.ivm.MvPublishPendingException;
+import com.starrocks.scheduler.mv.ivm.TvrTableSnapshotInfo;
+>>>>>>> c51085d66c7... [BugFix][RB-899] Wait for the MV's committed transactions to become visible before an incremental refresh plans (#67605)
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 
 import java.util.Map;
@@ -91,6 +96,24 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether pct may take over a run whose incremental plan failed. Not when pct would stop on the same failure: a
+     * lock or bookmark that is unavailable for now, which the task run retries on the incremental path, or a base table
+     * snapshot that cannot be taken, which pct takes too. Nor a view transaction that is still not visible, which
+     * passes, and the next run goes on incrementally. A change the view cannot follow incrementally falls back, and so
+     * does a failure nothing classifies.
+     */
+    @VisibleForTesting
+    static boolean canFallBackToPct(Throwable planFailure) {
+        return ExceptionUtils.indexOfType(planFailure, BookmarkUnreadableException.class) < 0
+                && ExceptionUtils.indexOfType(planFailure, LockTimeoutException.class) < 0
+                && ExceptionUtils.indexOfType(planFailure, BaseTableSnapshotAcquisitionException.class) < 0
+                && ExceptionUtils.indexOfType(planFailure, MvPublishPendingException.class) < 0;
+    }
+
+>>>>>>> c51085d66c7... [BugFix][RB-899] Wait for the MV's committed transactions to become visible before an incremental refresh plans (#67605)
     private ProcessExecPlan switchToPCTRefresh(TaskRunContext taskRunContext) throws Exception {
         this.currentRefreshMode = MaterializedView.RefreshMode.AUTO;
         // update the task run status to pct refresh

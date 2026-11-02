@@ -1556,6 +1556,15 @@ This topic introduces the following types of FE configurations:
 - Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
 - Introduced in: v3.3
 
+### `mv_incremental_refresh_wait_visible_timeout_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: How long an incremental refresh of a materialized view waits, before it plans, for the committed transactions on the materialized view to become visible. If one is still not visible by then, the refresh fails without writing data, and the next refresh waits again.
+- Introduced in: -
+
 ### `mv_plan_cache_max_size`
 
 - Default: 1000
