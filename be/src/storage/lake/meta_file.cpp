@@ -988,7 +988,8 @@ void MetaFileBuilder::remove_lcrm_file(const TxnLogPB_OpCompaction& op_compactio
 }
 
 Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
-                                           uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
+                                           uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id,
+                                           bool index_persisted) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::unordered_set<uint32_t> delete_delvec_sids;
@@ -1017,8 +1018,10 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                 delete_delvec_sids.insert(rssid);
                 del_range_ss << rssid << " ";
             }
-            // Collect del files.
-            _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            // Collect del files, unless the index already holds every delete.
+            if (!index_persisted) {
+                _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            }
             // Drop the delete_predicate before archiving the input rowset into compaction_inputs.
             // compaction_inputs is consumed only by vacuum/file cleanup, never by readers, so the
             // predicate is pure metadata bloat once the rowset is compacted away.
