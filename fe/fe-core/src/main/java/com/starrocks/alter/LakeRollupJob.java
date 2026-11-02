@@ -293,6 +293,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                             .setLatch(countDownLatch)
                             .setEnablePersistentIndex(table.enablePersistentIndex())
                             .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                            // Carry the table's flat-json config so the rollup tablets' metadata has it, as every
+                            // other create-replica path does; without it later compactions of the new index
+                            // write JSON columns with the be.conf globals.
+                            .setFlatJsonConfig(table.getFlatJsonConfig())
                             .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                             .setCompressionType(table.getCompressionType())
                             .setCreateSchemaFile(createSchemaFile)
