@@ -489,6 +489,40 @@ public class ReduceCastRuleTest {
     }
 
     @Test
+    public void testReduceIntegralDecimalComparison() {
+        Type decimalType = TypeFactory.createDecimalV3NarrowestType(20, 1);
+        ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.BIGINT, "company_id", true);
+        for (BinaryType binaryType : BinaryType.values()) {
+            BinaryPredicateOperator predicate = new BinaryPredicateOperator(binaryType,
+                    new CastOperator(decimalType, column),
+                    ConstantOperator.createDecimal(new BigDecimal("80940.0"), decimalType));
+            ScalarOperator result = new ReduceCastRule().apply(predicate, null);
+            assertEquals(column, result.getChild(0));
+            assertEquals(ConstantOperator.createBigint(80940), result.getChild(1));
+            assertEquals(binaryType, ((BinaryPredicateOperator) result).getBinaryType());
+        }
+    }
+
+    @Test
+    public void testRetainLossyDecimalComparisons() {
+        Type decimalType = TypeFactory.createDecimalV3NarrowestType(20, 1);
+        ColumnRefOperator column = new ColumnRefOperator(1, IntegerType.BIGINT, "company_id", true);
+        for (String value : new String[] {"80940.1", "9223372036854775808.0"}) {
+            BinaryPredicateOperator predicate = new BinaryPredicateOperator(BinaryType.EQ,
+                    new CastOperator(decimalType, column),
+                    ConstantOperator.createDecimal(new BigDecimal(value), decimalType));
+            assertEquals(predicate, new ReduceCastRule().apply(predicate, null));
+        }
+
+        // Even an integral constant cannot make a narrowing column cast safe to remove.
+        Type narrowDecimal = TypeFactory.createDecimalV3NarrowestType(9, 1);
+        BinaryPredicateOperator narrowing = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(narrowDecimal, column),
+                ConstantOperator.createDecimal(new BigDecimal("80940.0"), narrowDecimal));
+        assertEquals(narrowing, new ReduceCastRule().apply(narrowing, null));
+    }
+
+    @Test
     public void testReduceDateToDatetimeCast() {
         DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd");

@@ -20,13 +20,11 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.BinaryType;
->>>>>>> f209b0cf3c5... [Enhancement][RB-225] Prune Iceberg files on predicates over functions of a column (#67660)
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -271,12 +269,8 @@ public class ScalarOperatorToIcebergExpr {
         public Expression visitBinaryPredicate(BinaryPredicateOperator operator, IcebergContext context) {
             String columnName = getColumnName(operator.getChild(0));
             if (columnName == null) {
-<<<<<<< HEAD
-                return null;
-=======
                 return derivePreimage(operator.getChild(0), operator.getBinaryType(),
                         List.of(operator.getChild(1)), context);
->>>>>>> f209b0cf3c5... [Enhancement][RB-225] Prune Iceberg files on predicates over functions of a column (#67660)
             }
 
             Type icebergType = getResultType(columnName, context);

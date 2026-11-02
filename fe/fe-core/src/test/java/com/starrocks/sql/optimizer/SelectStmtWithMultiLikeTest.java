@@ -87,7 +87,7 @@ public class SelectStmtWithMultiLikeTest {
         String[][] testCases = new String[][] {
                 {"order_date > '2024-01-1' and site = 'ABC' and income = 10.0 and ship_mode = 3 and " +
                         "ship_code = 3 and region not like '%ABC%' and region not like '%DEF%'",
-                        "2: order_date > '2024-01-01', 3: site = 'ABC', CAST(4: income AS DECIMAL64(8,1)) = 10.0, 5: ship_mode "
+                        "2: order_date > '2024-01-01', 3: site = 'ABC', 4: income = 10, 5: ship_mode "
                                 + "= 3, 6: ship_code = 3, NOT (1: region REGEXP '^((.*ABC.*)|(.*DEF.*))$')"
                 },
                 {"region like '%ABC' or region like 'DEF_G'", "1: region REGEXP '^((.*ABC)|(DEF.G))$'"},
