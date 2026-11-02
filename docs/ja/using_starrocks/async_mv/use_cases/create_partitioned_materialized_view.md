@@ -110,7 +110,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv1
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY datekey
   AS 
   SELECT 
@@ -131,7 +131,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv2
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY str2date(datekey, '%Y-%m-%d')
   AS 
   SELECT 
@@ -158,7 +158,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv3
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', datekey)
   AS 
   SELECT 
@@ -183,7 +183,7 @@ DISTRIBUTED BY HASH(k1);
 
   ```SQL
   CREATE MATERIALIZED VIEW par_mv4
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PARTITION BY date_trunc('month', mv_datekey)
   AS 
   SELECT 
@@ -214,7 +214,7 @@ SELECT
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv5
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY date_trunc('day', mv_datekey)
 AS 
 SELECT 
@@ -236,7 +236,7 @@ GROUP BY datekey, k1;
 ```SQL
 -- JOIN でテーブルを接続。
 CREATE MATERIALIZED VIEW par_mv6
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -249,7 +249,7 @@ GROUP BY par_tbl1.datekey, t1k1, t2k1;
 
 -- UNION でテーブルを接続。
 CREATE MATERIALIZED VIEW par_mv7
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 AS SELECT 
   par_tbl1.datekey,
@@ -290,8 +290,8 @@ GROUP BY
 
 - **リフレッシュ戦略**
 
-  - 自動リフレッシュ戦略（`REFRESH ASYNC`）を持つマテリアライズドビューは、ベーステーブルのデータが変更されるたびに自動的にリフレッシュされます。
-  - 定期的なリフレッシュ戦略（`REFRESH ASYNC [START (<start_time>)] EVERY (INTERVAL <interval>)`）を持つマテリアライズドビューは、定義された間隔で定期的にリフレッシュされます。
+  - 自動リフレッシュ戦略（`REFRESH ON_CHANGE`）を持つマテリアライズドビューは、ベーステーブルのデータが変更されるたびに自動的にリフレッシュされます。
+  - 定期的なリフレッシュ戦略（`REFRESH SCHEDULE [START (<start_time>)] EVERY (INTERVAL <interval>)`）を持つマテリアライズドビューは、定義された間隔で定期的にリフレッシュされます。
 
   :::note
 
@@ -305,7 +305,7 @@ GROUP BY
 
 ```SQL
 CREATE MATERIALIZED VIEW par_mv8
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PARTITION BY datekey
 PROPERTIES(
   "partition_ttl_number" = "2",

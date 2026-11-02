@@ -214,7 +214,7 @@ The following example only provides guidance on creating and assign a dedicated 
 
     ```SQL
     CREATE MATERIALIZED VIEW mv_example
-    REFRESH ASYNC
+    REFRESH ON_CHANGE
     PROPERTIES (
         'resource_group' = 'rg_mv'
     )

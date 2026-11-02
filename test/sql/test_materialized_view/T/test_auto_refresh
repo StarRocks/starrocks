@@ -18,7 +18,7 @@ INSERT INTO t1 VALUES
 
 CREATE MATERIALIZED VIEW `mv1`
 PARTITION BY (`__time`)
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
     "auto_refresh_partitions_limit" = "3",
     "partition_refresh_number" = "-1"

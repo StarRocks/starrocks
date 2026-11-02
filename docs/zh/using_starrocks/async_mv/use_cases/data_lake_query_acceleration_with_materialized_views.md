@@ -234,7 +234,7 @@ ORDER BY d_year, p_brand;
 CREATE MATERIALIZED VIEW lineorder_flat_mv
 DISTRIBUTED BY HASH(LO_ORDERDATE, LO_ORDERKEY) BUCKETS 48
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES ( 
     -- 指定唯一约束。
     "unique_constraints" = "
@@ -291,7 +291,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_1 
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   lo_orderdate, count(distinct lo_orderkey)
@@ -301,7 +301,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_2 
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   -- lo_orderkey 必须是 BIGINT 类型，以便可以用于查询改写。
@@ -320,7 +320,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_3
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   AS 
   SELECT
   lo_orderdate, lo_discount, lo_quantity, d_year, d_yearmonth, SUM(lo_extendedprice * lo_discount) AS REVENUE
@@ -334,7 +334,7 @@ AS SELECT
   CREATE MATERIALIZED VIEW mv_2_4
   DISTRIBUTED BY HASH(lo_orderdate)
   PARTITION BY LO_ORDERDATE
-  REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+  REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
   PROPERTIES (
       "force_external_table_query_rewrite" = "TRUE"
   )
@@ -375,7 +375,7 @@ Q5 首先在 `customer` 表上执行聚合，然后在 `lineorder` 表上执行 
 --mv_3_1
 CREATE MATERIALIZED VIEW mv_3_1
 DISTRIBUTED BY HASH(c_custkey)
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES (
     "force_external_table_query_rewrite" = "TRUE"
 )
@@ -386,7 +386,7 @@ SELECT distinct c_custkey, c_region from hive.ssb_1g_csv.customer;
 CREATE MATERIALIZED VIEW mv_3_2
 DISTRIBUTED BY HASH(lo_orderdate)
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 PROPERTIES (
     "force_external_table_query_rewrite" = "TRUE"
 )
@@ -406,7 +406,7 @@ GROUP BY l.lo_orderkey, l.lo_orderdate, mv.c_custkey, mv.c_region;
 CREATE MATERIALIZED VIEW mv_4_1 
 DISTRIBUTED BY HASH(lo_orderdate)
 PARTITION BY LO_ORDERDATE
-REFRESH ASYNC EVERY(INTERVAL 1 DAY) 
+REFRESH SCHEDULE EVERY(INTERVAL 1 DAY) 
 AS 
 SELECT lo_orderkey, lo_orderdate, lo_revenue
 FROM hive.ssb_1g_csv.lineorder

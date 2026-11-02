@@ -55,7 +55,7 @@ last_refresh_error_message           |
 rows                                 | 0
 text                                 | CREATE MATERIALIZED VIEW `mv_pred_2` (`lo_quantity`, `lo_revenue`, `sum`)
 DISTRIBUTED BY HASH(`lo_quantity`, `lo_revenue`) BUCKETS 2
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "storage_medium" = "HDD"
@@ -172,7 +172,7 @@ MySQL > SHOW CREATE TABLE mv_agg\G
 Materialized View        | mv_agg
 Create Materialized View | CREATE MATERIALIZED VIEW `mv_agg` (`c_custkey`)
 DISTRIBUTED BY RANDOM
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "replicated_storage" = "true",
@@ -240,7 +240,7 @@ If you failed to create an asynchronous materialized view, that is, the CREATE M
 
   ```SQL
   CREATE MATERIALIZED VIEW <mv_name> 
-  REFRESH ASYNC -- The refresh strategy of the asynchronous materialized view.
+  REFRESH <refresh_strategy> -- The refresh strategy of the asynchronous materialized view.
   DISTRIBUTED BY HASH(<column>) -- The data distribution strategy of the asynchronous materialized view.
   AS <query>
   ```
@@ -275,7 +275,7 @@ If the materialized view fails to refresh, that is, the state of the refresh tas
   ```SQL
   -- Define the properties when creating the materialized view.
   CREATE MATERIALIZED VIEW mv1 
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PROPERTIES ( 'session.enable_spill'='true' )
   AS <query>;
 
@@ -402,7 +402,7 @@ If your materialized view fails to rewrite relevant queries, you can look into t
 Example 1: The materialized view `mv1` uses nested aggregation. Thus, it cannot be used to rewrite queries.
 
 ```SQL
-CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv1 REFRESH ON_CHANGE AS
 select count(distinct cnt) 
 from (
     select c_city, count(*) cnt 
@@ -414,7 +414,7 @@ from (
 Example 2: The materialized view `mv2` uses join plus aggregation. Thus, it cannot be used to rewrite queries. To solve this problem, you can create a materialized view with aggregation, and then a nested materialized view with join based on the previous one.
 
 ```SQL
-CREATE MATERIALIZED VIEW mv2 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv2 REFRESH ON_CHANGE AS
 select *
 from (
     select lo_orderkey, lo_custkey, p_partkey, p_name
@@ -432,14 +432,14 @@ on lo.lo_custkey = cust.c_custkey;
 Example 3: The materialized view `mv3` cannot rewrite queries in the pattern of `SELECT c_city, sum(tax) FROM tbl WHERE dt='2023-01-01' AND c_city = 'xxx'` because the column that the predicate referenced is not in the SELECT expression.
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT c_city, sum(tax) FROM tbl GROUP BY c_city;
 ```
 
 To solve this problem, you can create the materialized view as follows:
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 ```
 

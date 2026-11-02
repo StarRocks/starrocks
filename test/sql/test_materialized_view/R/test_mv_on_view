@@ -26,7 +26,7 @@ insert into jj values('2020-01-16', 1);
 CREATE VIEW view1 AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW mv_on_view_1 REFRESH ASYNC AS select * from view1;
+CREATE MATERIALIZED VIEW mv_on_view_1 REFRESH ON_CHANGE AS select * from view1;
 -- result:
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode ;

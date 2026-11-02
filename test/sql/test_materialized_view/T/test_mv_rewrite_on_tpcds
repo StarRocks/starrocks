@@ -6,7 +6,7 @@ set materialized_view_rewrite_mode='force';
 DROP MATERIALIZED VIEW IF EXISTS __mv__ta0008;
 
 CREATE MATERIALIZED VIEW __mv__ta0008 (_ca0005, _ca0006, _ca0007)
-REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+REFRESH SCHEDULE START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
 PROPERTIES (
   "replicated_storage" = "true",
   "replication_num" = "1",

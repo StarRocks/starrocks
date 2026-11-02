@@ -44,9 +44,10 @@ StarRocks v2.3以前のバージョンでは、単一のテーブルにのみ構
 
   非同期マテリアライズドビューを作成すると、そのデータはその時点でのベーステーブルの状態を反映します。ベーステーブルのデータが変更された場合、マテリアライズドビューをリフレッシュして変更を同期させる必要があります。
 
-  現在、StarRocksは2つの一般的なリフレッシュ戦略をサポートしています。
+  現在、StarRocksは3つのリフレッシュ戦略をサポートしています。
 
-  - ASYNC: 非同期リフレッシュモード。ベーステーブルのデータが変更されたとき、または指定された間隔に基づいて定期的に、マテリアライズドビューを自動的にリフレッシュできます。
+  - ON_CHANGE: ベーステーブル変更トリガーモード。ベーステーブルデータが変更されるたびに、マテリアライズドビューが自動的にリフレッシュされます。
+  - SCHEDULE: 定期リフレッシュモード。定義された間隔でマテリアライズドビューが定期的にリフレッシュされます。
   - MANUAL: 手動リフレッシュモード。マテリアライズドビューは自動的にリフレッシュされません。リフレッシュタスクはユーザーによって手動でトリガーされる必要があります。
 
 - **クエリの書き換え**
@@ -162,7 +163,7 @@ GROUP BY order_id;
 ```SQL
 CREATE MATERIALIZED VIEW order_mv
 DISTRIBUTED BY HASH(`order_id`)
-REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+REFRESH SCHEDULE START('2022-09-01 10:00:00') EVERY (interval 1 day)
 AS SELECT
     order_list.order_id,
     sum(goods.price) as total
@@ -182,7 +183,7 @@ GROUP BY order_id;
 
 - **非同期マテリアライズドビューのリフレッシュメカニズムについて**
 
-  現在、StarRocksは2つのオンデマンドリフレッシュ戦略をサポートしています：MANUALリフレッシュとASYNCリフレッシュ。
+  現在、StarRocksは3つのオンデマンドリフレッシュ戦略をサポートしています：ON_CHANGEリフレッシュ、SCHEDULEリフレッシュ、MANUALリフレッシュ。
 
   StarRocks v2.5では、非同期マテリアライズドビューはリフレッシュのコストを制御し、成功率を高めるためのさまざまな非同期リフレッシュメカニズムをさらにサポートしています。
 
@@ -270,7 +271,7 @@ StarRocks v2.5は、SPJGタイプの非同期マテリアライズドビュー�
 - 非同期マテリアライズドビューのリフレッシュ間隔を2日に変更する。
 
   ```SQL
-  ALTER MATERIALIZED VIEW order_mv REFRESH ASYNC EVERY(INTERVAL 2 DAY);
+  ALTER MATERIALIZED VIEW order_mv REFRESH SCHEDULE EVERY(INTERVAL 2 DAY);
   ```
 
 ### 非同期マテリアライズドビューを表示する

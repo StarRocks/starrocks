@@ -55,7 +55,7 @@ last_refresh_error_message           |
 rows                                 | 0
 text                                 | CREATE MATERIALIZED VIEW `mv_pred_2` (`lo_quantity`, `lo_revenue`, `sum`)
 DISTRIBUTED BY HASH(`lo_quantity`, `lo_revenue`) BUCKETS 2
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "storage_medium" = "HDD"
@@ -172,7 +172,7 @@ MySQL > SHOW CREATE TABLE mv_agg\G
 Materialized View        | mv_agg
 Create Materialized View | CREATE MATERIALIZED VIEW `mv_agg` (`c_custkey`)
 DISTRIBUTED BY RANDOM
-REFRESH ASYNC
+REFRESH ON_CHANGE
 PROPERTIES (
 "replication_num" = "3",
 "replicated_storage" = "true",
@@ -240,7 +240,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
 
   ```SQL
   CREATE MATERIALIZED VIEW <mv_name> 
-  REFRESH ASYNC -- 非同期マテリアライズドビューのリフレッシュ戦略。
+  REFRESH <refresh_strategy> -- 非同期マテリアライズドビューのリフレッシュ戦略。
   DISTRIBUTED BY HASH(<column>) -- 非同期マテリアライズドビューのデータ分散戦略。
   AS <query>
   ```
@@ -275,7 +275,7 @@ MySQL > EXPLAIN LOGICAL SELECT `customer`.`c_custkey`
   ```SQL
   -- マテリアライズドビューを作成する際にプロパティを定義します。
   CREATE MATERIALIZED VIEW mv1 
-  REFRESH ASYNC
+  REFRESH ON_CHANGE
   PROPERTIES ( 'session.enable_spill'='true' )
   AS <query>;
 
@@ -400,7 +400,7 @@ ALTER MATERIALIZED VIEW mv1 ACTIVE;
 例1: マテリアライズドビュー`mv1`はネストされた集計を使用しています。そのため、クエリを書き換えることはできません。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv1 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv1 REFRESH ON_CHANGE AS
 select count(distinct cnt) 
 from (
     select c_city, count(*) cnt 
@@ -412,7 +412,7 @@ from (
 例2: マテリアライズドビュー`mv2`はジョインと集計を使用しています。そのため、クエリを書き換えることはできません。この問題を解決するには、集計を含むマテリアライズドビューを作成し、その後、前のものに基づいてジョインを含むネストされたマテリアライズドビューを作成できます。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv2 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv2 REFRESH ON_CHANGE AS
 select *
 from (
     select lo_orderkey, lo_custkey, p_partkey, p_name
@@ -430,14 +430,14 @@ on lo.lo_custkey = cust.c_custkey;
 例3: マテリアライズドビュー`mv3`は、`SELECT c_city, sum(tax) FROM tbl WHERE dt='2023-01-01' AND c_city = 'xxx'`のパターンのクエリを書き換えることができません。なぜなら、述語が参照する列がSELECT式に含まれていないからです。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT c_city, sum(tax) FROM tbl GROUP BY c_city;
 ```
 
 この問題を解決するには、次のようにマテリアライズドビューを作成できます。
 
 ```SQL
-CREATE MATERIALIZED VIEW mv3 REFRESH ASYNC AS
+CREATE MATERIALIZED VIEW mv3 REFRESH ON_CHANGE AS
 SELECT dt, c_city, sum(tax) FROM tbl GROUP BY dt, c_city;
 ```
 
