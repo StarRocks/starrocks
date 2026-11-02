@@ -316,6 +316,14 @@ public class FunctionAnalyzer {
         // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
         if (fnParams.isDistinct()) {
             for (Expr child : functionCallExpr.getChildren()) {
+                // GEO has no equality/hash. The multi-argument COUNT DISTINCT rewrite would otherwise
+                // look up a missing IF overload for geo and NPE.
+                if (child.getType().isGeoType() || child.getType().hasNestedGeoType()) {
+                    throw new SemanticException(
+                            "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types: " +
+                                    ExprToSql.toSql(functionCallExpr),
+                            functionCallExpr.getPos());
+                }
                 if (child.getType().isPercentile()) {
                     throw new SemanticException(
                             "DISTINCT aggregation is not supported for PERCENTILE type: " +
