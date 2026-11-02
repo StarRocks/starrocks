@@ -16,9 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <memory>
+#include <numeric>
+#include <random>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -1651,6 +1654,161 @@ TEST_F(ChunksSorterTest, test_nan) {
     };
     auto greater = [&](auto lhs, auto rhs) { return cmp(lhs, rhs) > 0; };
     ::pdqsort(begin, end, greater);
+}
+
+TEST_F(ChunksSorterTest, test_topn_filter_short_circuit) {
+    auto expr_int = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
+    std::vector<bool> is_asc{true};
+    std::vector<bool> is_null_first{true};
+    std::vector<ExprContext*> sort_exprs{new ExprContext(expr_int.get())};
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+
+    RuntimeProfile profile("test_topn_filter_short_circuit");
+    MemTracker mem_tracker(1L << 62, "test_topn_filter_short_circuit", nullptr);
+
+    ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "",
+                            /*offset=*/0, /*limit=*/10, TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
+                            ChunksSorterTopn::kDefaultMaxBufferBytes,
+                            /*max_buffered_chunks=*/1);
+    sorter.setup_runtime(_runtime_state.get(), &profile, &mem_tracker);
+
+    Chunk::SlotHashMap slot_map{{0, 0}};
+
+    // Feed chunk 1 with 100 rows [10..109]
+    {
+        std::vector<int32_t> data(100);
+        std::iota(data.begin(), data.end(), 10);
+        ChunkPtr chunk = std::make_shared<Chunk>(Columns{ColumnTestHelper::build_column(data)}, slot_map);
+        ASSERT_OK(sorter.update(_runtime_state.get(), chunk));
+    }
+
+    // Feed 5 chunks of 100 rows each with values [500..599] (include_num == 0 on every chunk)
+    for (int c = 0; c < 5; ++c) {
+        std::vector<int32_t> data(100);
+        std::iota(data.begin(), data.end(), 500);
+        ChunkPtr chunk = std::make_shared<Chunk>(Columns{ColumnTestHelper::build_column(data)}, slot_map);
+        ASSERT_OK(sorter.update(_runtime_state.get(), chunk));
+    }
+
+    // Feed chunk 7 with 10 rows [0..9]
+    {
+        std::vector<int32_t> data(10);
+        std::iota(data.begin(), data.end(), 0);
+        ChunkPtr chunk = std::make_shared<Chunk>(Columns{ColumnTestHelper::build_column(data)}, slot_map);
+        ASSERT_OK(sorter.update(_runtime_state.get(), chunk));
+    }
+
+    ASSERT_OK(sorter.done(_runtime_state.get()));
+
+    ChunkPtr result = consume_page_from_sorter(sorter);
+    ASSERT_NE(nullptr, result);
+    ASSERT_EQ(10, result->num_rows());
+    for (int i = 0; i < 10; ++i) {
+        EXPECT_EQ(i, result->get(i).get(0).get_int32());
+    }
+
+    auto* sort_filter_rows = profile.get_counter("SortFilterRows");
+    ASSERT_NE(nullptr, sort_filter_rows);
+    EXPECT_EQ(500, sort_filter_rows->value());
+}
+
+TEST_F(ChunksSorterTest, test_topn_randomized_differential) {
+    constexpr size_t kLimit = 10;
+    const std::vector<std::pair<TTopNType::type, size_t>> configs = {
+            {TTopNType::ROW_NUMBER, 0},
+            {TTopNType::ROW_NUMBER, 5},
+            {TTopNType::RANK, 0},
+    };
+
+    Chunk::SlotHashMap slot_map{{0, 0}};
+
+    for (const auto& [topn_type, offset] : configs) {
+        auto expr_int = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
+        std::vector<bool> is_asc{true};
+        std::vector<bool> is_null_first{true};
+        std::vector<ExprContext*> sort_exprs{new ExprContext(expr_int.get())};
+        DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
+        ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+
+        RuntimeProfile profile("test_randomized");
+        MemTracker mem_tracker(1L << 62, "test_randomized", nullptr);
+
+        ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", offset, kLimit,
+                                topn_type, ChunksSorterTopn::kDefaultMaxBufferRows,
+                                ChunksSorterTopn::kDefaultMaxBufferBytes,
+                                /*max_buffered_chunks=*/1);
+        sorter.setup_runtime(_runtime_state.get(), &profile, &mem_tracker);
+
+        // Generate 20 random chunks:
+        // Include chunks above threshold, chunks with boundary duplicates, and general random chunks.
+        std::mt19937 rng(42 + static_cast<int>(topn_type) * 10 + offset);
+        std::vector<int32_t> all_values;
+        constexpr size_t kNumChunks = 20;
+
+        for (size_t c = 0; c < kNumChunks; ++c) {
+            size_t chunk_rows = 50;
+            std::vector<int32_t> chunk_data(chunk_rows);
+            if (c % 4 == 1) {
+                // Entirely above threshold
+                std::uniform_int_distribution<int32_t> high_dist(10000, 20000);
+                for (size_t r = 0; r < chunk_rows; ++r) {
+                    chunk_data[r] = high_dist(rng);
+                }
+            } else if (c % 4 == 2) {
+                // Duplicate boundary ties around small range [10..25]
+                std::uniform_int_distribution<int32_t> tie_dist(10, 25);
+                for (size_t r = 0; r < chunk_rows; ++r) {
+                    chunk_data[r] = tie_dist(rng);
+                }
+            } else {
+                // Wide distribution
+                std::uniform_int_distribution<int32_t> wide_dist(0, 500);
+                for (size_t r = 0; r < chunk_rows; ++r) {
+                    chunk_data[r] = wide_dist(rng);
+                }
+            }
+            all_values.insert(all_values.end(), chunk_data.begin(), chunk_data.end());
+            ChunkPtr chunk = std::make_shared<Chunk>(Columns{ColumnTestHelper::build_column(chunk_data)}, slot_map);
+            ASSERT_OK(sorter.update(_runtime_state.get(), chunk));
+        }
+
+        ASSERT_OK(sorter.done(_runtime_state.get()));
+
+        // Expected sorted output from std::stable_sort
+        std::stable_sort(all_values.begin(), all_values.end());
+
+        std::vector<int32_t> expected;
+        if (topn_type == TTopNType::ROW_NUMBER) {
+            size_t start = offset;
+            size_t end = std::min(start + kLimit, all_values.size());
+            for (size_t i = start; i < end; ++i) {
+                expected.push_back(all_values[i]);
+            }
+        } else {
+            // RANK with offset == 0:
+            // Includes all rows whose value is <= all_values[kLimit - 1]
+            ASSERT_GE(all_values.size(), kLimit);
+            int32_t boundary_val = all_values[kLimit - 1];
+            for (int32_t v : all_values) {
+                if (v <= boundary_val) {
+                    expected.push_back(v);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        ChunkPtr result = consume_page_from_sorter(sorter);
+        ASSERT_NE(nullptr, result);
+        ASSERT_EQ(expected.size(), result->num_rows());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            EXPECT_EQ(expected[i], result->get(i).get(0).get_int32())
+                    << "Mismatch at index " << i << " for topn_type=" << topn_type << " offset=" << offset;
+        }
+    }
 }
 
 } // namespace starrocks
