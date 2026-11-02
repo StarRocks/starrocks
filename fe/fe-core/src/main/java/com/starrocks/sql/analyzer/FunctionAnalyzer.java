@@ -314,19 +314,16 @@ public class FunctionAnalyzer {
         // string/binary distinct path and down_casts the PercentileColumn to a BinaryColumn it is
         // not, which aborts a debug build (casts.h down_cast on BinaryColumnBase) and dereferences
         // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
+        // GEO has no equality/hash. The multi-argument COUNT DISTINCT rewrite would otherwise
+        // look up a missing IF overload for geo and NPE.
         if (fnParams.isDistinct()) {
             for (Expr child : functionCallExpr.getChildren()) {
-                // GEO has no equality/hash. The multi-argument COUNT DISTINCT rewrite would otherwise
-                // look up a missing IF overload for geo and NPE.
-                if (child.getType().isGeoType() || child.getType().hasNestedGeoType()) {
+                Type type = child.getType();
+                boolean percentile = type.isPercentile();
+                if (percentile || type.isGeoType() || type.hasNestedGeoType()) {
                     throw new SemanticException(
-                            "DISTINCT aggregation is not supported for GEOGRAPHY/GEOMETRY types: " +
-                                    ExprToSql.toSql(functionCallExpr),
-                            functionCallExpr.getPos());
-                }
-                if (child.getType().isPercentile()) {
-                    throw new SemanticException(
-                            "DISTINCT aggregation is not supported for PERCENTILE type: " +
+                            "DISTINCT aggregation is not supported for " +
+                                    (percentile ? "PERCENTILE type" : "GEOGRAPHY/GEOMETRY types") + ": " +
                                     ExprToSql.toSql(functionCallExpr),
                             functionCallExpr.getPos());
                 }
