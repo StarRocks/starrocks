@@ -362,7 +362,7 @@ TEST(GeoTransportTest, LegacyConstantNullInOrdinaryAndMixedChunks) {
         Chunk chunk;
         chunk.append_column(ColumnHelper::create_const_null_column(16), 1);
         ProtobufChunkMeta meta;
-        meta.types = {TypeDescriptor(TYPE_BIGINT)};
+        meta.types = {TYPE_BIGINT_DESC};
         meta.is_nulls = {true};
         meta.is_consts = {true};
         meta.slot_id_to_index[1] = 0;
@@ -498,7 +498,7 @@ TEST(GeoTransportTest, SharedSerdePreservesTypedGeoConstantNull) {
 TEST(GeoTransportTest, SharedSerdeSupportsNestedGeoWithoutTransportFlags) {
     const auto geo_type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor().type);
     std::vector<TypeDescriptor> types = {TypeDescriptor::create_array_type(geo_type),
-                                         TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), geo_type),
+                                         TypeDescriptor::create_map_type(TYPE_INT_DESC, geo_type),
                                          TypeDescriptor::create_struct_type({"geo"}, {geo_type})};
     for (const auto& type : types) {
         for (int level : {0, 7}) {
