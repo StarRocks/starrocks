@@ -1417,6 +1417,11 @@ public class Config extends ConfigBase {
             "are upgraded to a version that supports it.")
     public static boolean lake_enable_batch_publish_multi_table = false;
 
+    @ConfField(mutable = true, comment = "Retry a lake publish batch that did not finish with only the transactions " +
+            "of that attempt, so that every partition keeps the new version of the attempt. When false, a retry " +
+            "batch is rebuilt as usual and may take in transactions committed since.")
+    public static boolean lake_enable_batch_publish_retry_freeze = true;
+
     /**
      * Minimum interval, in milliseconds, before PublishVersionDaemon retries a partition whose last publish
      * attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch

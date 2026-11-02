@@ -396,8 +396,6 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
 
-<<<<<<< HEAD
-=======
 ## `lake_publish_batch_retry_total`
 
 - 单位：计数
@@ -410,7 +408,6 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 类型：Gauge
 - 描述：本 BE/CN 启动以来，重试的 publish 直接使用存储中已写好的新版本 tablet 元数据、不再重新 apply 事务的 tablet 累积次数。只统计重试（该分区之前的 publish 失败过）且新版本不在元数据缓存中的情况；命中元数据缓存的 tablet 和首次 publish 都不计入。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
 
->>>>>>> 52693c9 ([Enhancement] Let a retried lake publish return a new version that is already written (#81773))
 ## `lake_segment_cache_hit_minute`
 
 - 单位：次数

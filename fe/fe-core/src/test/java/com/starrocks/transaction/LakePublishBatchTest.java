@@ -25,14 +25,19 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.PartitionPublishVersionData;
 import com.starrocks.lake.Utils;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -66,9 +71,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-<<<<<<< HEAD
-import java.util.concurrent.TimeUnit;
-=======
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -76,7 +78,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
->>>>>>> 52693c9 ([Enhancement] Let a retried lake publish return a new version that is already written (#81773))
 import javax.validation.constraints.NotNull;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1181,62 +1182,6 @@ public class LakePublishBatchTest {
         }
         awaitPublish(daemon, waiter1, waiter2);
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testBatchSnapshottedWhileItsTableIsInFlightIsNotRepublished() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
-        Partition partition = Lists.newArrayList(table.getPartitions()).get(0);
-        List<TabletCommitInfo> tablets = getPartitionTabletCommitInfos(partition);
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                "in_flight_1_" + UUIDUtil.genUUID(), transactionSource,
-                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
-                db.getId(), txnId1, tablets, Lists.newArrayList(), null);
-        long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                "in_flight_2_" + UUIDUtil.genUUID(), transactionSource,
-                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
-                db.getId(), txnId2, tablets, Lists.newArrayList(), null);
-
-        // A previous round left a batch of this table in flight.
-        PublishVersionDaemon daemon = new PublishVersionDaemon();
-        daemon.publishingLakeTransactionsBatchTableId = Sets.newConcurrentHashSet();
-        daemon.publishingLakeTransactionsBatchTableId.add(table.getId());
-        // That batch finishes right after the daemon takes its snapshot, so its marker is gone by the time
-        // the daemon reaches the batch: this is the window that used to publish the transactions again.
-        new MockUp<GlobalTransactionMgr>() {
-            @Mock
-            public List<TransactionStateBatch> getReadyPublishTransactionsBatch(Invocation invocation) {
-                List<TransactionStateBatch> ready = invocation.proceed();
-                daemon.publishingLakeTransactionsBatchTableId.remove(table.getId());
-                return ready;
-            }
-        };
-        List<Long> publishedTableIds = Lists.newArrayList();
-        new MockUp<PublishVersionDaemon>() {
-            @Mock
-            void publishVersionForLakeTableBatch(Invocation invocation, List<TransactionStateBatch> batches) {
-                for (TransactionStateBatch batch : batches) {
-                    publishedTableIds.addAll(batch.getTableIdList());
-                }
-                invocation.proceed();
-            }
-        };
-
-        daemon.runAfterLeaseValid();
-        assertFalse(publishedTableIds.contains(table.getId()));
-        DatabaseTransactionMgr dbTxnMgr = globalTransactionMgr.getDatabaseTransactionMgr(db.getId());
-        assertFalse(dbTxnMgr.getTransactionState(txnId1).hasSendTask());
-        assertFalse(dbTxnMgr.getTransactionState(txnId2).hasSendTask());
-
-        // Nothing is in flight when the next snapshot is taken, so the batch publishes and finishes.
-        awaitPublish(daemon, waiter1, waiter2);
-        Assertions.assertTrue(publishedTableIds.contains(table.getId()));
-    }
 
     private VisibleStateWaiter commitOnPartition(Database db, Table table, Partition partition, String labelPrefix,
                                                  List<Long> txnIds) throws Exception {
@@ -1554,5 +1499,4 @@ public class LakePublishBatchTest {
             Config.enable_new_publish_mechanism = oldNewPublishMechanism;
         }
     }
->>>>>>> 52693c9 ([Enhancement] Let a retried lake publish return a new version that is already written (#81773))
 }
