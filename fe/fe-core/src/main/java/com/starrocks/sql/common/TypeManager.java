@@ -400,12 +400,12 @@ public class TypeManager {
         } else if (from.isScalarType() && to.isScalarType()) {
             return canCastTo((ScalarType) from, (ScalarType) to);
         } else if (from.isArrayType() && to.isArrayType()) {
-            return canCastTo(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
+            return canCastComplexTypeItem(((ArrayType) from).getItemType(), ((ArrayType) to).getItemType());
         } else if (from.isMapType() && to.isMapType()) {
             MapType fromMap = (MapType) from;
             MapType toMap = (MapType) to;
-            return canCastTo(fromMap.getKeyType(), toMap.getKeyType()) &&
-                    canCastTo(fromMap.getValueType(), toMap.getValueType());
+            return canCastComplexTypeItem(fromMap.getKeyType(), toMap.getKeyType()) &&
+                    canCastComplexTypeItem(fromMap.getValueType(), toMap.getValueType());
         } else if (from.isStructType() && to.isStructType()) {
             StructType fromStruct = (StructType) from;
             StructType toStruct = (StructType) to;
@@ -424,7 +424,7 @@ public class TypeManager {
                 if (toField == null) {
                     return false;
                 }
-                if (!canCastTo(fromField.getType(), toField.getType())) {
+                if (!canCastComplexTypeItem(fromField.getType(), toField.getType())) {
                     return false;
                 }
             }
@@ -453,6 +453,14 @@ public class TypeManager {
         } else {
             return false;
         }
+    }
+
+    // A geo leaf inside ARRAY/MAP/STRUCT casts only to an identical descriptor; top-level scalar casts keep PrimitiveType rules.
+    private static boolean canCastComplexTypeItem(Type from, Type to) {
+        if (from.isGeoType()) {
+            return from.equals(to);
+        }
+        return canCastTo(from, to);
     }
 
     private static boolean variantCanCastToComplexType(Type to) {

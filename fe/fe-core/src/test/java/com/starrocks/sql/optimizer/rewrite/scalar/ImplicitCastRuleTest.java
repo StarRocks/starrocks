@@ -23,9 +23,11 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -39,26 +41,121 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Month;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ImplicitCastRuleTest {
+
+
+    @Test
+    public void testEmptyGeoArrayLiteralCoercion() {
+        assertGeoArrayLiteralCoercion(0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2})
+    public void testNullOnlyGeoArrayLiteralCoercion(int size) {
+        assertGeoArrayLiteralCoercion(size);
+    }
+
+    @Test
+    public void testGeoArrayLiteralCoercionInStrictMode() {
+        enterStrictMode();
+        try {
+            assertGeoArrayLiteralCoercion(0);
+            assertGeoArrayLiteralCoercion(2);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    private void assertGeoArrayLiteralCoercion(int size) {
+        Type geography = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
+                GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
+        Type geometry = ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857"));
+        for (Type item : List.of(geography, geometry, new ArrayType(geometry))) {
+            ArrayType target = new ArrayType(item);
+            for (boolean nullable : new boolean[] {false, true}) {
+                List<ScalarOperator> nulls = new ArrayList<>();
+                for (int i = 0; i < size; i++) {
+                    nulls.add(ConstantOperator.createNull(NullType.NULL));
+                }
+                ArrayOperator literal = new ArrayOperator(new ArrayType(NullType.NULL), nullable, nulls);
+                CallOperator call = new CallOperator("ifnull", target,
+                        Lists.newArrayList(new ColumnRefOperator(1, target, "a", true), literal),
+                        new Function(new FunctionName("ifnull"), new Type[] {target, target}, target, false));
+                new ImplicitCastRule().apply(call, null);
+                CaseWhenOperator caseWhen = new CaseWhenOperator(target, null, literal,
+                        List.of(ConstantOperator.createBoolean(true), literal));
+                new ImplicitCastRule().apply(caseWhen, null);
+                for (ScalarOperator result : List.of(call.getChild(1), caseWhen.getThenClause(0), caseWhen.getElseClause())) {
+                    assertTrue(result instanceof ArrayOperator);
+                    assertNotSame(literal, result);
+                    assertSame(target, result.getType());
+                    assertEquals(nullable, result.isNullable());
+                    assertEquals(size, result.getChildren().size());
+                    for (ScalarOperator child : result.getChildren()) {
+                        assertTrue(child.isConstantNull());
+                        assertSame(item, child.getType());
+                    }
+                }
+                assertEquals(new ArrayType(NullType.NULL), literal.getType());
+                assertEquals(size, literal.getChildren().size());
+                assertTrue(literal.getChildren().stream().allMatch(child -> child.getType().isNull()));
+            }
+        }
+    }
+
+    @Test
+    public void testGeoArrayLiteralCoercionScope() {
+        Type geometry = ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857"));
+        Type target = new ArrayType(geometry);
+        List<ScalarOperator> sources = List.of(
+                new ArrayOperator(new ArrayType(IntegerType.INT), false, List.of()),
+                new ArrayOperator(new ArrayType(BooleanType.BOOLEAN), false,
+                        List.of(ConstantOperator.createNull(BooleanType.BOOLEAN))),
+                new CallOperator("array_map", new ArrayType(NullType.NULL), List.of()),
+                new ArrayOperator(new ArrayType(NullType.NULL), false,
+                        List.of(new ColumnRefOperator(90, NullType.NULL, "n", true))),
+                new ArrayOperator(new ArrayType(ScalarType.createGeoType(
+                        PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:4326"))), false, List.of()));
+        for (ScalarOperator source : sources) {
+            CallOperator call = new CallOperator("ifnull", target, Lists.newArrayList(source));
+            new ImplicitCastRule().apply(call, null);
+            assertTrue(call.getChild(0) instanceof CastOperator);
+            assertSame(source, call.getChild(0).getChild(0));
+        }
+        ArrayOperator empty = new ArrayOperator(new ArrayType(NullType.NULL), false, List.of());
+        CallOperator ordinary = new CallOperator("ifnull", new ArrayType(IntegerType.INT), Lists.newArrayList(empty));
+        new ImplicitCastRule().apply(ordinary, null);
+        assertTrue(ordinary.getChild(0) instanceof CastOperator);
+        assertSame(empty, ordinary.getChild(0).getChild(0));
+    }
 
     @Test
     public void testCall() {

@@ -30,6 +30,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -47,6 +48,7 @@ import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.ScalarType;
@@ -403,13 +405,20 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     }
 
     private void addCastChild(Type returnType, ScalarOperator node, int index) {
-        ScalarOperator child = node.getChild(index);
-        checkImplicitCastAllowed(child.getType(), returnType);
-        node.getChildren().set(index, new CastOperator(returnType, child, true));
+        node.getChildren().set(index, makeImplicitCast(returnType, node.getChild(index)));
     }
 
-    private CastOperator makeImplicitCast(Type returnType, ScalarOperator child) {
+    private ScalarOperator makeImplicitCast(Type returnType, ScalarOperator child) {
         checkImplicitCastAllowed(child.getType(), returnType);
+        if (returnType.isArrayType() && returnType.hasNestedGeoType() && child instanceof ArrayOperator
+                && ((ArrayType) child.getType()).getItemType().isNull()
+                && child.getChildren().stream().allMatch(ScalarOperator::isConstantNull)) {
+            // Type empty/NULL-only literals directly: BE has no NULL-element-to-geo array cast.
+            Type itemType = ((ArrayType) returnType).getItemType();
+            List<ScalarOperator> elements = child.getChildren().stream()
+                    .map(element -> (ScalarOperator) ConstantOperator.createNull(itemType)).collect(Collectors.toList());
+            return new ArrayOperator(returnType, child.isNullable(), elements);
+        }
         return new CastOperator(returnType, child, true);
     }
 
