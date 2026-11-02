@@ -26,9 +26,9 @@
 namespace starrocks {
 
 TEST(FunctionContextCoreTest, CreateTestContextArgAccess) {
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)};
     auto ctx = std::unique_ptr<FunctionContext>(
-            FunctionContext::create_test_context(std::move(arg_types), TypeDescriptor(TYPE_BIGINT)));
+            FunctionContext::create_test_context(std::move(arg_types), TYPE_BIGINT_DESC));
 
     EXPECT_EQ(2, ctx->get_num_args());
     ASSERT_NE(nullptr, ctx->get_arg_type(0));
@@ -51,9 +51,9 @@ TEST(FunctionContextCoreTest, FunctionStateScopeSetGet) {
 
 TEST(FunctionContextCoreTest, CloneKeepsConstantsAndFragmentState) {
     MemPool mem_pool;
-    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor(TYPE_INT)};
+    std::vector<FunctionContext::TypeDesc> arg_types = {TYPE_INT_DESC};
     auto ctx = std::unique_ptr<FunctionContext>(
-            FunctionContext::create_context(nullptr, &mem_pool, TypeDescriptor(TYPE_INT), arg_types));
+            FunctionContext::create_context(nullptr, &mem_pool, TYPE_INT_DESC, arg_types));
 
     int fragment_local_state = 123;
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, &fragment_local_state);
