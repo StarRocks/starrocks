@@ -75,6 +75,7 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+#include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
@@ -217,6 +218,10 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
 Status StorageEngine::_open(const EngineOptions& options) {
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
+
+    // The column-mode partial update spill lives on the first store. No publish can run yet, so
+    // anything found there was left by the previous process and will never be read again.
+    lake::ColumnModePartialUpdateHandler::sweep_leftover_spill_files();
 
     _effective_cluster_id = config::cluster_id;
     _need_write_cluster_id = options.need_write_cluster_id;
