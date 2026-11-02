@@ -215,13 +215,13 @@ protected:
                 return create_random_array_column(type_desc.children[0], size);
             } else {
                 // Fallback to INT if no element type specified
-                return create_random_array_column(TypeDescriptor(TYPE_INT), size);
+                return create_random_array_column(TYPE_INT_DESC, size);
             }
         }
         case TYPE_MAP: {
             // For map type, use key and value types from TypeDescriptor
             TypeDescriptor key_type =
-                    (type_desc.children.size() > 0) ? type_desc.children[0] : TypeDescriptor(TYPE_INT);
+                    (type_desc.children.size() > 0) ? type_desc.children[0] : TYPE_INT_DESC;
             TypeDescriptor value_type =
                     (type_desc.children.size() > 1) ? type_desc.children[1] : TypeDescriptor(TYPE_VARCHAR);
 
@@ -250,7 +250,7 @@ protected:
 
             // If no field types specified, create default fields
             if (fields.empty()) {
-                fields.push_back(create_random_column(TypeDescriptor(TYPE_INT), size));
+                fields.push_back(create_random_column(TYPE_INT_DESC, size));
                 fields.push_back(create_random_column(TypeDescriptor(TYPE_VARCHAR), size));
             }
 
@@ -403,12 +403,12 @@ protected:
                 // Create a struct type with two INT fields named "field1" and "field2"
                 return TypeDescriptor::create_struct_type(
                         std::vector<std::string>{"field1", "field2"},
-                        std::vector<TypeDescriptor>{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+                        std::vector<TypeDescriptor>{TYPE_INT_DESC, TYPE_INT_DESC});
             } else if (name_str.find("ANY_MAP") != std::string::npos) {
                 // TODO: randomize
-                return TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT));
+                return TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_INT_DESC);
             } else if (name_str.find("ANY_ELEMENT") != std::string::npos) {
-                return TypeDescriptor(TYPE_INT);
+                return TYPE_INT_DESC;
             } else if (name_str.find("...") != std::string::npos) {
                 return TypeDescriptor(TYPE_VARCHAR);
             } else if (name_str.find("DECIMAL32") != std::string::npos) {

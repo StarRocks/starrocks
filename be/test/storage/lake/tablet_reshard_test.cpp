@@ -3038,9 +3038,9 @@ TEST_F(LakeTabletReshardTest, test_mixed_zero_row_delete_slot_survives_split_mer
     });
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-    slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    slots.emplace_back(1, "c1", TYPE_INT_DESC);
+    slots.emplace_back(2, "__op", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
     Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
     auto make_chunk = [&](bool upsert) {

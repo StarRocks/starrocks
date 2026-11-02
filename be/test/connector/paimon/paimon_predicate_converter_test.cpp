@@ -136,8 +136,8 @@ std::shared_ptr<paimon::LeafPredicate> as_leaf_predicate(const std::shared_ptr<p
 
 TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonSlotRefLeftOperand) {
     SlotDescriptor worldcode_id(1, "worldcode_id", TypeDescriptor(TYPE_VARCHAR));
-    SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
-    SlotDescriptor score(10, "_INDEX_SCORE", TypeDescriptor(TYPE_FLOAT));
+    SlotDescriptor isolation(7, "isolation", TYPE_BOOLEAN_DESC);
+    SlotDescriptor score(10, "_INDEX_SCORE", TYPE_FLOAT_DESC);
     PaimonPredicateConverter converter({&worldcode_id, &isolation, &score});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::BOOLEAN));
@@ -151,11 +151,11 @@ TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonSlotRefLeftOperand) {
 }
 
 TEST(PaimonPredicateConverterTest, ConvertsBooleanLiteralToPaimonBoolean) {
-    SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
+    SlotDescriptor isolation(7, "isolation", TYPE_BOOLEAN_DESC);
     PaimonPredicateConverter converter({&isolation});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::BOOLEAN));
-    ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
+    ColumnRef isolation_ref(TYPE_BOOLEAN_DESC, isolation.id());
     VectorizedLiteral false_literal(create_boolean_literal_node(false));
     predicate.add_child(&isolation_ref);
     predicate.add_child(&false_literal);
@@ -171,11 +171,11 @@ TEST(PaimonPredicateConverterTest, ConvertsBooleanLiteralToPaimonBoolean) {
 }
 
 TEST(PaimonPredicateConverterTest, KeepsTinyintLiteralAsPaimonTinyint) {
-    SlotDescriptor tinyint_slot(8, "tinyint_col", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor tinyint_slot(8, "tinyint_col", TYPE_TINYINT_DESC);
     PaimonPredicateConverter converter({&tinyint_slot});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::TINYINT));
-    ColumnRef tinyint_ref(TypeDescriptor(TYPE_TINYINT), tinyint_slot.id());
+    ColumnRef tinyint_ref(TYPE_TINYINT_DESC, tinyint_slot.id());
     VectorizedLiteral tinyint_literal(create_tinyint_literal_node(-1));
     predicate.add_child(&tinyint_ref);
     predicate.add_child(&tinyint_literal);
@@ -190,13 +190,13 @@ TEST(PaimonPredicateConverterTest, KeepsTinyintLiteralAsPaimonTinyint) {
 }
 
 TEST(PaimonPredicateConverterTest, ConvertsNullSafeEqualNullToIsNull) {
-    SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
+    SlotDescriptor isolation(7, "isolation", TYPE_BOOLEAN_DESC);
     PaimonPredicateConverter converter({&isolation});
 
     TExprNode predicate_node = create_binary_predicate_node(TPrimitiveType::BOOLEAN);
     predicate_node.__set_opcode(TExprOpcode::EQ_FOR_NULL);
     TestExpr predicate(predicate_node);
-    ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
+    ColumnRef isolation_ref(TYPE_BOOLEAN_DESC, isolation.id());
     VectorizedLiteral null_literal(create_null_literal_node());
     predicate.add_child(&isolation_ref);
     predicate.add_child(&null_literal);
@@ -210,13 +210,13 @@ TEST(PaimonPredicateConverterTest, ConvertsNullSafeEqualNullToIsNull) {
 }
 
 TEST(PaimonPredicateConverterTest, SkipsInPredicateWithNullLiteral) {
-    SlotDescriptor tinyint_slot(8, "tinyint_col", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor tinyint_slot(8, "tinyint_col", TYPE_TINYINT_DESC);
     PaimonPredicateConverter converter({&tinyint_slot});
 
     // paimon-cpp rejects null literals in predicates, so `col IN (1, NULL)` must skip
     // pushdown instead of producing a predicate that fails reader creation.
     TestExpr predicate(create_in_predicate_node(TPrimitiveType::TINYINT));
-    ColumnRef tinyint_ref(TypeDescriptor(TYPE_TINYINT), tinyint_slot.id());
+    ColumnRef tinyint_ref(TYPE_TINYINT_DESC, tinyint_slot.id());
     VectorizedLiteral tinyint_literal(create_tinyint_literal_node(1));
     VectorizedLiteral null_literal(create_null_literal_node());
     predicate.add_child(&tinyint_ref);
@@ -228,11 +228,11 @@ TEST(PaimonPredicateConverterTest, SkipsInPredicateWithNullLiteral) {
 }
 
 TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonLiteralRightOperand) {
-    SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
+    SlotDescriptor isolation(7, "isolation", TYPE_BOOLEAN_DESC);
     PaimonPredicateConverter converter({&isolation});
 
     TestExpr predicate(create_binary_predicate_node(TPrimitiveType::BOOLEAN));
-    ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
+    ColumnRef isolation_ref(TYPE_BOOLEAN_DESC, isolation.id());
     TestExpr function_result(create_function_node(TPrimitiveType::BOOLEAN));
     predicate.add_child(&isolation_ref);
     predicate.add_child(&function_result);
@@ -242,11 +242,11 @@ TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonLiteralRightOperand) {
 }
 
 TEST(PaimonPredicateConverterTest, SkipsInPredicateWithNonLiteralOperand) {
-    SlotDescriptor isolation(7, "isolation", TypeDescriptor(TYPE_BOOLEAN));
+    SlotDescriptor isolation(7, "isolation", TYPE_BOOLEAN_DESC);
     PaimonPredicateConverter converter({&isolation});
 
     TestExpr predicate(create_in_predicate_node(TPrimitiveType::BOOLEAN));
-    ColumnRef isolation_ref(TypeDescriptor(TYPE_BOOLEAN), isolation.id());
+    ColumnRef isolation_ref(TYPE_BOOLEAN_DESC, isolation.id());
     TestExpr function_result(create_function_node(TPrimitiveType::BOOLEAN));
     predicate.add_child(&isolation_ref);
     predicate.add_child(&function_result);
@@ -256,12 +256,12 @@ TEST(PaimonPredicateConverterTest, SkipsInPredicateWithNonLiteralOperand) {
 }
 
 TEST(PaimonPredicateConverterTest, ConvertsDateLiteralToDaysSinceEpoch) {
-    SlotDescriptor ship_date(16, "l_shipdate", TypeDescriptor(TYPE_DATE));
+    SlotDescriptor ship_date(16, "l_shipdate", TYPE_DATE_DESC);
     PaimonPredicateConverter converter({&ship_date});
     TExprNode predicate_node = create_binary_predicate_node(TPrimitiveType::DATE);
     predicate_node.__set_opcode(TExprOpcode::GE);
     TestExpr predicate(predicate_node);
-    ColumnRef date_ref(TypeDescriptor(TYPE_DATE), ship_date.id());
+    ColumnRef date_ref(TYPE_DATE_DESC, ship_date.id());
     VectorizedLiteral date_literal(create_date_literal_node("1995-01-01"));
     predicate.add_child(&date_ref);
     predicate.add_child(&date_literal);
@@ -279,10 +279,10 @@ TEST(PaimonPredicateConverterTest, ConvertsDateLiteralToDaysSinceEpoch) {
 }
 
 TEST(PaimonPredicateConverterTest, ConvertsDateInListToDateLiterals) {
-    SlotDescriptor ship_date(16, "l_shipdate", TypeDescriptor(TYPE_DATE));
+    SlotDescriptor ship_date(16, "l_shipdate", TYPE_DATE_DESC);
     PaimonPredicateConverter converter({&ship_date});
     TestExpr predicate(create_in_predicate_node(TPrimitiveType::DATE));
-    ColumnRef date_ref(TypeDescriptor(TYPE_DATE), ship_date.id());
+    ColumnRef date_ref(TYPE_DATE_DESC, ship_date.id());
     VectorizedLiteral first(create_date_literal_node("1970-01-01"));
     VectorizedLiteral second(create_date_literal_node("1970-01-03"));
     predicate.add_child(&date_ref);
@@ -380,12 +380,12 @@ TEST(PaimonPredicateConverterTest, PushesDecimalPrecisionsOutsideTheAmbiguousWid
 
 TEST(PaimonPredicateConverterTest, SkipsDatetimePredicate) {
     // paimon-cpp 0.3.0 cannot push TIMESTAMP predicates into parquet, so they stay with StarRocks
-    SlotDescriptor ts(5, "ts", TypeDescriptor(TYPE_DATETIME));
+    SlotDescriptor ts(5, "ts", TYPE_DATETIME_DESC);
     PaimonPredicateConverter converter({&ts});
     TExprNode predicate_node = create_binary_predicate_node(TPrimitiveType::DATETIME);
     predicate_node.__set_opcode(TExprOpcode::GE);
     TestExpr predicate(predicate_node);
-    ColumnRef ts_ref(TypeDescriptor(TYPE_DATETIME), ts.id());
+    ColumnRef ts_ref(TYPE_DATETIME_DESC, ts.id());
     TExprNode literal_node = create_date_literal_node("1995-01-01 00:00:00");
     literal_node.__set_type(gen_type_desc(TPrimitiveType::DATETIME));
     VectorizedLiteral ts_literal(literal_node);

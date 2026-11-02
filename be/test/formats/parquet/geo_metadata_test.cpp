@@ -316,7 +316,7 @@ TEST(GeoMetadataTest, MissingAndNoIdColumnsKeepExistingMatching) {
     lake.__set_fields({lake_field});
     SlotDescriptor slot(1, "renamed_shape", TypeDescriptor::create_varbinary_type(1024));
     EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &slot, true}}, true).ok());
-    SlotDescriptor supported(2, "id", TypeDescriptor(TYPE_INT));
+    SlotDescriptor supported(2, "id", TYPE_INT_DESC);
     EXPECT_TRUE(validate_scan(without_shape, &lake, {{0, &supported, true}}, true).ok());
     auto element = geo_element();
     element.__isset.field_id = false;
@@ -825,7 +825,7 @@ TEST(GeoMetadataTest, NestedNativeGeographyIsRejectedByComplexReader) {
     };
 
     expect_rejected(ColumnType::ARRAY, TypeDescriptor::create_array_type(geography));
-    expect_rejected(ColumnType::MAP, TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), geography));
+    expect_rejected(ColumnType::MAP, TypeDescriptor::create_map_type(TYPE_INT_DESC, geography));
     expect_rejected(ColumnType::STRUCT, TypeDescriptor::create_struct_type({"shape"}, {geography}));
 }
 

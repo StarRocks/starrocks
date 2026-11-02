@@ -44,8 +44,8 @@ TEST_F(PaimonScannerProjectionTest, pruned_map_reads_actual_schema_across_chunks
     auto array = arrow::ArrayFromJSON(type, R"([[ ["a", 10], ["b", null] ], [], null])");
     for (int pruned_child : {0, 1}) {
         TypeDescriptor projected(TYPE_MAP);
-        projected.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
-        projected.children[pruned_child] = TypeDescriptor(TYPE_UNKNOWN);
+        projected.children = {TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
+        projected.children[pruned_child] = TYPE_UNKNOWN_DESC;
         SlotDescriptor slot(1, "v", projected);
         HdfsScannerContext context;
         PaimonScanner scanner;
@@ -90,7 +90,7 @@ TEST_F(PaimonScannerProjectionTest, pruned_struct_uses_field_names) {
 }
 
 TEST_F(PaimonScannerProjectionTest, missing_arrow_column_reports_error) {
-    SlotDescriptor slot(1, "v", TypeDescriptor(TYPE_INT));
+    SlotDescriptor slot(1, "v", TYPE_INT_DESC);
     HdfsScannerContext context;
     PaimonScanner scanner;
     prepare(&scanner, &context, &slot, arrow::int32(), arrow::ArrayFromJSON(arrow::int32(), "[7]"));

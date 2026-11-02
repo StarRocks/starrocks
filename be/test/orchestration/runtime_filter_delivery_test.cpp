@@ -341,7 +341,7 @@ TEST_F(RuntimeFilterPublishTest, always_true_keeps_descriptors) {
             auto column = ColumnTestHelper::build_column<int32_t>({0, 7});
             pipeline::OpTRuntimeBloomFilterBuildParams params;
             params.emplace_back(pipeline::RuntimeMembershipFilterBuildParam(false, false, false, {std::move(column)},
-                                                                            nullptr, TypeDescriptor(TYPE_INT)));
+                                                                            nullptr, TYPE_INT_DESC));
             return merger.add_partial_filters(0, 1, {}, std::move(params), {desc});
         };
         auto add_spilled = [&]() { return merger.set_always_true({desc}); };
@@ -448,7 +448,7 @@ protected:
         auto params = make_partial(2, std::move(data));
         params.set_is_skew_broadcast_join(true);
         params.set_skew_shuffle_filter_id(1);
-        *params.mutable_columntype() = TypeDescriptor(TYPE_INT).to_protobuf();
+        *params.mutable_columntype() = TYPE_INT_DESC.to_protobuf();
         return params;
     }
 

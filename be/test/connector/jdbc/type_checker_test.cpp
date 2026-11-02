@@ -27,17 +27,17 @@ protected:
 
 // Define unit test for java.lang.Byte
 TEST_F(TypeCheckerTest, SupportByteType) {
-    SlotDescriptor boolean_type_slot(0, "boolean_type_slot", TypeDescriptor(TYPE_BOOLEAN));
+    SlotDescriptor boolean_type_slot(0, "boolean_type_slot", TYPE_BOOLEAN_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Byte", &boolean_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_BOOLEAN);
 
-    SlotDescriptor tinyint_type_slot(0, "tinyint_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor tinyint_type_slot(0, "tinyint_type_slot", TYPE_TINYINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Byte", &tinyint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_TINYINT);
 
-    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TypeDescriptor(TYPE_SMALLINT));
+    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TYPE_SMALLINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Byte", &smallint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_TINYINT);
@@ -51,18 +51,18 @@ TEST_F(TypeCheckerTest, NotSupportByteType) {
 
 // Define unit test for com.clickhouse.data.value.UnsignedByte
 TEST_F(TypeCheckerTest, SupportClickHouseUnsignedByteType) {
-    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TypeDescriptor(TYPE_SMALLINT));
+    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TYPE_SMALLINT_DESC);
     auto status_or_type =
             type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedByte", &smallint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_SMALLINT);
 
-    SlotDescriptor int_type_slot(0, "int_type_slot", TypeDescriptor(TYPE_INT));
+    SlotDescriptor int_type_slot(0, "int_type_slot", TYPE_INT_DESC);
     status_or_type = type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedByte", &int_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_SMALLINT);
 
-    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TYPE_BIGINT_DESC);
     status_or_type = type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedByte", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_SMALLINT);
@@ -76,22 +76,22 @@ TEST_F(TypeCheckerTest, NotSupportClickHouseUnsignedByteType) {
 
 // Define unit test for java.lang.Short
 TEST_F(TypeCheckerTest, SupportShortType) {
-    SlotDescriptor tinyint_type_slot(0, "tinyint_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor tinyint_type_slot(0, "tinyint_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Short", &tinyint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_SMALLINT);
 
-    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TypeDescriptor(TYPE_SMALLINT));
+    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TYPE_SMALLINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Short", &smallint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_SMALLINT);
 
-    SlotDescriptor int_type_slot(0, "int_type_slot", TypeDescriptor(TYPE_INT));
+    SlotDescriptor int_type_slot(0, "int_type_slot", TYPE_INT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Short", &int_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_SMALLINT);
 
-    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TYPE_BIGINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Short", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_SMALLINT);
@@ -105,12 +105,12 @@ TEST_F(TypeCheckerTest, NotSupportShortType) {
 
 // Define unit test for com.clickhouse.data.value.UnsignedShort
 TEST_F(TypeCheckerTest, SupportClickHouseUnsignedShortType) {
-    SlotDescriptor int_type_slot(0, "int_type_slot", TypeDescriptor(TYPE_INT));
+    SlotDescriptor int_type_slot(0, "int_type_slot", TYPE_INT_DESC);
     auto status_or_type = type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedShort", &int_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_INT);
 
-    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TYPE_BIGINT_DESC);
     status_or_type = type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedShort", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_INT);
@@ -125,22 +125,22 @@ TEST_F(TypeCheckerTest, NotSupportClickHouseUnsignedShortType) {
 
 // Define unit test for java.lang.Integer
 TEST_F(TypeCheckerTest, SupportIntegerType) {
-    SlotDescriptor tinyint_type_slot(0, "tinyint_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor tinyint_type_slot(0, "tinyint_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Integer", &tinyint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_INT);
 
-    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TypeDescriptor(TYPE_SMALLINT));
+    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TYPE_SMALLINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Integer", &smallint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_INT);
 
-    SlotDescriptor int_type_slot(0, "int_type_slot", TypeDescriptor(TYPE_INT));
+    SlotDescriptor int_type_slot(0, "int_type_slot", TYPE_INT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Integer", &int_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_INT);
 
-    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TYPE_BIGINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Integer", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_INT);
@@ -166,14 +166,14 @@ TEST_F(TypeCheckerTest, SupportStringType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportStringType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.String", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for com.clickhouse.data.value.UnsignedInteger
 TEST_F(TypeCheckerTest, SupportClickHouseUnsignedIntegerType) {
-    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TYPE_BIGINT_DESC);
     auto status_or_type =
             type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedInteger", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
@@ -181,7 +181,7 @@ TEST_F(TypeCheckerTest, SupportClickHouseUnsignedIntegerType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportClickHouseUnsignedIntegerType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type =
             type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedInteger", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
@@ -189,14 +189,14 @@ TEST_F(TypeCheckerTest, NotSupportClickHouseUnsignedIntegerType) {
 
 // Define unit test for java.lang.Long
 TEST_F(TypeCheckerTest, SupportLongType) {
-    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TYPE_BIGINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Long", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_BIGINT);
 }
 
 TEST_F(TypeCheckerTest, NotSupportLongType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Long", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -214,7 +214,7 @@ TEST_F(TypeCheckerTest, SupportBigIntegerType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportBigIntegerType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.math.BigInteger", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -229,76 +229,76 @@ TEST_F(TypeCheckerTest, SupportClickHouseUnsignedLongType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportClickHouseUnsignedLongType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedLong", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.lang.Boolean
 TEST_F(TypeCheckerTest, SupportBooleanType) {
-    SlotDescriptor boolean_type_slot(0, "boolean_type_slot", TypeDescriptor(TYPE_BOOLEAN));
+    SlotDescriptor boolean_type_slot(0, "boolean_type_slot", TYPE_BOOLEAN_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Boolean", &boolean_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_BOOLEAN);
 
-    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TypeDescriptor(TYPE_SMALLINT));
+    SlotDescriptor smallint_type_slot(0, "smallint_type_slot", TYPE_SMALLINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Boolean", &smallint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_BOOLEAN);
 
-    SlotDescriptor int_type_slot(0, "int_type_slot", TypeDescriptor(TYPE_INT));
+    SlotDescriptor int_type_slot(0, "int_type_slot", TYPE_INT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Boolean", &int_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_BOOLEAN);
 
-    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));
+    SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TYPE_BIGINT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Boolean", &bigint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_BOOLEAN);
 }
 
 TEST_F(TypeCheckerTest, NotSupportBooleanType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Boolean", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.lang.Float
 TEST_F(TypeCheckerTest, SupportFloatType) {
-    SlotDescriptor float_type_slot(0, "float_type_slot", TypeDescriptor(TYPE_FLOAT));
+    SlotDescriptor float_type_slot(0, "float_type_slot", TYPE_FLOAT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Float", &float_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_FLOAT);
 }
 
 TEST_F(TypeCheckerTest, NotSupportFloatType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Float", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.lang.Double
 TEST_F(TypeCheckerTest, SupportDoubleType) {
-    SlotDescriptor double_type_slot(0, "double_type_slot", TypeDescriptor(TYPE_DOUBLE));
+    SlotDescriptor double_type_slot(0, "double_type_slot", TYPE_DOUBLE_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Double", &double_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_DOUBLE);
 
-    SlotDescriptor float_type_slot(0, "float_type_slot", TypeDescriptor(TYPE_FLOAT));
+    SlotDescriptor float_type_slot(0, "float_type_slot", TYPE_FLOAT_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.Double", &float_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_DOUBLE);
 }
 
 TEST_F(TypeCheckerTest, NotSupportDoubleType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Double", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.sql.Timestamp
 TEST_F(TypeCheckerTest, SupportSqlTimestampType) {
-    SlotDescriptor datetime_type_slot(0, "datetime_type_slot", TypeDescriptor(TYPE_DATETIME));
+    SlotDescriptor datetime_type_slot(0, "datetime_type_slot", TYPE_DATETIME_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.sql.Timestamp", &datetime_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -310,62 +310,62 @@ TEST_F(TypeCheckerTest, SupportSqlTimestampType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportSqlTimestampType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.sql.Timestamp", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.sql.Date
 TEST_F(TypeCheckerTest, SupportSqlDateType) {
-    SlotDescriptor date_type_slot(0, "date_type_slot", TypeDescriptor(TYPE_DATE));
+    SlotDescriptor date_type_slot(0, "date_type_slot", TYPE_DATE_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.sql.Date", &date_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 }
 
 TEST_F(TypeCheckerTest, NotSupportSqlDateType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.sql.Date", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.sql.Time
 TEST_F(TypeCheckerTest, SupportSqlTimeType) {
-    SlotDescriptor time_type_slot(0, "time_type_slot", TypeDescriptor(TYPE_TIME));
+    SlotDescriptor time_type_slot(0, "time_type_slot", TYPE_TIME_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.sql.Time", &time_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_TIME);
 }
 
 TEST_F(TypeCheckerTest, NotSupportSqlTimeType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.sql.Time", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.time.LocalDateTime
 TEST_F(TypeCheckerTest, SupportLocalDateTimeType) {
-    SlotDescriptor localdatetime_type_slot(0, "localdatetime_type_slot", TypeDescriptor(TYPE_DATETIME));
+    SlotDescriptor localdatetime_type_slot(0, "localdatetime_type_slot", TYPE_DATETIME_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.time.LocalDateTime", &localdatetime_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 }
 
 TEST_F(TypeCheckerTest, NotSupportLocalDateTimeType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.time.LocalDateTime", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.time.LocalDate
 TEST_F(TypeCheckerTest, SupportLocalDateType) {
-    SlotDescriptor localdate_type_slot(0, "localdate_type_slot", TypeDescriptor(TYPE_DATE));
+    SlotDescriptor localdate_type_slot(0, "localdate_type_slot", TYPE_DATE_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.time.LocalDate", &localdate_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 }
 TEST_F(TypeCheckerTest, NotSupportLocalDateType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.time.LocalDate", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -392,14 +392,14 @@ TEST_F(TypeCheckerTest, SupporBigDecimalType) {
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 
-    SlotDescriptor double_type_slot(0, "double_type_slot", TypeDescriptor(TYPE_DOUBLE));
+    SlotDescriptor double_type_slot(0, "double_type_slot", TYPE_DOUBLE_DESC);
     status_or_type = type_checker_manager_.checkType("java.math.BigDecimal", &double_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 }
 
 TEST_F(TypeCheckerTest, NotSupportBigDecimalType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.math.BigDecimal", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -421,7 +421,7 @@ TEST_F(TypeCheckerTest, SupporOracleTimestampType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportOracleTimestampType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("oracle.sql.TIMESTAMP", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 
@@ -441,7 +441,7 @@ TEST_F(TypeCheckerTest, SupporSqlServerDateTimeOffsetType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportSqlServerDateTimeOffsetType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("microsoft.sql.DateTimeOffset", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -476,7 +476,7 @@ TEST_F(TypeCheckerTest, SupporByteArrayType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportByteArrayType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("byte[]", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 
@@ -496,7 +496,7 @@ TEST_F(TypeCheckerTest, SupporDefaultType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportDefaultType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_TINYINT));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_TINYINT_DESC);
     auto status_or_type = type_checker_manager_.checkType("unknown java class", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -534,7 +534,7 @@ TEST_F(TypeCheckerManagerConfigTest, DefaultsToHardcodedConfig) {
     TypeCheckerManager& manager = TypeCheckerManager::getInstance();
 
     // Verify a few basic type checkers work
-    SlotDescriptor int_slot(0, "test", TypeDescriptor(TYPE_INT));
+    SlotDescriptor int_slot(0, "test", TYPE_INT_DESC);
     auto result = manager.checkType("java.lang.Integer", &int_slot);
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(result.value(), TYPE_INT);

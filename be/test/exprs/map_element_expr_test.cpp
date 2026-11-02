@@ -203,7 +203,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
 
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
-        auto type = TypeDescriptor(LogicalType::TYPE_INT);
+        auto type = TYPE_INT_DESC;
         expr->add_child(new_fake_col_expr(ColumnTestHelper::build_column<int32_t>({3, 3, 3, 0, 0}), type));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());

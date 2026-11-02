@@ -1119,7 +1119,7 @@ TEST(ParquetScalarColumnReaderGuardTest, FillAndRestoreRejectNonTemporarySource)
     ParquetField field;
     tparquet::ColumnChunk chunk_meta;
     GlobalDictMap dict;
-    auto make_int_col = [] { return ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true); };
+    auto make_int_col = [] { return ColumnHelper::create_column(TYPE_INT_DESC, true); };
 
     // LowCardColumnReader::fill_dst_column: when src is not _code_column
     // (PHYSICAL dict codes), it is treated as already LOGICAL → swap directly.

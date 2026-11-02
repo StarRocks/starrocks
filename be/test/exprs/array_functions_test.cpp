@@ -315,7 +315,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_INT>(nullptr, {array, target}).value();
@@ -364,7 +364,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
         MutableColumnPtr array =
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -444,7 +444,7 @@ TEST_F(ArrayFunctionsTest, array_contains_no_null) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<int32_t>(
                 TYPE_ARRAY_INT_DESC, false, {{}, {2}, {1, 2, 3}, {3, 2, 1}, {2, 1, 3}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -677,7 +677,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_INT>(nullptr, {array, target}).value();
@@ -726,7 +726,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
         MutableColumnPtr array =
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -806,7 +806,7 @@ TEST_F(ArrayFunctionsTest, array_position_no_null) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<int32_t>(
                 TYPE_ARRAY_INT_DESC, false, {{}, {2}, {1, 2, 3}, {3, 2, 1}, {2, 1, 3}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -1018,7 +1018,7 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
     {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         target->append_datum(Datum{(int32_t)1});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
@@ -1074,7 +1074,7 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
         MutableColumnPtr array =
                 ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{}, {}, {}, {}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         DCHECK(target->is_constant());
         target->append_datum(Datum((int32_t)1));
         target->resize(4);
@@ -1232,7 +1232,7 @@ TEST_F(ArrayFunctionsTest, array_remove_no_null) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<int32_t>(
                 TYPE_ARRAY_INT_DESC, false, {{}, {2}, {1, 2, 3}, {3, 2, 1}, {2, 1, 3}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_INT_DESC, false, true, 0);
         target->append_datum(Datum{3});
         target->resize(5);
 
@@ -4017,9 +4017,9 @@ TEST_F(ArrayFunctionsTest, array_generate_rejects_too_many_elements) {
     ASSERT_TRUE(st.status().is_invalid_argument()) << st.status();
 
     // Rows that are each small but together exceed the limit.
-    auto start = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
-    auto stop = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
-    auto step = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), false);
+    auto start = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
+    auto stop = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
+    auto step = ColumnHelper::create_column(TYPE_BIGINT_DESC, false);
     for (int i = 0; i < 3; i++) {
         start->append_datum(Datum((int64_t)0));
         stop->append_datum(Datum((int64_t)std::numeric_limits<uint32_t>::max() / 2));
@@ -4789,7 +4789,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_array) {
 // array_repeat sizes the elements column from the counts before allocating it, so the offsets it
 // then appends must land on exactly that size — including for the rows that produce no elements.
 TEST_F(ArrayFunctionsTest, array_repeat_offsets_match_counted_size) {
-    auto src_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, false, 0);
+    auto src_column = ColumnHelper::create_column(TYPE_INT_DESC, false, false, 0);
     src_column->append_datum(Datum((int32_t)7));
     src_column->append_datum(Datum((int32_t)8));
     src_column->append_datum(Datum((int32_t)9));
@@ -4843,7 +4843,7 @@ TEST_F(ArrayFunctionsTest, array_repeat_does_not_reserve_nested_elements) {
 // allocation, so a request that cannot be addressed fails cleanly instead of allocating gigabytes
 // and then silently truncating the offsets.
 TEST_F(ArrayFunctionsTest, array_repeat_rejects_offset_overflow) {
-    auto src_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false, false, 0);
+    auto src_column = ColumnHelper::create_column(TYPE_INT_DESC, false, false, 0);
     auto repeat_count_column = Int32Column::create();
     for (int32_t i = 0; i < 3; i++) {
         src_column->append_datum(Datum((int32_t)i));
@@ -5139,9 +5139,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_year_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case 1: 2020-01-01 to 2023-01-01, step 1 year
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -5202,9 +5202,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_month_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-15 to 2020-04-15, step 1 month
     start_column->append_datum(DateValue::create(2020, 1, 15));
@@ -5240,9 +5240,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_day_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 to 2020-01-05, step 1 day
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -5279,9 +5279,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_hour_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 10:00:00 to 2020-01-01 14:00:00, step 2 hours
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
@@ -5316,9 +5316,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_minute_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 10:00:00 to 2020-01-01 10:05:00, step 1 minute
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
@@ -5356,9 +5356,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_second_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 10:00:00 to 2020-01-01 10:00:03, step 1 second
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 0, 0));
@@ -5394,9 +5394,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_null_values) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case 1: Normal case
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -5455,9 +5455,9 @@ TEST_F(ArrayFunctionsTest, array_generate_date_with_week_quarter_units) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATE>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 to 2020-01-22, step 1 week
     start_column->append_datum(DateValue::create(2020, 1, 1));
@@ -5493,9 +5493,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_year_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 10:30:45 to 2023-01-01 10:30:45, step 1 year
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 10, 30, 45));
@@ -5531,9 +5531,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_month_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-15 08:20:30 to 2020-04-15 08:20:30, step 1 month
     start_column->append_datum(TimestampValue::create(2020, 1, 15, 8, 20, 30));
@@ -5569,9 +5569,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_day_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 12:00:00 to 2020-01-03 12:00:00, step 1 day
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 12, 0, 0));
@@ -5606,9 +5606,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_week_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 09:00:00 to 2020-01-22 09:00:00, step 1 week
     start_column->append_datum(TimestampValue::create(2020, 1, 1, 9, 0, 0));
@@ -5644,9 +5644,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_millisecond_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 10:00:00.000 to 2020-01-01 10:00:00.003, step 1 millisecond
     // Note: TimestampValue stores microseconds, so 1ms = 1000us
@@ -5695,9 +5695,9 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_microsecond_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::prepare(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
 
-    auto start_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto stop_column = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
-    auto step_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+    auto start_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto stop_column = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+    auto step_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
 
     // Test case: 2020-01-01 10:00:00.000000 to 2020-01-01 10:00:00.000005, step 1 microsecond
     auto start_ts = TimestampValue::create(2020, 1, 1, 10, 0, 0);

@@ -176,7 +176,7 @@ static MutableColumnPtr build_single_path_bigint_shredded_variant(std::string pa
     append_primitive_int8_row(metadata.get(), remain.get(), 1);
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({typed_value}, {0}));
-    col->set_shredded_columns({std::move(path)}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
+    col->set_shredded_columns({std::move(path)}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata),
                               std::move(remain));
     return col;
 }
@@ -225,7 +225,7 @@ static MutableColumnPtr build_nullable_variant_column_from_timestamp_ntz_micros(
 
     auto datetime_col = NullableColumn::create(std::move(datetime_data), std::move(datetime_null));
     ColumnBuilder<TYPE_VARIANT> builder(values.size());
-    auto st = VariantEncoder::encode_column(datetime_col, TypeDescriptor(TYPE_DATETIME), &builder, false);
+    auto st = VariantEncoder::encode_column(datetime_col, TYPE_DATETIME_DESC, &builder, false);
     DCHECK(st.ok()) << st.to_string();
     if (!st.ok()) {
         return nullptr;
@@ -234,9 +234,9 @@ static MutableColumnPtr build_nullable_variant_column_from_timestamp_ntz_micros(
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_cases) {
-    auto numeric = VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_DOUBLE));
+    auto numeric = VariantColumnMerger::choose_common_type(TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC);
     ASSERT_TRUE(numeric.ok());
-    ASSERT_EQ(TypeDescriptor(TYPE_DOUBLE), numeric.value());
+    ASSERT_EQ(TYPE_DOUBLE_DESC, numeric.value());
 
     auto decimal =
             VariantColumnMerger::choose_common_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2),
@@ -244,7 +244,7 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_ca
     ASSERT_TRUE(decimal.ok());
     ASSERT_EQ(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 2), decimal.value());
 
-    auto array_conflict = VariantColumnMerger::choose_common_type(TYPE_ARRAY_BIGINT_DESC, TypeDescriptor(TYPE_BIGINT));
+    auto array_conflict = VariantColumnMerger::choose_common_type(TYPE_ARRAY_BIGINT_DESC, TYPE_BIGINT_DESC);
     ASSERT_TRUE(array_conflict.ok());
     ASSERT_EQ(TypeDescriptor(TYPE_VARIANT), array_conflict.value());
 }
@@ -252,7 +252,7 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_numeric_and_decimal_ca
 PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_bigint_preserves_query_cast_semantics) {
     auto src = build_nullable_variant_column_from_json({"1", "\"L2\"", "3", "null"}, {0, 0, 0, 0});
     auto casted =
-            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_BIGINT));
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TYPE_BIGINT_DESC);
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const auto* nullable = down_cast<const NullableColumn*>(casted.value().get());
@@ -263,7 +263,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_const_variant_typed_column_uses_oute
     auto data = build_nullable_variant_column_from_json({"1"}, {0});
     auto src = ConstColumn::create(std::move(data), 3);
     auto casted =
-            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_BIGINT));
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TYPE_BIGINT_DESC);
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const Column* result = casted.value().get();
@@ -283,7 +283,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_varchar_form
 PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_datetime_requires_explicit_timezone_context) {
     auto src = build_nullable_variant_column_from_json({"1711497600"}, {0});
     auto casted =
-            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_DATETIME));
+            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT), TYPE_DATETIME_DESC);
     ASSERT_FALSE(casted.ok());
     ASSERT_TRUE(casted.status().is_not_supported());
 }
@@ -312,7 +312,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_variant_typed_column_to_datetime_wit
     EXPECT_EQ(expected, direct_data->get_data()[0]);
 
     auto casted = VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARIANT),
-                                                         TypeDescriptor(TYPE_DATETIME), cctz::utc_time_zone());
+                                                         TYPE_DATETIME_DESC, cctz::utc_time_zone());
     ASSERT_TRUE(casted.ok()) << casted.status().to_string();
 
     const Column* result = casted.value().get();
@@ -331,7 +331,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_schema_union) {
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_int64_column({10}, {0}));
     src0_typed.emplace_back(build_nullable_int64_column({20}, {0}));
-    src0->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
+    src0->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
                                std::move(src0_typed), std::move(src0_metadata), std::move(src0_remain));
 
     auto src1 = VariantColumn::create();
@@ -341,7 +341,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_schema_union) {
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_int64_column({200}, {0}));
     src1_typed.emplace_back(build_nullable_int64_column({300}, {0}));
-    src1->set_shredded_columns({"b", "c"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
+    src1->set_shredded_columns({"b", "c"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
                                std::move(src1_typed), std::move(src1_metadata), std::move(src1_remain));
 
     Columns inputs{src0, src1};
@@ -370,7 +370,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_type_conflict_hoist_varian
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src0->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src1 = VariantColumn::create();
@@ -400,7 +400,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_numeric_widen) {
     append_primitive_int8_row(src0_metadata.get(), src0_remain.get(), 1);
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src0->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src0_typed), std::move(src0_metadata),
+    src0->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src0_typed), std::move(src0_metadata),
                                std::move(src0_remain));
 
     auto src2 = VariantColumn::create();
@@ -413,7 +413,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_numeric_widen) {
     data->append(30.5);
     null->append(0);
     src2_typed.emplace_back(NullableColumn::create(std::move(data), std::move(null)));
-    src2->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_DOUBLE)}, std::move(src2_typed), std::move(src2_metadata),
+    src2->set_shredded_columns({"a"}, {TYPE_DOUBLE_DESC}, std::move(src2_typed), std::move(src2_metadata),
                                std::move(src2_remain));
 
     Columns inputs{src0, src2};
@@ -422,7 +422,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_numeric_widen) {
 
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
     ASSERT_EQ((std::vector<std::string>{"a"}), merged->shredded_paths());
-    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_DOUBLE)}), merged->shredded_types());
+    ASSERT_EQ((std::vector<TypeDescriptor>{TYPE_DOUBLE_DESC}), merged->shredded_types());
 
     const auto* typed_a = down_cast<const NullableColumn*>(merged->typed_column_by_index(0));
     ASSERT_DOUBLE_EQ(10.0, typed_a->get(0).get_double());
@@ -475,7 +475,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_shredded_array_nonarray_conflict_ho
     append_primitive_int8_row(src1_metadata.get(), src1_remain.get(), 2);
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_int64_column({7}, {0}));
-    src1->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src1_typed), std::move(src1_metadata),
+    src1->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src1_typed), std::move(src1_metadata),
                                std::move(src1_remain));
 
     Columns inputs{src0, src1};
@@ -523,7 +523,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_into_empty_row_dst_with_shredded_sr
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 1);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto st = VariantColumnMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
@@ -627,7 +627,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_root_typed_only_with_base_shredded_
     auto root_typed_only = VariantColumn::create();
     MutableColumns root_typed_only_typed;
     root_typed_only_typed.emplace_back(build_nullable_root_int64_typed_only_column({7}, {0}));
-    root_typed_only->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(root_typed_only_typed),
+    root_typed_only->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(root_typed_only_typed),
                                           nullptr, nullptr);
 
     auto base_shredded = VariantColumn::create();
@@ -636,7 +636,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_root_typed_only_with_base_shredded_
     append_primitive_int8_row(full_metadata.get(), full_remain.get(), 1);
     MutableColumns full_typed;
     full_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    base_shredded->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(full_typed),
+    base_shredded->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(full_typed),
                                         std::move(full_metadata), std::move(full_remain));
 
     Columns inputs{root_typed_only, base_shredded};
@@ -667,12 +667,12 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_root_typed_only_with_root_typed_onl
     auto src0 = VariantColumn::create();
     MutableColumns src0_typed;
     src0_typed.emplace_back(build_nullable_root_int64_typed_only_column({7}, {0}));
-    src0->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src0_typed), nullptr, nullptr);
+    src0->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src0_typed), nullptr, nullptr);
 
     auto src1 = VariantColumn::create();
     MutableColumns src1_typed;
     src1_typed.emplace_back(build_nullable_root_int64_typed_only_column({8}, {0}));
-    src1->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src1_typed), nullptr, nullptr);
+    src1->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src1_typed), nullptr, nullptr);
 
     Columns inputs{src0, src1};
     auto merged_status = VariantColumnMerger::merge(inputs);
@@ -708,7 +708,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_prefers_shredded_even_when_row_inpu
     append_primitive_int8_row(metadata.get(), remain.get(), 1);
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({42}, {0}));
-    shredded_src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
+    shredded_src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata),
                                        std::move(remain));
 
     Columns inputs{row_src, shredded_src};
@@ -718,7 +718,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_prefers_shredded_even_when_row_inpu
     auto* merged = down_cast<VariantColumn*>(merged_status.value().get());
     ASSERT_EQ(2, merged->size());
     ASSERT_EQ((std::vector<std::string>{"a"}), merged->shredded_paths());
-    ASSERT_EQ((std::vector<TypeDescriptor>{TypeDescriptor(TYPE_BIGINT)}), merged->shredded_types());
+    ASSERT_EQ((std::vector<TypeDescriptor>{TYPE_BIGINT_DESC}), merged->shredded_types());
 }
 
 PARALLEL_TEST(VariantColumnMergerTest, merge_rejects_duplicate_shredded_paths) {
@@ -729,7 +729,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_rejects_duplicate_shredded_paths) {
     MutableColumns bad_typed;
     bad_typed.emplace_back(build_nullable_int64_column({10}, {0}));
     bad_typed.emplace_back(build_nullable_int64_column({20}, {0}));
-    bad_src->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
+    bad_src->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
                                   std::move(bad_typed), std::move(bad_metadata), std::move(bad_remain));
 
     auto ok_src = VariantColumn::create();
@@ -738,7 +738,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_rejects_duplicate_shredded_paths) {
     append_primitive_int8_row(ok_metadata.get(), ok_remain.get(), 2);
     MutableColumns ok_typed;
     ok_typed.emplace_back(build_nullable_int64_column({30}, {0}));
-    ok_src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(ok_typed), std::move(ok_metadata),
+    ok_src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(ok_typed), std::move(ok_metadata),
                                  std::move(ok_remain));
 
     // Simulate corrupted/non-conforming input and verify merger rejects it explicitly.
@@ -758,7 +758,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_src
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 1);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_int64_column({10}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     auto src = VariantColumn::create();
@@ -768,7 +768,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_src
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({20}, {0}));
     src_typed.emplace_back(build_nullable_int64_column({30}, {0}));
-    src->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
+    src->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
                               std::move(src_typed), std::move(src_metadata), std::move(src_remain));
     auto& src_paths = const_cast<std::vector<std::string>&>(src->shredded_paths());
     src_paths[1] = "a";
@@ -786,7 +786,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_dst
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_int64_column({10}, {0}));
     dst_typed.emplace_back(build_nullable_int64_column({11}, {0}));
-    dst->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT)},
+    dst->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
                               std::move(dst_typed), std::move(dst_metadata), std::move(dst_remain));
     auto& dst_paths = const_cast<std::vector<std::string>&>(dst->shredded_paths());
     dst_paths[1] = "a";
@@ -797,7 +797,7 @@ PARALLEL_TEST(VariantColumnMergerTest, merge_into_rejects_duplicate_paths_in_dst
     append_primitive_int8_row(src_metadata.get(), src_remain.get(), 2);
     MutableColumns src_typed;
     src_typed.emplace_back(build_nullable_int64_column({20}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(src_typed), std::move(src_metadata),
+    src->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(src_typed), std::move(src_metadata),
                               std::move(src_remain));
 
     auto st = VariantColumnMerger::merge_into(dst.get(), *down_cast<const VariantColumn*>(src.get()));
@@ -825,7 +825,7 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_string_like_types_are_
 
     // A string-like type vs a non-string-like type falls through to numeric/variant hoisting.
     auto varchar_bigint =
-            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_BIGINT));
+            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARCHAR), TYPE_BIGINT_DESC);
     ASSERT_TRUE(varchar_bigint.ok());
     EXPECT_EQ(TypeDescriptor(TYPE_VARIANT), varchar_bigint.value());
 }

@@ -692,8 +692,8 @@ TEST_F(ParquetSchemaBuilderTest, MapGroupKey) {
     // Accepted by both resolvers; whether the key can be read is decided by the table key type at read time.
     check_inferred_type(
             create_map_node("my_map", ::parquet::Repetition::OPTIONAL, {kv}),
-            TypeDescriptor::create_map_type(TypeDescriptor::create_struct_type({"a"}, {TypeDescriptor(TYPE_INT)}),
-                                            TypeDescriptor(TYPE_INT)));
+            TypeDescriptor::create_map_type(TypeDescriptor::create_struct_type({"a"}, {TYPE_INT_DESC}),
+                                            TYPE_INT_DESC));
 }
 
 TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {
@@ -708,7 +708,7 @@ TEST_F(ParquetSchemaBuilderTest, TopLevelRepeatedFields) {
         auto y = create_primitive_node("y", ::parquet::Repetition::OPTIONAL, ::parquet::Type::BYTE_ARRAY);
         auto node = create_group_node("rg", ::parquet::Repetition::REPEATED, {x, y});
         check_inferred_type(node, TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
-                                          {"x", "y"}, {TypeDescriptor(TYPE_INT), varbinary_type()})));
+                                          {"x", "y"}, {TYPE_INT_DESC, varbinary_type()})));
     }
     // A repeated field inside a struct: optional group s { repeated int32 a; }
     {
@@ -734,7 +734,7 @@ TEST_F(ParquetSchemaBuilderTest, LegacyListEncodings) {
         auto element = create_group_node("element", ::parquet::Repetition::REPEATED, {str, num});
         check_inferred_type(create_list_node("my_list", ::parquet::Repetition::OPTIONAL, {element}),
                             TypeDescriptor::create_array_type(TypeDescriptor::create_struct_type(
-                                    {"str", "num"}, {varbinary_type(), TypeDescriptor(TYPE_INT)})));
+                                    {"str", "num"}, {varbinary_type(), TYPE_INT_DESC})));
     }
     // Nested two-level list:
     // optional group my_list (LIST) { repeated group array (LIST) { repeated int32 array; } }

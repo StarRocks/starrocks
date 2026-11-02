@@ -27,10 +27,10 @@ class StreamSourceMetaTest : public testing::Test {
 protected:
     static MutableColumnPtr varchar_col() { return ColumnHelper::create_column(TYPE_VARCHAR_DESC, true); }
     static MutableColumnPtr int_col() {
-        return ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_INT), true);
+        return ColumnHelper::create_column(TYPE_INT_DESC, true);
     }
     static MutableColumnPtr bigint_col() {
-        return ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_BIGINT), true);
+        return ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     }
     static MutableColumnPtr map_col() {
         return ColumnHelper::create_column(TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC), true);

@@ -1029,14 +1029,14 @@ TEST_F(VectorizedCaseExprTest, searchedCaseReturnsVariant) {
     when1_column->append(0);
     when1_column->append(0);
     when1_column->append(0);
-    MockExpr when1(TypeDescriptor(TYPE_BOOLEAN), when1_column);
+    MockExpr when1(TYPE_BOOLEAN_DESC, when1_column);
 
     auto when2_column = BooleanColumn::create();
     when2_column->append(0);
     when2_column->append(1);
     when2_column->append(0);
     when2_column->append(0);
-    MockExpr when2(TypeDescriptor(TYPE_BOOLEAN), when2_column);
+    MockExpr when2(TYPE_BOOLEAN_DESC, when2_column);
 
     MockExpr then1(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"10", "11", "12", "13"}));
 
@@ -1069,7 +1069,7 @@ TEST_F(VectorizedCaseExprTest, searchedCaseReturnsVariant) {
     dynamic_when_column->append(0);
     dynamic_when_column->append(1);
     dynamic_when_column->append(0);
-    MockExpr dynamic_when(TypeDescriptor(TYPE_BOOLEAN), dynamic_when_column);
+    MockExpr dynamic_when(TYPE_BOOLEAN_DESC, dynamic_when_column);
     MockExpr dynamic_then(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"40", "41", "42"}));
     no_else_expr->_children.push_back(&dynamic_when);
     no_else_expr->_children.push_back(&dynamic_then);
@@ -1090,7 +1090,7 @@ TEST_F(VectorizedCaseExprTest, simpleCaseReturnsVariant) {
     ASSERT_NE(nullptr, expr);
 
     auto case_column = ColumnTestHelper::build_column<int32_t>({1, 2, 3, 4});
-    MockExpr case_expr(TypeDescriptor(TYPE_INT), case_column);
+    MockExpr case_expr(TYPE_INT_DESC, case_column);
 
     auto when1_column = Int32Column::create();
     auto when2_column = Int32Column::create();
@@ -1098,8 +1098,8 @@ TEST_F(VectorizedCaseExprTest, simpleCaseReturnsVariant) {
         when1_column->append(1);
         when2_column->append(2);
     }
-    MockExpr when1(TypeDescriptor(TYPE_INT), when1_column);
-    MockExpr when2(TypeDescriptor(TYPE_INT), when2_column);
+    MockExpr when1(TYPE_INT_DESC, when1_column);
+    MockExpr when2(TYPE_INT_DESC, when2_column);
 
     MockExpr then1(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"100", "101", "102", "103"}));
     MockExpr then2(TypeDescriptor(TYPE_VARIANT), create_case_variant_column({"200", "201", "202", "203"}));
@@ -1157,7 +1157,7 @@ TEST_F(VectorizedCaseExprTest, simpleCaseWithVariantWhenTypeAndIntResult) {
     expr_node.case_expr.has_case_expr = true;
     expr_node.case_expr.has_else_expr = true;
     expr_node.child_type = TPrimitiveType::VARIANT;
-    expr_node.type = TypeDescriptor(TYPE_INT).to_thrift();
+    expr_node.type = TYPE_INT_DESC.to_thrift();
 
     std::unique_ptr<Expr> expr(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_INT, TYPE_VARIANT));
     ASSERT_NE(nullptr, expr);
@@ -1173,9 +1173,9 @@ TEST_F(VectorizedCaseExprTest, simpleCaseWithVariantWhenTypeAndIntResult) {
         }
         return column;
     };
-    MockExpr then1(TypeDescriptor(TYPE_INT), make_int_column({100, 101, 102, 103}));
-    MockExpr then2(TypeDescriptor(TYPE_INT), make_int_column({200, 201, 202, 203}));
-    MockExpr else_expr(TypeDescriptor(TYPE_INT), make_int_column({300, 301, 302, 303}));
+    MockExpr then1(TYPE_INT_DESC, make_int_column({100, 101, 102, 103}));
+    MockExpr then2(TYPE_INT_DESC, make_int_column({200, 201, 202, 203}));
+    MockExpr else_expr(TYPE_INT_DESC, make_int_column({300, 301, 302, 303}));
 
     expr->_children.push_back(&case_expr);
     expr->_children.push_back(&when1);
@@ -1207,7 +1207,7 @@ TEST_F(VectorizedCaseExprTest, selectiveEvaluationMatchesFullEvaluation) {
     // when0 owns rows 0..2, when1 is true on 2..4 but only owns 3 and 4 (row 2 goes to when0),
     // row 5 is null in both, the rest fall through to ELSE.
     auto make_when = [](const std::vector<std::optional<bool>>& values) {
-        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), true);
+        auto column = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true);
         for (const auto& v : values) {
             if (v.has_value()) {
                 column->append_datum(Datum(static_cast<uint8_t>(*v ? 1 : 0)));
@@ -1247,9 +1247,9 @@ TEST_F(VectorizedCaseExprTest, selectiveEvaluationMatchesFullEvaluation) {
         expr_node.case_expr.has_else_expr = has_else;
         Expr* expr = pool.add(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_MAP, TYPE_BOOLEAN));
         expr->set_type(type_map_int_int);
-        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 0)));
+        expr->add_child(pool.add(new ColumnRef(TYPE_BOOLEAN_DESC, 0)));
         expr->add_child(pool.add(new ColumnRef(type_map_int_int, 2)));
-        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 1)));
+        expr->add_child(pool.add(new ColumnRef(TYPE_BOOLEAN_DESC, 1)));
         expr->add_child(pool.add(new ColumnRef(type_map_int_int, 3)));
         if (has_else) {
             expr->add_child(pool.add(new ColumnRef(type_map_int_int, 4)));
@@ -1293,7 +1293,7 @@ TEST_F(VectorizedCaseExprTest, selectiveEvaluationWithConstWhen) {
     const TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
     constexpr size_t kNumRows = 12;
 
-    auto when0 = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), true);
+    auto when0 = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true);
     for (size_t i = 0; i < kNumRows; ++i) {
         when0->append_datum(Datum(static_cast<uint8_t>(i < 3 ? 1 : 0)));
     }
@@ -1321,7 +1321,7 @@ TEST_F(VectorizedCaseExprTest, selectiveEvaluationWithConstWhen) {
         expr->set_type(type_map_int_int);
         // branch 0 owns rows 0..2 and is sparse enough to be compacted; branch 1's const-true WHEN then
         // has to claim exactly rows 3..11.
-        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 0)));
+        expr->add_child(pool.add(new ColumnRef(TYPE_BOOLEAN_DESC, 0)));
         expr->add_child(pool.add(new ColumnRef(type_map_int_int, 2)));
         expr->add_child(pool.add(new MockConstVectorizedExpr<TYPE_BOOLEAN>(bool_node, 1)));
         expr->add_child(pool.add(new ColumnRef(type_map_int_int, 3)));

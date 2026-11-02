@@ -71,7 +71,7 @@ private:
 TEST_F(ArrayElementExprTest, test_one_dim_array) {
     TypeDescriptor type_array_int;
     type_array_int.type = LogicalType::TYPE_ARRAY;
-    type_array_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_array_int.children.emplace_back(TYPE_INT_DESC);
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 

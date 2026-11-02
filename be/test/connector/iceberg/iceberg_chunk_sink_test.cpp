@@ -332,44 +332,44 @@ TEST_F(IcebergChunkSinkTest, test_utils) {
         {
             Datum datum;
             datum.set_int8(12);
-            auto res = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_TINYINT), true);
+            auto res = ColumnHelper::create_column(TYPE_TINYINT_DESC, true);
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
-            extra_metas.push_back(ChunkExtraColumnsMeta{TypeDescriptor(LogicalType::TYPE_TINYINT), true /*useless*/,
+            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_TINYINT_DESC, true /*useless*/,
                                                         true /*useless*/});
         }
 
         {
             Datum datum;
             datum.set_int16(33);
-            auto res = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_SMALLINT), true);
+            auto res = ColumnHelper::create_column(TYPE_SMALLINT_DESC, true);
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
-            extra_metas.push_back(ChunkExtraColumnsMeta{TypeDescriptor(LogicalType::TYPE_SMALLINT), true /*useless*/,
+            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_SMALLINT_DESC, true /*useless*/,
                                                         true /*useless*/});
         }
 
         {
             Datum datum;
             datum.set_int32(33);
-            auto res = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_INT), true);
+            auto res = ColumnHelper::create_column(TYPE_INT_DESC, true);
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
             extra_metas.push_back(
-                    ChunkExtraColumnsMeta{TypeDescriptor(LogicalType::TYPE_INT), true /*useless*/, true /*useless*/});
+                    ChunkExtraColumnsMeta{TYPE_INT_DESC, true /*useless*/, true /*useless*/});
         }
 
         {
             Datum datum;
             datum.set_int64(33);
-            auto res = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_BIGINT), true);
+            auto res = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
             res->append_datum(datum);
             auto ptr = ConstColumn::create(std::move(res), 1);
             partition_key_columns.emplace_back(ptr);
-            extra_metas.push_back(ChunkExtraColumnsMeta{TypeDescriptor(LogicalType::TYPE_BIGINT), true /*useless*/,
+            extra_metas.push_back(ChunkExtraColumnsMeta{TYPE_BIGINT_DESC, true /*useless*/,
                                                         true /*useless*/});
         }
 

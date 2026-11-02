@@ -25,7 +25,7 @@ namespace starrocks {
 TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     std::shared_ptr<arrow::DataType> type;
 
-    ASSERT_OK(convert_to_arrow_type(TypeDescriptor(TYPE_INT), &type));
+    ASSERT_OK(convert_to_arrow_type(TYPE_INT_DESC, &type));
     EXPECT_EQ(arrow::Type::INT32, type->id());
 
     auto decimal = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 4);
@@ -40,7 +40,7 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     auto list_type = std::static_pointer_cast<arrow::ListType>(type);
     EXPECT_EQ(arrow::Type::INT64, list_type->value_type()->id());
 
-    auto map = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_DOUBLE));
+    auto map = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TYPE_DOUBLE_DESC);
     ASSERT_OK(convert_to_arrow_type(map, &type));
     ASSERT_EQ(arrow::Type::MAP, type->id());
     auto map_type = std::static_pointer_cast<arrow::MapType>(type);
@@ -48,7 +48,7 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     EXPECT_EQ(arrow::Type::DOUBLE, map_type->item_type()->id());
 
     auto structure =
-            TypeDescriptor::create_struct_type({"k", "v"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_JSON)});
+            TypeDescriptor::create_struct_type({"k", "v"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_JSON)});
     ASSERT_OK(convert_to_arrow_type(structure, &type));
     ASSERT_EQ(arrow::Type::STRUCT, type->id());
     auto struct_type = std::static_pointer_cast<arrow::StructType>(type);
@@ -62,10 +62,10 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
 TEST(TypeToArrowConverterTest, MapsFlightSqlSpecialTypes) {
     std::shared_ptr<arrow::DataType> type;
 
-    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TypeDescriptor(TYPE_DATE), &type));
+    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TYPE_DATE_DESC, &type));
     EXPECT_EQ(arrow::Type::DATE32, type->id());
 
-    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TypeDescriptor(TYPE_DATETIME), &type));
+    ASSERT_OK(convert_to_arrow_type_for_flight_sql(TYPE_DATETIME_DESC, &type));
     ASSERT_EQ(arrow::Type::TIMESTAMP, type->id());
     auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(type);
     EXPECT_EQ(arrow::TimeUnit::MICRO, timestamp_type->unit());

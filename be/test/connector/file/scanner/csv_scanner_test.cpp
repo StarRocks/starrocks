@@ -209,7 +209,7 @@ TEST_P(CSVScannerTest, test_scalar_types) {
 }
 
 TEST_P(CSVScannerTest, test_adaptive_nullable_column1) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -241,7 +241,7 @@ TEST_P(CSVScannerTest, test_adaptive_nullable_column1) {
 }
 
 TEST_P(CSVScannerTest, test_adaptive_nullable_column2) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -273,7 +273,7 @@ TEST_P(CSVScannerTest, test_adaptive_nullable_column2) {
 }
 
 TEST_P(CSVScannerTest, test_adaptive_nullable_column3) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -594,7 +594,7 @@ TEST_P(CSVScannerTest, test_nested_array_of_int) {
 }
 
 TEST_P(CSVScannerTest, test_invalid_field_as_null) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -652,7 +652,7 @@ TEST_P(CSVScannerTest, test_invalid_field_of_array_as_null) {
 }
 
 TEST_P(CSVScannerTest, test_start_offset) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -689,7 +689,7 @@ TEST_P(CSVScannerTest, test_split_multi_scan_ranges) {
     // 7|8\n
     // 9|0\n
 
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TYPE_INT_DESC};
 
     {
         // split at row delimiter
@@ -793,7 +793,7 @@ TEST_P(CSVScannerTest, test_split_multi_scan_ranges) {
 }
 
 TEST_P(CSVScannerTest, test_skip_header) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -825,7 +825,7 @@ TEST_P(CSVScannerTest, test_skip_header) {
 }
 
 TEST_P(CSVScannerTest, test_skip_header_start_offset_not_0) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -864,7 +864,7 @@ TEST_P(CSVScannerTest, test_skip_header_start_offset_not_0) {
 }
 
 TEST_P(CSVScannerTrimSpaceTest, test_trim_space) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -889,7 +889,7 @@ TEST_P(CSVScannerTrimSpaceTest, test_trim_space) {
 }
 
 TEST_P(CSVScannerTrimSpaceTest, test_trim_space_with_ENCLOSE) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -921,7 +921,7 @@ TEST_P(CSVScannerTrimSpaceTest, test_trim_space_with_ENCLOSE) {
 }
 
 TEST_P(CSVScannerTest, test_ENCLOSE) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR),
                                       TypeDescriptor(TYPE_VARCHAR)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -963,7 +963,7 @@ TEST_P(CSVScannerTest, test_ENCLOSE) {
 }
 
 TEST_P(CSVScannerTest, test_ESCAPE) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR),
                                       TypeDescriptor(TYPE_VARCHAR)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -999,7 +999,7 @@ TEST_P(CSVScannerTest, test_ESCAPE) {
 }
 
 TEST_P(CSVScannerTest, TEST_Pile_not_ended_with_record_delimiter) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC, TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
@@ -1155,10 +1155,10 @@ TEST_P(CSVScannerTest, test_empty) {
 
 // 21431,"Rowdy" Roddy Piper, Superstar,,,,1,-999
 TEST_P(CSVScannerTest, test_enclose_fanatics) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_VARCHAR),
-                                      TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT),
-                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT),
-                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC,     TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC,
+                                      TYPE_INT_DESC,     TYPE_INT_DESC,
+                                      TYPE_INT_DESC,     TYPE_INT_DESC};
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;

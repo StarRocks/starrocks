@@ -57,7 +57,7 @@ protected:
     // cleanly.
     ExprContext* make_group_by_ctx() {
         auto* literal = _pool.add(new VectorizedLiteral(ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1),
-                                                        TypeDescriptor(TYPE_BIGINT)));
+                                                        TYPE_BIGINT_DESC));
         return _pool.add(new ExprContext(literal));
     }
 

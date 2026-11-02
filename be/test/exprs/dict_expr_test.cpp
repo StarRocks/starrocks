@@ -108,7 +108,7 @@ TEST_F(DictMappingTest, test1) {
     auto pl = pool.add(new PlaceHolderRef(node));
     origin->add_child(pl);
 
-    auto slot = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 1));
+    auto slot = pool.add(new ColumnRef(TYPE_INT_DESC, 1));
     dict_expr = pool.add(new DictMappingExpr(node));
     context = pool.add(new ExprContext(dict_expr));
     dict_expr->add_child(slot);
@@ -169,7 +169,7 @@ TEST_F(DictMappingTest, test_function_return_exception) {
     auto pl = pool.add(new PlaceHolderRef(node));
     origin->add_child(pl);
 
-    auto slot = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 1));
+    auto slot = pool.add(new ColumnRef(TYPE_INT_DESC, 1));
     dict_expr = pool.add(new DictMappingExpr(node));
     context = pool.add(new ExprContext(dict_expr));
     dict_expr->add_child(slot);
@@ -238,7 +238,7 @@ TEST_F(DictMappingTest, test_expression_returns_null_for_some_values) {
     auto pl = pool.add(new PlaceHolderRef(node));
     origin->add_child(pl);
 
-    auto slot = pool.add(new ColumnRef(TypeDescriptor(TYPE_INT), 1));
+    auto slot = pool.add(new ColumnRef(TYPE_INT_DESC, 1));
     dict_expr = pool.add(new DictMappingExpr(node));
     context = pool.add(new ExprContext(dict_expr));
     dict_expr->add_child(slot);

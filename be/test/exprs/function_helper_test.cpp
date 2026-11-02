@@ -162,7 +162,7 @@ TEST_F(FunctionHelperTest, testCreateColumnArray) {
 
 TEST_F(FunctionHelperTest, testCreateColumnStruct) {
     std::vector<std::string> field_names{"c1", "c2"};
-    std::vector<TypeDescriptor> field_types{TypeDescriptor(TYPE_INT), TYPE_ARRAY_INT_DESC};
+    std::vector<TypeDescriptor> field_types{TYPE_INT_DESC, TYPE_ARRAY_INT_DESC};
     TypeDescriptor struct_type = TypeDescriptor::create_struct_type(field_names, field_types);
 
     auto struct_column = FunctionHelper::create_column(struct_type, false);
@@ -192,7 +192,7 @@ static const GeoColumn* check_geo_leaf(const Column* column, const GeoTypeDescri
 TEST_F(FunctionHelperTest, testCreateColumnSpecialTypes) {
     for (const auto& type :
          {TypeDescriptor(TYPE_NULL),
-          TypeDescriptor::create_map_type(TypeDescriptor(TYPE_UNKNOWN), TypeDescriptor(TYPE_UNKNOWN)),
+          TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_UNKNOWN_DESC),
           TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 35, 7), TypeDescriptor(TYPE_GEOGRAPHY),
           TypeDescriptor(TYPE_GEOMETRY)}) {
         for (bool nullable : {false, true}) {
@@ -458,7 +458,7 @@ protected:
 
 TEST_P(GeoFunctionHelperTest, CreateColumns) {
     for (const auto& nested :
-         {type, array_type, TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), type),
+         {type, array_type, TypeDescriptor::create_map_type(TYPE_INT_DESC, type),
           TypeDescriptor::create_struct_type({"g"}, {type}), TypeDescriptor::create_array_type(array_type)}) {
         for (bool nullable : {false, true}) {
             auto column = FunctionHelper::create_column(nested, nullable);
@@ -527,8 +527,8 @@ TEST_P(GeoFunctionHelperTest, ArrayAggWindow) {
 }
 
 TEST_P(GeoFunctionHelperTest, MapAgg) {
-    auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), type);
-    auto ctx = context(map_type, {TypeDescriptor(TYPE_INT), type});
+    auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, type);
+    auto ctx = context(map_type, {TYPE_INT_DESC, type});
     auto* function = get_aggregate_function("map_agg", TYPE_INT, TYPE_MAP, false);
     ASSERT_NE(nullptr, function);
     auto state = ManagedAggrState::create(ctx.get(), function);
@@ -593,8 +593,8 @@ TEST_P(GeoFunctionHelperTest, StructCallers) {
 TEST_F(FunctionHelperTest, ArrayV2ColumnCopyControls) {
     MemPool pool;
     ArrayAggAggregateFunctionV2<ArrayAggAggregateStateV2> current;
-    for (const auto& arg : {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
-                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))}) {
+    for (const auto& arg : {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR),
+                            TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
@@ -639,8 +639,8 @@ TEST_F(FunctionHelperTest, MapColumnCopyControls) {
     ASSERT_NE(nullptr, map_function);
     auto keys = Int32Column::create();
     for (int key : {2, 1, 2}) keys->append(key);
-    for (const auto& arg : {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR),
-                            TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT))}) {
+    for (const auto& arg : {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR),
+                            TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
@@ -665,9 +665,9 @@ TEST_F(FunctionHelperTest, MapColumnCopyControls) {
                 return source->is_constant() ? down_cast<const ConstColumn*>(source.get())->data_column()->debug_item(0)
                                              : source->debug_item(i);
             };
-            auto map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), arg);
+            auto map_type = TypeDescriptor::create_map_type(TYPE_INT_DESC, arg);
             auto ctx = std::unique_ptr<FunctionContext>(
-                    FunctionContext::create_context(nullptr, &pool, map_type, {TypeDescriptor(TYPE_INT), arg}));
+                    FunctionContext::create_context(nullptr, &pool, map_type, {TYPE_INT_DESC, arg}));
             auto state = ManagedAggrState::create(ctx.get(), map_function);
             const Column* columns[] = {keys.get(), source.get()};
             for (size_t i = 0; i < source->size(); ++i) map_function->update(ctx.get(), columns, state->state(), i);

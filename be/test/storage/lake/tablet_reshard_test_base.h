@@ -375,7 +375,7 @@ protected:
         std::vector<ColumnId> pk_columns = {0};
         auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
         auto chunk = std::make_unique<Chunk>();
-        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        auto column = ColumnHelper::create_column(TYPE_INT_DESC, false);
         column->append_datum(Datum(value));
         chunk->append_column(std::move(column), (SlotId)0);
         MutableColumnPtr encoded;
@@ -1868,9 +1868,9 @@ protected:
                                                                int32_t delete_key, bool include_delete = true,
                                                                bool include_upsert = true) {
         std::vector<SlotDescriptor> slots;
-        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        slots.emplace_back(2, "__op", TYPE_INT_DESC);
         std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
         Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
 
@@ -1925,9 +1925,9 @@ protected:
     StatusOr<TabletMetadataPtr> publish_followup_deletes(int64_t tablet_id, int64_t base_version,
                                                          const std::vector<int32_t>& delete_keys) {
         std::vector<SlotDescriptor> slots;
-        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        slots.emplace_back(2, "__op", TYPE_INT_DESC);
         std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
         Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
 

@@ -73,7 +73,7 @@ protected:
         Columns columns{make_key_column(num_rows, step)};
         OpTRuntimeBloomFilterBuildParams params;
         params.emplace_back(RuntimeMembershipFilterBuildParam(false, false, false, std::move(columns), nullptr,
-                                                              TypeDescriptor(TYPE_INT)));
+                                                              TYPE_INT_DESC));
 
         PartialRuntimeFilterMerger merger(&_pool, kLocalRfLimit, kGlobalRfLimit, kFuncVersion, true);
         merger.incr_builder();

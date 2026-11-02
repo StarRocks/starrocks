@@ -353,7 +353,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_typed_only) {
         }
         MutableColumns typed;
         typed.emplace_back(NullableColumn::create(std::move(data), std::move(nulls)));
-        c1->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+        c1->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), nullptr, nullptr);
     }
     ASSERT_EQ(3, c1->size());
 
@@ -413,7 +413,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_base_shredded) {
 
         MutableColumns typed;
         typed.emplace_back(NullableColumn::create(std::move(data), std::move(nulls)));
-        c1->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), std::move(metadata),
+        c1->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata),
                                  std::move(remain));
     }
     ASSERT_TRUE(c1->has_metadata_column());
@@ -486,7 +486,7 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_multiple_paths) {
 
         TypeDescriptor varchar_type(TYPE_VARCHAR);
         varchar_type.len = TypeDescriptor::MAX_VARCHAR_LENGTH;
-        c1->set_shredded_columns({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), varchar_type}, std::move(typed),
+        c1->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, varchar_type}, std::move(typed),
                                  std::move(metadata), std::move(remain));
     }
     ASSERT_EQ(2, c1->size());
@@ -1093,7 +1093,7 @@ ProtobufChunkMeta make_wide_meta(size_t all_null_columns, size_t int_columns) {
     meta.is_consts.assign(total, false);
     for (size_t i = 0; i < total; i++) {
         meta.slot_id_to_index[static_cast<SlotId>(i)] = i;
-        meta.types[i] = i < all_null_columns ? TYPE_VARCHAR_DESC : TypeDescriptor(LogicalType::TYPE_INT);
+        meta.types[i] = i < all_null_columns ? TYPE_VARCHAR_DESC : TYPE_INT_DESC;
     }
     return meta;
 }
@@ -1122,8 +1122,8 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
     meta.is_nulls.resize(2, false);
     meta.is_consts.resize(2, false);
     meta.types.resize(2);
-    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
-    meta.types[1] = TypeDescriptor(LogicalType::TYPE_INT);
+    meta.types[0] = TYPE_INT_DESC;
+    meta.types[1] = TYPE_INT_DESC;
 
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);
@@ -1176,7 +1176,7 @@ PARALLEL_TEST(ProtobufChunkSerde, exchange_ignores_the_spill_only_all_null_bit) 
     meta.is_nulls.resize(1, true);
     meta.is_consts.resize(1, false);
     meta.types.resize(1);
-    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
+    meta.types[0] = TYPE_INT_DESC;
 
     ProtobufChunkDeserializer deserializer(meta, &with_bit_pb, kLevelWithBit);
     ASSIGN_OR_ABORT(auto restored, deserializer.deserialize(with_bit_pb.data()));
@@ -1330,7 +1330,7 @@ PARALLEL_TEST(ProtobufChunkSerde, negotiated_bit_costs_one_tag_byte_per_nullable
 
         // Values must survive the negotiated path untouched.
         auto meta = protobuf_serde_test::make_wide_meta(0, 0);
-        meta.types.resize(total, TypeDescriptor(LogicalType::TYPE_INT));
+        meta.types.resize(total, TYPE_INT_DESC);
         meta.is_nulls.assign(total, false);
         for (size_t i = 0; i < shape.nullable_cols; i++) {
             meta.is_nulls[i] = true;
@@ -1515,7 +1515,7 @@ PARALLEL_TEST(ProtobufChunkSerde, deserialize_with_schema) {
 PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
     auto chunk = std::make_unique<Chunk>(protobuf_serde_test::make_columns(2), protobuf_serde_test::make_schema(2));
     auto extra_data_meta = std::vector<ChunkExtraColumnsMeta>{
-            ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
+            ChunkExtraColumnsMeta{.type = TYPE_INT_DESC, .is_null = false, .is_const = false}};
     auto extra_data_cols = protobuf_serde_test::make_columns(2);
     auto extra_data = std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_meta), std::move(extra_data_cols));
     chunk->set_extra_data(extra_data);
@@ -1530,10 +1530,10 @@ PARALLEL_TEST(ProtobufChunkSerde, TestChunkWithExtraData) {
     meta.is_nulls.resize(2, false);
     meta.is_consts.resize(2, false);
     meta.types.resize(2);
-    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
-    meta.types[1] = TypeDescriptor(LogicalType::TYPE_INT);
+    meta.types[0] = TYPE_INT_DESC;
+    meta.types[1] = TYPE_INT_DESC;
     meta.extra_data_metas = std::vector<ChunkExtraColumnsMeta>{
-            ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false}};
+            ChunkExtraColumnsMeta{.type = TYPE_INT_DESC, .is_null = false, .is_const = false}};
 
     ProtobufChunkDeserializer deserializer(meta);
     auto chunk_or = deserializer.deserialize(serialized_data);
