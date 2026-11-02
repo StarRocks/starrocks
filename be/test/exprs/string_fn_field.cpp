@@ -238,8 +238,8 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest3) {
 }
 
 PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest4) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
-            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_INT)));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_INT_DESC, TYPE_INT_DESC, TYPE_INT_DESC}, TYPE_INT_DESC));
     Columns columns;
     auto paramBuilder1 = ColumnBuilder<TYPE_INT>(5);
     auto paramBuilder2 = ColumnBuilder<TYPE_INT>(5);

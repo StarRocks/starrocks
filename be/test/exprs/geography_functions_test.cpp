@@ -834,7 +834,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorRetainsNullSrid
     auto srid_nulls = NullColumn::create();
     for (uint8_t flag : {0, 0, 0, 1, 0}) srid_nulls->append(flag);
     std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TypeDescriptor(TYPE_INT)},
+            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_INT_DESC},
             geography_type()));
     auto result = GeoFunctions::st_geog_from_wkb(
             context.get(), {NullableColumn::create(input, nulls), NullableColumn::create(srids, srid_nulls)});
@@ -866,7 +866,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyRejectsInvalidInputAndSrid) {
                                  GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326};
     auto geography = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, descriptor);
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_INT)}, geography));
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_INT_DESC}, geography));
     auto input = BinaryColumn::create();
     input->append("POINT (181 0)");
     input->append("POINT (1 2)");
@@ -1107,7 +1107,7 @@ TEST_F(geographyFunctionsTest, nativeGeoPointDistanceFastPathPreservesBits) {
                     inputs.push_back(constants & (1 << side) ? ColumnPtr(ConstColumn::create(data, size)) : data);
                 }
                 std::unique_ptr<FunctionContext> context(
-                        FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+                        FunctionContext::create_test_context({type, type}, TYPE_DOUBLE_DESC));
                 context->set_constant_columns(
                         {constants & 1 ? inputs[0] : nullptr, constants & 2 ? inputs[1] : nullptr});
                 if (prepare)
@@ -1158,7 +1158,7 @@ TEST_F(geographyFunctionsTest, nativeGeoPointDistanceFastPathKeepsFallbackErrors
                 for (bool constant : {false, true}) {
                     ColumnPtr lhs = constant ? ConstColumn::create(input, 1) : input;
                     std::unique_ptr<FunctionContext> context(
-                            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+                            FunctionContext::create_test_context({type, type}, TYPE_DOUBLE_DESC));
                     context->set_constant_columns({constant ? lhs : nullptr, nullptr});
                     ASSERT_TRUE(
                             GeoFunctions::native_geo_distance_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL)
@@ -1839,7 +1839,7 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentReusesRows) {
                                                  : predicates[spherical][kind](ctx, {b, a});
                         };
                         std::unique_ptr<FunctionContext> ctx(
-                                FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_BOOLEAN)));
+                                FunctionContext::create_test_context({type, type}, TYPE_BOOLEAN_DESC));
                         Columns constants = {p->is_constant() ? p : nullptr, q->is_constant() ? q : nullptr};
                         if (kind % 2 != 0) std::reverse(constants.begin(), constants.end());
                         ctx->set_constant_columns(constants);
@@ -2000,8 +2000,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryContainmentPreparedTranslationInvar
     const bool strict_expected[] = {true, false, false};
     const bool inclusive_expected[] = {true, false, true};
     for (bool polygon_first : {true, false}) {
-        std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_BOOLEAN)));
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, TYPE_BOOLEAN_DESC));
         context->set_constant_columns(polygon_first ? Columns{polygon, nullptr} : Columns{nullptr, polygon});
         ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
         auto strict_result = polygon_first ? GeoFunctions::st_geometry_contains(context.get(), {polygon, points})
@@ -2108,7 +2107,7 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentUsesPrepareCloseLifecycle) {
                                       : geometry({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"});
         auto constant_polygon = ConstColumn::create(polygon_data, 2);
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+                FunctionContext::create_test_context({geo_type, geo_type}, TYPE_BOOLEAN_DESC));
         context->set_constant_columns({constant_polygon, nullptr});
 
         ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
@@ -2151,7 +2150,7 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentKeepsChunkOnlyConstantsBatchL
     {
         auto prepared_polygon = ConstColumn::create(geography({containing_polygon}), 1);
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+                FunctionContext::create_test_context({geo_type, geo_type}, TYPE_BOOLEAN_DESC));
         context->set_constant_columns({prepared_polygon, nullptr});
         ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -2171,7 +2170,7 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentKeepsChunkOnlyConstantsBatchL
     {
         auto prepared_point = ConstColumn::create(geography({"POINT (1 1)"}), 1);
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+                FunctionContext::create_test_context({geo_type, geo_type}, TYPE_BOOLEAN_DESC));
         context->set_constant_columns({nullptr, prepared_point});
         ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -2196,7 +2195,7 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentPreparesOnlyNullConstant) {
         const auto geo_type = spherical ? geography_type() : geometry_type();
         auto constant_null = ColumnHelper::create_const_null_column(2);
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+                FunctionContext::create_test_context({geo_type, geo_type}, TYPE_BOOLEAN_DESC));
         context->set_constant_columns({constant_null, nullptr});
         ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -2221,7 +2220,7 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentPreparesSphericalComponentsLa
     auto constant_polygon = ConstColumn::create(geography({invalid_second_component}), boundary_and_null->size());
     const auto geography_type_descriptor = geography_type();
     std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {geography_type_descriptor, geography_type_descriptor}, TypeDescriptor(TYPE_BOOLEAN)));
+            {geography_type_descriptor, geography_type_descriptor}, TYPE_BOOLEAN_DESC));
     context->set_constant_columns({constant_polygon, nullptr});
     ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -2706,8 +2705,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryIntersectsIsTranslationInvariant) {
 TEST_F(geographyFunctionsTest, nativeGeoIntersectsLifecycleAndThreadIsolation) {
     const auto type = geography_type();
     auto prepared_left = ConstColumn::create(geography({"POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))"}), 1);
-    std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_BOOLEAN)));
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, TYPE_BOOLEAN_DESC));
     context->set_constant_columns({prepared_left, nullptr});
     ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -2781,8 +2779,7 @@ TEST_F(geographyFunctionsTest, nativeGeoIntersectsNullEmptyAndRejection) {
 TEST_F(geographyFunctionsTest, nativeGeoDistanceUsesPrepareCloseAndKeepsChunkConstantsBatchLocal) {
     const auto type = geography_type();
     auto prepared_line = ConstColumn::create(geography({"LINESTRING (-1 0, 1 0)"}), 1);
-    std::unique_ptr<FunctionContext> line_context(
-            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+    std::unique_ptr<FunctionContext> line_context(FunctionContext::create_test_context({type, type}, TYPE_DOUBLE_DESC));
     line_context->set_constant_columns({nullptr, prepared_line});
     ASSERT_TRUE(GeoFunctions::native_geo_distance_prepare(line_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ASSERT_NE(nullptr, line_context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -2801,7 +2798,7 @@ TEST_F(geographyFunctionsTest, nativeGeoDistanceUsesPrepareCloseAndKeepsChunkCon
 
     auto prepared_point = ConstColumn::create(geography({"POINT (0 1)"}), 1);
     std::unique_ptr<FunctionContext> point_context(
-            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+            FunctionContext::create_test_context({type, type}, TYPE_DOUBLE_DESC));
     point_context->set_constant_columns({prepared_point, nullptr});
     ASSERT_TRUE(GeoFunctions::native_geo_distance_prepare(point_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -2820,8 +2817,7 @@ TEST_F(geographyFunctionsTest, nativeGeoDistanceUsesPrepareCloseAndKeepsChunkCon
 TEST_F(geographyFunctionsTest, nativeGeoDistanceIsolatesPreparedSphericalCachePerWorker) {
     const auto type = geography_type();
     auto constant_line = ConstColumn::create(geography({"LINESTRING (-1 0, 1 0)"}), 1);
-    std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, TYPE_DOUBLE_DESC));
     context->set_constant_columns({nullptr, constant_line});
     ASSERT_TRUE(GeoFunctions::native_geo_distance_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -3172,7 +3168,7 @@ TEST_F(geographyFunctionsTest, nativeGeographySingleRingValidityWrappers) {
           std::pair{"POLYGON EMPTY", true}}) {
         auto constant = ConstColumn::create(geography({text}), 5);
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({geography_type()}, TypeDescriptor(TYPE_BOOLEAN)));
+                FunctionContext::create_test_context({geography_type()}, TYPE_BOOLEAN_DESC));
         context->set_constant_columns({constant});
         ASSERT_TRUE(GeoFunctions::native_geo_unary_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
         auto actual = GeoFunctions::st_geography_is_valid(context.get(), {constant});
@@ -3225,7 +3221,7 @@ TEST_F(geographyFunctionsTest, nativeGeographySingleRingValidityPreservesCodecEr
 TEST_F(geographyFunctionsTest, nativeGeoUnaryLifecycleReusesPlanConstant) {
     const auto type = geography_type();
     auto constant = ConstColumn::create(geography({"POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"}), 3);
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type}, TypeDescriptor(TYPE_DOUBLE)));
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type}, TYPE_DOUBLE_DESC));
     context->set_constant_columns({constant});
     ASSERT_TRUE(GeoFunctions::native_geo_unary_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
@@ -3244,7 +3240,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsFunctionsPreserveMetadataAndTransform
 
     auto target = ColumnHelper::create_const_column<TYPE_INT>(3857, 1);
     std::unique_ptr<FunctionContext> set_context(
-            FunctionContext::create_test_context({source_type, TypeDescriptor(TYPE_INT)}, geometry_type()));
+            FunctionContext::create_test_context({source_type, TYPE_INT_DESC}, geometry_type()));
     set_context->set_constant_columns({nullptr, target});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(set_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     auto retagged = GeoFunctions::st_geometry_set_srid(set_context.get(), {source, target});
@@ -3262,7 +3258,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsFunctionsPreserveMetadataAndTransform
     ASSERT_TRUE(GeoFunctions::native_geo_transform_close(set_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
     std::unique_ptr<FunctionContext> forward(
-            FunctionContext::create_test_context({source_type, TypeDescriptor(TYPE_INT)}, geometry_type()));
+            FunctionContext::create_test_context({source_type, TYPE_INT_DESC}, geometry_type()));
     forward->set_constant_columns({nullptr, target});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(forward.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     auto projected = GeoFunctions::st_geometry_transform(forward.get(), {source, target});
@@ -3285,7 +3281,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsFunctionsPreserveMetadataAndTransform
 
     auto inverse_target = ColumnHelper::create_const_column<TYPE_INT>(4326, 1);
     std::unique_ptr<FunctionContext> inverse(
-            FunctionContext::create_test_context({geometry_type(), TypeDescriptor(TYPE_INT)}, source_type));
+            FunctionContext::create_test_context({geometry_type(), TYPE_INT_DESC}, source_type));
     inverse->set_constant_columns({nullptr, inverse_target});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(inverse.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     auto restored = GeoFunctions::st_geometry_transform(inverse.get(), {*projected, inverse_target});
@@ -3301,7 +3297,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsWebMercatorBoundaryAndCollections) {
     auto source_type = geometry_type("EPSG:4326", 4326);
     auto target = ColumnHelper::create_const_column<TYPE_INT>(3857, 1);
     std::unique_ptr<FunctionContext> forward(
-            FunctionContext::create_test_context({source_type, TypeDescriptor(TYPE_INT)}, geometry_type()));
+            FunctionContext::create_test_context({source_type, TYPE_INT_DESC}, geometry_type()));
     forward->set_constant_columns({nullptr, target});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(forward.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -3322,7 +3318,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsWebMercatorBoundaryAndCollections) {
 
     auto inverse_target = ColumnHelper::create_const_column<TYPE_INT>(4326, 1);
     std::unique_ptr<FunctionContext> inverse(
-            FunctionContext::create_test_context({geometry_type(), TypeDescriptor(TYPE_INT)}, source_type));
+            FunctionContext::create_test_context({geometry_type(), TYPE_INT_DESC}, source_type));
     inverse->set_constant_columns({nullptr, inverse_target});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(inverse.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     auto restored = GeoFunctions::st_geometry_transform(inverse.get(), {*projected, inverse_target});
@@ -3337,11 +3333,11 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsBoundaryRoundTripsStayInsideDomain) {
     auto projected_srid = ColumnHelper::create_const_column<TYPE_INT>(3857, 1);
     auto geographic_srid = ColumnHelper::create_const_column<TYPE_INT>(4326, 1);
     std::unique_ptr<FunctionContext> forward(
-            FunctionContext::create_test_context({geographic_type, TypeDescriptor(TYPE_INT)}, projected_type));
+            FunctionContext::create_test_context({geographic_type, TYPE_INT_DESC}, projected_type));
     forward->set_constant_columns({nullptr, projected_srid});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(forward.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     std::unique_ptr<FunctionContext> inverse(
-            FunctionContext::create_test_context({projected_type, TypeDescriptor(TYPE_INT)}, geographic_type));
+            FunctionContext::create_test_context({projected_type, TYPE_INT_DESC}, geographic_type));
     inverse->set_constant_columns({nullptr, geographic_srid});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(inverse.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -3382,7 +3378,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsRejectsInvalidAndSharesPreparedContex
     auto point = geometry({"POINT (10 20)"}, source_type);
     auto target = ColumnHelper::create_const_column<TYPE_INT>(3857, 1);
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({source_type, TypeDescriptor(TYPE_INT)}, geometry_type()));
+            FunctionContext::create_test_context({source_type, TYPE_INT_DESC}, geometry_type()));
     context->set_constant_columns({nullptr, target});
     ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
@@ -3425,14 +3421,14 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsRejectsInvalidAndSharesPreparedContex
     ColumnViewer<TYPE_INT> srid(GeoFunctions::st_geometry_srid(nullptr, {unknown}).value());
     EXPECT_TRUE(srid.is_null(0));
     std::unique_ptr<FunctionContext> invalid_source(
-            FunctionContext::create_test_context({unknown_type, TypeDescriptor(TYPE_INT)}, geometry_type()));
+            FunctionContext::create_test_context({unknown_type, TYPE_INT_DESC}, geometry_type()));
     invalid_source->set_constant_columns({nullptr, target});
     EXPECT_FALSE(
             GeoFunctions::native_geo_transform_prepare(invalid_source.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
     auto invalid_target = ColumnHelper::create_const_column<TYPE_INT>(999999, 1);
-    std::unique_ptr<FunctionContext> invalid_target_context(FunctionContext::create_test_context(
-            {source_type, TypeDescriptor(TYPE_INT)}, geometry_type("EPSG:999999", 999999)));
+    std::unique_ptr<FunctionContext> invalid_target_context(
+            FunctionContext::create_test_context({source_type, TYPE_INT_DESC}, geometry_type("EPSG:999999", 999999)));
     invalid_target_context->set_constant_columns({nullptr, invalid_target});
     EXPECT_FALSE(
             GeoFunctions::native_geo_transform_prepare(invalid_target_context.get(), FunctionContext::FRAGMENT_LOCAL)
@@ -3444,7 +3440,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsRejectsThreeAxisProjectedCrs) {
     auto three_axis_type = geometry_type("EPSG:9895", 9895);
     auto three_axis_target = ColumnHelper::create_const_column<TYPE_INT>(9895, 1);
     std::unique_ptr<FunctionContext> invalid_target(
-            FunctionContext::create_test_context({source_type, TypeDescriptor(TYPE_INT)}, three_axis_type));
+            FunctionContext::create_test_context({source_type, TYPE_INT_DESC}, three_axis_type));
     invalid_target->set_constant_columns({nullptr, three_axis_target});
     auto target_status =
             GeoFunctions::native_geo_transform_prepare(invalid_target.get(), FunctionContext::FRAGMENT_LOCAL);
@@ -3453,7 +3449,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsRejectsThreeAxisProjectedCrs) {
 
     auto two_axis_target = ColumnHelper::create_const_column<TYPE_INT>(4326, 1);
     std::unique_ptr<FunctionContext> invalid_source(
-            FunctionContext::create_test_context({three_axis_type, TypeDescriptor(TYPE_INT)}, source_type));
+            FunctionContext::create_test_context({three_axis_type, TYPE_INT_DESC}, source_type));
     invalid_source->set_constant_columns({nullptr, two_axis_target});
     auto source_status =
             GeoFunctions::native_geo_transform_prepare(invalid_source.get(), FunctionContext::FRAGMENT_LOCAL);
@@ -3678,8 +3674,8 @@ TEST_F(geographyFunctionsTest, h3CellAndArrayContract) {
     constexpr int64_t expected = 0x83754efffffffffLL; // H3 4.5.0: POINT (0 0), resolution 3
     auto point = geography({"POINT (0 0)"});
     auto res3 = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
-    std::unique_ptr<FunctionContext> from_context(FunctionContext::create_test_context(
-            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    std::unique_ptr<FunctionContext> from_context(
+            FunctionContext::create_test_context({geography_type(), TYPE_INT_DESC}, TYPE_BIGINT_DESC));
     auto from = GeoFunctions::h3_from_geo(from_context.get(), {point, res3});
     ASSERT_TRUE(from.ok()) << from.status();
     ColumnViewer<TYPE_BIGINT> from_view(*from);
@@ -3716,8 +3712,8 @@ TEST_F(geographyFunctionsTest, h3FromGeoNullableEmptyAndVaryingResolutions) {
     auto points = geography({"POINT (0 0)", nullptr, "POINT EMPTY", "POINT (180 90)", "POINT (-180 -90)"});
     auto resolutions = Int32Column::create();
     for (int resolution : {3, 9, 11, 7, 15}) resolutions->append(resolution);
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({geography_type(), TYPE_INT_DESC}, TYPE_BIGINT_DESC));
     auto result = GeoFunctions::h3_from_geo(context.get(), {points, resolutions});
     ASSERT_TRUE(result.ok()) << result.status();
     ColumnViewer<TYPE_BIGINT> output(*result);
@@ -3736,8 +3732,8 @@ TEST_F(geographyFunctionsTest, h3FromGeoPreparedPointAcrossResolutions) {
     auto point = ConstColumn::create(geography({"POINT (30 60)"}), 3);
     auto resolutions = Int32Column::create();
     for (int resolution : {3, 9, 11}) resolutions->append(resolution);
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({geography_type(), TYPE_INT_DESC}, TYPE_BIGINT_DESC));
     context->set_constant_columns({point, nullptr});
     for (int repeat = 0; repeat < 2; ++repeat) {
         auto result = GeoFunctions::h3_from_geo(context.get(), {point, resolutions});
@@ -3802,8 +3798,8 @@ TEST_F(geographyFunctionsTest, h3FromGeoConstantAndVaryingPointsShareDiagnostics
         auto resolution = ColumnHelper::create_const_column<TYPE_INT>(9, 1);
         auto varying = GeoFunctions::h3_from_geo(nullptr, {input, resolution});
         auto constant_input = ConstColumn::create(input, 1);
-        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-                {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({geography_type(), TYPE_INT_DESC}, TYPE_BIGINT_DESC));
         context->set_constant_columns({constant_input, resolution});
         auto constant = GeoFunctions::h3_from_geo(context.get(), {constant_input, resolution});
         ASSERT_EQ(std::isnan(coordinate.y), varying.ok());
@@ -4323,7 +4319,7 @@ TEST_F(geographyFunctionsTest, h3BoundaryAndPolygonFill) {
     constexpr int64_t cell_value = 0x83754efffffffffLL;
     auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);
     std::unique_ptr<FunctionContext> boundary_context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+            FunctionContext::create_test_context({TYPE_BIGINT_DESC}, geography_type()));
     auto boundary = GeoFunctions::h3_to_boundary(boundary_context.get(), {cell});
     ASSERT_TRUE(boundary.ok()) << boundary.status();
     EXPECT_TRUE((*boundary)->is_constant());
@@ -4647,7 +4643,7 @@ TEST_F(geographyFunctionsTest, h3BoundaryBuffersMatchCanonicalWkbAcrossCells) {
             cells->append_datum(Datum(static_cast<int64_t>(cell)));
     }
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+            FunctionContext::create_test_context({TYPE_BIGINT_DESC}, geography_type()));
     auto actual = GeoFunctions::h3_to_boundary(context.get(), {cells});
     ASSERT_TRUE(actual.ok()) << actual.status();
     ASSERT_EQ(size, (*actual)->size());
@@ -4678,7 +4674,7 @@ TEST_F(geographyFunctionsTest, h3BoundaryBuffersRetainConstantEmptyAndInvalidInp
     constexpr int64_t cell = 0x83754efffffffffLL;
     constexpr size_t size = 16;
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+            FunctionContext::create_test_context({TYPE_BIGINT_DESC}, geography_type()));
     auto constant =
             GeoFunctions::h3_to_boundary(context.get(), {ColumnHelper::create_const_column<TYPE_BIGINT>(cell, size)});
     ASSERT_TRUE(constant.ok());
@@ -4752,7 +4748,7 @@ TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbMatchesTopologyCorpus) {
     for (int vertices : {5, 6, 7, 8, 10}) EXPECT_TRUE(observed_vertices[vertices]);
     ASSERT_EQ(189, expected.front().size());
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+            FunctionContext::create_test_context({TYPE_BIGINT_DESC}, geography_type()));
     // Cover ordinary, all-valid nullable, and nullable input with invalid hidden payloads.
     for (int mode : {0, 1, 2}) {
         auto cells = Int64Column::create();
@@ -4800,14 +4796,13 @@ TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbRetainsDescriptorAndNullPreced
     EXPECT_EQ("H3_ToBoundary requires GEOGRAPHY return descriptor", missing_context.status().message());
     for (int variant = 0; variant < 6; ++variant) {
         auto type = geography_type();
-        if (variant == 0) type = TypeDescriptor(TYPE_BIGINT);
+        if (variant == 0) type = TYPE_BIGINT_DESC;
         if (variant == 1) type.geo_type.reset();
         if (variant == 2) type.geo_type->logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
         if (variant == 3) type.geo_type->coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
         if (variant == 4) type.geo_type->edge_algorithm = GEO_EDGE_ALGORITHM_PLANAR;
         if (variant == 5) type.geo_type->crs = "EPSG:4326";
-        std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, type));
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({TYPE_BIGINT_DESC}, type));
         auto actual = GeoFunctions::h3_to_boundary(context.get(), {invalid_cell});
         ASSERT_FALSE(actual.ok());
         EXPECT_TRUE(actual.status().is_not_supported());
@@ -4887,13 +4882,13 @@ TEST_F(geographyFunctionsTest, h3ArraySizeLimits) {
 TEST_F(geographyFunctionsTest, h3SeamPolarAndPentagon) {
     auto points = geography({"POINT (179.9 0)", "POINT (0 89.9)"});
     auto resolution = ColumnHelper::create_const_column<TYPE_INT>(1, 2);
-    std::unique_ptr<FunctionContext> from_context(FunctionContext::create_test_context(
-            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    std::unique_ptr<FunctionContext> from_context(
+            FunctionContext::create_test_context({geography_type(), TYPE_INT_DESC}, TYPE_BIGINT_DESC));
     auto cells = GeoFunctions::h3_from_geo(from_context.get(), {points, resolution});
     ASSERT_TRUE(cells.ok()) << cells.status();
     ColumnViewer<TYPE_BIGINT> cell_view(*cells);
     std::unique_ptr<FunctionContext> boundary_context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+            FunctionContext::create_test_context({TYPE_BIGINT_DESC}, geography_type()));
     for (int i = 0; i < 2; ++i) {
         const H3Index cell = static_cast<H3Index>(cell_view.value(i));
         ASSERT_TRUE(isValidCell(cell));
@@ -5094,8 +5089,8 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsNullsConstantInputsAndLimit
     EXPECT_EQ(rows, (*constant)->size());
     RuntimeState state;
     state.init_instance_mem_tracker();
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
-            &state, nullptr, TYPE_ARRAY_BIGINT_DESC, {geography_type(), TypeDescriptor(TYPE_INT)}));
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_context(&state, nullptr, TYPE_ARRAY_BIGINT_DESC,
+                                                                             {geography_type(), TYPE_INT_DESC}));
     const auto evaluate = [&]() {
         return GeoFunctions::h3_polygon_to_cells(context.get(),
                                                  {input, ColumnHelper::create_const_column<TYPE_INT>(9, rows)});
@@ -5205,7 +5200,7 @@ TEST_F(geographyFunctionsTest, h3PolygonFillRetainsOrderedCellsAndVaryingRowOffs
 TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
     auto polygon = ConstColumn::create(geography({"POLYGON ((-20 -20, 20 -20, 20 20, -20 20, -20 -20))"}), 2);
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)}, TYPE_ARRAY_BIGINT_DESC));
+            FunctionContext::create_test_context({geography_type(), TYPE_INT_DESC}, TYPE_ARRAY_BIGINT_DESC));
     context->set_constant_columns({polygon, nullptr});
     ASSERT_TRUE(GeoFunctions::h3_polygon_to_cells_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
