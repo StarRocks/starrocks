@@ -155,16 +155,16 @@ BENCHMARK(BM_HyperScan_Eval)->Apply(BM_HyperScan_Eval_Arg);
     BM_HyperScan_Eval/100/0/iterations:10000     100563 ns       100588 ns        10000
      */
 
-static ColumnPtr create_clickbench_q28_column(size_t num_rows, int selectivity) {
+static ColumnPtr create_anchored_capture_column(size_t num_rows, int selectivity) {
     auto column = BinaryColumn::create();
     for (size_t i = 0; i < num_rows; ++i) {
         const bool match = (i % 100) < static_cast<size_t>(selectivity);
         if (match) {
-            std::string s = "https://www.starrocks.io/blog/clickbench-vectorized-regexp-replace/benchmarks?id=" +
-                            std::to_string(i);
+            std::string s =
+                    "https://www.starrocks.io/blog/vectorized-regexp-replace/benchmarks?id=" + std::to_string(i);
             column->append(Slice(s));
         } else {
-            std::string s = "starrocks.io/blog/clickbench-vectorized-regexp-replace/benchmarks?id=" + std::to_string(i);
+            std::string s = "starrocks.io/blog/vectorized-regexp-replace/benchmarks?id=" + std::to_string(i);
             column->append(Slice(s));
         }
     }
@@ -228,8 +228,8 @@ static void run_re2_regexp_replace_bench(benchmark::State& state, const std::str
     state.SetItemsProcessed(state.iterations() * num_rows);
 }
 
-static void BM_Re2_RegexpReplace_ClickBenchQ28(benchmark::State& state) {
-    run_re2_regexp_replace_bench(state, "^https?://(?:www\\.)?([^/]+)/.*$", "\\1", create_clickbench_q28_column);
+static void BM_Re2_RegexpReplace_AnchoredCapture(benchmark::State& state) {
+    run_re2_regexp_replace_bench(state, "^https?://(?:www\\.)?([^/]+)/.*$", "\\1", create_anchored_capture_column);
 }
 
 static void BM_Re2_RegexpReplace_GlobalCapture(benchmark::State& state) {
@@ -243,7 +243,7 @@ static void BM_Re2_RegexpReplace_Args(benchmark::Benchmark* b) {
     b->Arg(100);
 }
 
-BENCHMARK(BM_Re2_RegexpReplace_ClickBenchQ28)->Apply(BM_Re2_RegexpReplace_Args);
+BENCHMARK(BM_Re2_RegexpReplace_AnchoredCapture)->Apply(BM_Re2_RegexpReplace_Args);
 BENCHMARK(BM_Re2_RegexpReplace_GlobalCapture)->Apply(BM_Re2_RegexpReplace_Args);
 
 } // namespace starrocks

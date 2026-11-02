@@ -191,7 +191,7 @@ TEST_F(StringFunctionRegexpReplaceTest, testRegexpReplaceTemplateParse) {
     ASSERT_FALSE(tmpl.has_invalid_escape);
     ASSERT_TRUE(tmpl.segments.empty());
 
-    // 2. Single capture group "\1" (ClickBench Q28)
+    // 2. Single capture group "\1"
     tmpl.parse(Slice("\\1"));
     ASSERT_EQ(tmpl.nsubmatch, 2);
     ASSERT_EQ(tmpl.max_submatch, 1);
@@ -649,12 +649,36 @@ TEST_F(StringFunctionRegexpReplaceTest, testShrinkingReplacementDoesNotOverReser
         ASSERT_EQ(out_bin->get_immutable_bytes().size(), 0u);
         ASSERT_EQ(out_bin->get_bytes().capacity(), 0u);
     }
+
+    // 4. NullableColumn where 64 preceding null slots each hold 64 KiB of hidden backing bytes
+    //    followed by a matching row replaced with "" -> must not reserve for hidden null payloads.
+    {
+        auto data_col = BinaryColumn::create();
+        auto null_col = NullColumn::create();
+        for (size_t i = 0; i < kNumRows; ++i) {
+            data_col->append(Slice(blob));
+            null_col->append(1);
+        }
+        data_col->append(Slice(blob));
+        null_col->append(0);
+        ColumnPtr nullable_str = NullableColumn::create(std::move(data_col), std::move(null_col));
+        ColumnPtr ptn_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("^.*$", kNumRows + 1);
+        ColumnPtr rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("", kNumRows + 1);
+
+        auto res = eval_regexp_replace({nullable_str, ptn_col, rpl_col});
+        ASSERT_TRUE(res.ok()) << res.status();
+        auto* out_nullable = down_cast<NullableColumn*>(res.value()->as_mutable_raw_ptr());
+        auto* out_bin = down_cast<BinaryColumn*>(out_nullable->data_column()->as_mutable_raw_ptr());
+        ASSERT_EQ(out_nullable->size(), kNumRows + 1);
+        ASSERT_EQ(out_bin->get_immutable_bytes().size(), 0u);
+        ASSERT_EQ(out_bin->get_bytes().capacity(), 0u);
+    }
 }
 
 TEST_F(StringFunctionRegexpReplaceTest, testVariablePatternAndReplacementEdgeCases) {
     // 1. regexp_replace_general: non-constant pattern with invalid regex on row 0,
     //    null str on row 1, valid matching regex on row 2, valid non-matching regex on row 3,
-    //    plus constant str column with variable pattern.
+    //    plus constant str column with variable pattern and all-empty BinaryColumn with a*.
     {
         auto str_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         str_col->append_datum(Datum(Slice("abc123")));
@@ -699,6 +723,17 @@ TEST_F(StringFunctionRegexpReplaceTest, testVariablePatternAndReplacementEdgeCas
         ASSERT_TRUE(viewer_const_str.is_null(0));
         ASSERT_FALSE(viewer_const_str.is_null(1));
         ASSERT_EQ(viewer_const_str.value(1), Slice("abcX"));
+
+        // All-empty BinaryColumn (_bytes.data() == nullptr) with non-constant "a*" and "XYZ+"
+        auto empty_str_col = BinaryColumn::create(2);
+        ASSERT_EQ(empty_str_col->get_string_begin(), nullptr);
+        auto empty_ptn_col = ColumnTestHelper::build_column<Slice>({"a*", "XYZ+"});
+        ColumnPtr empty_rpl_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("X", 2);
+        auto res_empty = eval_regexp_replace({empty_str_col, empty_ptn_col, empty_rpl_col});
+        ASSERT_TRUE(res_empty.ok()) << res_empty.status();
+        ColumnViewer<TYPE_VARCHAR> viewer_empty(res_empty.value());
+        ASSERT_EQ(viewer_empty.value(0), Slice("X"));
+        ASSERT_EQ(viewer_empty.value(1), Slice(""));
     }
 
     // 2. regexp_replace_const (global_mode = true and false): constant pattern,
