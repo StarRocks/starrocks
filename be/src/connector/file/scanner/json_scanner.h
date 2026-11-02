@@ -33,7 +33,7 @@ class JsonParser;
 class JsonScanner : public FileScanner {
 public:
     JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                ScannerCounter* counter);
+                ScannerCounter* counter, bool schema_only = false);
     ~JsonScanner() override;
 
     // Open this scanner, will initialize information needed
@@ -43,6 +43,9 @@ public:
 
     // Close this scanner
     void close() override;
+
+    Status get_schema(std::vector<SlotDescriptor>* schema) override;
+
     static Status parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
 
 #if BE_TEST
@@ -59,6 +62,8 @@ private:
     Status _open_next_reader();
     StatusOr<ChunkPtr> _cast_chunk(const ChunkPtr& src_chunk);
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
+
+    static TypeDescriptor _infer_json_value_type(simdjson::ondemand::value& val, bool sample_types);
 
     friend class JsonReader;
 

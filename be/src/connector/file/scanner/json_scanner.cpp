@@ -52,8 +52,8 @@ const int64_t MAX_ERROR_LOG_LENGTH = 64;
 static const Slice kCdcOpSlices[] = {Slice("0"), Slice("1")};
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                         ScannerCounter* counter)
-        : FileScanner(state, profile, scan_range.params, counter),
+                         ScannerCounter* counter, bool schema_only)
+        : FileScanner(state, profile, scan_range.params, counter, schema_only),
           _scan_range(scan_range),
 
           _max_chunk_size(state->chunk_size()),
@@ -261,6 +261,158 @@ Status JsonScanner::_open_next_reader() {
     }
     _next_range++;
     ++_counter->num_files_read;
+    return Status::OK();
+}
+
+// static
+TypeDescriptor JsonScanner::_infer_json_value_type(simdjson::ondemand::value& val, bool sample_types) {
+    if (!sample_types) {
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
+    simdjson::ondemand::json_type tp;
+    if (val.type().get(tp) != simdjson::SUCCESS) {
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
+    switch (tp) {
+    case simdjson::ondemand::json_type::boolean:
+        return TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    case simdjson::ondemand::json_type::number: {
+        simdjson::ondemand::number_type nt;
+        if (val.get_number_type().get(nt) != simdjson::SUCCESS) {
+            return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+        }
+        switch (nt) {
+        case simdjson::ondemand::number_type::signed_integer:
+        case simdjson::ondemand::number_type::unsigned_integer:
+            return TypeDescriptor::from_logical_type(TYPE_BIGINT);
+        default:
+            return TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+        }
+    }
+    case simdjson::ondemand::json_type::string:
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    case simdjson::ondemand::json_type::array:
+    case simdjson::ondemand::json_type::object:
+        return TypeDescriptor(TYPE_JSON);
+    default: // null
+        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    }
+}
+
+Status JsonScanner::get_schema(std::vector<SlotDescriptor>* schema) {
+    if (_scan_range.ranges.empty()) {
+        return Status::OK();
+    }
+
+    const auto& range_desc = _scan_range.ranges[0];
+    const int64_t sample_rows = _scan_range.params.schema_sample_file_row_count;
+    const bool sample_types = _scan_range.params.schema_sample_types;
+
+    // Open the file.
+    std::shared_ptr<SequentialFile> file;
+    TNetworkAddress addr;
+    if (!_scan_range.broker_addresses.empty()) {
+        addr = _scan_range.broker_addresses[0];
+    }
+    RETURN_IF_ERROR(create_sequential_file(range_desc, addr, _scan_range.params, &file));
+
+    // Read the whole file into a buffer (same approach as JsonReader::_read_file_broker).
+    auto* stream = down_cast<io::SeekableInputStream*>(file->stream().get());
+    auto size_res = stream->get_size();
+    if (!size_res.ok()) return size_res.status();
+    int64_t sz = size_res.value();
+    if (sz == 0) return Status::OK();
+    if (sz >= _params.json_file_size_limit) {
+        return Status::MemoryLimitExceeded(
+                fmt::format("File size {} exceeds json_file_size_limit {}, adjust FE configuration "
+                            "json_file_size_limit if needed",
+                            sz, _params.json_file_size_limit));
+    }
+
+    auto capacity = sz + simdjson::SIMDJSON_PADDING;
+    auto buf = std::make_unique<char[]>(capacity);
+    auto read_res = file->read(buf.get(), sz);
+    if (!read_res.ok()) return read_res.status();
+    int64_t bytes_read = read_res.value();
+    if (bytes_read <= 0) return Status::OK();
+
+    // Detect NDJSON vs JSON array by first non-whitespace character.
+    bool is_ndjson = false;
+    for (int64_t i = 0; i < bytes_read; ++i) {
+        char c = buf[i];
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') continue;
+        is_ndjson = (c == '{');
+        break;
+    }
+
+    simdjson::ondemand::parser simdjson_parser;
+    std::vector<std::vector<SlotDescriptor>> row_schemas;
+    faststring key_buf;
+
+    auto collect_fields = [&](simdjson::ondemand::object& obj) {
+        std::vector<SlotDescriptor> row_schema;
+        int idx = 0;
+        for (auto field : obj) {
+            std::string_view key = field_unescaped_key_safe(field, &key_buf);
+            simdjson::ondemand::value val = field.value();
+            row_schema.emplace_back(idx++, std::string(key), _infer_json_value_type(val, sample_types));
+        }
+        if (!row_schema.empty()) {
+            row_schemas.emplace_back(std::move(row_schema));
+        }
+    };
+
+    try {
+        if (is_ndjson) {
+            // iterate_many returns document_stream directly; errors surface as exceptions.
+            auto doc_stream = simdjson_parser.iterate_many(buf.get(), static_cast<size_t>(bytes_read),
+                                                           static_cast<size_t>(capacity));
+            int64_t rows_sampled = 0;
+            for (simdjson::ondemand::document_reference doc : doc_stream) {
+                if (rows_sampled >= sample_rows) break;
+                if (!_root_paths.empty()) {
+                    simdjson::ondemand::object root_obj = doc.get_object();
+                    simdjson::ondemand::value root_val;
+                    if (JsonFunctions::extract_from_object(root_obj, _root_paths, &root_val) != Status::OK()) {
+                        continue;
+                    }
+                    simdjson::ondemand::object sub_obj = root_val.get_object();
+                    collect_fields(sub_obj);
+                } else {
+                    simdjson::ondemand::object obj = doc.get_object();
+                    collect_fields(obj);
+                }
+                rows_sampled++;
+            }
+        } else {
+            // iterate returns simdjson_result<document>; implicit conversion throws on error.
+            simdjson::ondemand::document doc =
+                    simdjson_parser.iterate(buf.get(), static_cast<size_t>(bytes_read), static_cast<size_t>(capacity));
+            simdjson::ondemand::array arr = doc.get_array();
+            int64_t rows_sampled = 0;
+            for (simdjson::ondemand::value elem : arr) {
+                if (rows_sampled >= sample_rows) break;
+                if (!_root_paths.empty()) {
+                    simdjson::ondemand::object elem_obj = elem.get_object();
+                    simdjson::ondemand::value root_val;
+                    if (JsonFunctions::extract_from_object(elem_obj, _root_paths, &root_val) != Status::OK()) {
+                        continue;
+                    }
+                    simdjson::ondemand::object sub_obj = root_val.get_object();
+                    collect_fields(sub_obj);
+                } else {
+                    simdjson::ondemand::object obj = elem.get_object();
+                    collect_fields(obj);
+                }
+                rows_sampled++;
+            }
+        }
+    } catch (simdjson::simdjson_error& e) {
+        return Status::DataQualityError(
+                fmt::format("JSON schema inference failed: {}", simdjson::error_message(e.error())));
+    }
+
+    FileScanner::merge_schema(row_schemas, schema);
     return Status::OK();
 }
 
