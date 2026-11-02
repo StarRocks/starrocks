@@ -16,11 +16,15 @@ package org.apache.iceberg;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class StarRocksIcebergTableScanTest {
@@ -103,6 +107,49 @@ public class StarRocksIcebergTableScanTest {
         Assertions.assertTrue(keep.contains(2), "partition source column kept");
         Assertions.assertTrue(keep.contains(1), "sort source column from an evolved order kept");
         Assertions.assertFalse(keep.contains(3), "non-key column dropped");
+    }
+
+    @Test
+    public void testStatsCandidateRanksPreferTopLevelColumnsAndSkipListsAndMaps() {
+        Schema oldSchema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "s", Types.StructType.of(
+                        Types.NestedField.optional(3, "a", Types.LongType.get()),
+                        Types.NestedField.optional(4, "inner", Types.StructType.of(
+                                Types.NestedField.optional(5, "b", Types.StringType.get()))))),
+                Types.NestedField.optional(6, "l", Types.ListType.ofOptional(7, Types.IntegerType.get())),
+                Types.NestedField.optional(8, "m", Types.MapType.ofOptional(9, 10,
+                        Types.StringType.get(), Types.StructType.of(
+                                Types.NestedField.optional(11, "c", Types.IntegerType.get())))));
+        // a column added later exists only in the current schema
+        List<Types.NestedField> currentColumns = new ArrayList<>(oldSchema.columns());
+        currentColumns.add(Types.NestedField.optional(12, "added", Types.DateType.get()));
+        Schema currentSchema = new Schema(currentColumns);
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.schemas()).thenReturn(ImmutableMap.of(0, oldSchema, 1, currentSchema));
+
+        Map<Integer, Long> ranks = StarRocksIcebergTableScan.statsCandidateRanks(table);
+
+        Assertions.assertEquals(Set.of(1, 3, 5, 12), ranks.keySet(), "list and map fields are not candidates");
+        Assertions.assertTrue(ranks.get(1) < ranks.get(12));
+        Assertions.assertTrue(ranks.get(12) < ranks.get(3), "top-level columns rank before struct fields");
+        Assertions.assertTrue(ranks.get(3) < ranks.get(5));
+    }
+
+    @Test
+    public void testStatsTruncatedTypesCoverStringAndBinaryFields() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "s", Types.StringType.get()),
+                Types.NestedField.optional(2, "b", Types.BinaryType.get()),
+                Types.NestedField.optional(3, "st", Types.StructType.of(
+                        Types.NestedField.optional(4, "inner", Types.StringType.get()))),
+                Types.NestedField.optional(5, "d", Types.DecimalType.of(38, 2)),
+                Types.NestedField.optional(6, "f", Types.FixedType.ofLength(32)));
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.schemas()).thenReturn(ImmutableMap.of(0, schema));
+
+        Assertions.assertEquals(Map.of(1, Type.TypeID.STRING, 2, Type.TypeID.BINARY, 4, Type.TypeID.STRING),
+                StarRocksIcebergTableScan.statsTruncatedTypes(table));
     }
 
     // The on-read completeness check compares only cardinality, so a cache entry that lost one live file

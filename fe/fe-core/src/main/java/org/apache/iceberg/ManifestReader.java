@@ -21,6 +21,7 @@ package org.apache.iceberg;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.starrocks.connector.iceberg.DataFileWrapper;
+import com.starrocks.connector.iceberg.ManifestColumnStats;
 import com.starrocks.connector.iceberg.DeleteFileWrapper;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.exceptions.RuntimeIOException;
@@ -39,6 +40,7 @@ import org.apache.iceberg.relocated.com.google.common.collect.ImmutableList;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableSet;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
+import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PartitionSet;
 
@@ -112,6 +114,16 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
     private Set<Integer> identifierFieldIds = null;
+    // >= 0: cache statistics column by column (ManifestColumnStats), keeping identifierFieldIds plus other columns up
+    // to this many in total; < 0: cache per-file copies with statistics of identifierFieldIds only.
+    private int cacheStatsColumnLimit = -1;
+    // columns other than identifierFieldIds that may be kept in the column-wise layout, lower rank first; null for
+    // any column ranked by field id
+    private Map<Integer, Long> cacheStatsCandidateRanks = null;
+    // STRING and BINARY columns, whose long bounds the column-wise layout truncates
+    private Map<Integer, Type.TypeID> cacheStatsTruncatedTypes = null;
+    // live data files of the manifest when known (0 = unknown), so the column-wise arrays are sized once
+    private int cacheStatsExpectedFileCount = 0;
 
     protected ManifestReader(
             InputFile file,
@@ -270,6 +282,26 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         return this;
     }
 
+    ManifestReader<F> cacheStatsColumnLimit(int cacheStatsColumnLimit) {
+        this.cacheStatsColumnLimit = cacheStatsColumnLimit;
+        return this;
+    }
+
+    ManifestReader<F> cacheStatsCandidateRanks(Map<Integer, Long> cacheStatsCandidateRanks) {
+        this.cacheStatsCandidateRanks = cacheStatsCandidateRanks;
+        return this;
+    }
+
+    ManifestReader<F> cacheStatsTruncatedTypes(Map<Integer, Type.TypeID> cacheStatsTruncatedTypes) {
+        this.cacheStatsTruncatedTypes = cacheStatsTruncatedTypes;
+        return this;
+    }
+
+    ManifestReader<F> cacheStatsExpectedFileCount(int cacheStatsExpectedFileCount) {
+        this.cacheStatsExpectedFileCount = cacheStatsExpectedFileCount;
+        return this;
+    }
+
     CloseableIterable<ManifestEntry<F>> entries() {
         return entries(false /* all entries */);
     }
@@ -319,7 +351,22 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         // while missing a file, letting an incomplete entry pass the read-side size check.
         Set<DataFile> tmpDataFiles = ConcurrentHashMap.newKeySet();
         Set<DeleteFile> tmpDeleteFiles = ConcurrentHashMap.newKeySet();
-        if (shouldCacheDataFiles) {
+        // Compact statistics: copies without statistics are wrapped once the whole manifest has been read.
+        final ManifestColumnStats.Builder statsBuilder = shouldCacheDataFiles && dataFileCacheWithMetrics &&
+                cacheStatsColumnLimit >= 0 ?
+                ManifestColumnStats.builder(identifierFieldIds, cacheStatsCandidateRanks, cacheStatsColumnLimit,
+                        cacheStatsExpectedFileCount, cacheStatsTruncatedTypes) : null;
+        Map<Integer, DataFile> tmpStatslessDataFiles = new ConcurrentHashMap<>();
+        if (statsBuilder != null) {
+            entries = CloseableIterable.transform(entries,
+                    entry -> {
+                        if (entry.isLive()) {
+                            DataFile dataFile = (DataFile) entry.file();
+                            tmpStatslessDataFiles.put(statsBuilder.add(dataFile), dataFile.copyWithoutStats());
+                        }
+                        return entry;
+                    });
+        } else if (shouldCacheDataFiles) {
             final Set<Integer> requestedColumnIds =
                     identifierFieldIds != null && !identifierFieldIds.isEmpty() ? identifierFieldIds : null;
             entries = CloseableIterable.transform(entries,
@@ -377,6 +424,11 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             public void close() throws IOException {
                 try {
                     if (fullyConsumed.get()) {
+                        if (statsBuilder != null && !tmpStatslessDataFiles.isEmpty()) {
+                            ManifestColumnStats columnStats = statsBuilder.build();
+                            tmpStatslessDataFiles.forEach((index, dataFile) ->
+                                    tmpDataFiles.add(DataFileWrapper.wrap(dataFile, columnStats, index)));
+                        }
                         if (!tmpDataFiles.isEmpty()) {
                             dataFileCache.put(file.location(), tmpDataFiles); // to recalculate the weight
                         }
