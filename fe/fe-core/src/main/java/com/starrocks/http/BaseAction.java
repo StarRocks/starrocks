@@ -53,6 +53,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelProgressiveFuture;
 import io.netty.channel.ChannelProgressiveFutureListener;
 import io.netty.channel.DefaultFileRegion;
@@ -75,6 +76,7 @@ import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.stream.ChunkedFile;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedStream;
+import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.CharsetUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -274,6 +276,57 @@ public abstract class BaseAction implements IAction {
         boolean keepAlive = HttpUtil.isKeepAlive(request.getRequest());
         if (!keepAlive) {
             // Close the connection when the whole content is written out.
+            lastContentFuture.addListener(ChannelFutureListener.CLOSE);
+        }
+    }
+
+    // Send a body too large to build in memory: it goes out with chunked transfer encoding, and the channel takes
+    // each chunk only once it can send it. The status line is on the wire before the body is produced, so a
+    // failure while producing it closes the connection instead, and a cut-off body never ends with the last chunk
+    // that would make it look complete. An HTTP/1.0 client cannot take chunked encoding, so its body is ended by
+    // closing the connection.
+    //
+    // On the async handler (enable_http_async_handler) the body is produced on this thread and handed to the event
+    // loop a few chunks at a time, so the event loop only moves buffers; this call returns once the body is all
+    // produced. Handled on the event loop itself, the channel produces each chunk as it pulls it.
+    protected void writeChunkedResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status,
+                                        ChunkedInput<ByteBuf> body) {
+        HttpResponse responseObj = new DefaultHttpResponse(HttpVersion.HTTP_1_1, status);
+        checkDefaultContentTypeHeader(response, responseObj);
+        writeCustomHeaders(response, responseObj);
+        writeCookies(response, responseObj);
+        boolean chunked = !request.getRequest().protocolVersion().equals(HttpVersion.HTTP_1_0);
+        HttpUtil.setTransferEncodingChunked(responseObj, chunked);
+
+        boolean keepAlive = chunked && HttpUtil.isKeepAlive(request.getRequest()) && !response.isForceCloseConnection();
+        responseObj.headers().set(HttpHeaderNames.CONNECTION.toString(),
+                keepAlive ? HttpHeaderValues.KEEP_ALIVE.toString() : HttpHeaderValues.CLOSE.toString());
+
+        ChannelHandlerContext ctx = request.getContext();
+        String uri = WebUtils.sanitizeHttpReqUriForLog(request.getRequest().uri());
+        if (ctx.executor().inEventLoop()) {
+            queueChunkedResponse(ctx, responseObj, body, keepAlive, uri);
+            return;
+        }
+        HandOffChunkedInput handOff = new HandOffChunkedInput(ctx.channel(),
+                ctx.pipeline().get(ChunkedWriteHandler.class));
+        // One event-loop task queues the header, the body and its end together: ChunkedWriteHandler sends what it
+        // is given in order, so a response to another request on this connection cannot land between them.
+        ctx.executor().execute(() -> queueChunkedResponse(ctx, responseObj, handOff, keepAlive, uri));
+        handOff.produce(body, ctx.alloc());
+    }
+
+    private static void queueChunkedResponse(ChannelHandlerContext ctx, HttpResponse header,
+                                             ChunkedInput<ByteBuf> body, boolean keepAlive, String uri) {
+        ctx.write(header);
+        ctx.write(body).addListener((ChannelFutureListener) future -> {
+            if (!future.isSuccess()) {
+                LOG.warn("failed to send the response body of {}, closing the connection", uri, future.cause());
+                future.channel().close();
+            }
+        });
+        ChannelFuture lastContentFuture = ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+        if (!keepAlive) {
             lastContentFuture.addListener(ChannelFutureListener.CLOSE);
         }
     }
