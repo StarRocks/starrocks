@@ -55,8 +55,9 @@ function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.icebe
 function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
 
 -- #### uuid type
--- Iceberg buckets a uuid by its 16 bytes but StarRocks reads it as a string, so a uuid bucket column is not used
-function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+-- Iceberg buckets a uuid by its 16 bytes but StarRocks reads it as a string: the BE parses the string back to bytes
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
+function: assert_explain_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [bucket] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id', 'INNER JOIN (BUCKET_SHUFFLE)')
 
 -- #### functional boundary
 function: assert_explain_not_contains('select * from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_bucket_evo b on a.trip_id = b.trip_id', 'INNER JOIN (COLOCATE)')
@@ -113,7 +114,8 @@ select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_t
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_2 b on a.trip_id = b.trip_id;
 
 -- #### uuid type
--- select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [bucket] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id;
 
 set enable_bucket_aware_execution_on_lake = false;
 -- #### colocate join
@@ -155,6 +157,6 @@ select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_t
 select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_string_2 b on a.trip_id = b.trip_id;
 
 -- ## uuid type
--- select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id;
+select count(a.trip_distance), count(*), sum(a.trip_distance) from iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_1 a join [colocate] iceberg_sql_test_${uuid0}.iceberg_bucket_db.taxis_1bucket_uuid_2 b on a.trip_id = b.trip_id;
 
 drop catalog iceberg_sql_test_${uuid0};
