@@ -146,7 +146,7 @@ protected:
         PTransmitRuntimeFilterParams params = make_partial(query_id, filter_id, 0, data);
         params.set_is_skew_broadcast_join(true);
         params.set_skew_shuffle_filter_id(shuffle_filter_id);
-        *params.mutable_columntype() = TypeDescriptor(TYPE_INT).to_protobuf();
+        *params.mutable_columntype() = TYPE_INT_DESC.to_protobuf();
         return params;
     }
 
