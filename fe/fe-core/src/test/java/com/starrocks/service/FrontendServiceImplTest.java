@@ -53,23 +53,14 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.analyzer.Authorizer;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TAuthInfo;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TAuthenticateParams;
-import com.starrocks.thrift.TBatchGetTableSchemaRequest;
-import com.starrocks.thrift.TBatchGetTableSchemaResponse;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
@@ -107,12 +98,7 @@ import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
 import com.starrocks.thrift.TPlanFragmentExecParams;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TPrivilegeRequirement;
-import com.starrocks.thrift.TRefreshConnectionsRequest;
-import com.starrocks.thrift.TRefreshConnectionsResponse;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
@@ -163,11 +149,8 @@ import static com.starrocks.thrift.TFileType.FILE_STREAM;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-<<<<<<< HEAD
-=======
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;

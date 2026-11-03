@@ -33,8 +33,6 @@
 #include "http/action/metrics_action.h"
 #include "http/action/pipeline_blocking_drivers_action.h"
 #include "http/action/pprof_actions.h"
-#include "http/action/proc_profile_action.h"
-#include "http/action/proc_profile_file_action.h"
 #include "http/action/query_cache_action.h"
 #include "http/action/reload_tablet_action.h"
 #include "http/action/restore_tablet_action.h"
@@ -115,7 +113,7 @@ TEST(BeHandlerPrivilegeTest, compact_rocksdb_meta_requires_OPERATE) {
 }
 
 TEST(BeHandlerPrivilegeTest, datacache_requires_OPERATE) {
-    DataCacheAction h(nullptr, nullptr);
+    DataCacheAction h(nullptr);
     EXPECT_EQ(Priv::OPERATE, h.required_privilege());
 }
 
@@ -153,17 +151,7 @@ TEST(BeHandlerPrivilegeTest, pprof_handlers_require_OPERATE) {
     EXPECT_EQ(Priv::OPERATE, PmuProfileAction().required_privilege());
     EXPECT_EQ(Priv::OPERATE, ContentionAction().required_privilege());
     EXPECT_EQ(Priv::OPERATE, CmdlineAction().required_privilege());
-    EXPECT_EQ(Priv::OPERATE, SymbolAction().required_privilege());
-}
-
-TEST(BeHandlerPrivilegeTest, proc_profile_requires_OPERATE) {
-    ProcProfileAction h(nullptr);
-    EXPECT_EQ(Priv::OPERATE, h.required_privilege());
-}
-
-TEST(BeHandlerPrivilegeTest, proc_profile_file_requires_OPERATE) {
-    ProcProfileFileAction h(nullptr);
-    EXPECT_EQ(Priv::OPERATE, h.required_privilege());
+    EXPECT_EQ(Priv::OPERATE, SymbolAction(nullptr).required_privilege());
 }
 
 TEST(BeHandlerPrivilegeTest, greplog_requires_OPERATE) {

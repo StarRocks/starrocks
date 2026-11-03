@@ -2167,145 +2167,6 @@ struct TGetApplicableRolesResponse {
     2: optional i64 next_table_id_offset;
 }
 
-<<<<<<< HEAD
-=======
-struct TUpdateFailPointRequest {
-    1: optional string name;
-    2: optional bool is_enable;
-    3: optional i32 times;
-    4: optional double probability;
-}
-
-struct TUpdateFailPointResponse {
-    1: optional Status.TStatus status;
-}
-
-struct TTabletReshardJobsItem {
-    1: optional i64 job_id;
-    2: optional string db_name;
-    3: optional string table_name;
-    4: optional i64 db_id;
-    5: optional i64 table_id;
-    6: optional string job_type;
-    7: optional string job_state;
-    8: optional i64 transaction_id;
-    9: optional i64 parallel_partitions;
-    10: optional i64 parallel_tablets;
-    11: optional i64 created_time;
-    12: optional i64 finished_time;
-    13: optional string error_message;
-}
-
-struct TTabletReshardJobsRequest {
-}
-
-struct TTabletReshardJobsResponse {
-    1: optional Status.TStatus status;
-    2: optional list<TTabletReshardJobsItem> items;
-}
-
-struct TFeThreadInfo {
-    1: optional string fe_address;
-    2: optional i64 thread_id;
-    3: optional string thread_name;
-    4: optional string thread_state;
-    5: optional bool is_daemon;
-    6: optional i32 priority;
-    7: optional i64 cpu_time_ms;
-    8: optional i64 user_time_ms;
-}
-
-struct TGetFeThreadsRequest {
-    1: optional TAuthInfo auth_info;
-}
-
-struct TGetFeThreadsResponse {
-    1: optional Status.TStatus status;
-    2: optional list<TFeThreadInfo> threads;
-}
-
-struct TRefreshConnectionsRequest {
-    1: optional bool force;
-}
-
-struct TRefreshConnectionsResponse {
-    1: optional Status.TStatus status;
-}
-
-enum TTableSchemaRequestSource {
-    SCAN = 0,
-    LOAD = 1
-}
-
-struct TGetTableSchemaRequest {
-    1: optional Descriptors.TTableSchemaKey schema_key;
-    2: optional TTableSchemaRequestSource source;
-    3: optional i64 tablet_id;
-    // Valid if request_source is SCAN
-    4: optional Types.TUniqueId query_id;
-    // Valid if request_source is LOAD
-    5: optional i64 txn_id;
-}
-
-struct TGetTableSchemaResponse {
-    1: optional Status.TStatus status;
-    2: optional AgentService.TTabletSchema schema;
-}
-
-struct TBatchGetTableSchemaRequest {
-    1: optional list<TGetTableSchemaRequest> requests;
-}
-
-struct TBatchGetTableSchemaResponse {
-    1: optional Status.TStatus status;
-    2: optional list<TGetTableSchemaResponse> responses;
-}
-
-struct TGetTabletMetadataRequest {
-    1: optional i64 tablet_id;
-    2: optional i64 table_id;
-    3: optional i64 partition_id;
-    4: optional i64 index_id;
-    // The metadata version to fetch. Defaults to 1 when unset.
-    // The current implementation only serves version 1 (the initial empty metadata
-    // produced by tablet creation). Other versions return NOT_IMPLEMENTED until a
-    // future change extends the response with the fields needed for higher versions
-    // (rowsets, historical schemas, etc.).
-    5: optional i64 version;
-}
-
-// Subset of tablet metadata fields needed to construct a version-1 TabletMetadataPB
-// on CN. The shape currently overlaps with AgentService.TCreateTabletReq; the two
-// must be kept in sync per the NOTE on TCreateTabletReq. Higher versions will need
-// additional fields (rowsets, sstable meta, historical schemas, etc.) which can be
-// added without breaking compatibility since all fields are optional.
-struct TCloudTabletMeta {
-    1: optional i64 tablet_id;
-    2: optional AgentService.TTabletSchema schema;
-    3: optional bool enable_persistent_index;
-    4: optional AgentService.TPersistentIndexType persistent_index_type;
-    5: optional AgentService.TCompactionStrategy compaction_strategy;
-    6: optional AgentService.TFlatJsonConfig flat_json_config;
-    7: optional map<i64, Types.TTabletRange> tablet_ranges;
-    8: optional i64 gtid;
-    9: optional Types.TCompressionType compression_type;
-    10: optional i32 compression_level;
-}
-
-struct TGetTabletMetadataResponse {
-    1: optional Status.TStatus status;
-    2: optional TCloudTabletMeta meta;
-}
-
-struct TBatchGetTabletMetadataRequest {
-    1: optional list<TGetTabletMetadataRequest> requests;
-}
-
-struct TBatchGetTabletMetadataResponse {
-    1: optional Status.TStatus status;
-    2: optional list<TGetTabletMetadataResponse> responses;
-}
-
 // information_schema.fe_metrics: the BE scanner fetches each FE's metrics over the getFeMetrics
 // RPC (instead of scraping the HTTP /metrics endpoint), so fe_metrics works regardless of
 // `enable_http_auth` and no longer depends on HTTP Basic auth. The RPC takes no arguments —
@@ -2316,7 +2177,6 @@ struct TFeMetricsResult {
     2: optional string json_metrics
 }
 
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2461,22 +2321,9 @@ service FrontendService {
 
     TGetWarehouseQueriesResponse getWarehouseQueries(1: TGetWarehouseQueriesRequest request)
 
-<<<<<<< HEAD
-=======
-    TUpdateFailPointResponse updateFailPointStatus(1: TUpdateFailPointRequest request)
-
-    TTabletReshardJobsResponse getTabletReshardJobsInfo(1: TTabletReshardJobsRequest request)
-
-    TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
-
-    TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
-
-    TBatchGetTabletMetadataResponse getTabletMetadata(1: optional TBatchGetTabletMetadataRequest request)
-
     // Verify Basic Auth credentials. Used by BE to authenticate external HTTP requests
     // when `enable_http_auth` is on. Returns OK status when the user/password pair is
     // valid for the given host, or an error status otherwise.
     TFeResult checkAuth(1: optional TAuthenticateParams request)
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 }
 

@@ -38,11 +38,8 @@
 
 namespace starrocks {
 
-<<<<<<< HEAD
 class BfdParser;
 
-class HeapAction : public HttpHandler {
-=======
 // Shared base for pprof/profile handlers: requires System OPERATE privilege on top of identity AuthN.
 class PprofBaseHandler : public HttpHandler {
 public:
@@ -50,7 +47,6 @@ public:
 };
 
 class HeapAction : public PprofBaseHandler {
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 public:
     HeapAction() = default;
     ~HeapAction() override = default;

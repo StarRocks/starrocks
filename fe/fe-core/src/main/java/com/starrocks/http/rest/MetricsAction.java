@@ -37,11 +37,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.authorization.AccessDeniedException;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;

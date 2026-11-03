@@ -34,15 +34,9 @@
 
 #include "http_service.h"
 
-<<<<<<< HEAD
-#include "common/config.h"
-=======
-#include <fmt/format.h>
-
 #include <optional>
 
-#include "cache/datacache.h"
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
+#include "common/config.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "gutil/stl_util.h"
@@ -77,12 +71,9 @@
 #include "http/utils.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
-<<<<<<< HEAD
 #include "runtime/load_path_mgr.h"
 #include "runtime/memory/jemalloc_conf_updater.h"
-=======
 #include "service/service_be/http_auth_response.h"
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {

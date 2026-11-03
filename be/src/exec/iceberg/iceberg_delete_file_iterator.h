@@ -30,8 +30,6 @@ public:
 
     std::shared_ptr<::arrow::RecordBatch> next();
 
-    RequiredPrivilege required_privilege() const override { return RequiredPrivilege::OPERATE; }
-
 private:
     std::shared_ptr<::arrow::RecordBatch> _batch;
     std::shared_ptr<ParquetChunkReader> _file_reader;

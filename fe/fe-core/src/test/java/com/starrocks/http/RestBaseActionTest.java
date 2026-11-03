@@ -14,21 +14,12 @@
 
 package com.starrocks.http;
 
-<<<<<<< HEAD
-import com.starrocks.http.BaseRequest;
-import com.starrocks.http.BaseResponse;
-import com.starrocks.http.rest.RestBaseAction;
-=======
-import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.http.rest.ConnectionAction;
 import com.starrocks.http.rest.FeatureAction;
@@ -36,7 +27,6 @@ import com.starrocks.http.rest.GetClusterSnapshotRestoreStateAction;
 import com.starrocks.http.rest.GetSmallFileAction;
 import com.starrocks.http.rest.HealthAction;
 import com.starrocks.http.rest.IdleAction;
-import com.starrocks.http.rest.MemoryUsageAction;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.http.rest.OAuth2Action;
 import com.starrocks.http.rest.QueryProgressAction;
@@ -44,16 +34,9 @@ import com.starrocks.http.rest.RestBaseAction;
 import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
-import com.starrocks.http.rest.v2.BackendActionV2;
-import com.starrocks.http.rest.v2.ClusterSummaryActionV2;
-import com.starrocks.http.rest.v2.ComputeNodeActionV2;
-import com.starrocks.http.rest.v2.ProfileActionV2;
-import com.starrocks.http.rest.v2.QueryDetailActionV2;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.system.Frontend;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
@@ -63,27 +46,17 @@ import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
-<<<<<<< HEAD
-=======
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
-<<<<<<< HEAD
-=======
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.List;
 import java.util.Set;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.eq;
@@ -181,84 +154,7 @@ public class RestBaseActionTest {
         restBaseAction.redirectTo(mockRequest, mockResponse, mockAddr);
         verify(mockResponse).updateHeader(HttpHeaderNames.LOCATION.toString(), asciiUri);
     }
-<<<<<<< HEAD
-=======
 
-
-    @Test
-    public void testGetOtherAliveFronts() {
-        new MockUp<RestBaseAction>() {
-            @Mock
-            public static List<Pair<String, Integer>> getAllAliveFe() {
-                return List.of(
-                        new Pair<>("fe1", 8030),
-                        new Pair<>("fe2", 8031)
-                );
-            }
-
-            @Mock
-            public static Pair<String, Integer> getCurrentFe() {
-                return new Pair<>("fe1", 8030);
-            }
-        };
-
-        List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
-
-        Assertions.assertEquals(fronts.size(), 1);
-    }
-
-    @Test
-    public void verifyGetEmptyOtherAliveFronts() {
-
-        new Expectations(GlobalStateMgr.getCurrentState().getNodeMgr()) {
-            {
-
-                GlobalStateMgr.getCurrentState();
-                minTimes = 1;
-                result = null;
-            }
-        };
-
-        List<Pair<String, Integer>> fronts = restBaseAction.getOtherAliveFe();
-
-        Assertions.assertEquals(fronts.size(), 0);
-    }
-
-    @Test
-    public void verifyGetNullCurrentFe() {
-
-        new Expectations(GlobalStateMgr.getCurrentState()) {
-            {
-
-                GlobalStateMgr.getCurrentState();
-                minTimes = 1;
-                result = null;
-            }
-        };
-
-        Pair<String, Integer> currentFe = restBaseAction.getCurrentFe();
-
-        Assertions.assertNull(currentFe);
-    }
-
-    @Test
-    public void testGetAllAliveFe() {
-        Frontend frontend = new Frontend(0, FrontendNodeType.LEADER, "", "localhost", 0);
-        frontend.setAlive(true);
-        new Expectations(GlobalStateMgr.getCurrentState().getNodeMgr()) {
-            {
-                GlobalStateMgr.getCurrentState().getNodeMgr().getAllFrontends();
-                minTimes = 1;
-                result = Lists.newArrayList(frontend);
-            }
-        };
-
-        List<Pair<String, Integer>> result = restBaseAction.getAllAliveFe();
-
-        Assertions.assertEquals(1, result.size());
-        Assertions.assertEquals(frontend.getHost(), result.get(0).first);
-        Assertions.assertEquals(Config.http_port, result.get(0).second);
-    }
 
     private static String basicAuth(String user, String password) {
         String raw = user + ":" + password;
@@ -365,7 +261,6 @@ public class RestBaseActionTest {
         Assertions.assertFalse(new ConnectionAction(null).needAuth());
         Assertions.assertFalse(new ShowDataAction(null).needAuth());
         Assertions.assertFalse(new GetClusterSnapshotRestoreStateAction(null).needAuth());
-        Assertions.assertFalse(new MemoryUsageAction(null).needAuth());
         Assertions.assertFalse(new QueryProgressAction(null).needAuth());
         Assertions.assertFalse(new ShowMetaInfoAction(null).needAuth());
         Assertions.assertFalse(new ShowRuntimeInfoAction(null).needAuth());
@@ -374,7 +269,6 @@ public class RestBaseActionTest {
         Assertions.assertTrue(new ConnectionAction(null).needAuth());
         Assertions.assertTrue(new ShowDataAction(null).needAuth());
         Assertions.assertTrue(new GetClusterSnapshotRestoreStateAction(null).needAuth());
-        Assertions.assertTrue(new MemoryUsageAction(null).needAuth());
         Assertions.assertTrue(new QueryProgressAction(null).needAuth());
         Assertions.assertTrue(new ShowMetaInfoAction(null).needAuth());
         Assertions.assertTrue(new ShowRuntimeInfoAction(null).needAuth());
@@ -408,15 +302,6 @@ public class RestBaseActionTest {
         Assertions.assertFalse(new OAuth2Action(null).needAuth());
         Config.enable_http_auth = true;
         Assertions.assertFalse(new OAuth2Action(null).needAuth());
-    }
-
-    @Test
-    public void testSensitiveV2RestActionsKeepDefaultBasicAuth() {
-        Assertions.assertTrue(new BackendActionV2(null).needAuth());
-        Assertions.assertTrue(new ClusterSummaryActionV2(null).needAuth());
-        Assertions.assertTrue(new ComputeNodeActionV2(null).needAuth());
-        Assertions.assertTrue(new ProfileActionV2(null).needAuth());
-        Assertions.assertTrue(new QueryDetailActionV2(null).needAuth());
     }
 
     // -------- enable_http_auth-gated helpers --------
@@ -536,5 +421,4 @@ public class RestBaseActionTest {
         }
     }
 
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 }

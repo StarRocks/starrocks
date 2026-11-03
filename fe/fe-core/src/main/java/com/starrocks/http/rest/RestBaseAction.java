@@ -37,20 +37,12 @@ package com.starrocks.http.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
-<<<<<<< HEAD
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.AuthorizationMgr;
-=======
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
@@ -66,12 +58,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.UserIdentity;
-=======
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.system.Frontend;
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpResponseStatus;
@@ -237,16 +225,9 @@ public class RestBaseAction extends BaseAction {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
         ctx.setQueryId(UUIDUtil.genUUID());
-<<<<<<< HEAD
-        ctx.setRemoteIP(authInfo.remoteIp);
+        ctx.setRemoteIP(request.getHostString());
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
-=======
-        ctx.setRemoteIP(request.getHostString());
-        try (var scope = ctx.bindScope()) {
-            executeWithoutPassword(request, response);
-        }
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
     }
 
     // Subclasses implement this. Auth + ConnectContext setup are already done by the final

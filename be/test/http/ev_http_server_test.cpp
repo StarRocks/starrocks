@@ -21,17 +21,16 @@
 
 #include <atomic>
 #include <chrono>
-<<<<<<< HEAD
 #include <memory>
-#include <string>
-=======
 #include <optional>
->>>>>>> 0af731e ([Enhancement] Add HTTP authentication framework gated by enable_http_auth (backport #73822) (#75582))
+#include <string>
 #include <thread>
 #include <vector>
 
 #include "http/http_channel.h"
+#include "http/http_client.h"
 #include "http/http_handler.h"
+#include "http/http_method.h"
 #include "http/http_request.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
