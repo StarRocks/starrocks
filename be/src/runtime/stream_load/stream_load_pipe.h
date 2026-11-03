@@ -37,6 +37,11 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+<<<<<<< HEAD:be/src/runtime/stream_load/stream_load_pipe.h
+=======
+#include <type_traits>
+#include <utility>
+>>>>>>> dfff47f ([BugFix][RB-843] Read channel stream load pipes without blocking, with the default buffer (#81872)):be/src/compute_env/load/stream_load_pipe.h
 
 #include "gen_cpp/Types_types.h"
 #include "io/input_stream.h"
@@ -57,6 +62,10 @@ public:
     StreamLoadPipe(size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
                    size_t min_chunk_size = DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE)
             : StreamLoadPipe(false, -1, max_buffered_bytes, min_chunk_size) {}
+
+    // A lone bool would silently bind to max_buffered_bytes above: a 1-byte buffer with blocking reads.
+    template <typename T, typename = std::enable_if_t<std::is_same_v<T, bool>>>
+    explicit StreamLoadPipe(T non_blocking_read) = delete;
 
     StreamLoadPipe(bool non_blocking_read, int32_t non_blocking_wait_us, size_t max_buffered_bytes,
                    size_t min_chunk_size)
