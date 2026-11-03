@@ -871,7 +871,9 @@ In addition to the colocation group, you must also specify the colocated columns
 - The colocated columns must be a prefix of the sort columns.
 - Tables in the same colocation group must have the same type, number, and order of colocated columns.
 - The type of a colocated column cannot be changed after the table is created, including increasing the length of a VARCHAR column.
+- You can change the sort key online after the table is created (`ALTER TABLE ... ORDER BY`, adding or dropping a key column, or widening an integer sort-key column), as long as the new sort key still starts with the colocated columns, in the same order and with the same types. A change that drops, reorders, or changes the type of a colocated column is rejected. The table stays in its colocation group and keeps using Colocate Join.
 - Default colocated columns are the sort columns.
+- If `colocate_with` specifies only the colocation group and a sort key change makes the sort key longer than the colocated columns, StarRocks rewrites the property to the explicit form `<colocation_group>:<colocated_column>[,<colocated_column>]`, which `SHOW CREATE TABLE` returns from then on.
 :::
 
 ```SQL
