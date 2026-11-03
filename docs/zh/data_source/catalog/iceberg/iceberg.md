@@ -871,7 +871,8 @@ Google GCS 的 `StorageCredentialParams`：
 | **参数**                                 | **默认值**           | **描述**                                              |
 | :-------------------------------------------- | :-------------------- | :----------------------------------------------------------- |
 | enable_iceberg_metadata_cache                 | true                  | 是否缓存 Iceberg 相关的元数据，包括表缓存、分区名称缓存以及 Manifest 中的数据文件缓存和删除数据文件缓存。 |
-| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，仅缓存文件级 min/max 裁剪有效的列（分区来源列、排序键列和 identifier 列）的统计信息，以控制宽表的 Manifest 缓存内存占用。 |
+| iceberg_manifest_cache_with_column_statistics | true                  | 是否缓存列的统计信息。开启时，分区来源列、排序键列和 identifier 列的统计信息总是会被缓存，其他列也会被缓存，总列数不超过 `iceberg_manifest_cache_statistics_max_columns`，使 Manifest 缓存命中时文件级 min/max 裁剪仍然有效。 |
+| iceberg_manifest_cache_statistics_max_columns | 100                   | 开启 `iceberg_manifest_cache_with_column_statistics` 时，每个 Manifest 最多缓存多少列的统计信息。分区来源列、排序键列和 identifier 列总是会被缓存，剩余的名额优先分配给统计模式会写入 min/max 上下界的列（`truncate(N)` 或 `full`），其中通过 `write.metadata.metrics.column.<col>` 显式设置的列最优先，然后才是只写 `counts` 的列；同一组内先按字段 ID 顺序分配给顶层的基本类型列，再分配给 struct 内的基本类型字段。数组和 map 内的字段无法用于裁剪，不会被缓存。统计信息按列存储，每个数据文件每列约 25 字节；STRING 和 BINARY 列超过 16 个字符（字节）的上下界在缓存中会被截断，与 Iceberg 默认的 `truncate(16)` 统计模式相同，裁剪结果不会出错，只是个别情况下裁剪得少一些。设为 `0` 表示只缓存分区来源列、排序键列和 identifier 列。负数按 `0` 处理。 |
 | refresh_iceberg_manifest_min_length           | 2 * 1024 * 1024       | 触发数据文件缓存刷新的最小 Manifest 文件长度。 |
 | iceberg_data_file_cache_memory_usage_ratio    | 0.1                   | Data File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |
 | iceberg_delete_file_cache_memory_usage_ratio  | 0.1                   | Delete File Manifest 缓存的最大内存使用率。从 v3.5.6 版本开始支持。 |

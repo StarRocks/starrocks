@@ -68,7 +68,7 @@ static Status put_combined_txn_log_with_dir(TabletManager* tablet_mgr, const Com
 
 TEST(TransactionsLoadIdsTest, AllLoadIdsPresent_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1001;
     const int64_t txn_id = 2002;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{1, 11}, {2, 22}, {3, 33}};
@@ -95,7 +95,7 @@ TEST(TransactionsLoadIdsTest, AllLoadIdsPresent_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, SomeLoadIdsMissingAreSkipped_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1002; // Use different tablet_id to avoid conflicts
     const int64_t txn_id = 2003;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{10, 100}, {20, 200}, {30, 300}};
@@ -124,7 +124,7 @@ TEST(TransactionsLoadIdsTest, SomeLoadIdsMissingAreSkipped_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, AnyOtherErrorShouldFail_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1003; // Use different tablet_id
     const int64_t txn_id = 2004;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{100, 1000}}; // Only test one load_id
@@ -146,7 +146,7 @@ TEST(TransactionsLoadIdsTest, AnyOtherErrorShouldFail_RealApiWithMockMgr) {
 // under any load id is reported like a missing single txn log rather than as nothing to apply.
 TEST(TransactionsLoadIdsTest, AllMissingReturnsNotFound_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1004; // Use different tablet_id
     const int64_t txn_id = 2005;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{7, 70}, {8, 80}};
@@ -159,7 +159,7 @@ TEST(TransactionsLoadIdsTest, AllMissingReturnsNotFound_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, TabletWithoutAnyLogReturnsNotFound_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id_1 = 1012;
     const int64_t tablet_id_2 = 1013;
     const int64_t txn_id = 2010;
@@ -184,7 +184,7 @@ TEST(TransactionsLoadIdsTest, TabletWithoutAnyLogReturnsNotFound_RealApiWithMock
 
 TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1005; // Use different tablet_id
     const int64_t txn_id = 2006;
 
@@ -206,7 +206,7 @@ TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, MultiTabletLoadIdsPresent_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id_1 = 1006;
     const int64_t tablet_id_2 = 1007;
     const int64_t txn_id = 2007;
@@ -239,7 +239,7 @@ TEST(TransactionsLoadIdsTest, MultiTabletLoadIdsPresent_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, CombinedTxnLogForMultipleTablets_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t partition_id = 3001;
     const int64_t tablet_id_1 = 1008;
     const int64_t tablet_id_2 = 1009;
@@ -276,7 +276,7 @@ TEST(TransactionsLoadIdsTest, CombinedTxnLogForMultipleTablets_RealApiWithMockMg
 
 TEST(TransactionsLoadIdsTest, PreserveInputTabletIdsOrder_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t partition_id = 3002;
     const int64_t tablet_id_1 = 1010;
     const int64_t tablet_id_2 = 1011;

@@ -772,7 +772,7 @@ public class PublishVersionDaemonTest {
             public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                     long baseVersion, long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
                     ComputeResource computeResource, AggregatePublishVersionRequest request,
-                    boolean preferSharedInitialMetadata) {
+                    boolean preferSharedInitialMetadata, boolean isRetryPublish) {
                 capturedTablets.add(tablets);
                 capturedTxnInfos.add(txnInfos);
                 capturedRequests.add(request);
@@ -804,7 +804,7 @@ public class PublishVersionDaemonTest {
 
         PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
                 4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
-                new java.util.HashMap<>(), new ArrayList<>(), true);
+                new java.util.HashMap<>(), new ArrayList<>(), true, false);
 
         // The version-1 layout hint must reach BOTH batches: the carry-forward tablets belong to the
         // same physical partition, so a hint that covered only the touched tablets would leave them
@@ -955,6 +955,85 @@ public class PublishVersionDaemonTest {
         // One backed-off partition plus one that is ready: the batch still has work.
         Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(
                 Lists.newArrayList(stateWith(1L, tableId, justFailed), stateWith(2L, tableId, fresh)), now));
+    }
+
+    @Test
+    public void testNonBatchPublishBacksOffBeforeStartingPublish() {
+        long original = Config.lake_publish_version_retry_interval_ms;
+        try {
+            Config.lake_publish_version_retry_interval_ms = 60_000;
+            PartitionCommitInfo partition = new PartitionCommitInfo(100L, 2, 0);
+            TransactionState state = stateWith(1L, 10L, partition);
+            List<TransactionState> states = Lists.newArrayList(state);
+            AtomicInteger publishCalls = new AtomicInteger();
+            PublishVersionDaemon daemon = new PublishVersionDaemon() {
+                @Override
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+                    Assertions.assertSame(state, txnState);
+                    publishCalls.incrementAndGet();
+                    partition.markPublishFailed(System.currentTimeMillis());
+                    return CompletableFuture.completedFuture(null);
+                }
+            };
+
+            daemon.publishVersionForLakeTable(states);
+            Assertions.assertEquals(1, publishCalls.get());
+            for (int tick = 0; tick < 100; tick++) {
+                daemon.publishVersionForLakeTable(states);
+            }
+            Assertions.assertEquals(1, publishCalls.get(), "back-off must skip the transaction publish entrypoint");
+            Assertions.assertTrue(daemon.publishingTransactionIds.isEmpty());
+
+            partition.markPublishFailed(System.currentTimeMillis() - 60_000);
+            daemon.publishVersionForLakeTable(states);
+            Assertions.assertEquals(2, publishCalls.get(), "publish must resume after back-off expires");
+
+            partition.markPublishSucceeded(System.currentTimeMillis());
+            daemon.publishVersionForLakeTable(states);
+            Assertions.assertEquals(3, publishCalls.get(), "published partitions must still allow finishing the transaction");
+            Assertions.assertTrue(daemon.publishingTransactionIds.isEmpty());
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = original;
+        }
+    }
+
+    @Test
+    public void testNonBatchPublishProceedsWhenAnyPartitionIsReady() {
+        long original = Config.lake_publish_version_retry_interval_ms;
+        try {
+            Config.lake_publish_version_retry_interval_ms = 60_000;
+            PartitionCommitInfo failed = new PartitionCommitInfo(100L, 2, 0);
+            failed.markPublishFailed(System.currentTimeMillis());
+            PartitionCommitInfo ready = new PartitionCommitInfo(101L, 2, 0);
+            TransactionState state = stateWith(1L, 10L, failed, ready);
+            List<TransactionState> states = Lists.newArrayList(state);
+            AtomicInteger publishCalls = new AtomicInteger();
+            PublishVersionDaemon daemon = new PublishVersionDaemon() {
+                @Override
+                CompletableFuture<Void> publishLakeTransactionAsync(TransactionState txnState) {
+                    publishCalls.incrementAndGet();
+                    return CompletableFuture.completedFuture(null);
+                }
+            };
+
+            daemon.publishVersionForLakeTable(states);
+            Assertions.assertEquals(1, publishCalls.get(), "a ready partition must still publish");
+            ready.markPublishSucceeded(System.currentTimeMillis());
+            daemon.publishVersionForLakeTable(states);
+            Assertions.assertEquals(1, publishCalls.get(), "an already published partition must not bypass back-off");
+
+            PartitionCommitInfo otherTablePartition = new PartitionCommitInfo(200L, 2, 0);
+            state.addTableIdList(20L);
+            state.putIdToTableCommitInfo(20L, stateWith(1L, 20L, otherTablePartition).getTableCommitInfo(20L));
+            daemon.publishVersionForLakeTable(states);
+            Assertions.assertEquals(2, publishCalls.get(), "a ready partition in another table must still publish");
+            otherTablePartition.markPublishFailed(System.currentTimeMillis());
+            daemon.publishVersionForLakeTable(states);
+            Assertions.assertEquals(2, publishCalls.get(), "back-off must cover every table in a transaction");
+            Assertions.assertTrue(daemon.publishingTransactionIds.isEmpty());
+        } finally {
+            Config.lake_publish_version_retry_interval_ms = original;
+        }
     }
 
     @Test

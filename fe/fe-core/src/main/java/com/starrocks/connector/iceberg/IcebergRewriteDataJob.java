@@ -54,8 +54,7 @@ public class IcebergRewriteDataJob {
     // Same statement without the filter, used to read every live row of the selected files.
     private final String executionSql;
     private final boolean hasPartitionFilter;
-    private final boolean rewriteAll;
-    private final long minFileSizeBytes;
+    private final IcebergRewriteFileSelector fileSelector;
     private final long batchSize;
     private final boolean writeRowLineage;
     private final ConnectContext context;
@@ -149,8 +148,7 @@ public class IcebergRewriteDataJob {
     public IcebergRewriteDataJob(String planningSql,
                                  String executionSql,
                                  boolean hasPartitionFilter,
-                                 boolean rewriteAll,
-                                 long minFileSizeBytes,
+                                 IcebergRewriteFileSelector fileSelector,
                                  long batchSize,
                                  long batchParallelism,
                                  boolean writeRowLineage,
@@ -159,8 +157,7 @@ public class IcebergRewriteDataJob {
         this.planningSql = planningSql;
         this.executionSql = executionSql;
         this.hasPartitionFilter = hasPartitionFilter;
-        this.rewriteAll = rewriteAll;
-        this.minFileSizeBytes = minFileSizeBytes;
+        this.fileSelector = fileSelector;
         this.batchSize = batchSize;
         this.batchParallelism = batchParallelism;
         this.writeRowLineage = writeRowLineage;
@@ -177,7 +174,7 @@ public class IcebergRewriteDataJob {
                 .get(0);
 
         this.rewriteStmt = new IcebergRewriteStmt(
-                (InsertStmt) planningParsedStmt, rewriteAll, writeRowLineage, hasPartitionFilter);
+                (InsertStmt) planningParsedStmt, fileSelector.rewriteAll(), writeRowLineage, hasPartitionFilter);
         this.execPlan = StatementPlanner.plan(rewriteStmt, context);
         // A merge-on-read plan splits the data scan into DATA_FILE_WITH_EQ_DELETE and DATA_FILE_WITHOUT_EQ_DELETE
         // branches that carry the same plan node name. Both must contribute candidates, otherwise a whole branch
@@ -203,7 +200,7 @@ public class IcebergRewriteDataJob {
         this.rewriteData = new IcebergRewriteData();
         scanNodes.forEach(node -> rewriteData.addSource(node.getSourceRange()));
         this.rewriteData.setBatchSize(batchSize);
-        this.rewriteData.buildNewScanNodeRange(minFileSizeBytes, rewriteAll);
+        this.rewriteData.buildNewScanNodeRange(fileSelector);
     }
 
     public ConnectContext buildSubConnectContext(ConnectContext connectContext) {
@@ -261,7 +258,8 @@ public class IcebergRewriteDataJob {
                     ConnectContext subCtx = buildSubConnectContext(context);
                     try (var scope = subCtx.bindScope()) {
                         IcebergRewriteStmt localStmt =
-                                new IcebergRewriteStmt((InsertStmt) parsedStmt, rewriteAll, writeRowLineage, hasPartitionFilter);
+                                new IcebergRewriteStmt((InsertStmt) parsedStmt, fileSelector.rewriteAll(),
+                                        writeRowLineage, hasPartitionFilter);
                         ExecPlan localPlan = StatementPlanner.plan(localStmt, subCtx);
         
                         // Every iceberg scan node must be narrowed to this task group, including the

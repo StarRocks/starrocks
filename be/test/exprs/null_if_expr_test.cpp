@@ -89,7 +89,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfEquals) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 10);
@@ -113,7 +113,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfAllFalse) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -141,7 +141,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftAllNull) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -164,7 +164,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftAllNullConstNULL) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10, true); // only null
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -187,7 +187,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftConst) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockConstVectorizedExpr<TYPE_BIGINT> col1(expr_node, 20); // only const
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);
@@ -219,7 +219,7 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftNullRightNull) {
         expr_node.type = desc;
         auto expr = VectorizedConditionExprFactory::create_null_if_expr(expr_node);
         std::unique_ptr<Expr> expr_ptr(expr);
-        expr->set_type(TypeDescriptor(TYPE_BIGINT));
+        expr->set_type(TYPE_BIGINT_DESC);
 
         MockNullVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, 10);
         MockNullVectorizedExpr<TYPE_BIGINT> col2(expr_node, 10, 20);

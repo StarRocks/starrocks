@@ -1119,14 +1119,14 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
                 std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
         cache->cache_segment(path, dummy_segment);
         EXPECT_EQ(dummy_segment, cache->lookup_segment(path));
-        auto sz1 = cache->memory_usage();
+        auto sz1 = cache->segment_metadata_memory_usage();
 
         auto mirror_segment =
                 std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
         LakeIOOptions lake_io_opts{.fill_data_cache = true};
         auto st = mirror_segment->open(nullptr, nullptr, lake_io_opts);
         EXPECT_TRUE(st.ok());
-        auto sz2 = cache->memory_usage();
+        auto sz2 = cache->segment_metadata_memory_usage();
         // no memory_usage change, because the instance in metacache is different from this mirror_segment
         EXPECT_EQ(sz1, sz2);
     }
@@ -1139,13 +1139,13 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         auto mirror_segment =
                 std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
         cache->cache_segment(path, mirror_segment);
-        auto sz1 = cache->memory_usage();
+        auto sz1 = cache->segment_metadata_memory_usage();
         auto ssz1 = mirror_segment->mem_usage();
 
         LakeIOOptions lake_io_opts{.fill_data_cache = true};
         auto st = mirror_segment->open(nullptr, nullptr, lake_io_opts);
         EXPECT_TRUE(st.ok());
-        auto sz2 = cache->memory_usage();
+        auto sz2 = cache->segment_metadata_memory_usage();
         auto ssz2 = mirror_segment->mem_usage();
         // mem usage updated after the segment is opened.
         EXPECT_LT(sz1, sz2);
@@ -1292,8 +1292,7 @@ namespace {
 
 static VariantPB make_int_variant_pb(int32_t v) {
     VariantPB var;
-    TypeDescriptor td(TYPE_INT);
-    *var.mutable_type() = td.to_protobuf();
+    *var.mutable_type() = TYPE_INT_DESC.to_protobuf();
     var.set_value(std::to_string(v));
     return var;
 }
@@ -1743,8 +1742,7 @@ TEST_F(LakeRowsetTest, test_tablet_range_pb_invalid_bounds) {
         range->Clear();
         auto* lb = range->mutable_lower_bound();
         auto* v = lb->add_values();
-        TypeDescriptor td(TYPE_INT);
-        *v->mutable_type() = td.to_protobuf();
+        *v->mutable_type() = TYPE_INT_DESC.to_protobuf();
         auto rowset = std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0,
                                                      0 /* compaction_segment_limit */);
         auto res = rowset->read(input_schema, rs_opts);
@@ -2214,13 +2212,12 @@ public:
             segment_meta->set_filename(files[0].path);
             auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
-            TypeDescriptor td(TYPE_INT);
-            *min_var->mutable_type() = td.to_protobuf();
+            *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("0");
 
             auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
-            *max_var->mutable_type() = td.to_protobuf();
+            *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("10");
 
             segment_meta->set_num_rows(11);
@@ -2232,13 +2229,12 @@ public:
             segment_meta->set_filename(files[1].path);
             auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
-            TypeDescriptor td(TYPE_INT);
-            *min_var->mutable_type() = td.to_protobuf();
+            *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("20");
 
             auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
-            *max_var->mutable_type() = td.to_protobuf();
+            *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("30");
 
             segment_meta->set_num_rows(11);
@@ -2250,13 +2246,12 @@ public:
             segment_meta->set_filename(files[2].path);
             auto* min_tuple = segment_meta->mutable_sort_key_min();
             auto* min_var = min_tuple->add_values();
-            TypeDescriptor td(TYPE_INT);
-            *min_var->mutable_type() = td.to_protobuf();
+            *min_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             min_var->set_value("40");
 
             auto* max_tuple = segment_meta->mutable_sort_key_max();
             auto* max_var = max_tuple->add_values();
-            *max_var->mutable_type() = td.to_protobuf();
+            *max_var->mutable_type() = TYPE_INT_DESC.to_protobuf();
             max_var->set_value("50");
 
             segment_meta->set_num_rows(11);

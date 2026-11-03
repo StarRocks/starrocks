@@ -35,6 +35,7 @@
 #include "column/variant_column.h"
 #include "common/config_json_flat_fwd.h"
 #include "gutil/casts.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
 
@@ -100,7 +101,7 @@ PARALLEL_TEST(VariantEncoderTest, encode_int_column) {
     int_col->append_datum(Datum(static_cast<int32_t>(42)));
 
     ColumnBuilder<TYPE_VARIANT> builder(2);
-    Status st = VariantEncoder::encode_column(int_col, TypeDescriptor(TYPE_INT), &builder, true);
+    Status st = VariantEncoder::encode_column(int_col, TYPE_INT_DESC, &builder, true);
     ASSERT_TRUE(st.ok());
 
     ColumnPtr out = builder.build(false);
@@ -135,24 +136,19 @@ PARALLEL_TEST(VariantEncoderTest, encode_array_with_variant_children) {
 }
 
 PARALLEL_TEST(VariantEncoderTest, encode_map_with_variant_values_and_empty_row) {
-    auto key_data = BinaryColumn::create();
-    key_data->append_datum(Datum(Slice("left")));
-    key_data->append_datum(Datum(Slice("right")));
-    key_data->append_datum(Datum(Slice("null_child")));
+    auto key_data = ColumnTestHelper::build_column<Slice>({"left", "right", "null_child"});
     auto key_nulls = NullColumn::create(3, DATUM_NOT_NULL);
     auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
     auto values = make_nullable_variant_column({std::string(R"({"a":1})"), std::string(R"({"b":2})"), std::nullopt});
     auto map = MapColumn::create(keys, values, make_offsets({0, 3, 3}));
-    TypeDescriptor type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARIANT));
+    TypeDescriptor type = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TypeDescriptor(TYPE_VARIANT));
 
     expect_typed_column_variant_json(map, 0, type, R"({"left":{"a":1},"null_child":null,"right":{"b":2}})");
     expect_typed_column_variant_json(map, 1, type, R"({})");
 }
 
 PARALLEL_TEST(VariantEncoderTest, encode_map_with_varbinary_keys_and_variant_values) {
-    auto key_data = BinaryColumn::create();
-    key_data->append_datum(Datum(Slice("left")));
-    key_data->append_datum(Datum(Slice("right")));
+    auto key_data = ColumnTestHelper::build_column<Slice>({"left", "right"});
     auto key_nulls = NullColumn::create(2, DATUM_NOT_NULL);
     auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
     auto values = make_nullable_variant_column({std::string("1"), std::string("2")});

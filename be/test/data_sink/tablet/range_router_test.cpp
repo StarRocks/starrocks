@@ -125,11 +125,9 @@ protected:
 
     // ---- Routing-key type helpers ----
 
-    static std::vector<TypeDescriptor> int_types(size_t n) {
-        return std::vector<TypeDescriptor>(n, TypeDescriptor::from_logical_type(TYPE_INT));
-    }
+    static std::vector<TypeDescriptor> int_types(size_t n) { return std::vector<TypeDescriptor>(n, TYPE_INT_DESC); }
     static std::vector<TypeDescriptor> varchar_types(size_t n) {
-        return std::vector<TypeDescriptor>(n, TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+        return std::vector<TypeDescriptor>(n, TYPE_VARCHAR_DESC);
     }
 
     // ---- Single-column TTabletRange helpers ----
@@ -203,7 +201,7 @@ TEST_F(RangeRouterTest, SingleInfiniteRangeSelectAll) {
     std::vector<int32_t> values{-100, -1, 0, 5, 10, 100};
     Chunk chunk = make_int_chunk("c1", values);
 
-    SlotDescriptor slot_desc(0, "c1", TypeDescriptor::from_logical_type(TYPE_INT));
+    SlotDescriptor slot_desc(0, "c1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc};
     chunk.set_slot_id_to_index(slot_desc.id(), 0);
 
@@ -239,7 +237,7 @@ TEST_F(RangeRouterTest, IntThreeRangesFullCoverage) {
     std::vector<int32_t> values{-5, 0, 5, 10, 11, 19, 20, 21, 100};
     Chunk chunk = make_int_chunk("c1", values);
 
-    SlotDescriptor slot_desc(0, "c1", TypeDescriptor::from_logical_type(TYPE_INT));
+    SlotDescriptor slot_desc(0, "c1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc};
     chunk.set_slot_id_to_index(slot_desc.id(), 0);
 
@@ -302,7 +300,7 @@ TEST_F(RangeRouterTest, ManyRangesBinarySearchFullCoverage) {
     };
     Chunk chunk = make_int_chunk("c1", values);
 
-    SlotDescriptor slot_desc(0, "c1", TypeDescriptor::from_logical_type(TYPE_INT));
+    SlotDescriptor slot_desc(0, "c1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc};
     chunk.set_slot_id_to_index(slot_desc.id(), 0);
 
@@ -389,8 +387,8 @@ TEST_F(RangeRouterTest, MultiColumnTwoRangesFullCoverage) {
     chunk.append_column(c1, 0);
     chunk.append_column(c2, 1);
 
-    SlotDescriptor slot_desc1(0, "c1", TypeDescriptor::from_logical_type(TYPE_INT));
-    SlotDescriptor slot_desc2(1, "c2", TypeDescriptor::from_logical_type(TYPE_INT));
+    SlotDescriptor slot_desc1(0, "c1", TYPE_INT_DESC);
+    SlotDescriptor slot_desc2(1, "c2", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc1, &slot_desc2};
     chunk.set_slot_id_to_index(slot_desc1.id(), 0);
     chunk.set_slot_id_to_index(slot_desc2.id(), 1);
@@ -445,8 +443,7 @@ TEST_F(RangeRouterTest, MultiColumnNullBoundaries) {
     std::vector<int64_t> tablet_ids{100, 200};
 
     RangeRouter router;
-    std::vector<TypeDescriptor> key_types{TypeDescriptor::from_logical_type(TYPE_INT),
-                                          TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::vector<TypeDescriptor> key_types{TYPE_INT_DESC, TYPE_VARCHAR_DESC};
     ASSERT_TRUE(router.init(ranges, key_types).ok());
 
     // Test data: (c1, c2, expected_tablet_id)
@@ -479,8 +476,8 @@ TEST_F(RangeRouterTest, MultiColumnNullBoundaries) {
     chunk.append_column(col1, 0);
     chunk.append_column(col2, 1);
 
-    SlotDescriptor slot_desc1(0, "c1", TypeDescriptor::from_logical_type(TYPE_INT));
-    SlotDescriptor slot_desc2(1, "c2", TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    SlotDescriptor slot_desc1(0, "c1", TYPE_INT_DESC);
+    SlotDescriptor slot_desc2(1, "c2", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc1, &slot_desc2};
     chunk.set_slot_id_to_index(slot_desc1.id(), 0);
     chunk.set_slot_id_to_index(slot_desc2.id(), 1);
@@ -521,7 +518,7 @@ TEST_F(RangeRouterTest, VarcharThreeRangesFullCoverage) {
     std::vector<std::string> values = {"apple", "banana", "cherry", "date", "fig"};
     Chunk chunk = make_varchar_chunk("s1", values);
 
-    SlotDescriptor slot_desc(0, "s1", TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    SlotDescriptor slot_desc(0, "s1", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc};
     chunk.set_slot_id_to_index(slot_desc.id(), 0);
 
@@ -574,7 +571,7 @@ TEST_F(RangeRouterTest, CharBoundaryVarcharKeyRoutingMatches) {
 
     std::vector<std::string> values = {"apple", "m", "zebra"};
     Chunk chunk = make_varchar_chunk("s1", values);
-    SlotDescriptor slot_desc(0, "s1", TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    SlotDescriptor slot_desc(0, "s1", TYPE_VARCHAR_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc};
     chunk.set_slot_id_to_index(slot_desc.id(), 0);
     std::vector<uint16_t> row_indices{0, 1, 2};
@@ -645,7 +642,7 @@ TEST_F(RangeRouterTest, NullTypeBoundaryRouting) {
     Chunk chunk;
     chunk.append_column(nullable, 0);
 
-    SlotDescriptor slot_desc(0, "v1", TypeDescriptor::from_logical_type(TYPE_INT));
+    SlotDescriptor slot_desc(0, "v1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc};
     chunk.set_slot_id_to_index(slot_desc.id(), 0);
 
@@ -839,7 +836,7 @@ TEST_F(RangeRouterTest, RangeRouterSingleIntRangesRouting) {
     std::vector<int32_t> values{5, 10, 15, 20, 25, 30, 35};
     Chunk chunk = make_int_chunk("c1", values);
 
-    SlotDescriptor slot_desc(0, "c1", TypeDescriptor::from_logical_type(TYPE_INT));
+    SlotDescriptor slot_desc(0, "c1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_descs{&slot_desc};
     chunk.set_slot_id_to_index(slot_desc.id(), 0);
 
@@ -1111,7 +1108,7 @@ TEST_F(RangeRouterTest, DateTimeIsoWithNanosInitOk) {
     ranges.push_back(r1);
 
     RangeRouter router;
-    std::vector<TypeDescriptor> key_types{TypeDescriptor::from_logical_type(TYPE_DATETIME)};
+    std::vector<TypeDescriptor> key_types{TYPE_DATETIME_DESC};
     // If the FE-style ISO-8601 datetime with nanos cannot be parsed, init()
     // would return an error here. We only care that initialization succeeds.
     ASSERT_TRUE(router.init(ranges, key_types).ok());

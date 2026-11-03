@@ -2998,14 +2998,14 @@ TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
     auto file = _create_file(struct_in_struct_file_path);
 
     TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.children.emplace_back(TYPE_VARCHAR_DESC);
     type_struct.field_names.emplace_back("c0");
 
-    type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct.children.emplace_back(TYPE_VARCHAR_DESC);
     type_struct.field_names.emplace_back("c1");
 
     TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-    type_struct_in_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    type_struct_in_struct.children.emplace_back(TYPE_VARCHAR_DESC);
     type_struct_in_struct.field_names.emplace_back("c0");
 
     type_struct_in_struct.children.emplace_back(type_struct);
@@ -3022,23 +3022,21 @@ TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
                                                     std::filesystem::file_size(struct_in_struct_file_path));
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_struct, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
 
     // setup OlapScanConjunctsManager
     // TypeDescriptor type_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-    // type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    // type_struct.children.emplace_back(TYPE_VARCHAR_DESC);
     // type_struct.field_names.emplace_back("c0");
     //
-    // type_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    // type_struct.children.emplace_back(TYPE_VARCHAR_DESC);
     // type_struct.field_names.emplace_back("c1");
     //
     // TypeDescriptor type_struct_in_struct = TypeDescriptor::from_logical_type(LogicalType::TYPE_STRUCT);
-    // type_struct_in_struct.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR));
+    // type_struct_in_struct.children.emplace_back(TYPE_VARCHAR_DESC);
     // type_struct_in_struct.field_names.emplace_back("c0");
     //
     // type_struct_in_struct.children.emplace_back(type_struct);
@@ -3046,8 +3044,8 @@ TEST_F(FileReaderTest, TestStructSubfieldZonemap) {
 
     // tuple desc
     Utils::SlotDesc slot_descs[] = {
-            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-            {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"c0", TYPE_INT_DESC},
+            {"c1", TYPE_INT_DESC},
             {"c_struct", type_struct},
             {"c_struct_struct", type_struct_in_struct},
             {""},
@@ -3407,18 +3405,17 @@ TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop3) {
 }
 
 TEST_F(FileReaderTest, read_parquet_bloom_filter_by_parquet_hadoop4) {
-    TypeDescriptor type_struct = TypeDescriptor::create_struct_type(
-            {"col_long", "col_double"},
-            {TYPE_BIGINT_DESC, TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE)});
+    TypeDescriptor type_struct =
+            TypeDescriptor::create_struct_type({"col_long", "col_double"}, {TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC});
 
     // tuple desc
     Utils::SlotDesc slot_descs[] = {
-            {"col_bool", TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN)},
-            {"col_int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-            {"col_float", TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT)},
+            {"col_bool", TYPE_BOOLEAN_DESC},
+            {"col_int", TYPE_INT_DESC},
+            {"col_float", TYPE_FLOAT_DESC},
             {"col_struct", type_struct},
-            {"col_string", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
-            {"col_date", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE)},
+            {"col_string", TYPE_VARCHAR_DESC},
+            {"col_date", TYPE_DATE_DESC},
             //{"col_decimal32", TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32)},
             {""},
     };
@@ -3556,8 +3553,7 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
     auto file_reader = _create_file_reader(struct_in_struct_file_path);
 
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
     chunk->append_column(ColumnHelper::create_column(type_struct_in_struct, true), chunk->num_columns());
 
     Status status = file_reader->init(&ctx->format_scan_context);
@@ -4387,6 +4383,28 @@ TEST_F(FileReaderTest, no_matched_reader) {
     auto file_reader = _create_file_reader(file);
     Status status = file_reader->init(&ctx->format_scan_context);
     ASSERT_EQ("Global dictionary not match", status.code_as_string());
+}
+
+// Column b is an optional BOOLEAN whose data page is RLE_DICTIONARY over a PLAIN dictionary page of {false, true}.
+TEST_F(FileReaderTest, boolean_rle_dictionary) {
+    const std::string file = "./be/test/formats/parquet/test_data/boolean_rle_dictionary.parquet";
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_BOOLEAN_DESC, true), chunk->num_columns());
+
+    Utils::SlotDesc slot_descs[] = {{"id", TYPE_INT_DESC}, {"b", TYPE_BOOLEAN_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(file, slot_descs);
+    auto file_reader = _create_file_reader(file);
+    ASSERT_OK(file_reader->init(&ctx->format_scan_context));
+
+    ASSERT_OK(file_reader->get_next(&chunk));
+    ASSERT_EQ(10, chunk->num_rows());
+    const std::vector<std::string> expected = {"[0, 1]", "[1, 0]",    "[2, NULL]", "[3, 1]", "[4, 1]",
+                                               "[5, 0]", "[6, NULL]", "[7, 0]",    "[8, 1]", "[9, 1]"};
+    for (size_t i = 0; i < expected.size(); i++) {
+        EXPECT_EQ(expected[i], chunk->debug_row(i));
+    }
 }
 
 TEST_F(FileReaderTest, low_rows_reader) {

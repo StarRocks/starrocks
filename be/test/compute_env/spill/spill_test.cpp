@@ -810,8 +810,7 @@ TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
 
     // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
     // allocating them.
-    auto value = BinaryColumn::create();
-    value->append(Slice("v"));
+    auto value = ColumnTestHelper::build_column<Slice>({"v"});
     Chunk too_many_rows(Columns{ConstColumn::create(std::move(value), capacity_limit + 1)}, slot_map);
     auto status = spill::OrderedMemTable::check_chunk_before_sort(too_many_rows);
     EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;

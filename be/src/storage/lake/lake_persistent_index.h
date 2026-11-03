@@ -17,12 +17,14 @@
 #include <atomic>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <shared_mutex>
 #include <string>
 
 #include "column/vectorized_fwd.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
+#include "storage/lake/sst_seek_range.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
@@ -227,8 +229,10 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
+    // Major-compact the tablet's index files into txn_log's op_compaction. With unshare, rewrite the filesets the
+    // tablet cannot keep as they are (see pick_unshare_candidates) instead of picking by size.
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
-                                         const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
+                                         const TabletMetadataPtr& metadata, TxnLogPB* txn_log, bool unshare = false);
 
     Status apply_opcompaction(const TabletMetadataPtr& metadata, const TxnLogPB_OpCompaction& op_compaction);
 
@@ -419,17 +423,25 @@ private:
                         DelFilter* filter_words);
 
     // rebuild delete operation from rowset.
-    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version);
+    // Delete keys outside |tablet_range| (nullptr = no clip) are skipped: they belong to a sibling.
+    Status load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version,
+                     const SstSeekRange* tablet_range = nullptr);
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
+
+    // The tablet's key range, or nullptr when there is none to clip to (see _tablet_sst_range).
+    const SstSeekRange* tablet_sst_range() const { return _tablet_sst_range ? &*_tablet_sst_range : nullptr; }
 
 private:
     std::shared_ptr<PersistentIndexMemtable> _memtable;
     std::vector<std::shared_ptr<PersistentIndexMemtable>> _inactive_memtables;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    // Key range of a range-distribution tablet, set by load_from_lake_tablet; empty when the tablet
+    // is unbounded (or not range-distributed).
+    std::optional<SstSeekRange> _tablet_sst_range;
     size_t _need_rebuild_file_cnt{0};
     int64_t _need_rebuild_row_cnt{0};
     // Collection of sstable fileset, from old to new.

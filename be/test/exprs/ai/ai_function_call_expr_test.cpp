@@ -417,13 +417,12 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsMalformedAIThriftWithoutDelegatingT
             {"wrong config", [](TExprNode& node) { node.ai_provider_id = "invalid\nconfig"; }},
             {"missing nullable", [](TExprNode& node) { node.__isset.is_nullable = false; }},
             {"non-nullable", [](TExprNode& node) { node.__set_is_nullable(false); }},
-            {"wrong node return", [](TExprNode& node) { node.type = TypeDescriptor(TYPE_INT).to_thrift(); }},
-            {"wrong function return", [](TExprNode& node) { node.fn.ret_type = TypeDescriptor(TYPE_INT).to_thrift(); }},
+            {"wrong node return", [](TExprNode& node) { node.type = TYPE_INT_DESC.to_thrift(); }},
+            {"wrong function return", [](TExprNode& node) { node.fn.ret_type = TYPE_INT_DESC.to_thrift(); }},
             {"wrong arity", [](TExprNode& node) { node.num_children = 2; }},
             {"wrong argument count",
              [](TExprNode& node) { node.fn.arg_types.emplace_back(varchar_type().to_thrift()); }},
-            {"wrong argument type",
-             [](TExprNode& node) { node.fn.arg_types[0] = TypeDescriptor(TYPE_INT).to_thrift(); }},
+            {"wrong argument type", [](TExprNode& node) { node.fn.arg_types[0] = TYPE_INT_DESC.to_thrift(); }},
             {"mismatched fid", [](TExprNode& node) { node.fn.fid = 200004; }},
     };
 
@@ -639,7 +638,7 @@ TEST_F(AIFunctionCallExprTest, FactoryRejectsArgumentTypesThatDoNotMatchEachFid)
     for (const auto& test_case : test_cases) {
         SCOPED_TRACE(test_case.fid);
         TExpr expression = make_ai_expression(test_case.fid);
-        expression.nodes.front().fn.arg_types[test_case.argument_index] = TypeDescriptor(TYPE_INT).to_thrift();
+        expression.nodes.front().fn.arg_types[test_case.argument_index] = TYPE_INT_DESC.to_thrift();
 
         ObjectPool pool;
         Expr* root = nullptr;
@@ -666,8 +665,7 @@ TEST_F(AIFunctionCallExprTest, PrepareRejectsFlattenedChildTypesThatDisagreeWith
     for (const auto& test_case : test_cases) {
         SCOPED_TRACE(test_case.fid);
         TExpr expression = make_ai_expression(test_case.fid);
-        expression.nodes[test_case.argument_index + 1] =
-                make_slot_ref(TypeDescriptor(TYPE_INT), test_case.argument_index + 1);
+        expression.nodes[test_case.argument_index + 1] = make_slot_ref(TYPE_INT_DESC, test_case.argument_index + 1);
 
         ObjectPool pool;
         Expr* root = nullptr;
@@ -717,7 +715,7 @@ TEST_F(AIFunctionCallExprTest, PrepareAcceptsCurrentMainCompatibleStringChildTyp
 
 TEST_F(AIFunctionCallExprTest, PrepareRejectsConcreteOptionTypesThatDisagreeWithTheValidatedFunctionType) {
     TExpr expression = make_ai_expression(kPromptFid);
-    expression.nodes[4] = make_slot_ref(TypeDescriptor::create_map_type(varchar_type(), TypeDescriptor(TYPE_INT)), 4);
+    expression.nodes[4] = make_slot_ref(TypeDescriptor::create_map_type(varchar_type(), TYPE_INT_DESC), 4);
 
     ObjectPool pool;
     Expr* root = nullptr;
@@ -892,7 +890,7 @@ TEST_F(AIFunctionCallExprTest, PromptOptionsAreConstantPreparedOnceAndSharedByTh
 
 TEST_F(AIFunctionCallExprTest, FactoryRejectsNonJsonOptions) {
     for (const auto& type : {varchar_type(), TypeDescriptor::create_map_type(varchar_type(), varchar_type()),
-                             TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_DOUBLE))}) {
+                             TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_DOUBLE_DESC)}) {
         ObjectPool pool;
         auto wire = make_ai_expression(kPromptFid);
         wire.nodes.front().__set_num_children(4);
@@ -1132,8 +1130,6 @@ std::vector<AIOverloadCase> ai_overload_cases() {
     const TypeDescriptor text = varchar_type();
     const TypeDescriptor strings = TypeDescriptor::create_array_type(text);
     const TypeDescriptor json(TYPE_JSON);
-    const TypeDescriptor similarity(TYPE_FLOAT);
-    const TypeDescriptor boolean(TYPE_BOOLEAN);
     const TypeDescriptor options = options_type();
     const TypeDescriptor file(TYPE_FILE);
     using Result = AIFunctionResultKind;
@@ -1146,9 +1142,9 @@ std::vector<AIOverloadCase> ai_overload_cases() {
             {200007, "ai_fix_grammar", text, {text, text, text}, Result::STRING, 2, 1},
             {200008, "ai_redact", text, {text, strings, text, text}, Result::STRING, 3, 2},
             {200009, "ai_translate", text, {text, text, text, text, text}, Result::STRING, 4, 3},
-            {200010, "ai_similarity", similarity, {text, text, text, text}, Result::SIMILARITY, 3, 2},
+            {200010, "ai_similarity", TYPE_FLOAT_DESC, {text, text, text, text}, Result::SIMILARITY, 3, 2},
             {200011, "ai_summarize", text, {text, text, text}, Result::STRING, 2, 1},
-            {200012, "ai_filter", boolean, {text, text, text, text}, Result::BOOLEAN, 3, 2},
+            {200012, "ai_filter", TYPE_BOOLEAN_DESC, {text, text, text, text}, Result::BOOLEAN, 3, 2},
             {200002, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {text, text, text, options}, Result::EMBEDDING, 2, 1},
             {200003, "ai_embed", TYPE_ARRAY_FLOAT_DESC, {file, text, text, options}, Result::EMBEDDING, 2, 1},
     };
@@ -1181,12 +1177,12 @@ TEST_F(AIFunctionCallExprTest, EveryRegisteredOverloadRetainsValidatedSemanticsW
         invalid.fn.name.function_name = test.name == "ai_complete" ? "ai_embed" : "ai_complete";
         EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         invalid = wire.nodes.front();
-        invalid.__set_type(TypeDescriptor(TYPE_DOUBLE).to_thrift());
+        invalid.__set_type(TYPE_DOUBLE_DESC.to_thrift());
         EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         for (size_t argument = 0; argument < test.arguments.size(); ++argument) {
             SCOPED_TRACE(argument);
             invalid = wire.nodes.front();
-            invalid.fn.arg_types[argument] = TypeDescriptor(TYPE_INT).to_thrift();
+            invalid.fn.arg_types[argument] = TYPE_INT_DESC.to_thrift();
             EXPECT_FALSE(AIFunctionCallExpr::create(&pool, invalid).ok());
         }
     }
@@ -1330,7 +1326,7 @@ TEST_F(AIFunctionCallExprTest, FilterPromptRequestsUnquotedBooleanTokens) {
         SCOPED_TRACE(explicit_model);
         ObjectPool pool;
         std::vector<TypeDescriptor> arguments(4, varchar_type());
-        auto wire = make_extended_ai_expression(200012, "ai_filter", TypeDescriptor(TYPE_BOOLEAN), arguments);
+        auto wire = make_extended_ai_expression(200012, "ai_filter", TYPE_BOOLEAN_DESC, arguments);
         auto created = AIFunctionCallExpr::create(&pool, wire.nodes.front());
         ASSERT_TRUE(created.ok()) << created.status();
         auto* expression = created.value();
