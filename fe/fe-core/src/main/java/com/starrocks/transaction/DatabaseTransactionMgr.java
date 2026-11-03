@@ -1321,6 +1321,11 @@ public class DatabaseTransactionMgr {
                             // if most replica's version have been updated to version published
                             // which means publish version task finished in replica
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                // A double write to the temp partition moves the version of a replica in the
+                                // catalog past the versions that a version overwrite fills: for an overwrite,
+                                // trust the version its backend reports, as finishTransaction does.
+                                long publishedVersion =
+                                        txn.isVersionOverwrite() ? replica.getLastReportVersion() : replica.getVersion();
                                 if (!errReplicas.contains(replica.getId())) {
                                     // success healthy replica condition:
                                     // 1. version is equal to partition's visible version
@@ -1332,13 +1337,13 @@ public class DatabaseTransactionMgr {
                                         ++successHealthyReplicaNum;
                                         // replica report version has greater cur transaction commit version
                                         // This can happen when the BE publish succeeds but fails to send a response to FE
-                                    } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                    } else if (publishedVersion >= partitionCommitInfo.getVersion()) {
                                         ++successHealthyReplicaNum;
                                     } else if (unfinishedBackends != null
                                             && unfinishedBackends.contains(replica.getBackendId())) {
                                         errReplicas.add(replica.getId());
                                     }
-                                } else if (replica.getVersion() >= partitionCommitInfo.getVersion()) {
+                                } else if (publishedVersion >= partitionCommitInfo.getVersion()) {
                                     // the replica's version is larger than or equal to current transaction partition's version
                                     // the replica is normal, then remove it from error replica ids
                                     // this branch will be true if BE's replica reports it's version to FE

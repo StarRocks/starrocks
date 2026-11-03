@@ -940,7 +940,10 @@ public class OnlineOptimizeJobV2Test extends DDLTestBase {
         Assertions.assertEquals(TransactionStatus.VISIBLE,
                 transactionMgr.getTransactionState(db.getId(), later.getTransactionId()).getTransactionStatus());
         Assertions.assertTrue(replica.getVersion() > rewriteVersion);
-        // The publish tasks of the rewrite keep reporting the failure.
+        // Neither a publish task of the rewrite that has not finished, on a backend that restarted for example, nor one
+        // that keeps reporting the failure counts the replica.
+        Assertions.assertFalse(transactionMgr.canTxnFinished(transactionMgr.getTransactionState(db.getId(), txnId),
+                new HashSet<>(), Set.of(replica.getBackendId())));
         transactionMgr.finishTransaction(db.getId(), txnId, new HashSet<>(List.of(replica.getId())));
         Assertions.assertEquals(TransactionStatus.COMMITTED,
                 transactionMgr.getTransactionState(db.getId(), txnId).getTransactionStatus());
