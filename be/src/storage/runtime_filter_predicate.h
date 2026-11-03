@@ -39,6 +39,7 @@ protected:
     const RuntimeFilter* _rf = nullptr;
     ColumnId _column_id;
     std::vector<uint32_t> hash_values;
+    std::vector<uint8_t> _input_selection;
 };
 
 class DictColumnRuntimeFilterPredicate : public RuntimeFilterPredicate {
