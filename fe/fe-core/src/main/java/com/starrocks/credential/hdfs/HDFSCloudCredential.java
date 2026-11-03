@@ -147,6 +147,10 @@ public class HDFSCloudCredential implements CloudCredential {
     }
 
     private boolean isReservedHadoopExtProperty(String key) {
-        return HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING.equals(key);
+        // The catalog Kerberos keys are set only from the credential itself (see catalogKerberosProperties), so a
+        // catalog cannot pick its identity through them and enable_catalog_kerberos_credentials stays effective.
+        return HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING.equals(key)
+                || HadoopExt.CATALOG_KERBEROS_PRINCIPAL.equals(key)
+                || HadoopExt.CATALOG_KERBEROS_KEYTAB.equals(key);
     }
 }

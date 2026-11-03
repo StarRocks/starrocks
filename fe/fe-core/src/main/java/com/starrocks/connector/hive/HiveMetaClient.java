@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
@@ -21,6 +22,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -88,11 +90,21 @@ public class HiveMetaClient {
         this.maxPoolSize = conf.getInt(HIVE_METASTORE_CONNECTION_POOL_SIZE, MAX_HMS_CONNECTION_POOL_SIZE_DEFAULT);
     }
 
+    @VisibleForTesting
+    HiveConf getHiveConf() {
+        return conf;
+    }
+
     public static HiveMetaClient createHiveMetaClient(String catalogName, HdfsEnvironment env,
                                                       Map<String, String> properties) {
         HiveConf conf = new HiveConf();
         conf.addResource(env.getConfiguration());
-        properties.forEach(conf::set);
+        // The catalog Kerberos keys come only from env's configuration, never from the raw catalog properties.
+        properties.forEach((key, value) -> {
+            if (!HadoopExt.CATALOG_KERBEROS_PRINCIPAL.equals(key) && !HadoopExt.CATALOG_KERBEROS_KEYTAB.equals(key)) {
+                conf.set(key, value);
+            }
+        });
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }

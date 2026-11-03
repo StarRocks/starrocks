@@ -104,4 +104,24 @@ public class HDFSCloudCredentialKerberosTest {
         Assertions.assertNull(applied(props).get(HadoopExt.CATALOG_KERBEROS_PRINCIPAL));
         Assertions.assertFalse(thrift(props).containsKey(HadoopExt.CATALOG_KERBEROS_PRINCIPAL));
     }
+
+    @Test
+    public void rawInternalKeysAreIgnored() {
+        Config.enable_catalog_kerberos_credentials = false;
+        Map<String, String> props = new HashMap<>();
+        props.put(CloudConfigurationConstants.HDFS_AUTHENTICATION, "simple");
+        props.put(HadoopExt.CATALOG_KERBEROS_PRINCIPAL, "user_b@EXAMPLE.COM");
+        props.put(HadoopExt.CATALOG_KERBEROS_KEYTAB, "/path/to/user_b.keytab");
+        Assertions.assertNull(applied(props).get(HadoopExt.CATALOG_KERBEROS_PRINCIPAL));
+        Assertions.assertFalse(thrift(props).containsKey(HadoopExt.CATALOG_KERBEROS_KEYTAB));
+    }
+
+    @Test
+    public void catalogCredentialsWinOverRawInternalKeys() {
+        Map<String, String> props = kerberosProps(CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL,
+                CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB, KEYTAB);
+        props.put(HadoopExt.CATALOG_KERBEROS_PRINCIPAL, "user_b@EXAMPLE.COM");
+        Assertions.assertEquals(PRINCIPAL, applied(props).get(HadoopExt.CATALOG_KERBEROS_PRINCIPAL));
+        Assertions.assertEquals(PRINCIPAL, thrift(props).get(HadoopExt.CATALOG_KERBEROS_PRINCIPAL));
+    }
 }
