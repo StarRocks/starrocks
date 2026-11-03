@@ -27,9 +27,9 @@ on:
 permissions:
   contents: write  # create Releases; also lets the job see existing drafts
 
-concurrency:
-  group: release-publish
-  cancel-in-progress: false
+# No concurrency group: GitHub keeps only one pending run per group, so a queued push would be
+# cancelled and its new version never published. Parallel runs cannot publish the same version:
+# each run only publishes sections its own push added.
 
 jobs:
   release-publish:
