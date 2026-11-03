@@ -313,7 +313,9 @@ public:
         }
 
         ColumnPtr result = NULL_FN::template evaluate<LType, RType, ResultType>(v1, v2);
-        const size_t num_rows = v1->size();
+        // A constant operand may report fewer rows than the chunk, e.g. a decimal const-op-const result is a
+        // one-row ConstColumn, so take the broadcast row count, as DecimalBinaryFunction does.
+        const size_t num_rows = std::max(v1->size(), v2->size());
         Filter not_null(num_rows, 1);
         _mark_null_rows(v1, &not_null);
         _mark_null_rows(v2, &not_null);

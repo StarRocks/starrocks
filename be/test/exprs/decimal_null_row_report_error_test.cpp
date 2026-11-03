@@ -312,4 +312,49 @@ TEST_F(DecimalNullRowReportErrorTest, add_sub_mul_ignore_null_row) {
     }
 }
 
+// A decimal const-op-const result under REPORT_ERROR is a one-row ConstColumn, which can then meet a full-size
+// nullable operand, e.g. `(if(k > 0, 1.0, 2.0) + 1.0) + d` when IF keeps one constant branch for the chunk.
+TEST_F(DecimalNullRowReportErrorTest, one_row_const_lhs_with_nullable_rhs) {
+    using Add = VectorizedStrictDecimalBinaryFunction<AddOp, REPORT>;
+    using Div = VectorizedUnstrictDecimalBinaryFunction<TYPE_DECIMAL128, DivOp, REPORT>;
+    constexpr size_t kRows = 64;
+    auto one = [&] { return ConstColumn::create(make_decimals<TYPE_DECIMAL128>(38, 0, {1}, {}), kRows); };
+    ColumnPtr lhs = Add::evaluate<TYPE_DECIMAL128>(one(), one());
+    ASSERT_TRUE(lhs->is_constant());
+    ASSERT_EQ(1, lhs->size());
+
+    std::vector<int128_t> values(kRows, 3);
+    std::vector<uint8_t> is_null(kRows, 0);
+    std::vector<bool> expected(kRows, false);
+    for (size_t i = 0; i < kRows; i += 2) {
+        values[i] = 0; // a null divisor holds 0
+        is_null[i] = 1;
+        expected[i] = true;
+    }
+    auto rhs = make_decimals<TYPE_DECIMAL128>(38, 0, values, is_null);
+
+    ColumnPtr result;
+    ASSERT_NO_THROW(result = Add::evaluate<TYPE_DECIMAL128>(lhs, rhs));
+    ASSERT_EQ(kRows, result->size());
+    expect_nulls(result, expected);
+    EXPECT_EQ(value_at<TYPE_DECIMAL128>(result, 1), 5);
+    ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(lhs, rhs));
+    ASSERT_EQ(kRows, result->size());
+    expect_nulls(result, expected);
+
+    // a non-null overflowing row is still reported
+    const int128_t big = kE38 / 10 * 9; // 9e37
+    ColumnPtr big_lhs = Add::evaluate<TYPE_DECIMAL128>(
+            ConstColumn::create(make_decimals<TYPE_DECIMAL128>(38, 0, {big}, {}), kRows), one());
+    ASSERT_EQ(1, big_lhs->size());
+    values[1] = big;
+    auto bad_rhs = make_decimals<TYPE_DECIMAL128>(38, 0, values, is_null);
+    try {
+        (void)Add::evaluate<TYPE_DECIMAL128>(big_lhs, bad_rhs);
+        FAIL() << "expected an overflow error";
+    } catch (const std::overflow_error& e) {
+        EXPECT_STREQ(e.what(), "The 'add' operation involving decimal values overflows");
+    }
+}
+
 } // namespace starrocks
