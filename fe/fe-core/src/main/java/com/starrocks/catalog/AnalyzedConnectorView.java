@@ -31,7 +31,8 @@ import java.util.Set;
  * rewrite. So, like the connector tables ({@link HiveTable}, {@link IcebergTable}, ...), it is equal by name instead
  * of id: catalog, plus db and view name case-insensitively, as connector metastores resolve them.
  *
- * <p>The definition is part of equality too. Logical view scans also snapshot the definitions of all views referenced
+ * <p>The definition and effective Iceberg binding defaults are part of equality too. Logical view scans also snapshot
+ * the definitions and binding defaults of all views referenced
  * by the analyzed expansion, so changing an inner view cannot match a cached outer view with unchanged SQL.
  * Nothing inactivates an MV when a connector view is redefined, so the MV's cached plan may hold an older version
  * of the view, which then must not match queries on the new one. This only
@@ -45,16 +46,21 @@ public class AnalyzedConnectorView extends View {
     // lower-cased once here, as equals and hashCode run in the optimizer's table matching
     private final String lowerDbName;
     private final String lowerName;
+    private final BindingDefaults bindingDefaults;
     private final Set<ViewDefinition> referencedViewDefinitions;
 
-    private record ViewDefinition(String catalogName, String dbName, String name, Long nativeId, String sql) {
+    private record BindingDefaults(String catalogName, String dbName) {
+    }
+
+    private record ViewDefinition(String catalogName, String dbName, String name, Long nativeId, String sql,
+                                  BindingDefaults bindingDefaults) {
         private static ViewDefinition snapshot(View view) {
             if (view instanceof AnalyzedConnectorView connectorView) {
                 return new ViewDefinition(connectorView.catalogName, connectorView.lowerDbName,
-                        connectorView.lowerName, null, connectorView.getInlineViewDef());
+                        connectorView.lowerName, null, connectorView.getInlineViewDef(), connectorView.bindingDefaults);
             }
             // Native views retain their catalog table id, but their mutable definition must be copied.
-            return new ViewDefinition(null, null, null, view.getId(), view.getInlineViewDef());
+            return new ViewDefinition(null, null, null, view.getId(), view.getInlineViewDef(), null);
         }
     }
 
@@ -63,6 +69,9 @@ public class AnalyzedConnectorView extends View {
         this.catalogName = connectorView.catalogName;
         this.lowerDbName = connectorView.dbName.toLowerCase(Locale.ROOT);
         this.lowerName = connectorView.getName().toLowerCase(Locale.ROOT);
+        // Unchanged SQL can resolve to different tables when an Iceberg view version changes its defaults.
+        this.bindingDefaults = connectorView instanceof IcebergView icebergView
+                ? new BindingDefaults(icebergView.getDefaultCatalogName(), icebergView.getDefaultDbName()) : null;
         this.referencedViewDefinitions = Set.of();
         setInlineViewDefWithSqlMode(connectorView.getInlineViewDef(), 0);
         // view-based MV rewrite only triggers for views that have related MVs
@@ -74,6 +83,7 @@ public class AnalyzedConnectorView extends View {
         this.catalogName = view.catalogName;
         this.lowerDbName = view.lowerDbName;
         this.lowerName = view.lowerName;
+        this.bindingDefaults = view.bindingDefaults;
         this.referencedViewDefinitions = Set.copyOf(referencedViewDefinitions);
         setInlineViewDefWithSqlMode(view.getInlineViewDef(), view.getSqlMode());
         view.getRelatedMaterializedViews().forEach(this::addRelatedMaterializedView);
@@ -94,7 +104,8 @@ public class AnalyzedConnectorView extends View {
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(catalogName, lowerDbName, lowerName, getInlineViewDef(), referencedViewDefinitions);
+        return Objects.hashCode(catalogName, lowerDbName, lowerName, getInlineViewDef(), bindingDefaults,
+                referencedViewDefinitions);
     }
 
     @Override
@@ -107,6 +118,7 @@ public class AnalyzedConnectorView extends View {
                 lowerDbName.equals(otherView.lowerDbName) &&
                 lowerName.equals(otherView.lowerName) &&
                 Objects.equal(getInlineViewDef(), otherView.getInlineViewDef()) &&
+                Objects.equal(bindingDefaults, otherView.bindingDefaults) &&
                 referencedViewDefinitions.equals(otherView.referencedViewDefinitions);
     }
 }
