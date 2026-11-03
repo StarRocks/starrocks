@@ -966,7 +966,7 @@ TEST_P(SchemaChangeMultiStatementTxnTest, test_statement_loading_another_table) 
     auto txns = std::span<const TxnInfoPB>(&txn_info, 1);
 
     ASSERT_OK(publish_version(_tablet_manager.get(), PublishTabletInfo(base_tablet_id), version, version + 1, txns,
-                              false, std::nullopt)
+                              false)
                       .status());
     int64_t log_version = version + 1;
     ASSERT_OK(publish_log_version(_tablet_manager.get(), new_tablet_id, txns, &log_version));
