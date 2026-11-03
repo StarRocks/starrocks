@@ -2467,6 +2467,60 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
 
+// PrimaryKeyManager::_do_delete hands a pre-built tombstone sstable that an index other than the cloud-native one
+// does not ingest to vacuum through the rowset's orphan files, next to the segments a partial update replaced.
+// Both the single and the batch apply path must record it like those: name, size and shared flag kept, and the
+// version being built stamped as its creation version unless the producer set one.
+TEST_F(MetaFileTest, test_apply_opwrite_records_tombstone_sstable_orphan) {
+    const int64_t tablet_id = 30004;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    std::vector<FileMetaPB> orphan_files(3);
+    orphan_files[0].set_name("replaced.dat");
+    orphan_files[0].set_size(10);
+    orphan_files[1].set_name("0000000000000007_tombstone.sst");
+    orphan_files[1].set_size(20);
+    orphan_files[1].set_shared(true);
+    orphan_files[2].set_name("0000000000000008_tombstone.sst");
+    orphan_files[2].set_size(30);
+    orphan_files[2].set_version(5);
+
+    auto check_orphans = [&](const TabletMetadata& metadata) {
+        ASSERT_EQ(orphan_files.size(), metadata.orphan_files_size());
+        for (int i = 0; i < metadata.orphan_files_size(); i++) {
+            const auto& orphan = metadata.orphan_files(i);
+            EXPECT_EQ(orphan_files[i].name(), orphan.name());
+            EXPECT_EQ(orphan_files[i].size(), orphan.size());
+            EXPECT_EQ(orphan_files[i].shared(), orphan.shared());
+            EXPECT_EQ(orphan_files[i].has_version() ? orphan_files[i].version() : metadata.version(), orphan.version())
+                    << orphan.name();
+        }
+    };
+
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(10);
+        metadata->set_next_rowset_id(110);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("a.dat");
+        builder.apply_opwrite(op_write, {}, orphan_files);
+        check_orphans(*metadata);
+    }
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(11);
+        metadata->set_next_rowset_id(120);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("b.dat");
+        builder.batch_apply_opwrite(op_write, {}, orphan_files);
+        ASSERT_OK(builder.set_final_rowset());
+        check_orphans(*metadata);
+    }
+}
+
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {
     // Test SSTable delvec integration: test new get_del_vec(DelvecPagePB) function and
     // version reference collection from SSTable delvecs during finalization

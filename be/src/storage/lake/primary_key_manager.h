@@ -285,7 +285,8 @@ private:
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
                       LakePersistentIndex& index, DeletesMap* new_deletes, bool read_only);
     Status _do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
-                      RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes);
+                      RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes,
+                      std::vector<FileMetaPB>* orphan_files);
 
     // Performs condition-based merge update using parallel chunk-level execution for segments
     // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values
