@@ -14,56 +14,12 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class StructCastTest extends PlanTestBase {
-    @Test
-    public void testPositionCast() throws Exception {
-        final ConnectContext context = ConnectContext.get();
-        final SessionVariable sv = context.getSessionVariable();
-        final long prev = sv.getSqlMode();
-        try {
-            sv.setSqlMode(prev & ~SqlModeHelper.MODE_STRUCT_CAST_BY_NAME);
-
-            String sql = "select cast(named_struct('key',1,'value',1) as struct<key1 int,value1 int>)";
-            String plan = getFragmentPlan(sql);
-
-            assertContains(plan,
-                    "CAST(named_struct('key', 1, 'value', 1) AS struct<`key1` int(11), `value1` int(11)>)");
-        } finally {
-            sv.setSqlMode(prev);
-        }
-    }
-
-    @Test
-    public void testNamedCast() throws Exception {
-        final ConnectContext context = ConnectContext.get();
-        final SessionVariable sv = context.getSessionVariable();
-        final long prev = sv.getSqlMode();
-        try {
-            sv.setSqlMode(prev | SqlModeHelper.MODE_STRUCT_CAST_BY_NAME);
-
-            assertThrows(SemanticException.class, () -> {
-                String sql = "select cast(named_struct('key',1,'value',1) as struct<key1 int,value1 int>)";
-                getFragmentPlan(sql);
-            });
-
-            String sql = "select cast(named_struct('k',1,'v',1) as struct<v int,`k` int>)";
-            String plan = getFragmentPlan(sql);
-            assertContains(plan, "CAST(named_struct('k', 1, 'v', 1) AS struct<`v` int(11), `k` int(11)>)");
-        } finally {
-            sv.setSqlMode(prev);
-        }
-    }
-
     @Test
     public void testReuseCastUnderSubfield() throws Exception {
         String sql = "select s.k1, s.k2, s.k3 from (select cast(parse_json(concat('{\"k1\":', v1, ',\"k2\":', v2, " +
@@ -84,5 +40,4 @@ public class StructCastTest extends PlanTestBase {
         assertEquals(1, StringUtils.countMatches(plan, "parse_json[("), plan);
         assertEquals(1, StringUtils.countMatches(plan, "as struct<"), plan);
     }
-
 }

@@ -387,38 +387,24 @@ public class ComplexTypePrunePlanTest extends PlanTestBase {
         assertVerbosePlanContains(sql, "c3.c.a[false]", "c3.c.b[false]", "c3.a[false]", "c3.b[false]",
                 "c3.d[false]", "c2.a[false]", "c1.a[false]");
         // we don't support non-copy for this expr now
-<<<<<<< HEAD
         assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
-        // test common project expr
-        sql = "select c1.a, c1.a + 1 as c1a, c1.a + 2 as c2a from test";
-        assertVerbosePlanContains(sql, "c1.a[true]", "cast(2: c1.a[true] as BIGINT)");
-=======
-        assertPlanContains(sql, "c1.b[true][1].a[true]");
         // test common project expr: c1.a is evaluated once as a common expression, and nothing else
         // reads c1, so it does not need a copy
         sql = "select c1.a, c1.a + 1 as c1a, c1.a + 2 as c2a from test";
-        assertPlanContains(sql, "<slot 8> : 2: c1.a[false]", "<slot 9> : CAST(8: expr AS BIGINT)",
-                "<slot 6> : 9: cast + 1", "<slot 7> : 9: cast + 2");
->>>>>>> a308619 ([BugFix][RB-913] Reuse the shared expression under subfield access instead of evaluating it once per field (#82299))
+        assertVerbosePlanContains(sql, "8 <-> 2: c1.a[false]", "9 <-> cast([8: expr, INT, true] as BIGINT)",
+                "6 <-> [9: cast, BIGINT, true] + 1", "7 <-> [9: cast, BIGINT, true] + 2");
     }
 
     @Test
     public void testSubfieldNeedCopyForOverlap() throws Exception {
         String sql = "select c3.c.a, c3.c from test";
-<<<<<<< HEAD
         assertVerbosePlanContains(sql, "c3.c.a[true]", "c3.c[true]");
-        sql = "select c1.b, c1.b[1] from test";
-        assertVerbosePlanContains(sql, "c1.b[true]", "c1.b[true][1]");
-        sql = "select c1.b[1].a, c1.b from test";
-        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
-=======
-        assertPlanContains(sql, "c3.c.a[true]", "c3.c[true]");
         // c1.b is evaluated once as a common expression; c1 itself is not output, so no copy
         sql = "select c1.b, c1.b[1] from test";
-        assertPlanContains(sql, "<slot 7> : 2: c1.b[false]", "<slot 5> : 7: expr", "<slot 6> : 7: expr[1]");
+        assertVerbosePlanContains(sql, "7 <-> 2: c1.b[false]",
+                "5 <-> [7: expr, ARRAY<struct<a int(11), b int(11)>>, true]", "6 <-> 7: expr[1]");
         sql = "select c1.b[1].a, c1.b from test";
-        assertPlanContains(sql, "<slot 7> : 2: c1.b[false]", "7: expr[1].a[true]");
->>>>>>> a308619 ([BugFix][RB-913] Reuse the shared expression under subfield access instead of evaluating it once per field (#82299))
+        assertVerbosePlanContains(sql, "7 <-> 2: c1.b[false]", "7: expr[1].a[true]");
     }
 
     @Test
