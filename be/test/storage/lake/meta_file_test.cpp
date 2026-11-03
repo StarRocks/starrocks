@@ -4514,49 +4514,6 @@ TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
     EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
 }
 
-<<<<<<< HEAD
-=======
-// PK CDC: the three pk_change_locator capture maps and the capture status survive a serialize/parse
-// round-trip (confirms the proto fields and their generated accessors).
-TEST_F(MetaFileTest, test_cdc_maps_and_cdc_metadata_roundtrip) {
-    TabletMetadataPB meta;
-    meta.set_id(12345);
-    meta.set_version(7);
-    auto* cdc = meta.mutable_cdc_metadata()->mutable_pk_change_locator();
-    DelvecPagePB page;
-    page.set_version(7);
-    page.set_offset(0);
-    page.set_size(8);
-    page.set_crc32c(123);
-    (*cdc->mutable_compaction_input_delvecs())[100] = page;
-    (*cdc->mutable_compaction_output_delvecs())[200] = page;
-    (*cdc->mutable_column_overlay_vecs())[300] = page;
-    meta.mutable_cdc_metadata()->mutable_capture_status()->set_status_code(8); // non-OK
-    meta.mutable_cdc_metadata()->mutable_capture_status()->add_error_msgs("degraded: test");
-
-    std::string buf;
-    ASSERT_TRUE(meta.SerializeToString(&buf));
-    TabletMetadataPB parsed;
-    ASSERT_TRUE(parsed.ParseFromString(buf));
-
-    const auto& pcdc = parsed.cdc_metadata().pk_change_locator();
-    auto c = pcdc.compaction_input_delvecs().find(100);
-    ASSERT_TRUE(c != pcdc.compaction_input_delvecs().end());
-    EXPECT_EQ(7, c->second.version());
-    EXPECT_TRUE(pcdc.compaction_output_delvecs().find(200) != pcdc.compaction_output_delvecs().end());
-    EXPECT_TRUE(pcdc.column_overlay_vecs().find(300) != pcdc.column_overlay_vecs().end());
-    ASSERT_TRUE(parsed.has_cdc_metadata());
-    EXPECT_EQ(8, parsed.cdc_metadata().capture_status().status_code());
-    ASSERT_EQ(1, parsed.cdc_metadata().capture_status().error_msgs_size());
-    EXPECT_EQ("degraded: test", parsed.cdc_metadata().capture_status().error_msgs(0));
-}
-
-// Regression for the PK CDC column-update capture: when two column-mode partial updates in ONE
-// publish overlay different rows of the SAME source segment, the capture must UNION the later
-// op_write's rows with the earlier op_write's instead of overwriting them. The CHANGES diff reads
-// column_overlay_vecs[rssid] as the full set of rows the publish overlaid on that segment,
-// so dropping the first op_write's rows would silently lose them from both the DELETE and INSERT
-// sides of the CDC result.
 // A column-mode update rewrites some columns of a segment and keeps the other `.cols` files of that segment. A kept
 // file keeps its shared flag: after a range split it is still read by the sibling tablet, and a file that lost the flag
 // would be deleted by vacuum once a later update orphans it. A new file is private.
@@ -4592,12 +4549,12 @@ TEST_F(MetaFileTest, test_append_dcg_keeps_shared_flags_of_kept_files) {
 
     MetaFileBuilder builder(*tablet, metadata);
     // Column 4 moves to ccc.cols; aaa.cols keeps column 3 and bbb.cols column 6.
-    ASSERT_OK(builder.append_dcg(110, {{"ccc.cols", ""}}, {{4}}, {333}, Roaring{0}));
+    builder.append_dcg(110, {{"ccc.cols", ""}}, {{4}}, {333});
     EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"bbb.cols", true}, {"ccc.cols", false}}),
               shared_flags());
 
     // Column 6 moves to ddd.cols, so bbb.cols becomes an orphan and still records that it is shared.
-    ASSERT_OK(builder.append_dcg(110, {{"ddd.cols", ""}}, {{6}}, {444}, Roaring{0}));
+    builder.append_dcg(110, {{"ddd.cols", ""}}, {{6}}, {444});
     EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"ccc.cols", false}, {"ddd.cols", false}}),
               shared_flags());
     bool orphaned = false;
@@ -4610,116 +4567,4 @@ TEST_F(MetaFileTest, test_append_dcg_keeps_shared_flags_of_kept_files) {
     EXPECT_TRUE(orphaned);
 }
 
-TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_same_segment_in_one_publish) {
-    const int64_t tablet_id = 40060;
-    const uint32_t rssid = 7;
-    const int64_t version = 11;
-    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
-    auto metadata = std::make_shared<TabletMetadata>();
-    metadata->set_id(tablet_id);
-    metadata->set_version(version);
-    metadata->set_next_rowset_id(110);
-    // column_overlay_vecs is a primary-key concept; _finalize_delvec only persists the delvec
-    // file (and its version_to_file entry) for a primary-key tablet.
-    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
-    // column_overlay_vecs is only captured when change data capture is enabled on the tablet.
-    metadata->mutable_cdc_metadata()->set_enable_cdc(true);
-
-    MetaFileBuilder builder(*tablet, metadata);
-
-    // First op_write of the publish overlays rows {1, 2} of the source segment.
-    Roaring r1;
-    r1.add(1);
-    r1.add(2);
-    ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r1));
-
-    // Second op_write of the SAME publish overlays {2, 3} of the SAME segment (overlapping, not equal).
-    Roaring r2;
-    r2.add(2);
-    r2.add(3);
-    ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r2));
-
-    ASSERT_OK(builder.finalize(next_id()));
-
-    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, version));
-    const auto& dcg_map = persisted->cdc_metadata().pk_change_locator().column_overlay_vecs();
-    auto it = dcg_map.find(rssid);
-    ASSERT_TRUE(it != dcg_map.end());
-
-    DelVector read_dv;
-    LakeIOOptions lake_io_opts;
-    ASSERT_OK(get_del_vec(_tablet_manager.get(), *persisted, it->second, true, lake_io_opts, &read_dv));
-    // Before the fix the assign kept only the second op_write's {2, 3}; after it, the union {1, 2, 3}.
-    ASSERT_TRUE(read_dv.roaring() != nullptr);
-    EXPECT_EQ(3, read_dv.cardinality());
-    EXPECT_TRUE(read_dv.roaring()->contains(1));
-    EXPECT_TRUE(read_dv.roaring()->contains(2));
-    EXPECT_TRUE(read_dv.roaring()->contains(3));
-}
-
-// Regression for the PK CDC column-update capture across a base-advancement publish retry: a batch
-// publish's prior attempt finalized meta@advanced_base with a column-update of one segment; the retry
-// deep-copies that metadata (inheriting column_overlay_vecs[rssid] and its delvec file) and
-// replays only the tail. When the tail column-updates the SAME segment, the capture must UNION the
-// tail's rows with the inherited window capture (read back from the deep-copied delvec file) instead
-// of overwriting it, so the page still covers the whole (ori_base, new] edge.
-TEST_F(MetaFileTest, test_dcg_update_row_vec_unions_inherited_window_on_retry) {
-    const int64_t tablet_id = 40061;
-    const uint32_t rssid = 9;
-    const int64_t advanced_base = 11; // version the prior attempt finalized
-    const int64_t new_version = 12;   // the retry's finalized version
-    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
-
-    // Prior attempt: finalize meta@advanced_base capturing the window's column-update of rows {1, 2}.
-    auto meta_base = std::make_shared<TabletMetadata>();
-    meta_base->set_id(tablet_id);
-    meta_base->set_version(advanced_base);
-    meta_base->set_next_rowset_id(110);
-    meta_base->mutable_schema()->set_keys_type(PRIMARY_KEYS);
-    // column_overlay_vecs is only captured when change data capture is enabled on the tablet.
-    meta_base->mutable_cdc_metadata()->set_enable_cdc(true);
-    {
-        MetaFileBuilder builder(*tablet, meta_base);
-        Roaring r;
-        r.add(1);
-        r.add(2);
-        ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r));
-        ASSERT_OK(builder.finalize(next_id()));
-    }
-
-    // Retry: deep-copy meta@advanced_base (inherits column_overlay_vecs[rssid]={1,2} and its
-    // version_to_file), bump to new_version. The entry is retained on a base-advancement retry (its
-    // version advanced_base > ori_base), so the deep copy models the inherited state directly.
-    ASSIGN_OR_ABORT(auto reloaded_base, _tablet_manager->get_tablet_metadata(tablet_id, advanced_base));
-    auto meta_retry = std::make_shared<TabletMetadata>(*reloaded_base);
-    meta_retry->set_version(new_version);
-    ASSERT_TRUE(meta_retry->cdc_metadata().pk_change_locator().column_overlay_vecs().find(rssid) !=
-                meta_retry->cdc_metadata().pk_change_locator().column_overlay_vecs().end());
-
-    // Replayed tail column-updates the SAME segment, rows {2, 3} (overlapping the window, not equal).
-    {
-        MetaFileBuilder builder(*tablet, meta_retry);
-        Roaring r;
-        r.add(2);
-        r.add(3);
-        ASSERT_OK(builder.append_dcg(rssid, {}, {}, {}, r));
-        ASSERT_OK(builder.finalize(next_id()));
-    }
-
-    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, new_version));
-    auto it = persisted->cdc_metadata().pk_change_locator().column_overlay_vecs().find(rssid);
-    ASSERT_TRUE(it != persisted->cdc_metadata().pk_change_locator().column_overlay_vecs().end());
-
-    DelVector read_dv;
-    LakeIOOptions lake_io_opts;
-    ASSERT_OK(get_del_vec(_tablet_manager.get(), *persisted, it->second, true, lake_io_opts, &read_dv));
-    // Without the inherited-window union the tail's append keeps only {2, 3}; with it, {1, 2, 3}.
-    ASSERT_TRUE(read_dv.roaring() != nullptr);
-    EXPECT_EQ(3, read_dv.cardinality());
-    EXPECT_TRUE(read_dv.roaring()->contains(1));
-    EXPECT_TRUE(read_dv.roaring()->contains(2));
-    EXPECT_TRUE(read_dv.roaring()->contains(3));
-}
-
->>>>>>> 6f062d8999d... [BugFix][RB-96] Keep the shared flags of kept .cols files in a column-mode update (#67862)
 } // namespace starrocks::lake
