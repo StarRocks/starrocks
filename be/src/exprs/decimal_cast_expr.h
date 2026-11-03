@@ -19,6 +19,7 @@
 #include "base/decimal_types.h"
 #include "column/column_builder.h"
 #include "exprs/overflow.h"
+#include "exprs/unary_function.h"
 #include "types/decimalv3.h"
 #include "types/variant.h"
 
@@ -648,5 +649,14 @@ struct DecimalTo {
         return DecimalNonDecimalCast<overflow_mode, Type, ResultType>::decimal_to(column);
     }
 };
+
+// Drives a decimal cast op (DecimalFrom, DecimalTo, DecimalToDecimal) over a possibly nullable column.
+// Under REPORT_ERROR the overflow check must not run on the data slot of a null row, which may hold "" or a
+// value left by an upstream expression, see NullAwareReportErrorUnaryFunction.
+template <template <OverflowMode> class CastOp, OverflowMode overflow_mode>
+using VectorizedDecimalCastFunction =
+        std::conditional_t<error_if_overflow<overflow_mode>,
+                           NullAwareReportErrorUnaryFunction<CastOp<overflow_mode>, CastOp<OverflowMode::OUTPUT_NULL>>,
+                           VectorizedUnaryFunction<CastOp<overflow_mode>>>;
 
 } // namespace starrocks

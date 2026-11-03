@@ -260,13 +260,29 @@ public:
     }
 };
 
-template <typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
-using VectorizedStrictDecimalBinaryFunction =
+template <typename OP, OverflowMode overflow_mode>
+using UnionNullableDecimalBinaryFunction =
         UnionNullableColumnBinaryFunction<UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
 
-template <LogicalType Type, typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
-using VectorizedUnstrictDecimalBinaryFunction =
+template <LogicalType Type, typename OP, OverflowMode overflow_mode>
+using ProduceNullableDecimalBinaryFunction =
         ProduceNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<ArithmeticRightZeroCheck<Type>>,
                                             UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
+
+// Under REPORT_ERROR the overflow check must not run on the data slot of a row where an operand is NULL,
+// see NullAwareReportErrorBinaryFunction.
+template <typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
+using VectorizedStrictDecimalBinaryFunction = std::conditional_t<
+        error_if_overflow<overflow_mode>,
+        NullAwareReportErrorBinaryFunction<UnionNullableDecimalBinaryFunction<OP, overflow_mode>,
+                                           UnionNullableDecimalBinaryFunction<OP, OverflowMode::OUTPUT_NULL>>,
+        UnionNullableDecimalBinaryFunction<OP, overflow_mode>>;
+
+template <LogicalType Type, typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
+using VectorizedUnstrictDecimalBinaryFunction = std::conditional_t<
+        error_if_overflow<overflow_mode>,
+        NullAwareReportErrorBinaryFunction<ProduceNullableDecimalBinaryFunction<Type, OP, overflow_mode>,
+                                           ProduceNullableDecimalBinaryFunction<Type, OP, OverflowMode::OUTPUT_NULL>>,
+        ProduceNullableDecimalBinaryFunction<Type, OP, overflow_mode>>;
 
 } //namespace starrocks

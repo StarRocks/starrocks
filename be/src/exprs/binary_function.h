@@ -293,6 +293,76 @@ public:
 };
 
 /**
+ * Binary counterpart of NullAwareReportErrorUnaryFunction (see unary_function.h).
+ *
+ * The nullable binary drivers (UnionNullableColumnBinaryFunction, ProduceNullableColumnBinaryFunction) run the
+ * op over the data columns of both operands, so a throwing op (REPORT_FN) also checks the data slot of a row
+ * where either operand is NULL, e.g. a NULL decimal divisor holds 0 and `a / b` reports an overflow for it.
+ *
+ * NULL_FN must be the non-throwing twin of REPORT_FN, producing NULL for exactly the rows REPORT_FN rejects.
+ * When an operand has null rows, run NULL_FN; if its result has more null rows than the union of the inputs'
+ * null rows, re-run REPORT_FN on the rows where both operands are non-null to raise the original error.
+ */
+template <typename REPORT_FN, typename NULL_FN>
+class NullAwareReportErrorBinaryFunction {
+public:
+    template <LogicalType LType, LogicalType RType, LogicalType ResultType>
+    static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        if (!v1->has_null() && !v2->has_null()) {
+            return REPORT_FN::template evaluate<LType, RType, ResultType>(v1, v2);
+        }
+
+        ColumnPtr result = NULL_FN::template evaluate<LType, RType, ResultType>(v1, v2);
+        const size_t num_rows = v1->size();
+        Filter not_null(num_rows, 1);
+        _mark_null_rows(v1, &not_null);
+        _mark_null_rows(v2, &not_null);
+        const size_t num_not_null = SIMD::count_nonzero(not_null);
+        if (num_not_null > 0 && ColumnHelper::count_nulls(result) > num_rows - num_not_null) {
+            ColumnPtr lhs = _non_null_rows(v1, not_null, num_not_null);
+            ColumnPtr rhs = _non_null_rows(v2, not_null, num_not_null);
+            // Expected to throw: a row with two non-null operands was rejected by NULL_FN.
+            (void)REPORT_FN::template evaluate<LType, RType, ResultType>(lhs, rhs);
+        }
+        return result;
+    }
+
+    template <LogicalType Type>
+    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, Type>(v1, v2);
+    }
+
+    template <LogicalType Type, LogicalType ResultType>
+    static inline ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
+        return evaluate<Type, Type, ResultType>(v1, v2);
+    }
+
+private:
+    static void _mark_null_rows(const ColumnPtr& column, Filter* not_null) {
+        if (column->only_null()) {
+            std::fill(not_null->begin(), not_null->end(), 0);
+            return;
+        }
+        if (column->is_constant() || !column->is_nullable()) {
+            return;
+        }
+        const auto nulls = down_cast<const NullableColumn*>(column.get())->immutable_null_column_data();
+        for (size_t i = 0; i < nulls.size(); ++i) {
+            (*not_null)[i] &= !nulls[i];
+        }
+    }
+
+    static ColumnPtr _non_null_rows(const ColumnPtr& column, const Filter& not_null, size_t num_not_null) {
+        if (column->is_constant()) {
+            return ConstColumn::create(down_cast<const ConstColumn*>(column.get())->data_column(), num_not_null);
+        }
+        auto data = FunctionHelper::get_data_column_of_nullable(column)->clone();
+        data->filter(not_null);
+        return data;
+    }
+};
+
+/**
  * First: execute PRODUCE_NULL_OP function
  * Then: union nullable column and the PRODUCE_NULL_OP's result column
  * Last: execute OP function
