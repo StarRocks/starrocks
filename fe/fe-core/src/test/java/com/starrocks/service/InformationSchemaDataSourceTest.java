@@ -1065,8 +1065,10 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
             Assertions.assertEquals("external jdbc table comment", tableInfo.getTable_comment());
         } finally {
             Config.enable_external_catalog_information_schema_tables_access_full_metadata = originFlag;
+            // mockJDBCCatalogImpl creates both jdbc0 and jdbc_postgres
             try {
                 ConnectorPlanTestBase.dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+                ConnectorPlanTestBase.dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME);
             } catch (Exception ignored) {
                 // catalog may be absent if mockCatalog failed
             }
@@ -1098,8 +1100,10 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
             Assertions.assertFalse(response.getTables_infos().isEmpty());
         } finally {
             Config.enable_external_catalog_information_schema_tables_access_full_metadata = originFlag;
+            // mockJDBCCatalogImpl creates both jdbc0 and jdbc_postgres
             try {
                 ConnectorPlanTestBase.dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+                ConnectorPlanTestBase.dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_PG_CATALOG_NAME);
             } catch (Exception ignored) {
                 // catalog may be absent if mockCatalog failed
             }
