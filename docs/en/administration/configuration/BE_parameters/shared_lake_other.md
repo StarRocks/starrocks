@@ -716,7 +716,7 @@ This topic introduces the following types of BE configurations:
 
 ### lake_clear_corrupted_cache_data
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
