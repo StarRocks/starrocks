@@ -110,7 +110,7 @@ TEST_F(LocalBucketShuffleTest, test_local_bucket_shuffle) {
     auto col = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 3, 0, 4, 0}, {0, 0, 0, 1, 0, 1});
     chunk->append_column(std::move(col), 1);
 
-    auto col_s = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    auto col_s = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     std::vector<Slice> strings{{"a"}, {"b"}, {"c"}, {"d"}, {"e"}};
     col_s->append_strings(strings.data(), strings.size());
     col_s->append_nulls(1);

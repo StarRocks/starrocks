@@ -343,7 +343,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanPrunedStruct) {
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildren) {
     TypeDescriptor map_type(TYPE_MAP);
-    map_type.children = {TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
+    map_type.children = {TYPE_VARCHAR_DESC, TYPE_INT_DESC};
     TypeDescriptor struct_type(TYPE_STRUCT);
     struct_type.field_names = {"value"};
     struct_type.children.emplace_back(TYPE_INT);
@@ -2072,7 +2072,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_pruned_map) {
 
     for (int pruned_child : {0, 1}) {
         TypeDescriptor type(TYPE_MAP);
-        type.children = {TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
+        type.children = {TYPE_VARCHAR_DESC, TYPE_INT_DESC};
         type.children[pruned_child] = TYPE_UNKNOWN_DESC;
         TypeDescriptor raw_type;
         ConvertFuncTree plan;

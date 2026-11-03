@@ -1384,7 +1384,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryPointWkbConstructorMatchesCodec) {
     for (const auto& bytes : values) input->append(Slice(bytes));
     const auto type = geometry_type("EPSG:4326", 4326);
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARBINARY), TypeDescriptor(TYPE_VARCHAR)}, type));
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARBINARY), TYPE_VARCHAR_DESC}, type));
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:4326", values.size());
     auto output = GeoFunctions::st_geom_from_wkb(context.get(), {input, crs});
     ASSERT_TRUE(output.ok()) << output.status();
@@ -3502,7 +3502,7 @@ TEST_F(geographyFunctionsTest, nativeGeoHistoricalFunctionIds) {
 TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
     const auto type = geometry_type();
     std::unique_ptr<FunctionContext> context(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, type));
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, type));
     auto wkt = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("POINT (1 2)"), 1);
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("EPSG:3857"), 1);
     auto value = GeoFunctions::st_geom_from_text(context.get(), {wkt, crs});

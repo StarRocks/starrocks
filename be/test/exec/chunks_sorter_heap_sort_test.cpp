@@ -164,7 +164,7 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
     {
         // clang-format off
         std::vector<TypeDescriptor*> type_descs = {_pool.add(new TypeDescriptor(TYPE_INT_DESC)),
-                                                   _pool.add(new TypeDescriptor(TYPE_VARCHAR))};
+                                                   _pool.add(new TypeDescriptor(TYPE_VARCHAR_DESC))};
         std::vector<BuildOptions> build_options = {
             {{}, true, false},
             {{Slice("value1"), Slice("value2"), Slice("value3")}, true, false}

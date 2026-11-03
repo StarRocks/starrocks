@@ -40,7 +40,7 @@ TEST(TypeToArrowConverterTest, MapsScalarAndNestedTypes) {
     auto list_type = std::static_pointer_cast<arrow::ListType>(type);
     EXPECT_EQ(arrow::Type::INT64, list_type->value_type()->id());
 
-    auto map = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TYPE_DOUBLE_DESC);
+    auto map = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_DOUBLE_DESC);
     ASSERT_OK(convert_to_arrow_type(map, &type));
     ASSERT_EQ(arrow::Type::MAP, type->id());
     auto map_type = std::static_pointer_cast<arrow::MapType>(type);
