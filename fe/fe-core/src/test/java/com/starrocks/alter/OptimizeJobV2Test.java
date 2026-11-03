@@ -21,6 +21,7 @@ import com.starrocks.alter.AlterJobV2.JobState;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -52,7 +53,9 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
@@ -766,6 +769,65 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    public void testLoadCreatesPartitionWhileJobWaitsForStableTable() throws Exception {
+        // The job waits for the table to become stable as long as a replica repair takes. A load that creates a
+        // partition by expression must not fail meanwhile, as it does not once the job runs (OPTIMIZE).
+        OlapTable table = createPartitionedTable("t_optimize_unstable_new_partition");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        AlterTableStmt optimize = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " DISTRIBUTED BY HASH(k1) BUCKETS 2", starRocksAssert.getCtx());
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        schemaChangeHandler.process(optimize.getAlterClauseList(), db, table);
+        OptimizeJobV2 job = (OptimizeJobV2) schemaChangeHandler.getUnfinishedAlterJobV2ByTableId(table.getId()).get(0);
+
+        Replica replica = ((LocalTablet) table.getPartition("p1").getDefaultPhysicalPartition().getLatestBaseIndex()
+                .getTablets().get(0)).getImmutableReplicas().get(0);
+        replica.setState(Replica.ReplicaState.DECOMMISSION);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.PENDING, job.getJobState());
+        Assertions.assertEquals(OlapTableState.WAITING_STABLE, table.getState());
+
+        AlterTableStmt addPartition = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " ADD PARTITION p3 VALUES LESS THAN ('30')", starRocksAssert.getCtx());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(starRocksAssert.getCtx(), db,
+                table.getName(), (AddPartitionClause) addPartition.getAlterClauseList().get(0));
+        Assertions.assertNotNull(table.getPartition("p3"));
+
+        // Once the table is stable, the job rewrites the partitions it was created for only.
+        replica.setState(Replica.ReplicaState.NORMAL);
+        job.runPendingJob();
+        Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
+        Assertions.assertEquals(2, job.getTmpPartitionIds().size());
+    }
+
+    @Test
+    public void testColumnChangeCancelledByPartitionCreatedDuringJob() throws Exception {
+        // A partition created while the job runs, as a load creates one by expression, keeps the old distribution
+        // columns: the job must not give the table new ones, or no load could write that partition with the others.
+        OlapTable table = createPartitionedTable("t_optimize_column_change_new_partition");
+        OptimizeJobV2 job = submitOptimize(table, "DISTRIBUTED BY HASH(v1) BUCKETS 2");
+        runToRunning(job);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
+        AlterTableStmt addPartition = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                "ALTER TABLE " + table.getName() + " ADD PARTITION p3 VALUES LESS THAN ('30')", starRocksAssert.getCtx());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(starRocksAssert.getCtx(), db,
+                table.getName(), (AddPartitionClause) addPartition.getAlterClauseList().get(0));
+
+        for (OptimizeTask task : job.getOptimizeTasks()) {
+            task.setOptimizeTaskState(Constants.TaskRunState.SUCCESS);
+        }
+        job.run();
+
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
+        Assertions.assertTrue(job.errMsg.contains("can not change distribution columns") && job.errMsg.contains("p3"),
+                job.errMsg);
+        Assertions.assertEquals(OlapTableState.NORMAL, table.getState());
+        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+        Assertions.assertEquals(List.of("k1"), MetaUtils.getColumnNamesByColumnIds(table.getIdToColumn(),
+                ((HashDistributionInfo) table.getDefaultDistributionInfo()).getDistributionColumns()));
+    }
+
+    @Test
     public void testOptimizeFailedByVersion() throws Exception {
         SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
@@ -1249,8 +1311,12 @@ public class OptimizeJobV2Test extends DDLTestBase {
      * job sees every earlier load as finished.
      */
     private static OptimizeJobV2 submitOptimize(OlapTable table) throws Exception {
+        return submitOptimize(table, "DISTRIBUTED BY HASH(k1) BUCKETS 2");
+    }
+
+    private static OptimizeJobV2 submitOptimize(OlapTable table, String clause) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(
-                "ALTER TABLE " + table.getName() + " DISTRIBUTED BY HASH(k1) BUCKETS 2", starRocksAssert.getCtx());
+                "ALTER TABLE " + table.getName() + " " + clause, starRocksAssert.getCtx());
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         SchemaChangeHandler handler = new SchemaChangeHandler();
         handler.process(stmt.getAlterClauseList(), db, table);
