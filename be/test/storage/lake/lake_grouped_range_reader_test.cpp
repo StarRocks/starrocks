@@ -38,6 +38,7 @@
 #include "storage/rowset/short_key_range_option.h"
 #include "test_util.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks::lake {
 namespace {
@@ -599,6 +600,53 @@ TEST_F(LakeGroupedRangeReaderTest, CancelledPhysicalRootPublishesNoChildren) {
                                                           &state.cancelled_ref());
     EXPECT_TRUE(result.status().is_cancelled());
     EXPECT_EQ(0, helper_stats.io_ns);
+}
+
+// A cancellation after real child creation must discard the partial, unpublished plan and queue.
+TEST_F(LakeGroupedRangeReaderTest, InFlightCancellationDiscardsPartialPhysicalPlan) {
+    auto meta = write_source(1, {0, 1, 2, 3});
+    auto schema = ChunkHelper::convert_schema(TabletSchema::create(meta->schema()));
+    TabletReader root(_tablet_mgr.get(), meta, schema, true, true);
+    ASSERT_OK(root.prepare());
+    RuntimeState state;
+    TInternalScanRange internal;
+    internal.__set_tablet_id(meta->id());
+    internal.__set_version(std::to_string(meta->version()));
+    TScanRange scan;
+    scan.__set_internal_scan_range(internal);
+    TabletReaderParams params;
+    params.scan_range = &scan;
+    params.runtime_state = &state;
+    params.grouped_range_task = task(0, 4);
+    params.scan_dop = 4;
+    params.splitted_scan_rows = 4;
+    std::weak_ptr<pipeline::MorselQueue> queue;
+    size_t children_created = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_callbacks([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletReader::open::split_task_added", [&](void* arg) {
+        const auto& children = *static_cast<std::vector<pipeline::ScanSplitContextPtr>*>(arg);
+        children_created = children.size();
+        const auto* context = dynamic_cast<pipeline::LakeSplitContext*>(children.back().get());
+        ASSERT_NE(nullptr, context);
+        queue = context->split_morsel_queue;
+        if (children_created == 2) state.set_is_cancelled(true);
+    });
+    EXPECT_TRUE(root.open(params).is_cancelled());
+    EXPECT_EQ(2, children_created);
+    EXPECT_GT(root.stats().io_ns, 0);
+    EXPECT_EQ(0, root.stats().raw_rows_read);
+    std::vector<pipeline::ScanSplitContextPtr> children;
+    root.get_split_tasks(&children);
+    RecordProperty("PartialChildrenBeforeCancel", children_created);
+    RecordProperty("UnpublishedChildrenAfterCancel", children.size());
+    RecordProperty("QueueReleased", queue.expired());
+    EXPECT_TRUE(children.empty());
+    EXPECT_TRUE(queue.expired());
+    root.close();
 }
 
 // The footer and short-key index are held, but the exact boundary key pages cannot be read.

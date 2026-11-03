@@ -21,6 +21,7 @@
 #include "common/status.h"
 #include "gutil/stl_util.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
@@ -46,6 +47,16 @@
 #include "util/json_flattener.h"
 
 namespace starrocks::lake {
+
+// The open loops below can run for minutes on a tablet with many segments, so they stop as soon as the
+// query is cancelled instead of opening the rest. A read without a RuntimeState (compaction, publish) is
+// never cancelled here.
+static Status check_cancelled(const TabletReaderParams& params, int64_t tablet_id) {
+    if (params.runtime_state != nullptr && params.runtime_state->is_cancelled()) {
+        return Status::Cancelled(fmt::format("cancelled while opening tablet:{}", tablet_id));
+    }
+    return Status::OK();
+}
 
 using ConjunctivePredicates = starrocks::ConjunctivePredicates;
 using Datum = starrocks::Datum;
@@ -233,15 +244,16 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                                            read_params.end_key);
         split_morsel_queue->set_tablet_schema(_tablet_schema);
 
+        bool split_plan_finished = false;
+        DeferOp discard_unpublished_grouped_splits([&] {
+            if (read_params.grouped_range_task != nullptr && !split_plan_finished) _split_tasks.clear();
+        });
         while (true) {
-            if (auto status = check_grouped_cancelled(); !status.ok()) {
-                _split_tasks.clear();
-                return status;
-            }
+            // Every split can load a rowset's segments (PhysicalSplitMorselQueue::_init_segment).
+            RETURN_IF_ERROR(check_cancelled(read_params, _tablet_metadata->id()));
             auto split_status_or = split_morsel_queue->try_get();
             if (UNLIKELY(!split_status_or.ok())) {
                 if (read_params.grouped_range_task != nullptr) {
-                    _split_tasks.clear();
                     return split_status_or.status();
                 }
                 LOG(WARNING) << "failed to get split morsel: " << split_status_or.status()
@@ -266,10 +278,12 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                 }
                 ctx->split_morsel_queue = split_morsel_queue;
                 _split_tasks.emplace_back(std::move(ctx));
+                TEST_SYNC_POINT_CALLBACK("TabletReader::open::split_task_added", &_split_tasks);
             } else {
                 break;
             }
         }
+        split_plan_finished = true;
 
     } else {
         return init_collector(read_params);
@@ -456,6 +470,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
     });
     for (auto& rowset : _rowsets) {
+        // Stop opening, and submitting, the remaining rowsets. Rowset::read() checks again per segment.
+        RETURN_IF_ERROR(check_cancelled(params, _tablet_metadata->id()));
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
