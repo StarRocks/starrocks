@@ -965,9 +965,9 @@ TEST_P(SchemaChangeMultiStatementTxnTest, test_statement_loading_another_table) 
     txn_info.add_load_ids()->CopyFrom(load_id_2);
     auto txns = std::span<const TxnInfoPB>(&txn_info, 1);
 
-    ASSERT_OK(publish_version(_tablet_manager.get(), PublishTabletInfo(base_tablet_id), version, version + 1, txns,
-                              false)
-                      .status());
+    ASSERT_OK(
+            publish_version(_tablet_manager.get(), PublishTabletInfo(base_tablet_id), version, version + 1, txns, false)
+                    .status());
     int64_t log_version = version + 1;
     ASSERT_OK(publish_log_version(_tablet_manager.get(), new_tablet_id, txns, &log_version));
     // FE retries when it lost the response.
