@@ -3,6 +3,17 @@ Version history
 
 **Unreleased**
 
+- Fix the `FILES()` storage, unload and format options to write the properties StarRocks reads (by @rad-pat):
+  - `AzureBlobStorage` takes `wasb://` and `wasbs://` paths instead of `azure://`, and adds `endpoint`, `storage_account` and `container`.
+  - `AzureDataLakeStorage1` takes `adl://` paths and writes `azure.adls1.*` properties. Its `oauth2_client_credential` and `oauth2_client_endpoint` arguments are now `oauth2_credential` and `oauth2_endpoint`; the old names still work but are deprecated.
+  - `AzureDataLakeStorage2` takes `abfs://` and `abfss://` paths, writes `azure.adls2.oauth2_use_managed_identity` instead of `oauth2_managed_identity`, and adds `sas_token`, `endpoint` and `oauth2_token_file`.
+  - A path with the wrong scheme raises `ValueError`. The Data Lake classes no longer take `wasb://` paths; use `AzureBlobStorage` for those.
+  - `FilesTargetOptions` writes `target_max_file_size` and `partition_by` instead of `target_max_files_size` and `partitioned_by`, which StarRocks ignored. The old argument names are deprecated but still work, so they now take effect: an unload with `partitioned_by` is partitioned, and fails where StarRocks refuses the partitioning, as with `single=True`.
+  - `CSVFormat(line_delimiter=...)` writes `csv.row_delimiter`, which StarRocks reads for unloading as well as loading, instead of `csv.line_delimiter`, which it ignored; the row delimiter now takes effect. `line_delimiter` is now a deprecated old name of `row_delimiter`. `CSVFormat` gains `include_header` for unloading.
+  - The deprecated argument names (`target_max_files_size`, `partitioned_by`, `line_delimiter`, `oauth2_client_credential` and `oauth2_client_endpoint`) issue a `DeprecationWarning`, and will be removed in a later release.
+  - Every property value is written as a string, a bool as `true` or `false`: `trim_space=True` and `use_legacy_encoding=True` used to be a bare `True`, which is a syntax error. A missing value, an enum, or any other value that isn't a string, number or bool raises `CompileError`.
+  - A `%` in a property value, as in a SAS token, is escaped for the driver instead of failing in pymysql's parameter formatting. Write it once: a `%%` doubled by hand now reaches StarRocks as `%%`.
+
 **1.3.5**
 
 - Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (#80015 by @chris-celerdata)
