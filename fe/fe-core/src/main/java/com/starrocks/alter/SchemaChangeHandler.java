@@ -44,6 +44,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -84,6 +85,7 @@ import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.ColocatePropertyInfo;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.WriteQuorum;
@@ -2552,6 +2554,17 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     /**
+     * Inactivates the materialized views that depend on {@code table}, as a routed range rewrite of the table does,
+     * and returns {@code builtJob}. Callers pass the job already built: a build that is rejected (e.g. by the colocate
+     * prefix rule) must leave the dependent materialized views active.
+     */
+    private static AlterJobV2 inactivatingDependentMvsAfter(OlapTable table, AlterJobV2 builtJob) {
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(table,
+                MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(table.getName()));
+        return builtJob;
+    }
+
+    /**
      * Build a {@link LakeRangeRewriteSchemaChangeJob} for a sort-key reorder
      * ({@code ALTER TABLE ... ORDER BY (...)}) on a shared-data range table. The column set and
      * keysType are unchanged; only the sort key is permuted, so the new schema is the base schema and
@@ -2672,6 +2685,8 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("Table[" + olapTable.getName() + "] is doing ROLLUP job");
         }
         Preconditions.checkState(olapTable.getState() == OlapTableState.NORMAL, olapTable.getState().name());
+        List<Column> newRoutingColumns = newRangeRoutingColumns(newSchema, keysType, sortKeyIdxes);
+        checkRangeColocatePrefix(olapTable, newRoutingColumns);
 
         final ComputeResource computeResource = resolveAndValidateComputeResource();
 
@@ -2683,7 +2698,127 @@ public class SchemaChangeHandler extends AlterHandler {
                 jobId, db.getId(), olapTable.getId(), olapTable.getName(), Config.alter_table_timeout_second * 1000L);
         populateRangeRewriteJob(job, newSchema, keysType, sortKeyIdxes, sortKeyUniqueIds,
                 shadowIndexMetaId, originIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+        job.setPinnedColocateWith(pinnedColocateWith(olapTable, newRoutingColumns));
         return job;
+    }
+
+    /**
+     * The columns a range rewrite's new base index routes by: the key columns for a PRIMARY KEY table, which
+     * never routes by a separate ORDER BY (see {@link MetaUtils#getRangeDistributionColumns}), otherwise the
+     * new sort key.
+     */
+    static List<Column> newRangeRoutingColumns(List<Column> newSchema, KeysType keysType,
+                                               List<Integer> sortKeyIdxes) {
+        if (keysType == KeysType.PRIMARY_KEYS) {
+            return newSchema.stream().filter(Column::isKey).collect(Collectors.toList());
+        }
+        return resolveSortKeyColumns(newSchema, sortKeyIdxes);
+    }
+
+    /**
+     * Rejects a new range routing key that does not start with the colocate columns of the table's range
+     * colocate group: the same columns, in the same order, with the types the group stores. Every member of
+     * the group is aligned on these leading columns. The colocate columns are the table's current first N
+     * routing columns, N being the group's colocate column count. Two columns are the same column when their
+     * unique ids are equal, or, when either has no unique id, when their names are equal: a table created
+     * before unique ids were assigned has the same unset id on every column. Does nothing for a table that
+     * is not in a range colocate group.
+     */
+    public static void checkRangeColocatePrefix(OlapTable table, List<Column> newRoutingColumns)
+            throws DdlException {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
+        if (groupId == null) {
+            return;
+        }
+        ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(groupId);
+        int colocateColumnCount = groupSchema.getColocateColumnCount();
+        List<Column> colocateColumns = MetaUtils.getRangeDistributionColumns(table).subList(0, colocateColumnCount);
+        boolean matches = newRoutingColumns.size() >= colocateColumnCount;
+        for (int i = 0; matches && i < colocateColumnCount; i++) {
+            Column newColumn = newRoutingColumns.get(i);
+            matches = isSameColumn(newColumn, colocateColumns.get(i))
+                    && newColumn.getType().equals(groupSchema.getDistributionColTypes().get(i));
+        }
+        if (!matches) {
+            throw new DdlException("The sort key of a " + (table.isMaterializedView() ? "materialized view" : "table")
+                    + " in a range colocate group must start with its colocate columns " + unprefixedNames(colocateColumns)
+                    + " (same order and types). Got: " + unprefixedNames(newRoutingColumns));
+        }
+    }
+
+    /**
+     * Whether the table's colocate_with is set while the table is in no range colocate group. A range table with
+     * the property is normally a member of a range colocate group; this one is not, e.g. after a crash replayed its
+     * CREATE TABLE without the colocate group membership (see {@link OlapTable#hasColocateGroup}). A change of its
+     * range routing key stays rejected: the colocate prefix rule and the aligned layout need the group.
+     */
+    public static boolean hasColocateWithOutsideRangeColocateGroup(OlapTable table) {
+        return table.hasColocateGroup()
+                && GlobalStateMgr.getCurrentState().getColocateTableIndex().getRangeColocateGroupId(table.getId()) == null;
+    }
+
+    /**
+     * The colocate_with value to set on the table when a change of its range routing key takes effect, or null to
+     * leave the property as it is. A colocate_with that names no columns ({@code 'g'}) stands for the whole routing
+     * key, so once the routing key is longer than the group's colocate column count N it no longer fits the group
+     * wherever the columns are derived from the property again (CREATE TABLE LIKE, restore). Such a change gets the
+     * explicit form {@code g:<current first N routing columns>}; the colocate prefix rule has made the new routing
+     * key start with those columns. The change is rejected when the explicit form, parsed again, would not name the
+     * same group and columns: the parser trims the group name and the column names of that form and splits the
+     * columns at ',', so a group name with a leading or trailing space would resolve to another group.
+     */
+    static String pinnedColocateWith(OlapTable table, List<Column> newRoutingColumns) throws DdlException {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getRangeColocateGroupId(table.getId());
+        if (groupId == null) {
+            return null;
+        }
+        ColocatePropertyInfo propertyInfo = ColocatePropertyInfo.of(table.getColocateGroup());
+        if (propertyInfo == null || propertyInfo.getColocateColumnNames() != null) {
+            return null;
+        }
+        int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+        if (newRoutingColumns.size() <= colocateColumnCount) {
+            return null;
+        }
+        List<String> colocateColumnNames = MetaUtils.getRangeDistributionColumns(table).subList(0, colocateColumnCount)
+                .stream().map(Column::getName).collect(Collectors.toList());
+        ColocatePropertyInfo pinnedInfo = new ColocatePropertyInfo(propertyInfo.getColocateGroupName(), colocateColumnNames);
+        String pinned = pinnedInfo.toString();
+        if (!pinnedInfo.equals(ColocatePropertyInfo.of(pinned))) {
+            String kind = table.isMaterializedView() ? "materialized view" : "table";
+            throw new DdlException("The colocate_with '" + table.getColocateGroup() + "' of " + kind + " "
+                    + table.getName() + " names only its colocate group and can not be written with an explicit "
+                    + "column list, so its sort key can not be made longer. Recreate the " + kind
+                    + " with 'colocate_with' = '<group>:<columns>'");
+        }
+        return pinned;
+    }
+
+    /**
+     * Sets the colocate_with that {@link #pinnedColocateWith} computed on the table as the routing key change takes
+     * effect; does nothing when it is null. The property named no columns and so stood for the old routing key; the
+     * pinned value names those columns instead. {@code logContext} names the job in the log.
+     */
+    static void applyPinnedColocateWith(OlapTable table, String pinnedColocateWith, String logContext) {
+        if (pinnedColocateWith == null) {
+            return;
+        }
+        table.setColocateGroup(pinnedColocateWith);
+        LOG.info("{}: colocate_with of table {} is set to '{}'", logContext, table.getName(), pinnedColocateWith);
+    }
+
+    private static boolean isSameColumn(Column column, Column other) {
+        if (column.getUniqueId() != Column.COLUMN_UNIQUE_ID_INIT_VALUE
+                && other.getUniqueId() != Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+            return column.getUniqueId() == other.getUniqueId();
+        }
+        return column.nameEquals(other.getName(), true);
+    }
+
+    private static List<String> unprefixedNames(List<Column> columns) {
+        return columns.stream().map(column -> Column.removeNamePrefix(column.getName())).collect(Collectors.toList());
     }
 
     /**
@@ -2733,17 +2868,18 @@ public class SchemaChangeHandler extends AlterHandler {
      *
      * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the AUTO_INCREMENT gate from
      * {@link #needsRangeRewriteSchemaChange}: an AUTO_INCREMENT row-id column implies a PRIMARY_KEYS MV,
+<<<<<<< HEAD
      * which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects. The colocate gate is re-checked
      * here because the statement resolves the MV by name again under the lock, and
+=======
+     * which {@code AlterMVClauseAnalyzer#validateKeysTypeRule} already rejects. Nor does it check the colocate prefix
+     * rule ({@link #checkRangeColocatePrefix}) itself: {@code AlterMVJobExecutor#visitReorderColumnsClause} runs every
+     * analysis rule of the statement, that one included, again on this MV under the lock, because
+>>>>>>> 99434f2add1... [Enhancement][RB-97] Support sort key changes on range colocate tables and materialized views (#68025)
      * {@code ALTER MATERIALIZED VIEW ... SWAP WITH} can have put a different MV under the analyzed name.
      */
     void submitMvSortKeyRewriteJob(Database db, MaterializedView mv, List<Integer> sortKeyIdxes,
                                    List<Integer> sortKeyUniqueIds) throws StarRocksException {
-        // The analyzer already rejects this, but the MV under this name may have been swapped in since.
-        if (mv.hasColocateGroup()) {
-            throw new DdlException("ALTER MATERIALIZED VIEW ... ORDER BY is not supported on a materialized view "
-                    + "with 'colocate_with'");
-        }
         long baseIndexMetaId = mv.getBaseIndexMetaId();
         List<Column> newSchema = mv.getSchemaByIndexMetaId(baseIndexMetaId);
         short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(newSchema, null, sortKeyIdxes);
@@ -2758,6 +2894,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 jobId, db.getId(), mv.getId(), mv.getName(), Config.alter_table_timeout_second * 1000L);
         populateRangeRewriteJob(job, newSchema, mv.getKeysType(), sortKeyIdxes, sortKeyUniqueIds,
                 shadowIndexMetaId, baseIndexMetaId, shadowIndexName, shortKeyColumnCount, computeResource);
+        job.setPinnedColocateWith(
+                pinnedColocateWith(mv, newRangeRoutingColumns(newSchema, mv.getKeysType(), sortKeyIdxes)));
 
         // Capture BEFORE any suspend: a user-paused refresh task (or an INACTIVE MV, whose task is
         // paused) must not be silently resumed on settle/replay.
@@ -3024,8 +3162,9 @@ public class SchemaChangeHandler extends AlterHandler {
                     // (a) Partition column cannot be dropped -- finalAnalyze's checkPartitionColumnChange
                     //     is bypassed by the early return. checkDistributionColumnChange checks nothing for a
                     //     non-colocate range table (RangeDistributionInfo.getDistributionColumns() ==
-                    //     emptyList), and range colocate tables never take this routed path, so it is
-                    //     intentionally not re-run: dropping a range sort-key column IS the routed operation.
+                    //     emptyList), and for a range colocate table the job builder applies the colocate
+                    //     prefix rule instead, so it is intentionally not re-run: dropping a range sort-key
+                    //     column IS the routed operation.
                     checkPartitionColumnChange(olapTable, postDropBaseSchema, olapTable.getBaseIndexMetaId(), null);
                     // (b) key-set invariants (>=1 key, keys form a prefix).
                     if (!rangeRewriteKeySchemaIsValid(postDropBaseSchema)) {
@@ -3061,8 +3200,6 @@ public class SchemaChangeHandler extends AlterHandler {
                         throw new DdlException("DROP COLUMN that changes the range sort key on a "
                                 + "range-distribution table can not be combined with other alter operations");
                     }
-                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
                     // Compute the EXPLICIT post-drop range sort key = current range sort key minus the
                     // dropped column, remapped to post-drop positions, and build the job directly. Do NOT
                     // use createRangeRewriteJob(List<Column>) (it forces sortKeyIdxes=null ->
@@ -3104,13 +3241,15 @@ public class SchemaChangeHandler extends AlterHandler {
                         // columns), as a range table with no explicit ORDER BY resolves. Guaranteed
                         // non-empty by the rangeRewriteKeySchemaIsValid check above (>=1 key remains).
                         short fallbackShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null);
-                        return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
-                                olapTable.getKeysType(), null, null, fallbackShortKeyCount);
+                        return inactivatingDependentMvsAfter(olapTable, buildRangeRewriteJob(db, olapTable,
+                                olapTable.getBaseIndexMetaId(), postDropBaseSchema, olapTable.getKeysType(), null, null,
+                                fallbackShortKeyCount));
                     }
                     short dropShortKeyCount =
                             GlobalStateMgr.calcShortKeyColumnCount(postDropBaseSchema, null, dropSortKeyIdxes);
-                    return buildRangeRewriteJob(db, olapTable, olapTable.getBaseIndexMetaId(), postDropBaseSchema,
-                            olapTable.getKeysType(), dropSortKeyIdxes, dropSortKeyUniqueIds, dropShortKeyCount);
+                    return inactivatingDependentMvsAfter(olapTable, buildRangeRewriteJob(db, olapTable,
+                            olapTable.getBaseIndexMetaId(), postDropBaseSchema, olapTable.getKeysType(), dropSortKeyIdxes,
+                            dropSortKeyUniqueIds, dropShortKeyCount));
                 }
             } else if (alterClause instanceof ModifyColumnClause) {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
@@ -3182,9 +3321,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     // column, which CREATE TABLE rejects when the emitted DDL is replayed.
                     checkZstdCompressionColumnsStillEligible(olapTable.getZstdCompressionColumnIds(),
                             postFlipBaseSchema);
-                    AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                            MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
-                    return createRangeRewriteJob(db, olapTable, postFlipBaseSchema);
+                    return inactivatingDependentMvsAfter(olapTable,
+                            createRangeRewriteJob(db, olapTable, postFlipBaseSchema));
                 }
             } else if (alterClause instanceof ModifyColumnCommentClause) {
                 // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
@@ -3234,12 +3372,13 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Integer> sortKeyUniqueIds = new ArrayList<>();
                     processModifySortKeyColumn((ReorderColumnsClause) alterClause, olapTable, indexMetaIdToSchema, sortKeyIdxes,
                             sortKeyUniqueIds);
+                    if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
+                        return inactivatingDependentMvsAfter(olapTable,
+                                createRangeRewriteJob(db, olapTable, sortKeyIdxes, sortKeyUniqueIds));
+                    }
                     // If optimized olap table contains related mvs, set those mv state to inactive.
                     AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
                             MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
-                    if (needsRangeRewriteSchemaChange(olapTable, alterClause)) {
-                        return createRangeRewriteJob(db, olapTable, sortKeyIdxes, sortKeyUniqueIds);
-                    }
                     return createJobForProcessModifySortKeyColumn(db.getId(), olapTable, sortKeyIdxes, sortKeyUniqueIds);
                 } else {
                     processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexMetaIdToSchema);
@@ -3331,10 +3470,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("MODIFY COLUMN that widens a range sort-key column on a "
                         + "range-distribution table can not be combined with other alter operations");
             }
-            AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableReorderColumns(olapTable.getName()));
-            return createRangeRewriteJobForKeyWiden(db, olapTable,
-                    indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId()));
+            return inactivatingDependentMvsAfter(olapTable, createRangeRewriteJobForKeyWiden(db, olapTable,
+                    indexMetaIdToSchema.get(olapTable.getBaseIndexMetaId())));
         }
 
         if (!fastSchemaEvolution) {
@@ -5118,9 +5255,11 @@ public class SchemaChangeHandler extends AlterHandler {
      * schema-evolution job carrying the per-tablet target range map -- each existing tablet boundary
      * reprojected with a trailing NULL sentinel for the new column. Returns null when the change is not
      * metadata-only or the async job could not be built, so the caller falls back to the K-tablet
-     * data-rewrite job.
+     * data-rewrite job. Throws when the table's colocate_with can not be pinned
+     * (see {@link #pinnedColocateWith}).
      */
-    private AlterJobV2 tryCreateMetadataOnlyTrailingKeyAddJob(OlapTable olapTable, SchemaChangeData schemaChangeData) {
+    private AlterJobV2 tryCreateMetadataOnlyTrailingKeyAddJob(OlapTable olapTable, SchemaChangeData schemaChangeData)
+            throws DdlException {
         if (!isMetadataOnlyTrailingKeyAdd(schemaChangeData)) {
             return null;
         }
@@ -5134,6 +5273,9 @@ public class SchemaChangeHandler extends AlterHandler {
         }
         LakeTableAsyncFastSchemaChangeJob asyncJob = (LakeTableAsyncFastSchemaChangeJob) job;
         asyncJob.setTargetRanges(computeTargetRanges(olapTable, newTrailingColumns));
+        List<Column> newSchema = schemaChangeData.getNewIndexMetaIdToSchema().get(olapTable.getBaseIndexMetaId());
+        asyncJob.setPinnedColocateWith(pinnedColocateWith(olapTable,
+                newRangeRoutingColumns(newSchema, olapTable.getKeysType(), schemaChangeData.getSortKeyIdxes())));
         return asyncJob;
     }
 
@@ -5383,16 +5525,16 @@ public class SchemaChangeHandler extends AlterHandler {
         if (!table.isCloudNativeTable() || !table.isRangeDistribution()) {
             return false;
         }
-        // Range-colocate tables stay rejected (returning false here keeps the existing range-distribution
-        // rejection on both the reorder and keyness-flip paths). A colocate table's tablets must stay
-        // range-aligned with its ColocateRangeMgr expected ranges; the rewrite samples a fresh K-tablet
-        // layout independently, which would desync colocate scan/join routing after the flip.
+        // A table in a range colocate group is routed as well: the job builder rejects a new routing key
+        // that does not start with the group's colocate columns (checkRangeColocatePrefix). A table whose
+        // colocate_with is set but that is in no range colocate group is not routed, which keeps the
+        // range-distribution rejection for it (hasColocateWithOutsideRangeColocateGroup).
         // AUTO_INCREMENT is rejected only for a PRIMARY KEY table whose AUTO_INCREMENT column is a non-key
         // column: a partial update that omits it allocates ids per tablet, so during the job a new key
         // would get one id in the base index and another in the shadow index, and the row's id would change
         // at the flip. Other AUTO_INCREMENT tables are safe: the sink fills the value once per row before
         // fan-out, and the rewrite copies existing values verbatim.
-        if (table.hasColocateGroup() || hasNonKeyAutoIncrementColumnOnPrimaryKey(table)) {
+        if (hasColocateWithOutsideRangeColocateGroup(table) || hasNonKeyAutoIncrementColumnOnPrimaryKey(table)) {
             return false;
         }
         // Tables with user rollup / synchronous-MV indexes beyond the base index are not eligible:
@@ -5773,7 +5915,8 @@ public class SchemaChangeHandler extends AlterHandler {
      * <ul>
      *   <li>the table is a shared-data (cloud-native) range-distribution table;</li>
      *   <li>the table has exactly one index meta (no rollup / synchronous MV);</li>
-     *   <li>the table is not a colocate table and has no temp partitions;</li>
+     *   <li>the table has no temp partitions (a table in a range colocate group is eligible: appending
+     *       the same NULL sentinel to every tablet bound keeps each tablet inside its colocate range);</li>
      *   <li>the table's keysType is DUP_KEYS, AGG_KEYS, or UNIQUE_KEYS (not PRIMARY_KEYS);</li>
      *   <li>the base index's resolved schema adds one or more brand-new key columns (unique ids not
      *       present in the current live schema -- excludes promoting an existing value column to key),
@@ -5794,8 +5937,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (table.getIndexMetaIdToMeta().size() != 1) {
             return false;
         }
-        if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(table.getId())
-                || table.existTempPartitions()) {
+        if (table.existTempPartitions()) {
             return false;
         }
         KeysType keysType = table.getKeysType();

@@ -14,9 +14,11 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Sets;
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddMVColumnClause;
@@ -32,6 +34,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -167,9 +170,9 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
             throw new SemanticException("ALTER MATERIALIZED VIEW ... ORDER BY is only supported on "
                     + "range-distributed materialized views");
         }
-        // The rewrite builds the shadow tablets without regard to the colocate group's range layout, which
-        // leaves the MV unaligned with the group; reject until an aligned rewrite is supported.
-        if (mv.hasColocateGroup()) {
+        // A materialized view in a range colocate group is rewritten aligned with the group; one whose colocate_with
+        // is set but that is in no range colocate group has no group to align with.
+        if (SchemaChangeHandler.hasColocateWithOutsideRangeColocateGroup(mv)) {
             throw new SemanticException("ALTER MATERIALIZED VIEW ... ORDER BY is not supported on a materialized view "
                     + "with 'colocate_with'");
         }
@@ -182,6 +185,7 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
 
         List<Column> baseSchema = mv.getSchemaByIndexMetaId(mv.getBaseIndexMetaId());
         Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        List<Column> newSortKeyColumns = new ArrayList<>(orderBy.size());
         for (String name : orderBy) {
             Column column = baseSchema.stream().filter(c -> c.getName().equalsIgnoreCase(name)).findFirst()
                     .orElseThrow(() -> new SemanticException("ORDER BY column '" + name + "' does not exist "
@@ -192,8 +196,16 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
             if (!column.getType().canDistributedBy()) {
                 throw new SemanticException("ORDER BY column '" + name + "' has a type that cannot be a sort key");
             }
+            newSortKeyColumns.add(column);
         }
         validateKeysTypeRule(mv, orderBy);
+        // The keys types the rule above lets through all route by their sort key, so the new sort key is the new routing
+        // key, and in a range colocate group it must start with the group's colocate columns.
+        try {
+            SchemaChangeHandler.checkRangeColocatePrefix(mv, newSortKeyColumns);
+        } catch (DdlException e) {
+            throw new SemanticException(e.getMessage(), e);
+        }
         // Column validation above is case-insensitive, so compare the same way here: `ORDER BY (K1)` on
         // an existing `k1` sort key is a no-op and must be rejected too.
         if (equalsIgnoreCaseInOrder(orderBy, currentMvSortKeys(mv))) {
