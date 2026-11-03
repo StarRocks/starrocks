@@ -100,14 +100,16 @@ git push -u origin release-notes-<new_tag>
 gh pr create --title "[Doc] Add release notes for StarRocks v<new_tag>" --body-file <body>
 ```
 
-Fill `.github/PULL_REQUEST_TEMPLATE.md` for the body:
+Start the body from a verbatim copy of `.github/PULL_REQUEST_TEMPLATE.md` and edit it in place:
+keep every heading, question and checkbox row, including the "I have checked the version
+labels" row and the "If yes" change types; only write the sections and set the boxes below.
 - **What type of PR**: check `- [x] Doc`.
 - **Change in behavior**: check `- [x] No` (the notes themselves don't change product
   behavior).
 - **Checklist**: this PR *is* the user documentation; leave test-case boxes unchecked.
-- **Bugfix cherry-pick branch check**: this is a docs PR, not a code backport — copy the
-  version rows exactly as the template lists them (same versions, same order; do not take
-  them from this skill or an older PR) and leave them unchecked unless the user says otherwise.
+- **Bugfix cherry-pick branch check**: this is a docs PR, not a code backport — leave this
+  section as the template has it (its versions, order and indentation) with every box unchecked
+  unless the user says otherwise.
 - Append the **"Needs reviewer confirmation"** list under "What I'm doing" so reviewers
   verify the flagged entries.
 
