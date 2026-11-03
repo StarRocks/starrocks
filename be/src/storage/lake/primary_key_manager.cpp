@@ -1258,7 +1258,8 @@ Status PrimaryKeyManager::_do_delete(uint32_t del_id, uint32_t del_rssid, const 
     const bool has_prebuilt_del_sst = op_write.del_ssts_size() == op_write.dels_meta_size() &&
                                       op_write.del_sst_ranges_size() == op_write.dels_meta_size() &&
                                       !op_write.del_ssts(del_id).name().empty();
-    if (has_prebuilt_del_sst && use_cloud_native_pk_index(*params.metadata)) {
+    if (has_prebuilt_del_sst && params.metadata->enable_persistent_index() &&
+        params.metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE) {
         RETURN_IF_ERROR(index.bulk_erase(*state.deletes(del_id), new_deletes, del_rssid, op_write.del_ssts(del_id),
                                          op_write.del_sst_ranges(del_id), params.metadata->version()));
     } else {
