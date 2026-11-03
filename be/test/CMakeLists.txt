@@ -404,11 +404,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/unique_rowset_id_generator_test.cpp
     ./storage/rowset_update_state_test.cpp
     ./storage/rowset/zone_map_index_test.cpp
-<<<<<<< HEAD
-=======
-    ./storage/pk_publish_config_test.cpp
     ./storage/query/range_group_task_test.cpp
->>>>>>> 3a2dd424a6a... [Enhancement][RB-533] Add backend execution for grouped range scans (#67449)
     ./storage/rows_mapper_test.cpp
     ./storage/row_store_encoder_test.cpp
     ./storage/schema_change_test.cpp

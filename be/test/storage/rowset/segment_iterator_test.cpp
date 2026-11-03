@@ -2514,15 +2514,28 @@ TEST_F(SegmentIteratorTest, GroupedRowidChildrenPreserveSparseQueryAndOwnershipI
         return rows;
     };
     EXPECT_EQ((std::vector<int64_t>{36, 37, 38, 39, 72, 73, 74, 75, 76, 77, 82, 83}), read_rows());
-    // Exercise the conservative seek envelope before batch decoding, whose ranges must be ascending.
+    // Reversed sparse ranges still need a conservative envelope for exact ownership seeks.
     opts.rowid_range_option->split_and_reverse(opts.rowid_range_option->size(), 128);
     OlapReaderStatistics reverse_stats;
-    opts.stats = &reverse_stats;
-    ASSIGN_OR_ABORT(auto reversed, segment->new_iterator(read_schema, opts));
-    ASSERT_OK(reversed->init());
+    auto reverse_opts = opts;
+    reverse_opts.stats = &reverse_stats;
+    // OSS initializes on the first read. Keep each batch within one sparse range.
+    reverse_opts.chunk_size = 1;
+    ASSIGN_OR_ABORT(auto reversed, segment->new_iterator(read_schema, reverse_opts));
+    auto reversed_chunk = ChunkFactory::new_chunk(read_schema, 1);
+    std::vector<int64_t> reversed_rows;
+    while (true) {
+        reversed_chunk->reset();
+        auto status = reversed->get_next(reversed_chunk.get());
+        if (status.is_end_of_file()) break;
+        ASSERT_OK(status);
+        ASSERT_EQ(1, reversed_chunk->num_rows());
+        reversed_rows.push_back(reversed_chunk->get(0)[1].get_int64());
+    }
+    std::sort(reversed_rows.begin(), reversed_rows.end());
+    EXPECT_EQ((std::vector<int64_t>{36, 37, 38, 39, 72, 73, 74, 75, 76, 77, 82, 83}), reversed_rows);
     EXPECT_EQ(44, reverse_stats.rows_after_key_range);
     reversed->close();
-    opts.stats = &stats;
 
     opts.ranges.clear();
     opts.rowid_range_option = std::make_shared<SparseRange<>>(Range<>(19, 25));

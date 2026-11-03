@@ -554,18 +554,10 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         std::shared_ptr<pipeline::SplitMorselQueue> split_morsel_queue = nullptr;
 
         if (_could_split_physically) {
-            split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
+            auto physical_split_morsel_queue = std::make_shared<pipeline::PhysicalSplitMorselQueue>(
                     std::move(morsels), read_params.scan_dop, read_params.splitted_scan_rows);
-<<<<<<< HEAD
-=======
-            // A vector-index scan searches the index once per segment, so a sub-segment split would
-            // repeat the whole search in every child. Split at segment boundaries instead. The queue is
-            // shared with every other query, hence the vector-index conjunct.
-            physical_split_morsel_queue->set_split_at_segment_boundary(read_params.use_vector_index &&
-                                                                       read_params.split_at_segment_boundary);
             physical_split_morsel_queue->set_candidate_rowid_ranges(std::move(grouped_candidates));
             split_morsel_queue = std::move(physical_split_morsel_queue);
->>>>>>> 3a2dd424a6a... [Enhancement][RB-533] Add backend execution for grouped range scans (#67449)
         } else {
             // logical
             split_morsel_queue = std::make_shared<pipeline::LogicalSplitMorselQueue>(
