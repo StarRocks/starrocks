@@ -1,0 +1,53 @@
+-- name: test_cse_conditional_throw_mode
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t1 (id int, xs array<int>, j varchar(100)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t1 values (1, [], 'invalid');
+-- result:
+-- !result
+set sql_mode = concat(@@sql_mode, ',ALLOW_THROW_EXCEPTION');
+-- result:
+-- !result
+select if(id > 0, null, cast(cast(parse_json(j) as varchar) as int)), if(id > 0, null, cast(cast(parse_json(j) as varchar) as int) + 1) from t1;
+-- result:
+None	None
+-- !result
+select case when id > 0 then 0 else cast(cast(parse_json(j) as varchar) as int) end, case when id > 0 then 1 else cast(cast(parse_json(j) as varchar) as int) + 1 end from t1;
+-- result:
+0	1
+-- !result
+select id > 0 or cast(cast(parse_json(j) as varchar) as int) > 0, id > 0 or cast(cast(parse_json(j) as varchar) as int) > 1 from t1;
+-- result:
+1	1
+-- !result
+select array_map(x -> if(x > 0, 0, cast(cast(parse_json(j) as varchar) as int)) + if(x > 1, 0, cast(cast(parse_json(j) as varchar) as int) + 1), xs) from t1;
+-- result:
+[]
+-- !result
+function: assert_query_error_contains("select cast(cast(parse_json(j) as varchar) as int), if(id > 0, null, cast(cast(parse_json(j) as varchar) as int) + 1) from t1", "cast from VARCHAR(invalid) to INT failed")
+-- result:
+None
+-- !result
+create table t2 (id int) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t2 select generate_series from table(generate_series(1, 1000));
+-- result:
+-- !result
+select count(*) from (select if(id > 0, r, 0) a, if(id > 0, r, 1) b from (select id, rand() r from t2) s) t where a = b;
+-- result:
+1000
+-- !result
+select count(*) from (select if(id > 0, r, 0) a, if(id > 0, r, 1) b from (select id, array_sum([rand(), cast(id as double)]) r from t2) s) t where a = b;
+-- result:
+1000
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
