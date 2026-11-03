@@ -136,6 +136,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             } // end for physicalPartition
             schemaChangeJob.addIndexSchema(shadowIndexMetaId, originIndexMetaId, newIndexName, newShortKeyColumnCount,
                     entry.getValue());
+            if (indexSortKeyIdxes.containsKey(originIndexMetaId)) {
+                schemaChangeJob.setIndexSortKey(shadowIndexMetaId, indexSortKeyIdxes.get(originIndexMetaId),
+                        indexSortKeyUniqueIds.get(originIndexMetaId));
+            }
         } // end for index
         return schemaChangeJob;
     }

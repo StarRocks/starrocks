@@ -35,7 +35,7 @@ TEST(ResultToArrowConverterExecPrimitiveTest, BuildsSchemaAndConvertsChunkThroug
     constexpr TupleId kTupleId = 2;
     constexpr SlotId kSlotId = 5;
 
-    ColumnRef ref(TypeDescriptor(TYPE_INT), kSlotId);
+    ColumnRef ref(TYPE_INT_DESC, kSlotId);
     ref.set_tuple_id(kTupleId);
     ExprContext expr_context(&ref);
     RuntimeState runtime_state{TQueryGlobals()};
@@ -71,8 +71,7 @@ TEST(ResultToArrowConverterExecPrimitiveTest, ConvertsChunkBySlotIds) {
     chunk.append_column(std::move(column), kSlotId);
 
     auto schema = arrow::schema({arrow::field("v", arrow::int32(), false)});
-    TypeDescriptor type(TYPE_INT);
-    std::vector<const TypeDescriptor*> slot_types{&type};
+    std::vector<const TypeDescriptor*> slot_types{&TYPE_INT_DESC};
     std::vector<SlotId> slot_ids{kSlotId};
 
     std::shared_ptr<arrow::RecordBatch> batch;

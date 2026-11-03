@@ -926,6 +926,66 @@ public class LakeTableIndexFastPathJobTest {
         assertEquals(expectedRows, restoredRows);
     }
 
+    /**
+     * A load that commits while the job alters the tablets takes a version below the one the job commits, so the
+     * gtid that labels the job's version must be drawn after the load's: when the job reserves the version, and
+     * journaled with the reservation so that a job resumed from that entry, or a force cancel of it, publishes
+     * the version under the same gtid.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        OlapTable table = createTable("t_commit_version_gtid", "c0 INT, c1 INT, INDEX idx_c1 (c1) USING BITMAP");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        ConcurrentLoad.holdPublishDaemon();
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask batchTask) {
+            }
+        };
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion, long newVersion,
+                                       ComputeResource computeResource, boolean useAggregatePublish) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+            }
+        };
+        LakeTableIndexFastPathJobBase job = submitAlter(table, "DROP INDEX idx_c1");
+        job.run();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+
+        TransactionState load = ConcurrentLoad.commit(db, table);
+        job.batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+        job.run();
+        assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        ConcurrentLoad.makeVisible(db, load);
+        runToFinished(job);
+
+        long loadVersion = ConcurrentLoad.versionIn(load, table,
+                table.getAllPhysicalPartitions().iterator().next().getId());
+        assertFalse(publishedTxns.isEmpty());
+        assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        // BE reads an unset gtid as 0.
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid == null ? 0L : txn.gtid)
+                .collect(Collectors.toSet());
+        assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        assertTrue(load.getGlobalTransactionId() > 0);
+        assertTrue(commitGtid > load.getGlobalTransactionId(), "commit version gtid " + commitGtid
+                + " is not after the gtid " + load.getGlobalTransactionId() + " of the load committed below it");
+
+        LakeTableIndexFastPathJobBase finishedRewritingEntry = readJournaledEntries(job.getJobId()).stream()
+                .filter(entry -> entry.getJobState() == AlterJobV2.JobState.FINISHED_REWRITING)
+                .findFirst().orElseThrow();
+        publishedTxns.clear();
+        assertTrue(finishedRewritingEntry.lakePublishVersion());
+        assertTrue(finishedRewritingEntry.lakePublishVersionWithSkip("force cancel"));
+        assertTrue(publishedTxns.stream().anyMatch(txn -> Boolean.TRUE.equals(txn.noOpPublish)));
+        assertEquals(Set.of(commitGtid), publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet()));
+    }
+
     @Test
     public void testAddIndexJobReplayedFromJournalSendsTheIndexes() throws Exception {
         OlapTable table = createTable("t_add_index_journal", "c0 INT, c1 INT, c2 INT");

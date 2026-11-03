@@ -1311,9 +1311,7 @@ TEST_F(VecMathFunctionsTest, AbsDecimalNullableAllNullPreservesScale) {
 
     ColumnPtr result = MathFunctions::abs_decimal128(ctx.get(), columns).value();
     ASSERT_TRUE(result->is_nullable());
-    ASSERT_EQ(2, result->size());
-    ASSERT_TRUE(result->is_null(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[NULL, NULL]", result->debug_string());
 
     auto result_data =
             ColumnHelper::cast_to<TYPE_DECIMAL128>(FunctionHelper::get_data_column_of_nullable(result)).get();

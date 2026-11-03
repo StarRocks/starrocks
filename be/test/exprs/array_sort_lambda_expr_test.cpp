@@ -279,7 +279,7 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     add_node.type = gen_type_desc(TPrimitiveType::INT);
     auto* add_expr = _pool.add(VectorizedArithmeticExprFactory::from_thrift(add_node));
     add_expr->add_child(array_length(slot_ref(kArgX, TYPE_ARRAY_INT_DESC)));
-    add_expr->add_child(slot_ref(kZ, TypeDescriptor(TYPE_INT)));
+    add_expr->add_child(slot_ref(kZ, TYPE_INT_DESC));
 
     TExprNode tlambda_inner;
     tlambda_inner.opcode = TExprOpcode::ADD;
@@ -291,7 +291,7 @@ TEST_F(ArraySortLambdaExprTest, nested_array_map_in_comparator_captures_arg) {
     tlambda_inner.type = gen_type_desc(TPrimitiveType::INT);
     auto* inner_lambda = _pool.add(new LambdaFunction(tlambda_inner));
     inner_lambda->add_child(add_expr);
-    inner_lambda->add_child(slot_ref(kZ, TypeDescriptor(TYPE_INT)));
+    inner_lambda->add_child(slot_ref(kZ, TYPE_INT_DESC));
 
     auto* inner_map = _pool.add(new ArrayMapExpr(TYPE_ARRAY_INT_DESC));
     inner_map->clear_children();

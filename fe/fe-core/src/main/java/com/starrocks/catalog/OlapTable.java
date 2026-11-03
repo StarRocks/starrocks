@@ -304,6 +304,11 @@ public class OlapTable extends Table {
 
     protected Map<Long, Long> doubleWritePartitions = new HashMap<>();
 
+    // Online optimize: temp partition id -> the source partition version its rewrite copies. Absent until the
+    // job fixes it; until then a load committing a double write leaves the temp partition out, because the
+    // rewrite will copy that load from the source partition. See OnlineOptimizeJobV2.fixRewriteVersion.
+    protected Map<Long, Long> doubleWriteRewriteVersions = new HashMap<>();
+
     // Both the following two flags are used by StarMgrMetaSyncer
     private long lastCollectProfileTime = 0;
 
@@ -491,10 +496,24 @@ public class OlapTable extends Table {
 
     public void clearDoubleWritePartition() {
         doubleWritePartitions.clear();
+        doubleWriteRewriteVersions.clear();
     }
 
     public Map<Long, Long> getDoubleWritePartitions() {
         return doubleWritePartitions;
+    }
+
+    public void setDoubleWriteRewriteVersion(long tempPartitionId, long version) {
+        doubleWriteRewriteVersions.put(tempPartitionId, version);
+    }
+
+    /**
+     * The source partition version the online optimize rewrite of this temp partition copies, or null while the job
+     * has not fixed it yet.
+     */
+    @Nullable
+    public Long getDoubleWriteRewriteVersion(long tempPartitionId) {
+        return doubleWriteRewriteVersions.get(tempPartitionId);
     }
 
     public boolean hasShardGroupChanged() {
@@ -1489,9 +1508,26 @@ public class OlapTable extends Table {
     }
 
     /**
+     * Drop a partition. A force drop with a positive `retentionPeriod` (seconds) is still non-recoverable but
+     * keeps the partition's tablets for that period, see `dropPartitionWithRetention`. With 0 the table's own
+     * force drop applies: the tablets go on the next recycle bin pass (MaterializedView keeps them for a
+     * while, see its override).
+     */
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop, long retentionPeriod) {
+        if (isForceDrop && retentionPeriod > 0) {
+            dropPartitionWithRetention(dbId, partitionName, retentionPeriod);
+        } else {
+            dropPartition(dbId, partitionName, isForceDrop);
+        }
+    }
+
+    /**
      *  Try to retain the partition for a while to avoid tablet missing errors.
      *  This method is used in `insert overwrite`, `mv rewrite` etc. scenarios,
      *  where we don't want to delete data immediately
+     *
+     *  It is always a force drop: the partition cannot be recovered, only the erase of its tablets waits
+     *  for `partitionRetentionPeriod` seconds.
      *
      *  This method is not thread safe. The caller should ensure that this method is called under lock.
      */
@@ -1510,8 +1546,9 @@ public class OlapTable extends Table {
 
             removePartitionFromInnerState(partition);
         } else {
-            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully
-            dropPartition(dbId, partitionName, true);
+            // if `partitionRetentionPeriod` is not valid, fallback to drop partition forcefully.
+            // Call the private variant: MaterializedView overrides the public one to call back here.
+            dropPartition(dbId, partitionName, true, false);
         }
     }
 

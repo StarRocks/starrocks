@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
@@ -44,11 +45,13 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.EditLog;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
@@ -62,12 +65,15 @@ import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -81,10 +87,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 public class MergeTabletJobTest {
     protected static ConnectContext connectContext;
@@ -233,6 +242,119 @@ public class MergeTabletJobTest {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().getRecycleBin()
                 .isMaterializedIndexRecycled(beforeMergeIndex.getId()));
     }
+
+    /**
+     * A load that commits while the job creates the merged shards takes a version below the one the job
+     * commits, so the gtid that labels the job's version must be drawn after the load's, when the job reserves
+     * the version.
+     */
+    @Test
+    public void testCommitVersionGtid() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ConcurrentLoad.holdPublishDaemon();
+        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
+        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
+        new MockUp<Utils>() {
+            @Mock
+            public void publishVersion(Invocation invocation, List<Tablet> tablets, TxnInfoPB txnInfo,
+                                       long baseVersion, long newVersion, Map<Long, Double> compactionScores,
+                                       Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
+                                       Map<Long, TabletStatPB> tabletStats, boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
+                publishedTxns.add(txnInfo);
+                publishedVersions.add(newVersion);
+                invocation.proceed();
+            }
+        };
+        AtomicReference<TransactionState> load = new AtomicReference<>();
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForMerge(Invocation invocation, Map<Long, List<Long>> newToOldShardIds,
+                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo, Map<String, String> properties,
+                                             ComputeResource computeResource) throws Exception {
+                load.set(ConcurrentLoad.commit(db, table));
+                invocation.proceed();
+            }
+        };
+
+        mergeJob.init();
+        mergeJob.run();
+        // The job waits for the load, which holds the version below the one the job reserved.
+        Assertions.assertEquals(TabletReshardJob.JobState.PREPARING, mergeJob.getJobState());
+        ConcurrentLoad.makeVisible(db, load.get());
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (mergeJob.getJobState() != TabletReshardJob.JobState.FINISHED) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs,
+                    "job is still " + mergeJob.getJobState());
+            mergeJob.run();
+            Thread.sleep(10);
+        }
+
+        long loadVersion = ConcurrentLoad.versionIn(load.get(), table, physicalPartition.getId());
+        Assertions.assertFalse(publishedTxns.isEmpty());
+        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
+        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
+        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
+        long commitGtid = publishedGtids.iterator().next();
+        Assertions.assertTrue(load.get().getGlobalTransactionId() > 0);
+        Assertions.assertTrue(commitGtid > load.get().getGlobalTransactionId(),
+                "commit version gtid " + commitGtid + " is not after the gtid " + load.get().getGlobalTransactionId()
+                        + " of the load committed below it");
+    }
+
+    /**
+     * A load that committed after the job reserved its version but before the job journaled the reservation would
+     * reach the journal first, so a leader change in between would leave the reserved version to no one and the
+     * partition stuck behind it. Such a load has to wait for the reservation's journal entry, then takes the next
+     * version.
+     */
+    @Test
+    public void testCommitVersionJournaledBeforeNextLoad() throws Exception {
+        MergeTabletJob mergeJob = createMergeTabletReshardJob();
+        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        ConcurrentLoad.holdPublishDaemon();
+        long loadId = ConcurrentLoad.begin(db, table);
+        AtomicLong nextVersionWhenJournaled = new AtomicLong();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUpdateTabletReshardJob(Invocation invocation, TabletReshardJob job) {
+                boolean reservationEntry = job.getJobState() == TabletReshardJob.JobState.PREPARING;
+                if (reservationEntry) {
+                    ConcurrentLoad.tryCommit(db, table, loadId, 100);
+                }
+                invocation.proceed();
+                if (reservationEntry) {
+                    nextVersionWhenJournaled.set(physicalPartition.getNextVersion());
+                }
+            }
+        };
+        long reservedVersion = physicalPartition.getNextVersion();
+
+        mergeJob.init();
+        mergeJob.runPendingJob();
+
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        Assertions.assertEquals(TransactionStatus.PREPARE,
+                txnMgr.getTransactionState(db.getId(), loadId).getTransactionStatus());
+        Assertions.assertEquals(reservedVersion + 1, nextVersionWhenJournaled.get());
+        TransactionState load = ConcurrentLoad.commit(db, table, loadId);
+        Assertions.assertEquals(reservedVersion + 1, ConcurrentLoad.versionIn(load, table, physicalPartition.getId()));
+
+        // The job publishes the version it reserved, then waits in CLEANING for the load above it.
+        long deadlineMs = System.currentTimeMillis() + 60_000L;
+        while (mergeJob.getJobState() != TabletReshardJob.JobState.CLEANING) {
+            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + mergeJob.getJobState());
+            mergeJob.run();
+            Thread.sleep(10);
+        }
+        ConcurrentLoad.makeVisible(db, load);
+        mergeJob.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
+    }
+
 
     @Test
     public void testRunMergeBumpsOptimisticVersion() throws Exception {

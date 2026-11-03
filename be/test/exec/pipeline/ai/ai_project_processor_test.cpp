@@ -561,7 +561,7 @@ TEST(AIProjectProcessorTest, TypedResponseValidationRespectsOnErrorOnTheSourceDr
         SCOPED_TRACE(on_error);
         auto buffer = make_input_buffer();
         auto projection = std::make_shared<RecordingProjection>();
-        projection->result_type = TypeDescriptor(TYPE_BOOLEAN);
+        projection->result_type = TYPE_BOOLEAN_DESC;
         projection->result_kind = AIFunctionResultKind::BOOLEAN;
         auto submitter = std::make_shared<ManualTaskSubmitter>();
         auto processor = make_processor(buffer, projection, submitter, on_error);
@@ -674,7 +674,7 @@ TEST(AIProjectProcessorTest, TypedFailureStatisticsSurviveLaterMaterializationFa
 TEST(AIProjectProcessorTest, TypedFailureStatisticsStayLaneLocalAndAggregateAtQueryLevel) {
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
-    projection->result_type = TypeDescriptor(TYPE_BOOLEAN);
+    projection->result_type = TYPE_BOOLEAN_DESC;
     projection->result_kind = AIFunctionResultKind::BOOLEAN;
     auto submitter = std::make_shared<ManualTaskSubmitter>();
     auto processor = make_processor(buffer, projection, submitter, "ignore", 2);
@@ -705,7 +705,7 @@ TEST(AIProjectProcessorTest, TypedFailureStatisticsStayLaneLocalAndAggregateAtQu
 TEST(AIProjectProcessorTest, TypedFailureAccountingDoesNotRecountDispatcherFailuresOrNullInputs) {
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
-    projection->result_type = TypeDescriptor(TYPE_BOOLEAN);
+    projection->result_type = TYPE_BOOLEAN_DESC;
     projection->result_kind = AIFunctionResultKind::BOOLEAN;
     projection->row_actions = {AIFunctionRowAction::DISPATCH, AIFunctionRowAction::DISPATCH,
                                AIFunctionRowAction::SQL_NULL};
@@ -734,7 +734,7 @@ TEST(AIProjectProcessorTest, TypedFailureAccountingDoesNotRecountDispatcherFailu
 TEST(AIProjectProcessorTest, SourceFinishDoesNotValidateDiscardedTypedResponses) {
     auto buffer = make_input_buffer();
     auto projection = std::make_shared<RecordingProjection>();
-    projection->result_type = TypeDescriptor(TYPE_BOOLEAN);
+    projection->result_type = TYPE_BOOLEAN_DESC;
     projection->result_kind = AIFunctionResultKind::BOOLEAN;
     auto submitter = std::make_shared<ManualTaskSubmitter>();
     auto processor = make_processor(buffer, projection, submitter);

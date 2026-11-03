@@ -188,7 +188,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When `true`, partition creation (manual `ALTER TABLE ... ADD PARTITION`, automatic creation during loading, and the dynamic partition scheduler) is allowed to proceed concurrently with metadata-only alter operations that are provably safe — currently the shared-data ADD/DROP INDEX fast-path jobs and the transient `UPDATING_META` state of fast schema evolution — instead of rejecting the DDL or cancelling the alter job. Set to `false` to restore the legacy exclusive behavior. This setting only relaxes partition creation; all other alter jobs and all non-`ADD PARTITION` DDL keep the legacy state checks.
+- Description: When `true`, partition creation (manual `ALTER TABLE ... ADD PARTITION`, automatic creation during loading, and the dynamic partition scheduler) is allowed to proceed concurrently with metadata-only alter operations that are provably safe — currently the shared-data ADD/DROP INDEX fast-path jobs and the transient `UPDATING_META` state of fast schema evolution — instead of rejecting the DDL or cancelling the alter job. Partition creation is also allowed while an optimize job, before it starts, waits for all replicas of the table to be healthy, which can take as long as a replica repair. Set to `false` to restore the legacy exclusive behavior. This setting only relaxes partition creation; all other alter jobs and all non-`ADD PARTITION` DDL keep the legacy state checks.
 - Introduced in: -
 
 ### `capacity_used_percent_high_water`
@@ -330,7 +330,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Controls whether StarRocks will use the non-blocking online optimization path when creating an optimize job. When `enable_online_optimize_table` is true and the target table meets compatibility checks (no partition/keys/sort specification, distribution is not `RandomDistributionDesc`, storage type is not `COLUMN_WITH_ROW`, replicated storage enabled, and the table is not a cloud-native table or materialized view), the planner creates an `OnlineOptimizeJobV2` to perform optimization without blocking writes. If false or any compatibility condition fails, StarRocks falls back to `OptimizeJobV2`, which may block write operations during optimization.
+- Description: Controls whether StarRocks will use the non-blocking online optimization path when creating an optimize job. When `enable_online_optimize_table` is true and the target table meets compatibility checks (no partition/keys/sort specification, distribution is not `RandomDistributionDesc`, the bucketing method and the bucketing columns are not changed, storage type is not `COLUMN_WITH_ROW`, replicated storage enabled, and the table is not a cloud-native table or materialized view), the planner creates an `OnlineOptimizeJobV2` to perform optimization without blocking writes. If false or any compatibility condition fails, StarRocks falls back to `OptimizeJobV2`, which may block write operations during optimization. The online optimization path does not support `enable_new_publish_mechanism`: if `enable_new_publish_mechanism` is also true, creating an optimize job that meets the compatibility checks fails with an error. In this case, set `enable_new_publish_mechanism` or `enable_online_optimize_table` to false.
 - Introduced in: v3.3.3, v3.4.0, v3.5.0
 
 ### `enable_strict_storage_medium_check`
@@ -393,7 +393,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing RECOVER.
+- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE, materialized view refresh operations, or partition TTL (`partition_live_number`, `partition_ttl`, or `partition_retention_condition`). Note that such metadata cannot be recovered by executing RECOVER.
 - Introduced in: v3.5.9
 
 ### `recover_with_empty_tablet`

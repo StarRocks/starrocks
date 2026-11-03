@@ -56,10 +56,7 @@ TEST(AppendWithMaskCoreTest, appendNullableColumnWithMask) {
     auto dst = NullableColumn::create(Int32Column::create(), NullColumn::create());
     ASSERT_TRUE(append_with_mask<true>(dst.get(), *src, mask, 3).ok());
 
-    ASSERT_EQ(2, dst->size());
-    EXPECT_FALSE(dst->is_null(0));
-    EXPECT_EQ(10, dst->get(0).get_int32());
-    EXPECT_TRUE(dst->is_null(1));
+    ASSERT_EQ("[10, NULL]", dst->debug_string());
 }
 
 } // namespace starrocks

@@ -29,10 +29,7 @@ TEST(ConstNullableCoreTest, ConstColumnSelectiveAndFilter) {
     auto dst = Int32Column::create();
     const uint32_t indexes[] = {0, 0, 0};
     dst->append_selective(*col, indexes, 0, 3);
-    ASSERT_EQ(3, dst->size());
-    EXPECT_EQ(7, dst->get(0).get_int32());
-    EXPECT_EQ(7, dst->get(1).get_int32());
-    EXPECT_EQ(7, dst->get(2).get_int32());
+    ASSERT_EQ("[7, 7, 7]", dst->debug_string());
 
     Filter keep = {1, 0, 1, 0};
     col->filter(keep);
@@ -57,12 +54,7 @@ TEST(ConstNullableCoreTest, NullableSelectiveAndNullAccounting) {
     const uint32_t indexes[] = {2, 1, 0};
     dst->append_selective(*src, indexes, 0, 3);
 
-    ASSERT_EQ(3, dst->size());
-    EXPECT_FALSE(dst->is_null(0));
-    EXPECT_TRUE(dst->is_null(1));
-    EXPECT_FALSE(dst->is_null(2));
-    EXPECT_EQ(30, dst->get(0).get_int32());
-    EXPECT_EQ(10, dst->get(2).get_int32());
+    ASSERT_EQ("[30, NULL, 10]", dst->debug_string());
 }
 
 } // namespace starrocks

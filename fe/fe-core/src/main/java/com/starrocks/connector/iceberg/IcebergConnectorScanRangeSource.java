@@ -51,6 +51,7 @@ import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -67,6 +68,9 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.encryption.EncryptionManager;
+import org.apache.iceberg.encryption.PlaintextEncryptionManager;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
@@ -247,32 +251,15 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     // Note: unlike getSourceOutputs(), this path does not call addPartition(), so scan_lake_partition_num_limit is
     // never enforced here. This is intentional - it's only used by compaction (OPTIMIZE TABLE), not by user SELECTs.
-    public List<FileScanTask> getSourceFileScanOutputs(int maxSize, long fileSizeThreshold, boolean allFiles) {
+    public List<FileScanTask> getSourceFileScanOutputs(int maxSize, IcebergRewriteFileSelector selector) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             List<FileScanTask> res = new ArrayList<>();
             while (hasMoreOutput() && res.size() < maxSize) {
                 RemoteFileInfo remoteFileInfo = remoteFileInfoSource.getOutput();
                 IcebergRemoteFileInfo icebergRemoteFileInfo = remoteFileInfo.cast();
                 FileScanTask fileScanTask = icebergRemoteFileInfo.getFileScanTask();
-                if (allFiles || fileScanTask.file().fileSizeInBytes() <= fileSizeThreshold) {
+                if (selector.shouldRewrite(fileScanTask)) {
                     res.add(fileScanTask);
-                } else {
-                    for (DeleteFile del : fileScanTask.deletes()) {
-                        if (del.content() == FileContent.POSITION_DELETES) {
-                            // if the pos delete is a file level pos delete, then we may skip the data file scan if 
-                            // the condition does not match. Otherwise(partition-level delete file), 
-                            // we scan the data file anyway, to make sure the pos delete can be eliminated any way
-                            int filePathId = 2147483546; //https://iceberg.apache.org/spec/#reserved-field-ids
-                            if (del.referencedDataFile() == null && (del.lowerBounds() != null && del.upperBounds() != null &&
-                                    !del.lowerBounds().get(filePathId).equals(del.upperBounds().get(filePathId)))) {
-                                //partition pos delete file related files
-                                res.add(fileScanTask);
-                            }
-                        } else if (del.content() == FileContent.EQUALITY_DELETES) {
-                            // to judge if a equality delete is fully applied is not easy. Only the rewrite-all can make sure that
-                            // we can eliminate the equality delete files.
-                        }
-                    }
                 }
             }
             return res;
@@ -283,8 +270,14 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         if (bucketProperties.isPresent()) {
             List<PartitionField> fields = table.getNativeTable().spec().fields();
             for (BucketProperty bucket : bucketProperties.get()) {
-                for (int i = 0; i < fields.size(); i++) {
-                    if (fields.get(i).name().equals(bucket.getColumn().getName() + "_bucket")) {
+                // Match the partition field by its source column id and bucket count: the field name is not
+                // always <column>_bucket (a renamed source column keeps the old field name, or the name was set
+                // explicitly), and one column can have several bucket transforms with different counts.
+                Types.NestedField source = table.getReadSchema().findField(bucket.getColumn().getName());
+                String transform = "bucket[" + bucket.getBucketNum() + "]";
+                for (int i = 0; source != null && i < fields.size(); i++) {
+                    if (fields.get(i).sourceId() == source.fieldId()
+                            && fields.get(i).transform().toString().equals(transform)) {
                         bucketInfo.add(new Pair<>(i, bucket.getBucketNum()));
                         break;
                     }
@@ -340,6 +333,15 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                 target.setFile_format(IcebergApiConverter.getHdfsFileFormat(deleteFile.format()).toThrift());
                 if (referencesOnlyDataFile(deleteFile, task.file())) {
                     target.setReferences_only_data_file(true);
+                }
+            }
+            // A position-delete file in an encrypted table is itself encrypted, with its own
+            // per-file key. It cannot reuse the data file's key, so carry its key material
+            // separately or the BE has no way to open it.
+            if (deleteFile.keyMetadata() != null && deleteFile.keyMetadata().remaining() > 0) {
+                TParquetEncryptionInfo deleteEncInfo = buildEncryptionInfo(deleteFile);
+                if (deleteEncInfo != null) {
+                    target.setParquet_encryption_info(deleteEncInfo);
                 }
             }
             posDeleteFiles.add(target);
@@ -514,6 +516,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         if (firstRowId != null) {
             hdfsScanRange.setFirst_row_id(firstRowId);
+        }
+
+        // Table-level gate FIRST, unconditionally. It must not sit inside the key-metadata branch
+        // below: the case it exists to catch is a table that declares encryption while the catalog
+        // supplies a plaintext manager, and such a table's files are written WITHOUT key metadata --
+        // so they would skip the branch and be served silently, which is the exact fail-open the
+        // gate is for.
+        IcebergEncryption.checkReadSupported(table.getNativeTable(), table.getName());
+
+        // Attach encryption info if the file has key metadata (encrypted file)
+        if (file.keyMetadata() != null && file.keyMetadata().remaining() > 0) {
+            TParquetEncryptionInfo encInfo = buildEncryptionInfo(file);
+            if (encInfo != null) {
+                hdfsScanRange.setParquet_encryption_info(encInfo);
+            }
         }
 
         return hdfsScanRange;
@@ -790,4 +807,51 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
         return tableLocation;
     }
+
+    /**
+     * Recover the per-file data key for an encrypted Iceberg file and hand it to BE.
+     *
+     * <p>The key is read straight out of {@code StandardKeyMetadata}. It deliberately does not go
+     * through {@code EncryptionManager.decrypt()}: the standard manager returns a
+     * {@code StandardDecryptedInputFile}, which implements {@code NativeEncryptionInputFile} and
+     * <b>not</b> {@code NativelyEncryptedFile}, and exposes no {@code nativeCryptoParameters()} --
+     * so there is no file key to take from it. That is the shape of the API in Iceberg 1.11, not a
+     * gap in an older version.
+     *
+     * <p>No KMS call and no cache are needed here: in this mode the key is already present in
+     * {@code key_metadata}. Its confidentiality rests on Iceberg encrypting the manifest that
+     * carries it.
+     *
+     * <p>Fails the query rather than returning null if the key cannot be recovered: an encrypted
+     * file must never be handed to BE as though it were plaintext.
+     */
+    private TParquetEncryptionInfo buildEncryptionInfo(ContentFile<?> file) {
+        // The table-level gate runs in buildScanRange, before any per-file test -- see there for why
+        // it cannot live here.
+        EncryptionManager encMgr = table.getNativeTable().encryption();
+        if (encMgr instanceof PlaintextEncryptionManager) {
+            return null;
+        }
+        try {
+            StarRocksKeyMetadata.Parsed parsed = StarRocksKeyMetadata.parse(file.keyMetadata());
+            if (parsed.dek == null || parsed.dek.length == 0) {
+                throw new StarRocksConnectorException(
+                        "Iceberg key_metadata carries no data key for encrypted file " + file.path());
+            }
+            TParquetEncryptionInfo encInfo = new TParquetEncryptionInfo();
+            encInfo.setFile_dek(parsed.dek);
+            // v1 carries an AAD prefix that v0 does not. BE needs it whenever the file itself does
+            // not store one (supply_aad_prefix).
+            if (parsed.aadPrefix != null && parsed.aadPrefix.length > 0) {
+                encInfo.setAad_prefix(parsed.aadPrefix);
+            }
+            return encInfo;
+        } catch (StarRocksConnectorException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    "failed to read Iceberg encryption key metadata for " + file.path(), e);
+        }
+    }
+
 }

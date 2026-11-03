@@ -79,8 +79,8 @@ public:
               _update_mem_tracker(
                       std::make_unique<MemTracker>(10 * 1024 * 1024, "lake_data_source", _parent_tracker.get())),
               _primary_key_manager(std::make_unique<PrimaryKeyManager>(_location_provider, _update_mem_tracker.get())),
-              _owned_tablet_mgr(
-                      std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024)),
+              _owned_tablet_mgr(std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1024 * 1024, 1024 * 1024)),
               _tablet_mgr(_owned_tablet_mgr.get()) {
         _tablet_metadata = std::make_unique<TabletMetadata>();
         _tablet_metadata->set_id(next_id());

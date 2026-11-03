@@ -590,6 +590,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         scanContext.setDeleteFileIndexCache(deleteFileIndexCache);
         scanContext.setMetaFileCacheMap(metaFileCacheMap);
         scanContext.setDataFileCacheWithMetrics(icebergProperties.isIcebergManifestCacheWithColumnStatistics());
+        scanContext.setDataFileCacheStatsColumnLimit(icebergProperties.getIcebergManifestCacheStatisticsMaxColumns());
         scanContext.setEnableCacheDataFileIdentifierColumnMetrics(
                 icebergProperties.enableCacheDataFileIdentifierColumnStatistics());
         scanContext.setOnlyReadCache(shouldOnlyReadCache(scanContext.getConnectContext()));
@@ -734,14 +735,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         if (files == null || files.isEmpty()) {
             return 0L;
         }
-        StructLike like = files.iterator().next().partition();
+        ContentFile<?> first = files.iterator().next();
+        // Compact statistics are shared by every file of the manifest and skipped by the per-file sample.
+        long sharedStatsSize = first instanceof DataFileWrapper wrapper && wrapper.columnStats() != null
+                ? wrapper.columnStats().retainedBytes() : 0L;
+        StructLike like = first.partition();
         if (like instanceof PartitionData partitionData) {
             org.apache.avro.Schema schema = partitionData.getSchema();
             Set<Class<?>> ignoreClass = new HashSet<>();
             ignoreClass.add(schema.getClass());
-            return Estimator.estimate(files, 3, ignoreClass) + Estimator.estimate(schema, 3);
+            return Estimator.estimate(files, 3, ignoreClass) + Estimator.estimate(schema, 3) + sharedStatsSize;
         } else {
-            return Estimator.estimate(files, 3);
+            return Estimator.estimate(files, 3) + sharedStatsSize;
         }
     }
 

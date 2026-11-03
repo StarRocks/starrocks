@@ -241,6 +241,10 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
+    // Keep shared_files 1:1 with column_files when the segment records it: a new file is private, and a kept file
+    // keeps its flag. After a range split a kept file can still be read by the sibling tablet, so losing the flag
+    // would let vacuum delete it once a later update orphans it.
+    const bool record_shared_files = dcg_ver.shared_files_size() > 0;
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
@@ -260,6 +264,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         }
         new_dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
         new_dcg_ver.add_versions(_tablet_meta->version());
+        if (record_shared_files) {
+            new_dcg_ver.add_shared_files(false);
+        }
     }
     // 2. remove old dcgs
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.column_files_size());
@@ -278,6 +285,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             new_dcg_ver.add_versions(dcg_ver.versions(i));
             if (i < dcg_ver.encryption_metas_size()) {
                 new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));
+            }
+            if (record_shared_files) {
+                new_dcg_ver.add_shared_files(i < dcg_ver.shared_files_size() && dcg_ver.shared_files(i));
             }
         } else {
             // Put this `.cols` files into orphan files
@@ -402,12 +412,15 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
     }
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
-    // collect trash files: replaced partial-update segments and their segment-name-keyed .vi files
+    // collect trash files: replaced partial-update segments, their segment-name-keyed .vi files, and the
+    // tombstone sstables an index that is not cloud-native did not ingest (PrimaryKeyManager::_do_delete)
     for (const auto& orphan_file : orphan_files) {
-        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()) || is_sst(orphan_file.name()))
+                << orphan_file.name();
         auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
         added_orphan->CopyFrom(orphan_file);
-        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // These files are produced by this txn -- the replaced segment/.vi files by its partial-update
+        // rewrite, a tombstone sstable by its load -- and no visible metadata ever referenced them, so
         // their creation version is the metadata version being built. Respect an accurate version if
         // the producer already set one.
         if (!added_orphan->has_version()) {
@@ -988,7 +1001,8 @@ void MetaFileBuilder::remove_lcrm_file(const TxnLogPB_OpCompaction& op_compactio
 }
 
 Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction,
-                                           uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id) {
+                                           uint32_t max_compact_input_rowset_id, int64_t output_rowset_schema_id,
+                                           bool index_persisted) {
     // delete input rowsets
     std::stringstream del_range_ss;
     std::unordered_set<uint32_t> delete_delvec_sids;
@@ -1017,8 +1031,10 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
                 delete_delvec_sids.insert(rssid);
                 del_range_ss << rssid << " ";
             }
-            // Collect del files.
-            _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            // Collect del files, unless the index already holds every delete.
+            if (!index_persisted) {
+                _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            }
             // Drop the delete_predicate before archiving the input rowset into compaction_inputs.
             // compaction_inputs is consumed only by vacuum/file cleanup, never by readers, so the
             // predicate is pure metadata bloat once the rowset is compacted away.
@@ -1991,12 +2007,15 @@ Status MetaFileBuilder::set_final_rowset() {
     // If rowset doesn't contain segment files, still increment next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
 
-    // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
+    // Collect orphan files: replaced partial-update segments, their segment-name-keyed .vi files, and the
+    // tombstone sstables an index that is not cloud-native did not ingest (PrimaryKeyManager::_do_delete)
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
-        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()) || is_sst(orphan_file.name()))
+                << orphan_file.name();
         auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
         added_orphan->CopyFrom(orphan_file);
-        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // These files are produced by this txn -- the replaced segment/.vi files by its partial-update
+        // rewrite, a tombstone sstable by its load -- and no visible metadata ever referenced them, so
         // their creation version is the metadata version being built. Respect an accurate version if
         // the producer already set one.
         if (!added_orphan->has_version()) {

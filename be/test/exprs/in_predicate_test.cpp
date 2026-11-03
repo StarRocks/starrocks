@@ -561,7 +561,7 @@ TEST_F(VectorizedInPredicateTest, columnRefInValueListFailsOpen) {
 
     MockVectorizedExpr<TYPE_TINYINT> lhs(expr_node, 10, 1);
     MockConstVectorizedExpr<TYPE_TINYINT> zero(expr_node, 0);
-    ColumnRef slot(TypeDescriptor(TYPE_TINYINT), 14);
+    ColumnRef slot(TYPE_TINYINT_DESC, 14);
 
     expr->_children.push_back(&lhs);
     expr->_children.push_back(&zero);

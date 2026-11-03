@@ -19,7 +19,10 @@
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/primary_key_manager.h"
+#include "storage/lake/sst_seek_range.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
@@ -153,15 +156,68 @@ static bool carries_shared_segment(const RowsetMetadataPB& rowset) {
                        [](const SegmentMetadataPB& segment) { return segment.shared(); });
 }
 
+// A rowset holds a file shared with a split sibling when any of its segments, any of its del files,
+// or a DCG/IDG sidecar keyed by one of its segments' rssids is shared.
+// The kinds mirror tablet_reshard_helper::has_shared_files, except the tablet-wide index files.
+static bool holds_shared_file(const TabletMetadataPB& metadata, const RowsetMetadataPB& rowset) {
+    if (carries_shared_segment(rowset) || std::any_of(rowset.del_files().begin(), rowset.del_files().end(),
+                                                      [](const DelfileWithRowsetId& del) { return del.shared(); })) {
+        return true;
+    }
+    const auto& dcgs = metadata.dcg_meta().dcgs();
+    const auto& idgs = metadata.idg_meta().idgs();
+    for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+        const uint32_t rssid = get_rssid(rowset, i);
+        if (auto it = dcgs.find(rssid);
+            it != dcgs.end() && std::any_of(it->second.shared_files().begin(), it->second.shared_files().end(),
+                                            [](bool shared) { return shared; })) {
+            return true;
+        }
+        if (auto it = idgs.find(rssid);
+            it != idgs.end() && std::any_of(it->second.entries().begin(), it->second.entries().end(),
+                                            [](const IndexDeltaGroupEntryPB& entry) { return entry.shared_file(); })) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// UNSHARE picks every rowset that holds any file shared with a split sibling (segment, del file,
+// or DCG/IDG sidecar). A tablet whose sort key differs from the primary key keeps the narrower
+// rule: only rowsets with a shared segment.
+static bool unshare_picks(const TabletMetadataPB& metadata, const RowsetMetadataPB& rowset, bool separate_sort_key) {
+    return separate_sort_key ? carries_shared_segment(rowset) : holds_shared_file(metadata, rowset);
+}
+
 StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
+    const bool separate_sort_key = TabletSchema::create(_tablet_metadata->schema())->has_separate_sort_key();
     std::vector<RowsetPtr> input_rowsets;
     for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
-        if (carries_shared_segment(_tablet_metadata->rowsets(i))) {
+        if (unshare_picks(*_tablet_metadata, _tablet_metadata->rowsets(i), separate_sort_key)) {
             input_rowsets.emplace_back(
                     std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
         }
     }
     return input_rowsets;
+}
+
+StatusOr<bool> UnshareCompactionPolicy::has_work(const TabletMetadataPB& metadata) {
+    const auto schema = TabletSchema::create(metadata.schema());
+    const bool separate_sort_key = schema->has_separate_sort_key();
+    if (std::any_of(metadata.rowsets().begin(), metadata.rowsets().end(), [&](const RowsetMetadataPB& rowset) {
+            return unshare_picks(metadata, rowset, separate_sort_key);
+        })) {
+        return true;
+    }
+    // Mirrors the index step of an UNSHARE, which runs only without a separate sort key.
+    if (separate_sort_key || !metadata.has_range()) {
+        return false;
+    }
+    ASSIGN_OR_RETURN(auto tablet_range, TabletRangeHelper::create_sst_seek_range_from(metadata.range(), schema));
+    const auto& sstables = metadata.sstable_meta().sstables();
+    return std::any_of(sstables.begin(), sstables.end(), [&](const PersistentIndexSstablePB& sstable) {
+        return sstable_needs_rewrite(sstable, &tablet_range);
+    });
 }
 
 StatusOr<CompactionAlgorithm> UnshareCompactionPolicy::choose_compaction_algorithm(

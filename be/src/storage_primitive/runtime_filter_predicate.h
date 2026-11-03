@@ -58,6 +58,7 @@ protected:
     // (ScanConjunctsManager::get_runtime_filter_predicates news them per call), so this
     // mutable state is not shared between concurrent readers.
     RuntimeFilter::RunningContext _running_ctx;
+    std::vector<uint8_t> _input_selection;
 };
 
 class DictColumnRuntimeFilterPredicate : public RuntimeFilterPredicate {
