@@ -433,8 +433,7 @@ public class PruneComplexTypeUtil {
         // Only an array that is a scan column or struct subfields of one (Context#isScanColumnSubfieldChain), or
         // struct subfields of an enclosing lambda's argument that is, gets the paths: an element path then names
         // the same subfields in the scan column. Anything else is read in full: a function may reshape the
-        // elements - map_entries(m) yields synthetic struct<key, value> elements whose paths do not exist in m -
-        // and a column computed by a lower projection, whatever its definition, keeps its full declared type.
+        // elements so that their paths do not exist in the source column, and a column computed by a lower projection, whatever its definition, keeps its full declared type.
         //
         // Like visit(), the access path stack is cleared for the whole call: a path pushed by an enclosing
         // expression, or recorded downstream for the column the call defines, describes array_map's result, not
@@ -520,14 +519,8 @@ public class PruneComplexTypeUtil {
             if (FunctionSet.MAP_VALUES.equals(name)) {
                 return ComplexTypeAccessPathType.MAP_VALUE;
             }
-<<<<<<< HEAD
             // map_entries, which main handles here as ALL_SUBFIELDS, does not exist on this branch
             // (added by #65328); an unknown name falls through to the conservative route below.
-=======
-            // map_entries is left out on purpose: it returns array<struct<key, value>>, so a path into its
-            // elements ([value, a]) is not a path into the map, and appending it to ALL_SUBFIELDS made
-            // setAccessGroup look up a `value` field in the map's value struct. visit() reads the map in full.
->>>>>>> 8756959 ([BugFix][RB-841] Keep conditional expressions out of CSE in throw mode and prune arrays by their array_map lambda (#82293))
             return null;
         }
     }

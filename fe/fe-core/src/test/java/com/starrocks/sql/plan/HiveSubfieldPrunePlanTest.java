@@ -74,11 +74,7 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
         String sql = "select array_map((x) -> named_struct('c0', x.c1), col_arr)[1].c0 "
                 + "from hive0.subfield_db.subfield_map";
         String plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        assertContains(plan, "[col_arr] <-> [ARRAY<struct<c0 int(11), c1 int(11)>>]");
-=======
-        assertContains(plan, "[col_arr] <-> [ARRAY<struct<`c1` int(11)>>]");
->>>>>>> 8756959 ([BugFix][RB-841] Keep conditional expressions out of CSE in throw mode and prune arrays by their array_map lambda (#82293))
+        assertContains(plan, "[col_arr] <-> [ARRAY<struct<c1 int(11)>>]");
 
         // Same shape with the subfield access in a different operator, so the path arrives through the
         // visited access group instead of the local path stack.
@@ -87,20 +83,17 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
                 + "from hive0.subfield_db.subfield_map) t "
                 + "join (select col_int as ci from hive0.subfield_db.subfield_map) s on t.col_int = s.ci";
         plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        assertContains(plan, "[col_arr] <-> [ARRAY<struct<c0 int(11), c1 int(11)>>]");
-=======
-        assertContains(plan, "[col_arr] <-> [ARRAY<struct<`c1` int(11)>>]");
+        assertContains(plan, "[col_arr] <-> [ARRAY<struct<c1 int(11)>>]");
     }
 
     @Test
     public void testArrayMapLambdaSubfieldsPruneTheArray() throws Exception {
         // The lambda argument is bound to the array's elements, so its subfield reads are the array's.
         String sql = "select array_sum(array_map(x -> x.c1, col_arr)) from hive0.subfield_db.subfield_map";
-        assertContains(getVerboseExplain(sql), "[col_arr] <-> [ARRAY<struct<`c1` int(11)>>]");
+        assertContains(getVerboseExplain(sql), "[col_arr] <-> [ARRAY<struct<c1 int(11)>>]");
 
         // The element used whole, or the array also read directly, keeps every subfield.
-        String full = "[col_arr] <-> [ARRAY<struct<`c0` int(11), `c1` int(11)>>]";
+        String full = "[col_arr] <-> [ARRAY<struct<c0 int(11), c1 int(11)>>]";
         // (x -> x alone is folded to the array itself, which [1].c0 then prunes legitimately.)
         sql = "select array_map(x -> named_struct('s', x), col_arr)[1].s.c0 from hive0.subfield_db.subfield_map";
         assertContains(getVerboseExplain(sql), full);
@@ -112,18 +105,14 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
         sql = "select array_map(x -> array_sum(array_map(y -> y.a, x.items)), col_nested) "
                 + "from hive0.subfield_db.subfield_map";
         assertContains(getVerboseExplain(sql),
-                "[col_nested] <-> [ARRAY<struct<`items` array<struct<`a` int(11)>>>>]");
+                "[col_nested] <-> [ARRAY<struct<items array<struct<a int(11)>>>>]");
         sql = "select array_map(x -> array_sum(array_map(y -> y.a + x.c0, x.items)), col_nested) "
                 + "from hive0.subfield_db.subfield_map";
         assertContains(getVerboseExplain(sql),
-                "[col_nested] <-> [ARRAY<struct<`c0` int(11), `items` array<struct<`a` int(11)>>>>]");
+                "[col_nested] <-> [ARRAY<struct<c0 int(11), items array<struct<a int(11)>>>>]");
 
-        // An array produced by a function may reshape its elements: map_entries yields struct<key, value>
-        // elements whose paths are not paths of col_map_struct, and array_filter's lambda reads x.c0. Such
-        // arrays keep their columns whole, and planning must not fail.
-        String fullMap = "[col_map_struct] <-> [MAP<INT,struct<`a` int(11), `b` int(11)>>]";
-        sql = "select array_map(e -> e.value.a, map_entries(col_map_struct)) from hive0.subfield_db.subfield_map";
-        assertContains(getVerboseExplain(sql), fullMap);
+        // An array produced by a function may reshape its elements, and array_filter's lambda reads x.c0. Such
+        // arrays keep their columns whole.
         sql = "select array_map(x -> x.c1, array_filter(x -> x.c0 > 0, col_arr)) from hive0.subfield_db.subfield_map";
         assertContains(getVerboseExplain(sql), full);
 
@@ -139,7 +128,7 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
         String sql = "select array_sum(array_map(x -> x.c1, t.a)) from "
                 + "(select col_arr as a, col_int from hive0.subfield_db.subfield_map) t "
                 + "join (select col_int as ci from hive0.subfield_db.subfield_map) s on t.col_int = s.ci";
-        assertContains(getVerboseExplain(sql), "[col_arr] <-> [ARRAY<struct<`c1` int(11)>>]");
+        assertContains(getVerboseExplain(sql), "[col_arr] <-> [ARRAY<struct<c1 int(11)>>]");
 
         // A struct subfield computed by a lower projection is a new column that keeps its full declared type,
         // and it crosses the shuffle exchange: narrowing the scan column under it would make the two disagree.
@@ -147,21 +136,17 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
                 + "join [shuffle] (select col_int, col_struct_arr.items as arr from hive0.subfield_db.subfield_map) t "
                 + "on t.col_int = s.ci";
         assertContains(getVerboseExplain(sql),
-                "[col_struct_arr] <-> [struct<`items` array<struct<`a` int(11), `b` int(11)>>>]");
+                "[col_struct_arr] <-> [struct<items array<struct<a int(11), b int(11)>>>]");
         // Taken in the same projection, the subfield chain is on the scan column and prunes.
         sql = "select array_map(x -> x.a, col_struct_arr.items) from hive0.subfield_db.subfield_map";
-        assertContains(getVerboseExplain(sql), "[col_struct_arr] <-> [struct<`items` array<struct<`a` int(11)>>>]");
+        assertContains(getVerboseExplain(sql), "[col_struct_arr] <-> [struct<items array<struct<a int(11)>>>]");
 
         // The lower projection computes the array with a function: the column looks like a plain column ref
         // here, but its element paths are not paths of the scan column, so it is read in full.
-        sql = "select array_map(e -> e.value.a, t.entries) from "
-                + "(select col_int, map_entries(col_map_struct) as entries from hive0.subfield_db.subfield_map) t "
-                + "join (select col_int as ci from hive0.subfield_db.subfield_map) s on t.col_int = s.ci";
-        assertContains(getVerboseExplain(sql), "[col_map_struct] <-> [MAP<INT,struct<`a` int(11), `b` int(11)>>]");
         sql = "select array_map(x -> x.c1, t.a) from "
                 + "(select col_int, array_filter(x -> x.c0 > 0, col_arr) as a from hive0.subfield_db.subfield_map) t "
                 + "join (select col_int as ci from hive0.subfield_db.subfield_map) s on t.col_int = s.ci";
-        assertContains(getVerboseExplain(sql), "[col_arr] <-> [ARRAY<struct<`c0` int(11), `c1` int(11)>>]");
+        assertContains(getVerboseExplain(sql), "[col_arr] <-> [ARRAY<struct<c0 int(11), c1 int(11)>>]");
     }
 
     @Test
@@ -170,28 +155,13 @@ public class HiveSubfieldPrunePlanTest extends PlanTestBase {
         // looking up `a` in other's element type.
         String sql = "select col_two_arrs[1].items[array_length(col_two_arrs[1].other)].a "
                 + "from hive0.subfield_db.subfield_map";
-        assertContains(getVerboseExplain(sql), "[col_two_arrs] <-> [ARRAY<struct<`items` array<struct<`a` int(11)>>, "
-                + "`other` array<struct<`c` int(11), `d` int(11)>>>>]");
+        assertContains(getVerboseExplain(sql), "[col_two_arrs] <-> [ARRAY<struct<items array<struct<a int(11)>>, "
+                + "other array<struct<c int(11), d int(11)>>>>]");
         // same inside an array_map lambda, whose paths now reach the scan column
         sql = "select array_map(x -> x.items[array_length(x.other)].a, col_two_arrs) "
                 + "from hive0.subfield_db.subfield_map";
-        assertContains(getVerboseExplain(sql), "[col_two_arrs] <-> [ARRAY<struct<`items` array<struct<`a` int(11)>>, "
-                + "`other` array<struct<`c` int(11), `d` int(11)>>>>]");
-    }
-
-    @Test
-    public void testMapEntriesElementPathReadsTheWholeMap() throws Exception {
-        // A path into map_entries' struct<key, value> elements is not a path into the map; planning used to
-        // fail looking up `value` in the map's value struct.
-        String fullMap = "[col_map_struct] <-> [MAP<INT,struct<`a` int(11), `b` int(11)>>]";
-        String sql = "select map_entries(col_map_struct)[1].value.a from hive0.subfield_db.subfield_map";
-        assertContains(getVerboseExplain(sql), fullMap);
-        // Same with the element path in an upper operator.
-        sql = "select t.e[1].value.a from "
-                + "(select col_int, map_entries(col_map_struct) as e from hive0.subfield_db.subfield_map) t "
-                + "join (select col_int as ci from hive0.subfield_db.subfield_map) s on t.col_int = s.ci";
-        assertContains(getVerboseExplain(sql), fullMap);
->>>>>>> 8756959 ([BugFix][RB-841] Keep conditional expressions out of CSE in throw mode and prune arrays by their array_map lambda (#82293))
+        assertContains(getVerboseExplain(sql), "[col_two_arrs] <-> [ARRAY<struct<items array<struct<a int(11)>>, "
+                + "other array<struct<c int(11), d int(11)>>>>]");
     }
 
     @Test

@@ -27,7 +27,7 @@ create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceber
 use ice_cat_${uuid0}.sqltest_db_${uuid0};
 -- result:
 -- !result
-function: assert_explain_verbose_contains("select array_map(x -> x.a, l) from t", "Pruned type: 2 <-> [ARRAY<struct<`a` int(11)>>]")
+function: assert_explain_verbose_contains("select array_map(x -> x.a, l) from t", "Pruned type: 2 <-> [ARRAY<struct<a int(11)>>]")
 -- result:
 None
 -- !result
@@ -59,13 +59,6 @@ None
 3	[null]
 4	[41]
 -- !result
-[ORDER]select id, array_map(e -> e.value.a, map_entries(m)) from t order by id;
--- result:
-1	[100]
-2	[200]
-3	None
-4	[400]
--- !result
 [ORDER]select id, array_map(x -> x.a, arr) from (select id, s.items as arr from t) v order by id;
 -- result:
 1	[11,12]
@@ -79,13 +72,6 @@ None
 2	[]
 3	None
 4	[41]
--- !result
-[ORDER]select id, map_entries(m)[1].value.a from t order by id;
--- result:
-1	100
-2	200
-3	None
-4	400
 -- !result
 set enable_prune_complex_types = false;
 -- result:

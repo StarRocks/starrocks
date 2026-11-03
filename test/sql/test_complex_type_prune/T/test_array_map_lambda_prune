@@ -14,18 +14,16 @@ create external catalog ice_cat_${uuid0} properties ("type" = "iceberg", "iceber
     "aws.s3.endpoint" = "${oss_endpoint}"
 );
 use ice_cat_${uuid0}.sqltest_db_${uuid0};
-function: assert_explain_verbose_contains("select array_map(x -> x.a, l) from t", "Pruned type: 2 <-> [ARRAY<struct<`a` int(11)>>]")
+function: assert_explain_verbose_contains("select array_map(x -> x.a, l) from t", "Pruned type: 2 <-> [ARRAY<struct<a int(11)>>]")
 [ORDER]select id, array_map(x -> x.a, l), array_sum(array_map(x -> x.a, l)) from t order by id;
 -- c was added after the first files were written: it reads NULL there
 [ORDER]select id, array_map(x -> x.c, l) from t order by id;
 [ORDER]select id, array_map(x -> x.a, s.items) from t order by id;
 -- a collection index inside the lambda reads its own path
 [ORDER]select id, array_map(x -> x.items[array_length(x.other)].a, [s]) from t order by id;
--- arrays a function or a lower projection produces are read whole
-[ORDER]select id, array_map(e -> e.value.a, map_entries(m)) from t order by id;
+-- arrays a lower projection produces are read whole
 [ORDER]select id, array_map(x -> x.a, arr) from (select id, s.items as arr from t) v order by id;
 [ORDER]select v.id, array_map(x -> x.a, v.arr) from (select id, s.items as arr from t) v join [shuffle] t t2 on v.id = t2.id order by v.id;
-[ORDER]select id, map_entries(m)[1].value.a from t order by id;
 set enable_prune_complex_types = false;
 [ORDER]select id, array_map(x -> x.a, l), array_sum(array_map(x -> x.a, l)) from t order by id;
 [ORDER]select id, array_map(x -> x.c, l) from t order by id;
