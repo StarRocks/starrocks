@@ -151,6 +151,35 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
     }
 
     if (_need_split) {
+        std::vector<BaseTabletSharedPtr> tablets;
+        auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
+        // to avoid list tablet metadata by set version_hint
+        tablet_shared_ptr->set_version_hint(_tablet_metadata->version());
+        tablets.emplace_back(tablet_shared_ptr);
+
+        std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
+        tablet_rowsets.emplace_back();
+        auto& rss = tablet_rowsets.back();
+        int64_t tablet_num_rows = 0;
+        for (auto& rowset : _rowsets) {
+            tablet_num_rows += rowset->num_rows();
+            rss.emplace_back(rowset);
+        }
+
+        // Do not split if tablet has no rowsets (empty tablet)
+        if (_rowsets.empty()) {
+            _need_split = false;
+            return init_collector(read_params);
+        }
+
+        // not split for data skew between tablet
+        if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
+            // set _need_split false to make iterator can get data this round if split do not happen,
+            // otherwise, iterator will return empty.
+            _need_split = false;
+            return init_collector(read_params);
+        }
+
         RowidRangeOptionPtr grouped_candidates;
         const std::atomic<bool>* is_cancelled =
                 read_params.runtime_state != nullptr ? &read_params.runtime_state->cancelled_ref() : nullptr;
@@ -190,34 +219,6 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                                             std::make_shared<SparseRange<>>(std::move(candidates)), true);
                 }
             }
-        }
-        std::vector<BaseTabletSharedPtr> tablets;
-        auto tablet_shared_ptr = std::make_shared<Tablet>(_tablet_mgr, _tablet_metadata->id());
-        // to avoid list tablet metadata by set version_hint
-        tablet_shared_ptr->set_version_hint(_tablet_metadata->version());
-        tablets.emplace_back(tablet_shared_ptr);
-
-        std::vector<std::vector<BaseRowsetSharedPtr>> tablet_rowsets;
-        tablet_rowsets.emplace_back();
-        auto& rss = tablet_rowsets.back();
-        int64_t tablet_num_rows = 0;
-        for (auto& rowset : _rowsets) {
-            tablet_num_rows += rowset->num_rows();
-            rss.emplace_back(rowset);
-        }
-
-        // Do not split if tablet has no rowsets (empty tablet)
-        if (_rowsets.empty()) {
-            _need_split = false;
-            return init_collector(read_params);
-        }
-
-        // not split for data skew between tablet
-        if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
-            // set _need_split false to make iterator can get data this round if split do not happen,
-            // otherwise, iterator will return empty.
-            _need_split = false;
-            return init_collector(read_params);
         }
 
         pipeline::Morsels morsels;

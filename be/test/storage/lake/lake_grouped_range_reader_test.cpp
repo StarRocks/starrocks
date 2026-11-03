@@ -460,6 +460,65 @@ TEST_F(LakeGroupedRangeReaderTest, ArchivedPhysicalOwnershipUsesCurrentReaderCol
     }
 }
 
+// A no-split root must avoid boundary preparation and return the complete clipped physical rows.
+TEST_F(LakeGroupedRangeReaderTest, NoSplitRootSkipsBoundaryReadsAndPreservesArchivedSharedOwnership) {
+    for (bool archived : {false, true}) {
+        SCOPED_TRACE(archived ? "archived shared ownership" : "current schema");
+        auto meta = write_source(1, {20, 21, 22, 23}, true, 1, /*num_key_columns=*/1,
+                                 /*num_short_key_columns=*/1);
+        std::vector<ColumnId> projection;
+        if (archived) {
+            meta = insert_non_sort_column(meta);
+            *meta->mutable_range() = clip(22, 24);
+            projection = {0, 2, 3, 4, 5};
+        }
+        const auto original_meta = meta->SerializeAsString();
+        auto tablet_schema = TabletSchema::create(meta->schema());
+        auto schema = projection.empty() ? ChunkHelper::convert_schema(tablet_schema)
+                                         : ChunkHelper::convert_schema(tablet_schema, projection);
+        TabletReader root(_tablet_mgr.get(), meta, schema, true, true);
+        ASSERT_OK(root.prepare());
+        TabletReaderParams params;
+        params.grouped_range_task = task(21, 23);
+        params.splitted_scan_rows = 1024;
+        ASSERT_OK(root.open(params));
+        RecordProperty(archived ? "ArchivedBoundarySeekNs" : "CurrentBoundarySeekNs", root.stats().block_seek_ns);
+        RecordProperty(archived ? "ArchivedBoundaryFetchNs" : "CurrentBoundaryFetchNs", root.stats().block_fetch_ns);
+        EXPECT_EQ(0, root.stats().block_seek_ns);
+        EXPECT_EQ(0, root.stats().block_fetch_ns);
+        std::vector<pipeline::ScanSplitContextPtr> children;
+        root.get_split_tasks(&children);
+        EXPECT_TRUE(children.empty());
+        Rows rows;
+        auto chunk = ChunkHelper::new_chunk(schema, 16);
+        while (true) {
+            chunk->reset();
+            auto status = root.get_next(chunk.get());
+            if (status.is_end_of_file()) break;
+            ASSERT_OK(status);
+            for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                const auto row = chunk->get(i);
+                rows.emplace(row[0].get_int64(), row[1].get_int64(), row[2].get_int64(),
+                             row[3].is_null() ? std::nullopt : std::optional(row[3].get_int64()), row[4].get_int64());
+            }
+        }
+        // [21,23) selects both middle keys; shared physical ownership [22,24) retains only 22.
+        Rows expected{{7, 8, 22, 42, 100006}, {7, 8, 22, 42, 100007}, {7, 8, 22, std::nullopt, 100008},
+                      {7, 8, 22, 42, 110006}, {7, 8, 22, 42, 110007}, {7, 8, 22, std::nullopt, 110008}};
+        if (!archived) {
+            expected.insert({{7, 8, 21, 42, 100003},
+                             {7, 8, 21, 42, 100004},
+                             {7, 8, 21, std::nullopt, 100005},
+                             {7, 8, 21, 42, 110003},
+                             {7, 8, 21, 42, 110004},
+                             {7, 8, 21, std::nullopt, 110005}});
+        }
+        EXPECT_EQ(expected, rows);
+        EXPECT_EQ(original_meta, meta->SerializeAsString());
+        root.close();
+    }
+}
+
 TEST_F(LakeGroupedRangeReaderTest, RejectsArchivedUidAndSortOrderMismatch) {
     auto meta = write_source(1, {0, 1});
     for (bool changed_uid : {false, true}) {
@@ -528,6 +587,30 @@ TEST_F(LakeGroupedRangeReaderTest, PhysicalRootsValidateArchivedSchemaBeforeEmpt
         (*changed->mutable_historical_schemas())[archived.id()] = archived;
         ASSERT_NO_FATAL_FAILURE(check_empty_query_schema_status(
                 changed, Rowset::get_rowsets(_tablet_mgr.get(), changed), mismatch != 2));
+        // The no-split fallback must validate the archive before pruning an empty query, too.
+        TabletReaderParams params;
+        params.grouped_range_task = task(21, 23);
+        params.splitted_scan_rows = 1024;
+        params.range = TabletReaderParams::RangeStartOperation::GE;
+        params.end_range = TabletReaderParams::RangeEndOperation::LT;
+        params.start_key.emplace_back(std::vector<std::string>{"0"});
+        params.end_key.emplace_back(std::vector<std::string>{"1"});
+        auto schema = ChunkHelper::convert_schema(TabletSchema::create(changed->schema()));
+        TabletReader root(_tablet_mgr.get(), changed, schema, true, true);
+        ASSERT_OK(root.prepare());
+        const auto status = root.open(params);
+        if (mismatch != 2) {
+            EXPECT_TRUE(status.is_invalid_argument()) << status;
+        } else {
+            ASSERT_OK(status);
+            auto chunk = ChunkHelper::new_chunk(schema, 16);
+            EXPECT_TRUE(root.get_next(chunk.get()).is_end_of_file());
+            EXPECT_EQ(0, chunk->num_rows());
+        }
+        std::vector<pipeline::ScanSplitContextPtr> children;
+        root.get_split_tasks(&children);
+        EXPECT_TRUE(children.empty());
+        root.close();
     }
 }
 
@@ -570,8 +653,6 @@ TEST_F(LakeGroupedRangeReaderTest, PhysicalRootPrepassPreservesColdCachePolicyAn
 TEST_F(LakeGroupedRangeReaderTest, CancelledPhysicalRootPublishesNoChildren) {
     auto meta = write_source(1, {0, 1, 2, 3});
     auto schema = ChunkHelper::convert_schema(TabletSchema::create(meta->schema()));
-    TabletReader root(_tablet_mgr.get(), meta, schema, true, true);
-    ASSERT_OK(root.prepare());
     RuntimeState state;
     state.set_is_cancelled(true);
     TInternalScanRange internal;
@@ -584,13 +665,21 @@ TEST_F(LakeGroupedRangeReaderTest, CancelledPhysicalRootPublishesNoChildren) {
     params.runtime_state = &state;
     params.grouped_range_task = task(0, 2);
     params.scan_dop = 4;
-    params.splitted_scan_rows = 4;
-    EXPECT_TRUE(root.open(params).is_cancelled());
-    std::vector<pipeline::ScanSplitContextPtr> children;
-    root.get_split_tasks(&children);
-    EXPECT_TRUE(children.empty());
-    EXPECT_EQ(0, root.stats().raw_rows_read);
-    root.close();
+    for (int64_t split_rows : {4, 1024}) {
+        SCOPED_TRACE(split_rows);
+        TabletReader root(_tablet_mgr.get(), meta, schema, true, true);
+        ASSERT_OK(root.prepare());
+        params.splitted_scan_rows = split_rows;
+        EXPECT_TRUE(root.open(params).is_cancelled());
+        std::vector<pipeline::ScanSplitContextPtr> children;
+        root.get_split_tasks(&children);
+        EXPECT_TRUE(children.empty());
+        EXPECT_EQ(0, root.stats().raw_rows_read);
+        EXPECT_EQ(0, root.stats().io_ns);
+        EXPECT_EQ(0, root.stats().block_seek_ns);
+        EXPECT_EQ(0, root.stats().block_fetch_ns);
+        root.close();
+    }
     auto rowsets = Rowset::get_rowsets(_tablet_mgr.get(), meta);
     ASSIGN_OR_ABORT(auto segments, rowsets[0]->get_segments_checked());
     ASSIGN_OR_ABORT(auto seek,
@@ -960,6 +1049,13 @@ TEST_F(LakeGroupedRangeReaderTest, RejectsMalformedOrLogicalSplitReaders) {
             EXPECT_TRUE(status.is_not_supported()) << invalid << ": " << status;
         }
     }
+    // Current-schema validation remains an entry guard when the physical root will not split.
+    ordinary.grouped_range_task =
+            std::make_shared<const RangeGroupTask>(RangeGroupTask{0, clip(0, 4), {100, 999, 102}});
+    ordinary.splitted_scan_rows = 1024;
+    TabletReader root(_tablet_mgr.get(), meta, schema, true, true);
+    ASSERT_OK(root.prepare());
+    EXPECT_TRUE(root.open(ordinary).is_invalid_argument());
 }
 
 } // namespace starrocks::lake
