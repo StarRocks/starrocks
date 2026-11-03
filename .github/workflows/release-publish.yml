@@ -1,0 +1,56 @@
+name: RELEASE PUBLISH
+
+# Publishes the GitHub Release of a patch version once its English release notes land on main:
+# the Release body is the `## X.Y.Z` section of docs/en/release_notes/release-X.Y.md, under the
+# existing X.Y.Z tag. Only the sections a push adds are published, never older versions that
+# lack a Release; the tag must already exist, an existing Release or draft is left alone, and
+# the Release is marked Latest only when its version is the highest.
+# Backfill a single version (or one tagged after its notes merged) with workflow_dispatch.
+# Thin caller: the logic is ci-tool lib/release_publish.py.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/en/release_notes/release-*.md'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish, e.g. 4.0.17 (its tag and release-notes section must exist on main)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Only print what would be published'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write  # create Releases; also lets the job see existing drafts
+
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
+
+jobs:
+  release-publish:
+    name: release-publish
+    if: github.repository == 'StarRocks/starrocks'
+    runs-on: [self-hosted, quick]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BEFORE: ${{ github.event.before }}
+      AFTER: ${{ github.event.after }}
+      VERSION: ${{ inputs.version }}
+      DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: release-publish
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            args=(--version "${VERSION}")
+            [[ "${DRY_RUN}" == "true" ]] && args+=(--dry-run)
+          else
+            args=(--before "${BEFORE}" --after "${AFTER}")
+          fi
+          python3 ci-tool/lib/release_publish.py --repo "${REPO}" "${args[@]}"
