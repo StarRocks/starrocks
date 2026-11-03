@@ -105,7 +105,7 @@ public class CatalogConnectorMetadataTest {
                 result = Table.TableType.VIEW;
                 times = 1;
                 connectorMetadata.listViewNames((ConnectContext) any, "test_db");
-                result = ImmutableList.of("view1");
+                result = List.of("view1");
                 times = 1;
             }
         };
@@ -117,7 +117,7 @@ public class CatalogConnectorMetadataTest {
         );
 
         assertEquals(Table.TableType.VIEW, catalogConnectorMetadata.getViewType());
-        assertEquals(ImmutableList.of("view1"),
+        assertEquals(List.of("view1"),
                 catalogConnectorMetadata.listViewNames(new ConnectContext(), "test_db"));
     }
 

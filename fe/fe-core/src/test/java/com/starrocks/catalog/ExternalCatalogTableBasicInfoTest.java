@@ -23,7 +23,7 @@ public class ExternalCatalogTableBasicInfoTest {
     }
 
     @Test
-    public void testGetMysqlType() {
+    void testGetMysqlType() {
         Assertions.assertEquals("BASE TABLE", mysqlType(Table.TableType.ICEBERG));
         Assertions.assertEquals("VIEW", mysqlType(Table.TableType.ICEBERG_VIEW));
     }

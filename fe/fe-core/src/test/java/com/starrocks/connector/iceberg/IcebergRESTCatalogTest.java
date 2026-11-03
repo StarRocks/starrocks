@@ -474,7 +474,7 @@ public class IcebergRESTCatalogTest {
         Assertions.assertTrue(tables.contains("view1"));
 
         // listViews returns only the view names
-        Assertions.assertEquals(ImmutableList.of("view1"), icebergRESTCatalog.listViews(connectContext, "db"));
+        Assertions.assertEquals(List.of("view1"), icebergRESTCatalog.listViews(connectContext, "db"));
     }
 
     @Test

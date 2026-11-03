@@ -704,11 +704,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public String getMysqlType() {
         switch (type) {
-            case INLINE_VIEW:
-            case VIEW:
-            case MATERIALIZED_VIEW:
-            case CLOUD_NATIVE_MATERIALIZED_VIEW:
-            case ICEBERG_VIEW:
+            case INLINE_VIEW, VIEW, MATERIALIZED_VIEW, CLOUD_NATIVE_MATERIALIZED_VIEW, ICEBERG_VIEW:
                 return "VIEW";
             case SCHEMA:
                 return "SYSTEM VIEW";
