@@ -807,11 +807,11 @@ This topic introduces the following types of FE configurations:
 
 ### `lake_enable_batch_publish_multi_table`
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
+- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. From v26.3 onwards, the default value is changed from `false` to `true`. FE nodes running a version earlier than v4.1.5 do not support this feature: when such an FE replays a multi-table transaction batch, it applies the visible log of the first table only. Therefore, when you upgrade the cluster from such a version, set this parameter to `false` in **fe.conf** of each upgraded FE node until all FE nodes are upgraded, because a Leader FE failover during the upgrade can make an upgraded FE node the Leader while older FE nodes are still running. When you downgrade the cluster to such a version, set this parameter to `false`, wait until all transactions committed before the change have become visible, and then create the metadata snapshot.
 - Introduced in: v4.1.5
 
 ### `lake_enable_batch_publish_retry_freeze`
