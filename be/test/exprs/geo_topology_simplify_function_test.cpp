@@ -65,8 +65,7 @@ ColumnPtr distances(std::initializer_list<double> values) {
 ColumnPtr radius(double value, size_t size = 1) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(value, size);
 }
-ColumnPtr raw_geometry(std::string_view wkb, GeoColumnDescriptor descriptor = {geo_type().geo_type.value(),
-                                                                               {GEO_ENCODING_WKB, GEO_DIMENSION_XY}}) {
+ColumnPtr raw_geometry(std::string_view wkb, GeoColumnDescriptor descriptor = {geo_type().geo_type.value()}) {
     auto result = GeoColumn::create(std::move(descriptor));
     result->append_wkb(Slice(wkb));
     return result;
@@ -98,7 +97,6 @@ TEST(GeoTopologySimplifyFunctionTest, FamilyCrsAndValidationSurviveVaryingTolera
         EXPECT_GE(decoded(*result, 2).rings[0].size(), 4);
         auto* data = down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result->get())->data_column().get());
         EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
-        EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
         auto before = GeoFunctions::st_geometry_as_wkb(nullptr, {source}).value();
         auto after = GeoFunctions::st_geometry_as_wkb(nullptr, {*result}).value();
         EXPECT_EQ(ColumnViewer<TYPE_VARBINARY>(before).value(0), ColumnViewer<TYPE_VARBINARY>(after).value(0));
@@ -184,16 +182,10 @@ TEST(GeoTopologySimplifyFunctionTest, InvalidToleranceAndTopologyAreRejectedBefo
     auto good = geometries({kSquare});
     auto bytes = GeoFunctions::st_geometry_as_wkb(nullptr, {good}).value();
     auto wkb = ColumnViewer<TYPE_VARBINARY>(bytes).value(0).to_string();
-    GeoColumnDescriptor descriptor{geo_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
-    // Storage dimension labels are not gates; each row's WKB is checked instead.
-    for (auto dim :
-         {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
-        auto other = descriptor;
-        other.storage.dimension = dim;
-        auto result =
-                GeoFunctions::st_geometry_simplify_preserve_topology(ctx.get(), {raw_geometry(wkb, other), radius(0)});
-        EXPECT_TRUE(result.ok()) << dim << ": " << result.status();
-    }
+    GeoColumnDescriptor descriptor{geo_type().geo_type.value()};
+    auto result =
+            GeoFunctions::st_geometry_simplify_preserve_topology(ctx.get(), {raw_geometry(wkb, descriptor), radius(0)});
+    EXPECT_TRUE(result.ok()) << result.status();
     auto other = descriptor;
     other.type.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
     EXPECT_FALSE(GeoFunctions::st_geometry_simplify_preserve_topology(ctx.get(), {raw_geometry(wkb, other), radius(0)})

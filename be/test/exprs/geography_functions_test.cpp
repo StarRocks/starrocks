@@ -652,7 +652,6 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorPreservesCanoni
     }
     auto& output = down_cast<const GeoColumn*>(down_cast<const NullableColumn*>((*result).get())->data_column().get())
                            ->descriptor();
-    EXPECT_EQ(GEO_DIMENSION_XY, output.storage.dimension);
 
     auto constant_value = BinaryColumn::create();
     constant_value->append(Slice(expected[3]));
@@ -888,7 +887,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyRejectsInvalidInputAndSrid) {
 TEST_F(geographyFunctionsTest, nativeGeographySerializerChecksBoundaryDescriptor) {
     GeoTypeDescriptor type{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR,
                            "OGC:CRS84", 4326};
-    GeoColumnDescriptor descriptor{type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+    GeoColumnDescriptor descriptor{type};
     auto column = GeoColumn::create(std::move(descriptor));
     const char point[] = {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     column->append_wkb(Slice(point, sizeof(point)));
@@ -947,7 +946,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointAccessorsMatchCodec) {
             values.push_back(bytes);
         }
     }
-    const GeoColumnDescriptor descriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+    const GeoColumnDescriptor descriptor{geography_type().geo_type.value()};
     for (size_t i = 0; i < values.size(); ++i) {
         SCOPED_TRACE(i);
         auto input = GeoColumn::create(descriptor);
@@ -1090,8 +1089,7 @@ TEST_F(geographyFunctionsTest, nativeGeoPointDistanceFastPathPreservesBits) {
             for (bool prepare : {false, true}) {
                 Columns inputs;
                 for (size_t side = 0; side < 2; ++side) {
-                    auto data = GeoColumn::create(
-                            GeoColumnDescriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+                    auto data = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value()});
                     for (size_t row = 0; row < (constants & (1 << side) ? 1 : size); ++row) {
                         WkbGeometry point;
                         point.type = WkbGeometryType::POINT;
@@ -1134,7 +1132,7 @@ TEST_F(geographyFunctionsTest, nativeGeoPointDistanceFastPathKeepsFallbackErrors
     for (bool spherical : {false, true}) {
         const auto type = spherical ? geography_type() : geometry_type();
         auto distance = spherical ? GeoFunctions::st_geography_distance : GeoFunctions::st_geometry_distance;
-        const GeoColumnDescriptor descriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+        const GeoColumnDescriptor descriptor{type.geo_type.value()};
         const auto point = spherical ? geography({"POINT (1 2)"}) : geometry({"POINT (1 2)"});
         auto big = point->get(0).get_slice().to_string();
         big[0] = 0;
@@ -1360,19 +1358,17 @@ TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityA
 
     // An unsupported edge algorithm is a semantic type mismatch and stays NotSupported.
     auto vincenty = GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                                           GEO_EDGE_ALGORITHM_VINCENTY, "OGC:CRS84", 4326},
-                                                          {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+                                                           GEO_EDGE_ALGORITHM_VINCENTY, "OGC:CRS84", 4326}});
     vincenty->append_wkb(Slice(wkb));
     auto rejected = GeoFunctions::st_geography_x(nullptr, {vincenty});
     ASSERT_FALSE(rejected.ok());
     EXPECT_TRUE(rejected.status().is_not_supported());
 
-    // The storage dimension label is not a gate: the row's own XY header decides.
-    auto xyz_label = GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                                            GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326},
-                                                           {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ}});
-    xyz_label->append_wkb(Slice(wkb));
-    auto admitted = GeoFunctions::st_geography_x(nullptr, {xyz_label});
+    // The same row computes under the SPHERICAL edge algorithm.
+    auto spherical = GeoColumn::create(GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                                            GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326}});
+    spherical->append_wkb(Slice(wkb));
+    auto admitted = GeoFunctions::st_geography_x(nullptr, {spherical});
     ASSERT_TRUE(admitted.ok()) << admitted.status();
     EXPECT_DOUBLE_EQ(1, ColumnViewer<TYPE_DOUBLE>(*admitted).value(0));
 }
@@ -1402,7 +1398,6 @@ TEST_F(geographyFunctionsTest, nativeGeometryPointWkbConstructorMatchesCodec) {
     }
     const auto* data = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(output->get()));
     EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
-    EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
     auto nulls = NullColumn::create();
     for (size_t row = 0; row < values.size(); ++row) nulls->append(row % 11 == 0);
     auto mixed = GeoFunctions::st_geom_from_wkb(context.get(), {NullableColumn::create(input, nulls), crs});
@@ -1431,8 +1426,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryPointAccessorsMatchCodec) {
     const auto type = geometry_type("EPSG:4326", 4326);
     for (const auto& bytes : geometry_point_wkb_cases()) {
         SCOPED_TRACE(bytes.size());
-        auto input =
-                GeoColumn::create(GeoColumnDescriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto input = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value()});
         input->append_wkb(Slice(bytes));
         WkbGeometry point;
         const auto status = WkbCodec::parse_wkb(Slice(bytes), &point, WkbCoordinateSemantics::GEOMETRY_CARTESIAN);
@@ -1483,17 +1477,13 @@ TEST_F(geographyFunctionsTest, nativeGeometryPointFastPathRetainsNullsAndDescrip
         EXPECT_EQ(17, (*all_null)->size());
         EXPECT_TRUE((*all_null)->is_null(16));
     }
-    for (auto dimension : {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ}) {
-        auto input =
-                GeoColumn::create(GeoColumnDescriptor{geometry_type().geo_type.value(), {GEO_ENCODING_WKB, dimension}});
-        input->append_wkb("not WKB");
-        for (bool x : {true, false}) {
-            auto output =
-                    x ? GeoFunctions::st_geometry_x(nullptr, {input}) : GeoFunctions::st_geometry_y(nullptr, {input});
-            ASSERT_FALSE(output.ok());
-            // Storage dimension labels are not gates; the row's own bytes are rejected.
-            EXPECT_TRUE(output.status().is_invalid_argument()) << output.status();
-        }
+    auto input = GeoColumn::create(GeoColumnDescriptor{geometry_type().geo_type.value()});
+    input->append_wkb("not WKB");
+    for (bool x : {true, false}) {
+        auto output = x ? GeoFunctions::st_geometry_x(nullptr, {input}) : GeoFunctions::st_geometry_y(nullptr, {input});
+        ASSERT_FALSE(output.ok());
+        // The row's own bytes are rejected.
+        EXPECT_TRUE(output.status().is_invalid_argument()) << output.status();
     }
 }
 
@@ -1561,14 +1551,12 @@ TEST_F(geographyFunctionsTest, nativeGeometryComputeRejectsUnsupportedInputs) {
     std::string wkb;
     ASSERT_TRUE(WkbCodec::to_wkb(point, &wkb).ok());
     GeoColumnDescriptor descriptor{
-            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
-            {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ}};
-    auto xyz = GeoColumn::create(std::move(descriptor));
-    xyz->append_wkb(Slice(wkb));
-    // The storage dimension label is not a gate: the row's own XY header decides.
-    auto xyz_label = GeoFunctions::st_geometry_type(nullptr, {xyz});
-    ASSERT_TRUE(xyz_label.ok()) << xyz_label.status();
-    EXPECT_EQ("ST_Point", ColumnViewer<TYPE_VARCHAR>(*xyz_label).value(0).to_string());
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
+    auto column = GeoColumn::create(std::move(descriptor));
+    column->append_wkb(Slice(wkb));
+    auto type_name = GeoFunctions::st_geometry_type(nullptr, {column});
+    ASSERT_TRUE(type_name.ok()) << type_name.status();
+    EXPECT_EQ("ST_Point", ColumnViewer<TYPE_VARCHAR>(*type_name).value(0).to_string());
 }
 
 TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
@@ -1590,7 +1578,6 @@ TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
     const auto* nullable = down_cast<const NullableColumn*>(native.get());
     const auto* data = down_cast<const GeoColumn*>(nullable->data_column().get());
     EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
-    EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
 
     std::unique_ptr<FunctionContext> text_serializer(FunctionContext::create_test_context({type}, TYPE_VARCHAR_DESC));
     auto text = GeoFunctions::st_geometry_as_text(text_serializer.get(), {native}).value();
@@ -2480,8 +2467,7 @@ void check_intersects_equivalence(const WkbGeometry& a, const WkbGeometry& b, co
     for (const auto* polygon : {&a, &b}) {
         std::string bytes;
         ASSERT_TRUE(WkbCodec::to_wkb(*polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
-        auto column =
-                GeoColumn::create(GeoColumnDescriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto column = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value()});
         column->append_wkb(Slice(bytes));
         inputs.emplace_back(std::move(column));
     }
@@ -2532,7 +2518,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryIntersectsLazySetupKeepsFirstProbe)
 
 TEST_F(geographyFunctionsTest, nativeGeometryIntersectsIndexThresholdsAndScratchReuse) {
     const auto type = geometry_type();
-    auto left = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+    auto left = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value()});
     auto right = GeoColumn::create(left->descriptor());
     std::vector<bool> expected;
     // Around the 128-edge threshold and the 256-pair budget (first probe skips its already checked pair).
@@ -2627,8 +2613,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryIntersectsFiltersRoundedOrientation
                     }
                     std::string bytes;
                     ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
-                    auto column = GeoColumn::create(GeoColumnDescriptor{geometry_type().geo_type.value(),
-                                                                        {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+                    auto column = GeoColumn::create(GeoColumnDescriptor{geometry_type().geo_type.value()});
                     column->append_wkb(Slice(bytes));
                     inputs.emplace_back(std::move(column));
                 }
@@ -2660,8 +2645,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryIntersectsKeepsTolerantEndpointCont
         polygon.rings = {{{p, p}, {q, p}, {p, q}, {p, p}}};
         std::string bytes;
         ASSERT_TRUE(WkbCodec::to_wkb(polygon, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
-        auto right = GeoColumn::create(
-                GeoColumnDescriptor{geometry_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto right = GeoColumn::create(GeoColumnDescriptor{geometry_type().geo_type.value()});
         right->append_wkb(Slice(bytes));
         auto forward = GeoFunctions::st_geometry_intersects(nullptr, {left, right});
         auto reverse = GeoFunctions::st_geometry_intersects(nullptr, {right, left});
@@ -3057,17 +3041,15 @@ TEST_F(geographyFunctionsTest, nativeGeoValiditySeparatesTopologyFromBoundaryErr
     EXPECT_TRUE(null->is_null(0));
 
     GeoColumnDescriptor unsupported_descriptor{
-            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
-            {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ}};
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
     auto unsupported = GeoColumn::create(std::move(unsupported_descriptor));
     std::string point_wkb(21, 0);
     point_wkb[0] = 1;
     point_wkb[1] = 1;
     unsupported->append_wkb(Slice(point_wkb));
-    // The storage dimension label is not a gate: the row's own XY header decides.
-    auto xyz_label = GeoFunctions::st_geometry_is_valid(nullptr, {unsupported});
-    ASSERT_TRUE(xyz_label.ok()) << xyz_label.status();
-    EXPECT_TRUE(ColumnViewer<TYPE_BOOLEAN>(*xyz_label).value(0));
+    auto valid = GeoFunctions::st_geometry_is_valid(nullptr, {unsupported});
+    ASSERT_TRUE(valid.ok()) << valid.status();
+    EXPECT_TRUE(ColumnViewer<TYPE_BOOLEAN>(*valid).value(0));
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyValidityAcrossDirectCheckCutoff) {
@@ -3090,8 +3072,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyValidityAcrossDirectCheckCutoff) {
                 if (kind == 2) ring[n / 2] = ring[1];
                 if (kind == 3) ring.insert(ring.begin() + 1, ring.front());
                 ring.push_back(ring.front());
-                auto input = GeoColumn::create(
-                        GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+                auto input = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
                 std::string wkb;
                 ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
                 input->append_wkb(Slice(wkb));
@@ -3121,8 +3102,7 @@ TEST_F(geographyFunctionsTest, nativeGeographySingleRingValidityAndFallbacks) {
                            "MULTIPOLYGON (((0 0, 2 0, 1 2, 0 0)), ((10 0, 12 2, 10 2, 12 0, 10 0)))",
                            "GEOMETRYCOLLECTION (POLYGON ((0 0, 2 0, 1 2, 0 0)), POLYGON EMPTY)",
                            "POLYGON EMPTY"};
-    auto input = GeoColumn::create(
-            GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+    auto input = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
     std::vector<bool> expected;
     for (const auto* text : cases) {
         WkbGeometry geometry;
@@ -3195,8 +3175,7 @@ TEST_F(geographyFunctionsTest, nativeGeographySingleRingValidityPreservesCodecEr
         WkbGeometry parsed;
         auto expected = WkbCodec::parse_wkb(Slice(bytes), &parsed);
         ASSERT_FALSE(expected.ok());
-        auto input = GeoColumn::create(
-                GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto input = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
         input->append_wkb(Slice(bytes));
         auto actual = GeoFunctions::st_geography_is_valid(nullptr, {input});
         ASSERT_FALSE(actual.ok());
@@ -3394,7 +3373,7 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsRejectsInvalidAndSharesPreparedContex
     auto outside_domain = geometry({"POINT (10 95)"}, source_type);
     auto rejected = GeoFunctions::st_geometry_transform(context.get(), {outside_domain, target});
     EXPECT_FALSE(rejected.ok());
-    GeoColumnDescriptor malformed_descriptor{source_type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+    GeoColumnDescriptor malformed_descriptor{source_type.geo_type.value()};
     auto malformed = GeoColumn::create(std::move(malformed_descriptor));
     const std::string bad_wkb = "bad";
     malformed->append_wkb(Slice(bad_wkb));
@@ -3505,8 +3484,6 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
     auto value = GeoFunctions::st_geom_from_text(context.get(), {wkt, crs});
     ASSERT_TRUE(value.ok()) << value.status();
     const auto expected = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(value->get()))->descriptor();
-    // Copies do not propagate storage metadata; factory-created destinations keep their default storage.
-    const GeoStorageDescriptor destination_storage{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN};
     for (bool nullable : {false, true}) {
         // A non-nullable destination receives a non-nullable constant payload.
         ColumnPtr source =
@@ -3516,9 +3493,8 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
         EXPECT_FALSE(unfolded->is_constant());
         EXPECT_EQ(nullable, unfolded->is_nullable());
         auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(unfolded.get()));
-        // Unfolding copies into a factory-created column: the type is kept, storage stays destination-owned.
-        EXPECT_EQ(expected.type, geo->descriptor().type);
-        EXPECT_EQ(destination_storage, geo->descriptor().storage);
+        // Unfolding copies into a factory-created column of the same type.
+        EXPECT_EQ(expected, geo->descriptor());
         auto x = GeoFunctions::st_geometry_x(nullptr, {unfolded});
         ASSERT_TRUE(x.ok()) << x.status();
         for (size_t i = 0; i < 3; ++i) EXPECT_DOUBLE_EQ(1.0, x.value()->get(i).get_double());
@@ -3533,8 +3509,7 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
     destination->append(*null_row, 0, 1);
     destination->append(*row, 0, 1);
     const auto& copied = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(destination.get()))->descriptor();
-    EXPECT_EQ(expected.type, copied.type);
-    EXPECT_EQ(destination_storage, copied.storage);
+    EXPECT_EQ(expected, copied);
     auto x = GeoFunctions::st_geometry_x(nullptr, {destination});
     ASSERT_TRUE(x.ok()) << x.status();
     ASSERT_EQ(4, x.value()->size());
@@ -3753,7 +3728,7 @@ TEST_F(geographyFunctionsTest, h3FromGeoRetainsCoordinateAndTypeValidation) {
         std::string bytes;
         ASSERT_TRUE(WkbCodec::to_wkb(geometry, &bytes, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
         // Producer validation metadata must not bypass H3's coordinate/type checks.
-        GeoColumnDescriptor descriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+        GeoColumnDescriptor descriptor{geography_type().geo_type.value()};
         auto input = GeoColumn::create(descriptor);
         input->append_wkb(Slice(bytes));
         auto result = GeoFunctions::h3_from_geo(nullptr, {input, ColumnHelper::create_const_column<TYPE_INT>(9, 1)});
@@ -3779,7 +3754,7 @@ TEST_F(geographyFunctionsTest, h3FromGeoConstantAndVaryingPointsShareDiagnostics
                 bytes[5 + axis * sizeof(bits) + i] = static_cast<char>(bits >> (8 * i));
             }
         }
-        GeoColumnDescriptor descriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+        GeoColumnDescriptor descriptor{geography_type().geo_type.value()};
         auto input = GeoColumn::create(descriptor);
         input->append_wkb(Slice(bytes));
         auto resolution = ColumnHelper::create_const_column<TYPE_INT>(9, 1);
@@ -3807,7 +3782,7 @@ TEST_F(geographyFunctionsTest, h3FromGeoConstantAndVaryingPointsShareDiagnostics
 
 TEST_F(geographyFunctionsTest, h3FromGeoPointBytesInBothOrdersAndMalformedPayloads) {
     const auto from_bytes = [&](const std::string& bytes) {
-        GeoColumnDescriptor descriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+        GeoColumnDescriptor descriptor{geography_type().geo_type.value()};
         auto column = GeoColumn::create(descriptor);
         column->append_wkb(Slice(bytes));
         return GeoFunctions::h3_from_geo(nullptr, {column, ColumnHelper::create_const_column<TYPE_INT>(9, 1)});
@@ -3850,7 +3825,7 @@ TEST_F(geographyFunctionsTest, h3FromGeoPointBytesInBothOrdersAndMalformedPayloa
 
 TEST_F(geographyFunctionsTest, h3FromGeoFixedPointStructureRetainsDiagnostics) {
     const auto from_bytes = [&](const std::string& bytes) {
-        GeoColumnDescriptor descriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+        GeoColumnDescriptor descriptor{geography_type().geo_type.value()};
         auto column = GeoColumn::create(descriptor);
         column->append_wkb(Slice(bytes));
         return GeoFunctions::h3_from_geo(nullptr, {column, ColumnHelper::create_const_column<TYPE_INT>(9, 1)});
@@ -3901,7 +3876,7 @@ TEST_F(geographyFunctionsTest, h3FromGeoFixedPointStructureRetainsCoordinateBits
                                                                {-179.999999, 0.000001},
                                                                {payload_nan, payload_nan}}};
     for (uint8_t order : {0, 1}) {
-        GeoColumnDescriptor descriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+        GeoColumnDescriptor descriptor{geography_type().geo_type.value()};
         auto points = GeoColumn::create(descriptor);
         for (const auto& coordinate : coordinates) {
             std::string bytes(21, '\0');
@@ -4746,8 +4721,6 @@ TEST_F(geographyFunctionsTest, h3BoundaryDirectWkbMatchesTopologyCorpus) {
         ASSERT_EQ(origins.size(), (*actual)->size());
         const auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(actual->get()));
         EXPECT_EQ(geography_type().geo_type.value(), geo->descriptor().type);
-        EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
-        EXPECT_EQ(GEO_DIMENSION_XY, geo->descriptor().storage.dimension);
         for (size_t row = 0; row < origins.size(); ++row) {
             SCOPED_TRACE(row);
             const bool is_null = mode == 2 && row % 17 == 0;
@@ -4919,8 +4892,7 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillMatchesStandardCenterFill) {
         }
         std::string wkb;
         ASSERT_TRUE(WkbCodec::to_wkb(geometry, &wkb).ok());
-        auto input = GeoColumn::create(
-                GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto input = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
         input->append_wkb(Slice(wkb));
         std::vector<std::vector<LatLng>> vertices;
         for (const auto& source : geometry.rings) {
@@ -4973,8 +4945,7 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsSensitiveGeometryAndMultipo
         ring.push_back(ring.front());
         std::string wkb;
         ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
-        auto input = GeoColumn::create(
-                GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto input = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
         input->append_wkb(Slice(wkb));
         std::vector<LatLng> vertices;
         for (size_t i = 0; i + 1 < ring.size(); ++i)
@@ -5018,8 +4989,7 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsSensitiveGeometryAndMultipo
         empty.empty = true;
         multi.children.push_back(empty);
         ASSERT_TRUE(WkbCodec::to_wkb(multi, &wkb).ok());
-        auto multiple = GeoColumn::create(
-                GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto multiple = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
         multiple->append_wkb(Slice(wkb));
         auto result = GeoFunctions::h3_polygon_to_cells(
                 nullptr, {multiple, ColumnHelper::create_const_column<TYPE_INT>(resolution, 1)});
@@ -5042,8 +5012,7 @@ TEST_F(geographyFunctionsTest, h3RecursiveFillRetainsNullsConstantInputsAndLimit
     ring.push_back(ring.front());
     std::string wkb;
     ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
-    auto data = GeoColumn::create(
-            GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+    auto data = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
     data->append_wkb(Slice(wkb));
     constexpr size_t rows = 17;
     ColumnPtr input = ConstColumn::create(data, rows);
@@ -5133,8 +5102,7 @@ TEST_F(geographyFunctionsTest, h3PolygonFillRetainsOrderedCellsAndVaryingRowOffs
     shapes[7] = empty;
 
     const std::array<size_t, 9> row_shapes{0, 1, 7, 3, 5, 6, 0, 1, 2};
-    auto data = GeoColumn::create(
-            GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+    auto data = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
     auto nulls = NullColumn::create();
     auto resolutions = NullableColumn::create(Int32Column::create(), NullColumn::create());
     for (size_t row = 0; row < row_shapes.size(); ++row) {
@@ -5310,8 +5278,7 @@ TEST_F(geographyFunctionsTest, h3SingleRingValidityRetainsOrderedFillAndTopology
         ring.push_back(ring.front());
         std::string wkb;
         ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb).ok());
-        auto data = GeoColumn::create(
-                GeoColumnDescriptor{geography_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+        auto data = GeoColumn::create(GeoColumnDescriptor{geography_type().geo_type.value()});
         data->append_wkb(Slice(wkb));
 
         std::vector<LatLng> coordinates;
@@ -5409,25 +5376,24 @@ std::string iso_wkb(WkbGeometryType kind, uint32_t offset, bool little = true) {
     return writer.bytes();
 }
 
-// The most trusting storage label a producer can attach: XY and semantically validated.
-ColumnPtr labelled_xy(const TypeDescriptor& type, const std::string& wkb) {
-    auto column = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
+// A single-row column of `type` holding `wkb` unchanged.
+ColumnPtr wkb_column(const TypeDescriptor& type, const std::string& wkb) {
+    auto column = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value()});
     column->append_wkb(Slice(wkb));
     return column;
 }
 
 } // namespace
 
-// The column-level XY label is a producer claim, not evidence about payloads. Every kernel that reads
-// coordinates must decode each row's own WKB header and refuse Z/M rows even under that label. This is
-// the guarantee that lets the storage dimension metadata be removed without changing results.
+// The column descriptor says nothing about row dimensions. Every kernel that reads coordinates must
+// decode each row's own WKB header and refuse Z/M rows.
 namespace {
 
 using GeoKernelCall = std::function<StatusOr<ColumnPtr>(const ColumnPtr&)>;
 using GeoKernel = StatusOr<ColumnPtr> (*)(FunctionContext*, const Columns&);
 
 ColumnPtr xy(const TypeDescriptor& type, WkbGeometryType kind) {
-    return labelled_xy(type, iso_wkb(kind, 0));
+    return wkb_column(type, iso_wkb(kind, 0));
 }
 
 // Runs `call` on the XY payload of `kind`, which must succeed so that the call itself is admitted, then
@@ -5445,7 +5411,7 @@ void expect_rejects_non_xy(const TypeDescriptor& type, WkbGeometryType kind, con
     if (kind == WkbGeometryType::POINT) payloads.emplace_back("Z big-endian", iso_wkb(kind, 1000, false));
     for (const auto& [label, payload] : payloads) {
         SCOPED_TRACE(label);
-        auto output = call(labelled_xy(type, payload));
+        auto output = call(wkb_column(type, payload));
         if (predicate && output.ok()) {
             // value() ignores the null flag and reads a default false for an all-NULL column.
             ColumnViewer<TYPE_BOOLEAN> valid(*output);
@@ -5678,77 +5644,6 @@ TEST_F(GeoNonXYPayloadTest, StDifference) {
 
 TEST_F(GeoNonXYPayloadTest, StSymDifference) {
     expect_overlay_rejects_non_xy(geometry_type(), GeoFunctions::st_geometry_sym_difference);
-}
-
-// Producers that cannot vouch for the dimension, such as Iceberg GEOGRAPHY reads, label columns UNKNOWN.
-// Such columns are admitted: XY rows compute and Z rows are rejected by the row's own WKB header.
-ColumnPtr labelled_unknown(const TypeDescriptor& type, const std::string& wkb) {
-    auto column =
-            GeoColumn::create(GeoColumnDescriptor{type.geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN}});
-    column->append_wkb(Slice(wkb));
-    return column;
-}
-
-void expect_unknown_label_admitted(const TypeDescriptor& type, WkbGeometryType kind, const GeoKernelCall& call) {
-    SCOPED_TRACE(::testing::Message() << (type.type == TYPE_GEOGRAPHY ? "GEOGRAPHY " : "GEOMETRY ")
-                                      << WkbCodec::type_name(kind));
-    auto computed = call(labelled_unknown(type, iso_wkb(kind, 0)));
-    EXPECT_TRUE(computed.ok()) << computed.status();
-    EXPECT_FALSE(call(labelled_unknown(type, iso_wkb(kind, 1000))).ok());
-}
-
-TEST_F(GeoNonXYPayloadTest, UnknownLabelGeometryKernelsCompute) {
-    const auto type = geometry_type();
-    expect_unknown_label_admitted(type, POINT, unary(GeoFunctions::st_geometry_x));
-    expect_unknown_label_admitted(type, POLYGON, unary(GeoFunctions::st_geometry_area));
-    expect_unknown_label_admitted(type, POINT, unary_with_context(GeoFunctions::st_geometry_centroid, type));
-    expect_unknown_label_admitted(type, POINT, binary(GeoFunctions::st_geometry_distance, type, POINT, true));
-    expect_unknown_label_admitted(type, POLYGON, binary(GeoFunctions::st_geometry_contains, type, POINT, true));
-    expect_unknown_label_admitted(type, POLYGON, [&](const ColumnPtr& input) {
-        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
-        auto distance = DoubleColumn::create();
-        distance->append(1.0);
-        return GeoFunctions::st_geometry_buffer(context.get(), {input, std::move(distance)});
-    });
-    expect_unknown_label_admitted(type, POLYGON, [&](const ColumnPtr& input) {
-        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, type));
-        return GeoFunctions::st_geometry_intersection(context.get(), {input, xy(type, POLYGON)});
-    });
-}
-
-TEST_F(GeoNonXYPayloadTest, UnknownLabelGeographyFeedsH3) {
-    const auto type = geography_type();
-    const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
-    expect_unknown_label_admitted(type, POINT, [&](const ColumnPtr& input) {
-        std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, TYPE_INT_DESC}, TYPE_BIGINT_DESC));
-        return GeoFunctions::h3_from_geo(context.get(), {input, resolution});
-    });
-    expect_unknown_label_admitted(type, POLYGON, [&](const ColumnPtr& input) {
-        return GeoFunctions::h3_polygon_to_cells(nullptr, {input, resolution});
-    });
-}
-
-// Explicit non-XY storage labels are producer claims too: XY rows compute and Z rows are rejected per row.
-TEST_F(GeoNonXYPayloadTest, NonXYStorageLabelsAreNotGates) {
-    for (auto dimension : {GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
-        SCOPED_TRACE(dimension);
-        auto labelled = [dimension](const TypeDescriptor& type, const std::string& wkb) {
-            auto column = GeoColumn::create(GeoColumnDescriptor{type.geo_type.value(), {GEO_ENCODING_WKB, dimension}});
-            column->append_wkb(Slice(wkb));
-            return ColumnPtr(std::move(column));
-        };
-        const auto planar = geometry_type();
-        EXPECT_TRUE(GeoFunctions::st_geometry_x(nullptr, {labelled(planar, iso_wkb(POINT, 0))}).ok());
-        EXPECT_FALSE(GeoFunctions::st_geometry_x(nullptr, {labelled(planar, iso_wkb(POINT, 1000))}).ok());
-        const auto spherical = geography_type();
-        const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
-        EXPECT_TRUE(GeoFunctions::h3_polygon_to_cells(nullptr, {labelled(spherical, iso_wkb(POLYGON, 0)), resolution})
-                            .ok());
-        EXPECT_FALSE(
-                GeoFunctions::h3_polygon_to_cells(nullptr, {labelled(spherical, iso_wkb(POLYGON, 1000)), resolution})
-                        .ok());
-    }
 }
 
 } // namespace
