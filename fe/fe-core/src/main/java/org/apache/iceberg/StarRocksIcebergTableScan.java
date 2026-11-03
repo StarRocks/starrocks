@@ -141,7 +141,10 @@ public class StarRocksIcebergTableScan
         this.deleteFileIndexCache = scanContext.getDeleteFileIndexCache();
         this.metaFileCacheMap = scanContext.getMetaFileCacheMap();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
-        this.cacheStatsColumnLimit = dataFileCacheWithMetrics ? scanContext.getDataFileCacheStatsColumnLimit() : -1;
+        // without cached column statistics, only the identifier columns may be cached (equality deletes), so no
+        // column beyond the keep-set
+        this.cacheStatsColumnLimit =
+                dataFileCacheWithMetrics ? Math.max(scanContext.getDataFileCacheStatsColumnLimit(), 0) : 0;
         this.enableCacheDataFileIdentifierColumnMetrics = scanContext.isEnableCacheDataFileIdentifierColumnMetrics();
         this.onlyReadCache = scanContext.isOnlyReadCache();
         this.localParallelism = scanContext.getLocalParallelism();
@@ -455,7 +458,7 @@ public class StarRocksIcebergTableScan
                         .cacheWithMetrics(dataFileCacheWithMetrics)
                         .cacheStatsColumnLimit(cacheStatsColumnLimit)
                         .cacheStatsCandidateRanks(cacheStatsColumnLimit > 0 ? statsCandidateRanks(table()) : null)
-                        .cacheStatsTruncatedTypes(cacheStatsColumnLimit >= 0 ? statsTruncatedTypes(table()) : null);
+                        .cacheStatsTruncatedTypes(statsTruncatedTypes(table()));
 
         if (shouldIgnoreResiduals()) {
             manifestGroup = manifestGroup.ignoreResiduals();
@@ -474,11 +477,10 @@ public class StarRocksIcebergTableScan
         }
 
         if (dataFileCacheWithMetrics) {
-            // The keep-set is always cached; with a column limit (ManifestColumnStats) other columns are
-            // cached too, up to the limit in total, so file-level min/max still prunes on columns that
-            // correlate with the file layout without being partition or sort keys. Without a limit an
-            // empty keep set caches all columns. Scans that need full column stats never reach here --
-            // useCache() routes them to the non-cache path.
+            // The keep-set is always cached; other columns are cached too (ManifestColumnStats), up to the
+            // column limit in total, so file-level min/max still prunes on columns that correlate with the
+            // file layout without being partition or sort keys. Scans that need full column stats never
+            // reach here -- useCache() routes them to the non-cache path.
             Set<Integer> keepColumnIds = statsKeepColumnIds(table(), tableSchema());
             if (!keepColumnIds.isEmpty()) {
                 return keepColumnIds;
@@ -497,7 +499,7 @@ public class StarRocksIcebergTableScan
 
     // Columns where file-level min/max actually prunes: partition source columns and sort-order
     // source columns -- unioned across all specs and sort orders so partition/sort evolution stays
-    // covered -- plus identifier columns (equality-delete correctness). Empty result caches all.
+    // covered -- plus identifier columns (equality-delete correctness).
     static Set<Integer> statsKeepColumnIds(Table table, Schema schema) {
         Set<Integer> ids = new HashSet<>(schema.identifierFieldIds());
         table.specs().values().forEach(spec -> spec.fields().forEach(field -> ids.add(field.sourceId())));
@@ -506,12 +508,51 @@ public class StarRocksIcebergTableScan
     }
 
     // Columns whose file-level min/max can prune, in every schema of the table, ranked for the cached statistics
-    // column limit: top-level primitive columns first, then primitive fields inside structs, each in field id order.
-    // Predicates cannot reference fields inside lists or maps, so their statistics are not cached.
+    // column limit. Tiers by the table's current metrics config, which only orders the columns (files may have been
+    // written under another config; what is kept still comes from the manifest): columns with an explicit
+    // write.metadata.metrics.column.<col> mode that writes bounds, then the other columns whose mode writes bounds,
+    // then the rest (counts or none, or no longer in the current schema). Inside a tier, top-level primitive columns
+    // first, then primitive fields inside structs, each in field id order. Predicates cannot reference fields inside
+    // lists or maps, so their statistics are not cached.
     static Map<Integer, Long> statsCandidateRanks(Table table) {
         Map<Integer, Long> ranks = new HashMap<>();
         table.schemas().values().forEach(schema -> collectPrunableFields(schema.asStruct(), true, ranks));
+        Map<Integer, Long> tiers = statsMetricsTiers(table, ranks.keySet());
+        if (tiers != null) {
+            ranks.replaceAll((id, rank) -> (tiers.get(id) << 34) + rank);
+        }
         return ranks;
+    }
+
+    private static final long TIER_EXPLICIT_BOUNDS = 0;
+    private static final long TIER_BOUNDS = 1;
+    private static final long TIER_OTHER = 2;
+
+    // Null when the metrics config cannot be read: the columns then keep the untiered order.
+    private static Map<Integer, Long> statsMetricsTiers(Table table, Set<Integer> fieldIds) {
+        try {
+            Schema schema = table.schema();
+            Map<String, String> properties = table.properties();
+            MetricsConfig config = MetricsConfig.forTable(table);
+            Map<Integer, Long> tiers = new HashMap<>();
+            for (Integer id : fieldIds) {
+                String name = schema.findColumnName(id);
+                long tier = TIER_OTHER;
+                if (name != null) {
+                    MetricsModes.MetricsMode mode = config.columnMode(name);
+                    if (mode instanceof MetricsModes.Truncate || mode instanceof MetricsModes.Full) {
+                        tier = properties.containsKey(TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX + name) ?
+                                TIER_EXPLICIT_BOUNDS : TIER_BOUNDS;
+                    }
+                }
+                tiers.put(id, tier);
+            }
+            return tiers;
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to read the metrics config of table {}, cached statistics columns are not tiered by it",
+                    table.name(), e);
+            return null;
+        }
     }
 
     // STRING and BINARY fields of every schema of the table: the cached statistics truncate their long bounds.

@@ -120,7 +120,7 @@ public class DataFileWrapper implements DataFile {
 
     @Override
     public Map<Integer, Long> columnSizes() {
-        return dataFile.columnSizes();
+        return columnStats == null ? dataFile.columnSizes() : columnStats.columnSizes(columnStatsIndex);
     }
 
     @Override

@@ -121,6 +121,10 @@ public final class ManifestColumnStats {
         return columns.length == 0 ? null : new CountMap(file, CountKind.NAN);
     }
 
+    public Map<Integer, Long> columnSizes(int file) {
+        return columns.length == 0 ? null : new CountMap(file, CountKind.SIZE);
+    }
+
     private Column column(Object key) {
         if (!(key instanceof Integer)) {
             return null;
@@ -130,7 +134,7 @@ public final class ManifestColumnStats {
     }
 
     private enum CountKind {
-        VALUE, NULL, NAN
+        VALUE, NULL, NAN, SIZE
     }
 
     // Statistics of one column. Each part is encoded at build time in the cheapest exact form for this manifest:
@@ -143,6 +147,7 @@ public final class ManifestColumnStats {
         final Longs valueCounts;
         final Longs nullCounts;
         final Longs nanCounts;
+        final Longs sizes;
 
         Column(ColumnBuilder b, int fileCount, Longs recordCounts) {
             if (b.width > 0) {
@@ -156,6 +161,7 @@ public final class ManifestColumnStats {
             this.valueCounts = Longs.encode(b.valueCounts, fileCount, recordCounts);
             this.nullCounts = Longs.encode(b.nullCounts, fileCount, null);
             this.nanCounts = Longs.encode(b.nanCounts, fileCount, null);
+            this.sizes = Longs.encode(b.sizes, fileCount, null);
         }
 
         ByteBuffer bound(int file, boolean isLower) {
@@ -164,7 +170,20 @@ public final class ManifestColumnStats {
         }
 
         Long count(int file, CountKind kind) {
-            Longs counts = kind == CountKind.VALUE ? valueCounts : kind == CountKind.NULL ? nullCounts : nanCounts;
+            Longs counts;
+            switch (kind) {
+                case VALUE:
+                    counts = valueCounts;
+                    break;
+                case NULL:
+                    counts = nullCounts;
+                    break;
+                case NAN:
+                    counts = nanCounts;
+                    break;
+                default:
+                    counts = sizes;
+            }
             if (counts == null) {
                 return null;
             }
@@ -178,7 +197,7 @@ public final class ManifestColumnStats {
 
         long retainedBytes() {
             return COLUMN_BYTES + retained(lower) + retained(upper) + retained(valueCounts) + retained(nullCounts) +
-                    retained(nanCounts);
+                    retained(nanCounts) + retained(sizes);
         }
 
         private static long retained(Bounds bounds) {
@@ -559,7 +578,7 @@ public final class ManifestColumnStats {
 
     // Shallow sizes with compressed oops: 12-byte object headers, 16-byte array headers, 8-byte alignment.
     private static final long OBJECT_BYTES = 24;
-    private static final long COLUMN_BYTES = 32;
+    private static final long COLUMN_BYTES = 40;
 
     private static long align(long bytes) {
         return (bytes + 7) & ~7L;
@@ -648,6 +667,7 @@ public final class ManifestColumnStats {
             addCounts(file.valueCounts(), index, CountKind.VALUE);
             addCounts(file.nullValueCounts(), index, CountKind.NULL);
             addCounts(file.nanValueCounts(), index, CountKind.NAN);
+            addCounts(file.columnSizes(), index, CountKind.SIZE);
             return index;
         }
 
@@ -768,6 +788,7 @@ public final class ManifestColumnStats {
         long[] valueCounts;
         long[] nullCounts;
         long[] nanCounts;
+        long[] sizes;
 
         ColumnBuilder(int capacity) {
             this.capacity = capacity;
@@ -830,9 +851,13 @@ public final class ManifestColumnStats {
                     nullCounts = ensure(nullCounts, index, ABSENT, capacity);
                     nullCounts[index] = count;
                     break;
-                default:
+                case NAN:
                     nanCounts = ensure(nanCounts, index, ABSENT, capacity);
                     nanCounts[index] = count;
+                    break;
+                default:
+                    sizes = ensure(sizes, index, ABSENT, capacity);
+                    sizes[index] = count;
             }
         }
 

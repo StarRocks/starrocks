@@ -72,6 +72,7 @@ public class ManifestColumnStatsTest {
             assertSameMap(source.valueCounts(), stats.valueCounts(i));
             assertSameMap(source.nullValueCounts(), stats.nullValueCounts(i));
             assertSameMap(source.nanValueCounts(), stats.nanValueCounts(i));
+            assertSameMap(source.columnSizes(), stats.columnSizes(i));
         }
     }
 
@@ -212,13 +213,50 @@ public class ManifestColumnStatsTest {
             Map<Integer, ByteBuffer> upper = new HashMap<>(file.upperBounds());
             lower.put(12, bytes(200, i));
             upper.put(12, bytes(200, i + 1));
-            longer.add(dataFile(file.valueCounts(), file.nullValueCounts(), lower, upper));
+            longer.add(dataFile(file.columnSizes(), file.valueCounts(), file.nullValueCounts(), lower, upper));
         }
         ManifestColumnStats longerStats = build(longer, Set.of(), 100);
         long longerActual = GraphLayout.parseInstance(longerStats).totalSize();
         // the packed 200-byte values replace 4-byte ints: at least 2 x 196 bytes more per file
         Assertions.assertTrue(longerStats.retainedBytes() - stats.retainedBytes() >= 2L * 196 * FILES);
         Assertions.assertEquals(longerActual, longerStats.retainedBytes(), longerActual * 0.1);
+    }
+
+    // Column sizes differ from file to file, so they encode as one int[] per column: about 4 bytes per kept column
+    // per file on top of the bounds and counts.
+    @Test
+    public void testColumnSizesCostAnIntPerColumnPerFile() {
+        int columns = 100;
+        Random random = new Random(19);
+        List<DataFile> withSizes = new ArrayList<>();
+        List<DataFile> withoutSizes = new ArrayList<>();
+        for (int i = 0; i < FILES; i++) {
+            Map<Integer, Long> sizes = new HashMap<>();
+            Map<Integer, Long> values = new HashMap<>();
+            Map<Integer, Long> nulls = new HashMap<>();
+            Map<Integer, ByteBuffer> lower = new HashMap<>();
+            Map<Integer, ByteBuffer> upper = new HashMap<>();
+            for (int id = 1; id <= columns; id++) {
+                sizes.put(id, 1000L + random.nextInt(1_000_000));
+                values.put(id, 10L);
+                nulls.put(id, (long) random.nextInt(3));
+                lower.put(id, Conversions.toByteBuffer(Types.LongType.get(), (long) random.nextInt(1000)));
+                upper.put(id, Conversions.toByteBuffer(Types.LongType.get(), 1000L + random.nextInt(1000)));
+            }
+            withSizes.add(dataFile(sizes, values, nulls, lower, upper));
+            withoutSizes.add(dataFile(null, values, nulls, lower, upper));
+        }
+        ManifestColumnStats with = build(withSizes, Set.of(), columns);
+        ManifestColumnStats without = build(withoutSizes, Set.of(), columns);
+        long withHeap = GraphLayout.parseInstance(with).totalSize();
+        long withoutHeap = GraphLayout.parseInstance(without).totalSize();
+        double perFile = (double) (withHeap - withoutHeap) / FILES;
+        System.out.printf("column sizes: %d B/file without, +%.1f B/file with (%d columns, %d files)%n",
+                withoutHeap / FILES, perFile, columns, FILES);
+        Assertions.assertEquals(4.0 * columns, perFile, 0.1 * 4 * columns);
+        // the sizes are weighed exactly; the whole store stays within a few bytes of the heap
+        Assertions.assertEquals(withHeap - withoutHeap, with.retainedBytes() - without.retainedBytes());
+        Assertions.assertEquals(withHeap, with.retainedBytes(), 64);
     }
 
     @Test
@@ -234,6 +272,7 @@ public class ManifestColumnStatsTest {
                 assertSameMap(source.valueCounts(), stats.valueCounts(i));
                 assertSameMap(source.nullValueCounts(), stats.nullValueCounts(i));
                 assertSameMap(source.nanValueCounts(), stats.nanValueCounts(i));
+                assertSameMap(source.columnSizes(), stats.columnSizes(i));
             }
             Assertions.assertEquals(unsized.retainedBytes(), stats.retainedBytes());
             long actual = GraphLayout.parseInstance(stats).totalSize();
@@ -250,6 +289,8 @@ public class ManifestColumnStatsTest {
         DataFile copy = cached.copyWithoutStats();
         Assertions.assertEquals(files.get(0).location(), copy.location());
         Assertions.assertNull(copy.lowerBounds());
+        Assertions.assertNull(copy.columnSizes());
+        Assertions.assertEquals(files.get(0).columnSizes(), cached.columnSizes());
         // a plain wrapper still copies
         Assertions.assertEquals(files.get(0).lowerBounds(), DataFileWrapper.wrap(files.get(0)).copy().lowerBounds());
     }
@@ -287,6 +328,7 @@ public class ManifestColumnStatsTest {
             assertSameMap(source.valueCounts(), stats.valueCounts(i));
             assertSameMap(source.nullValueCounts(), stats.nullValueCounts(i));
             assertSameMap(source.nanValueCounts(), stats.nanValueCounts(i));
+            assertSameMap(source.columnSizes(), stats.columnSizes(i));
         }
         // every get() returns a fresh buffer, so a caller cannot modify the shared values
         stats.lowerBounds(1).get(5).put(0, (byte) 0x7F);
@@ -414,10 +456,16 @@ public class ManifestColumnStatsTest {
 
     private static DataFile dataFile(Map<Integer, Long> valueCounts, Map<Integer, Long> nullCounts,
                                      Map<Integer, ByteBuffer> lower, Map<Integer, ByteBuffer> upper) {
+        return dataFile(null, valueCounts, nullCounts, lower, upper);
+    }
+
+    private static DataFile dataFile(Map<Integer, Long> sizes, Map<Integer, Long> valueCounts,
+                                     Map<Integer, Long> nullCounts, Map<Integer, ByteBuffer> lower,
+                                     Map<Integer, ByteBuffer> upper) {
         return DataFiles.builder(PartitionSpec.unpartitioned())
                 .withPath("/path/to/f" + System.nanoTime() + ".parquet")
                 .withFormat(FileFormat.PARQUET).withFileSizeInBytes(10).withRecordCount(10)
-                .withMetrics(new Metrics(10L, null, valueCounts, nullCounts, null, lower, upper))
+                .withMetrics(new Metrics(10L, sizes, valueCounts, nullCounts, null, lower, upper))
                 .build();
     }
 
@@ -431,6 +479,7 @@ public class ManifestColumnStatsTest {
             Map<Integer, Long> values = new HashMap<>();
             Map<Integer, Long> nulls = new HashMap<>();
             Map<Integer, Long> nans = new HashMap<>();
+            Map<Integer, Long> sizes = new HashMap<>();
             Map<Integer, ByteBuffer> lower = new HashMap<>();
             Map<Integer, ByteBuffer> upper = new HashMap<>();
             long rows = 1000;
@@ -440,6 +489,8 @@ public class ManifestColumnStatsTest {
                     continue; // no statistics for this column in these files
                 }
                 values.put(id, rows);
+                // column 3 has the same size in every file; column 4 sizes exceed an int
+                sizes.put(id, id == 3 ? 4096L : id == 4 ? 5_000_000_000L + i : 100L + random.nextInt(10000));
                 if (id == 8 && i % 5 == 0) {
                     nulls.put(id, rows); // all null: counts, no bounds
                     continue;
@@ -506,7 +557,7 @@ public class ManifestColumnStatsTest {
             files.add(DataFiles.builder(PartitionSpec.unpartitioned())
                     .withPath("/path/to/data-" + i + ".parquet")
                     .withFormat(FileFormat.PARQUET).withFileSizeInBytes(1 << 20).withRecordCount(rows)
-                    .withMetrics(new Metrics(rows, null, values, nulls, nans, lower, upper))
+                    .withMetrics(new Metrics(rows, sizes, values, nulls, nans, lower, upper))
                     .build());
         }
         return files;
