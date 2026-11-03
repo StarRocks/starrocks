@@ -61,6 +61,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -1258,6 +1259,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     @Override
     public Void visitReorderColumnsClause(ReorderColumnsClause clause, ConnectContext context) {
         MaterializedView mv = (MaterializedView) table;
+        // The statement was analyzed against the materialized view its name resolved to at the time, and ALTER
+        // MATERIALIZED VIEW ... SWAP WITH can have given the name to another one since. The view was looked up by
+        // name before the lock and its identity is re-checked under it; analyze again on the view this statement
+        // locked, so that every analysis rule holds for the view this rewrites.
+        new AlterMVClauseAnalyzerVisitor(mv).visitReorderColumnsClause(clause, context);
         SortKeyResolution sortKey = resolveSortKey(mv, clause.getColumnsByPos());
         List<Integer> sortKeyIdxes = sortKey.sortKeyIdxes();
         List<Integer> sortKeyUniqueIds = sortKey.sortKeyUniqueIds();

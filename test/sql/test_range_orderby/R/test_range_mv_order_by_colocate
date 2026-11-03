@@ -31,7 +31,7 @@ as select k1, k2, v from t;
 refresh materialized view mv_colocate with sync mode;
 alter materialized view mv_colocate order by (k2, k1);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: ALTER MATERIALIZED VIEW ... ORDER BY is not supported on a materialized view with 'colocate_with'.")
+E: (1064, 'Getting analyzing error. Detail message: The sort key of a materialized view in a range colocate group must start with its colocate columns [k1] (same order and types). Got: [k2, k1].')
 -- !result
 function: assert_schema_change_job_count("db_${uuid0}", "mv_colocate", 0)
 -- result:

@@ -862,7 +862,9 @@ PRIMARY KEY (tenant_id, created_time, id);
 - Colocated Column 必须是排序列的前缀。
 - 同一 Colocation Group 中的表必须具有相同类型的 Colocated Column，且 Colocated Column 的数量和顺序必须一致。
 - 建表后不能修改 Colocated Column 的类型，包括增加 VARCHAR 列的长度。
+- 建表后可以在线变更排序键（`ALTER TABLE ... ORDER BY`、添加或删除键列、扩宽整数类型的排序键列），前提是新排序键仍以 Colocated Column 开头，且这些列的顺序和类型不变。不支持删除 Colocated Column、调整其顺序或修改其类型。变更完成后，表仍属于原 Colocation Group，Colocate Join 不受影响。
 - 默认的 Colocated Column 即为排序列。
+- 如果 `colocate_with` 只指定了 Colocation Group，而排序键变更后包含的列多于 Colocated Column，StarRocks 会将该属性改写为显式列出 Colocated Column 的形式 `<colocation_group>:<colocated_column>[,<colocated_column>]`，此后 `SHOW CREATE TABLE` 中显示的即为该形式。
 :::
 
 ```SQL
