@@ -36,6 +36,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler;
@@ -659,7 +660,7 @@ public class LakeTableAlterMetaJobTest {
                                 .build());
                 }
             };
-            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertFalse(LakeTableHelper.checkLakeRollupAllowFileBundling(table2));
             new MockUp<StarOSAgent>() {
                 @Mock
                 public List<ShardInfo> getShardInfo(List<Long> shardIds, long workerGroupId)
@@ -668,10 +669,10 @@ public class LakeTableAlterMetaJobTest {
                 }
             };
 
-            Assertions.assertTrue(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertTrue(LakeTableHelper.checkLakeRollupAllowFileBundling(table2));
             ShardInfo shardInfo1 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10002/")).build();
             shardInfos.add(shardInfo1);
-            Assertions.assertFalse(table2.checkLakeRollupAllowFileBundling());
+            Assertions.assertFalse(LakeTableHelper.checkLakeRollupAllowFileBundling(table2));
             shardInfos.clear();
 
             ShardInfo shardInfo2 = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/10003")).build();
