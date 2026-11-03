@@ -365,6 +365,59 @@ public class LakePublishBatchTest {
     }
 
     @Test
+    public void testMultiTableBatchPublishDisabled() throws Exception {
+        // lake_enable_batch_publish_multi_table = false keeps an FE that cannot replay a
+        // multi-table batch safe: every multi-table txn is published on its own.
+        boolean oldMultiTable = Config.lake_enable_batch_publish_multi_table;
+        int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
+        Config.lake_enable_batch_publish_multi_table = false;
+        // a single-txn batch is below the class-wide minimum of 2 and would never publish
+        Config.lake_batch_publish_min_version_num = 1;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), TABLE_AGG_OFF);
+            Table table2 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), TABLE_AGG_ON);
+            List<Long> bothTableIds = Lists.newArrayList(table1.getId(), table2.getId());
+
+            List<TabletCommitInfo> bothTableTablets = Lists.newArrayList();
+            for (Table table : Lists.newArrayList(table1, table2)) {
+                for (Partition partition : table.getPartitions()) {
+                    bothTableTablets.addAll(getPartitionTabletCommitInfos(partition));
+                }
+            }
+
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+            long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), bothTableIds,
+                    "mt_disabled_1_" + UUIDUtil.genUUID(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
+                    db.getId(), txnId1, bothTableTablets, Lists.newArrayList(), null);
+
+            long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), bothTableIds,
+                    "mt_disabled_2_" + UUIDUtil.genUUID(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
+                    db.getId(), txnId2, bothTableTablets, Lists.newArrayList(), null);
+
+            List<TransactionStateBatch> batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            TransactionStateBatch headBatch = batches.stream()
+                    .filter(batch -> batch.getTxnIds().contains(txnId1))
+                    .findFirst().orElse(null);
+            assertNotNull(headBatch);
+            assertEquals(Lists.newArrayList(txnId1), headBatch.getTxnIds());
+
+            PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+            awaitPublish(publishVersionDaemon, waiter1, waiter2);
+        } finally {
+            Config.lake_enable_batch_publish_multi_table = oldMultiTable;
+            Config.lake_batch_publish_min_version_num = oldMinVersionNum;
+        }
+    }
+
+    @Test
     public void testTrimBatchAtVersionGapMultiTable() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()

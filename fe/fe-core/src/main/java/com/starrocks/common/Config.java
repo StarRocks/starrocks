@@ -1413,9 +1413,12 @@ public class Config extends ConfigBase {
     public static int lake_batch_publish_min_version_num = 1;
 
     @ConfField(mutable = true, comment = "Allow batching consecutive multi-table transactions into one publish. " +
-            "Effective only when lake_enable_batch_publish_version is true. Enable this only after all FE nodes " +
-            "are upgraded to a version that supports it.")
-    public static boolean lake_enable_batch_publish_multi_table = false;
+            "Effective only when lake_enable_batch_publish_version is true. An FE older than 4.1.5 replays such " +
+            "a batch incorrectly (it applies the visible log of the first table only). When upgrading from such " +
+            "a version, keep this false on the upgraded FEs until all FEs are upgraded. When downgrading to such " +
+            "a version, set it to false and wait until the transactions committed before the change are " +
+            "visible before creating the metadata image.")
+    public static boolean lake_enable_batch_publish_multi_table = true;
 
     @ConfField(mutable = true, comment = "Retry a lake publish batch that did not finish with only the transactions " +
             "of that attempt, so that every partition keeps the new version of the attempt. When false, a retry " +
