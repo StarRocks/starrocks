@@ -24,6 +24,7 @@ import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.AsyncIterable;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
+import com.starrocks.connector.iceberg.DataFileWrapper;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
@@ -44,6 +45,9 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.metrics.MetricsReporter;
 import org.apache.iceberg.metrics.ScanMetricsUtil;
+import org.apache.iceberg.types.Type;
+import org.apache.iceberg.types.TypeUtil;
+import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ParallelIterable;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.TableScanUtil;
@@ -53,6 +57,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +89,8 @@ public class StarRocksIcebergTableScan
     private final String schemaString;
     private DeleteFileIndex deleteFileIndex;
     private boolean dataFileCacheWithMetrics;
+    // Set only when the catalog caches column statistics; identifier-only caching keeps per-file copies.
+    private final int cacheStatsColumnLimit;
     private boolean enableCacheDataFileIdentifierColumnMetrics;
     private final StarRocksIcebergTableScanContext scanContext;
     private final boolean onlyReadCache;
@@ -134,6 +141,10 @@ public class StarRocksIcebergTableScan
         this.deleteFileIndexCache = scanContext.getDeleteFileIndexCache();
         this.metaFileCacheMap = scanContext.getMetaFileCacheMap();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
+        // without cached column statistics, only the identifier columns may be cached (equality deletes), so no
+        // column beyond the keep-set
+        this.cacheStatsColumnLimit =
+                dataFileCacheWithMetrics ? Math.max(scanContext.getDataFileCacheStatsColumnLimit(), 0) : 0;
         this.enableCacheDataFileIdentifierColumnMetrics = scanContext.isEnableCacheDataFileIdentifierColumnMetrics();
         this.onlyReadCache = scanContext.isOnlyReadCache();
         this.localParallelism = scanContext.getLocalParallelism();
@@ -444,7 +455,10 @@ public class StarRocksIcebergTableScan
                         .withDataFileCache(dataFileCache)
                         .preparedDeleteFileIndex(deleteFileIndex)
                         .identifierFieldIds(getIdentifierFieldIds())
-                        .cacheWithMetrics(dataFileCacheWithMetrics);
+                        .cacheWithMetrics(dataFileCacheWithMetrics)
+                        .cacheStatsColumnLimit(cacheStatsColumnLimit)
+                        .cacheStatsCandidateRanks(cacheStatsColumnLimit > 0 ? statsCandidateRanks(table()) : null)
+                        .cacheStatsTruncatedTypes(statsTruncatedTypes(table()));
 
         if (shouldIgnoreResiduals()) {
             manifestGroup = manifestGroup.ignoreResiduals();
@@ -463,9 +477,10 @@ public class StarRocksIcebergTableScan
         }
 
         if (dataFileCacheWithMetrics) {
-            // Cache statistics only for the prune-effective keep-set; an empty keep set caches all
-            // columns. Scans that need full column stats never reach here -- useCache() routes them
-            // to the non-cache path.
+            // The keep-set is always cached; other columns are cached too (ManifestColumnStats), up to the
+            // column limit in total, so file-level min/max still prunes on columns that correlate with the
+            // file layout without being partition or sort keys. Scans that need full column stats never
+            // reach here -- useCache() routes them to the non-cache path.
             Set<Integer> keepColumnIds = statsKeepColumnIds(table(), tableSchema());
             if (!keepColumnIds.isEmpty()) {
                 return keepColumnIds;
@@ -484,12 +499,83 @@ public class StarRocksIcebergTableScan
 
     // Columns where file-level min/max actually prunes: partition source columns and sort-order
     // source columns -- unioned across all specs and sort orders so partition/sort evolution stays
-    // covered -- plus identifier columns (equality-delete correctness). Empty result caches all.
+    // covered -- plus identifier columns (equality-delete correctness).
     static Set<Integer> statsKeepColumnIds(Table table, Schema schema) {
         Set<Integer> ids = new HashSet<>(schema.identifierFieldIds());
         table.specs().values().forEach(spec -> spec.fields().forEach(field -> ids.add(field.sourceId())));
         table.sortOrders().values().forEach(order -> order.fields().forEach(field -> ids.add(field.sourceId())));
         return ids;
+    }
+
+    // Columns whose file-level min/max can prune, in every schema of the table, ranked for the cached statistics
+    // column limit. Tiers by the table's current metrics config, which only orders the columns (files may have been
+    // written under another config; what is kept still comes from the manifest): columns with an explicit
+    // write.metadata.metrics.column.<col> mode that writes bounds, then the other columns whose mode writes bounds,
+    // then the rest (counts or none, or no longer in the current schema). Inside a tier, top-level primitive columns
+    // first, then primitive fields inside structs, each in field id order. Predicates cannot reference fields inside
+    // lists or maps, so their statistics are not cached.
+    static Map<Integer, Long> statsCandidateRanks(Table table) {
+        Map<Integer, Long> ranks = new HashMap<>();
+        table.schemas().values().forEach(schema -> collectPrunableFields(schema.asStruct(), true, ranks));
+        Map<Integer, Long> tiers = statsMetricsTiers(table, ranks.keySet());
+        if (tiers != null) {
+            ranks.replaceAll((id, rank) -> (tiers.get(id) << 34) + rank);
+        }
+        return ranks;
+    }
+
+    private static final long TIER_EXPLICIT_BOUNDS = 0;
+    private static final long TIER_BOUNDS = 1;
+    private static final long TIER_OTHER = 2;
+
+    // Null when the metrics config cannot be read: the columns then keep the untiered order.
+    private static Map<Integer, Long> statsMetricsTiers(Table table, Set<Integer> fieldIds) {
+        try {
+            Schema schema = table.schema();
+            Map<String, String> properties = table.properties();
+            MetricsConfig config = MetricsConfig.forTable(table);
+            Map<Integer, Long> tiers = new HashMap<>();
+            for (Integer id : fieldIds) {
+                String name = schema.findColumnName(id);
+                long tier = TIER_OTHER;
+                if (name != null) {
+                    MetricsModes.MetricsMode mode = config.columnMode(name);
+                    if (mode instanceof MetricsModes.Truncate || mode instanceof MetricsModes.Full) {
+                        tier = properties.containsKey(TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX + name) ?
+                                TIER_EXPLICIT_BOUNDS : TIER_BOUNDS;
+                    }
+                }
+                tiers.put(id, tier);
+            }
+            return tiers;
+        } catch (RuntimeException e) {
+            LOG.warn("Failed to read the metrics config of table {}, cached statistics columns are not tiered by it",
+                    table.name(), e);
+            return null;
+        }
+    }
+
+    // STRING and BINARY fields of every schema of the table: the cached statistics truncate their long bounds.
+    static Map<Integer, Type.TypeID> statsTruncatedTypes(Table table) {
+        Map<Integer, Type.TypeID> types = new HashMap<>();
+        table.schemas().values().forEach(schema -> TypeUtil.indexById(schema.asStruct()).forEach((id, field) -> {
+            Type.TypeID type = field.type().typeId();
+            if (type == Type.TypeID.STRING || type == Type.TypeID.BINARY) {
+                types.put(id, type);
+            }
+        }));
+        return types;
+    }
+
+    private static void collectPrunableFields(Types.StructType struct, boolean topLevel, Map<Integer, Long> ranks) {
+        for (Types.NestedField field : struct.fields()) {
+            if (field.type().isPrimitiveType()) {
+                long rank = (topLevel ? 0L : 1L << 32) + Integer.toUnsignedLong(field.fieldId());
+                ranks.merge(field.fieldId(), rank, Math::min);
+            } else if (field.type().isStructType()) {
+                collectPrunableFields(field.type().asStructType(), false, ranks);
+            }
+        }
     }
 
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
@@ -580,8 +666,11 @@ public class StarRocksIcebergTableScan
 
         ScanMetricsUtil.fileTask(scanMetrics(), dataFile, deleteFiles);
 
+        // Pruning and delete matching are done; scans that need file statistics bypass the cache.
+        DataFile taskFile = dataFile instanceof DataFileWrapper ? ((DataFileWrapper) dataFile).withoutSharedStats() :
+                dataFile;
         return new BaseFileScanTask(
-                dataFile,
+                taskFile,
                 deleteFiles,
                 schemaString,
                 specString,

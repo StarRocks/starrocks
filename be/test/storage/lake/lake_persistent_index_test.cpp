@@ -220,16 +220,14 @@ protected:
 
     VariantPB make_int_variant_pb(int32_t v) {
         VariantPB var;
-        TypeDescriptor type_desc(TYPE_INT);
-        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         var.set_value(std::to_string(v));
         return var;
     }
 
     VariantPB make_string_variant_pb(const std::string& v) {
         VariantPB var;
-        TypeDescriptor type_desc(TYPE_VARCHAR);
-        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
         var.set_value(v);
         return var;
     }
@@ -1736,7 +1734,7 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
         auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
 
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+        auto col2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         col2->append_datum(Datum(Slice(v2)));
         chunk->append_column(std::move(col2), (SlotId)1);
 
@@ -2590,9 +2588,48 @@ TEST_F(LakePersistentIndexTest, test_load_dels_non_origin_filters_stale_deletes)
     EXPECT_EQ(values[3], got[3]);                  // rssid 50 >  20 -> stale delete skipped
 }
 
-// Origin-skip: a del file whose origin_rowset_id == the rebuilt rowset id skips get() entirely and
-// erases every key regardless of its current rssid. Same keys/rssids as the non-origin test above,
-// but here even the rssid-50 keys (which the non-origin path keeps) are erased.
+// An origin del file also filters when the index contains an entry newer than the delete. This is
+// required when replay order differs from rssid order: replaying an older delete after a newer rowset
+// must not erase that rowset's keys.
+TEST_F(LakePersistentIndexTest, test_load_dels_origin_filters_stale_deletes) {
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    std::vector<std::string> keys = {"k0", "k1", "k2", "k3"};
+    std::vector<uint32_t> rssids = {5, 5, 50, 50};
+    std::vector<Slice> key_slices;
+    std::vector<IndexValue> values;
+    for (size_t i = 0; i < keys.size(); ++i) {
+        key_slices.emplace_back(keys[i]);
+        values.emplace_back((uint64_t{rssids[i]} << 32) | i);
+    }
+    ASSERT_OK(index->insert(keys.size(), key_slices.data(), values.data(), /*version=*/1));
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+
+    write_binary_del_file(tablet_id, "del_origin_stale", keys);
+    RowsetMetadataPB rowset_meta;
+    rowset_meta.set_id(20);
+    auto* d = rowset_meta.add_del_files();
+    d->set_name("del_origin_stale");
+    d->set_origin_rowset_id(20);
+    d->set_op_offset(0);
+
+    auto tablet_schema = make_varchar_pk_schema();
+    auto rowset = std::make_shared<Rowset>(_tablet_mgr.get(), tablet_id, &rowset_meta, /*index=*/0, tablet_schema);
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, std::vector<ColumnId>{0});
+    ASSERT_OK(index->load_dels(rowset, pkey_schema, /*rowset_version=*/10));
+
+    std::vector<IndexValue> got(keys.size());
+    ASSERT_OK(index->get(keys.size(), key_slices.data(), got.data()));
+    EXPECT_EQ(IndexValue(NullIndexValue), got[0]);
+    EXPECT_EQ(IndexValue(NullIndexValue), got[1]);
+    EXPECT_EQ(values[2], got[2]);
+    EXPECT_EQ(values[3], got[3]);
+}
+
+// When the index has no entry newer than an origin delete, load_dels skips the lookup and erases
+// every key. Same keys as above, but the delete's rssid 777 is newer than every current entry.
 TEST_F(LakePersistentIndexTest, test_load_dels_origin_erases_all_keys) {
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
@@ -2904,9 +2941,11 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_get_propagates_sst_error
     std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4"};
     std::vector<Slice> slices;
     std::vector<IndexValue> values;
+    // The entries are newer than the deletes below (rssid 50 against origin 20), so load_dels has to look
+    // their keys up; against entries no newer than a delete the lookup could skip nothing and is not made.
     for (size_t i = 0; i < keys.size(); ++i) {
         slices.emplace_back(keys[i]);
-        values.emplace_back((uint64_t{5} << 32) | i);
+        values.emplace_back((uint64_t{50} << 32) | i);
     }
     ASSERT_OK(index->insert(keys.size(), slices.data(), values.data(), 1));
     ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
@@ -2956,9 +2995,11 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_load_error_drains_get_ta
     std::vector<std::string> keys = {"k0", "k1", "k2", "k3", "k4"};
     std::vector<Slice> slices;
     std::vector<IndexValue> values;
+    // The entries are newer than the deletes below (rssid 50 against origin 20), so load_dels has to look
+    // their keys up; against entries no newer than a delete the lookup could skip nothing and is not made.
     for (size_t i = 0; i < keys.size(); ++i) {
         slices.emplace_back(keys[i]);
-        values.emplace_back((uint64_t{5} << 32) | i);
+        values.emplace_back((uint64_t{50} << 32) | i);
     }
     ASSERT_OK(index->insert(keys.size(), slices.data(), values.data(), 1));
     ASSERT_OK(index->sync_flush_all_memtables(10'000'000));

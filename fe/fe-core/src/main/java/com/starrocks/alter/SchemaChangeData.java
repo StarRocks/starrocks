@@ -48,6 +48,9 @@ class SchemaChangeData {
     private final boolean shortKeyChanged;
     private final List<Integer> sortKeyIdxes;
     private final List<Integer> sortKeyUniqueIds;
+    // index meta id -> sort key of a non-base index that keeps its own sort key
+    private final Map<Long, List<Integer>> indexSortKeyIdxes;
+    private final Map<Long, List<Integer>> indexSortKeyUniqueIds;
     private final long warehouseId;
     private final ComputeResource computeResource;
     private final boolean disableReplicatedStorageForGIN;
@@ -131,6 +134,16 @@ class SchemaChangeData {
     }
 
     @NotNull
+    Map<Long, List<Integer>> getIndexSortKeyIdxes() {
+        return Collections.unmodifiableMap(indexSortKeyIdxes);
+    }
+
+    @NotNull
+    Map<Long, List<Integer>> getIndexSortKeyUniqueIds() {
+        return Collections.unmodifiableMap(indexSortKeyUniqueIds);
+    }
+
+    @NotNull
     public ComputeResource getComputeResource() {
         return computeResource;
     }
@@ -157,6 +170,8 @@ class SchemaChangeData {
         this.shortKeyChanged = builder.shortKeyChanged;
         this.sortKeyIdxes = builder.sortKeyIdxes;
         this.sortKeyUniqueIds = builder.sortKeyUniqueIds;
+        this.indexSortKeyIdxes = builder.indexSortKeyIdxes;
+        this.indexSortKeyUniqueIds = builder.indexSortKeyUniqueIds;
         this.warehouseId = builder.warehouseId;
         this.computeResource = builder.computeResource;
         this.disableReplicatedStorageForGIN = builder.disableReplicatedStorageForGIN;
@@ -179,6 +194,8 @@ class SchemaChangeData {
         private boolean shortKeyChanged = false;
         private List<Integer> sortKeyIdxes;
         private List<Integer> sortKeyUniqueIds;
+        private final Map<Long, List<Integer>> indexSortKeyIdxes = new HashMap<>();
+        private final Map<Long, List<Integer>> indexSortKeyUniqueIds = new HashMap<>();
         private long warehouseId;
         private ComputeResource computeResource;
         private boolean disableReplicatedStorageForGIN = false;
@@ -251,6 +268,13 @@ class SchemaChangeData {
 
         Builder withSortKeyUniqueIds(@Nullable List<Integer> sortKeyUniqueIds) {
             this.sortKeyUniqueIds = sortKeyUniqueIds;
+            return this;
+        }
+
+        Builder withIndexSortKey(long indexMetaId, @NotNull List<Integer> sortKeyIdxes,
+                                 @NotNull List<Integer> sortKeyUniqueIds) {
+            this.indexSortKeyIdxes.put(indexMetaId, sortKeyIdxes);
+            this.indexSortKeyUniqueIds.put(indexMetaId, sortKeyUniqueIds);
             return this;
         }
 

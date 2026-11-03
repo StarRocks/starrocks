@@ -1030,6 +1030,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SQL 层检查的任务调度的最小允许调度间隔（以秒为单位）。提交任务时，TaskAnalyzer 将调度周期转换为秒，如果周期小于 `task_min_schedule_interval_s`，则以 `ERR_INVALID_PARAMETER` 拒绝提交。这可以防止创建运行过于频繁的任务，并保护调度器免受高频任务的影响。如果调度没有显式开始时间，TaskAnalyzer 会将开始时间设置为当前纪元秒。
 - 引入版本: v3.3.0, v3.4.0, v3.5.0
 
+### `task_runs_dispatch_interval_ms`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Leader FE 检查正在运行的 TaskRun 是否完成、并启动等待中的 TaskRun 的间隔。可通过 `ADMIN SET FRONTEND CONFIG` 修改，无需重启 FE。新间隔在当前调度周期结束后生效。减小该值可使等待中的 TaskRun 更快启动、完成状态更快更新，但会增加 FE CPU 开销；增大该值可降低开销，但会延迟启动。负值按 `1000` 处理。`0` 按 `1` 处理。
+- 引入版本: -
+
 ### `task_runs_timeout_second`
 
 - 默认值: 4 * 3600
@@ -1085,7 +1094,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
+- 描述: 是否为云原生表启用 File Bundling 优化。自 v26.2 起，该配置也作用于存算分离集群中的异步物化视图。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为，或使用 CREATE MATERIALIZED VIEW 属性 `file_bundling` 在物化视图级别控制此行为。
 - 引入版本: v4.0
 
 ### `enable_pipeline_routine_load`

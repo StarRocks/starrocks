@@ -46,14 +46,28 @@ public:
                     size_t buffer_size = 128 * 1024)
             : CSVReader(parse_options, buffer_size), _data(std::move(data)), _max_chunk(max_chunk) {}
 
+    // Every read that delivers data first times out once, like a non-blocking stream load pipe whose next piece
+    // has not arrived yet.
+    void time_out_before_each_chunk() { _time_out_before_each_chunk = true; }
+    size_t num_timeouts() const { return _num_timeouts; }
+
     // Collects each row's fields as copied strings so tests don't have to
     // worry about the underlying buffer being reused.
     starrocks::Status read_all_rows(std::vector<std::vector<std::string>>* rows) {
-        while (true) {
+        // Each call gets at least one more piece of the data, or a row, or a timeout followed by a piece.
+        const size_t max_calls = 4 * (_data.size() + 1) + 16;
+        for (size_t calls = 0;; ++calls) {
+            if (calls > max_calls) {
+                return starrocks::Status::InternalError("no progress");
+            }
             starrocks::CSVRow row;
             auto st = next_record(row);
             if (st.is_end_of_file()) {
                 return starrocks::Status::OK();
+            }
+            if (st.is_time_out()) {
+                // Read again, as the scanner does on its next call.
+                continue;
             }
             if (!st.ok()) {
                 return st;
@@ -71,6 +85,13 @@ public:
 protected:
     starrocks::Status _fill_buffer() override {
         DCHECK(_buff.free_space() > 0);
+        if (_time_out_before_each_chunk && _pos < _data.size()) {
+            _timed_out = !_timed_out;
+            if (_timed_out) {
+                ++_num_timeouts;
+                return starrocks::Status::TimedOut("no data yet");
+            }
+        }
         size_t free_space = _buff.free_space();
         size_t remaining = _data.size() - _pos;
         size_t to_copy = std::min({free_space, remaining, _max_chunk});
@@ -105,7 +126,32 @@ private:
     std::string _data;
     size_t _pos = 0;
     size_t _max_chunk;
+    bool _time_out_before_each_chunk = false;
+    bool _timed_out = false;
+    size_t _num_timeouts = 0;
 };
+
+// Reads `data` in pieces of every size from 1 byte up, each piece behind a timed-out read, and checks that the rows
+// are the same as when it is read at once.
+static void expect_same_rows_across_timed_out_reads(const starrocks::CSVParseOptions& options,
+                                                    const std::string& data) {
+    StringCSVReader at_once(options, data);
+    std::vector<std::vector<std::string>> expected;
+    auto st = at_once.read_all_rows(&expected);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_FALSE(expected.empty());
+
+    for (size_t piece = 1; piece <= data.size(); ++piece) {
+        SCOPED_TRACE("piece size " + std::to_string(piece));
+        StringCSVReader reader(options, data, piece);
+        reader.time_out_before_each_chunk();
+        std::vector<std::vector<std::string>> rows;
+        st = reader.read_all_rows(&rows);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        EXPECT_GT(reader.num_timeouts(), 0u);
+        EXPECT_EQ(expected, rows);
+    }
+}
 
 class CSVReaderTest : public ::testing::Test {
 public:
@@ -481,6 +527,41 @@ TEST_F(CSVReaderTest, test_multichar_delimiter_expand_boundary_uaf) {
     ASSERT_EQ(2u, rows[0].size());
     EXPECT_EQ(std::string(buf - 1, 'a'), rows[0][0]);
     EXPECT_EQ("b", rows[0][1]);
+}
+
+// A non-blocking stream load pipe (a channel or merge-commit stream load) times out a read while the next piece of
+// the data has not arrived. more_rows() must keep the row it was parsing and parse it again on the next call,
+// wherever the read was cut: inside an enclosed field, after an escape, between two enclose characters.
+TEST_F(CSVReaderTest, test_more_rows_keeps_row_cut_by_timed_out_read) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, '\\', '"');
+    const std::string data = "1,\"a,b\",c\n2,\"x\ny\",z\n3,p\\,q,r\n4,\"say \"\"hi\"\"\",s\n";
+
+    StringCSVReader at_once(options, data);
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(at_once.read_all_rows(&rows).ok());
+    ASSERT_EQ(4u, rows.size());
+    EXPECT_EQ((std::vector<std::string>{"1", "a,b", "c"}), rows[0]);
+    EXPECT_EQ((std::vector<std::string>{"2", "x\ny", "z"}), rows[1]);
+
+    expect_same_rows_across_timed_out_reads(options, data);
+}
+
+// The same with multi-char delimiters, where a read can also be cut inside a delimiter: its bytes must not be taken
+// for data.
+TEST_F(CSVReaderTest, test_more_rows_keeps_multichar_delimiter_cut_by_timed_out_read) {
+    starrocks::CSVParseOptions options("$$$", "@@", 0, false, 0, '"');
+    // The last row has no row delimiter, which the reader adds at the end of the data.
+    const std::string data = "1@@\"a$$$b\"@@c$$$2@@x@@y$$$3@@\"z\"@@w";
+
+    StringCSVReader at_once(options, data);
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(at_once.read_all_rows(&rows).ok());
+    ASSERT_EQ(3u, rows.size());
+    EXPECT_EQ((std::vector<std::string>{"1", "a$$$b", "c"}), rows[0]);
+    EXPECT_EQ((std::vector<std::string>{"2", "x", "y"}), rows[1]);
+    EXPECT_EQ((std::vector<std::string>{"3", "z", "w"}), rows[2]);
+
+    expect_same_rows_across_timed_out_reads(options, data);
 }
 
 } // namespace starrocks::csv

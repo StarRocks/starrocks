@@ -248,7 +248,7 @@ public:
 
     Status read_range(const Range<uint64_t>& range, const Filter*, ColumnPtr& dst) override {
         if (_temp_col == nullptr) {
-            _temp_col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+            _temp_col = ColumnHelper::create_column(TYPE_INT_DESC, true);
         }
         dst = _temp_col;
         _temp_col->as_mutable_raw_ptr()->append_datum(Datum(int32_t(42)));
@@ -386,11 +386,11 @@ static Status fill_dst_chunk_without_projected(GroupReader* group_reader, ChunkP
 static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
     auto variant = VariantColumn::create();
     MutableColumns typed_columns;
-    auto typed_col = ColumnHelper::create_column(TypeDescriptor(TYPE_BIGINT), true);
+    auto typed_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     typed_col->append_datum(int64_t(11));
     typed_col->append_datum(int64_t(22));
     typed_columns.emplace_back(typed_col->as_mutable_ptr());
-    variant->set_shredded_columns({"a.b.c"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns), nullptr, nullptr);
+    variant->set_shredded_columns({"a.b.c"}, {TYPE_BIGINT_DESC}, std::move(typed_columns), nullptr, nullptr);
     return variant;
 }
 
@@ -4749,13 +4749,13 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
 TEST_F(GroupReaderTest, TempColumnAccretesStaleWithoutReset) {
     MockTempColumnReader reader;
 
-    ColumnPtr col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ColumnPtr col1 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col1));
     EXPECT_EQ(1u, col1->size()) << "First read: 1 row";
 
     // Simulate skipped fill: don't call finalize_lazy_state
 
-    ColumnPtr col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ColumnPtr col2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col2));
     EXPECT_EQ(2u, col2->size()) << "Without reset, second read accretes stale data: 1 stale + 1 new = 2 rows";
 
@@ -4850,7 +4850,7 @@ public:
 
     Status read_range(const Range<uint64_t>& range, const Filter*, ColumnPtr& dst) override {
         if (_code_column == nullptr) {
-            _code_column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), true);
+            _code_column = ColumnHelper::create_column(TYPE_INT_DESC, true);
         }
         _code_column->as_mutable_raw_ptr()->reset_column();
         _code_column->as_mutable_raw_ptr()->append_datum(Datum(int32_t(100)));

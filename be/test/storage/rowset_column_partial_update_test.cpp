@@ -2165,7 +2165,7 @@ static void check_json_subfield(const TabletSharedPtr& tablet, int64_t version, 
                                 const std::function<int64_t(int64_t)>& expected_x, const std::string& expected_tag) {
     std::vector<ColumnAccessPathPtr> paths;
     // The extended TabletColumn keeps a raw pointer to this path, so it has to outlive the read.
-    paths.emplace_back(make_extended_json_path("j", "x", TypeDescriptor(TYPE_BIGINT)));
+    paths.emplace_back(make_extended_json_path("j", "x", TYPE_BIGINT_DESC));
     ASSERT_EQ("j.x", paths[0]->linear_path());
     ASSERT_TRUE(paths[0]->is_extended());
 

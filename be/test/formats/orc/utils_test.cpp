@@ -195,13 +195,12 @@ TEST(OrcTimestampHelperTest, InstantUsesOffsetAtInstant) {
 static std::pair<std::string, std::string> decode_instant_min_max(int64_t min_ms, int64_t max_ms,
                                                                   const cctz::time_zone& tz) {
     std::unique_ptr<orc::Type> orc_type = orc::createPrimitiveType(orc::TypeKind::TIMESTAMP_INSTANT);
-    TypeDescriptor type(TYPE_DATETIME);
-    SlotDescriptor slot(0, "c0", type);
+    SlotDescriptor slot(0, "c0", TYPE_DATETIME_DESC);
     orc::proto::ColumnStatistics stats;
     stats.mutable_timestampstatistics()->set_minimumutc(min_ms);
     stats.mutable_timestampstatistics()->set_maximumutc(max_ms);
-    auto min_col = ColumnHelper::create_column(type, slot.is_nullable());
-    auto max_col = ColumnHelper::create_column(type, slot.is_nullable());
+    auto min_col = ColumnHelper::create_column(TYPE_DATETIME_DESC, slot.is_nullable());
+    auto max_col = ColumnHelper::create_column(TYPE_DATETIME_DESC, slot.is_nullable());
     // tz_offset_in_seconds (the epoch-offset model) is ignored when the reader zone is given.
     CHECK(OrcMinMaxDecoder::decode(&slot, orc_type.get(), stats, min_col.get(), max_col.get(), 12345, &tz).ok());
     return {min_col->debug_item(0), max_col->debug_item(0)};

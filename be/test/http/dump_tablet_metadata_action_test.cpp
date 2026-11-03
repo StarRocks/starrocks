@@ -418,7 +418,7 @@ protected:
         (void)fs::remove_all(_root);
         ASSERT_OK(fs::create_directories(join_path(_root, kMetadataDirectoryName)));
         _provider = std::make_shared<FixedLocationProvider>(_root);
-        _tablet_manager = std::make_unique<TabletManager>(_provider, 1LL << 30);
+        _tablet_manager = std::make_unique<TabletManager>(_provider, 1LL << 30, 1LL << 30);
         s_injected_send_reply = capture_reply;
     }
 

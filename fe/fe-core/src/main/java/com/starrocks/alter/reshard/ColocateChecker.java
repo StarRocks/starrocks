@@ -454,8 +454,9 @@ public class ColocateChecker {
      * Reads the actual PACK shard-group membership of the given tablets from StarOS in bounded
      * batches, finds the ones whose membership disagrees with the {@link ColocateRange} their range
      * belongs to, and reassigns each into its expected PACK shard group with the minimal add/remove
-     * delta. Shared by the placement backstop ({@link #reconcileTablePackPlacement}) and the
-     * post-publish split path ({@code SplitTabletJob}).
+     * delta. Shared by the placement backstop ({@link #reconcileTablePackPlacement}), the
+     * post-publish split path ({@code SplitTabletJob}) and the range rewrite job, which places its
+     * shadow tablets into their PACK groups at the end of RUNNING.
      *
      * <p>Best-effort per tablet. Catches the expected StarOS checked failures — the batched
      * {@link StarOSAgent#getShardInfo} {@link StarClientException} and the per-tablet
@@ -470,9 +471,9 @@ public class ColocateChecker {
      *         cannot turn into a bogus add-only reassignment), or any misplaced tablet (reassignment
      *         issued, confirmed by a re-read) ⇒ {@code false}.
      */
-    static boolean reconcileTabletPackPlacement(Map<Long, Range<Tuple>> tabletIdToRange,
-                                                List<ColocateRange> expectedRanges, int colocateColumnCount,
-                                                String logContext) {
+    public static boolean reconcileTabletPackPlacement(Map<Long, Range<Tuple>> tabletIdToRange,
+                                                       List<ColocateRange> expectedRanges, int colocateColumnCount,
+                                                       String logContext) {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         List<Long> tabletIds = new ArrayList<>(tabletIdToRange.keySet());
         Map<Long, List<Long>> tabletIdToGroupIds = new HashMap<>();

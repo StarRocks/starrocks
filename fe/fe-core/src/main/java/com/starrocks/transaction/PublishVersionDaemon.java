@@ -392,7 +392,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 batchTask.addTask(task);
             }
             if (!tasks.isEmpty()) {
+                transactionState.updateSendTaskTime();
                 transactionState.setHasSendTask(true);
+                transactionState.recordPublishRequestSentTime();
                 transactionIds.add(transactionState.getTransactionId());
             }
         }
@@ -553,9 +555,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                             txnState.getTransactionId());
                     continue;
                 }
-                publishingTransactions.add(txnId);
-                CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
-                future.thenRun(() -> publishingTransactions.remove(txnId));
+                // Skip backed-off transactions before logging a publish start or creating futures.
+                if (batchHasPublishablePartition(List.of(txnState), System.currentTimeMillis())) {
+                    publishingTransactions.add(txnId);
+                    CompletableFuture<Void> future = publishLakeTransactionAsync(txnState);
+                    future.thenRun(() -> publishingTransactions.remove(txnId));
+                }
             }
         }
     }
@@ -595,6 +600,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(tableIdList);
+                    countBatchRetry(state);
                     CompletableFuture<Void> future = publishLakeTransactionAsync(state);
                     future.thenRun(() -> tableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
@@ -633,11 +639,19 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         continue;
                     }
                     publishingLakeTransactionsBatchTableId.addAll(batchTableIdList);
+                    countBatchRetry(txnStateBatch.transactionStates.get(0));
 
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
                     future.thenRun(() -> batchTableIdList.forEach(publishingLakeTransactionsBatchTableId::remove));
                 }
             }
+        }
+    }
+
+    // A batch whose first txn was already sent retries an attempt that did not finish.
+    private static void countBatchRetry(TransactionState head) {
+        if (head.hasSendTask()) {
+            MetricRepo.COUNTER_LAKE_PUBLISH_BATCH_RETRY.increase(1L);
         }
     }
 
@@ -658,7 +672,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
             return CompletableFuture.completedFuture(null);
         }
 
-        txnState.setHasSendTask(true);
+        // The attempt starts now; hasSendTask is set only once a request goes out, see publishPartition().
+        txnState.updateSendTaskTime();
         CompletableFuture<Boolean> publishFuture;
         Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
         if (tableCommitInfos.size() == 1) {
@@ -791,6 +806,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
         long startVersion = versions.get(0);
         long endVersion = versions.get(versions.size() - 1);
 
+        // Marked only once a request goes out, after the version-order check, so that a batch that merely waited
+        // for an earlier version is not retried as a sent one. Every txn of the batch is marked: a batch that sent
+        // anything is retried with the same txns, see DatabaseTransactionMgr.getReadyToPublishTxnListBatch(). The
+        // request time is recorded only for the txns this request carries.
+        stateBatch.getTransactionStates().forEach(state -> state.setHasSendTask(true));
+        transactionStates.forEach(TransactionState::recordPublishRequestSentTime);
         try {
             if (shadowIndexTxnBatches != null) {
                 for (ShadowIndexTxnBatch txnBatch : shadowIndexTxnBatches.values()) {
@@ -824,18 +845,24 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // Per-tablet stats for real-time reshard triggering (range-distribution tablets only).
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                // An earlier request may have finished some tablets: let them answer from storage. Decided here,
+                // after the version-order check, so that waiting for an earlier version is not taken for a retry.
+                boolean isRetryPublish = false;
+                for (PartitionCommitInfo info : publishVersionData.getPartitionCommitInfos()) {
+                    isRetryPublish |= info.getAndMarkPublishSent();
+                }
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
-                            startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            computeResource, tabletStats, vectorIndexBuildInfos);
+                            startVersion - 1, endVersion, compactionScores, null, nodeToTablets,
+                            computeResource, tabletStats, vectorIndexBuildInfos, isRetryPublish);
                 } else if (CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(publishTablets, txnInfos, carryForwardTablets,
                             startVersion - 1, endVersion, nodeToTablets, computeResource, compactionScores,
-                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata, isRetryPublish);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
                             compactionScores, null, nodeToTablets, computeResource, tabletStats,
-                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            vectorIndexBuildInfos, preferSharedInitialMetadata, isRetryPublish);
                 }
 
                 // Mixed batches (rare) fall back to false so the load-tail delay protects
@@ -1149,7 +1176,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
-        states.forEach(state -> state.setHasSendTask(true));
+        // The attempt starts now; hasSendTask is set only once a request goes out, see publishPartitionBatch().
+        states.forEach(TransactionState::updateSendTaskTime);
         for (TransactionState state : states) {
             for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
                 long tableId = tableCommitInfo.getTableId();
@@ -1389,6 +1417,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // op_schema_change@W via the TXN_SHADOW_REWRITE publish txn; nothing to publish here.
                 return true;
             }
+            // Marked only once a request goes out, after the version-order check, so that a txn that merely waited
+            // for an earlier version is not retried as a sent one.
+            txnState.setHasSendTask(true);
+            txnState.recordPublishRequestSentTime();
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
@@ -1398,14 +1430,17 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // collection, and range-distribution tablet sizes for real-time reshard triggering.
                 Map<Long, TabletStatPB> tabletStats = new HashMap<>();
                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
+                // An earlier request may have finished some tablets: let them answer from storage. Decided here,
+                // after the version-order check, so that waiting for an earlier version is not taken for a retry.
+                boolean isRetryPublish = partitionCommitInfo.getAndMarkPublishSent();
                 if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
                             baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,
-                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            vectorIndexBuildInfos, preferSharedInitialMetadata, isRetryPublish);
                 } else {
                     Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
                             null, computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos,
-                            preferSharedInitialMetadata);
+                            preferSharedInitialMetadata, isRetryPublish);
                 }
 
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
@@ -1474,11 +1509,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                                                  Map<Long, Double> compactionScores,
                                                  Map<Long, TabletStatPB> tabletStats,
                                                  List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                                 boolean preferSharedInitialMetadata)
+                                                 boolean preferSharedInitialMetadata,
+                                                 boolean isRetryPublish)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         Utils.createSubRequestForAggregatePublish(touchedTablets, txnInfos, baseVersion, newVersion,
-                nodeToTablets, computeResource, request, preferSharedInitialMetadata);
+                nodeToTablets, computeResource, request, preferSharedInitialMetadata, isRetryPublish);
 
         List<TxnInfoPB> carryForwardTxnInfos = Lists.newArrayListWithCapacity(txnInfos.size());
         for (TxnInfoPB txnInfo : txnInfos) {
@@ -1495,7 +1531,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // They belong to the same physical partition as |touchedTablets|, so the version-1 layout hint applies
         // to them identically.
         Utils.createSubRequestForAggregatePublish(carryForwardTablets, carryForwardTxnInfos, baseVersion, newVersion,
-                null, computeResource, request, preferSharedInitialMetadata);
+                null, computeResource, request, preferSharedInitialMetadata, isRetryPublish);
         Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
                 tabletStats, vectorIndexBuildInfos);
     }

@@ -73,8 +73,8 @@ public:
         _location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _primary_key_manager = std::make_unique<lake::PrimaryKeyManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(), 1638400000);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _primary_key_manager.get(),
+                                                                1638400000, 1638400000);
     }
 
     void TearDown() { (void)FileSystem::Default()->delete_dir_recursive(kTestDir); }
@@ -205,7 +205,7 @@ protected:
                                 int64_t txn_id, std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
         CHECK_EQ(2, sources.size());
         auto* split_key = sources[0]->mutable_range()->mutable_upper_bound()->add_values();
-        split_key->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+        split_key->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
         split_key->set_value("0");
         split_key->set_variant_type(VariantTypePB::NORMAL_VALUE);
         sources[0]->mutable_range()->set_upper_bound_included(false);
@@ -1614,6 +1614,58 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
     }
 }
 
+// A compaction moves the delete files of its inputs above the index rebuild point into its output rowset, so a cold
+// index rebuild can still replay them. When the publish has persisted the index first, it moves none: the delete
+// files stay, with their shared flag, on the archived input rowsets.
+TEST_F(MetaFileTest, test_apply_opcompaction_does_not_carry_dels_when_index_persisted) {
+    for (const bool index_persisted : {false, true}) {
+        SCOPED_TRACE(index_persisted);
+        const int64_t tablet_id = next_id();
+        Tablet tablet(_tablet_manager.get(), tablet_id);
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(3);
+        metadata->set_next_rowset_id(3);
+        metadata->set_enable_persistent_index(true);
+        metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        auto* older = metadata->add_rowsets();
+        older->set_id(1);
+        older->add_segment_metas()->set_filename("older.dat");
+        auto* newer = metadata->add_rowsets();
+        newer->set_id(2);
+        newer->add_segment_metas()->set_filename("newer.dat");
+        auto* del = newer->add_del_files();
+        del->set_name("newer.del");
+        del->set_origin_rowset_id(2);
+        del->set_shared(true);
+        // The index file stops inside rowset 2, so the delete file of rowset 2 is above the rebuild point.
+        metadata->mutable_sstable_meta()->add_sstables()->set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+
+        MetaFileBuilder builder(tablet, metadata);
+        TxnLogPB_OpCompaction op_compaction;
+        op_compaction.add_input_rowsets(1);
+        op_compaction.add_input_rowsets(2);
+        op_compaction.mutable_output_rowset()->add_segment_metas()->set_filename("output.dat");
+        ASSERT_OK(builder.apply_opcompaction(op_compaction, 2, 0, index_persisted));
+
+        ASSERT_EQ(1, metadata->rowsets_size());
+        const auto& output = metadata->rowsets(0);
+        ASSERT_EQ(2, metadata->compaction_inputs_size());
+        const auto& archived = metadata->compaction_inputs(1);
+        ASSERT_EQ(2, archived.id());
+        if (index_persisted) {
+            EXPECT_EQ(0, output.del_files_size());
+            ASSERT_EQ(1, archived.del_files_size());
+            EXPECT_EQ("newer.del", archived.del_files(0).name());
+            EXPECT_TRUE(archived.del_files(0).shared());
+        } else {
+            ASSERT_EQ(1, output.del_files_size());
+            EXPECT_EQ("newer.del", output.del_files(0).name());
+            EXPECT_EQ(0, archived.del_files_size());
+        }
+    }
+}
+
 TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
     // Regression for the metadata-reclaim change: when compaction archives its input
     // rowsets into compaction_inputs, the (potentially large) delete_predicate must be
@@ -2755,6 +2807,60 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_normalizes_mixed_op_write) {
     EXPECT_EQ(128, rowset.segment_metas(1).bundle_file_offset());
     EXPECT_FALSE(rowset.segment_metas(1).synthetic_bundle_file_offset());
     EXPECT_EQ(402, metadata->next_rowset_id());
+}
+
+// PrimaryKeyManager::_do_delete hands a pre-built tombstone sstable that an index other than the cloud-native one
+// does not ingest to vacuum through the rowset's orphan files, next to the segments a partial update replaced.
+// Both the single and the batch apply path must record it like those: name, size and shared flag kept, and the
+// version being built stamped as its creation version unless the producer set one.
+TEST_F(MetaFileTest, test_apply_opwrite_records_tombstone_sstable_orphan) {
+    const int64_t tablet_id = 30004;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    std::vector<FileMetaPB> orphan_files(3);
+    orphan_files[0].set_name("replaced.dat");
+    orphan_files[0].set_size(10);
+    orphan_files[1].set_name("0000000000000007_tombstone.sst");
+    orphan_files[1].set_size(20);
+    orphan_files[1].set_shared(true);
+    orphan_files[2].set_name("0000000000000008_tombstone.sst");
+    orphan_files[2].set_size(30);
+    orphan_files[2].set_version(5);
+
+    auto check_orphans = [&](const TabletMetadata& metadata) {
+        ASSERT_EQ(orphan_files.size(), metadata.orphan_files_size());
+        for (int i = 0; i < metadata.orphan_files_size(); i++) {
+            const auto& orphan = metadata.orphan_files(i);
+            EXPECT_EQ(orphan_files[i].name(), orphan.name());
+            EXPECT_EQ(orphan_files[i].size(), orphan.size());
+            EXPECT_EQ(orphan_files[i].shared(), orphan.shared());
+            EXPECT_EQ(orphan_files[i].has_version() ? orphan_files[i].version() : metadata.version(), orphan.version())
+                    << orphan.name();
+        }
+    };
+
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(10);
+        metadata->set_next_rowset_id(110);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("a.dat");
+        builder.apply_opwrite(op_write, {}, orphan_files);
+        check_orphans(*metadata);
+    }
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(11);
+        metadata->set_next_rowset_id(120);
+        MetaFileBuilder builder(*tablet, metadata);
+        TxnLogPB_OpWrite op_write;
+        op_write.mutable_rowset()->add_segment_metas()->set_filename("b.dat");
+        builder.batch_apply_opwrite(op_write, {}, orphan_files);
+        ASSERT_OK(builder.set_final_rowset());
+        check_orphans(*metadata);
+    }
 }
 
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {
@@ -4802,6 +4908,59 @@ TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
     EXPECT_EQ(BITMAP, schema->table_indices(0).index_type());
     ASSERT_EQ(1, schema->dropped_table_indices_size());
     EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+}
+
+// A column-mode update rewrites some columns of a segment and keeps the other `.cols` files of that segment. A kept
+// file keeps its shared flag: after a range split it is still read by the sibling tablet, and a file that lost the flag
+// would be deleted by vacuum once a later update orphans it. A new file is private.
+TEST_F(MetaFileTest, test_append_dcg_keeps_shared_flags_of_kept_files) {
+    const int64_t tablet_id = next_id();
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(11);
+    metadata->set_next_rowset_id(111);
+    // Segment 110 as a split leaves it: both `.cols` files are shared with the sibling.
+    auto& split_dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[110];
+    for (const auto& [file, cuids, size] : std::vector<std::tuple<std::string, std::vector<ColumnUID>, int64_t>>{
+                 {"aaa.cols", {3, 4}, 111}, {"bbb.cols", {6}, 222}}) {
+        split_dcg.add_column_files(file);
+        auto* ids = split_dcg.add_unique_column_ids();
+        for (ColumnUID cuid : cuids) {
+            ids->add_column_ids(cuid);
+        }
+        split_dcg.add_column_file_sizes(size);
+        split_dcg.add_versions(10);
+        split_dcg.add_shared_files(true);
+    }
+    auto shared_flags = [&]() {
+        const auto& dcg = metadata->dcg_meta().dcgs().at(110);
+        EXPECT_EQ(dcg.column_files_size(), dcg.shared_files_size());
+        std::map<std::string, bool> flags;
+        for (int i = 0; i < dcg.column_files_size() && i < dcg.shared_files_size(); ++i) {
+            flags[dcg.column_files(i)] = dcg.shared_files(i);
+        }
+        return flags;
+    };
+
+    MetaFileBuilder builder(*tablet, metadata);
+    // Column 4 moves to ccc.cols; aaa.cols keeps column 3 and bbb.cols column 6.
+    builder.append_dcg(110, {{"ccc.cols", ""}}, {{4}}, {333});
+    EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"bbb.cols", true}, {"ccc.cols", false}}),
+              shared_flags());
+
+    // Column 6 moves to ddd.cols, so bbb.cols becomes an orphan and still records that it is shared.
+    builder.append_dcg(110, {{"ddd.cols", ""}}, {{6}}, {444});
+    EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"ccc.cols", false}, {"ddd.cols", false}}),
+              shared_flags());
+    bool orphaned = false;
+    for (const auto& file : metadata->orphan_files()) {
+        if (file.name() == "bbb.cols") {
+            orphaned = true;
+            EXPECT_TRUE(file.shared());
+        }
+    }
+    EXPECT_TRUE(orphaned);
 }
 
 } // namespace starrocks::lake

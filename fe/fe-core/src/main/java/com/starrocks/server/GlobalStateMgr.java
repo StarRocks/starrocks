@@ -2218,6 +2218,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
                 .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
+                .put(SRMetaBlockID.GTID_GENERATOR, gtidGenerator::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
@@ -2491,6 +2492,7 @@ public class GlobalStateMgr {
                 tabletReshardJobMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
                 aiProviderMgr.save(imageWriter);
+                gtidGenerator.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);

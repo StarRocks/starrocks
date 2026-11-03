@@ -8,6 +8,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gtest/gtest.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::pipeline {
 class TableFunctionOperatorTest : public testing::Test {
@@ -175,11 +176,7 @@ TEST_F(TableFunctionOperatorTest, key_partition_exchanger) {
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(4096, 134217728);
 
     ChunkPtr chunk = std::make_shared<Chunk>();
-    auto c = ColumnHelper::create_column(TYPE_INT_DESC, true);
-    c->append_datum(Datum(1));
-    c->append_datum(Datum(2));
-    c->append_datum(Datum(1));
-    c->append_datum(Datum(2));
+    auto c = ColumnTestHelper::build_nullable_column<int32_t>({1, 2, 1, 2});
     auto null_datum = Datum();
     null_datum.set_null();
     c->append_datum(null_datum);

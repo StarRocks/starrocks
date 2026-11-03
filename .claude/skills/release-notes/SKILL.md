@@ -105,8 +105,9 @@ Fill `.github/PULL_REQUEST_TEMPLATE.md` for the body:
 - **Change in behavior**: check `- [x] No` (the notes themselves don't change product
   behavior).
 - **Checklist**: this PR *is* the user documentation; leave test-case boxes unchecked.
-- **Bugfix cherry-pick branch check**: this is a docs PR, not a code backport — leave the
-  version boxes (`4.1`/`4.0`/`3.5`) unchecked unless the user says otherwise.
+- **Bugfix cherry-pick branch check**: this is a docs PR, not a code backport — copy the
+  version rows exactly as the template lists them (same versions, same order; do not take
+  them from this skill or an older PR) and leave them unchecked unless the user says otherwise.
 - Append the **"Needs reviewer confirmation"** list under "What I'm doing" so reviewers
   verify the flagged entries.
 

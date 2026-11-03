@@ -112,8 +112,8 @@ public:
             c2->set_default_value("10");
         }
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
 
@@ -319,7 +319,7 @@ public:
         Chunk key_chunk({std::move(key_column)}, key_slot_map);
         auto update_chunk = condition_update ? generate_data(kChunkSize, 0, true, 7) : std::move(key_chunk);
         std::vector<SlotDescriptor> key_slots;
-        key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        key_slots.emplace_back(0, "c0", TYPE_INT_DESC);
         std::vector<SlotDescriptor*> key_slot_pointers{&key_slots[0]};
         const auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
@@ -347,7 +347,7 @@ public:
         _tablet_mgr->prune_metacache();
         ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_cache_key));
         ASSERT_EQ(base_version, _primary_key_mgr->get_primary_index_data_version(tablet_id));
-        ASSERT_GE(_tablet_mgr->metacache()->capacity(), 2 * 1024);
+        ASSERT_GE(_tablet_mgr->metacache()->segment_metadata_capacity(), 2 * 1024);
         ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(tablet_id, base_version + 1, txn_id));
         EXPECT_EQ(0, index_load_count.load()) << "PK index rebuild must not seed the base segment cache";
         ASSERT_EQ(base_version + 1, _primary_key_mgr->get_primary_index_data_version(tablet_id));
@@ -1097,7 +1097,7 @@ TEST_P(LakePartialUpdateTest, test_dcg_segment_missing_files_returns_error) {
     Chunk c0_only_chunk({std::move(c0_only)}, slot_only);
     // Build local slot descriptors with single column (c0) to match chunk schema
     std::vector<SlotDescriptor> local_slots;
-    local_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    local_slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> local_slot_ptrs;
     local_slot_ptrs.emplace_back(&local_slots[0]);
 
@@ -1958,7 +1958,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
         GTEST_SKIP() << "Only row mode reads base segments through UpdateManager::get_column_values";
     }
 
-    // TestBase constructs its TabletManager with this metacache capacity.
+    // TestBase constructs its TabletManager with this segment metadata cache capacity.
     constexpr int64_t kDefaultMetacacheLimit = 1024 * 1024;
     constexpr int kRanges = 6;
     constexpr int kRangeSize = kChunkSize / kRanges;
@@ -1971,7 +1971,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
-        _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(kDefaultMetacacheLimit);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
@@ -2020,7 +2020,7 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
     // while a shard gets only 2 KiB. An aggregate-only gate incorrectly enables caching here.
     constexpr int64_t kSmallMetacacheLimit = 64 * 1024;
     ASSERT_LT(base_metadata->rowsets_size() * _tablet_schema->num_columns() * 1024, kSmallMetacacheLimit);
-    _tablet_mgr->update_metacache_limit(kSmallMetacacheLimit);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kSmallMetacacheLimit);
     fill_decisions.clear();
     write_and_publish(generate_data(kThirdKeys, 1, true, 5), /*row_mode_partial_update=*/true);
     ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
@@ -2029,13 +2029,13 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_respects_segment_and_
 
     // No room: every segment is skipped, the first one included -- nothing has to be cached before
     // the gate can decide.
-    _tablet_mgr->update_metacache_limit(0);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(0);
     fill_decisions.clear();
     write_and_publish(generate_data(kThirdKeys, 2, true, 5), /*row_mode_partial_update=*/true);
     ASSERT_EQ(kRanges / 3, fill_decisions.size()) << "expected one decision per base segment read";
     EXPECT_TRUE(std::none_of(fill_decisions.begin(), fill_decisions.end(), [](bool v) { return v; }));
 
-    _tablet_mgr->update_metacache_limit(kDefaultMetacacheLimit);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kDefaultMetacacheLimit);
     EXPECT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return c0 * 5 == c1 && c0 * 4 == c2; }));
 }
 
@@ -2158,12 +2158,12 @@ TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
     const bool saved_use_segment_cache = config::lake_pk_partial_update_use_segment_cache;
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
-        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(1024 * 1024);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
     config::lake_pk_partial_update_use_segment_cache = true;
-    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kCacheCapacity);
     std::vector<bool> decisions;
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
                                           [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
@@ -2204,7 +2204,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
     DeferOp restore([&]() {
         config::lake_pk_partial_update_use_segment_cache = saved_use_segment_cache;
         config::enable_zstd_compression_dict = saved_write_dictionary;
-        _tablet_mgr->update_metacache_limit(1024 * 1024);
+        _tablet_mgr->metacache()->update_segment_metadata_capacity(1024 * 1024);
         SyncPoint::GetInstance()->ClearAllCallBacks();
         SyncPoint::GetInstance()->DisableProcessing();
     });
@@ -2302,7 +2302,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
     const TxnLogPB_OpWrite op_write;
     const RowsetUpdateStateParams params{op_write, tablet_schema, read_metadata, &tablet, container};
     const std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid{{1, rowids}};
-    _tablet_mgr->update_metacache_limit(kCacheCapacity);
+    _tablet_mgr->metacache()->update_segment_metadata_capacity(kCacheCapacity);
     std::vector<bool> decisions;
     SyncPoint::GetInstance()->SetCallBack("UpdateManager::get_column_values:fill_meta_cache",
                                           [&](void* arg) { decisions.push_back(*static_cast<bool*>(arg)); });
@@ -2376,9 +2376,9 @@ public:
             //c2->set_default_value("10");
         }
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _slots.emplace_back(2, "__op", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
         _slot_pointers.emplace_back(&_slots[2]);
@@ -2494,8 +2494,8 @@ public:
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
 
         // A DELETE hands the writer the key columns plus the trailing __op marker.
-        _delete_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _delete_slots.emplace_back(1, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        _delete_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _delete_slots.emplace_back(1, "__op", TYPE_TINYINT_DESC);
         for (auto& slot : _delete_slots) {
             _delete_slot_pointers.emplace_back(&slot);
         }
@@ -4242,7 +4242,7 @@ TEST_F(LakeColumnUpsertModeTest, partial_update_reads_encrypted_dcg_segments) {
     Chunk c0_chunk({std::move(c0_only)}, slot_only);
 
     std::vector<SlotDescriptor> key_slots;
-    key_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    key_slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> key_slot_ptrs;
     key_slot_ptrs.emplace_back(&key_slots[0]);
 
@@ -4569,7 +4569,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_values_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -4938,8 +4938,8 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto chunk_update = Chunk({std::move(c0_update), std::move(c1_update)}, update_slot_map);
 
     std::vector<SlotDescriptor> update_slots;
-    update_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    update_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+    update_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    update_slots.emplace_back(1, "c1", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> update_slot_pointers;
     update_slot_pointers.emplace_back(&update_slots[0]);
     update_slot_pointers.emplace_back(&update_slots[1]);
@@ -4996,9 +4996,9 @@ TEST_F(LakeColumnUpsertModeTest, test_auto_increment_column_handling) {
     auto chunk_insert = Chunk({std::move(c0_insert), std::move(c1_insert), std::move(c2_insert)}, insert_slot_map);
 
     std::vector<SlotDescriptor> insert_slots;
-    insert_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-    insert_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-    insert_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_BIGINT});
+    insert_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+    insert_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+    insert_slots.emplace_back(2, "c2", TYPE_BIGINT_DESC);
     std::vector<SlotDescriptor*> insert_slot_pointers;
     insert_slot_pointers.emplace_back(&insert_slots[0]);
     insert_slot_pointers.emplace_back(&insert_slots[1]);
@@ -5162,10 +5162,10 @@ TEST_F(LakeColumnUpsertModeTest, test_handle_delete_files) {
 
         // Create slot descriptors including operation column
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(2, "c2", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -5328,7 +5328,7 @@ TEST_F(LakeColumnUpsertModeTest, test_bundle_files_and_encryption_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -5476,7 +5476,7 @@ TEST_F(LakeColumnUpsertModeTest, test_default_value_and_null_handling) {
     auto chunk_partial = Chunk({std::move(c0_partial)}, partial_slot_map);
 
     std::vector<SlotDescriptor> slots;
-    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(0, "c0", TYPE_INT_DESC);
     std::vector<SlotDescriptor*> slot_pointers;
     slot_pointers.emplace_back(&slots[0]);
 
@@ -5878,9 +5878,9 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
         for (int i = 0; i < kChunkSize; i++) idx[i] = i;
 
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -6053,9 +6053,9 @@ TEST_F(LakeColumnUpsertModeTest, test_no_del_tombstone_sstable_in_column_upsert_
         for (int i = 0; i < kChunkSize; i++) idx[i] = i;
 
         std::vector<SlotDescriptor> op_slots;
-        op_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        op_slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        op_slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        op_slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        op_slots.emplace_back(3, "__op", TYPE_TINYINT_DESC);
         std::vector<SlotDescriptor*> op_slot_pointers;
         for (auto& slot : op_slots) {
             op_slot_pointers.emplace_back(&slot);
@@ -6370,9 +6370,9 @@ protected:
         _tablet_schema = TabletSchema::create(*schema);
 
         // Build slot descriptors. Slot id <-> column id mapping mirrors LakePartialUpdateTestBase.
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "v_int", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TypeDescriptor{LogicalType::TYPE_INT}));
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "v_int", TYPE_INT_DESC);
+        _slots.emplace_back(2, "v_arr", TypeDescriptor::create_array_type(TYPE_INT_DESC));
 
         _slot_pointers_full.emplace_back(&_slots[0]);
         _slot_pointers_full.emplace_back(&_slots[1]);

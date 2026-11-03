@@ -98,8 +98,10 @@ public:
     void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
                        const std::vector<FileMetaPB>& orphan_files);
     void apply_column_mode_partial_update(const TxnLogPB_OpWrite& op_write);
+    // |index_persisted|: the publish has flushed the cloud-native PK index, so every delete is in its sstables and
+    // the output rowset carries no delete file of the inputs; the delete files stay on the archived input rowsets.
     Status apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction, uint32_t max_compact_input_rowset_id,
-                              int64_t output_rowset_schema_id);
+                              int64_t output_rowset_schema_id, bool index_persisted = false);
     void apply_opcompaction_with_conflict(const TxnLogPB_OpCompaction& op_compaction);
 
     // Merge an OpAddIndex (produced by the ADD INDEX fast path) into

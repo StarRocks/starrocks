@@ -17,14 +17,15 @@
 #include "column/column_helper.h"
 #include "formats/csv/converter.h"
 #include "formats/io/formatted_output_stream_string.h"
+#include "testutil/column_test_helper.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::csv {
 
 // NOLINTNEXTLINE
 TEST(BooleanConverterTest, test_read_string) {
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+    auto conv = csv::get_converter(TYPE_BOOLEAN_DESC, false);
+    auto col = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, false);
 
     EXPECT_TRUE(conv->read_string(col.get(), "1", Converter::Options()));
     EXPECT_TRUE(conv->read_string(col.get(), "10", Converter::Options()));
@@ -52,8 +53,8 @@ TEST(BooleanConverterTest, test_read_string) {
 
 // NOLINTNEXTLINE
 TEST(BooleanConverterTest, test_read_string_invalid_value) {
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+    auto conv = csv::get_converter(TYPE_BOOLEAN_DESC, false);
+    auto col = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, false);
     EXPECT_FALSE(conv->read_string(col.get(), "1a", Converter::Options()));
     EXPECT_FALSE(conv->read_string(col.get(), "", Converter::Options()));
 
@@ -62,8 +63,8 @@ TEST(BooleanConverterTest, test_read_string_invalid_value) {
 
 // NOLINTNEXTLINE
 TEST(BooleanConverterTest, test_read_quoted_string) {
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+    auto conv = csv::get_converter(TYPE_BOOLEAN_DESC, false);
+    auto col = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, false);
 
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "1", Converter::Options()));
     EXPECT_TRUE(conv->read_quoted_string(col.get(), "10", Converter::Options()));
@@ -85,8 +86,8 @@ TEST(BooleanConverterTest, test_read_quoted_string) {
 
 // NOLINTNEXTLINE
 TEST(BooleanConverterTest, test_read_quoted_string_invalid_value) {
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+    auto conv = csv::get_converter(TYPE_BOOLEAN_DESC, false);
+    auto col = ColumnHelper::create_column(TYPE_BOOLEAN_DESC, false);
 
     EXPECT_FALSE(conv->read_quoted_string(col.get(), "1a", Converter::Options()));
     EXPECT_FALSE(conv->read_quoted_string(col.get(), "", Converter::Options()));
@@ -99,13 +100,8 @@ TEST(BooleanConverterTest, test_read_quoted_string_invalid_value) {
 // NOLINTNEXTLINE
 TEST(BooleanConverterTest, test_write_string_as_integral_value) {
     csv::Converter::Options opts{.bool_alpha = false};
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-
-    col->append_datum(true);
-    col->append_datum(false);
-    col->append_datum(true);
-    col->append_datum(false);
+    auto conv = csv::get_converter(TYPE_BOOLEAN_DESC, false);
+    auto col = ColumnTestHelper::build_column<uint8_t>({true, false, true, false});
 
     formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());
@@ -126,13 +122,8 @@ TEST(BooleanConverterTest, test_write_string_as_integral_value) {
 // NOLINTNEXTLINE
 TEST(BooleanConverterTest, test_write_string_as_textual_value) {
     csv::Converter::Options opts{.bool_alpha = true};
-    auto conv = csv::get_converter(TypeDescriptor(TYPE_BOOLEAN), false);
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
-
-    col->append_datum(true);
-    col->append_datum(false);
-    col->append_datum(true);
-    col->append_datum(false);
+    auto conv = csv::get_converter(TYPE_BOOLEAN_DESC, false);
+    auto col = ColumnTestHelper::build_column<uint8_t>({true, false, true, false});
 
     formats::FormattedOutputStreamString buff;
     ASSERT_TRUE(conv->write_string(&buff, *col, 0, opts).ok());
