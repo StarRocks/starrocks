@@ -176,7 +176,7 @@ StatusOr<int32_t> VerticalCompactionTask::_calculate_chunk_size_for_column_group
         for (auto& segment : rowset->segments()) {
             for (uint32_t column_index : column_group) {
                 auto uid = _tablet_schema->column(column_index).unique_id();
-                const auto* column_reader = segment->column_with_uid(uid);
+                ASSIGN_OR_RETURN(const auto* column_reader, segment->column_with_uid(uid));
                 if (column_reader == nullptr) {
                     continue;
                 }

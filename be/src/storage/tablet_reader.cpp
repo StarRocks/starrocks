@@ -189,7 +189,7 @@ Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& rea
                 if (segment->num_rows() == 0) {
                     continue;
                 }
-                auto reader = segment->column_with_uid(col.unique_id());
+                ASSIGN_OR_RETURN(auto reader, segment->column_with_uid(col.unique_id()));
                 if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
                     nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
                     readers.emplace_back(reader);

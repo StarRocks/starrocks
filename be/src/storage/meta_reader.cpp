@@ -263,7 +263,8 @@ StatusOr<const TabletColumn*> SegmentMetaCollecter::_get_tablet_column(ColumnId 
 
 StatusOr<ColumnReader*> SegmentMetaCollecter::_get_column_reader(ColumnId cid) const {
     ASSIGN_OR_RETURN(const TabletColumn* tablet_column, _get_tablet_column(cid));
-    return const_cast<ColumnReader*>(_segment->column_with_uid(tablet_column->unique_id()));
+    ASSIGN_OR_RETURN(const auto* reader, _segment->column_with_uid(tablet_column->unique_id()));
+    return const_cast<ColumnReader*>(reader);
 }
 
 bool SegmentMetaCollecter::_is_missing_default_column(const TabletColumn& column) const {

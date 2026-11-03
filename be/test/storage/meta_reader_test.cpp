@@ -208,7 +208,7 @@ TEST_F(SegmentMetaCollecterTest, test_collect_flat_json_meta_fields) {
     // Open the JSON segment
     FileInfo json_file_info{.path = json_segment_name, .encryption_meta = encryption_pair.encryption_meta};
     ASSIGN_OR_ABORT(auto json_segment, Segment::open(fs, json_file_info, 0, json_tablet_schema));
-    const auto* root_reader = json_segment->column(0);
+    ASSIGN_OR_ABORT(const auto* root_reader, json_segment->column(0));
     ASSERT_NE(nullptr, root_reader);
     ASSERT_TRUE(root_reader->is_flat_json());
     ASSERT_NE(nullptr, root_reader->sub_readers());

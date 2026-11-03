@@ -342,7 +342,7 @@ StatusOr<AddIndexSchemaChange::IndexDisposition> AddIndexSchemaChange::classify_
     const int col_uid = ix.col_unique_id(0);
     const auto& column = **out_column;
 
-    if (segment->column_with_uid(column.unique_id()) != nullptr) {
+    if (!segment->is_default_column(column)) {
         return IndexDisposition::kBuild;
     }
 
@@ -794,7 +794,8 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     // col_iter->init() above already loaded this column's ordinal index, so the
     // reader can report its data-page layout. column_with_uid() returns the very
     // same ColumnReader the iterator reads through (both keyed by unique_id).
-    auto* col_reader = const_cast<ColumnReader*>(segment->column_with_uid(column.unique_id()));
+    ASSIGN_OR_RETURN(const auto* const_col_reader, segment->column_with_uid(column.unique_id()));
+    auto* col_reader = const_cast<ColumnReader*>(const_col_reader);
     if (col_reader == nullptr) {
         return Status::InternalError(
                 strings::Substitute("build_bloom_for_column: no column reader for column $0", column.name()));

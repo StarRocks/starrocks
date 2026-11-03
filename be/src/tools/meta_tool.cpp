@@ -1718,7 +1718,7 @@ Status SegmentDump::dump_zonemap() {
         std::cout << "Type: " << type_to_string(column_type) << std::endl;
 
         // Get column reader to access zonemap
-        const auto* column_reader = _segment->column(column_id);
+        ASSIGN_OR_RETURN(const auto* column_reader, _segment->column(column_id));
         if (!column_reader) {
             std::cerr << "Column reader not found for column " << column_id << std::endl;
             continue;

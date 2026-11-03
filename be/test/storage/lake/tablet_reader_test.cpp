@@ -1155,7 +1155,8 @@ void LakeDuplicateTablet10kColumnReaderTest::test_10k_column_read_perf_body(bool
     if (enable_batch_update) {
         ASSERT_EQ(2, invocation_counter); // 1 segment open + 1 batch update
     } else {
-        ASSERT_EQ(1 + kColumnSize, invocation_counter);
+        // 1 segment open + for each column, 1 to build its reader and 1 to load its ordinal index
+        ASSERT_EQ(1 + 2 * kColumnSize, invocation_counter);
     }
 
     read_chunk_ptr->reset();

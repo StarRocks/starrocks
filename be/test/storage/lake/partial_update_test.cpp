@@ -365,10 +365,10 @@ public:
             // reader uses a private full-schema Segment without replacing the narrowed shared one.
             ASSERT_NE(nullptr, cached);
             EXPECT_EQ(new_tablet_schema->id(), cached->tablet_schema().id());
-            EXPECT_EQ(nullptr, cached->column_with_uid(dropped_uid));
+            EXPECT_EQ(nullptr, cached->column_with_uid(dropped_uid).value());
         } else {
             // Keep this check nonfatal so actual old-version values below still provide evidence.
-            EXPECT_TRUE(cached == nullptr || cached->column_with_uid(dropped_uid) != nullptr)
+            EXPECT_TRUE(cached == nullptr || cached->column_with_uid(dropped_uid).value() != nullptr)
                     << "publish cached a Segment without the dropped column reader";
         }
 
@@ -418,10 +418,10 @@ public:
             ASSERT_NE(nullptr, cached_after_old_read);
             EXPECT_NE(cached.get(), cached_after_old_read.get());
             EXPECT_EQ(_tablet_schema->id(), cached_after_old_read->tablet_schema().id());
-            EXPECT_NE(nullptr, cached_after_old_read->column_with_uid(dropped_uid));
+            EXPECT_NE(nullptr, cached_after_old_read->column_with_uid(dropped_uid).value());
             // The old query can make its compatible schema reusable without mutating a narrowed
             // Segment that another reader still holds.
-            EXPECT_EQ(nullptr, cached->column_with_uid(dropped_uid));
+            EXPECT_EQ(nullptr, cached->column_with_uid(dropped_uid).value());
         }
         auto current_schema = ChunkHelper::convert_schema(new_tablet_schema);
         auto current_reader = std::make_shared<TabletReader>(_tablet_mgr.get(), new_metadata, current_schema);
@@ -2126,7 +2126,7 @@ TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
     file_info.size = file_size;
     ASSIGN_OR_ABORT(auto probe, Segment::open(fs, file_info, 0, tablet_schema));
-    auto* complex_reader = probe->column_with_uid(complex->unique_id());
+    auto* complex_reader = probe->column_with_uid(complex->unique_id()).value();
     ASSERT_NE(nullptr, complex_reader);
     ASSERT_NE(nullptr, complex_reader->sub_readers());
     if (type == "JSON") {
@@ -2265,7 +2265,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
     std::iota(rowids.begin(), rowids.end(), 0);
     {
         ASSIGN_OR_ABORT(auto probe, Segment::open(fs, file_info, 0, tablet_schema));
-        const auto* reader = probe->column_with_uid(dictionary_column->unique_id());
+        const auto* reader = probe->column_with_uid(dictionary_column->unique_id()).value();
         ASSERT_NE(nullptr, reader);
         ASSERT_TRUE(reader->has_zstd_compression_dict());
         ASSIGN_OR_ABORT(auto iter, probe->new_column_iterator(tablet_schema->column(2), nullptr));

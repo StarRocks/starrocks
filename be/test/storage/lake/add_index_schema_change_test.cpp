@@ -550,8 +550,8 @@ TEST_F(AddIndexSchemaChangeTest, run_empty_pk_segment_skips_indexes_without_defa
             auto metadata = create_pk_tablet_metadata();
             auto segment = append_pk_rowset(metadata.get(), /*key_only=*/true, /*nrows=*/0, bundled);
             ASSERT_EQ(0, segment->num_rows());
-            ASSERT_NE(nullptr, segment->column_with_uid(_c0_uid));
-            ASSERT_EQ(nullptr, segment->column_with_uid(_c1_uid));
+            ASSERT_NE(nullptr, segment->column_with_uid(_c0_uid).value());
+            ASSERT_EQ(nullptr, segment->column_with_uid(_c1_uid).value());
             if (!record_num_rows) metadata->mutable_rowsets(0)->mutable_segment_metas(0)->clear_num_rows();
 
             VersionedTablet vt(_tablet_manager.get(), metadata);
@@ -1065,7 +1065,7 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bitmap_iterator_smoke) {
     ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
                                                                 LakeIOOptions{.fill_data_cache = false},
                                                                 /*fill_meta_cache=*/true, base_schema));
-    auto* reader_const = segment->column_with_uid(_c1_uid);
+    auto* reader_const = segment->column_with_uid(_c1_uid).value();
     ASSERT_TRUE(reader_const != nullptr);
 
     // 3. Wire IDG loader to surface the .idx file we just produced.
@@ -1147,7 +1147,7 @@ TEST_F(AddIndexSchemaChangeTest, idg_backed_bloom_filter_smoke) {
     ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
                                                                 LakeIOOptions{.fill_data_cache = false},
                                                                 /*fill_meta_cache=*/true, base_schema));
-    auto* reader_const = segment->column_with_uid(_c2_uid);
+    auto* reader_const = segment->column_with_uid(_c2_uid).value();
     ASSERT_TRUE(reader_const != nullptr);
 
     // 3. Wire IDG loader to surface the .idx file we just produced.
@@ -1248,7 +1248,7 @@ TEST_F(AddIndexSchemaChangeTest, idg_bloom_multi_page_no_oob_and_correct_pruning
     ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
                                                                 LakeIOOptions{.fill_data_cache = false},
                                                                 /*fill_meta_cache=*/true, base_schema));
-    auto* reader_const = segment->column_with_uid(_c1_uid);
+    auto* reader_const = segment->column_with_uid(_c1_uid).value();
     ASSERT_TRUE(reader_const != nullptr);
     auto* reader = const_cast<ColumnReader*>(reader_const);
     // load_segment() only parses the footer; the ordinal index stays unloaded
@@ -1392,9 +1392,9 @@ TEST_F(AddIndexSchemaChangeTest, superset_schema_still_builds_and_prunes_present
                                                                 LakeIOOptions{.fill_data_cache = false},
                                                                 /*fill_meta_cache=*/true, authoritative));
     // The present column still gets a reader; the absent one still does not.
-    auto* reader_const = segment->column_with_uid(_c1_uid);
+    auto* reader_const = segment->column_with_uid(_c1_uid).value();
     ASSERT_TRUE(reader_const != nullptr);
-    EXPECT_TRUE(segment->column_with_uid(_c5_uid) == nullptr);
+    EXPECT_TRUE(segment->column_with_uid(_c5_uid).value() == nullptr);
     auto* reader = const_cast<ColumnReader*>(reader_const);
     {
         OlapReaderStatistics ord_stats;
@@ -1502,7 +1502,7 @@ TEST_F(AddIndexSchemaChangeTest, idg_bloom_undersized_idx_degrades_to_no_pruning
     ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
                                                                 LakeIOOptions{.fill_data_cache = false},
                                                                 /*fill_meta_cache=*/true, base_schema));
-    auto* reader_const = segment->column_with_uid(_c1_uid);
+    auto* reader_const = segment->column_with_uid(_c1_uid).value();
     ASSERT_TRUE(reader_const != nullptr);
     auto* reader = const_cast<ColumnReader*>(reader_const);
     // load_segment() leaves the ordinal index unloaded; load it so
@@ -1940,14 +1940,14 @@ TEST_F(AddIndexSchemaChangeTest, run_does_not_seed_metacache_with_alter_schema) 
         ASSIGN_OR_ABORT(auto reader_seg, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
                                                                        LakeIOOptions{.fill_data_cache = false},
                                                                        /*fill_meta_cache=*/true, base_schema));
-        ASSERT_TRUE(reader_seg->column_with_uid(_c3_uid) != nullptr) << "precondition: cached with c3";
+        ASSERT_TRUE(reader_seg->column_with_uid(_c3_uid).value() != nullptr) << "precondition: cached with c3";
     }
     AddIndexSchemaChange sc2(_tablet_manager.get(), next_id(), vt, vt, indexes, version, authoritative);
     TxnLogPB_OpAddIndex op2;
     ASSERT_OK(sc2.run(&op2));
     auto cached = _tablet_manager->metacache()->lookup_segment(cache_key);
     ASSERT_TRUE(cached != nullptr);
-    EXPECT_TRUE(cached->column_with_uid(_c3_uid) != nullptr)
+    EXPECT_TRUE(cached->column_with_uid(_c3_uid).value() != nullptr)
             << "the alter replaced or narrowed the Segment a reader had cached with c3";
 }
 

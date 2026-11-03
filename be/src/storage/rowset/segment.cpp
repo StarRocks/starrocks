@@ -36,8 +36,11 @@
 
 #include <bvar/bvar.h>
 #include <fmt/core.h>
-#include <google/protobuf/io/zero_copy_stream_impl.h>
+#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/wire_format_lite.h>
 
+#include <algorithm>
+#include <cstring>
 #include <memory>
 
 #include "base/failpoint/fail_point.h"
@@ -79,6 +82,10 @@ bvar::Window<bvar::Adder<int>> g_open_segments_minute("starrocks", "open_segment
 // NOLINTNEXTLINE
 bvar::Window<bvar::Adder<int>> g_open_segments_io_minute("starrocks", "open_segments_io_minute", &g_open_segments_io,
                                                          60);
+// How many ColumnReaders segments have built. A segment builds the reader of a column the first time the column is
+// used, not when it is opened.
+// NOLINTNEXTLINE
+bvar::Adder<int64_t> g_segment_column_readers_built("starrocks", "segment_column_readers_built");
 
 namespace starrocks {
 
@@ -100,9 +107,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
     return std::move(segment);
 }
 
-StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                               size_t* footer_length_hint,
-                                               const FooterPointerPB* partial_rowset_footer) {
+// Reads the serialized SegmentFooterPB of |read_file| and verifies its checksum. On success |*footer| views the
+// footer bytes, which are owned by |*buf|.
+static StatusOr<size_t> read_segment_footer_internal(RandomAccessFile* read_file, std::string* buf,
+                                                     std::string_view* footer, size_t* footer_length_hint,
+                                                     const FooterPointerPB* partial_rowset_footer) {
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)
     ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
 
@@ -122,7 +131,7 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
         }
         footer_read_size = partial_rowset_footer->size();
     }
-    std::string buff;
+    std::string& buff = *buf;
     raw::stl_string_resize_uninitialized(&buff, footer_read_size);
     size_t read_pos = partial_rowset_footer ? partial_rowset_footer->position() : file_size - buff.size();
 
@@ -149,39 +158,27 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
 
     buff.resize(buff.size() - 12); // Remove the last 12 bytes.
 
-    uint32_t actual_checksum = 0;
     if (footer_length <= buff.size()) {
         g_open_segments << 1;
         g_open_segments_io << 1;
 
-        std::string_view buf_footer(buff.data() + buff.size() - footer_length, footer_length);
-        actual_checksum = crc32c::Value(buf_footer.data(), buf_footer.size());
-        if (!footer->ParseFromArray(buf_footer.data(), buf_footer.size())) {
-            return Status::Corruption(
-                    strings::Substitute("Bad segment file $0: failed to parse footer", read_file->filename()));
-        }
+        *footer = std::string_view(buff.data() + buff.size() - footer_length, footer_length);
     } else { // Need read file again.
         g_open_segments << 1;
         g_open_segments_io << 2;
 
-        int left_size = (int)footer_length - buff.size();
-        std::string buff_2;
-        raw::stl_string_resize_uninitialized(&buff_2, left_size);
-        RETURN_IF_ERROR(read_file->read_at_fully(file_size - footer_length - 12, buff_2.data(), buff_2.size()));
-        actual_checksum = crc32c::Extend(actual_checksum, buff_2.data(), buff_2.size());
-        actual_checksum = crc32c::Extend(actual_checksum, buff.data(), buff.size());
-
-        ::google::protobuf::io::ArrayInputStream stream1(buff_2.data(), buff_2.size());
-        ::google::protobuf::io::ArrayInputStream stream2(buff.data(), buff.size());
-        ::google::protobuf::io::ZeroCopyInputStream* streams[2] = {&stream1, &stream2};
-        ::google::protobuf::io::ConcatenatingInputStream concatenating_stream(streams, 2);
-        if (!footer->ParseFromZeroCopyStream(&concatenating_stream)) {
-            return Status::Corruption(
-                    strings::Substitute("Bad segment file $0: failed to parse footer", read_file->filename()));
-        }
+        // |buff| holds the tail of the footer. Read the rest in front of it.
+        size_t left_size = footer_length - buff.size();
+        std::string whole;
+        raw::stl_string_resize_uninitialized(&whole, footer_length);
+        RETURN_IF_ERROR(read_file->read_at_fully(file_size - footer_length - 12, whole.data(), left_size));
+        memcpy(whole.data() + left_size, buff.data(), buff.size());
+        buff = std::move(whole);
+        *footer = std::string_view(buff);
     }
 
     // validate footer PB's checksum
+    uint32_t actual_checksum = crc32c::Value(footer->data(), footer->size());
     if (actual_checksum != checksum) {
         return Status::Corruption(
                 strings::Substitute("Bad segment file $0: footer checksum not match, actual=$1 vs expect=$2",
@@ -191,10 +188,9 @@ StatusOr<size_t> parse_segment_footer_internal(RandomAccessFile* read_file, Segm
     return footer_length + 12;
 }
 
-StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                               size_t* footer_length_hint,
-                                               const FooterPointerPB* partial_rowset_footer) {
-    auto s = parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer);
+static StatusOr<size_t> read_segment_footer(RandomAccessFile* read_file, std::string* buf, std::string_view* footer,
+                                            size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer) {
+    auto s = read_segment_footer_internal(read_file, buf, footer, footer_length_hint, partial_rowset_footer);
     if (s.ok()) {
         return s;
     }
@@ -204,13 +200,93 @@ StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, Segm
         if (!drop_status.ok()) {
             return s; // return first read error
         }
-        return parse_segment_footer_internal(read_file, footer, footer_length_hint, partial_rowset_footer);
+        return read_segment_footer_internal(read_file, buf, footer, footer_length_hint, partial_rowset_footer);
     } else {
         return s;
     }
 #else
     return s;
 #endif
+}
+
+StatusOr<size_t> Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                               size_t* footer_length_hint,
+                                               const FooterPointerPB* partial_rowset_footer) {
+    std::string buf;
+    std::string_view footer_bytes;
+    ASSIGN_OR_RETURN(auto size,
+                     read_segment_footer(read_file, &buf, &footer_bytes, footer_length_hint, partial_rowset_footer));
+    if (!footer->ParseFromArray(footer_bytes.data(), footer_bytes.size())) {
+        return Status::Corruption(
+                strings::Substitute("Bad segment file $0: failed to parse footer", read_file->filename()));
+    }
+    return size;
+}
+
+// Parses a serialized SegmentFooterPB except its `columns`, which are returned as slices of |footer| in
+// |column_metas| instead. Parsing the ColumnMetaPB of every column of a wide table costs more than
+// everything else in opening a segment, and most of them may never be read.
+static Status parse_footer_without_columns(std::string_view footer, SegmentFooterPB* footer_pb,
+                                           std::vector<std::string_view>* column_metas) {
+    using google::protobuf::internal::WireFormatLite;
+    google::protobuf::io::CodedInputStream input(reinterpret_cast<const uint8_t*>(footer.data()), footer.size());
+    std::string others;
+    while (true) {
+        const int start = input.CurrentPosition();
+        const uint32_t tag = input.ReadTag();
+        if (tag == 0) {
+            // ReadTag() returns 0 at the end of the input, and for an invalid tag.
+            if (start != static_cast<int>(footer.size())) {
+                return Status::Corruption("invalid tag in segment footer");
+            }
+            break;
+        }
+        if (WireFormatLite::GetTagFieldNumber(tag) == SegmentFooterPB::kColumnsFieldNumber &&
+            WireFormatLite::GetTagWireType(tag) == WireFormatLite::WIRETYPE_LENGTH_DELIMITED) {
+            uint32_t length = 0;
+            if (!input.ReadVarint32(&length) || length > footer.size() - input.CurrentPosition()) {
+                return Status::Corruption("truncated column meta in segment footer");
+            }
+            column_metas->emplace_back(footer.substr(input.CurrentPosition(), length));
+            input.Skip(length);
+            continue;
+        }
+        if (!WireFormatLite::SkipField(&input, tag)) {
+            return Status::Corruption("truncated field in segment footer");
+        }
+        others.append(footer.data() + start, input.CurrentPosition() - start);
+    }
+    if (!footer_pb->ParseFromString(others)) {
+        return Status::Corruption("failed to parse segment footer");
+    }
+    return Status::OK();
+}
+
+// Returns the unique id in a serialized ColumnMetaPB without parsing the rest of it. As when parsing, the last
+// occurrence wins and an absent field reads as 0.
+static StatusOr<uint32_t> peek_column_unique_id(std::string_view column_meta) {
+    using google::protobuf::internal::WireFormatLite;
+    google::protobuf::io::CodedInputStream input(reinterpret_cast<const uint8_t*>(column_meta.data()),
+                                                 column_meta.size());
+    uint32_t unique_id = 0;
+    while (true) {
+        const int start = input.CurrentPosition();
+        const uint32_t tag = input.ReadTag();
+        if (tag == 0) {
+            if (start != static_cast<int>(column_meta.size())) {
+                return Status::Corruption("invalid tag in column meta");
+            }
+            return unique_id;
+        }
+        if (WireFormatLite::GetTagFieldNumber(tag) == ColumnMetaPB::kUniqueIdFieldNumber &&
+            WireFormatLite::GetTagWireType(tag) == WireFormatLite::WIRETYPE_VARINT) {
+            if (!input.ReadVarint32(&unique_id)) {
+                return Status::Corruption("truncated unique id in column meta");
+            }
+        } else if (!WireFormatLite::SkipField(&input, tag)) {
+            return Status::Corruption("truncated field in column meta");
+        }
+    }
 }
 
 Status Segment::write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer) {
@@ -244,7 +320,11 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uin
 }
 
 Segment::~Segment() {
-    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->segment_metadata_mem_tracker(), _basic_info_mem_usage());
+    for (auto& column : _column_readers) {
+        delete column.reader.load(std::memory_order_acquire);
+    }
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->segment_metadata_mem_tracker(),
+                             _basic_info_mem_usage() + _column_meta_mem_usage);
     MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->short_key_index_mem_tracker(), _short_key_index_mem_usage());
 }
 
@@ -283,7 +363,8 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
                       const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
-    SegmentFooterPB footer;
+    std::string footer_buf;
+    std::string_view footer_bytes;
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
                                  .buffer_size = lake_io_opts.buffer_size};
 
@@ -302,13 +383,19 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
                 add_read_file_io_stats(*read_file, stats);
             }
         });
-        RETURN_IF_ERROR(
-                Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
+        RETURN_IF_ERROR(read_segment_footer(read_file.get(), &footer_buf, &footer_bytes, footer_length_hint,
+                                            partial_rowset_footer));
     }
     if (stats != nullptr) {
         stats->segments_opened++;
     }
-    RETURN_IF_ERROR(_create_column_readers(&footer));
+    SegmentFooterPB footer;
+    std::vector<std::string_view> column_metas;
+    if (auto st = parse_footer_without_columns(footer_bytes, &footer, &column_metas); !st.ok()) {
+        return Status::Corruption(
+                strings::Substitute("Bad segment file $0: $1", _segment_file_info.path, st.message()));
+    }
+    RETURN_IF_ERROR(_create_column_readers(column_metas));
     _num_rows = footer.num_rows();
     _short_key_index_page = PagePointer(footer.short_key_index_page());
     _skip_vector_index =
@@ -346,12 +433,17 @@ struct SegmentZoneMapPruner {
                                                                : parent->_tablet_schema->column(column_id);
         const auto column_unique_id = tablet_column.unique_id();
 
-        if (const auto it = parent->_column_readers.find(column_unique_id); it == parent->_column_readers.end()) {
+        const auto* column = parent->_find_column(column_unique_id);
+        if (column == nullptr) {
             return false;
-        } else {
-            return it->second->has_zone_map() && !it->second->segment_zone_map_filter({col_pred}) &&
-                   (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options));
         }
+        auto reader = parent->_get_or_create_column_reader(*column);
+        if (!reader.ok()) {
+            // Not pruning is always safe. The scan reads the column next and reports the error then.
+            return false;
+        }
+        return (*reader)->has_zone_map() && !(*reader)->segment_zone_map_filter({col_pred}) &&
+               (tablet_column.is_key() || parent->_use_segment_zone_map_filter(read_options));
     }
     bool operator()(const PredicateAndNode& node) const {
         return std::any_of(node.children().begin(), node.children().end(),
@@ -406,13 +498,14 @@ StatusOr<ChunkIteratorPtr> Segment::new_reusable_iterator(const Schema& iterator
 
 Status Segment::new_inverted_index_iterator(uint32_t ucid, InvertedIndexIterator** iter, const SegmentReadOptions& opts,
                                             const IndexReadOptions& index_opt) {
-    auto column_reader_iter = _column_readers.find(ucid);
+    const auto* column = _find_column(ucid);
 
-    if (column_reader_iter != _column_readers.end()) {
+    if (column != nullptr) {
         std::shared_ptr<TabletIndex> index_meta;
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(ucid, GIN, index_meta));
         if (index_meta.get() != nullptr) {
-            return column_reader_iter->second->new_inverted_index_iterator(index_meta, iter, opts, index_opt);
+            ASSIGN_OR_RETURN(auto reader, _get_or_create_column_reader(*column));
+            return reader->new_inverted_index_iterator(index_meta, iter, opts, index_opt);
         }
     }
     return Status::OK();
@@ -492,35 +585,118 @@ bool Segment::has_loaded_index() const {
     return invoked(_load_index_once);
 }
 
-Status Segment::_create_column_readers(SegmentFooterPB* footer) {
+Status Segment::_create_column_readers(const std::vector<std::string_view>& column_metas) {
     std::unordered_map<uint32_t, uint32_t> column_id_to_footer_ordinal;
-    RETURN_IF_ERROR(_check_column_unique_id_uniqueness(footer, column_id_to_footer_ordinal));
+    RETURN_IF_ERROR(_check_column_unique_id_uniqueness(column_metas, column_id_to_footer_ordinal));
+
+    struct Slot {
+        int32_t unique_id;
+        std::string_view meta;
+    };
+    std::vector<Slot> slots;
+    size_t metas_size = 0;
     for (uint32_t ordinal = 0, sz = _tablet_schema->num_columns(); ordinal < sz; ++ordinal) {
         const auto& column = _tablet_schema->column(ordinal);
         auto iter = column_id_to_footer_ordinal.find(column.unique_id());
         if (iter == column_id_to_footer_ordinal.end()) {
             continue;
         }
-
-        auto res = ColumnReader::create(footer->mutable_columns(iter->second), this, &column);
-        if (!res.ok()) {
-            return res.status();
-        }
-        _column_readers.emplace(column.unique_id(), std::move(res).value());
+        slots.push_back({column.unique_id(), column_metas[iter->second]});
+        metas_size += column_metas[iter->second].size();
     }
+    std::sort(slots.begin(), slots.end(), [](const Slot& a, const Slot& b) { return a.unique_id < b.unique_id; });
+
+    // Keep only the metas of the columns this segment can read through its schema. The columns of a
+    // historical schema are not all of the footer.
+    std::string metas;
+    metas.reserve(metas_size);
+    std::vector<LazyColumnReader> columns(slots.size());
+    for (size_t i = 0; i < slots.size(); ++i) {
+        columns[i].unique_id = slots[i].unique_id;
+        columns[i].meta_offset = metas.size();
+        metas.append(slots[i].meta);
+    }
+    _column_metas = std::move(metas);
+    _column_readers = std::move(columns);
+    _column_meta_mem_usage = _column_metas.capacity() + _column_readers.capacity() * sizeof(LazyColumnReader);
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->segment_metadata_mem_tracker(), _column_meta_mem_usage);
     return Status::OK();
+}
+
+const Segment::LazyColumnReader* Segment::_find_column(int32_t uid) const {
+    auto it = std::lower_bound(_column_readers.begin(), _column_readers.end(), uid,
+                               [](const LazyColumnReader& c, int32_t id) { return c.unique_id < id; });
+    return (it != _column_readers.end() && it->unique_id == uid) ? &*it : nullptr;
+}
+
+std::string_view Segment::_column_meta(const LazyColumnReader& column) const {
+    const size_t end = &column + 1 == _column_readers.data() + _column_readers.size() ? _column_metas.size()
+                                                                                      : (&column + 1)->meta_offset;
+    return std::string_view(_column_metas).substr(column.meta_offset, end - column.meta_offset);
+}
+
+StatusOr<ColumnReader*> Segment::_get_or_create_column_reader(const LazyColumnReader& column) const {
+    if (auto* reader = column.reader.load(std::memory_order_acquire); reader != nullptr) {
+        return reader;
+    }
+    {
+        std::lock_guard l(_column_readers_lock);
+        if (auto* reader = column.reader.load(std::memory_order_relaxed); reader != nullptr) {
+            return reader;
+        }
+        // Like the short key index, the reader is shared by every user of this segment and must not be left
+        // half-built because the query that happens to build it is over its memory limit.
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+        ColumnMetaPB meta;
+        const auto serialized_meta = _column_meta(column);
+        if (!meta.ParseFromArray(serialized_meta.data(), serialized_meta.size())) {
+            return Status::Corruption(strings::Substitute("Bad segment file $0: failed to parse meta of column $1",
+                                                          _segment_file_info.path, column.unique_id));
+        }
+        int32_t field_index = _tablet_schema->field_index(column.unique_id);
+        if (field_index < 0) {
+            // The unique id index can miss a column of the schema: the hidden row-store column appended by
+            // TabletSchema::_build_current_tablet_schema() is not in it.
+            for (size_t i = 0, n = _tablet_schema->num_columns(); i < n; ++i) {
+                if (_tablet_schema->column(i).unique_id() == column.unique_id) {
+                    field_index = static_cast<int32_t>(i);
+                    break;
+                }
+            }
+        }
+        if (field_index < 0) {
+            return Status::InternalError(strings::Substitute("Segment $0 has no schema column with unique id $1",
+                                                             _segment_file_info.path, column.unique_id));
+        }
+        ASSIGN_OR_RETURN(auto reader,
+                         ColumnReader::create(&meta, const_cast<Segment*>(this), &_tablet_schema->column(field_index)));
+        column.reader.store(reader.release(), std::memory_order_release);
+        g_segment_column_readers_built << 1;
+    }
+    // The reader adds to mem_usage(), which the metacache charges for this segment.
+    const_cast<Segment*>(this)->update_cache_size();
+    return column.reader.load(std::memory_order_acquire);
+}
+
+StatusOr<const ColumnReader*> Segment::column_with_uid(int32_t uid) const {
+    const auto* column = _find_column(uid);
+    if (column == nullptr) {
+        return nullptr;
+    }
+    return _get_or_create_column_reader(*column);
 }
 
 DEFINE_FAIL_POINT(ingest_duplicate_column_unique_id);
 Status Segment::_check_column_unique_id_uniqueness(
-        SegmentFooterPB* footer, std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal) {
+        const std::vector<std::string_view>& column_metas,
+        std::unordered_map<uint32_t, uint32_t>& column_id_to_footer_ordinal) {
     // check uniqueness of column ids in footer
-    for (uint32_t ordinal = 0, sz = footer->columns().size(); ordinal < sz; ++ordinal) {
-        const auto& column_pb = footer->columns(ordinal);
-        auto [it, ok] = column_id_to_footer_ordinal.emplace(column_pb.unique_id(), ordinal);
+    for (uint32_t ordinal = 0, sz = column_metas.size(); ordinal < sz; ++ordinal) {
+        ASSIGN_OR_RETURN(auto unique_id, peek_column_unique_id(column_metas[ordinal]));
+        auto [it, ok] = column_id_to_footer_ordinal.emplace(unique_id, ordinal);
         if (UNLIKELY(!ok)) {
-            LOG(ERROR) << "Duplicate column id=" << column_pb.unique_id() << " found between column '"
-                       << footer->columns(it->second).name() << "' and column '" << column_pb.name() << "'";
+            LOG(ERROR) << "Duplicate column id=" << unique_id << " found between column #" << it->second
+                       << " and column #" << ordinal << " of segment " << _segment_file_info.path;
             return Status::InternalError("Duplicate column id");
         }
     }
@@ -546,10 +722,11 @@ Status Segment::_check_column_unique_id_uniqueness(
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_default(const TabletColumn& column,
                                                                                   ColumnAccessPath* path) {
     auto id = column.unique_id();
-    if (_column_readers.contains(id)) {
-        ASSIGN_OR_RETURN(auto source_iter, _column_readers[id]->new_iterator(path, &column));
+    if (const auto* lazy_reader = _find_column(id); lazy_reader != nullptr) {
+        ASSIGN_OR_RETURN(auto reader, _get_or_create_column_reader(*lazy_reader));
+        ASSIGN_OR_RETURN(auto source_iter, reader->new_iterator(path, &column));
         bool need_cast = false;
-        if (_column_readers[id]->column_type() != column.type()) {
+        if (reader->column_type() != column.type()) {
             need_cast = true;
         } else if (column.type() == TYPE_CHAR) {
             // if the column is a char column, we need to check if the length of the column is the same as
@@ -558,7 +735,7 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
             // bitmap index and zone map need it.
             // In shared-data mode, segments may be opened with a new tablet schema that has a different
             // CHAR length than what's stored on disk, so we must compare against the segment's stored length.
-            int32_t segment_column_length = _column_readers[id]->column_length();
+            int32_t segment_column_length = reader->column_length();
             if (segment_column_length != column.length()) {
                 need_cast = true;
             }
@@ -566,8 +743,8 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator_or_defaul
         if (!need_cast) {
             return source_iter;
         } else {
-            auto nullable = _column_readers[id]->is_nullable();
-            auto source_type = TypeDescriptor::from_logical_type(_column_readers[id]->column_type());
+            auto nullable = reader->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(reader->column_type());
             auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
@@ -615,13 +792,14 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
 
     auto source_id = _tablet_schema->column(static_cast<size_t>(source_index)).unique_id();
     auto& leaf_type = access_path->leaf_value_type();
-    RETURN_IF(!_column_readers.contains(source_id),
-              Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
+    const auto* lazy_source_reader = _find_column(source_id);
+    RETURN_IF(lazy_source_reader == nullptr, Status::RuntimeError(fmt::format("unknown root column: {}", source_id)));
+    ASSIGN_OR_RETURN(auto column_reader, _get_or_create_column_reader(*lazy_source_reader));
 
     // Check if it's a sub-column of FlatJSON
     // case 1: it's not a FlatJSON
     // case 2: it's a FlatJSON, but it's not a flatten column in the FlatJSON
-    auto sub_readers = _column_readers[source_id]->sub_readers();
+    auto sub_readers = column_reader->sub_readers();
     if (sub_readers) {
         for (auto& sub_reader : *sub_readers) {
             if (field_name == sub_reader->name()) {
@@ -646,7 +824,6 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     }
 
     // case 3: check if this segment contains the specific field
-    auto& column_reader = _column_readers[source_id];
     bool may_contains = column_reader->has_remain_json();
     if (may_contains && column_reader->get_remain_filter() != nullptr) {
         std::vector<std::string> paths = strings::Split(full_path, ".");
@@ -677,23 +854,22 @@ StatusOr<ColumnIteratorUPtr> Segment::_new_extended_column_iterator(const Tablet
     }
 
     // Build a regular JsonExtractIterator to read it
-    auto& source_reader = _column_readers[source_id];
-    ASSIGN_OR_RETURN(auto source_iter, source_reader->new_iterator(path, &column));
-    return create_json_extract_iterator(std::move(source_iter), source_reader->is_nullable(), std::string(field_name),
+    ASSIGN_OR_RETURN(auto source_iter, column_reader->new_iterator(path, &column));
+    return create_json_extract_iterator(std::move(source_iter), column_reader->is_nullable(), std::string(field_name),
                                         leaf_type.type);
 }
 
 StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const TabletColumn& column,
                                                                        ColumnAccessPath* path) {
     auto id = column.unique_id();
-    auto iter = _column_readers.find(id);
-    if (iter != _column_readers.end()) {
-        ASSIGN_OR_RETURN(auto source_iter, iter->second->new_iterator(path, &column));
-        if (iter->second->column_type() == column.type()) {
+    if (const auto* lazy_reader = _find_column(id); lazy_reader != nullptr) {
+        ASSIGN_OR_RETURN(auto reader, _get_or_create_column_reader(*lazy_reader));
+        ASSIGN_OR_RETURN(auto source_iter, reader->new_iterator(path, &column));
+        if (reader->column_type() == column.type()) {
             return source_iter;
         } else {
-            auto nullable = iter->second->is_nullable();
-            auto source_type = TypeDescriptor::from_logical_type(iter->second->column_type());
+            auto nullable = reader->is_nullable();
+            auto source_type = TypeDescriptor::from_logical_type(reader->column_type());
             auto target_type = TypeDescriptor::from_logical_type(column.type(), column.precision(), column.scale());
             return std::make_unique<CastColumnIterator>(std::move(source_iter), source_type, target_type, nullable);
         }
@@ -703,17 +879,18 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(const Tab
 }
 
 Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** res) {
-    auto iter = _column_readers.find(id);
-    if (iter == _column_readers.end()) {
+    const auto* lazy_reader = _find_column(id);
+    if (lazy_reader == nullptr) {
         return Status::OK();
     }
+    ASSIGN_OR_RETURN(auto reader, _get_or_create_column_reader(*lazy_reader));
     // Delegate to ColumnReader: it handles both the footer-embedded bitmap
     // (legacy path) and the IDG-backed sidecar (.idx file, lake fast path).
     // Do NOT gate on `has_bitmap_index()` here — that only checks the
     // footer-loaded `_bitmap_index` pointer and would short-circuit before
     // the IDG branch gets a chance. ColumnReader::new_bitmap_index_iterator
     // returns OK with `*res == nullptr` when neither source has a bitmap.
-    return iter->second->new_bitmap_index_iterator(options, res);
+    return reader->new_bitmap_index_iterator(options, res);
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
@@ -748,9 +925,10 @@ Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
 
 size_t Segment::_column_index_mem_usage() const {
     size_t size = 0;
-    for (auto& r : _column_readers) {
-        auto& reader = r.second;
-        size += reader->mem_usage();
+    for (const auto& column : _column_readers) {
+        if (const auto* reader = column.reader.load(std::memory_order_acquire); reader != nullptr) {
+            size += reader->mem_usage();
+        }
     }
     return size;
 }
@@ -794,8 +972,8 @@ size_t Segment::mem_usage() const {
         // just report the basic info memory usage if not opened yet
         return _basic_info_mem_usage();
     }
-    return _basic_info_mem_usage() + _loaded_key_index_mem_usage.load(std::memory_order_relaxed) +
-           _column_index_mem_usage();
+    return _basic_info_mem_usage() + _column_meta_mem_usage +
+           _loaded_key_index_mem_usage.load(std::memory_order_relaxed) + _column_index_mem_usage();
 }
 
 StatusOr<int64_t> Segment::get_data_size() const {

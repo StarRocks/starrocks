@@ -990,7 +990,7 @@ TEST_F(SortKeySamplerSegmentTest, path_b_samples_across_multiple_data_pages) {
     // data page for this column (segment.h's column(i) is by schema position, matching
     // sort_key_idxes). The ordinal index is lazily loaded by ColumnIterator::init, so this can only
     // be checked after the sampling call above, not before it.
-    ASSERT_GT(segment->column(0)->num_data_pages(), 1) << "fixture did not actually span multiple pages";
+    ASSERT_GT(segment->column(0).value()->num_data_pages(), 1) << "fixture did not actually span multiple pages";
     // row_interval = ceil(1000/9) = 112 -> 8 ordinals, each many 64-byte pages apart in the int
     // column (4 bytes/value, so ~16 rows/page).
     ASSERT_EQ(8u, result.samples.size());
