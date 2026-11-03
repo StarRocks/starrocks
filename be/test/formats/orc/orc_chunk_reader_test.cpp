@@ -2472,7 +2472,7 @@ TEST_F(OrcChunkReaderTest, GetFileSchema) {
               {"col_string", TYPE_VARCHAR_DESC},
               {"col_char", TypeDescriptor::create_char_type(10)},
               {"col_varchar", TypeDescriptor::create_varchar_type(10)},
-              {"col_binary", TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+              {"col_binary", TYPE_VARBINARY_DESC},
               {"col_decimal", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 19)},
               {"col_timestamp", TYPE_DATETIME_DESC},
               {"col_date", TYPE_DATE_DESC}}},

@@ -609,11 +609,11 @@ TEST_F(geographyFunctionsTest, nativeGeographyWktAndWkbRoundTrip) {
     auto text = GeoFunctions::st_geography_as_text(text_serializer.get(), {native}).value();
     EXPECT_EQ("GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING (1 2, 3 4))", text->get(0).get_slice().to_string());
 
-    std::unique_ptr<FunctionContext> wkb_serializer(FunctionContext::create_test_context(
-            {geography}, TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)));
+    std::unique_ptr<FunctionContext> wkb_serializer(
+            FunctionContext::create_test_context({geography}, TYPE_VARBINARY_DESC));
     auto wkb = GeoFunctions::st_geography_as_wkb(wkb_serializer.get(), {native}).value();
-    std::unique_ptr<FunctionContext> wkb_constructor(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}, geography));
+    std::unique_ptr<FunctionContext> wkb_constructor(
+            FunctionContext::create_test_context({TYPE_VARBINARY_DESC}, geography));
     auto reconstructed = GeoFunctions::st_geog_from_wkb(wkb_constructor.get(), {wkb}).value();
     auto reconstructed_text = GeoFunctions::st_geography_as_text(text_serializer.get(), {reconstructed}).value();
     EXPECT_EQ(text->get(0).get_slice().to_string(), reconstructed_text->get(0).get_slice().to_string());
@@ -641,8 +641,8 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorPreservesCanoni
         expected.push_back(bytes);
         input->append(Slice(bytes));
     }
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}, geography_type()));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TYPE_VARBINARY_DESC}, geography_type()));
     auto result = GeoFunctions::st_geog_from_wkb(context.get(), {input});
     ASSERT_TRUE(result.ok()) << result.status();
     ASSERT_EQ(coordinates.size(), (*result)->size());
@@ -798,8 +798,8 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorRetainsNormaliz
     }
     auto input = BinaryColumn::create();
     for (const auto& bytes : values) input->append(Slice(bytes));
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}, geography_type()));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TYPE_VARBINARY_DESC}, geography_type()));
     auto result = GeoFunctions::st_geog_from_wkb(context.get(), {input});
     ASSERT_TRUE(result.ok()) << result.status();
     ASSERT_EQ(values.size(), (*result)->size());
@@ -833,9 +833,8 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointWkbConstructorRetainsNullSrid
     for (int32_t srid : {4326, 3857, 4326, 4326, 4326}) srids->append(srid);
     auto srid_nulls = NullColumn::create();
     for (uint8_t flag : {0, 0, 0, 1, 0}) srid_nulls->append(flag);
-    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_INT_DESC},
-            geography_type()));
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({TYPE_VARBINARY_DESC, TYPE_INT_DESC}, geography_type()));
     auto result = GeoFunctions::st_geog_from_wkb(
             context.get(), {NullableColumn::create(input, nulls), NullableColumn::create(srids, srid_nulls)});
     ASSERT_TRUE(result.ok()) << result.status();
@@ -1599,11 +1598,10 @@ TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
         EXPECT_EQ(values[row], text->get(row).get_slice().to_string());
     }
 
-    std::unique_ptr<FunctionContext> wkb_serializer(FunctionContext::create_test_context(
-            {type}, TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)));
+    std::unique_ptr<FunctionContext> wkb_serializer(FunctionContext::create_test_context({type}, TYPE_VARBINARY_DESC));
     auto wkb = GeoFunctions::st_geometry_as_wkb(wkb_serializer.get(), {native}).value();
-    std::unique_ptr<FunctionContext> wkb_constructor(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_VARCHAR_DESC}, type));
+    std::unique_ptr<FunctionContext> wkb_constructor(
+            FunctionContext::create_test_context({TYPE_VARBINARY_DESC, TYPE_VARCHAR_DESC}, type));
     auto reconstructed = GeoFunctions::st_geom_from_wkb(wkb_constructor.get(), {wkb, crs}).value();
     auto reconstructed_text = GeoFunctions::st_geometry_as_text(text_serializer.get(), {reconstructed}).value();
     for (size_t row = 0; row < std::size(values); ++row) {
@@ -1631,9 +1629,8 @@ TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
 
     auto malformed_wkb = ColumnTestHelper::build_column<Slice>({"not WKB"});
     auto one_crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", 1);
-    std::unique_ptr<FunctionContext> wkb_context(FunctionContext::create_test_context(
-            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH), TYPE_VARCHAR_DESC},
-            geometry_type()));
+    std::unique_ptr<FunctionContext> wkb_context(
+            FunctionContext::create_test_context({TYPE_VARBINARY_DESC, TYPE_VARCHAR_DESC}, geometry_type()));
     auto invalid_wkb = GeoFunctions::st_geom_from_wkb(wkb_context.get(), {malformed_wkb, one_crs}).value();
     EXPECT_TRUE(invalid_wkb->is_null(0));
 
