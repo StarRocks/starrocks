@@ -196,7 +196,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
     if (data_type == TYPE_INT) {
         type_desc = TYPE_INT_DESC;
     } else if (data_type == TYPE_VARCHAR) {
-        type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        type_desc = TYPE_VARCHAR_DESC;
     } else if (data_type == TYPE_DOUBLE) {
         type_desc = TYPE_DOUBLE_DESC;
     } else {
@@ -457,7 +457,7 @@ static void do_bench_materialize(benchmark::State& state, LogicalType data_type,
     if (data_type == TYPE_INT) {
         type_desc = TYPE_INT_DESC;
     } else if (data_type == TYPE_VARCHAR) {
-        type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        type_desc = TYPE_VARCHAR_DESC;
     } else if (data_type == TYPE_DOUBLE) {
         type_desc = TYPE_DOUBLE_DESC;
     } else {

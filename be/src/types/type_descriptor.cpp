@@ -467,7 +467,7 @@ TypeDescriptor TypeDescriptor::promote_types(const TypeDescriptor& type1, const 
         return TypeDescriptor::create_varbinary_type(len);
     }
     // treat other conflicted types as varchar.
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
@@ -475,7 +475,7 @@ TypeDescriptor TypeDescriptor::promote_decimal_type(int precision, int scale) {
     if (precision <= 0 || precision > decimal_precision_limit<int128_t>) {
         // if precision is invalid, use varchar
         LOG(WARNING) << "failed to promote decimal type, use varchar. precision: " << precision;
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARCHAR_DESC;
     } else if (precision <= decimal_precision_limit<int32_t>) {
         return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, precision, scale);
     } else if (precision <= decimal_precision_limit<int64_t>) {
