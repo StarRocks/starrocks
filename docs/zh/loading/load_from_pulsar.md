@@ -96,6 +96,12 @@ Routine Load 支持以下 Pulsar 的自定义参数。
 | property.pulsar_default_initial_position | 否       | 当订阅 Topic 的分区时的默认初始位置。该参数在未指定 `pulsar_initial_positions` 时生效。其有效值与 `pulsar_initial_positions` 的有效值相同。示例：`"``property.pulsar_default_initial_position" = "POSITION_EARLIEST"` |
 | property.auth.token                      | 否       | 如果 Pulsar 启用了使用安全令牌验证客户端身份，则需要令牌字符串来验证您的身份。示例：`"p``roperty.auth.token" = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUJzdWIiOiJqaXV0aWFuY2hlbiJ9.lulGngOC72vE70OW54zcbyw7XdKSOxET94WT_hIqD"` |
 
+### 消费者连接失败
+
+创建 Pulsar 消费者时，如果返回 `ConnectError` 或 `Timeout`，Routine Load 会中止该任务，并按照现有的任务调度间隔安排替代任务，作业保持 `RUNNING` 状态。重复失败仍会记录在 `OtherMsg`、任务消息、BE 日志和中止任务统计中。消费者创建失败时，该重试路径不会确认消息或推进导入进度。重试会按调度间隔持续进行，因此仍需排查持续的故障。其他消费者创建错误（包括身份验证、权限和无效配置错误）仍会使作业暂停。
+
+仅当任务没有初始位置设置时，才会自动重试任务。如果任务仍在初始化任一分区，失败时作业会暂停，以避免替代任务对已处理的分区再次执行 `POSITION_EARLIEST` 或 `POSITION_LATEST` 定位。
+
 ## 检查导入作业和任务
 
 ### 检查导入作业

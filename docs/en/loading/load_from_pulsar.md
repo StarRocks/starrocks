@@ -96,6 +96,12 @@ Routine Load supports the following custom parameters for Pulsar.
 | property.pulsar_default_initial_position | No       | The default initial positions when the topic's partitions are subscribed. The parameter takes effect when `pulsar_initial_positions` is not specified. Its valid values are the same as the valid values of `pulsar_initial_positions`.Example: `"``property.pulsar_default_initial_position" = "POSITION_EARLIEST"` |
 | property.auth.token                      | No       | If Pulsar enables authenticating clients using security tokens, you need the token string to verify your identity.Example: `"p``roperty.auth.token" = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUJzdWIiOiJqaXV0aWFuY2hlbiJ9.lulGngOC72vE70OW54zcbyw7XdKSOxET94WT_hIqD"` |
 
+### Consumer connection failures
+
+If creating a Pulsar consumer returns `ConnectError` or `Timeout`, Routine Load aborts the task and schedules a replacement at its existing task scheduling interval. The job stays `RUNNING`; repeated failures remain visible in `OtherMsg`, task messages, BE logs, and aborted-task statistics. This retry path does not acknowledge messages or advance the load progress for the failed consumer creation. It continues retrying at the scheduling interval, so a prolonged outage still requires investigation. Other consumer creation errors, including authentication, authorization, and invalid configuration errors, continue to pause the job.
+
+Automatic task retry applies only when the task has no initial-position assignments. If a task is still initializing any partition, the job pauses on failure to avoid repeating an earlier seek to `POSITION_EARLIEST` or `POSITION_LATEST` on a replacement task.
+
 ## Check a load job and task
 
 ### Check a load job
