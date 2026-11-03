@@ -465,8 +465,8 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
-        getTable(connectContext, dbName, tableName);
+    public Table prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
+        return getTable(connectContext, dbName, tableName);
     }
 
     @Override

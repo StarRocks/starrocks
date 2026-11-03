@@ -267,9 +267,9 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     @Override
-    public void prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
+    public Table prefetchTableMetadataForAnalyze(String dbName, String tableName, ConnectContext connectContext) {
         ConnectorMetadata metadata = metadataOfTable(dbName, tableName);
-        metadata.prefetchTableMetadataForAnalyze(dbName, tableName, connectContext);
+        return metadata.prefetchTableMetadataForAnalyze(dbName, tableName, connectContext);
     }
 
     @Override

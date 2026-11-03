@@ -252,7 +252,8 @@ public class PaimonMetadataTest {
                 result = "fake_uuid";
             }
         };
-        com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
+        com.starrocks.catalog.Table table = metadata.prefetchTableMetadataForAnalyze("db1", "tbl1", connectContext);
+        org.junit.jupiter.api.Assertions.assertSame(table, metadata.getTable(connectContext, "db1", "tbl1"));
         PaimonTable paimonTable = (PaimonTable) table;
         org.junit.jupiter.api.Assertions.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         assertEquals("db1", paimonTable.getCatalogDBName());

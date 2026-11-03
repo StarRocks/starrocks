@@ -988,11 +988,11 @@ public class MetadataMgr {
      * This explicit query ID is required because callers may run on worker threads without a ConnectContext
      * thread-local binding.
      */
-    public void prefetchTableMetadataForAnalyze(String queryId, String catalogName, String dbName, String tableName,
+    public Table prefetchTableMetadataForAnalyze(String queryId, String catalogName, String dbName, String tableName,
                                                 ConnectContext connectContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(Optional.of(queryId), catalogName);
-        connectorMetadata.ifPresent(metadata ->
-                metadata.prefetchTableMetadataForAnalyze(dbName, tableName, connectContext));
+        return connectorMetadata.map(metadata ->
+                metadata.prefetchTableMetadataForAnalyze(dbName, tableName, connectContext)).orElse(null);
     }
 
     public void refreshTable(String catalogName, String srDbName, Table table,

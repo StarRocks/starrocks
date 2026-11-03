@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KuduTable;
@@ -123,6 +124,22 @@ public class UnifiedMetadataTest {
         );
         this.getRemoteFilesParams = GetRemoteFilesParams.newBuilder().setPartitionKeys(ImmutableList.of())
                 .setTableVersionRange(TvrTableSnapshot.empty()).build();
+    }
+
+    @Test
+    public void testPrefetchReturnsResolvedView() {
+        Table resolved = new HiveView(1, "test", "test_db", "test_view",
+                List.of(), "select * from base_table", HiveView.Type.Hive);
+        new Expectations() {
+            {
+                hiveMetadata.getTable((ConnectContext) any, "test_db", "test_view");
+                result = resolved;
+                hiveMetadata.prefetchTableMetadataForAnalyze("test_db", "test_view", connectContext);
+                result = resolved;
+                times = 1;
+            }
+        };
+        assertSame(resolved, unifiedMetadata.prefetchTableMetadataForAnalyze("test_db", "test_view", connectContext));
     }
 
     @Test

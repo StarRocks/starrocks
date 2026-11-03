@@ -40,6 +40,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class CatalogConnectorMetadataTest {
@@ -168,9 +169,11 @@ public class CatalogConnectorMetadataTest {
 
     @Test
     void testPrefetchTableMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+        Table resolved = new Table(1, "test_tbl", Table.TableType.HIVE, List.of());
         new Expectations() {
             {
                 connectorMetadata.prefetchTableMetadataForAnalyze("test_db", "test_tbl", (ConnectContext) any);
+                result = resolved;
                 times = 1;
             }
         };
@@ -181,7 +184,8 @@ public class CatalogConnectorMetadataTest {
                 metaMetadata
         );
 
-        catalogConnectorMetadata.prefetchTableMetadataForAnalyze("test_db", "test_tbl", new ConnectContext());
+        assertSame(resolved, catalogConnectorMetadata.prefetchTableMetadataForAnalyze(
+                "test_db", "test_tbl", new ConnectContext()));
     }
 
     @Test
