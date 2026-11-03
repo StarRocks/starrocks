@@ -1409,7 +1409,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
 
+    /**
+     * @deprecated No effect. Every transaction that no longer waits for an earlier one starts a publish batch in
+     * each round, and the batch is published whatever its size, up to {@code lake_batch_publish_max_version_num}. A
+     * minimum above 1 was unsafe: a batch that could never grow to the minimum, for example the last loads of a
+     * table that becomes idle or a chain blocked at a multi-table transaction, was dropped in every round with no
+     * fallback, so its committed transactions never became visible and later loads on the same tables queued
+     * behind them. Kept, and still mutable, only so that an existing fe.conf entry or ADMIN SET FRONTEND CONFIG
+     * on it keeps working.
+     */
     @ConfField(mutable = true)
+    @Deprecated
     public static int lake_batch_publish_min_version_num = 1;
 
     @ConfField(mutable = true, comment = "Allow batching consecutive multi-table transactions into one publish. " +
