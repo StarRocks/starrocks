@@ -21,34 +21,23 @@
 #include <string>
 #include <vector>
 
-<<<<<<< HEAD:be/test/exec/file_scanner/csv_scanner_test.cpp
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
-=======
-#include "base/testutil/assert.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk.h"
-#include "column/datum_tuple.h"
-#include "common/config_exec_fwd.h"
-#include "compute_env/load/load_stream_mgr.h"
-#include "compute_env/load/stream_load_pipe.h"
->>>>>>> dfff47f ([BugFix][RB-843] Read channel stream load pipes without blocking, with the default buffer (#81872)):be/test/connector/file/scanner/csv_scanner_test.cpp
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/byte_buffer.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-<<<<<<< HEAD:be/test/exec/file_scanner/csv_scanner_test.cpp
+#include "runtime/stream_load/load_stream_mgr.h"
+#include "runtime/stream_load/stream_load_pipe.h"
 #include "testutil/assert.h"
-=======
-#include "runtime/service_contexts.h"
-#include "testutil/type_test_helper.h"
->>>>>>> dfff47f ([BugFix][RB-843] Read channel stream load pipes without blocking, with the default buffer (#81872)):be/test/connector/file/scanner/csv_scanner_test.cpp
+#include "util/byte_buffer.h"
+#include "util/defer_op.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -62,8 +51,7 @@ protected:
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
                                                    const std::vector<TBrokerRangeDesc>& ranges,
-                                                   TBrokerScanRangeParams* params,
-                                                   const QueryExecutionServices* services = nullptr) {
+                                                   TBrokerScanRangeParams* params, ExecEnv* exec_env = nullptr) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -80,8 +68,7 @@ protected:
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
-        RuntimeState* state =
-                _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), services, nullptr));
+        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), exec_env));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
         state->_query_options.query_type = TQueryType::LOAD;
@@ -124,7 +111,7 @@ protected:
                                                    const std::string& multi_column_separator = "|",
                                                    const int64_t skip_header = 0, const bool trim_space = false,
                                                    const char enclose = 0, const char escape = 0,
-                                                   const QueryExecutionServices* services = nullptr) {
+                                                   ExecEnv* exec_env = nullptr) {
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
         params->__set_multi_row_delimiter(multi_row_delimiter);
@@ -134,15 +121,10 @@ protected:
         params->__set_enclose(enclose);
         params->__set_escape(escape);
 
-        return create_csv_scanner(types, ranges, params, services);
+        return create_csv_scanner(types, ranges, params, exec_env);
     }
 
     bool _use_v2;
-
-    // For scanners that read a stream load pipe (FILE_STREAM).
-    LoadStreamMgr _load_stream_mgr;
-    RuntimeServices _runtime_services;
-    QueryExecutionServices _query_execution_services;
 
 private:
     RuntimeState _runtime_state;
@@ -1472,14 +1454,15 @@ TEST_P(CSVScannerTest, test_skip_headers) {
 // piece of the data has not arrived, and is called again later. Header rows still to skip, and a row cut by a
 // timed-out read, carry over to that call.
 TEST_P(CSVScannerTest, test_stream_pipe_resumes_after_timed_out_reads) {
-    _runtime_services.load_stream_mgr = &_load_stream_mgr;
-    _query_execution_services.runtime = &_runtime_services;
+    // The scanner gets FILE_STREAM pipes from the load stream manager of the exec env.
+    ExecEnv* exec_env = ExecEnv::GetInstance();
+    LoadStreamMgr* load_stream_mgr = exec_env->load_stream_mgr();
     const UniqueId load_id = UniqueId::gen_uid();
     auto pipe = std::make_shared<StreamLoadPipe>(/*non_blocking_read=*/true, /*non_blocking_wait_us=*/1000,
                                                  DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES,
                                                  DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE);
-    ASSERT_OK(_load_stream_mgr.put(load_id, pipe));
-    DeferOp remove_pipe([&] { _load_stream_mgr.remove(load_id); });
+    ASSERT_OK(load_stream_mgr->put(load_id, pipe));
+    DeferOp remove_pipe([&] { load_stream_mgr->remove(load_id); });
 
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
     std::vector<TBrokerRangeDesc> ranges(1);
@@ -1504,7 +1487,7 @@ TEST_P(CSVScannerTest, test_stream_pipe_resumes_after_timed_out_reads) {
         first_value = "ab";
     }
     auto scanner = create_csv_scanner(types, ranges, "\n", ",", /*skip_header=*/2, /*trim_space=*/false, enclose,
-                                      /*escape=*/0, &_query_execution_services);
+                                      /*escape=*/0, exec_env);
     ASSERT_OK(scanner->open());
 
     auto append = [&pipe](const std::string& piece) {

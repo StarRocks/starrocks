@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "compute_env/load/stream_context_mgr.h"
-
 #include <gtest/gtest.h>
 
 #include <chrono>
@@ -26,14 +24,16 @@
 #include <type_traits>
 #include <utility>
 
-#include "base/testutil/assert.h"
-#include "base/uid_util.h"
-#include "base/utility/defer_op.h"
-#include "compute_env/load/load_stream_mgr.h"
-#include "compute_env/load/stream_load_context.h"
-#include "compute_env/load/stream_load_pipe.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "runtime/byte_buffer.h"
+#include "runtime/exec_env.h"
+#include "runtime/stream_load/load_stream_mgr.h"
+#include "runtime/stream_load/stream_load_context.h"
+#include "runtime/stream_load/stream_load_pipe.h"
+#include "runtime/stream_load/transaction_mgr.h"
+#include "testutil/assert.h"
+#include "util/byte_buffer.h"
+#include "util/defer_op.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -71,18 +71,20 @@ std::optional<Status> call_with_deadline(StreamLoadPipe* pipe, std::function<Sta
 // they deadlocked compute nodes with more open channels than connector scan threads until the transactions timed
 // out.
 TEST(StreamContextMgrTest, channel_pipe_reads_without_blocking_and_buffers_requests) {
-    // Declared first: a context removes its pipe from the load stream manager when it is released.
-    LoadStreamMgr load_stream_mgr;
-    StreamContextMgr stream_context_mgr(&load_stream_mgr);
+    // A context removes its pipe from the load stream manager of the exec env when it is released.
+    ExecEnv* exec_env = ExecEnv::GetInstance();
+    LoadStreamMgr* load_stream_mgr = exec_env->load_stream_mgr();
+    ASSERT_NE(nullptr, load_stream_mgr);
+    StreamContextMgr stream_context_mgr;
     const TUniqueId load_id = UniqueId::gen_uid().to_thrift();
     StreamLoadContext* ctx = nullptr;
-    ASSERT_OK(stream_context_mgr.create_channel_context("label", 0, "db", "tbl", TFileFormatType::FORMAT_CSV_PLAIN, ctx,
-                                                        load_id, 1));
+    ASSERT_OK(stream_context_mgr.create_channel_context(exec_env, "label", 0, "db", "tbl",
+                                                        TFileFormatType::FORMAT_CSV_PLAIN, ctx, load_id, 1));
     DeferOp release_ctx([&] { StreamLoadContext::release(ctx); });
 
     auto pipe = std::dynamic_pointer_cast<StreamLoadPipe>(ctx->body_sink);
     ASSERT_NE(nullptr, pipe);
-    ASSERT_EQ(pipe, load_stream_mgr.get(load_id));
+    ASSERT_EQ(pipe, load_stream_mgr->get(load_id));
 
     // The fragment starts reading before any request arrives: the read times out instead of blocking.
     auto read_st = call_with_deadline(pipe.get(), [&pipe] { return pipe->read().status(); });
