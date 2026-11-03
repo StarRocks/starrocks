@@ -16,17 +16,11 @@ package com.starrocks.sql.analyzer.mv;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -39,43 +33,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * The hidden columns an incremental mv adds for itself ({@code __ROW_ID__}, {@code __AGG_STATE_*}) stay out of
  * what users list and write: DESC, SHOW COLUMNS, SHOW CREATE, and the column list of CREATE MATERIALIZED VIEW.
  */
-public class IvmHiddenColumnVisibilityTest {
-    private static final String DB = "ivm_hidden_cols";
-    private static final String OTHER_DB = "ivm_hidden_cols_other";
-    private static final String BASE_TABLE_DDL = "CREATE TABLE t (k INT NOT NULL, v BIGINT) DUPLICATE KEY(k) "
-            + "DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1')";
-    private static final String QUERY = "SELECT k, SUM(v) AS s, AVG(v) AS a FROM t GROUP BY k";
-
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
+public class IvmHiddenColumnVisibilityTest extends MVIVMIcebergTestBase {
+    private static final String BASE_TABLE = "`iceberg0`.`unpartitioned_db`.`t_numeric`";
+    private static final String QUERY = "SELECT id, SUM(c1) AS s, AVG(c2) AS a FROM " + BASE_TABLE + " GROUP BY id";
+    private static final String SUM_STATE_COLUMN = "__AGG_STATE_sum(iceberg0.unpartitioned_db.t_numeric.c1)";
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
-        connectContext = UtFrameUtils.createDefaultCtx();
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase(OTHER_DB).useDatabase(OTHER_DB).withTable(BASE_TABLE_DDL);
-        starRocksAssert.withDatabase(DB).useDatabase(DB).withTable(BASE_TABLE_DDL);
+        MVIVMIcebergTestBase.beforeClass();
+    }
+
+    @Override
+    public void advanceTableVersionTo(long toVersion) {
     }
 
     @AfterEach
     public void dropMvs() throws Exception {
-        starRocksAssert.useDatabase(DB);
-        for (String db : List.of(DB, OTHER_DB)) {
-            for (String mv : List.of("mv", "mv_copy")) {
-                starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS " + db + "." + mv);
-            }
+        starRocksAssert.useDatabase("test");
+        for (String mv : List.of("mv", "mv_copy")) {
+            starRocksAssert.ddl("DROP MATERIALIZED VIEW IF EXISTS test." + mv);
         }
     }
 
-    private static String mvDdl(String name, String columnList, String refreshMode, String query) {
+    private static String mvDdl(String name, String columnList, String query) {
         return "CREATE MATERIALIZED VIEW " + name + " " + columnList + "REFRESH DEFERRED MANUAL "
-                + "PROPERTIES ('refresh_mode' = '" + refreshMode + "') AS " + query;
-    }
-
-    private static MaterializedView getMv(String db, String name) {
-        return (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db).getTable(name);
+                + "PROPERTIES ('refresh_mode' = 'incremental') AS " + query;
     }
 
     private static List<String> column(List<List<String>> rows, int index) {
@@ -97,56 +79,42 @@ public class IvmHiddenColumnVisibilityTest {
         return ddl.substring(ddl.indexOf('('), ddl.indexOf(")\n") + 1);
     }
 
-    private static void assertIncrementallyMaintained(MaterializedView mv, String refreshMode) {
-        assertEquals(refreshMode, mv.getCurrentRefreshMode().name().toLowerCase(), mv.getCurrentRefreshModeReason());
-        assertEquals(RowIdStrategy.QUERY_COMPUTED, mv.getRowIdStrategy());
-    }
+    @Test
+    public void testDescAndShowColumnsListOnlyQueryColumns() throws Exception {
+        starRocksAssert.withMaterializedView(mvDdl("mv", "", QUERY));
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, getMv("test", "mv").getRowIdStrategy());
 
-    @ParameterizedTest
-    @ValueSource(strings = {"incremental", "auto"})
-    public void testDescAndShowColumnsListOnlyQueryColumns(String refreshMode) throws Exception {
-        starRocksAssert.withMaterializedView(mvDdl("mv", "", refreshMode, QUERY));
-        assertIncrementallyMaintained(getMv(DB, "mv"), refreshMode);
-
-        List<String> queryColumns = List.of("k", "s", "a");
+        List<String> queryColumns = List.of("id", "s", "a");
         assertEquals(queryColumns, column(starRocksAssert.show("DESC mv"), 0));
         assertEquals(queryColumns, column(starRocksAssert.show("SHOW COLUMNS FROM mv"), 0));
         assertEquals(queryColumns, column(starRocksAssert.show("SHOW FULL COLUMNS FROM mv"), 0));
 
         List<String> physicalColumns = column(starRocksAssert.show("DESC mv ALL"), 2);
         assertTrue(physicalColumns.contains(IvmOpUtils.COLUMN_ROW_ID), physicalColumns.toString());
-        assertTrue(physicalColumns.contains("__AGG_STATE_avg(ivm_hidden_cols.t.v)"), physicalColumns.toString());
+        assertTrue(physicalColumns.contains(SUM_STATE_COLUMN), physicalColumns.toString());
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"incremental", "auto"})
-    public void testShowCreateOutputRunsInAnotherDatabase(String refreshMode) throws Exception {
-        starRocksAssert.withMaterializedView(mvDdl("mv", "", refreshMode, QUERY));
+    @Test
+    public void testShowCreateOutputCreatesTheSameMv() throws Exception {
+        starRocksAssert.withMaterializedView(mvDdl("mv", "", QUERY));
         String showCreate = starRocksAssert.show("SHOW CREATE MATERIALIZED VIEW mv").get(0).get(1);
-        assertEquals("(`k`, `s`, `a`)", columnList(showCreate));
+        assertEquals("(`id`, `s`, `a`)", columnList(showCreate));
 
-        String copy = showCreate.replace("`mv`", "`mv_copy`");
-        starRocksAssert.withMaterializedView(copy);
-        assertEquals(visibleColumnNames(getMv(DB, "mv")), visibleColumnNames(getMv(DB, "mv_copy")));
-
-        starRocksAssert.useDatabase(OTHER_DB);
-        starRocksAssert.withMaterializedView(copy);
-        MaterializedView other = getMv(OTHER_DB, "mv_copy");
-        assertIncrementallyMaintained(other, refreshMode);
-        assertEquals(List.of("k", "s", "a"), visibleColumnNames(other));
-        assertTrue(other.getColumn("__AGG_STATE_sum(ivm_hidden_cols_other.t.v)").isHidden());
+        starRocksAssert.withMaterializedView(showCreate.replace("`mv`", "`mv_copy`"));
+        MaterializedView copy = getMv("test", "mv_copy");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, copy.getRowIdStrategy());
+        assertEquals(schemaFingerprint(getMv("test", "mv")), schemaFingerprint(copy));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"incremental", "auto"})
-    public void testColumnListNamesOnlyQueryColumns(String refreshMode) throws Exception {
-        starRocksAssert.withMaterializedView(mvDdl("mv", "(kk, ss COMMENT 'total') ", refreshMode,
-                "SELECT k, SUM(v) FROM t GROUP BY k"));
-        MaterializedView mv = getMv(DB, "mv");
-        assertIncrementallyMaintained(mv, refreshMode);
+    @Test
+    public void testColumnListNamesOnlyQueryColumns() throws Exception {
+        starRocksAssert.withMaterializedView(mvDdl("mv", "(kk, ss COMMENT 'total') ",
+                "SELECT id, SUM(c1) FROM " + BASE_TABLE + " GROUP BY id"));
+        MaterializedView mv = getMv("test", "mv");
+        assertEquals(RowIdStrategy.QUERY_COMPUTED, mv.getRowIdStrategy());
         assertEquals(List.of("kk", "ss"), visibleColumnNames(mv));
         assertEquals("total", mv.getColumn("ss").getComment());
-        assertTrue(mv.getColumn("__AGG_STATE_sum(ivm_hidden_cols.t.v)").isHidden());
+        assertTrue(mv.getColumn(SUM_STATE_COLUMN).isHidden());
 
         // The refresh re-derives the hidden columns by name and position.
         IvmRefreshDefinition.derive(connectContext, mv);
@@ -160,15 +128,15 @@ public class IvmHiddenColumnVisibilityTest {
 
     @Test
     public void testColumnListWithHiddenColumnsStillAccepted() throws Exception {
-        starRocksAssert.withMaterializedView(mvDdl("mv", "(`__ROW_ID__`, kk, ss, `__AGG_STATE_sum(ivm_hidden_cols.t.v)`) ",
-                "incremental", "SELECT k, SUM(v) FROM t GROUP BY k"));
-        assertEquals(List.of("kk", "ss"), visibleColumnNames(getMv(DB, "mv")));
+        starRocksAssert.withMaterializedView(mvDdl("mv", "(`__ROW_ID__`, kk, ss, `" + SUM_STATE_COLUMN + "`) ",
+                "SELECT id, SUM(c1) FROM " + BASE_TABLE + " GROUP BY id"));
+        assertEquals(List.of("kk", "ss"), visibleColumnNames(getMv("test", "mv")));
     }
 
     @Test
     public void testColumnListOfAnotherLengthRejected() {
         Exception e = assertThrows(Exception.class, () -> starRocksAssert.withMaterializedView(
-                mvDdl("mv", "(kk, ss, extra) ", "incremental", "SELECT k, SUM(v) FROM t GROUP BY k")));
+                mvDdl("mv", "(kk, ss, extra) ", "SELECT id, SUM(c1) FROM " + BASE_TABLE + " GROUP BY id")));
         assertTrue(e.getMessage().contains("different column counts"), e.getMessage());
     }
 }

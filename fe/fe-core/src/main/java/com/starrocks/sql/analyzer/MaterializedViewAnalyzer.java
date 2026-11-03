@@ -636,8 +636,7 @@ public class MaterializedViewAnalyzer {
 
         /**
          * The column list of a new incremental mv may name only the user query's columns, leaving the hidden ones
-         * the IVM rewrite added to their generated names. Not for re-analysis: an AUTO mv that settled on PCT stays
-         * PCT only because its stored list is too short for the incremental rewrite.
+         * the IVM rewrite added to their generated names.
          */
         private static List<ColWithComment> withIvmInternalColumns(List<ColWithComment> colWithComments,
                                                                    List<String> columnNames) {
@@ -675,7 +674,7 @@ public class MaterializedViewAnalyzer {
             Scope queryScope = queryStatement.getQueryRelation().getScope();
             List<Field> relationFields = queryScope.getRelationFields().getAllFields();
             if (colWithComments != null) {
-                if (rowIdStrategy != null && !REANALYZING_EXISTING_MV.get()) {
+                if (rowIdStrategy != null) {
                     colWithComments = withIvmInternalColumns(colWithComments, columnNames);
                 }
                 if (colWithComments.size() != relationFields.size()) {
