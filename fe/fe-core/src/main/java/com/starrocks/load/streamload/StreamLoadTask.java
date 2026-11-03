@@ -930,7 +930,9 @@ public class StreamLoadTask extends AbstractStreamLoadTask {
                 streamLoadInfo.getNegative(), channelNum, streamLoadInfo.getColumnExprDescs(), streamLoadInfo, label,
                 streamLoadInfo.getTimeout());
 
-        loadPlanner.plan();
+        // Unlike the other load paths, a transaction stream load reaches the planner holding no table lock, so let the
+        // planner take it: a schema change committing mid-plan would split the load's slots from its sink schema.
+        loadPlanner.planUnderTableLock();
 
         coord = getCoordinatorFactory().createStreamLoadScheduler(loadPlanner);
 
