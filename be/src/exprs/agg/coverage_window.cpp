@@ -164,11 +164,10 @@ void CoverageWindowFunction::get_values(FunctionContext* ctx, ConstAggDataPtr st
     }
     if (geo->size() == 0) {
         // The generic result allocator has no storage metadata. Only this
-        // adapter can certify the kernel's validated XY output. Keep the
+        // adapter can certify the kernel's XY output. Keep the
         // destination object so Analytor's ordinary column ownership applies.
-        auto validated = GeoColumn::create(
-                GeoColumnDescriptor{geo->descriptor().type,
-                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+        auto validated =
+                GeoColumn::create(GeoColumnDescriptor{geo->descriptor().type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
         geo->swap_column(*validated);
     }
     // start/end are chunk-local destination positions. emitted is the ordinal
