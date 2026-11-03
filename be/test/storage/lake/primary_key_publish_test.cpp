@@ -17,7 +17,9 @@
 
 #include <ctime>
 #include <map>
+#include <optional>
 #include <random>
+#include <set>
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -184,6 +186,95 @@ public:
     int64_t read_rows(int64_t tablet_id, int64_t version) {
         auto chunk = read(tablet_id, version);
         return chunk.value()->num_rows();
+    }
+
+    int64_t write_single_upsert_txn(int64_t tablet_id, int32_t key, int32_t value) {
+        auto keys = Int32Column::create();
+        auto values = Int32Column::create();
+        auto ops = Int8Column::create();
+        keys->append(key);
+        values->append(value);
+        ops->append(TOpType::UPSERT);
+        auto chunk =
+                std::make_shared<Chunk>(Columns{std::move(keys), std::move(values), std::move(ops)}, _slot_cid_map);
+        std::vector<uint32_t> indexes = {0};
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&_slot_pointers)
+                                             .set_profile(&_dummy_runtime_profile)
+                                             .build());
+        CHECK_OK(writer->open());
+        CHECK_OK(writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(writer->finish_with_txnlog());
+        writer->close();
+        return txn_id;
+    }
+
+    IndexValue prepare_and_point_get(const TabletMetadataPtr& metadata, int64_t version, int32_t key) {
+        Tablet tablet(_tablet_mgr.get(), metadata->id());
+        auto mutable_metadata = std::make_shared<TabletMetadata>(*metadata);
+        MetaFileBuilder builder(tablet, mutable_metadata);
+        _update_mgr->lock_shard_pk_index_shard(metadata->id());
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
+        ASSIGN_OR_ABORT(auto* entry,
+                        _update_mgr->prepare_primary_index(metadata, &builder, version, version, write_guard));
+        EXPECT_EQ(2, entry->get_ref());
+        auto keys = Int32Column::create();
+        keys->append(key);
+        std::vector<uint64_t> values(keys->size(), NullIndexValue);
+        EXPECT_OK(entry->value().get(*keys, &values));
+        EXPECT_EQ(1, values.size());
+        const IndexValue result(values.empty() ? NullIndexValue : values[0]);
+        write_guard.reset();
+        _update_mgr->release_primary_index_cache(entry);
+        _update_mgr->unlock_shard_pk_index_shard(metadata->id());
+        EXPECT_TRUE(_update_mgr->TEST_check_primary_index_cache_ref(metadata->id(), 1));
+        return result;
+    }
+
+    IndexValue cached_point_get(int64_t tablet_id, int32_t key) {
+        auto* entry = _update_mgr->index_cache().get(tablet_id);
+        CHECK(entry != nullptr);
+        CHECK_EQ(2, entry->get_ref());
+        auto guard = entry->value().fetch_guard();
+        auto keys = Int32Column::create();
+        keys->append(key);
+        std::vector<uint64_t> values(keys->size(), NullIndexValue);
+        CHECK_OK(entry->value().get(*keys, &values));
+        CHECK_EQ(1, values.size());
+        const IndexValue result(values[0]);
+        guard.reset();
+        _update_mgr->release_primary_index_cache(entry);
+        CHECK(_update_mgr->TEST_check_primary_index_cache_ref(tablet_id, 1));
+        return result;
+    }
+
+    struct VisibleOracle {
+        int64_t row_count = 0;
+        int64_t pk_occurrences = 0;
+        std::set<int32_t> distinct_keys;
+        std::optional<int32_t> target_value;
+    };
+
+    VisibleOracle visible_oracle(int64_t tablet_id, int64_t version, int32_t key) {
+        ASSIGN_OR_ABORT(auto chunk, read(tablet_id, version));
+        VisibleOracle oracle;
+        oracle.row_count = chunk->num_rows();
+        for (size_t row = 0; row < chunk->num_rows(); ++row) {
+            const auto pk = chunk->get(row)[0].get_int32();
+            oracle.distinct_keys.insert(pk);
+            if (pk == key) {
+                ++oracle.pk_occurrences;
+                oracle.target_value = chunk->get(row)[1].get_int32();
+            }
+        }
+        return oracle;
     }
 
 protected:
@@ -2035,9 +2126,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_reloads_index_when_recover_cannot_r
         SyncPoint::GetInstance()->DisableProcessing();
     });
     {
-        auto* other_holder = _primary_key_mgr->index_cache().get(tablet_id);
+        auto* other_holder = _update_mgr->index_cache().get(tablet_id);
         ASSERT_NE(nullptr, other_holder);
-        DeferOp release_other_holder([&]() { _primary_key_mgr->release_primary_index_cache(other_holder); });
+        DeferOp release_other_holder([&]() { _update_mgr->release_primary_index_cache(other_holder); });
         ASSERT_FALSE(publish_single_version(tablet_id, 3, txn_id).ok());
         ASSERT_TRUE(injected);
         // What a reader that probes the index before the retry checks, e.g. the auto-increment probe of a load.
@@ -2054,7 +2145,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_reloads_index_when_recover_cannot_r
     EXPECT_EQ(1, visible.row_count);
     EXPECT_EQ(std::optional<int32_t>(kNewValue), visible.target_value);
     EXPECT_EQ(new_row, cached_point_get(tablet_id, kKey));
-    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    _update_mgr->unload_and_remove_primary_index(tablet_id);
     EXPECT_EQ(new_row, prepare_and_point_get(published, 3, kKey));
 }
 
