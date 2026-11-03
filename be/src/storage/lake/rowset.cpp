@@ -778,8 +778,8 @@ Status Rowset::load_segments(std::vector<LoadedSegment>* segments, SegmentReadOp
             return Status::Cancelled(fmt::format("cancelled while loading segments, tablet:{} rowset:{} segment:{}/{}",
                                                  _tablet_id, metadata().id(), index - seg_start, seg_end - seg_start));
         }
-        auto* segment_footer_stats = footer_stats != nullptr ? &per_segment_footer_stats[index] : nullptr;
         const auto& segment_meta = metadata().segment_metas(index);
+        auto* segment_footer_stats = footer_stats != nullptr ? &per_segment_footer_stats[index] : nullptr;
         const auto& seg_name = segment_meta.filename();
         int current_idx = base_idx + seg_idx;
         uint32_t segment_id = get_segment_idx(metadata(), index);
