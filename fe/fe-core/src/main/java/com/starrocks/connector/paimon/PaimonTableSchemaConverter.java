@@ -74,7 +74,7 @@ public final class PaimonTableSchemaConverter {
         if (stmt.getExtProperties() != null && !stmt.getExtProperties().isEmpty()) {
             throw new SemanticException("Paimon table options must be specified in PROPERTIES");
         }
-        List<String> primaryKeys = primaryKeys(stmt);
+        List<String> primaryKeys = primaryKeys(stmt, tableOptions(stmt.getProperties()));
         for (ColumnDef column : stmt.getColumnDefs()) {
             if (column.isAutoIncrement()) {
                 throw new SemanticException("Paimon does not support AUTO_INCREMENT columns: %s", column.getName());
@@ -186,10 +186,6 @@ public final class PaimonTableSchemaConverter {
             default:
                 throw new SemanticException("Unsupported Paimon column type: %s", type);
         }
-    }
-
-    public static List<String> primaryKeys(CreateTableStmt stmt) {
-        return primaryKeys(stmt, tableOptions(stmt.getProperties()));
     }
 
     private static List<String> primaryKeys(CreateTableStmt stmt, Map<String, String> options) {

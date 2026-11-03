@@ -45,6 +45,8 @@ import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.options.Options;
+import org.apache.paimon.schema.Schema;
+import org.apache.paimon.table.Table;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -99,8 +101,6 @@ public class PaimonCreateTableAnalyzerTest {
         Assertions.assertEquals("paimon", stmt.getEngineName());
         Assertions.assertFalse(stmt.getColumns().get(0).isKey());
         Assertions.assertTrue(stmt.getColumns().get(0).isAllowNull());
-        Assertions.assertTrue(stmt.getColumns().get(1).isKey());
-        Assertions.assertFalse(stmt.getColumns().get(1).isAllowNull());
         Assertions.assertFalse(stmt.getColumnDefs().get(1).isKey());
         Assertions.assertTrue(stmt.getColumnDefs().get(1).isAllowNull());
         Assertions.assertFalse(stmt.getColumnDefs().get(2).isKey());
@@ -109,7 +109,12 @@ public class PaimonCreateTableAnalyzerTest {
         Assertions.assertEquals(3, stmt.getColumnDefs().size());
         Assertions.assertNull(stmt.getDistributionDesc());
         Assertions.assertFalse(stmt.getProperties().containsKey("replication_num"));
-        Assertions.assertEquals(List.of("dt"), PaimonTableSchemaConverter.toSchema(stmt).partitionKeys());
+        Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+        Assertions.assertEquals(List.of("Id", "dt"), schema.primaryKeys());
+        Assertions.assertEquals(List.of("dt"), schema.partitionKeys());
+        Assertions.assertTrue(schema.fields().get(0).type().isNullable());
+        Assertions.assertFalse(schema.fields().get(1).type().isNullable());
+        Assertions.assertFalse(schema.fields().get(2).type().isNullable());
     }
 
     @Test
@@ -118,11 +123,12 @@ public class PaimonCreateTableAnalyzerTest {
                 "properties ('primary-key'='ID', 'bucket'='2')");
         Assertions.assertNull(stmt.getKeysDesc());
         Assertions.assertFalse(stmt.getColumns().get(0).isKey());
-        Assertions.assertTrue(stmt.getColumns().get(1).isKey());
-        Assertions.assertFalse(stmt.getColumns().get(1).isAllowNull());
         Assertions.assertFalse(stmt.getColumnDefs().get(1).isKey());
         Assertions.assertTrue(stmt.getColumnDefs().get(1).isAllowNull());
-        Assertions.assertEquals(List.of("Id"), PaimonTableSchemaConverter.toSchema(stmt).primaryKeys());
+        Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+        Assertions.assertEquals(List.of("Id"), schema.primaryKeys());
+        Assertions.assertTrue(schema.fields().get(0).type().isNullable());
+        Assertions.assertFalse(schema.fields().get(1).type().isNullable());
     }
 
     @Test
@@ -161,6 +167,16 @@ public class PaimonCreateTableAnalyzerTest {
             executeDdl("create database if not exists paimon_ddl.ddl_sql");
             executeDdl("create database if not exists paimon_ddl.ddl_sql");
             Assertions.assertThrows(DdlException.class, () -> executeDdl("create database paimon_ddl.ddl_sql"));
+            for (String keys : List.of("primary key(id)", "properties ('primary-key'='id')")) {
+                executeDdl("create table paimon_ddl.ddl_sql.pk_demo (payload varchar(100), id bigint) " + keys);
+                try (Catalog fresh = CatalogFactory.createCatalog(CatalogContext.create(options))) {
+                    Table table = fresh.getTable(Identifier.create("ddl_sql", "pk_demo"));
+                    Assertions.assertEquals(List.of("id"), table.primaryKeys());
+                    Assertions.assertTrue(table.rowType().getTypeAt(0).isNullable());
+                    Assertions.assertFalse(table.rowType().getTypeAt(1).isNullable());
+                }
+                executeDdl("drop table paimon_ddl.ddl_sql.pk_demo");
+            }
             executeDdl("create table if not exists paimon_ddl.ddl_sql.append_demo " +
                     "(id bigint not null, payload varchar(100), dt date) partition by(dt) properties('bucket'='-1')");
             executeDdl("create table if not exists paimon_ddl.ddl_sql.append_demo (different int)");
