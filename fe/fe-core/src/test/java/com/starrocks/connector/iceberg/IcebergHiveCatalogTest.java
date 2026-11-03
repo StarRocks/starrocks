@@ -129,19 +129,19 @@ public class IcebergHiveCatalogTest {
         new Expectations() {
             {
                 hiveCatalog.listTables(Namespace.of("db"));
-                result = ImmutableList.of(TableIdentifier.of("db", "t1"));
+                result = List.of(TableIdentifier.of("db", "t1"));
                 minTimes = 1;
 
                 hiveCatalog.listViews(Namespace.of("db"));
-                result = ImmutableList.of(TableIdentifier.of("db", "v1"));
+                result = List.of(TableIdentifier.of("db", "v1"));
                 minTimes = 1;
             }
         };
 
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(hiveCatalog, new Configuration());
-        Assertions.assertEquals(ImmutableList.of("v1"), icebergHiveCatalog.listViews(connectContext, "db"));
+        Assertions.assertEquals(List.of("v1"), icebergHiveCatalog.listViews(connectContext, "db"));
         // listTables merges tables with views so SHOW TABLES can surface Iceberg views.
-        Assertions.assertEquals(ImmutableList.of("t1", "v1"), icebergHiveCatalog.listTables(connectContext, "db"));
+        Assertions.assertEquals(List.of("t1", "v1"), icebergHiveCatalog.listTables(connectContext, "db"));
     }
 
     @Test

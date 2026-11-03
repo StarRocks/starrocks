@@ -156,6 +156,7 @@ public class CachingIcebergCatalogTest {
 
             @Override
             public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName) {
+                throw new UnsupportedOperationException();
             }
 
             @Override
