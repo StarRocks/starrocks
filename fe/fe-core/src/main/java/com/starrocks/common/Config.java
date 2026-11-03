@@ -1409,13 +1409,26 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
 
+    /**
+     * @deprecated No effect. Every transaction that no longer waits for an earlier one starts a publish batch in
+     * each round, and the batch is published whatever its size, up to {@code lake_batch_publish_max_version_num}. A
+     * minimum above 1 was unsafe: a batch that could never grow to the minimum, for example the last loads of a
+     * table that becomes idle or a chain blocked at a multi-table transaction, was dropped in every round with no
+     * fallback, so its committed transactions never became visible and later loads on the same tables queued
+     * behind them. Kept, and still mutable, only so that an existing fe.conf entry or ADMIN SET FRONTEND CONFIG
+     * on it keeps working.
+     */
     @ConfField(mutable = true)
+    @Deprecated
     public static int lake_batch_publish_min_version_num = 1;
 
     @ConfField(mutable = true, comment = "Allow batching consecutive multi-table transactions into one publish. " +
-            "Effective only when lake_enable_batch_publish_version is true. Enable this only after all FE nodes " +
-            "are upgraded to a version that supports it.")
-    public static boolean lake_enable_batch_publish_multi_table = false;
+            "Effective only when lake_enable_batch_publish_version is true. An FE older than 4.1.5 replays such " +
+            "a batch incorrectly (it applies the visible log of the first table only). When upgrading from such " +
+            "a version, keep this false on the upgraded FEs until all FEs are upgraded. When downgrading to such " +
+            "a version, set it to false and wait until the transactions committed before the change are " +
+            "visible before creating the metadata image.")
+    public static boolean lake_enable_batch_publish_multi_table = true;
 
     @ConfField(mutable = true, comment = "Retry a lake publish batch that did not finish with only the transactions " +
             "of that attempt, so that every partition keeps the new version of the attempt. When false, a retry " +
@@ -4713,6 +4726,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
+
+    @ConfField(mutable = true, comment = "How long an incremental refresh waits for the materialized view's " +
+            "committed transactions to become visible before it reads the view. The refresh fails when they " +
+            "are still not visible by then, and the next refresh tries again")
+    public static long mv_incremental_refresh_wait_visible_timeout_ms = 300 * 1000L;
 
     @ConfField(mutable = true, comment = "materialized view can refresh at most 64 partition at a time")
     public static int mv_max_partitions_num_per_refresh = 64;
