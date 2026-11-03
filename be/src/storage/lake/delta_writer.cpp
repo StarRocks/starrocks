@@ -547,13 +547,6 @@ inline Status DeltaWriterImpl::reset_memtable() {
                                                _max_buffer_size, _mem_tracker);
     }
 
-<<<<<<< HEAD
-=======
-    if (_flexible_row_merger != nullptr) {
-        mem_table->set_flexible_row_merger(_flexible_row_merger.get());
-    }
-
->>>>>>> 56a72c7b802... [BugFix][RB-923] Plan a transaction stream load against one version of the table schema (#67724)
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         ASSIGN_OR_RETURN(pk_encoding_type, _tablet_schema->primary_key_encoding_type_or_error());

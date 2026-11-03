@@ -32,6 +32,8 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
@@ -592,7 +594,6 @@ public class LoadPlanner {
                     partitionIds.addAll(brokerFileGroup.getPartitionIds());
                 }
             }
-<<<<<<< HEAD
         } else if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == etlJobType.ROUTINE_LOAD) {
             PartitionNames partitionNames = streamLoadInfo.getPartitions();
             if (partitionNames != null) {
@@ -600,26 +601,6 @@ public class LoadPlanner {
                     Partition part = olapDestTable.getPartition(partName, partitionNames.isTemp());
                     if (part == null) {
                         throw new LoadException("unknown partition " + partName + " in table " + destTable.getName());
-=======
-        }
-
-        // Partition maps are plain HashMaps mutated in place under the table WRITE lock (e.g. an automatic
-        // partition added by a concurrent load). Read them under the READ lock, as OlapTableSink#complete does
-        // (#68853), or the loop throws ConcurrentModificationException. The callers of plan() hold this lock or the
-        // database's already; taking it again here keeps the read safe for any caller.
-        Locker locker = new Locker();
-        locker.lockTableWithIntensiveDbLock(dbId, destTable.getId(), LockType.READ);
-        try {
-            if (this.etlJobType == EtlJobType.STREAM_LOAD || this.etlJobType == EtlJobType.ROUTINE_LOAD) {
-                PartitionNames partitionNames = streamLoadInfo.getPartitions();
-                if (partitionNames != null) {
-                    for (String partName : partitionNames.getPartitionNames()) {
-                        Partition part = olapDestTable.getPartition(partName, partitionNames.isTemp());
-                        if (part == null) {
-                            throw new LoadException("unknown partition " + partName + " in table " + destTable.getName());
-                        }
-                        partitionIds.add(part.getId());
->>>>>>> 56a72c7b802... [BugFix][RB-923] Plan a transaction stream load against one version of the table schema (#67724)
                     }
                     partitionIds.add(part.getId());
                 }
