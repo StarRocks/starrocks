@@ -2877,7 +2877,7 @@ static ColumnPtr make_base_shredded_root_bigint_variant_column(const std::vector
 static ColumnPtr make_root_typed_only_variant_map_column(const std::vector<DatumMap>& values,
                                                          const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC);
+    TypeDescriptor map_type = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC);
     auto map_col = ColumnHelper::create_column(map_type, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -2892,8 +2892,7 @@ static ColumnPtr make_root_typed_only_variant_map_column(const std::vector<Datum
 static ColumnPtr make_root_typed_only_variant_struct_column(const std::vector<DatumStruct>& values,
                                                             const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor struct_type =
-            TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
     auto struct_col = ColumnHelper::create_column(struct_type, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -2988,12 +2987,12 @@ TEST_F(VectorizedCastExprTest, const_json_to_map_keeps_row_count) {
 TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
     // Create source struct type: STRUCT<price INT, product_id VARCHAR>
     TypeDescriptor from_type =
-            TypeDescriptor::create_struct_type({"price", "product_id"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)});
+            TypeDescriptor::create_struct_type({"price", "product_id"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
 
     // Create target struct type: STRUCT<product_id VARCHAR, price INT>
     // Note: same field names but different order
     TypeDescriptor to_type =
-            TypeDescriptor::create_struct_type({"product_id", "price"}, {TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC});
+            TypeDescriptor::create_struct_type({"product_id", "price"}, {TYPE_VARCHAR_DESC, TYPE_INT_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -3017,13 +3016,11 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
 // Test struct-to-struct cast with matching field order (no reordering needed)
 TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
     // Create source struct type: STRUCT<a INT, b VARCHAR>
-    TypeDescriptor from_type =
-            TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
 
     // Create target struct type: STRUCT<a BIGINT, b VARCHAR>
     // Same field order, just different types
-    TypeDescriptor to_type =
-            TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_BIGINT_DESC, TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -3198,8 +3195,7 @@ TEST_F(VectorizedCastExprTest, variant_string_cast_constants_and_nullable_rows) 
     }
     auto nulls = NullColumn::create(5, 0);
     nulls->get_data()[3] = 1;
-    auto variants =
-            cast_to_variant(TypeDescriptor(TYPE_VARCHAR), NullableColumn::create(std::move(strings), std::move(nulls)));
+    auto variants = cast_to_variant(TYPE_VARCHAR_DESC, NullableColumn::create(std::move(strings), std::move(nulls)));
     auto result = cast_from_variant(gen_type_desc(TPrimitiveType::TINYINT), variants);
     ASSERT_EQ("[35, NULL, NULL, NULL, 0]", result->debug_string());
 }
@@ -3481,14 +3477,14 @@ TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch
 // local buffer. The value must be read while that buffer is alive. The string is longer than the SSO
 // limit so a dangling read lands on freed heap memory (caught by ASAN).
 static ColumnPtr make_object_typed_only_variant_column(const std::vector<std::string>& values) {
-    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    auto typed = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     for (const auto& v : values) {
         typed->append_datum(Datum(Slice(v)));
     }
     MutableColumns typed_columns;
     typed_columns.emplace_back(std::move(typed));
     auto variant = VariantColumn::create();
-    variant->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed_columns), nullptr, nullptr);
+    variant->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(typed_columns), nullptr, nullptr);
     return variant;
 }
 

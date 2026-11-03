@@ -88,7 +88,7 @@ public:
     }
 
 private:
-    const TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
+    const TypeDescriptor type_desc = TYPE_VARCHAR_DESC;
     size_t _ratio = 0;
     Columns _columns{};
     std::shared_ptr<StringFunctionsState> _state;

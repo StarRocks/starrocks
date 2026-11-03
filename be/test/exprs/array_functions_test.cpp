@@ -326,7 +326,7 @@ TEST_F(ArrayFunctionsTest, array_contains_empty_array) {
     {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false, {{}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
@@ -493,7 +493,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(
                 TYPE_ARRAY_VARCHAR_DESC, false, {{std::nullopt}, {"abc", std::nullopt}, {std::nullopt, "abc"}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -511,7 +511,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_target) {
                 ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false, {{"abc", "def"}});
 
         // const-null column.
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 0);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ(1, result->size());
@@ -540,7 +540,7 @@ TEST_F(ArrayFunctionsTest, array_contains_has_null_element_and_target) {
                                                                              {{std::nullopt}, {std::nullopt, "abc"}});
 
         // const-null column.
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 0);
 
         auto result = ArrayFunctions::array_contains_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ("[1, 1]", result->debug_string());
@@ -576,7 +576,7 @@ TEST_F(ArrayFunctionsTest, array_contains_nullable_array) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(
                 TYPE_ARRAY_VARCHAR_DESC, true, {{"a", "b"}, NullArrayRow{}, {"a", "b", "c"}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -688,7 +688,7 @@ TEST_F(ArrayFunctionsTest, array_position_empty_array) {
     {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false, {{}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
@@ -855,7 +855,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(
                 TYPE_ARRAY_VARCHAR_DESC, false, {{std::nullopt}, {"abc", std::nullopt}, {std::nullopt, "abc"}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -873,7 +873,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_target) {
                 ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false, {{"abc", "def"}});
 
         // const-null column.
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 0);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ(1, result->size());
@@ -902,7 +902,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target) {
                                                                              {{std::nullopt}, {std::nullopt, "abc"}});
 
         // const-null column.
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 1);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 1);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ("[1, 1]", result->debug_string());
@@ -937,7 +937,7 @@ TEST_F(ArrayFunctionsTest, array_position_has_null_element_and_target_and_check_
                                                                              {{std::nullopt}, {std::nullopt, "abc"}});
 
         // const-null column.
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 0);
 
         auto result = ArrayFunctions::array_position_specific<TYPE_VARCHAR>(nullptr, {array, target}).value();
         EXPECT_EQ("[1, 1]", result->debug_string());
@@ -974,7 +974,7 @@ TEST_F(ArrayFunctionsTest, array_position_nullable_array) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(
                 TYPE_ARRAY_VARCHAR_DESC, true, {{"a", "b"}, NullArrayRow{}, {"a", "b", "c"}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -1030,7 +1030,7 @@ TEST_F(ArrayFunctionsTest, array_remove_empty_array) {
     {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false, {{}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum{"abc"});
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
@@ -1405,7 +1405,7 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(
                 TYPE_ARRAY_VARCHAR_DESC, false, {{std::nullopt}, {"abc", std::nullopt}, {std::nullopt, "abc"}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
         target->append_datum(Datum{"abc"});
@@ -1437,7 +1437,7 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_target) {
                 ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false, {{"abc", "def"}});
 
         // const-null column.
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 0);
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
         EXPECT_EQ(1, result->size());
 
@@ -1490,7 +1490,7 @@ TEST_F(ArrayFunctionsTest, array_remove_has_null_element_and_target) {
                                                                              {{std::nullopt}, {std::nullopt, "abc"}});
 
         // const-null column.
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 0);
 
         auto result = ArrayFunctions::array_remove(nullptr, {array, target}).value();
         EXPECT_EQ(2, result->size());
@@ -1564,7 +1564,7 @@ TEST_F(ArrayFunctionsTest, array_remove_nullable_array) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(
                 TYPE_ARRAY_VARCHAR_DESC, true, {{"a", "b"}, NullArrayRow{}, {"a", "b", "c"}});
 
-        MutableColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr target = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
         target->append_datum(Datum("c"));
@@ -1638,7 +1638,7 @@ TEST_F(ArrayFunctionsTest, array_append) {
     {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(TYPE_ARRAY_VARCHAR_DESC, false, {{}});
 
-        MutableColumnPtr null = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true, true, 0);
+        MutableColumnPtr null = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true, true, 0);
 
         auto result = ArrayFunctions::array_append(nullptr, {array, null}).value();
         EXPECT_EQ(1, result->size());
@@ -1653,7 +1653,7 @@ TEST_F(ArrayFunctionsTest, array_append) {
         MutableColumnPtr array = ColumnTestHelper::build_array_column<Slice>(
                 TYPE_ARRAY_VARCHAR_DESC, true, {{"abc"}, {"xyz", "xxx"}, {}, NullArrayRow{}});
 
-        MutableColumnPtr data = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false, true, 0);
+        MutableColumnPtr data = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false, true, 0);
         data->append_datum("def");
 
         auto result = ArrayFunctions::array_append(nullptr, {array, data}).value();

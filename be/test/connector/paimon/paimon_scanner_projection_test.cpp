@@ -44,7 +44,7 @@ TEST_F(PaimonScannerProjectionTest, pruned_map_reads_actual_schema_across_chunks
     auto array = arrow::ArrayFromJSON(type, R"([[ ["a", 10], ["b", null] ], [], null])");
     for (int pruned_child : {0, 1}) {
         TypeDescriptor projected(TYPE_MAP);
-        projected.children = {TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
+        projected.children = {TYPE_VARCHAR_DESC, TYPE_INT_DESC};
         projected.children[pruned_child] = TYPE_UNKNOWN_DESC;
         SlotDescriptor slot(1, "v", projected);
         HdfsScannerContext context;

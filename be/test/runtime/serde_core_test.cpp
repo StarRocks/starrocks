@@ -483,10 +483,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, variant_column_shredded_multiple_paths) {
         typed.emplace_back(std::move(int_col));
         typed.emplace_back(std::move(str_col));
 
-        TypeDescriptor varchar_type(TYPE_VARCHAR);
-        varchar_type.len = TypeDescriptor::MAX_VARCHAR_LENGTH;
-        c1->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, varchar_type}, std::move(typed), std::move(metadata),
-                                 std::move(remain));
+        c1->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}, std::move(typed),
+                                 std::move(metadata), std::move(remain));
     }
     ASSERT_EQ(2, c1->size());
     ASSERT_EQ(2u, c1->shredded_paths().size());
