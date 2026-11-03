@@ -35,13 +35,11 @@ namespace {
 
 GeoColumnDescriptor descriptor() {
     return {{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84",
-             4326},
-            {GEO_ENCODING_WKB, GEO_DIMENSION_MIXED}};
+             4326}};
 }
 
 GeoColumnDescriptor geometry_descriptor() {
-    return {{GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
-            {GEO_ENCODING_WKB, GEO_DIMENSION_MIXED}};
+    return {{GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857}};
 }
 
 std::string point() {
@@ -286,24 +284,21 @@ TEST(GeoTransportDeathTest, SerializationRequiresValidDescriptor) {
 }
 #endif
 
-TEST(GeoTransportTest, StorageMetadataAndOpaquePayload) {
+TEST(GeoTransportTest, SemanticTypeAndOpaquePayload) {
     for (int edge = GEO_EDGE_ALGORITHM_SPHERICAL; edge <= GEO_EDGE_ALGORITHM_KARNEY; ++edge) {
-        for (int dimension = GEO_DIMENSION_UNKNOWN; dimension <= GEO_DIMENSION_MIXED; ++dimension) {
-            auto desc = descriptor();
-            desc.type.edge_algorithm = static_cast<GeoEdgeAlgorithmPB>(edge);
-            desc.type.srid.reset();
-            desc.storage.dimension = static_cast<GeoDimensionPB>(dimension);
-            auto source = GeoColumn::create(desc);
-            source->append_wkb(Slice("opaque WKB: transport does not parse"));
-            auto bytes = serialize_geo(*source);
-            auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, desc.type);
-            auto target = ColumnHelper::create_column(type, false);
-            type.geo_type->crs = "changed after creation";
-            auto* geo = down_cast<GeoColumn*>(target.get());
-            ASSERT_TRUE(geo->deserialize_column(bytes.data(), bytes.data() + bytes.size()).ok());
-            EXPECT_EQ(desc, geo->descriptor());
-            EXPECT_EQ(source->get_wkb(0), geo->get_wkb(0));
-        }
+        auto desc = descriptor();
+        desc.type.edge_algorithm = static_cast<GeoEdgeAlgorithmPB>(edge);
+        desc.type.srid.reset();
+        auto source = GeoColumn::create(desc);
+        source->append_wkb(Slice("opaque WKB: transport does not parse"));
+        auto bytes = serialize_geo(*source);
+        auto type = TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY, desc.type);
+        auto target = ColumnHelper::create_column(type, false);
+        type.geo_type->crs = "changed after creation";
+        auto* geo = down_cast<GeoColumn*>(target.get());
+        ASSERT_TRUE(geo->deserialize_column(bytes.data(), bytes.data() + bytes.size()).ok());
+        EXPECT_EQ(desc, geo->descriptor());
+        EXPECT_EQ(source->get_wkb(0), geo->get_wkb(0));
     }
 }
 
@@ -564,7 +559,6 @@ namespace {
 
 void check_empty_array_transport(bool copy_rows) {
     for (auto desc : {descriptor(), geometry_descriptor()}) {
-        desc.storage = {GEO_ENCODING_WKB, GEO_DIMENSION_XY};
         const auto primitive = desc.type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY ? TYPE_GEOGRAPHY : TYPE_GEOMETRY;
         const auto type = TypeDescriptor::create_array_type(TypeDescriptor::create_geo_type(primitive, desc.type));
         auto leaf = [](const Column* column) {

@@ -34,8 +34,7 @@ using apache::thrift::transport::TMemoryBuffer;
 
 GeoColumnDescriptor geography() {
     return {GeoTypeDescriptor{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
-                              "OGC:CRS84", std::nullopt},
-            GeoStorageDescriptor{GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
+                              "OGC:CRS84", std::nullopt}};
 }
 
 template <typename Protocol = TBinaryProtocol, typename Thrift>
@@ -55,7 +54,7 @@ void check_round_trip(const Descriptor& expected) {
     parsed.Clear();
     ASSERT_TRUE(parsed.ParseFromString(protobuf.SerializeAsString()));
     EXPECT_EQ(expected, Descriptor::from_protobuf(parsed));
-    // Only the semantic type crosses FE/BE Thrift; storage and column descriptors are protobuf-only.
+    // Only the semantic type crosses FE/BE Thrift; the column descriptor is protobuf-only.
     if constexpr (std::is_same_v<Descriptor, GeoTypeDescriptor>) {
         EXPECT_EQ(expected, Descriptor::from_thrift(thrift_wire_round_trip(expected.to_thrift())));
         EXPECT_EQ(expected, Descriptor::from_thrift(thrift_wire_round_trip<TCompactProtocol>(expected.to_thrift())));
@@ -66,26 +65,22 @@ void check_round_trip(const Descriptor& expected) {
     }
 }
 
-TEST(GeoTypeDescriptorTest, AllAlgorithmsAndDimensionsRoundTrip) {
+TEST(GeoTypeDescriptorTest, AllAlgorithmsRoundTrip) {
     const std::array algorithms = {GEO_EDGE_ALGORITHM_UNKNOWN,  GEO_EDGE_ALGORITHM_SPHERICAL,
                                    GEO_EDGE_ALGORITHM_VINCENTY, GEO_EDGE_ALGORITHM_THOMAS,
                                    GEO_EDGE_ALGORITHM_ANDOYER,  GEO_EDGE_ALGORITHM_KARNEY,
                                    GEO_EDGE_ALGORITHM_PLANAR};
     for (auto algorithm : algorithms) {
-        for (int dim = GEO_DIMENSION_UNKNOWN; dim <= GEO_DIMENSION_MIXED; ++dim) {
-            SCOPED_TRACE(::testing::Message() << algorithm << "/" << dim);
-            auto desc = geography();
-            desc.type.edge_algorithm = algorithm;
-            if (algorithm == GEO_EDGE_ALGORITHM_PLANAR) {
-                desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
-                desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
-            }
-            desc.type.srid = 4326;
-            desc.storage.dimension = static_cast<GeoDimensionPB>(dim);
-            check_round_trip(desc.type);
-            check_round_trip(desc.storage);
-            check_round_trip(desc);
+        SCOPED_TRACE(::testing::Message() << algorithm);
+        auto desc = geography();
+        desc.type.edge_algorithm = algorithm;
+        if (algorithm == GEO_EDGE_ALGORITHM_PLANAR) {
+            desc.type.logical_type = GEO_LOGICAL_TYPE_GEOMETRY;
+            desc.type.coordinate_system = GEO_COORDINATE_SYSTEM_CARTESIAN;
         }
+        desc.type.srid = 4326;
+        check_round_trip(desc.type);
+        check_round_trip(desc);
     }
 }
 
@@ -116,8 +111,6 @@ TEST(GeoTypeDescriptorTest, WireOrdinalsRemainStable) {
     EXPECT_EQ(5, GEO_EDGE_ALGORITHM_KARNEY);
     EXPECT_EQ(6, TGeoEdgeAlgorithm::PLANAR);
     EXPECT_EQ(6, GEO_EDGE_ALGORITHM_PLANAR);
-    EXPECT_EQ(0, GEO_ENCODING_UNKNOWN);
-    EXPECT_EQ(1, GEO_ENCODING_WKB);
     EXPECT_EQ(0, GEO_DIMENSION_UNKNOWN);
     EXPECT_EQ(1, GEO_DIMENSION_XY);
     EXPECT_EQ(2, GEO_DIMENSION_XYZ);
@@ -129,10 +122,7 @@ TEST(GeoTypeDescriptorTest, WireOrdinalsRemainStable) {
     EXPECT_EQ(3, GeoTypeDescPB::kEdgeAlgorithmFieldNumber);
     EXPECT_EQ(4, GeoTypeDescPB::kCrsFieldNumber);
     EXPECT_EQ(5, GeoTypeDescPB::kSridFieldNumber);
-    EXPECT_EQ(1, GeoStorageDescPB::kEncodingFieldNumber);
-    EXPECT_EQ(2, GeoStorageDescPB::kDimensionFieldNumber);
     EXPECT_EQ(1, GeoColumnDescPB::kTypeFieldNumber);
-    EXPECT_EQ(2, GeoColumnDescPB::kStorageFieldNumber);
 }
 
 TEST(GeoTypeDescriptorTest, AlgorithmsRemainDistinctForCompatibility) {
@@ -150,7 +140,6 @@ TEST(GeoTypeDescriptorTest, AlgorithmsRemainDistinctForCompatibility) {
 TEST(GeoTypeDescriptorTest, MissingFieldsNormalizeWithoutGuessingSemantics) {
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_thrift(TGeoTypeDesc{}));
     EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_protobuf(GeoTypeDescPB{}));
-    EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_protobuf(GeoStorageDescPB{}));
     EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_protobuf(GeoColumnDescPB{}));
     check_round_trip(GeoColumnDescriptor{});
 
@@ -220,8 +209,6 @@ TEST(GeoTypeDescriptorTest, WireFieldsUseDeclaredEnums) {
     static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.coordinate_system()), GeoCoordinateSystemPB>);
     static_assert(std::is_same_v<decltype(TGeoTypeDesc{}.edge_algorithm), TGeoEdgeAlgorithm::type>);
     static_assert(std::is_same_v<decltype(GeoTypeDescPB{}.edge_algorithm()), GeoEdgeAlgorithmPB>);
-    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.encoding()), GeoEncodingPB>);
-    static_assert(std::is_same_v<decltype(GeoStorageDescPB{}.dimension()), GeoDimensionPB>);
 }
 
 constexpr std::array unknown_values = {127, -1, std::numeric_limits<int32_t>::max(),
@@ -240,7 +227,7 @@ TEST(GeoTypeDescriptorTest, UnknownThriftEnumsNormalizeToUnknown) {
             expected.srid = 4326;
             EXPECT_EQ(expected, type);
             check_round_trip(type);
-            const GeoColumnDescriptor normalized{expected, {}};
+            const GeoColumnDescriptor normalized{expected};
             check_round_trip(normalized);
             EXPECT_FALSE(is_geo_compute_compatible(normalized, normalized));
         }
@@ -252,28 +239,17 @@ TEST(GeoTypeDescriptorTest, UnknownProtobufWireEnumsUseUnknownDefault) {
         for (int field = 1; field <= 3; ++field) {
             SCOPED_TRACE(::testing::Message() << field << "/" << value);
             GeoTypeDescPB type;
-            GeoStorageDescPB storage;
             ASSERT_TRUE(type.ParseFromString(protobuf_enum_wire(field, value)));
-            ASSERT_TRUE(storage.ParseFromString(protobuf_enum_wire(field, value)));
             // Closed-enum parsing leaves the field unset; its declared default is UNKNOWN.
             EXPECT_FALSE(type.GetReflection()->HasField(type, type.GetDescriptor()->FindFieldByNumber(field)));
-            // GeoStorageDescPB has no field 3: it has no descriptor and always lands in unknown fields.
-            if (field <= 2) {
-                EXPECT_FALSE(
-                        storage.GetReflection()->HasField(storage, storage.GetDescriptor()->FindFieldByNumber(field)));
-            }
             EXPECT_EQ(1, type.unknown_fields().field_count());
-            EXPECT_EQ(1, storage.unknown_fields().field_count());
             EXPECT_EQ(GeoTypeDescriptor{}, GeoTypeDescriptor::from_protobuf(type));
-            EXPECT_EQ(GeoStorageDescriptor{}, GeoStorageDescriptor::from_protobuf(storage));
             GeoColumnDescPB column;
             *column.mutable_type() = type;
-            *column.mutable_storage() = storage;
             EXPECT_EQ(GeoColumnDescriptor{}, GeoColumnDescriptor::from_protobuf(column));
             check_round_trip(GeoColumnDescriptor::from_protobuf(column));
             // Internal descriptors are normalized metadata, not an unknown-field relay.
             EXPECT_TRUE(GeoTypeDescriptor::from_protobuf(type).to_protobuf().unknown_fields().empty());
-            EXPECT_TRUE(GeoStorageDescriptor::from_protobuf(storage).to_protobuf().unknown_fields().empty());
         }
     }
 }
@@ -286,15 +262,10 @@ TEST(GeoTypeDescriptorTest, ProtobufKnownEnumsAreNotOverriddenByUnknownFields) {
                 SCOPED_TRACE(::testing::Message() << field << "/" << value << "/" << known_first);
                 const auto unknown = protobuf_enum_wire(field, value);
                 const auto type_bytes = expected.type.to_protobuf().SerializeAsString();
-                const auto storage_bytes = expected.storage.to_protobuf().SerializeAsString();
                 GeoTypeDescPB type;
-                GeoStorageDescPB storage;
                 ASSERT_TRUE(type.ParseFromString(known_first ? type_bytes + unknown : unknown + type_bytes));
-                ASSERT_TRUE(storage.ParseFromString(known_first ? storage_bytes + unknown : unknown + storage_bytes));
                 EXPECT_EQ(1, type.unknown_fields().field_count());
-                EXPECT_EQ(1, storage.unknown_fields().field_count());
                 EXPECT_EQ(expected.type, GeoTypeDescriptor::from_protobuf(type));
-                EXPECT_EQ(expected.storage, GeoStorageDescriptor::from_protobuf(storage));
             }
         }
     }
@@ -348,31 +319,6 @@ TEST(GeoTypeDescriptorTest, SemanticMismatchIsNotImplicitlyConverted) {
     incomplete = source;
     incomplete.type.edge_algorithm = GEO_EDGE_ALGORITHM_UNKNOWN;
     EXPECT_FALSE(is_geo_compute_compatible(incomplete, incomplete));
-}
-
-TEST(GeoTypeDescriptorTest, EncodingDoesNotAffectSemanticComparison) {
-    const auto source = geography();
-    auto target = source;
-    target.storage.encoding = GEO_ENCODING_UNKNOWN;
-    EXPECT_NE(source, target);
-    EXPECT_TRUE(is_geo_compute_compatible(source, target));
-    target.storage = GeoStorageDescriptor{};
-    EXPECT_TRUE(is_geo_compute_compatible(source, target));
-}
-
-TEST(GeoTypeDescriptorTest, DimensionDoesNotAffectSemanticComparison) {
-    for (int source_dim = GEO_DIMENSION_UNKNOWN; source_dim <= GEO_DIMENSION_MIXED; ++source_dim) {
-        for (int target_dim = GEO_DIMENSION_UNKNOWN; target_dim <= GEO_DIMENSION_MIXED; ++target_dim) {
-            auto source = geography();
-            auto target = geography();
-            source.storage.dimension = static_cast<GeoDimensionPB>(source_dim);
-            target.storage.dimension = static_cast<GeoDimensionPB>(target_dim);
-            EXPECT_EQ(source_dim == target_dim, source == target);
-            EXPECT_TRUE(is_geo_semantically_compatible(source.type, target.type));
-            // Semantic comparison neither derives a result dimension nor checks row dimensions.
-            EXPECT_TRUE(is_geo_compute_compatible(source, target));
-        }
-    }
 }
 
 } // namespace
