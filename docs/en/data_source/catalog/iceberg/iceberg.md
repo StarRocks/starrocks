@@ -110,6 +110,21 @@ If Kerberos authentication is enabled for your HDFS cluster or Hive metastore, c
 
 </Tabs>
 
+##### Catalog-level Kerberos credentials
+
+Instead of running `kinit` for one principal on every node, you can give a catalog its own principal and keytab in its properties. StarRocks then accesses the Hive metastore and HDFS of that catalog as that principal, so catalogs in the same cluster can use different principals.
+
+```SQL
+"hadoop.security.authentication" = "kerberos",
+"hadoop.kerberos.principal" = "user_a@EXAMPLE.COM",
+"hadoop.kerberos.keytab" = "/path/to/user_a.keytab"
+```
+
+- The keytab file must exist at the same path on every FE and every BE or CN.
+- The Hadoop configuration of the FE and BE (or CN) processes must still set `hadoop.security.authentication` to `kerberos`, and the **krb5.conf** file must cover the realms of all principals.
+- Reads and writes of the catalog, including files written by INSERT, run as the principal of the catalog.
+- To make all catalogs use the Kerberos identity of the processes again, set the FE parameter `enable_catalog_kerberos_credentials` to `false` and restart the FE.
+
 ---
 
 ## Create an Iceberg catalog

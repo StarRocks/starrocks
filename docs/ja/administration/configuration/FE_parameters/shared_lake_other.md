@@ -742,6 +742,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## データレイク
 
+### `enable_catalog_kerberos_credentials`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：`hadoop.security.authentication` を `kerberos` に設定し、`hadoop.kerberos.principal` と `hadoop.kerberos.keytab` も指定した External Catalog が、そのプリンシパルとして Hive メタストアと HDFS にアクセスするかどうか。`false` に設定すると、すべての Catalog が FE および BE（または CN）プロセスの Kerberos ID を使用します。
+- 導入時期：-
+
 ### `files_enable_insert_push_down_column_type`
 
 - デフォルト：true

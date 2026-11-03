@@ -741,6 +741,15 @@ This topic introduces the following types of FE configurations:
 
 ## Data Lake
 
+### `enable_catalog_kerberos_credentials`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether an external catalog that sets `hadoop.security.authentication` to `kerberos` together with `hadoop.kerberos.principal` and `hadoop.kerberos.keytab` accesses its Hive metastore and HDFS as that principal. When this item is set to `false`, all catalogs use the Kerberos identity of the FE and BE (or CN) processes.
+- Introduced in: -
+
 ### `files_enable_insert_push_down_column_type`
 
 - Default: true
