@@ -2919,6 +2919,54 @@ TEST(ArrowOutputSizeEstimateTest, DictionaryChargesTheExpandedValues) {
     auto int_dict = std::make_shared<arrow::DictionaryArray>(arrow::dictionary(arrow::int8(), arrow::int32()), int_idx,
                                                              make_int32_array({10, 20, 30}));
     EXPECT_EQ(4 + 4 * 4, estimate_all(int_dict));
+
+    // dictionary<int16, STRING_VIEW>: 1 entry of 1 MiB + 1,023 empty entries, with 4,096 indices selecting index 0.
+    // Averaging across the 1,024 dictionary entries would underestimate this at ~4 MiB instead of ~4 GiB.
+    {
+        arrow::StringViewBuilder view_dict_builder;
+        const std::string one_mib(1024 * 1024, 'v');
+        ASSERT_TRUE(view_dict_builder.Append(one_mib).ok());
+        for (int i = 1; i < 1024; ++i) {
+            ASSERT_TRUE(view_dict_builder.Append("").ok());
+        }
+        std::shared_ptr<arrow::Array> view_dict;
+        ASSERT_TRUE(view_dict_builder.Finish(&view_dict).ok());
+
+        arrow::Int16Builder idx16_builder;
+        ASSERT_TRUE(idx16_builder.AppendValues(std::vector<int16_t>(4096, 0)).ok());
+        std::shared_ptr<arrow::Array> idx16;
+        ASSERT_TRUE(idx16_builder.Finish(&idx16).ok());
+
+        auto view_dict_array = std::make_shared<arrow::DictionaryArray>(
+                arrow::dictionary(arrow::int16(), arrow::utf8_view()), idx16, view_dict);
+        const int64_t expected_min = 4096LL * 1024 * 1024;
+        EXPECT_GE(estimate_all(view_dict_array), expected_min);
+        auto varchar_type = TypeDescriptor::create_varchar_type(1048576);
+        EXPECT_GE(estimate_arrow_array_output_bytes(*view_dict_array, 0, 4096, &varchar_type), expected_min);
+    }
+
+    // Variable-length complex dictionary (dictionary<int16, list<int64>> targeting JSON): 1 entry with 1,000 elements
+    // + 99 empty entries, with 100 rows selecting index 0.
+    {
+        arrow::Int64Builder child_builder;
+        ASSERT_TRUE(child_builder.AppendValues(std::vector<int64_t>(1000, 7)).ok());
+        std::shared_ptr<arrow::Array> child_arr;
+        ASSERT_TRUE(child_builder.Finish(&child_arr).ok());
+        std::vector<int32_t> list_offsets(101, 1000);
+        list_offsets[0] = 0;
+        auto dict_lists = arrow::ListArray::FromArrays(*make_offsets32(list_offsets), *child_arr).ValueOrDie();
+
+        arrow::Int16Builder idx16_builder;
+        ASSERT_TRUE(idx16_builder.AppendValues(std::vector<int16_t>(100, 0)).ok());
+        std::shared_ptr<arrow::Array> idx16;
+        ASSERT_TRUE(idx16_builder.Finish(&idx16).ok());
+
+        auto list_dict_array = std::make_shared<arrow::DictionaryArray>(
+                arrow::dictionary(arrow::int16(), dict_lists->type()), idx16, dict_lists);
+        auto json_type = TypeDescriptor::from_logical_type(TYPE_JSON);
+        // 100 references to a 1000-element int64 list -> >= 100 * 1000 * 8 = 800,000 bytes (not averaged to ~8,000).
+        EXPECT_GE(estimate_arrow_array_output_bytes(*list_dict_array, 0, 100, &json_type), 800'000);
+    }
 }
 
 TEST(ArrowOutputSizeEstimateTest, UnknownLayoutsAndLimitsAreConservative) {

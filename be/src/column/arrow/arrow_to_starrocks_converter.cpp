@@ -1713,8 +1713,9 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
             }
             return saturating_add(index_bytes, estimate_default_column_bytes(*dst_type, length, nested, depth));
         }
-        // Expansion is what the converters materialize per row. Binary-like dictionaries are summed exactly because
-        // a single huge value repeated by many indices is the classic amplification.
+        // Expansion is what the converters materialize per row. Binary-like and variable-size dictionaries are summed
+        // across the referenced entries because a single large value repeated by many indices is the classic
+        // amplification.
         int64_t expanded = 0;
         const arrow::Type::type value_id = dictionary->type_id();
         if (value_id == arrow::Type::BINARY || value_id == arrow::Type::STRING) {
@@ -1723,7 +1724,9 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
                 if (a.IsNull(i)) continue;
                 const int64_t idx = a.GetValueIndex(i);
                 if (idx < 0 || idx >= dictionary_length) continue;
-                expanded = saturating_add(expanded, saturating_add(values.value_length(idx), sizeof(int32_t)));
+                const int64_t val_len = values.value_length(idx);
+                variable_value_bytes = saturating_add(variable_value_bytes, val_len);
+                expanded = saturating_add(expanded, saturating_add(val_len, sizeof(int32_t)));
             }
         } else if (value_id == arrow::Type::LARGE_BINARY || value_id == arrow::Type::LARGE_STRING) {
             const auto& values = static_cast<const arrow::LargeBinaryArray&>(*dictionary);
@@ -1731,15 +1734,39 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
                 if (a.IsNull(i)) continue;
                 const int64_t idx = a.GetValueIndex(i);
                 if (idx < 0 || idx >= dictionary_length) continue;
-                expanded = saturating_add(expanded, saturating_add(values.value_length(idx), sizeof(int64_t)));
+                const int64_t val_len = values.value_length(idx);
+                variable_value_bytes = saturating_add(variable_value_bytes, val_len);
+                expanded = saturating_add(expanded, saturating_add(val_len, sizeof(int64_t)));
             }
-        } else {
+        } else if (value_id == arrow::Type::STRING_VIEW || value_id == arrow::Type::BINARY_VIEW) {
+            const auto& values = static_cast<const arrow::BinaryViewArray&>(*dictionary);
+            for (int64_t i = begin; i < begin + length; ++i) {
+                if (a.IsNull(i)) continue;
+                const int64_t idx = a.GetValueIndex(i);
+                if (idx < 0 || idx >= dictionary_length) continue;
+                const int64_t val_len = values.IsNull(idx) ? 0 : static_cast<int64_t>(values.GetView(idx).size());
+                variable_value_bytes = saturating_add(variable_value_bytes, val_len);
+                expanded = saturating_add(expanded, saturating_add(val_len, sizeof(arrow::BinaryViewType::c_type)));
+            }
+        } else if (arrow::is_fixed_width(value_id) || value_id == arrow::Type::NA) {
             const int64_t dictionary_bytes =
                     estimate_output_bytes(*dictionary, 0, dictionary_length, dst_type, depth + 1);
             const int64_t per_value = dictionary_bytes == std::numeric_limits<int64_t>::max()
                                               ? dictionary_bytes
                                               : (dictionary_bytes + dictionary_length - 1) / dictionary_length;
             expanded = saturating_mul(length, per_value);
+        } else {
+            std::unordered_map<int64_t, int64_t> ref_counts;
+            for (int64_t i = begin; i < begin + length; ++i) {
+                if (a.IsNull(i)) continue;
+                const int64_t idx = a.GetValueIndex(i);
+                if (idx < 0 || idx >= dictionary_length) continue;
+                ++ref_counts[idx];
+            }
+            for (const auto& [idx, count] : ref_counts) {
+                const int64_t entry_bytes = estimate_output_bytes(*dictionary, idx, 1, dst_type, depth + 1);
+                expanded = saturating_add(expanded, saturating_mul(count, entry_bytes));
+            }
         }
         untyped_bytes = saturating_add(index_bytes, expanded);
         break;
@@ -1799,12 +1826,18 @@ arrow::Status ArrowBoundedMemoryPool::Allocate(int64_t size, int64_t alignment, 
     if (size < 0) {
         return arrow::Status::Invalid("Negative Arrow allocation size: ", size);
     }
-    int64_t current = _bytes_allocated.fetch_add(size, std::memory_order_relaxed) + size;
-    if (_max_bytes > 0 && current > _max_bytes) {
-        _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
-        return arrow::Status::CapacityError("Arrow IPC decoded allocation of ", size,
-                                            " bytes exceeds per-message limit of ", _max_bytes,
-                                            " bytes (current allocated: ", current - size, ")");
+    int64_t prev = _bytes_allocated.load(std::memory_order_relaxed);
+    int64_t current = 0;
+    while (true) {
+        if (__builtin_add_overflow(prev, size, &current) || (_max_bytes > 0 && current > _max_bytes)) {
+            return arrow::Status::CapacityError("Arrow IPC decoded allocation of ", size,
+                                                " bytes exceeds per-message limit of ", _max_bytes,
+                                                " bytes (current allocated: ", prev, ")");
+        }
+        if (_bytes_allocated.compare_exchange_weak(prev, current, std::memory_order_relaxed,
+                                                   std::memory_order_relaxed)) {
+            break;
+        }
     }
     arrow::Status st = _delegate->Allocate(size, alignment, out);
     if (!st.ok()) {
@@ -1818,15 +1851,28 @@ arrow::Status ArrowBoundedMemoryPool::Allocate(int64_t size, int64_t alignment, 
 }
 
 arrow::Status ArrowBoundedMemoryPool::Reallocate(int64_t old_size, int64_t new_size, int64_t alignment, uint8_t** ptr) {
-    if (new_size < 0) {
-        return arrow::Status::Invalid("Negative Arrow reallocation size: ", new_size);
+    if (old_size < 0 || new_size < 0) {
+        return arrow::Status::Invalid("Negative Arrow reallocation size: old=", old_size, ", new=", new_size);
     }
-    int64_t delta = new_size - old_size;
-    int64_t current = _bytes_allocated.fetch_add(delta, std::memory_order_relaxed) + delta;
-    if (_max_bytes > 0 && delta > 0 && current > _max_bytes) {
-        _bytes_allocated.fetch_sub(delta, std::memory_order_relaxed);
-        return arrow::Status::CapacityError("Arrow IPC decoded reallocation of ", new_size,
-                                            " bytes exceeds per-message limit of ", _max_bytes, " bytes");
+    int64_t delta = 0;
+    if (__builtin_sub_overflow(new_size, old_size, &delta)) {
+        return arrow::Status::CapacityError("Arrow IPC decoded reallocation from ", old_size, " to ", new_size,
+                                            " bytes overflows int64");
+    }
+    int64_t prev = _bytes_allocated.load(std::memory_order_relaxed);
+    int64_t current = 0;
+    while (true) {
+        if (delta > 0 && (__builtin_add_overflow(prev, delta, &current) || (_max_bytes > 0 && current > _max_bytes))) {
+            return arrow::Status::CapacityError("Arrow IPC decoded reallocation of ", new_size,
+                                                " bytes exceeds per-message limit of ", _max_bytes, " bytes");
+        }
+        if (delta <= 0 && __builtin_add_overflow(prev, delta, &current)) {
+            return arrow::Status::Invalid("Arrow IPC decoded reallocation underflows allocated bytes");
+        }
+        if (_bytes_allocated.compare_exchange_weak(prev, current, std::memory_order_relaxed,
+                                                   std::memory_order_relaxed)) {
+            break;
+        }
     }
     arrow::Status st = _delegate->Reallocate(old_size, new_size, alignment, ptr);
     if (!st.ok()) {

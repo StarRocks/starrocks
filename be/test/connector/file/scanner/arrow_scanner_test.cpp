@@ -5852,4 +5852,84 @@ TEST_F(ArrowScannerTest, TestStreamRejectsNestedDestinationTypeExpansionInPrefli
     }
 }
 
+TEST_F(ArrowScannerTest, TestStreamRejectsStringViewDictionaryExpansionInPreflight) {
+    const int64_t saved_cap = config::routine_load_arrow_max_decoded_bytes_per_message;
+    DeferOp restore_cap([saved_cap]() { config::routine_load_arrow_max_decoded_bytes_per_message = saved_cap; });
+    config::routine_load_arrow_max_decoded_bytes_per_message = 1024 * 1024; // 1 MiB
+
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_str", TypeDescriptor::create_varchar_type(1048576), true);
+
+    // Dictionary with one 64 KiB string_view entry + 1,023 empty entries, and 64 rows all selecting index 0.
+    // Averaging across the 1,024 entries would estimate ~4 KiB, whereas the 64 rows materialize > 4 MiB (> 1 MiB cap).
+    arrow::StringViewBuilder dict_builder;
+    ASSERT_ARROW_OK(dict_builder.Append(std::string(64 * 1024, 'v')));
+    for (int i = 1; i < 1024; ++i) {
+        ASSERT_ARROW_OK(dict_builder.Append(""));
+    }
+    std::shared_ptr<arrow::Array> dict_values;
+    ASSERT_ARROW_OK(dict_builder.Finish(&dict_values));
+
+    arrow::Int16Builder idx_builder;
+    ASSERT_ARROW_OK(idx_builder.AppendValues(std::vector<int16_t>(64, 0)));
+    std::shared_ptr<arrow::Array> indices;
+    ASSERT_ARROW_OK(idx_builder.Finish(&indices));
+
+    auto dict_type = arrow::dictionary(arrow::int16(), arrow::utf8_view());
+    auto hostile_dict = std::make_shared<arrow::DictionaryArray>(dict_type, indices, dict_values);
+    auto hostile_schema = arrow::schema({arrow::field("c0_str", dict_type)});
+    auto hostile_batch = arrow::RecordBatch::Make(hostile_schema, 64, {hostile_dict});
+
+    arrow::StringViewBuilder good_builder;
+    ASSERT_ARROW_OK(good_builder.Append("ok1"));
+    ASSERT_ARROW_OK(good_builder.Append("ok2"));
+    std::shared_ptr<arrow::Array> good_arr;
+    ASSERT_ARROW_OK(good_builder.Finish(&good_arr));
+    auto good_schema = arrow::schema({arrow::field("c0_str", arrow::utf8_view())});
+    auto good_batch = arrow::RecordBatch::Make(good_schema, 2, {good_arr});
+
+    // Hostile only -> preflight rejection before any chunk initialization or column conversion
+    {
+        auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+
+        append_ipc_message(pipe, hostile_schema, {hostile_batch});
+        ASSERT_OK(pipe->finish());
+
+        ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(scanner.open());
+        EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+        EXPECT_EQ(0, ctx->counter->init_chunk_ns);
+        EXPECT_EQ(0, ctx->counter->fill_ns);
+        EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+        EXPECT_EQ(64, ctx->counter->num_rows_filtered);
+        scanner.close();
+    }
+
+    // Hostile followed by valid message
+    {
+        auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+
+        append_ipc_message(pipe, hostile_schema, {hostile_batch});
+        append_ipc_message(pipe, good_schema, {good_batch});
+        ASSERT_OK(pipe->finish());
+
+        ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(scanner.open());
+        auto res = scanner.get_next();
+        ASSERT_OK(res.status());
+        ASSERT_EQ(2, res.value()->num_rows());
+        EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+        EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+        EXPECT_EQ(64, ctx->counter->num_rows_filtered);
+        EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+        scanner.close();
+    }
+}
+
 } // namespace starrocks
