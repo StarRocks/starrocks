@@ -560,6 +560,37 @@ public class LakeTableSchemaChangeJobTest {
         siblingJob.cancel("test");
     }
 
+    // The shadow tablets carry the table's flat_json.* settings in their create request, so their metadata
+    // has them for every later write and compaction of the new index.
+    @Test
+    public void testShadowTabletsCarryTableFlatJsonConfig() throws Exception {
+        LakeTable flatJsonTable = createTable(connectContext,
+                    "CREATE TABLE t_flat_json(c0 INT, j1 JSON) duplicate key(c0) "
+                                + "distributed by hash(c0) buckets " + NUM_BUCKETS
+                                + " properties('flat_json.enable' = 'false', 'light_weight_tablet_creation' = 'false')");
+        Assertions.assertNotNull(flatJsonTable.getFlatJsonConfig());
+
+        List<CreateReplicaTask> sent = new ArrayList<>();
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendCreateReplicaTasks(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(task -> sent.add((CreateReplicaTask) task));
+            }
+        };
+
+        alterTable(connectContext, "ALTER TABLE t_flat_json ADD COLUMN c1 BIGINT key NOT NULL default \"0\"");
+        LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(flatJsonTable);
+        schemaChangeJob.runPendingJob(); // dispatch round
+        Assertions.assertEquals(NUM_BUCKETS, sent.size());
+        for (CreateReplicaTask task : sent) {
+            Assertions.assertTrue(task.toThrift().isSetFlat_json_config());
+            Assertions.assertFalse(task.toThrift().getFlat_json_config().isFlat_json_enable());
+        }
+
+        schemaChangeJob.cancel("test");
+        Assertions.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
+    }
+
     @Test
     public void testCreateTabletSuccess() throws Exception {
         LakeTableSchemaChangeJob schemaChangeJob = alterTableAddColumn();

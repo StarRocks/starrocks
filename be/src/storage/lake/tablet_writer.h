@@ -27,6 +27,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/flat_json_config.h"
 
 namespace starrocks {
 class Chunk;
@@ -227,6 +228,16 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
+    // The table's flat JSON settings for the segments this writer produces, set by whoever creates
+    // the writer: a load from its open request (PTabletWriterOpenRequest.lake_tablet_params.flat_json_config,
+    // or the metadata cache when the request lacks it, see DeltaWriterImpl), compaction and schema change
+    // from version-pinned metadata. The writer itself never reads the tablet metadata cache; without a
+    // config it follows the be.conf globals.
+    void set_flat_json_config(std::shared_ptr<FlatJsonConfig> flat_json_config) {
+        _flat_json_config = std::move(flat_json_config);
+    }
+    const std::shared_ptr<FlatJsonConfig>& flat_json_config() const { return _flat_json_config; }
+
     const starrocks::TabletSchemaCSPtr& tablet_schema() const { return _schema; }
 
     void set_auto_flush(bool auto_flush) { _auto_flush = auto_flush; }
@@ -279,6 +290,7 @@ protected:
     TabletSchemaCSPtr _schema;
     int64_t _txn_id;
     ThreadPool* _flush_pool;
+    std::shared_ptr<FlatJsonConfig> _flat_json_config;
     std::vector<SegmentFileInfo> _segments;
     std::vector<FileInfo> _dels;
     // Parallel to _dels: op_offset (segment index the delete follows) for each del file.
