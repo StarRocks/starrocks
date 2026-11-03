@@ -138,7 +138,7 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         break;
     case parquet::Type::BYTE_ARRAY:
         if (logical_type->is_string()) {
-            *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *type_desc = TYPE_VARCHAR_DESC;
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
             *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
@@ -146,7 +146,7 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         } else if (logical_type->is_JSON()) {
             *type_desc = TypeDescriptor::create_json_type();
         } else {
-            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *type_desc = TYPE_VARBINARY_DESC;
         }
         break;
     case parquet::Type::FIXED_LEN_BYTE_ARRAY: {
@@ -163,13 +163,13 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
         } else {
             // INTERVAL (12B), BSON, and unannotated FLBA all carry raw binary data.
             // VARBINARY is the correct SR type for all of these.
-            *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            *type_desc = TYPE_VARBINARY_DESC;
         }
         break;
     }
     default:
         // Treat unsupported types as varbinary type.
-        *type_desc = TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        *type_desc = TYPE_VARBINARY_DESC;
     }
 
     return Status::OK();
@@ -196,7 +196,7 @@ static Status get_parquet_type_from_group(const ::parquet::schema::NodePtr& node
     }
 
     // Treat unsupported types as VARCHAR.
-    *type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    *type_desc = TYPE_VARCHAR_DESC;
     return Status::OK();
 }
 
