@@ -45,6 +45,7 @@
 #include "compute_env/load_path/load_path_mgr.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "compute_env/load_path/rejected_record_writer.h"
+#include "exprs/expr_context.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -4597,13 +4598,8 @@ TEST_F(ArrowScannerTest, TestArrowInputStreamAndFileMetadataBranches) {
         ASSERT_OK(scanner.open_next_reader());
         ASSERT_NE(nullptr, scanner._curr_file_reader);
 
-        // Extract the owned arrow::io::InputStream (StarRocksArrowInputStream) from InputStreamMessageReader
-        // inside RecordBatchStreamReaderImpl to exercise Tell(), Close(), closed(), and Read() after Close().
-        auto* msg_reader = *reinterpret_cast<arrow::ipc::MessageReader* const*>(
-                reinterpret_cast<const char*>(scanner._curr_file_reader.get()) + 0x108);
-        ASSERT_NE(nullptr, msg_reader);
-        auto owned_arrow_stream = *reinterpret_cast<const std::shared_ptr<arrow::io::InputStream>*>(
-                reinterpret_cast<const char*>(msg_reader) + 0x18);
+        // Exercise Tell(), Close(), closed(), and Read() after Close() on the scanner's StarRocksArrowInputStream.
+        auto owned_arrow_stream = scanner._curr_arrow_stream;
         ASSERT_NE(nullptr, owned_arrow_stream);
         EXPECT_FALSE(owned_arrow_stream->closed());
         auto tell_open = owned_arrow_stream->Tell();
@@ -6003,6 +5999,116 @@ TEST_F(ArrowScannerTest, TestStreamRejectsJsonStructKeyExpansionInPreflight) {
         EXPECT_EQ(kHostileRows, ctx->counter->num_rows_filtered);
         EXPECT_EQ(1, ctx->counter->arrow_messages_read);
         scanner.close();
+    }
+}
+
+namespace {
+
+class FailingDestExpr final : public Expr {
+public:
+    explicit FailingDestExpr(const TypeDescriptor& type, Status status)
+            : Expr(type, /*is_slotref=*/false), _status(std::move(status)) {}
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new FailingDestExpr(_type, _status)); }
+
+    bool is_constant() const override { return false; }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* /*context*/, Chunk* /*ptr*/) override { return _status; }
+
+private:
+    Status _status;
+};
+
+class LargeColumnDestExpr final : public Expr {
+public:
+    explicit LargeColumnDestExpr(const TypeDescriptor& type, size_t bytes_per_row)
+            : Expr(type, /*is_slotref=*/false), _bytes_per_row(bytes_per_row) {}
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new LargeColumnDestExpr(_type, _bytes_per_row)); }
+
+    bool is_constant() const override { return false; }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* /*context*/, Chunk* ptr) override {
+        auto col = ColumnHelper::create_column(_type, /*nullable=*/true);
+        const std::string payload(_bytes_per_row, 'z');
+        const size_t rows = ptr != nullptr ? ptr->num_rows() : 1;
+        for (size_t i = 0; i < rows; ++i) {
+            col->append_datum(Datum(Slice(payload)));
+        }
+        return col;
+    }
+
+private:
+    size_t _bytes_per_row;
+};
+
+} // namespace
+
+TEST_F(ArrowScannerTest, TestStreamPropagatesDestinationExpressionEvaluationFailure) {
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_int", TypeDescriptor::from_logical_type(TYPE_INT), true);
+
+    auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+    auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+    ASSERT_OK(ctx_res.status());
+    auto& ctx = ctx_res.value();
+
+    auto schema = arrow::schema({arrow::field("c0_int", arrow::int32())});
+    append_ipc_message(pipe, schema, {make_int32_batch(schema, {10, 20})});
+    append_ipc_message(pipe, schema, {make_int32_batch(schema, {30, 40})});
+    ASSERT_OK(pipe->finish());
+
+    ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+    ASSERT_OK(scanner.open());
+    ASSERT_FALSE(scanner._dest_expr_ctx.empty());
+    // Simulate a destination COLUMNS expression failure (e.g. Python UDF RPC error mapped to InvalidArgument).
+    scanner._dest_expr_ctx[0]->_root = ctx->state->obj_pool()->add(new FailingDestExpr(
+            TypeDescriptor::from_logical_type(TYPE_INT), Status::InvalidArgument("UDF worker RPC failed")));
+
+    auto res = scanner.get_next();
+    EXPECT_TRUE(res.status().is_invalid_argument()) << res.status().to_string();
+    EXPECT_NE(std::string::npos, res.status().message().find("UDF worker RPC failed"));
+    EXPECT_EQ(0, ctx->counter->arrow_messages_rejected);
+    EXPECT_EQ(0, ctx->counter->num_rows_filtered);
+    EXPECT_EQ(0, ctx->counter->arrow_messages_read);
+    scanner.close();
+
+    // Verify that a post-cast / post-materialize bytes_usage() budget breach IS still routed to
+    // reject_discrete_message() and does not abort the scan.
+    {
+        SlotTypeDescInfoArray varchar_slots;
+        varchar_slots.emplace_back("c0_varchar", TypeDescriptor::create_varchar_type(4096), true);
+
+        auto pipe2 = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx2_res = make_stream_scanner_context(varchar_slots, UniqueId::gen_uid(), pipe2);
+        ASSERT_OK(ctx2_res.status());
+        auto& ctx2 = ctx2_res.value();
+
+        const int64_t saved_cap = config::routine_load_arrow_max_decoded_bytes_per_message;
+        DeferOp restore_cap([saved_cap]() { config::routine_load_arrow_max_decoded_bytes_per_message = saved_cap; });
+        config::routine_load_arrow_max_decoded_bytes_per_message = 4096;
+
+        auto schema2 = arrow::schema({arrow::field("c0_varchar", arrow::utf8())});
+        arrow::StringBuilder b1;
+        for (int i = 0; i < 4; ++i) {
+            ASSERT_ARROW_OK(b1.Append("x"));
+        }
+        std::shared_ptr<arrow::Array> a1;
+        ASSERT_ARROW_OK(b1.Finish(&a1));
+        append_ipc_message(pipe2, schema2, {arrow::RecordBatch::Make(schema2, 4, {a1})});
+        ASSERT_OK(pipe2->finish());
+
+        ArrowScanner scanner2(ctx2->state, ctx2->profile, ctx2->broker_scan_range, ctx2->counter);
+        ASSERT_OK(scanner2.open());
+        ASSERT_FALSE(scanner2._dest_expr_ctx.empty());
+        // 4 rows * 2048 bytes/row = 8192 bytes > 4096 cap after materialize().
+        scanner2._dest_expr_ctx[0]->_root =
+                ctx2->state->obj_pool()->add(new LargeColumnDestExpr(TypeDescriptor::create_varchar_type(4096), 2048));
+        auto res2 = scanner2.get_next();
+        EXPECT_TRUE(res2.status().is_end_of_file()) << res2.status().to_string();
+        EXPECT_EQ(1, ctx2->counter->arrow_messages_rejected);
+        EXPECT_EQ(4, ctx2->counter->num_rows_filtered);
+        scanner2.close();
     }
 }
 

@@ -2831,6 +2831,14 @@ TEST(ArrowOutputSizeEstimateTest, BinaryLikeTypes) {
     std::shared_ptr<arrow::Array> views;
     ASSERT_TRUE(view_builder.Finish(&views).ok());
     EXPECT_EQ(3 * 16 + 101, estimate_all(views));
+
+    arrow::BinaryViewBuilder binary_view_builder;
+    ASSERT_TRUE(binary_view_builder.Append(std::string(100, 'b')).ok());
+    ASSERT_TRUE(binary_view_builder.Append("z").ok());
+    ASSERT_TRUE(binary_view_builder.AppendNull().ok());
+    std::shared_ptr<arrow::Array> binary_views;
+    ASSERT_TRUE(binary_view_builder.Finish(&binary_views).ok());
+    EXPECT_EQ(3 * 16 + 101, estimate_all(binary_views));
 }
 
 TEST(ArrowOutputSizeEstimateTest, NestedTypesFollowTheReferencedChildRange) {
@@ -2971,11 +2979,8 @@ TEST(ArrowOutputSizeEstimateTest, DictionaryChargesTheExpandedValues) {
 
 TEST(ArrowOutputSizeEstimateTest, UnknownLayoutsAndLimitsAreConservative) {
     // Layouts without a dedicated rule are charged a pointer-sized value per row.
-    arrow::BinaryViewBuilder binary_view_builder;
-    ASSERT_TRUE(binary_view_builder.Append("abc").ok());
-    std::shared_ptr<arrow::Array> binary_views;
-    ASSERT_TRUE(binary_view_builder.Finish(&binary_views).ok());
-    EXPECT_EQ(8, estimate_all(binary_views));
+    auto ree_array = arrow::RunEndEncodedArray::Make(1, make_int32_array({1}), make_int32_array({42})).ValueOrDie();
+    EXPECT_EQ(8, estimate_all(ree_array));
 
     // Arithmetic saturates instead of overflowing.
     std::vector<std::shared_ptr<arrow::Array>> huge_children;
@@ -3062,12 +3067,23 @@ TEST(ArrowOutputSizeEstimateTest, DestinationTypeAwareEstimation) {
         EXPECT_EQ(12'004, estimate_arrow_array_output_bytes(*map_arr, 0, 1, &map_bigint_unknown));
     }
 
-    // Case 5 (Nested two-phase cast): 1-row list<int32> with 1,000 children targeting ARRAY<VARCHAR>.
+    // Case 5 (Nested two-phase cast to VARCHAR): 1-row list<int32> and list<decimal256> with 1,000 children
+    // targeting ARRAY<VARCHAR>, charging both Phase-1 storage and Phase-2 formatted ASCII string bytes.
     {
         auto int32_child = make_int32_array(std::vector<int32_t>(1000, 42));
         auto list_int32 = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *int32_child).ValueOrDie();
         auto arr_varchar_type = TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_VARCHAR));
-        EXPECT_EQ(11'004, estimate_arrow_array_output_bytes(*list_int32, 0, 1, &arr_varchar_type));
+        EXPECT_EQ(23'004, estimate_arrow_array_output_bytes(*list_int32, 0, 1, &arr_varchar_type));
+
+        arrow::Decimal256Builder dec256_builder(arrow::decimal256(76, 10));
+        for (int i = 0; i < 1000; ++i) {
+            ASSERT_TRUE(dec256_builder.Append(arrow::Decimal256(123456789)).ok());
+        }
+        std::shared_ptr<arrow::Array> dec256_child;
+        ASSERT_TRUE(dec256_builder.Finish(&dec256_child).ok());
+        auto list_dec256 = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *dec256_child).ValueOrDie();
+        // decimal256 -> VARCHAR charges Phase-2 VARCHAR (4+1) + Phase-1 DECIMAL256 (32+1) + 80B formatted text + 1B.
+        EXPECT_EQ(119'004, estimate_arrow_array_output_bytes(*list_dec256, 0, 1, &arr_varchar_type));
     }
 
     // Case 6 (Missing top-level column default estimation): BIGINT, LARGEINT, and STRUCT<a BIGINT, b LARGEINT>.
@@ -3105,6 +3121,33 @@ TEST(ArrowOutputSizeEstimateTest, DestinationTypeAwareEstimation) {
         // Nested 1-row map<int8, struct<huge_key: int8>> with 4,096 entries targeting JSON.
         auto map_of_struct = arrow::MapArray::FromArrays(make_offsets32({0, kRows}), i8_arr, struct_arr).ValueOrDie();
         EXPECT_GE(estimate_arrow_array_output_bytes(*map_of_struct, 0, 1, &json_type), min_expected_key_bytes);
+    }
+
+    // Case 8 (Two-phase STRING -> ARRAY<DECIMAL256> and DICTIONARY two-phase surcharge):
+    {
+        // 500 KiB comma-separated string "1,1,1,..." targeting ARRAY<DECIMAL256> (~256,000 parsed elements -> >8 MiB).
+        std::string csv_500k(512 * 1024, '1');
+        for (size_t i = 1; i < csv_500k.size(); i += 2) {
+            csv_500k[i] = ',';
+        }
+        auto str_arr = make_string_array({csv_500k});
+        auto arr_dec256_type =
+                TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(TYPE_DECIMAL256, 76, 10));
+        EXPECT_GT(estimate_arrow_array_output_bytes(*str_arr, 0, 1, &arr_dec256_type), 8LL * 1024 * 1024);
+
+        // Nested list<dictionary<int8, int8>> with 1,000 elements targeting ARRAY<DECIMAL256> includes two-phase surcharge.
+        arrow::Int8Builder dict_val_builder;
+        ASSERT_TRUE(dict_val_builder.AppendValues({1, 2}).ok());
+        std::shared_ptr<arrow::Array> dict_vals;
+        ASSERT_TRUE(dict_val_builder.Finish(&dict_vals).ok());
+        arrow::Int8Builder dict_idx_builder;
+        ASSERT_TRUE(dict_idx_builder.AppendValues(std::vector<int8_t>(1000, 0)).ok());
+        std::shared_ptr<arrow::Array> dict_idx;
+        ASSERT_TRUE(dict_idx_builder.Finish(&dict_idx).ok());
+        auto dict_i8 = std::make_shared<arrow::DictionaryArray>(arrow::dictionary(arrow::int8(), arrow::int8()),
+                                                                dict_idx, dict_vals);
+        auto list_dict_i8 = arrow::ListArray::FromArrays(*make_offsets32({0, 1000}), *dict_i8).ValueOrDie();
+        EXPECT_GE(estimate_arrow_array_output_bytes(*list_dict_i8, 0, 1, &arr_dec256_type), 36'004);
     }
 }
 

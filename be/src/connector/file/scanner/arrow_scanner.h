@@ -66,11 +66,12 @@ private:
     // so a rejected message never exposes any of its rows and every message is counted exactly once.
     StatusOr<ChunkPtr> get_next_discrete();
     Status read_discrete_message();
-    Status decode_and_convert_discrete_message(int64_t* filtered_rows);
+    Status decode_and_convert_discrete_message(int64_t* filtered_rows, bool* reject_message);
     Status decode_discrete_message(ArrowBoundedMemoryPool* pool,
                                    std::deque<std::shared_ptr<arrow::RecordBatch>>* batches, int64_t* rows,
                                    int64_t* filtered_rows);
-    Status convert_discrete_batches(std::deque<std::shared_ptr<arrow::RecordBatch>>* batches, int64_t max_bytes);
+    Status convert_discrete_batches(std::deque<std::shared_ptr<arrow::RecordBatch>>* batches, int64_t max_bytes,
+                                    bool* reject_message);
     int64_t estimate_batch_output_bytes(const arrow::RecordBatch& batch) const;
     void reject_discrete_message(const std::string& reason, int64_t filtered_rows);
 
@@ -78,9 +79,10 @@ private:
     Status append_batch_to_src_chunk(ChunkPtr* chunk);
     bool chunk_is_full();
     bool batch_is_exhausted();
-    Status finalize_src_chunk(ChunkPtr* chunk);
+    Status finalize_src_chunk(ChunkPtr* chunk, bool* reject_message = nullptr);
 
     bool _is_discrete_pipe{false};
+    int64_t _curr_message_converted_bytes{0};
     const TBrokerScanRange& _scan_range;
     int _next_file{0};
     // Index into _scan_range.ranges for the file whose rows are in the current
@@ -90,6 +92,7 @@ private:
     // opening a new file (which would otherwise advance _next_file past the
     // current chunk's file).
     int _chunk_file_idx{0};
+    std::shared_ptr<arrow::io::InputStream> _curr_arrow_stream;
     std::shared_ptr<arrow::ipc::RecordBatchStreamReader> _curr_file_reader;
     bool _scanner_eof{false};
     // Fully converted chunks of the discrete message being drained by get_next_discrete().

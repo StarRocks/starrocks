@@ -1530,6 +1530,40 @@ int64_t estimate_logical_type_elem_bytes(LogicalType lt) {
     }
 }
 
+int64_t estimate_formatted_string_bytes(LogicalType lt) {
+    switch (lt) {
+    case TYPE_BOOLEAN:
+    case TYPE_TINYINT:
+    case TYPE_UNSIGNED_TINYINT:
+        return 6;
+    case TYPE_SMALLINT:
+    case TYPE_UNSIGNED_SMALLINT:
+        return 8;
+    case TYPE_INT:
+    case TYPE_UNSIGNED_INT:
+    case TYPE_DATE:
+    case TYPE_DECIMAL32:
+        return 12;
+    case TYPE_FLOAT:
+    case TYPE_BIGINT:
+    case TYPE_UNSIGNED_BIGINT:
+    case TYPE_DOUBLE:
+    case TYPE_TIME:
+    case TYPE_DECIMAL64:
+        return 24;
+    case TYPE_DATETIME:
+        return 32;
+    case TYPE_LARGEINT:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL128:
+        return 44;
+    case TYPE_DECIMAL256:
+        return 80;
+    default:
+        return 24;
+    }
+}
+
 int64_t estimate_default_column_bytes(const TypeDescriptor& dst_type, int64_t length, bool include_null_byte,
                                       int depth) {
     if (length <= 0) {
@@ -1590,8 +1624,9 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
         variable_value_bytes = value_bytes;
         break;
     }
-    case arrow::Type::STRING_VIEW: {
-        const auto& a = static_cast<const arrow::StringViewArray&>(array);
+    case arrow::Type::STRING_VIEW:
+    case arrow::Type::BINARY_VIEW: {
+        const auto& a = static_cast<const arrow::BinaryViewArray&>(array);
         int64_t value_bytes = 0;
         for (int64_t i = begin; i < begin + length; ++i) {
             if (!a.IsNull(i)) value_bytes = saturating_add(value_bytes, static_cast<int64_t>(a.GetView(i).size()));
@@ -1820,15 +1855,26 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
     if (dst_type == nullptr) {
         return untyped_bytes;
     }
+    const arrow::Type::type effective_type_id = unwrap_arrow_dictionary_type(array.type().get())->id();
     int64_t dst_elem_bytes = estimate_logical_type_elem_bytes(dst_type->type) + (nested ? 1 : 0);
-    if (type_id != arrow::Type::DICTIONARY &&
-        get_arrow_converter(type_id, dst_type->type, /*is_nullable=*/true, /*is_strict=*/false) == nullptr) {
-        LogicalType raw_lt = get_strict_type(type_id);
-        if (raw_lt != TYPE_UNKNOWN && raw_lt != dst_type->type && nested) {
+    int64_t extra_payload_bytes = variable_value_bytes;
+    if (get_arrow_converter(effective_type_id, dst_type->type, /*is_nullable=*/true, /*is_strict=*/false) == nullptr) {
+        LogicalType raw_lt = get_strict_type(effective_type_id);
+        if (raw_lt != TYPE_UNKNOWN && raw_lt != dst_type->type) {
             dst_elem_bytes += estimate_logical_type_elem_bytes(raw_lt) + 1;
+            if ((dst_type->type == TYPE_VARCHAR || dst_type->type == TYPE_CHAR) && raw_lt != TYPE_VARCHAR &&
+                raw_lt != TYPE_CHAR && raw_lt != TYPE_VARBINARY) {
+                dst_elem_bytes += estimate_formatted_string_bytes(raw_lt);
+            } else if (dst_type->type == TYPE_ARRAY && !dst_type->children.empty() &&
+                       (raw_lt == TYPE_VARCHAR || raw_lt == TYPE_CHAR || raw_lt == TYPE_VARBINARY)) {
+                const int64_t parsed_elems = std::max<int64_t>(length, (variable_value_bytes + 1) / 2);
+                const int64_t child_bytes = estimate_default_column_bytes(dst_type->children[0], parsed_elems,
+                                                                          /*include_null_byte=*/true, depth + 1);
+                extra_payload_bytes = saturating_add(extra_payload_bytes, saturating_add(parsed_elems, child_bytes));
+            }
         }
     }
-    const int64_t dst_bytes = saturating_add(saturating_mul(length, dst_elem_bytes), variable_value_bytes);
+    const int64_t dst_bytes = saturating_add(saturating_mul(length, dst_elem_bytes), extra_payload_bytes);
     return std::max(saturating_add(untyped_bytes, nested ? length : 0), dst_bytes);
 }
 
@@ -1922,6 +1968,7 @@ arrow::Status ArrowBoundedMemoryPool::Reallocate(int64_t old_size, int64_t new_s
 }
 
 void ArrowBoundedMemoryPool::Free(uint8_t* buffer, int64_t size, int64_t alignment) {
+    DCHECK_GE(size, 0);
     _delegate->Free(buffer, size, alignment);
     _bytes_allocated.fetch_sub(size, std::memory_order_relaxed);
 }

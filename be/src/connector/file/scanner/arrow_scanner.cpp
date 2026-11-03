@@ -328,6 +328,7 @@ Status ArrowScanner::open_next_reader() {
     _is_discrete_pipe = pipe != nullptr && pipe->is_discrete_message_pipe();
     if (_is_discrete_pipe) {
         // Delay opening reader until next_batch() for discrete buffers (Kafka/Pulsar Routine Load)
+        _curr_arrow_stream = nullptr;
         _curr_file_reader = nullptr;
     } else {
         // Continuous input stream for HTTP Stream Load and local/remote files
@@ -337,6 +338,7 @@ Status ArrowScanner::open_next_reader() {
             return Status::InternalError("open RecordBatchStreamReader failed, reason: " +
                                          reader_res.status().ToString());
         }
+        _curr_arrow_stream = std::move(arrow_stream);
         _curr_file_reader = std::move(reader_res).MoveValueUnsafe();
     }
 
@@ -377,12 +379,14 @@ Status ArrowScanner::next_batch() {
             LOG(WARNING) << "Arrow routine load: " << error_msg;
             _counter->num_rows_filtered++;
             _curr_file_reader.reset();
+            _curr_arrow_stream.reset();
             _parser_buf.reset();
             return Status::InternalError(error_msg);
         }
 
         if (_batch == nullptr) {
             _curr_file_reader.reset();
+            _curr_arrow_stream.reset();
             _parser_buf.reset();
             for (auto& conv : _conv_funcs) {
                 conv = std::make_unique<ConvertFuncTree>();
@@ -506,10 +510,13 @@ Status ArrowScanner::read_discrete_message() {
 
     const int64_t filtered_before = _counter->num_rows_filtered;
     int64_t filtered_rows = 0;
-    Status st = decode_and_convert_discrete_message(&filtered_rows);
+    bool reject_message = true;
+    Status st = decode_and_convert_discrete_message(&filtered_rows, &reject_message);
     if (!st.ok()) {
-        if (st.is_cancelled() || st.is_mem_limit_exceeded()) {
-            // Infrastructure failures are not a verdict on the message; surface them instead of skipping data.
+        if (!reject_message || st.is_cancelled() || st.is_mem_limit_exceeded()) {
+            // Infrastructure and expression evaluation failures are not a verdict on the message;
+            // surface them instead of skipping data.
+            _counter->num_rows_filtered = filtered_before;
             _parser_buf.reset();
             return st;
         }
@@ -539,7 +546,8 @@ int64_t ArrowScanner::estimate_batch_output_bytes(const arrow::RecordBatch& batc
     return std::max<int64_t>(total, batch.num_rows());
 }
 
-Status ArrowScanner::decode_and_convert_discrete_message(int64_t* filtered_rows) {
+Status ArrowScanner::decode_and_convert_discrete_message(int64_t* filtered_rows, bool* reject_message) {
+    *reject_message = true;
     const int64_t max_decoded_bytes = config::routine_load_arrow_max_decoded_bytes_per_message;
 
     // Declaration order is load-bearing: the batches hold arrow::PoolBuffers that free into `pool` when they are
@@ -563,7 +571,7 @@ Status ArrowScanner::decode_and_convert_discrete_message(int64_t* filtered_rows)
     int64_t rows = 0;
     RETURN_IF_ERROR(decode_discrete_message(&pool, &batches, &rows, filtered_rows));
     Status convert_status;
-    TRY_CATCH_BAD_ALLOC(convert_status = convert_discrete_batches(&batches, max_decoded_bytes));
+    TRY_CATCH_BAD_ALLOC(convert_status = convert_discrete_batches(&batches, max_decoded_bytes, reject_message));
     if (!convert_status.ok()) {
         *filtered_rows = std::max<int64_t>(rows, 1);
         return convert_status;
@@ -706,18 +714,21 @@ Status ArrowScanner::decode_discrete_message(ArrowBoundedMemoryPool* pool,
 // Converts every batch of the message into finished chunks. Nothing is published until the whole message converts;
 // on any failure the partial chunks are dropped with the local queue.
 Status ArrowScanner::convert_discrete_batches(std::deque<std::shared_ptr<arrow::RecordBatch>>* batches,
-                                              int64_t max_bytes) {
+                                              int64_t max_bytes, bool* reject_message) {
+    *reject_message = true;
     std::deque<ChunkPtr> chunks;
     ChunkPtr chunk;
-    int64_t converted_bytes = 0;
+    _curr_message_converted_bytes = 0;
     _chunk_start_idx = 0;
 
     auto finish_chunk = [&]() -> Status {
-        RETURN_IF_ERROR(finalize_src_chunk(&chunk));
+        RETURN_IF_ERROR(finalize_src_chunk(&chunk, reject_message));
+        *reject_message = true;
         // Backstop for the estimate in decode_discrete_message(): bound what was actually materialized. bytes_usage()
         // counts the rows present, whereas memory_usage() would also charge the capacity reserved per chunk.
-        converted_bytes = saturating_add(converted_bytes, static_cast<int64_t>(chunk->bytes_usage()));
-        if (max_bytes > 0 && converted_bytes > max_bytes) {
+        _curr_message_converted_bytes =
+                saturating_add(_curr_message_converted_bytes, static_cast<int64_t>(chunk->bytes_usage()));
+        if (max_bytes > 0 && _curr_message_converted_bytes > max_bytes) {
             return Status::DataQualityError(strings::Substitute(
                     "Arrow IPC message converts to more than routine_load_arrow_max_decoded_bytes_per_message "
                     "($0 bytes)",
@@ -861,6 +872,22 @@ Status ArrowScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
                                                                 _batch_start_idx, _batch_start_idx + num_elements));
             }
         }
+        if (_is_discrete_pipe) {
+            const int64_t max_bytes = config::routine_load_arrow_max_decoded_bytes_per_message;
+            if (max_bytes > 0) {
+                int64_t chunk_bytes = 0;
+                for (const auto& col : (*chunk)->columns()) {
+                    chunk_bytes = saturating_add(chunk_bytes, static_cast<int64_t>(col->byte_size()));
+                }
+                if (saturating_add(_curr_message_converted_bytes, chunk_bytes) > max_bytes) {
+                    _conv_ctx.clear_current_column();
+                    return Status::DataQualityError(
+                            strings::Substitute("Arrow IPC message converts to more than "
+                                                "routine_load_arrow_max_decoded_bytes_per_message ($0 bytes)",
+                                                max_bytes));
+                }
+            }
+        }
     }
 
     _conv_ctx.clear_current_column();
@@ -869,9 +896,13 @@ Status ArrowScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk) {
+Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk, bool* reject_message) {
+    if (reject_message != nullptr) {
+        *reject_message = false;
+    }
     auto num_rows = (*chunk)->filter(_chunk_filter);
     _counter->num_rows_filtered += _chunk_start_idx - num_rows;
+    const int64_t max_bytes = _is_discrete_pipe ? config::routine_load_arrow_max_decoded_bytes_per_message : 0;
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
     {
         SCOPED_RAW_TIMER(&_counter->cast_chunk_ns);
@@ -884,6 +915,19 @@ Status ArrowScanner::finalize_src_chunk(ChunkPtr* chunk) {
             ASSIGN_OR_RETURN(auto column, _cast_exprs[i]->evaluate_checked(nullptr, (*chunk).get()));
             column = ColumnHelper::unfold_const_column(slot_desc->type(), (*chunk)->num_rows(), column);
             cast_chunk->append_column(column, slot_desc->id());
+            if (max_bytes > 0) {
+                const int64_t peak_chunk_bytes = saturating_add(static_cast<int64_t>((*chunk)->bytes_usage()),
+                                                                static_cast<int64_t>(cast_chunk->bytes_usage()));
+                if (saturating_add(_curr_message_converted_bytes, peak_chunk_bytes) > max_bytes) {
+                    if (reject_message != nullptr) {
+                        *reject_message = true;
+                    }
+                    return Status::DataQualityError(
+                            strings::Substitute("Arrow IPC message converts to more than "
+                                                "routine_load_arrow_max_decoded_bytes_per_message ($0 bytes)",
+                                                max_bytes));
+                }
+            }
         }
         auto range = _scan_range.ranges.at(_chunk_file_idx);
         if (range.__isset.num_of_columns_from_file) {
@@ -953,6 +997,7 @@ StatusOr<ChunkPtr> ArrowScanner::get_next() {
             }
 
             _curr_file_reader.reset();
+            _curr_arrow_stream.reset();
             _file.reset();
             if (chunk->num_rows() > 0) {
                 break;
@@ -995,6 +1040,7 @@ void ArrowScanner::close() {
     _batch.reset();
     _parser_buf.reset();
     _curr_file_reader.reset();
+    _curr_arrow_stream.reset();
     _file.reset();
     _pool.clear();
     FileScanner::close();
