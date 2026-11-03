@@ -1252,13 +1252,13 @@ public class AlterMVJobExecutorEditLogTest {
     }
 
     @Test
-    public void testVisitRefreshSchemeClauseOnChangeKeepsVersionState() throws Exception {
+    public void testVisitRefreshSchemeClauseAsyncWithoutIntervalKeepsVersionState() throws Exception {
         MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getDb(DB_NAME).getTable(MV_NAME);
         seedVersionState(mv.getRefreshScheme().getAsyncRefreshContext());
 
         alterRefreshScheme("refresh schedule start('2122-12-31 00:00:00') every(interval 1 hour)");
-        alterRefreshScheme("refresh on_change");
+        alterRefreshScheme("refresh async");
 
         MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
         assertVersionStateKept(context);
@@ -1269,9 +1269,9 @@ public class AlterMVJobExecutorEditLogTest {
         Assertions.assertNull(task.getSchedule());
 
         UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME);
-        ChangeMaterializedViewRefreshSchemeLog onChangeLog = (ChangeMaterializedViewRefreshSchemeLog)
+        ChangeMaterializedViewRefreshSchemeLog asyncLog = (ChangeMaterializedViewRefreshSchemeLog)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME);
-        MaterializedView replayed = replayRefreshSchemeOnFollower(onChangeLog);
+        MaterializedView replayed = replayRefreshSchemeOnFollower(asyncLog);
         assertVersionStateKept(replayed.getRefreshScheme().getAsyncRefreshContext());
         Assertions.assertTrue(replayed.isLoadTriggeredRefresh());
         Assertions.assertFalse(replayed.getRefreshScheme().getAsyncRefreshContext().isDefineStartTime());
