@@ -5841,6 +5841,21 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testRangePredicateRewriteWithInListInsideOrBranch() {
+        String mv = "select lo_orderkey, lo_orderdate, lo_linenumber, lo_shipmode from lineorder " +
+                "where lo_orderdate between 19930101 and 19931231";
+        List<String> queries = ImmutableList.of(
+                "select lo_orderkey from lineorder where lo_orderdate between 19930101 and 19931231 " +
+                        "and (lo_orderkey in (1, 2, 3) or (lo_linenumber = 1 and lo_shipmode in ('AIR', 'MAIL')))",
+                "select lo_orderkey from lineorder where lo_orderdate between 19930101 and 19931231 " +
+                        "and ((lo_linenumber = 1 and lo_shipmode in ('AIR', 'MAIL')) or lo_orderkey in (1, 2, 3))");
+        for (String query : queries) {
+            testRewriteOK(mv, query)
+                    .contains("lo_orderkey IN (1, 2, 3)", "lo_linenumber = 1", "lo_shipmode IN ('AIR', 'MAIL')");
+        }
+    }
+
+    @Test
     public void testAggregateToProjection() {
         // If agg push down is open, cannot rewrite.
         String mv = "select lo_orderkey from lineorder group by lo_orderkey";
