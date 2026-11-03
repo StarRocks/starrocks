@@ -1618,4 +1618,50 @@ public class LakePublishBatchTest {
             Config.enable_new_publish_mechanism = oldNewPublishMechanism;
         }
     }
+
+    // Once any request of a batch goes out, every txn of the batch is marked as sent, but a txn's request time is
+    // recorded only when a request carrying it goes out.
+    @Test
+    public void testRequestTimeRecordedOnlyForTxnsInTheRequest() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        List<Partition> partitions = Lists.newArrayList(table.getPartitions());
+        DatabaseTransactionMgr dbTxnMgr =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getDatabaseTransactionMgr(db.getId());
+        List<Long> txnIds = Lists.newArrayList();
+        VisibleStateWaiter waiter1 = commitOnPartition(db, table, partitions.get(2), "request_time_1_", txnIds);
+        VisibleStateWaiter waiter2 = commitOnPartition(db, table, partitions.get(3), "request_time_2_", txnIds);
+        TransactionState first = dbTxnMgr.getTransactionState(txnIds.get(0));
+        TransactionState second = dbTxnMgr.getTransactionState(txnIds.get(1));
+        long heldPartitionId = partitions.get(3).getDefaultPhysicalPartition().getId();
+
+        CountDownLatch release = new CountDownLatch(1);
+        new MockUp<PublishVersionDaemon>() {
+            @Mock
+            public PublishVersionDaemon.BatchPublishResult publishPartitionBatch(Invocation invocation, Database db,
+                    long tableId, PartitionPublishVersionData publishVersionData, TransactionStateBatch stateBatch)
+                    throws InterruptedException {
+                if (publishVersionData.getPartitionId() == heldPartitionId) {
+                    Assertions.assertTrue(release.await(60, TimeUnit.SECONDS));
+                }
+                return invocation.proceed();
+            }
+        };
+        try {
+            PublishVersionDaemon daemon = new PublishVersionDaemon();
+            Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+                daemon.runAfterLeaseValid();
+                return first.getPublishRequestSentTime() > 0;
+            });
+            // The request of the second txn's partition is held before it goes out.
+            Assertions.assertTrue(second.hasSendTask());
+            assertEquals(-1, second.getPublishRequestSentTime());
+
+            release.countDown();
+            awaitPublish(daemon, waiter1, waiter2);
+            Assertions.assertTrue(second.getPublishRequestSentTime() >= first.getPublishRequestSentTime());
+        } finally {
+            release.countDown();
+        }
+    }
 }

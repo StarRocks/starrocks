@@ -347,7 +347,7 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
     private boolean hasSendTask;
     // Start of the latest publish attempt, see updateSendTaskTime().
     private long publishVersionTime = -1;
-    // When the first publish request of this txn went out, see setHasSendTask().
+    // When the first publish request carrying this txn went out, see recordPublishRequestSentTime().
     private long publishRequestSentTime = -1;
     private long publishVersionFinishTime = -1;
     // The time when canTxnFinish() first returns true. -1 means unset.
@@ -748,12 +748,15 @@ public class TransactionState implements Writable, GsonPreProcessable, GsonPostP
         this.publishVersionTasks.put(backendId, task);
     }
 
-    // Marks that a publish request of this txn went out; the first one also records its time. A lake publish
-    // calls it once per partition right before the request, so it leaves publishVersionTime, the start of the
-    // attempt stamped by updateSendTaskTime(), alone.
+    // A lake publish sets it right before a request goes out, once per partition, so it leaves publishVersionTime,
+    // the start of the attempt stamped by updateSendTaskTime(), alone.
     public void setHasSendTask(boolean hasSendTask) {
         this.hasSendTask = hasSendTask;
-        if (hasSendTask && publishRequestSentTime == -1) {
+    }
+
+    // Called when a publish request carrying this txn goes out; only the first call records the time.
+    public void recordPublishRequestSentTime() {
+        if (publishRequestSentTime == -1) {
             publishRequestSentTime = System.currentTimeMillis();
         }
     }

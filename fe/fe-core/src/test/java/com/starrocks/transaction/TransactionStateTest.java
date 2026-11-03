@@ -117,10 +117,12 @@ public class TransactionStateTest {
         transactionState.setHasSendTask(true);
         Assertions.assertTrue(transactionState.hasSendTask());
         assertEquals(-1, transactionState.getPublishVersionTime());
+        assertEquals(-1, transactionState.getPublishRequestSentTime());
+        transactionState.recordPublishRequestSentTime();
         long firstRequestSentTime = transactionState.getPublishRequestSentTime();
         Assertions.assertTrue(firstRequestSentTime > 0);
-        // A later request of the same txn keeps the time of the first one.
-        transactionState.setHasSendTask(true);
+        // A later request carrying the same txn keeps the time of the first one.
+        transactionState.recordPublishRequestSentTime();
         assertEquals(firstRequestSentTime, transactionState.getPublishRequestSentTime());
         transactionState.updateSendTaskTime();
         Assertions.assertTrue(transactionState.getPublishVersionTime() > 0);
@@ -147,6 +149,7 @@ public class TransactionStateTest {
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         original.putIdToTableCommitInfo(20000L, tableCommitInfo);
         original.setHasSendTask(true);
+        original.recordPublishRequestSentTime();
 
         TransactionState copied = new TransactionState(original);
         Assertions.assertTrue(copied.hasSendTask());

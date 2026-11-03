@@ -394,6 +394,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (!tasks.isEmpty()) {
                 transactionState.updateSendTaskTime();
                 transactionState.setHasSendTask(true);
+                transactionState.recordPublishRequestSentTime();
                 transactionIds.add(transactionState.getTransactionId());
             }
         }
@@ -804,8 +805,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         // Marked only once a request goes out, after the version-order check, so that a batch that merely waited
         // for an earlier version is not retried as a sent one. Every txn of the batch is marked: a batch that sent
-        // anything is retried with the same txns, see DatabaseTransactionMgr.getReadyToPublishTxnListBatch().
+        // anything is retried with the same txns, see DatabaseTransactionMgr.getReadyToPublishTxnListBatch(). The
+        // request time is recorded only for the txns this request carries.
         stateBatch.getTransactionStates().forEach(state -> state.setHasSendTask(true));
+        transactionStates.forEach(TransactionState::recordPublishRequestSentTime);
         try {
             if (shadowIndexTxnBatches != null) {
                 for (ShadowIndexTxnBatch txnBatch : shadowIndexTxnBatches.values()) {
@@ -1414,6 +1417,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // Marked only once a request goes out, after the version-order check, so that a txn that merely waited
             // for an earlier version is not retried as a sent one.
             txnState.setHasSendTask(true);
+            txnState.recordPublishRequestSentTime();
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
