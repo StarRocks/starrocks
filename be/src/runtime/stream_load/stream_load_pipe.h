@@ -37,11 +37,8 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
-<<<<<<< HEAD:be/src/runtime/stream_load/stream_load_pipe.h
-=======
 #include <type_traits>
 #include <utility>
->>>>>>> dfff47f ([BugFix][RB-843] Read channel stream load pipes without blocking, with the default buffer (#81872)):be/src/compute_env/load/stream_load_pipe.h
 
 #include "gen_cpp/Types_types.h"
 #include "io/input_stream.h"
