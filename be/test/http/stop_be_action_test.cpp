@@ -68,7 +68,7 @@ TEST_F(StopBeActionTest, disabled_rejects_with_forbidden) {
 
     StopBeAction action(nullptr);
     HttpRequest request(_evhttp_req);
-    request.set_method(HttpMethod::POST);
+    request._method = HttpMethod::POST;
     request.set_handler(&action);
 
     // The disabled path must not change the process quick-exit state, regardless
