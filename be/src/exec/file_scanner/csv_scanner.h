@@ -76,6 +76,7 @@ private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);
 
     Status _init_reader();
+    Status _skip_header_rows();
     Status _parse_csv(Chunk* chunk);
     Status _parse_csv_v2(Chunk* chunk);
 
@@ -93,6 +94,8 @@ private:
     int _num_fields_in_csv = 0;
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;
+    // Header rows of the current range still to skip; a timed-out read leaves the rest to the next call.
+    int64_t _header_rows_to_skip = 0;
     std::vector<ConverterPtr> _converters;
     bool _use_v2;
     CSVReader::Fields fields;
