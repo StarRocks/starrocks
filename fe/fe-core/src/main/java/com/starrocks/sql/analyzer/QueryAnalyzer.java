@@ -960,6 +960,9 @@ public class QueryAnalyzer {
                 } else {
                     r.setNeedRewrittenByPolicy(false);
                     SubqueryRelation subqueryRelation = new SubqueryRelation(policyRewriteQuery);
+                    // Keep the policy wrapper identifiable when deciding whether a view expansion is equivalent
+                    // to its stored definition for view-based MV rewrite.
+                    subqueryRelation.setCreateByPolicyRewritten(true);
 
                     // If an alias exists, rewrite the alias into subquery to ensure
                     // that the original expression can be resolved correctly.

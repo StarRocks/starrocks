@@ -18,20 +18,34 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.thrift.TExplainLevel;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -54,6 +68,10 @@ class HiveViewMvRewriteTest extends MVTestBase {
     private static final String VIEW_DB = "view_db";
     private static final String VIEW_NAME = "customer_union_view";
     private static final String VIEW = MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME + "." + VIEW_DB + "." + VIEW_NAME;
+    private static final String NESTED_VIEW_NAME = "customer_nested_view";
+    private static final String NESTED_VIEW =
+            MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME + "." + VIEW_DB + "." + NESTED_VIEW_NAME;
+    private static final UserIdentity RESTRICTED_USER = new UserIdentity("policy_user", "%");
 
     private static final String VIEW_SQL =
             "SELECT c_custkey, c_name, c_mktsegment FROM hive0.tpch.customer WHERE c_mktsegment = 'BUILDING' " +
@@ -75,7 +93,8 @@ class HiveViewMvRewriteTest extends MVTestBase {
     private static final class UncachedViewHiveMetadata extends MockedHiveMetadata {
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
-            if (!VIEW_DB.equalsIgnoreCase(dbName) || !VIEW_NAME.equalsIgnoreCase(tblName)) {
+            boolean nested = NESTED_VIEW_NAME.equalsIgnoreCase(tblName);
+            if (!VIEW_DB.equalsIgnoreCase(dbName) || (!VIEW_NAME.equalsIgnoreCase(tblName) && !nested)) {
                 return super.getTable(context, dbName, tblName);
             }
             List<FieldSchema> cols = Lists.newArrayList(
@@ -86,7 +105,8 @@ class HiveViewMvRewriteTest extends MVTestBase {
                     Lists.newArrayList(), Maps.newHashMap());
             // the metastore stores db and view names lower-cased
             org.apache.hadoop.hive.metastore.api.Table hmsView = new org.apache.hadoop.hive.metastore.api.Table(
-                    VIEW_NAME, VIEW_DB, null, 0, 0, 0, sd, Lists.newArrayList(), Maps.newHashMap(), null, viewSql,
+                    nested ? NESTED_VIEW_NAME : VIEW_NAME, VIEW_DB, null, 0, 0, 0, sd, Lists.newArrayList(),
+                    Maps.newHashMap(), null, nested ? "SELECT * FROM " + VIEW : viewSql,
                     "VIRTUAL_VIEW");
             return HiveMetastoreApiConverter.toHiveView(hmsView, MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
         }
@@ -98,11 +118,15 @@ class HiveViewMvRewriteTest extends MVTestBase {
     }
 
     private void createMvOnView(String mvName) throws Exception {
+        createMvOnView(mvName, VIEW);
+    }
+
+    private void createMvOnView(String mvName, String view) throws Exception {
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
                 "DISTRIBUTED BY HASH(c_custkey)\n" +
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\"replication_num\" = \"1\")\n" +
-                "AS SELECT * FROM " + VIEW);
+                "AS SELECT * FROM " + view);
         refreshMaterializedView(DB_NAME, mvName);
     }
 
@@ -147,6 +171,90 @@ class HiveViewMvRewriteTest extends MVTestBase {
             }
         } finally {
             dropMv(DB_NAME, "union_view_mv");
+        }
+    }
+
+    private String getPolicyCheckedPlan(String query) {
+        StatementBase statement = SqlParser.parse(query, connectContext.getSessionVariable()).get(0);
+        // ConnectProcessor enables policy checks on user queries before analysis.
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                return null;
+            }
+        }.visit(statement);
+        return StatementPlanner.plan(statement, connectContext).getExplainString(TExplainLevel.NORMAL);
+    }
+
+    private String getRestrictedPlan(String query) {
+        UserIdentity originalUser = connectContext.getCurrentUserIdentity();
+        connectContext.setCurrentUserIdentity(RESTRICTED_USER);
+        Tracers.register(connectContext);
+        Tracers.init(connectContext, "LOGS", "MV");
+        try {
+            String plan = getPolicyCheckedPlan(query);
+            PlanTestBase.assertContains(Tracers.printLogs(), "contains a security policy rewrite");
+            return plan;
+        } finally {
+            Tracers.close();
+            connectContext.setCurrentUserIdentity(originalUser);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+    void rowFilterOnUnderlyingTablePreventsMvRewrite(boolean nested, boolean textMatch) throws Exception {
+        boolean originalTextMatch = connectContext.getSessionVariable().isEnableMaterializedViewTextMatchRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(textMatch);
+        String view = nested ? NESTED_VIEW : VIEW;
+        createMvOnView("union_view_row_policy_mv", view);
+        try {
+            assertNotNull(CachingMvPlanContextBuilder.getInstance()
+                    .getOrLoadPlanContext(getMv(DB_NAME, "union_view_row_policy_mv"), 30_000));
+            String query = "SELECT * FROM " + view;
+            PlanTestBase.assertContains(getPolicyCheckedPlan(query), "union_view_row_policy_mv");
+
+            try (MockedStatic<Authorizer> authorizer = Mockito.mockStatic(Authorizer.class)) {
+                authorizer.when(() -> Authorizer.getRowAccessPolicy(Mockito.argThat(
+                                        ctx -> RESTRICTED_USER.equals(ctx.getCurrentUserIdentity())),
+                                Mockito.argThat(name -> "customer".equalsIgnoreCase(name.getTbl()))))
+                        .thenAnswer(invocation -> SqlParser.parseSqlToExpr("c_custkey < 100", 0));
+                String plan = getRestrictedPlan(query);
+                PlanTestBase.assertNotContains(plan, "union_view_row_policy_mv");
+                PlanTestBase.assertContains(plan, "HdfsScanNode", "c_custkey < 100");
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(originalTextMatch);
+            dropMv(DB_NAME, "union_view_row_policy_mv");
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"false, false", "false, true", "true, false", "true, true"})
+    void columnMaskOnUnderlyingTablePreventsMvRewrite(boolean nested, boolean textMatch) throws Exception {
+        boolean originalTextMatch = connectContext.getSessionVariable().isEnableMaterializedViewTextMatchRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(textMatch);
+        String view = nested ? NESTED_VIEW : VIEW;
+        createMvOnView("union_view_mask_policy_mv", view);
+        try {
+            assertNotNull(CachingMvPlanContextBuilder.getInstance()
+                    .getOrLoadPlanContext(getMv(DB_NAME, "union_view_mask_policy_mv"), 30_000));
+            String query = "SELECT * FROM " + view;
+            PlanTestBase.assertContains(getPolicyCheckedPlan(query), "union_view_mask_policy_mv");
+
+            try (MockedStatic<Authorizer> authorizer = Mockito.mockStatic(Authorizer.class)) {
+                authorizer.when(() -> Authorizer.getColumnMaskingPolicy(Mockito.argThat(
+                                        ctx -> RESTRICTED_USER.equals(ctx.getCurrentUserIdentity())),
+                                Mockito.argThat(name -> "customer".equalsIgnoreCase(name.getTbl())), Mockito.any()))
+                        .thenAnswer(invocation -> Map.of("c_name", SqlParser.parseSqlToExpr("'masked_name'", 0)));
+                String plan = getRestrictedPlan(query);
+                PlanTestBase.assertNotContains(plan, "union_view_mask_policy_mv");
+                PlanTestBase.assertContains(plan, "HdfsScanNode", "masked_name");
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(originalTextMatch);
+            dropMv(DB_NAME, "union_view_mask_policy_mv");
         }
     }
 

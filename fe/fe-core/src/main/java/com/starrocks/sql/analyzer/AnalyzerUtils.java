@@ -163,6 +163,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -970,6 +971,21 @@ public class AnalyzerUtils {
         Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
         return tableRelations;
+    }
+
+    public static boolean hasPolicyRewrite(ParseNode parseNode) {
+        AtomicBoolean rewritten = new AtomicBoolean(false);
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
+                if (node.isCreateByPolicyRewritten()) {
+                    rewritten.set(true);
+                    return null;
+                }
+                return super.visitSubqueryRelation(node, context);
+            }
+        }.visit(parseNode);
+        return rewritten.get();
     }
 
     public static List<TableRelation> collectTableRelations(StatementBase statementBase) {

@@ -167,6 +167,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 import static com.starrocks.sql.ast.CTERelation.CTEMaterializationHint.MATERIALIZED;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class RelationTransformer implements AstVisitorExtendInterface<LogicalPlan, ExpressionMapping> {
@@ -911,6 +912,14 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         boolean isInlineView = isInlineView();
         boolean isEnableViewBasedRewrite = isEnableViewBasedRewrite(node.getView());
+        if ((isEnableViewBasedRewrite || !isInlineView) && AnalyzerUtils.hasPolicyRewrite(node.getQueryStatement())) {
+            // A view scan only represents the stored definition. Collapsing an expansion with row filters or
+            // column masks would hide those policies from MV matching, including policies inside nested views.
+            isInlineView = true;
+            isEnableViewBasedRewrite = false;
+            logMVPrepare(session, "[ViewBasedRewrite] Skip view {} because its expansion contains a security policy rewrite",
+                    node.getName());
+        }
         if (isInlineView) {
             // expand views in logical plan
             OptExprBuilder builder = new OptExprBuilder(

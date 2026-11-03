@@ -33,6 +33,7 @@ import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -131,6 +132,12 @@ public class TextMatchBasedRewriteRule extends Rule {
         }
         if (stmt == null || stmt.getOrigStmt() == null || stmt.getOrigStmt().originStmt == null) {
             logMVRewrite(context, this, "Materialized view text based rewrite is disabled: stmt is null");
+            return null;
+        }
+        if (AnalyzerUtils.hasPolicyRewrite(parseNode)) {
+            // SQL formatting represents a view by name and omits policies inside its expanded body.
+            logMVRewrite(context, this,
+                    "Materialized view text based rewrite is disabled: query contains a security policy rewrite");
             return null;
         }
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
