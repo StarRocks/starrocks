@@ -402,12 +402,15 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
     }
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
-    // collect trash files: replaced partial-update segments and their segment-name-keyed .vi files
+    // collect trash files: replaced partial-update segments, their segment-name-keyed .vi files, and the
+    // tombstone sstables an index that is not cloud-native did not ingest (PrimaryKeyManager::_do_delete)
     for (const auto& orphan_file : orphan_files) {
-        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()) || is_sst(orphan_file.name()))
+                << orphan_file.name();
         auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
         added_orphan->CopyFrom(orphan_file);
-        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // These files are produced by this txn -- the replaced segment/.vi files by its partial-update
+        // rewrite, a tombstone sstable by its load -- and no visible metadata ever referenced them, so
         // their creation version is the metadata version being built. Respect an accurate version if
         // the producer already set one.
         if (!added_orphan->has_version()) {
@@ -1994,12 +1997,15 @@ Status MetaFileBuilder::set_final_rowset() {
     // If rowset doesn't contain segment files, still increment next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
 
-    // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
+    // Collect orphan files: replaced partial-update segments, their segment-name-keyed .vi files, and the
+    // tombstone sstables an index that is not cloud-native did not ingest (PrimaryKeyManager::_do_delete)
     for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
-        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()) || is_sst(orphan_file.name()))
+                << orphan_file.name();
         auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
         added_orphan->CopyFrom(orphan_file);
-        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // These files are produced by this txn -- the replaced segment/.vi files by its partial-update
+        // rewrite, a tombstone sstable by its load -- and no visible metadata ever referenced them, so
         // their creation version is the metadata version being built. Respect an accurate version if
         // the producer already set one.
         if (!added_orphan->has_version()) {
