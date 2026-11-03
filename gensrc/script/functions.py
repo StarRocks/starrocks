@@ -1910,4 +1910,7 @@ vectorized_functions = [
          ],
          'ai': ai_metadata('CHAT', 'FILTER', 'BOOLEAN', inputs=('input', 'condition'))
      }],
+
+    # file functions
+    [210000, 'to_file', True, True, 'FILE', ['ANY_STRUCT'], 'FileFunctions::to_file'],
 ]
