@@ -168,6 +168,19 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BE HTTP サーバーポート。
 - 導入バージョン: -
 
+### enable_http_auth
+
+- デフォルト: false
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 導入時期: v4.2.0
+- 説明: true の場合、ほとんどの外部 BE HTTP エンドポイントで HTTP Basic 認証が必要になります。資格情報は Thrift `checkAuth` RPC で FE Leader に転送されて検証され、ユーザー名/パスワードは FE 側の認証システム（LDAP / security integration を含む）を正としています。次のエンドポイントは常に除外されます：
+  - トークン認証の内部転送（FE/BE 間の tablet clone と load エラーファイル取得に使用）: `/api/_tablet/_download`、`/api/_download_load`。これらは各自の token チェックで保護されており、`enable_http_auth=true` を有効にしても `enable_token_check=false` の影響を補うことはできません。
+  - ハンドラ内でロードラベル + テーブル権限から認証する Stream Load / transaction エンドポイント: `/api/{db}/{table}/_stream_load`、`/api/transaction/{txn_op}`、`/api/transaction/load`。
+
+  特権エンドポイントでは追加でセッション内に**有効化された** SYSTEM レベル RBAC 権限（`OPERATE` / `NODE`）が必要です。付与済みでデフォルトに設定されていない場合は `SET DEFAULT ROLE <roles> TO <user>;` または `activate_all_roles_on_login=true` を利用してください。LDAP / security integration のグループ → ロールマッピングは自動的に有効化されます。
+
 ### be_port
 
 - デフォルト: 9060
@@ -255,7 +268,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Boolean
 - 単位: -
 - 変更可能: No
-- 説明: この項目が `true` に設定されていると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、jemalloc の統計を1秒ごとにポーリングして、jemalloc の "stats.metadata" 値で GlobalEnv の jemalloc メタデータ MemTracker を更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスのメモリ集計に含まれ、jemalloc 内部により使用されるメモリの過小報告を防ぎます。トラッカーは macOS 以外のビルド（#ifndef __APPLE__）でのみコンパイル/起動され、"jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker の状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合、または jemalloc のトラッキングを別途意図的に管理している場合のみ無効にし、それ以外は正確なメモリ集計と割り当て保護を維持するために有効のままにしてください。
+- 説明: この項目が `true` に設定されていると、BE はバックグラウンドスレッド（jemalloc_tracker_daemon）を起動し、jemalloc の統計を1秒ごとにポーリングして、jemalloc の "stats.metadata" 値で GlobalEnv の jemalloc メタデータ MemTracker を更新します。これにより jemalloc のメタデータ消費が StarRocks プロセスのメモリ集計に含まれ、jemalloc 内部により使用されるメモリの過小報告を防ぎます。トラッカーは macOS 以外のビルド（`#ifndef __APPLE__`）でのみコンパイル/起動され、"jemalloc_tracker_daemon" という名前のデーモンスレッドとして動作します。この設定は起動時の振る舞いや MemTracker の状態を維持するスレッドに影響するため、変更には再起動が必要です。jemalloc を使用していない場合、または jemalloc のトラッキングを別途意図的に管理している場合のみ無効にし、それ以外は正確なメモリ集計と割り当て保護を維持するために有効のままにしてください。
 - 導入バージョン: v3.2.12
 
 ### enable_jvm_metrics

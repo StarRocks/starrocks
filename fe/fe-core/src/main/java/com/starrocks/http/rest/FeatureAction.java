@@ -14,6 +14,7 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Version;
 import com.starrocks.feature.ProductFeature;
 import com.starrocks.http.ActionController;
@@ -32,8 +33,16 @@ public class FeatureAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/v2/feature", new FeatureAction(controller));
     }
 
+    // Returns server version + feature flag list, no sensitive data. Historically
+    // anonymous; gated for backward compatibility so it requires Basic auth (AuthN-only,
+    // no privilege check) only when the operator opts in via `enable_http_auth`.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
+    public boolean needAuth() {
+        return Config.enable_http_auth;
+    }
+
+    @Override
+    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
         response.setContentType("application/json");
 
         RestResult result = new RestResult();
