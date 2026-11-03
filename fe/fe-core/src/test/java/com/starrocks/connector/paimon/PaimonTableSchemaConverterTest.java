@@ -15,6 +15,7 @@
 package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -138,6 +139,63 @@ public class PaimonTableSchemaConverterTest {
         Assertions.assertEquals(List.of("dt"), schema.partitionKeys());
         Assertions.assertFalse(schema.fields().get(0).type().isNullable());
         Assertions.assertTrue(schema.fields().get(1).type().isNullable());
+    }
+
+    @Test
+    public void testPrimaryKeyAnalysisAndConversionPreserveParsedColumns() {
+        for (String keys : List.of("primary key(Id, dt)", "properties ('primary-key'=' ID, dt ')")) {
+            CreateTableStmt stmt = parse("create table p.db.t (payload varchar(20), Id bigint, " +
+                    "dt date not null, required int not null) engine=paimon " + keys);
+            List<ColumnDef> definitions = List.copyOf(stmt.getColumnDefs());
+            List<Boolean> nullable = definitions.stream().map(ColumnDef::isAllowNull).toList();
+            List<Boolean> keyFlags = definitions.stream().map(ColumnDef::isKey).toList();
+
+            PaimonTableSchemaConverter.analyze(stmt);
+            Assertions.assertEquals(nullable, definitions.stream().map(ColumnDef::isAllowNull).toList());
+            Assertions.assertEquals(keyFlags, definitions.stream().map(ColumnDef::isKey).toList());
+            Schema first = PaimonTableSchemaConverter.toSchema(stmt);
+            Schema second = PaimonTableSchemaConverter.toSchema(stmt);
+
+            Assertions.assertEquals(List.of("Id", "dt"), first.primaryKeys());
+            Assertions.assertTrue(first.fields().get(0).type().isNullable());
+            Assertions.assertFalse(first.fields().get(1).type().isNullable());
+            Assertions.assertFalse(first.fields().get(2).type().isNullable());
+            Assertions.assertFalse(first.fields().get(3).type().isNullable());
+            Assertions.assertEquals(first.rowType(), second.rowType());
+            Assertions.assertEquals(nullable, definitions.stream().map(ColumnDef::isAllowNull).toList());
+            Assertions.assertEquals(keyFlags, definitions.stream().map(ColumnDef::isKey).toList());
+            for (int i = 0; i < definitions.size(); i++) {
+                Assertions.assertSame(definitions.get(i), stmt.getColumnDefs().get(i));
+            }
+        }
+    }
+
+    @Test
+    public void testConversionPreservesSuppliedColumns() {
+        CreateTableStmt stmt = parse("create table p.db.t (id bigint, payload int) engine=paimon primary key(id)");
+        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnBuilder::buildColumn).toList();
+        stmt.setColumns(columns);
+
+        Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+
+        Assertions.assertFalse(schema.fields().get(0).type().isNullable());
+        Assertions.assertTrue(schema.fields().get(1).type().isNullable());
+        Assertions.assertSame(columns, stmt.getColumns());
+        Assertions.assertTrue(columns.get(0).isAllowNull());
+        Assertions.assertFalse(columns.get(0).isKey());
+    }
+
+    @Test
+    public void testRejectedPrimaryKeyPreservesParsedColumns() {
+        CreateTableStmt stmt = parse("create table p.db.t (id bigint, dt date null) " +
+                "engine=paimon primary key(id, dt)");
+        List<Boolean> nullable = stmt.getColumnDefs().stream().map(ColumnDef::isAllowNull).toList();
+        List<Boolean> keyFlags = stmt.getColumnDefs().stream().map(ColumnDef::isKey).toList();
+
+        Assertions.assertThrows(SemanticException.class, () -> PaimonTableSchemaConverter.analyze(stmt));
+
+        Assertions.assertEquals(nullable, stmt.getColumnDefs().stream().map(ColumnDef::isAllowNull).toList());
+        Assertions.assertEquals(keyFlags, stmt.getColumnDefs().stream().map(ColumnDef::isKey).toList());
     }
 
     @Test

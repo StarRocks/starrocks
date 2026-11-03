@@ -101,6 +101,10 @@ public class PaimonCreateTableAnalyzerTest {
         Assertions.assertTrue(stmt.getColumns().get(0).isAllowNull());
         Assertions.assertTrue(stmt.getColumns().get(1).isKey());
         Assertions.assertFalse(stmt.getColumns().get(1).isAllowNull());
+        Assertions.assertFalse(stmt.getColumnDefs().get(1).isKey());
+        Assertions.assertTrue(stmt.getColumnDefs().get(1).isAllowNull());
+        Assertions.assertFalse(stmt.getColumnDefs().get(2).isKey());
+        Assertions.assertTrue(stmt.getColumnDefs().get(2).isAllowNull());
         Assertions.assertNull(stmt.getColumns().get(0).getAggregationType());
         Assertions.assertEquals(3, stmt.getColumnDefs().size());
         Assertions.assertNull(stmt.getDistributionDesc());
@@ -116,7 +120,18 @@ public class PaimonCreateTableAnalyzerTest {
         Assertions.assertFalse(stmt.getColumns().get(0).isKey());
         Assertions.assertTrue(stmt.getColumns().get(1).isKey());
         Assertions.assertFalse(stmt.getColumns().get(1).isAllowNull());
+        Assertions.assertFalse(stmt.getColumnDefs().get(1).isKey());
+        Assertions.assertTrue(stmt.getColumnDefs().get(1).isAllowNull());
         Assertions.assertEquals(List.of("Id"), PaimonTableSchemaConverter.toSchema(stmt).primaryKeys());
+    }
+
+    @Test
+    public void testPrimaryKeyDefaultNullRemainsRejected() {
+        for (String keys : List.of("primary key(id)", "properties ('primary-key'='id')")) {
+            SemanticException error = Assertions.assertThrows(SemanticException.class,
+                    () -> analyze("create table paimon_ddl.db.t (id bigint default null) " + keys));
+            Assertions.assertTrue(error.getMessage().contains("Invalid default value"), error.getMessage());
+        }
     }
 
     @Test

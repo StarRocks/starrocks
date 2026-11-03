@@ -74,8 +74,7 @@ public final class PaimonTableSchemaConverter {
         if (stmt.getExtProperties() != null && !stmt.getExtProperties().isEmpty()) {
             throw new SemanticException("Paimon table options must be specified in PROPERTIES");
         }
-        Map<String, String> options = tableOptions(stmt.getProperties());
-        List<String> primaryKeys = primaryKeys(stmt, options);
+        List<String> primaryKeys = primaryKeys(stmt);
         for (ColumnDef column : stmt.getColumnDefs()) {
             if (column.isAutoIncrement()) {
                 throw new SemanticException("Paimon does not support AUTO_INCREMENT columns: %s", column.getName());
@@ -91,12 +90,13 @@ public final class PaimonTableSchemaConverter {
                 throw new SemanticException("Paimon only supports DEFAULT NULL: %s", column.getName());
             }
             if (primaryKeys.contains(column.getName())) {
-                column.setPrimaryKeyNonNullable();
-                if (column.isAllowNull()) {
+                if (column.isAllowNull() && !column.isAllowNullImplicit()) {
                     throw new SemanticException("Paimon primary key column[%s] cannot be nullable", column.getName());
                 }
+                if (defaultValue != null && defaultValue.isSet) {
+                    throw new SemanticException("Invalid default value for '%s'", column.getName());
+                }
             }
-            column.setIsKey(primaryKeys.contains(column.getName()));
         }
     }
 
@@ -186,6 +186,10 @@ public final class PaimonTableSchemaConverter {
             default:
                 throw new SemanticException("Unsupported Paimon column type: %s", type);
         }
+    }
+
+    public static List<String> primaryKeys(CreateTableStmt stmt) {
+        return primaryKeys(stmt, tableOptions(stmt.getProperties()));
     }
 
     private static List<String> primaryKeys(CreateTableStmt stmt, Map<String, String> options) {

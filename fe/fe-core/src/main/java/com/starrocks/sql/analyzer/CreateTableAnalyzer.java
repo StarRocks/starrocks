@@ -254,6 +254,8 @@ public class CreateTableAnalyzer {
         String engineName = statement.getEngineName();
         KeysDesc keysDesc = statement.getKeysDesc();
         List<ColumnDef> columnDefs = statement.getColumnDefs();
+        List<String> paimonPrimaryKeys = engineName.equalsIgnoreCase("paimon")
+                ? PaimonTableSchemaConverter.primaryKeys(statement) : List.of();
 
         if (columnDefs.stream().filter(ColumnDef::isAutoIncrement).count() > 1) {
             throw new SemanticException("More than one AUTO_INCREMENT column defined in CREATE TABLE Statement",
@@ -310,6 +312,13 @@ public class CreateTableAnalyzer {
                 col = ColumnBuilder.buildGeneratedColumn(null, columnDef);
             } else {
                 col = ColumnBuilder.buildColumn(columnDef);
+            }
+            if (engineName.equalsIgnoreCase("paimon")) {
+                boolean isPrimaryKey = paimonPrimaryKeys.contains(col.getName());
+                col.setIsKey(isPrimaryKey);
+                if (isPrimaryKey) {
+                    col.setIsAllowNull(false);
+                }
             }
             if (keysDesc != null && (keysDesc.getKeysType() == KeysType.UNIQUE_KEYS
                     || keysDesc.getKeysType() == KeysType.PRIMARY_KEYS ||
