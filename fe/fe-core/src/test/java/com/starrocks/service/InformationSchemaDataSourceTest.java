@@ -356,9 +356,9 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
     }
 
     public static ZoneOffset offset(ZoneId id) {
-        return ZoneOffset.ofTotalSeconds((int) 
+        return ZoneOffset.ofTotalSeconds((int)
             TimeUnit.MILLISECONDS.toSeconds(
-                TimeZone.getTimeZone(id).getRawOffset()        // Returns offset in milliseconds 
+                TimeZone.getTimeZone(id).getRawOffset()        // Returns offset in milliseconds
             )
         );
     }
@@ -1063,6 +1063,34 @@ public class InformationSchemaDataSourceTest extends StarRocksTestBase {
 
             Assertions.assertNotNull(tableInfo);
             Assertions.assertEquals("external jdbc table comment", tableInfo.getTable_comment());
+        } finally {
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = originFlag;
+        }
+    }
+
+    @Test
+    public void testExternalCatalogTablesInfoListsViewsWhenFullMetadataDisabled() throws Exception {
+        boolean originFlag = Config.enable_external_catalog_information_schema_tables_access_full_metadata;
+        try {
+            Config.enable_external_catalog_information_schema_tables_access_full_metadata = false;
+
+            ConnectorPlanTestBase.mockCatalog(connectContext, MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TGetTablesInfoRequest request = new TGetTablesInfoRequest();
+            TAuthInfo authInfo = new TAuthInfo();
+            TUserIdentity userIdentity = new TUserIdentity();
+            userIdentity.setUsername("root");
+            userIdentity.setHost("%");
+            userIdentity.setIs_domain(false);
+            authInfo.setCurrent_user_ident(userIdentity);
+            authInfo.setCatalog_name(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            authInfo.setPattern(MockedJDBCMetadata.MOCKED_PARTITIONED_DB_NAME);
+            request.setAuth_info(authInfo);
+
+            TGetTablesInfoResponse response = impl.getTablesInfo(request);
+            Assertions.assertNotNull(response.getTables_infos());
+            Assertions.assertFalse(response.getTables_infos().isEmpty());
         } finally {
             Config.enable_external_catalog_information_schema_tables_access_full_metadata = originFlag;
         }

@@ -118,6 +118,55 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testListViewsForwardsToDelegate(@Mocked IcebergCatalog icebergCatalog) {
+        new Expectations() {
+            {
+                icebergCatalog.listViews(connectContext, "db");
+                result = Lists.newArrayList("v1");
+                times = 1;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        Assertions.assertEquals(Lists.newArrayList("v1"), cachingIcebergCatalog.listViews(connectContext, "db"));
+    }
+
+    @Test
+    public void testDefaultListViewsReturnsEmpty() {
+        IcebergCatalog catalog = new IcebergCatalog() {
+            @Override
+            public IcebergCatalogType getIcebergCatalogType() {
+                return IcebergCatalogType.HIVE_CATALOG;
+            }
+
+            @Override
+            public List<String> listAllDatabases(ConnectContext context) {
+                return List.of();
+            }
+
+            @Override
+            public Database getDB(ConnectContext context, String dbName) {
+                return null;
+            }
+
+            @Override
+            public List<String> listTables(ConnectContext context, String dbName) {
+                return List.of();
+            }
+
+            @Override
+            public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName) {
+            }
+
+            @Override
+            public Table getTable(ConnectContext context, String dbName, String tableName) {
+                throw new UnsupportedOperationException();
+            }
+        };
+        Assertions.assertTrue(catalog.listViews(connectContext, "db").isEmpty());
+    }
+
+    @Test
     public void testAsyncListPartitionNamesAfterExecutorShutdown(@Mocked IcebergCatalog icebergCatalog) {
         PartitionSpec spec = Mockito.mock(PartitionSpec.class);
         Mockito.when(spec.isUnpartitioned()).thenReturn(false);

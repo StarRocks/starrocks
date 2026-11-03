@@ -15,6 +15,8 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.BasicTable;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -53,6 +55,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
@@ -128,6 +131,53 @@ public class MetadataMgrTest {
         Assertions.assertTrue(metadataMgr.listViewNames(ctx, "not_exist_catalog", "db").isEmpty());
         // Hive connector has no view listing override -> ConnectorMetadata default empty list.
         Assertions.assertTrue(metadataMgr.listViewNames(ctx, "hive_catalog", "db2").isEmpty());
+
+        ConnectorMetadata throwing = new ConnectorMetadata() {
+            @Override
+            public List<String> listViewNames(ConnectContext context, String dbName) {
+                throw new RuntimeException("list views failed");
+            }
+        };
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getOptionalMetadata("boom_catalog");
+                result = Optional.of(throwing);
+                minTimes = 0;
+            }
+        };
+        assertThrows(RuntimeException.class, () -> metadataMgr.listViewNames(ctx, "boom_catalog", "db"));
+    }
+
+    @Test
+    public void testGetBasicTable() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+        ConnectorMetadata viewCapable = new ConnectorMetadata() {
+            @Override
+            public TableType getTableType() {
+                return TableType.ICEBERG;
+            }
+
+            @Override
+            public TableType getViewType() {
+                return TableType.ICEBERG_VIEW;
+            }
+        };
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getOptionalMetadata("view_typing_catalog");
+                result = Optional.of(viewCapable);
+                minTimes = 0;
+            }
+        };
+
+        BasicTable asView = metadataMgr.getBasicTable(ctx, "view_typing_catalog", "db", "v1", false, Set.of("v1"));
+        Assertions.assertNotNull(asView);
+        Assertions.assertEquals(TableType.ICEBERG_VIEW, asView.getType());
+
+        BasicTable asTable = metadataMgr.getBasicTable(ctx, "view_typing_catalog", "db", "t1", false, Set.of("v1"));
+        Assertions.assertNotNull(asTable);
+        Assertions.assertEquals(TableType.ICEBERG, asTable.getType());
     }
 
     @Test
