@@ -20,6 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddMVColumnClause;
 import com.starrocks.sql.ast.DropMVColumnClause;
@@ -45,7 +46,11 @@ public class AlterMVClauseAnalyzerVisitor extends AlterTableClauseAnalyzer {
     }
 
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
-        //modify properties check in AlterMVJobExecutor
+        // file_bundling rewrites tablet metadata the same way for a table and a materialized view, so it shares
+        // the ALTER TABLE checks; other properties are checked in AlterMVJobExecutor
+        if (clause.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_FILE_BUNDLING)) {
+            return super.visitModifyTablePropertiesClause(clause, context);
+        }
         return null;
     }
 
