@@ -9,6 +9,7 @@
 #include "base/coding.h"
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
+#include "base/phmap/btree.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/lake/tablet_manager.h"
@@ -398,5 +399,8 @@ template Status Table::MultiGet<std::set<size_t>::iterator>(const ReadOptions& o
                                                             std::set<size_t>::iterator begin,
                                                             std::set<size_t>::iterator end,
                                                             std::vector<std::string>* values);
+template Status Table::MultiGet<phmap::btree_set<size_t>::const_iterator>(
+        const ReadOptions& options, const Slice* keys, phmap::btree_set<size_t>::const_iterator begin,
+        phmap::btree_set<size_t>::const_iterator end, std::vector<std::string>* values);
 
 } // namespace starrocks::sstable

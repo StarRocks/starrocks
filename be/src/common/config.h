@@ -550,6 +550,10 @@ CONF_mBool(enable_pk_size_tiered_compaction_strategy, "true");
 // The minimum threshold of data size for enabling pk index eager build.
 // Default is 100MB.
 CONF_mInt64(pk_index_eager_build_threshold_bytes, "104857600");
+// A delete file holding at least this many rows also gets its tombstone sstable built at import time, in addition
+// to the pk_index_eager_build_threshold_bytes trigger, so publish ingests the sstable instead of writing every
+// deleted key into the primary key index memtable. Not positive disables the row trigger.
+CONF_mInt64(pk_index_del_sst_min_rows, "1000000");
 // Compaction threadpool max thread num for cloud native pk index compact in shared-data mode.
 CONF_mInt32(pk_index_parallel_compaction_threadpool_max_threads, "0");
 // The queue size for pk index parallel compaction threadpool in shared-data mode.

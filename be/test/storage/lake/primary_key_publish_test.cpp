@@ -1101,6 +1101,90 @@ TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_persisted) {
     EXPECT_EQ(written_crc32c, persisted_crc32c);
 }
 
+// A DELETE statement writes only the key columns, so its del files stay far below
+// pk_index_eager_build_threshold_bytes however many rows they hold. pk_index_del_sst_min_rows must then build the
+// tombstone sstable on its own, for exactly the del files holding at least that many rows; with the trigger off,
+// or for a smaller del file, the delete keeps the memtable erase path. A cloud-native index ingests the sstable
+// through bulk_erase; any other index applies the delete through the memtable and hands the sstable to vacuum
+// (this fixture runs only cloud-native indexes; MetaFileTest.test_apply_opwrite_records_tombstone_sstable_orphan
+// covers the vacuum hand-off). Every path has to remove exactly the deleted keys.
+TEST_P(LakePrimaryKeyPublishTest, test_del_sst_min_rows_builds_tombstone_sstable) {
+    ConfigResetGuard<int64_t> g_eager_threshold(&config::pk_index_eager_build_threshold_bytes, 1024L * 1024 * 1024);
+    const bool cloud_native_index = GetParam().enable_persistent_index &&
+                                    GetParam().persistent_index_type == PersistentIndexTypePB::CLOUD_NATIVE;
+    const int n = kChunkSize;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<uint32_t> indexes(n);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(n); i++) {
+        indexes[i] = i;
+    }
+    auto write_one_txn = [&](const ChunkPtr& chunk) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(*chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        return txn_id;
+    };
+
+    int64_t version = 1;
+    // 1 lets every non-empty del file qualify, however the writer splits the deletes; n and n + 1 sit on either side
+    // of a del file that holds all n deletes; 0 turns the trigger off.
+    for (const int64_t min_rows : {int64_t{1}, int64_t{n}, int64_t{n + 1}, int64_t{0}}) {
+        ConfigResetGuard<int64_t> g_min_rows(&config::pk_index_del_sst_min_rows, min_rows);
+        ASSERT_OK(
+                publish_single_version(tablet_id, version + 1, write_one_txn(make_op_chunk(n, 0, true, _slot_cid_map)))
+                        .status());
+        version++;
+        ASSERT_EQ(n, read_rows(tablet_id, version));
+
+        auto delete_txn = write_one_txn(make_op_chunk(n, 0, /*upsert=*/false, _slot_cid_map));
+        ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, delete_txn));
+        const auto& op_write = txn_log->op_write();
+        ASSERT_GE(op_write.dels_meta_size(), 1);
+        ASSERT_EQ(op_write.dels_meta_size(), op_write.del_ssts_size());
+        ASSERT_EQ(op_write.dels_meta_size(), op_write.del_num_rows_size());
+        for (int i = 0; i < op_write.del_ssts_size(); i++) {
+            // The byte threshold is out of reach, so the row trigger alone decides.
+            const bool expect_sst = min_rows > 0 && op_write.del_num_rows(i) >= min_rows;
+            EXPECT_EQ(expect_sst, !op_write.del_ssts(i).name().empty())
+                    << "min_rows=" << min_rows << " i=" << i << " rows=" << op_write.del_num_rows(i);
+        }
+
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, delete_txn).status());
+        version++;
+        ASSERT_EQ(0, read_rows(tablet_id, version)) << "min_rows=" << min_rows;
+
+        // Every tombstone sstable joined the index (cloud-native) or went to vacuum (any other index); none is left
+        // unreferenced, and none takes the other route.
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        std::set<std::string> ingested;
+        for (const auto& sstable : metadata->sstable_meta().sstables()) {
+            ingested.insert(sstable.filename());
+        }
+        std::set<std::string> orphaned;
+        for (const auto& file : metadata->orphan_files()) {
+            orphaned.insert(file.name());
+        }
+        for (const auto& del_sst : op_write.del_ssts()) {
+            if (!del_sst.name().empty()) {
+                EXPECT_EQ(cloud_native_index, ingested.count(del_sst.name()) > 0) << del_sst.name();
+                EXPECT_EQ(!cloud_native_index, orphaned.count(del_sst.name()) > 0) << del_sst.name();
+            }
+        }
+    }
+}
+
 // A corrupted del file must fail publish rather than erase the wrong primary keys. (The skip rules --
 // absent checksum, verification turned off -- are covered by MetaFileTest.test_verify_del_file_crc32c.)
 TEST_P(LakePrimaryKeyPublishTest, test_del_file_crc32c_detects_corruption) {
