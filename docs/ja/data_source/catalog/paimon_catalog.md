@@ -24,7 +24,7 @@ Paimon クラスターで SQL ワークロードを成功させるには、StarR
 
 ## 使用上の注意
 
-Paimon catalog はデータのクエリにのみ使用できます。Paimon catalog を使用して、Paimon クラスターにデータを削除、削除、または挿入することはできません。
+Paimon catalog では、データのクエリと Paimon データベースおよびテーブルの作成・削除ができます。INSERT、UPDATE、DELETE によるデータの書き込み、および CREATE TABLE LIKE と CREATE TABLE AS SELECT はサポートされていません。
 
 ## Paimon to StarRocks data types
 
@@ -699,6 +699,45 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 ```SQL
 DROP Catalog paimon_catalog_fs;
 ```
+
+## Paimon データベースとテーブルの作成・削除
+
+次の例では、既存の Paimon catalog に空の append-only テーブルを作成します。
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100),
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+作成先が Paimon catalog の場合、`ENGINE = paimon` は省略できます。テーブルは catalog で設定した warehouse とストレージ認証情報を使用します。データベースプロパティ、および catalog、保存場所、認証情報、スキーマを上書きするテーブルプロパティは使用できません。
+
+テーブル定義には次のルールが適用されます。
+
+- 主キーテーブルは `PRIMARY KEY (column, ...)` または `primary-key` テーブルプロパティで定義します。主キー列を先頭に配置する必要はありませんが、明示的に NULL 許容にはできません。両方の形式を指定する場合は、列名と順序を一致させてください。
+- 通常のパーティション列は `PARTITION BY (column, ...)` で指定します。パーティション式と明示的なパーティション定義はサポートされていません。
+- Paimon テーブルオプションは `PROPERTIES` で指定します。未知のオプションや無効な値は拒否されます。DISTRIBUTED BY、ORDER BY、ROLLUP、生成列、集約列、AUTO_INCREMENT はサポートされていません。
+- 列のデフォルト値は `DEFAULT NULL` のみサポートされます。
+- 対応する列型は BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度 38 以下の DECIMAL、ARRAY、MAP、STRUCT、VARIANT です。DATETIME は Paimon TIMESTAMP(6) に変換されます。VARIANT の既存の読み取り制限は引き続き適用されます。
+
+データベースを削除する前に、テーブルを削除してください。
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+これらのステートメントは Paimon のネイティブオブジェクトを操作します。空でないデータベースは削除できません。`FORCE` を指定しても、カスケード削除は行われません。
 
 ## Paimon テーブルのスキーマを表示
 

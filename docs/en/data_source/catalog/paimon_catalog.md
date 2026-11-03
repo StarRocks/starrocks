@@ -24,7 +24,7 @@ To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluste
 
 ## Usage notes
 
-You can only use Paimon catalogs to query data. You cannot use Paimon catalogs to drop, delete, or insert data into your Paimon cluster.
+You can use Paimon catalogs to query data and create or drop Paimon databases and tables. Writing data with INSERT, UPDATE, or DELETE, and creating tables with CREATE TABLE LIKE or CREATE TABLE AS SELECT are not supported.
 
 ## Paimon to StarRocks data types
 
@@ -699,6 +699,45 @@ The following example drops a Paimon catalog named `paimon_catalog_fs`:
 ```SQL
 DROP Catalog paimon_catalog_fs;
 ```
+
+## Create and drop Paimon databases and tables
+
+The following example creates an empty append-only table in an existing Paimon catalog:
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100),
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+When the target is a Paimon catalog, you can omit `ENGINE = paimon`. The table uses the catalog's warehouse and storage credentials. Database properties and table properties that override the catalog, storage location, credentials, or schema are rejected.
+
+The following rules apply to table definitions:
+
+- Use `PRIMARY KEY (column, ...)` or the `primary-key` table property to create a primary-key table. Primary key columns need not be the first columns, and they cannot be explicitly nullable. If both forms are specified, they must identify the same columns in the same order.
+- Use `PARTITION BY (column, ...)` for ordinary partition columns. Partition expressions and explicit partition definitions are not supported.
+- Specify Paimon table options in `PROPERTIES`. Unknown options and invalid option values are rejected. DISTRIBUTED BY, ORDER BY, ROLLUP, generated columns, aggregate columns, and AUTO_INCREMENT are not supported.
+- Only `DEFAULT NULL` is supported. Non-NULL column defaults are not supported.
+- Supported column types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DATE, DATETIME, CHAR, VARCHAR, VARBINARY, DECIMAL with precision up to 38, ARRAY, MAP, STRUCT, and VARIANT. DATETIME maps to Paimon TIMESTAMP(6). The existing read restrictions for VARIANT still apply.
+
+Drop the tables before dropping their database:
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+These statements operate on the native Paimon objects. A database must be empty before it can be dropped; `FORCE` does not enable cascading deletion.
 
 ## View the schema of a Paimon table
 

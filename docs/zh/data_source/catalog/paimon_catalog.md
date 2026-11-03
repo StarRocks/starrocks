@@ -24,7 +24,7 @@ Paimon catalog 是一种 external catalog，可以让您在不进行数据导入
 
 ## 使用注意事项
 
-Paimon catalog 仅支持查询数据，不支持通过 Paimon catalog 在 Paimon 集群中执行 DROP、DELETE 或 INSERT 操作。
+Paimon catalog 支持查询数据，以及创建和删除 Paimon 数据库与表。不支持通过 INSERT、UPDATE、DELETE 写入数据，也不支持 CREATE TABLE LIKE 和 CREATE TABLE AS SELECT。
 
 ## Paimon to StarRocks data types
 
@@ -699,6 +699,45 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 ```SQL
 DROP Catalog paimon_catalog_fs;
 ```
+
+## 创建和删除 Paimon 数据库与表
+
+以下示例在已有的 Paimon catalog 中创建一个空的 append-only 表：
+
+```SQL
+CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
+    id BIGINT NOT NULL,
+    payload VARCHAR(100),
+    dt DATE
+)
+ENGINE = paimon
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "-1",
+    "file.format" = "parquet"
+);
+```
+
+目标为 Paimon catalog 时，可以省略 `ENGINE = paimon`。表使用 catalog 配置的 warehouse 和存储凭证。不支持数据库属性，也不支持通过表属性覆盖 catalog、存储位置、凭证或 schema。
+
+表定义遵循以下规则：
+
+- 使用 `PRIMARY KEY (column, ...)` 或 `primary-key` 表属性创建主键表。主键列不必位于表的开头，不能显式声明为可空。同时指定两种形式时，列名及顺序必须一致。
+- 使用 `PARTITION BY (column, ...)` 指定普通分区列。不支持分区表达式和显式分区定义。
+- 通过 `PROPERTIES` 指定 Paimon 表选项。不支持的选项和无效的选项值会被拒绝。不支持 DISTRIBUTED BY、ORDER BY、ROLLUP、生成列、聚合列和 AUTO_INCREMENT。
+- 仅支持 `DEFAULT NULL`，不支持非 NULL 的列默认值。
+- 支持的列类型包括 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度不超过 38 的 DECIMAL，以及 ARRAY、MAP、STRUCT 和 VARIANT。DATETIME 映射为 Paimon TIMESTAMP(6)。VARIANT 仍受现有读取限制约束。
+
+先删除表，再删除数据库：
+
+```SQL
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+```
+
+这些语句操作的是 Paimon 原生对象。数据库必须为空才能删除；`FORCE` 不会启用级联删除。
 
 ## 查看 Paimon 表的 schema
 
