@@ -344,6 +344,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to support colocating the synchronous materialized view index with the base table when creating a synchronous materialized view. If this item is set to `true`, tablet sink will speed up the write performance of synchronous materialized views.
 - Introduced in: v3.2.0
 
+### `enable_connector_location_worker_restriction`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to restrict worker scheduling for queries that scan an external catalog with the catalog property `labels.location` in shared-nothing mode. When enabled, allowed backends are the label-matched backends (L) union native OlapScan replica backends (N), and connector scans prefer L. When disabled, external catalog reads use unrestricted worker scheduling even if `labels.location` is set on the catalog. Shared-data mode is unaffected.
+- Introduced in: -
+
 ### `enable_decimal_v3`
 
 - Default: true

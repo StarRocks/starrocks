@@ -3288,6 +3288,15 @@ public class Config extends ConfigBase {
     public static double connector_table_analyze_min_column_coverage_ratio = 0.5;
 
     /**
+     * When true (default), queries that scan an external catalog with {@code labels.location}
+     * are scheduled only on label-matched backends (L) union native OlapScan replica backends (N)
+     * in shared-nothing mode. Connector scans prefer L. Set false to disable and restore
+     * unrestricted worker scheduling for external catalog reads.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_connector_location_worker_restriction = true;
+
+    /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
      * 1. N hosts with N Backends and N Frontends deployed.

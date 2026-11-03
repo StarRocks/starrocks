@@ -129,3 +129,33 @@ ALTER TABLE example_mv1
 ```
 
 :::
+
+### 使用标签限制外部 Catalog 查询的调度范围
+
+在存算一体集群中，可以为外部 Catalog（如 Hive 或 Iceberg）设置 Catalog 属性 `"labels.location"`，使扫描该 Catalog 的查询优先调度到标签匹配的 BE 上。
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "thrift://127.0.0.1:9083",
+    "labels.location" = "rack:rack1"
+);
+```
+
+当查询扫描此类 Catalog，且 FE 配置 [`enable_connector_location_worker_restriction`](../../configuration/FE_parameters/user_query_loading.md#enable_connector_location_worker_restriction) 已开启（默认：`true`）时：
+
+- **L**：标签与外部 Catalog 的 `labels.location` 匹配且存活的 BE。
+- **N**：同一查询中原生（本地）表扫描所涉及副本所在的 BE。
+- 该查询可用的 Worker 为 **L ∪ N**。外部表扫描优先使用 **L**。
+- 若没有存活 BE 匹配 Catalog 标签（**L** 为空），则回退为不受限的 Worker 调度。
+- 存算分离模式不受影响。可将 `enable_connector_location_worker_restriction` 设为 `false`，在不删除 Catalog 属性的情况下关闭该行为。
+
+:::note
+
+- 若同一查询将外部 Catalog 表与副本位于其他标签上的原生表进行关联，则 **L** 与 **N** 中的 Worker 都可能参与执行；外部表 Scan 仍优先使用 **L**。
+- 同一查询中多个外部 Catalog 设置了不同的 `labels.location` 时，其匹配到的 BE 会取并集作为 **L**。
+
+:::

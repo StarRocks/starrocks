@@ -126,3 +126,33 @@ ALTER TABLE example_mv1
 ```
 
 :::
+
+### ラベルを使用して外部 Catalog クエリのスケジューリングを固定する
+
+共有なしクラスタでは、外部 Catalog（Hive や Iceberg など）に Catalog プロパティ `"labels.location"` を設定し、その Catalog をスキャンするクエリがラベルに一致するバックエンドを優先するようにできます。
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_catalog
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "thrift://127.0.0.1:9083",
+    "labels.location" = "rack:rack1"
+);
+```
+
+このような Catalog をスキャンするクエリで、FE 設定 [`enable_connector_location_worker_restriction`](../../configuration/FE_parameters/user_query_loading.md#enable_connector_location_worker_restriction) が有効（デフォルト：`true`）の場合：
+
+- **L**: 外部 Catalog の `labels.location` に一致し、かつ稼働中のバックエンド。
+- **N**: 同一クエリ内のネイティブ（ローカル）テーブルのスキャンで使用されるレプリカを保持するバックエンド。
+- クエリで許可される Worker は **L ∪ N** です。コネクタスキャンは **L** を優先します。
+- Catalog ラベルに一致する稼働中のバックエンドがない場合（**L** が空）、制限なしの Worker スケジューリングにフォールバックします。
+- 共有データモードには影響しません。Catalog プロパティを削除せずにこの動作を無効にするには、`enable_connector_location_worker_restriction` を `false` に設定します。
+
+:::note
+
+- 同一クエリで、外部 Catalog テーブルと他のラベル上にレプリカがあるネイティブテーブルを結合する場合、**L** と **N** の両方の Worker が参加する可能性があります。コネクタの分割は引き続き **L** を優先します。
+- 同一クエリ内で異なる `labels.location` を持つ複数の外部 Catalog がある場合、一致したバックエンドの和集合が **L** になります。
+
+:::

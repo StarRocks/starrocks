@@ -291,6 +291,18 @@ public class HDFSBackendSelector implements BackendSelector {
         return size;
     }
 
+    /**
+     * Workers used for connector scan-range assignment. Prefers label-matched backends when
+     * {@link WorkerProvider#getPreferredConnectorWorkers()} is non-empty (Iceberg/catalog location pinning).
+     */
+    private Collection<ComputeNode> connectorWorkers() {
+        Collection<ComputeNode> preferred = workerProvider.getPreferredConnectorWorkers();
+        if (preferred != null && !preferred.isEmpty()) {
+            return preferred;
+        }
+        return workerProvider.getAllWorkers();
+    }
+
     @Override
     public void computeScanRangeAssignment() throws StarRocksException {
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "computeScanRangeAssignment")) {
@@ -301,7 +313,7 @@ public class HDFSBackendSelector implements BackendSelector {
                 end.setScan_range(new TScanRange());
                 end.setEmpty(true);
                 end.setHas_more(hasMore);
-                for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+                for (ComputeNode computeNode : connectorWorkers()) {
                     // Eager Lance scans need terminal markers only where this scan has data.
                     if (scanNode instanceof LanceScanNode &&
                             !assignment.getOrDefault(computeNode.getId(), Collections.emptyMap())
@@ -318,7 +330,7 @@ public class HDFSBackendSelector implements BackendSelector {
             StarRocksException {
         // be host -> bes
         Multimap<String, ComputeNode> hostToBackends = HashMultimap.create();
-        for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+        for (ComputeNode computeNode : connectorWorkers()) {
             hostToBackends.put(computeNode.getHost(), computeNode);
         }
 
@@ -350,9 +362,10 @@ public class HDFSBackendSelector implements BackendSelector {
             return;
         }
 
+        Collection<ComputeNode> workers = connectorWorkers();
         long totalSize = computeTotalSize();
-        long avgNodeScanRangeBytes = totalSize / Math.max(workerProvider.getAllWorkers().size(), 1) + 1;
-        for (ComputeNode computeNode : workerProvider.getAllWorkers()) {
+        long avgNodeScanRangeBytes = totalSize / Math.max(workers.size(), 1) + 1;
+        for (ComputeNode computeNode : workers) {
             assignedBytesPerComputeNode.put(computeNode, 0L);
             assignedScanRangesPerComputeNode.put(computeNode, 0L);
             reBalancedBytesPerComputeNode.put(computeNode, 0L);
