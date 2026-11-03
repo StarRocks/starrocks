@@ -70,9 +70,14 @@ public class HadoopExtCatalogUgiTest {
             return UserGroupInformation.createRemoteUser(principal);
         }
 
+        volatile String failingReloginUser = null;
+
         @Override
-        protected void reloginIfNeeded(UserGroupInformation ugi) {
+        protected void reloginIfNeeded(UserGroupInformation ugi) throws IOException {
             relogins.incrementAndGet();
+            if (ugi.getUserName().equals(failingReloginUser)) {
+                throw new IOException("KDC unreachable");
+            }
         }
     }
 
@@ -182,5 +187,34 @@ public class HadoopExtCatalogUgiTest {
         } finally {
             pool.shutdownNow();
         }
+    }
+
+    @Test
+    public void backgroundReloginRefreshesEveryCachedUgi() {
+        FakeKerberosHadoopExt ext = new FakeKerberosHadoopExt();
+        ext.getHDFSUGI(catalogConf(USER_A, KEYTAB_A));
+        ext.getHDFSUGI(catalogConf(USER_B, KEYTAB_B));
+        Assertions.assertTrue(ext.isCatalogKerberosReloginScheduled());
+        int before = ext.relogins.get();
+        ext.reloginCatalogKerberosUgis();
+        Assertions.assertEquals(before + 2, ext.relogins.get());
+    }
+
+    @Test
+    public void backgroundReloginSurvivesOneFailure() {
+        FakeKerberosHadoopExt ext = new FakeKerberosHadoopExt();
+        ext.getHDFSUGI(catalogConf(USER_A, KEYTAB_A));
+        ext.getHDFSUGI(catalogConf(USER_B, KEYTAB_B));
+        ext.failingReloginUser = USER_A;
+        int before = ext.relogins.get();
+        Assertions.assertDoesNotThrow(ext::reloginCatalogKerberosUgis);
+        Assertions.assertEquals(before + 2, ext.relogins.get());
+    }
+
+    @Test
+    public void noReloginScheduledWithoutCatalogCredentials() {
+        FakeKerberosHadoopExt ext = new FakeKerberosHadoopExt();
+        ext.getHDFSUGI(new Configuration(false));
+        Assertions.assertFalse(ext.isCatalogKerberosReloginScheduled());
     }
 }

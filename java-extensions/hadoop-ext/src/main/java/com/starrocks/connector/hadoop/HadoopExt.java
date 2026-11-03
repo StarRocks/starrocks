@@ -24,6 +24,9 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.security.PrivilegedAction;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class HadoopExt {
     private static final Logger LOGGER =
@@ -43,6 +46,10 @@ public class HadoopExt {
     public static final String CATALOG_KERBEROS_KEYTAB = "starrocks.catalog.kerberos.keytab";
 
     private final ConcurrentHashMap<String, UserGroupInformation> catalogKerberosUgis = new ConcurrentHashMap<>();
+    // Hadoop IPC only re-logs in the process login user, so keytab UGIs held by long-lived clients (the BE keeps
+    // its HDFS handles cached) must be refreshed here or their tickets expire.
+    private static final long CATALOG_KERBEROS_RELOGIN_INTERVAL_SECONDS = 60;
+    private volatile ScheduledExecutorService catalogKerberosRelogin;
 
     public static HadoopExt getInstance() {
         return instance;
@@ -99,6 +106,7 @@ public class HadoopExt {
             try {
                 UserGroupInformation loggedIn = loginFromKeytab(principal, keytab);
                 LOGGER.info("{} logged in from keytab for catalog principal {}", LOGGER_MESSAGE_PREFIX, principal);
+                scheduleCatalogKerberosRelogin();
                 return loggedIn;
             } catch (IOException e) {
                 throw new UncheckedIOException("Failed to log in from keytab for catalog principal " + principal, e);
@@ -110,6 +118,42 @@ public class HadoopExt {
             LOGGER.warn("{} relogin from keytab failed for catalog principal {}", LOGGER_MESSAGE_PREFIX, principal, e);
         }
         return ugi;
+    }
+
+    private void scheduleCatalogKerberosRelogin() {
+        if (catalogKerberosRelogin != null) {
+            return;
+        }
+        synchronized (this) {
+            if (catalogKerberosRelogin == null) {
+                ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(r -> {
+                    Thread t = new Thread(r, "catalog-kerberos-relogin");
+                    t.setDaemon(true);
+                    return t;
+                });
+                executor.scheduleWithFixedDelay(this::reloginCatalogKerberosUgis,
+                        CATALOG_KERBEROS_RELOGIN_INTERVAL_SECONDS, CATALOG_KERBEROS_RELOGIN_INTERVAL_SECONDS,
+                        TimeUnit.SECONDS);
+                catalogKerberosRelogin = executor;
+            }
+        }
+    }
+
+    // Package-private for tests.
+    boolean isCatalogKerberosReloginScheduled() {
+        return catalogKerberosRelogin != null;
+    }
+
+    // Package-private for tests; also the body of the periodic relogin task, so it must never throw.
+    void reloginCatalogKerberosUgis() {
+        for (UserGroupInformation ugi : catalogKerberosUgis.values()) {
+            try {
+                reloginIfNeeded(ugi);
+            } catch (Throwable t) {
+                LOGGER.warn("{} periodic relogin from keytab failed for catalog principal {}",
+                        LOGGER_MESSAGE_PREFIX, ugi.getUserName(), t);
+            }
+        }
     }
 
     protected boolean isSecurityEnabled() {
