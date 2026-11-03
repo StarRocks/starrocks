@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.AnalyzedConnectorView;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
@@ -353,6 +354,10 @@ public class MaterializationContext {
                 }
             }
         } else {
+            if (matchMode == MaterializedViewRewriter.MatchMode.NOT_MATCH &&
+                    queryTables.stream().anyMatch(table -> table instanceof AnalyzedConnectorView)) {
+                logMVRewrite(mvName, "mv pruned: connector view definitions do not match the cached MV plan");
+            }
             return false;
         }
 

@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
+import com.starrocks.catalog.AnalyzedConnectorView;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
@@ -959,7 +960,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         ImmutableMap.Builder<Column, ColumnRefOperator> columnMetaToColRefMapBuilder = ImmutableMap.builder();
 
         List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
-        List<Column> viewSchema = node.getView().getBaseSchema();
+        View view = node.getView();
+        if (view instanceof AnalyzedConnectorView connectorView) {
+            view = connectorView.withReferencedViewDefinitions(node.getQueryStatement());
+        }
+        List<Column> viewSchema = view.getBaseSchema();
         Preconditions.checkState(outputColumns.size() == viewSchema.size());
         // should add a new relationid for view instead of using original outputColumns directly here,
         // because the original columns are related to the base tables(maybe olap table or others),
@@ -976,7 +981,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 outputVariables.add(columnRef);
             }
             columnRefFactory.updateColumnToRelationIds(columnRef.getId(), relationId);
-            columnRefFactory.updateColumnRefToColumns(columnRef, column, node.getView());
+            columnRefFactory.updateColumnRefToColumns(columnRef, column, view);
             colRefToColumnMetaMapBuilder.put(columnRef, viewSchema.get(i));
             columnMetaToColRefMapBuilder.put(viewSchema.get(i), columnRef);
             projectionMap.put(outputColumns.get(i), columnRef);
@@ -1004,7 +1009,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
 
         LogicalViewScanOperator scanOperator = new LogicalViewScanOperator(relationId,
-                node.getView(), columnRefOperatorToColumn, columnMetaToColRefMap,
+                view, columnRefOperatorToColumn, columnMetaToColRefMap,
                 new ColumnRefSet(logicalPlan.getOutputColumn()), newExprMapping, projectionMap);
         if (isInlineView) {
             // add a projection to make sure output columns keep the same,

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.profile.Tracers;
@@ -35,6 +36,7 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.junit.jupiter.api.BeforeAll;
@@ -51,6 +53,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -71,6 +74,9 @@ class HiveViewMvRewriteTest extends MVTestBase {
     private static final String NESTED_VIEW_NAME = "customer_nested_view";
     private static final String NESTED_VIEW =
             MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME + "." + VIEW_DB + "." + NESTED_VIEW_NAME;
+    private static final String OUTER_VIEW_NAME = "customer_outer_view";
+    private static final String OUTER_VIEW =
+            MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME + "." + VIEW_DB + "." + OUTER_VIEW_NAME;
     private static final UserIdentity RESTRICTED_USER = new UserIdentity("policy_user", "%");
 
     private static final String VIEW_SQL =
@@ -94,7 +100,8 @@ class HiveViewMvRewriteTest extends MVTestBase {
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
             boolean nested = NESTED_VIEW_NAME.equalsIgnoreCase(tblName);
-            if (!VIEW_DB.equalsIgnoreCase(dbName) || (!VIEW_NAME.equalsIgnoreCase(tblName) && !nested)) {
+            boolean outer = OUTER_VIEW_NAME.equalsIgnoreCase(tblName);
+            if (!VIEW_DB.equalsIgnoreCase(dbName) || (!VIEW_NAME.equalsIgnoreCase(tblName) && !nested && !outer)) {
                 return super.getTable(context, dbName, tblName);
             }
             List<FieldSchema> cols = Lists.newArrayList(
@@ -105,8 +112,9 @@ class HiveViewMvRewriteTest extends MVTestBase {
                     Lists.newArrayList(), Maps.newHashMap());
             // the metastore stores db and view names lower-cased
             org.apache.hadoop.hive.metastore.api.Table hmsView = new org.apache.hadoop.hive.metastore.api.Table(
-                    nested ? NESTED_VIEW_NAME : VIEW_NAME, VIEW_DB, null, 0, 0, 0, sd, Lists.newArrayList(),
-                    Maps.newHashMap(), null, nested ? "SELECT * FROM " + VIEW : viewSql,
+                    outer ? OUTER_VIEW_NAME : nested ? NESTED_VIEW_NAME : VIEW_NAME,
+                    VIEW_DB, null, 0, 0, 0, sd, Lists.newArrayList(),
+                    Maps.newHashMap(), null, outer ? "SELECT * FROM " + NESTED_VIEW : nested ? "SELECT * FROM " + VIEW : viewSql,
                     "VIRTUAL_VIEW");
             return HiveMetastoreApiConverter.toHiveView(hmsView, MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
         }
@@ -287,6 +295,41 @@ class HiveViewMvRewriteTest extends MVTestBase {
         } finally {
             viewSql = VIEW_SQL;
             dropMv(DB_NAME, "union_view_redefined_mv");
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"1, false", "1, true", "2, false", "2, true"})
+    void cachedMvPlanStopsMatchingOnceAnInnerViewIsRedefined(int depth, boolean textMatch) throws Exception {
+        boolean originalTextMatch = connectContext.getSessionVariable().isEnableMaterializedViewTextMatchRewrite();
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(textMatch);
+        String view = depth == 1 ? NESTED_VIEW : OUTER_VIEW;
+        String mvName = "nested_view_redefined_mv";
+        createMvOnView(mvName, view);
+        try {
+            List<MvPlanContext> cachedPlans = CachingMvPlanContextBuilder.getInstance()
+                    .getOrLoadPlanContext(getMv(DB_NAME, mvName), 30_000);
+            assertNotNull(cachedPlans);
+            String query = "SELECT * FROM " + view;
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+
+            // Only the innermost definition changes. Every enclosing view keeps the same SELECT * text.
+            viewSql = VIEW_SQL.replace("'MACHINERY'", "'AUTOMOBILE'");
+            var planAndTrace = UtFrameUtils.getFragmentPlanWithTrace(connectContext, query, "MV");
+            String plan = planAndTrace.second.first.getExplainString(TExplainLevel.NORMAL);
+            PlanTestBase.assertNotContains(plan, mvName);
+            PlanTestBase.assertContains(plan, "HdfsScanNode", "AUTOMOBILE");
+            PlanTestBase.assertContains(planAndTrace.second.second, "connector view definitions");
+            assertSame(cachedPlans, CachingMvPlanContextBuilder.getInstance()
+                    .getOrLoadPlanContext(getMv(DB_NAME, mvName), 30_000));
+
+            // Restoring the definition can match the original snapshot again, without rebuilding the cache.
+            viewSql = VIEW_SQL;
+            PlanTestBase.assertContains(getFragmentPlan(query), mvName);
+        } finally {
+            viewSql = VIEW_SQL;
+            connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(originalTextMatch);
+            dropMv(DB_NAME, mvName);
         }
     }
 

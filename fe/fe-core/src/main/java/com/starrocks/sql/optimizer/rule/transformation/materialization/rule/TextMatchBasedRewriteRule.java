@@ -20,6 +20,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.AnalyzedConnectorView;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
@@ -146,7 +147,7 @@ public class TextMatchBasedRewriteRule extends Rule {
         }
 
         CachingMvPlanContextBuilder.AstKey astKey = new CachingMvPlanContextBuilder.AstKey(parseNode);
-        OptExpression rewritten = rewriteByTextMatch(input, context, astKey);
+        OptExpression rewritten = rewriteByTextMatch(input, context, astKey, parseNode);
         if (rewritten != null) {
             return rewritten;
         }
@@ -213,13 +214,15 @@ public class TextMatchBasedRewriteRule extends Rule {
 
     private OptExpression rewriteByTextMatch(OptExpression input,
                                              OptimizerContext context,
-                                             CachingMvPlanContextBuilder.AstKey ast) {
+                                             CachingMvPlanContextBuilder.AstKey ast,
+                                             ParseNode parseNode) {
         if (!isSupportForTextBasedRewrite(input)) {
             logMVRewrite(context, this, "TEXT_BASED_REWRITE is not supported for this input");
             return null;
         }
 
         QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
+        Set<AnalyzedConnectorView> queryViews = AnalyzerUtils.collectConnectorViewsForMvRewrite(parseNode);
         try {
             Set<MaterializedView> candidateMvs = getMaterializedViewsByAst(input, ast);
             logMVRewrite(context, this, "TEXT_BASED_REWRITE matched mvs: {}",
@@ -259,6 +262,12 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final OptExpression mvPlan = mvPlanContext.getLogicalPlan();
                 if (mvPlan == null) {
                     logMVRewrite(context, this, "MV {} plan context is null", mv.getName());
+                    continue;
+                }
+                if (!connectorViewDefinitionsMatch(mv, queryViews)) {
+                    logMVRewrite(context, this,
+                            "MV {} cannot be used for text rewrite: connector view definitions changed or cannot be verified",
+                            mv.getName());
                     continue;
                 }
 
@@ -307,6 +316,23 @@ public class TextMatchBasedRewriteRule extends Rule {
             return null;
         }
         return null;
+    }
+
+    private boolean connectorViewDefinitionsMatch(MaterializedView mv, Set<AnalyzedConnectorView> queryViews) {
+        if (queryViews.isEmpty()) {
+            return true;
+        }
+        if (!connectContext.getSessionVariable().isEnableMaterializedViewPlanCache()) {
+            return false;
+        }
+        List<MvPlanContext> cachedPlans = CachingMvPlanContextBuilder.getInstance()
+                .getPlanContextIfPresent(mv, 0);
+        if (cachedPlans == null) {
+            return false;
+        }
+        // Text equality omits view bodies. Verify their snapshots against the cached plan with view scans.
+        return cachedPlans.stream().filter(plan -> plan.getLogicalPlan() != null)
+                .anyMatch(plan -> MvUtils.getAllTables(plan.getLogicalPlan()).containsAll(queryViews));
     }
 
     public Pair<Boolean, String> isValidForTextBasedRewrite(OptimizerContext context,
@@ -447,7 +473,7 @@ public class TextMatchBasedRewriteRule extends Rule {
             // try to rewrite by text match
             ParseNode parseNode = mvTransformerContext.getOpAST(op);
             OptExpression rewritten = rewriteByTextMatch(input, optimizerContext,
-                    new CachingMvPlanContextBuilder.AstKey(parseNode));
+                    new CachingMvPlanContextBuilder.AstKey(parseNode), parseNode);
             if (rewritten != null) {
                 return rewritten;
             }

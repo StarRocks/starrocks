@@ -31,6 +31,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.AnalyzedConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
@@ -1017,6 +1018,21 @@ public class AnalyzerUtils {
         List<ViewRelation> viewRelations = Lists.newArrayList();
         new AnalyzerUtils.ViewRelationsCollector(viewRelations).visit(statementBase);
         return viewRelations;
+    }
+
+    public static Set<AnalyzedConnectorView> collectConnectorViewsForMvRewrite(ParseNode parseNode) {
+        Set<AnalyzedConnectorView> views = new HashSet<>();
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitView(ViewRelation node, Void context) {
+                if (node.getView() instanceof AnalyzedConnectorView connectorView) {
+                    views.add(connectorView.withReferencedViewDefinitions(node.getQueryStatement()));
+                    return null;
+                }
+                return super.visitView(node, context);
+            }
+        }.visit(parseNode);
+        return views;
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
