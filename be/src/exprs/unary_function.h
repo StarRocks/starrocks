@@ -362,47 +362,6 @@ using VectorizedStringStrictUnaryFunction =
 template <typename VectorizedOp>
 using VectorizedUnaryFunction = DealNullableColumnUnaryFunction<UnpackConstColumnUnaryFunction<VectorizedOp>>;
 
-/**
- * Drives an error-reporting op (REPORT_FN) so that the data of a null row can never raise its error.
- *
- * VectorizedUnaryFunction strips the null column before calling the op, so a throwing op also checks the data
- * slot of every null row. That slot is undefined: "" for a string, 0, or a value left by an upstream expression
- * that computed over its data column (e.g. `a + b` with a NULL `a` holds `b`). Checking it raises a spurious
- * error for a row whose result is NULL anyway.
- *
- * NULL_FN must be the non-throwing twin of REPORT_FN: it turns exactly the rows REPORT_FN rejects into NULL.
- * - No null rows: run REPORT_FN directly, as before.
- * - Null rows present: run NULL_FN. Its null rows are a superset of the input's null rows, so if the counts
- *   match, no non-null row was rejected. Otherwise (cold path, the query fails anyway) re-run REPORT_FN on
- *   the non-null rows only, which raises the original error with its original message.
- */
-template <typename REPORT_FN, typename NULL_FN>
-class NullAwareReportErrorUnaryFunction {
-public:
-    template <LogicalType Type, LogicalType ResultType, typename... Args>
-    static ColumnPtr evaluate(const ColumnPtr& v1, const Args&... args) {
-        if (v1->is_constant() || !v1->is_nullable() || !v1->has_null()) {
-            return VectorizedUnaryFunction<REPORT_FN>::template evaluate<Type, ResultType>(v1, args...);
-        }
-
-        ColumnPtr result = VectorizedUnaryFunction<NULL_FN>::template evaluate<Type, ResultType>(v1, args...);
-        if (ColumnHelper::count_nulls(result) > ColumnHelper::count_nulls(v1)) {
-            const auto* nullable = down_cast<const NullableColumn*>(v1.get());
-            const auto nulls = nullable->immutable_null_column_data();
-            Filter not_null(nulls.size());
-            for (size_t i = 0; i < nulls.size(); ++i) {
-                not_null[i] = !nulls[i];
-            }
-            auto non_null_rows = nullable->data_column()->clone();
-            non_null_rows->filter(not_null);
-            ColumnPtr strict_input = std::move(non_null_rows);
-            // Expected to throw: a non-null row was rejected by NULL_FN, so REPORT_FN rejects it as well.
-            (void)REPORT_FN::template evaluate<Type, ResultType>(strict_input, args...);
-        }
-        return result;
-    }
-};
-
 template <typename OP, typename NULL_OP>
 using VectorizedInputCheckUnaryFunction = DealNullableColumnUnaryFunction<
         UnpackConstColumnUnaryFunction<ProduceNullUnaryFunction<OP, NULL_OP, NopCheck>>>;

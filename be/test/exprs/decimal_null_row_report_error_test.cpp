@@ -357,4 +357,25 @@ TEST_F(DecimalNullRowReportErrorTest, one_row_const_lhs_with_nullable_rhs) {
     }
 }
 
+// The kernel scales a constant operand up once, before its row loop, so that overflow is not tied to a row. It must
+// not raise an error when every row of the other operand is NULL, and must when any row is non-null.
+TEST_F(DecimalNullRowReportErrorTest, const_operand_scale_up_overflow) {
+    using Add = VectorizedStrictDecimalBinaryFunction<AddOp, REPORT>;
+    const int128_t big = kE38 / 10 * 9; // 9e37, overflows once scaled up by 2 digits
+    auto big_lhs = [&] { return ConstColumn::create(make_decimals<TYPE_DECIMAL128>(38, 0, {big}, {}), 3); };
+
+    auto all_null_rhs = make_decimals<TYPE_DECIMAL128>(38, 2, {0, 0, 0}, {1, 1, 1});
+    ColumnPtr result;
+    ASSERT_NO_THROW(result = Add::evaluate<TYPE_DECIMAL128>(big_lhs(), all_null_rhs));
+    expect_nulls(result, {true, true, true});
+
+    auto rhs = make_decimals<TYPE_DECIMAL128>(38, 2, {0, 100, 0}, {1, 0, 1});
+    try {
+        (void)Add::evaluate<TYPE_DECIMAL128>(big_lhs(), rhs);
+        FAIL() << "expected an overflow error";
+    } catch (const std::overflow_error& e) {
+        EXPECT_STREQ(e.what(), "The 'add' operation involving decimal values overflows");
+    }
+}
+
 } // namespace starrocks
