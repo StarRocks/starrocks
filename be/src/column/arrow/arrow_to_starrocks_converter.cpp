@@ -1640,9 +1640,13 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
                     estimate_output_bytes(*values, first, child_len, &dst_type->children[0], depth + 1);
             return saturating_add(dst_outer_bytes, saturating_add(child_len, child_bytes));
         }
+        const TypeDescriptor json_dst(TYPE_JSON);
+        const int64_t json_child = estimate_output_bytes(*values, first, child_len, &json_dst, depth + 1);
         const int64_t untyped_child = estimate_output_bytes(*values, first, child_len, nullptr, depth + 1);
+        const int64_t child_payload = std::max({untyped_child, json_child, saturating_mul(child_len, 8)});
+        const int64_t phase_factor = (dst_type->type == TYPE_JSON) ? 1 : 2;
         return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth),
-                              std::max(untyped_child, saturating_mul(child_len, 8)));
+                              saturating_mul(child_payload, phase_factor));
     }
     case arrow::Type::MAP: {
         const auto& a = static_cast<const arrow::MapArray&>(array);
@@ -1670,8 +1674,14 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
             }
             return std::max(untyped_map_bytes, total);
         }
+        const TypeDescriptor json_dst(TYPE_JSON);
+        const int64_t json_keys = estimate_output_bytes(*a.keys(), first, child_len, &json_dst, depth + 1);
+        const int64_t json_items = estimate_output_bytes(*a.items(), first, child_len, &json_dst, depth + 1);
+        const int64_t json_map_bytes = saturating_add(json_keys, json_items);
+        const int64_t map_payload = std::max({untyped_map_bytes, json_map_bytes, saturating_mul(child_len, 16)});
+        const int64_t phase_factor = (dst_type->type == TYPE_JSON) ? 1 : 2;
         return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth),
-                              std::max(untyped_map_bytes, saturating_mul(child_len, 16)));
+                              saturating_mul(map_payload, phase_factor));
     }
     case arrow::Type::STRUCT: {
         const auto& a = static_cast<const arrow::StructArray&>(array);
@@ -1698,7 +1708,32 @@ int64_t estimate_output_bytes(const arrow::Array& array, int64_t begin, int64_t 
             }
             return std::max(untyped_struct_bytes, total);
         }
-        return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth), untyped_struct_bytes);
+        if (dst_type->type == TYPE_VARIANT) {
+            return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth),
+                                  untyped_struct_bytes);
+        }
+        // Non-STRUCT/non-VARIANT destination (e.g. TYPE_JSON, or TYPE_VARCHAR/TYPE_CHAR via two-phase JSON cast):
+        // convert_single_arrow_struct() serializes every field name into every row and converts all child fields
+        // to JSON.
+        const TypeDescriptor json_dst(TYPE_JSON);
+        const auto* struct_type = a.struct_type();
+        int64_t per_row_key_bytes = 0;
+        int64_t json_children_bytes = 0;
+        for (int i = 0; i < a.num_fields(); ++i) {
+            const int64_t key_len =
+                    (struct_type != nullptr && i < struct_type->num_fields() && struct_type->field(i) != nullptr)
+                            ? static_cast<int64_t>(struct_type->field(i)->name().size())
+                            : 0;
+            per_row_key_bytes = saturating_add(per_row_key_bytes, saturating_add(key_len, 2));
+            json_children_bytes = saturating_add(
+                    json_children_bytes, estimate_output_bytes(*a.field(i), begin, length, &json_dst, depth + 1));
+        }
+        const int64_t json_struct_bytes =
+                saturating_add(saturating_mul(length, per_row_key_bytes), json_children_bytes);
+        const int64_t struct_payload = std::max(untyped_struct_bytes, json_struct_bytes);
+        const int64_t phase_factor = (dst_type->type == TYPE_JSON) ? 1 : 2;
+        return saturating_add(estimate_default_column_bytes(*dst_type, length, nested, depth),
+                              saturating_mul(struct_payload, phase_factor));
     }
     case arrow::Type::DICTIONARY: {
         const auto& a = static_cast<const arrow::DictionaryArray&>(array);

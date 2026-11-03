@@ -5932,4 +5932,78 @@ TEST_F(ArrowScannerTest, TestStreamRejectsStringViewDictionaryExpansionInPreflig
     }
 }
 
+TEST_F(ArrowScannerTest, TestStreamRejectsJsonStructKeyExpansionInPreflight) {
+    const int64_t saved_cap = config::routine_load_arrow_max_decoded_bytes_per_message;
+    DeferOp restore_cap([saved_cap]() { config::routine_load_arrow_max_decoded_bytes_per_message = saved_cap; });
+    config::routine_load_arrow_max_decoded_bytes_per_message = 1024 * 1024; // 1 MiB
+
+    SlotTypeDescInfoArray slots;
+    slots.emplace_back("c0_json", TypeDescriptor::from_logical_type(TYPE_JSON), true);
+
+    // 64 rows of struct<huge_key: int8> where huge_key is 32 KiB.
+    // The IPC stream stores the 32 KiB field name once in the schema (~32 KiB wire payload),
+    // but converting to JSON serializes the 32 KiB key into all 64 rows (~2 MiB > 1 MiB cap).
+    constexpr int32_t kHostileRows = 64;
+    const std::string huge_key(32 * 1024, 'k');
+    arrow::Int8Builder hostile_child_builder;
+    ASSERT_ARROW_OK(hostile_child_builder.AppendValues(std::vector<int8_t>(kHostileRows, 1)));
+    std::shared_ptr<arrow::Array> hostile_child;
+    ASSERT_ARROW_OK(hostile_child_builder.Finish(&hostile_child));
+
+    auto hostile_struct = arrow::StructArray::Make({hostile_child}, std::vector<std::string>{huge_key}).ValueOrDie();
+    auto hostile_schema = arrow::schema({arrow::field("c0_json", hostile_struct->type())});
+    auto hostile_batch = arrow::RecordBatch::Make(hostile_schema, kHostileRows, {hostile_struct});
+
+    arrow::Int8Builder good_child_builder;
+    ASSERT_ARROW_OK(good_child_builder.AppendValues(std::vector<int8_t>{10, 20}));
+    std::shared_ptr<arrow::Array> good_child;
+    ASSERT_ARROW_OK(good_child_builder.Finish(&good_child));
+    auto good_struct = arrow::StructArray::Make({good_child}, std::vector<std::string>{"k"}).ValueOrDie();
+    auto good_schema = arrow::schema({arrow::field("c0_json", good_struct->type())});
+    auto good_batch = arrow::RecordBatch::Make(good_schema, 2, {good_struct});
+
+    // Hostile only -> preflight rejection before any chunk initialization or column conversion
+    {
+        auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+
+        append_ipc_message(pipe, hostile_schema, {hostile_batch});
+        ASSERT_OK(pipe->finish());
+
+        ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(scanner.open());
+        EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+        EXPECT_EQ(0, ctx->counter->init_chunk_ns);
+        EXPECT_EQ(0, ctx->counter->fill_ns);
+        EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+        EXPECT_EQ(kHostileRows, ctx->counter->num_rows_filtered);
+        scanner.close();
+    }
+
+    // Hostile followed by valid message
+    {
+        auto pipe = std::make_shared<MockDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024);
+        auto ctx_res = make_stream_scanner_context(slots, UniqueId::gen_uid(), pipe);
+        ASSERT_OK(ctx_res.status());
+        auto& ctx = ctx_res.value();
+
+        append_ipc_message(pipe, hostile_schema, {hostile_batch});
+        append_ipc_message(pipe, good_schema, {good_batch});
+        ASSERT_OK(pipe->finish());
+
+        ArrowScanner scanner(ctx->state, ctx->profile, ctx->broker_scan_range, ctx->counter);
+        ASSERT_OK(scanner.open());
+        auto res = scanner.get_next();
+        ASSERT_OK(res.status());
+        ASSERT_EQ(2, res.value()->num_rows());
+        EXPECT_TRUE(scanner.get_next().status().is_end_of_file());
+        EXPECT_EQ(1, ctx->counter->arrow_messages_rejected);
+        EXPECT_EQ(kHostileRows, ctx->counter->num_rows_filtered);
+        EXPECT_EQ(1, ctx->counter->arrow_messages_read);
+        scanner.close();
+    }
+}
+
 } // namespace starrocks

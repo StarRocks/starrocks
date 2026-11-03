@@ -3078,6 +3078,34 @@ TEST(ArrowOutputSizeEstimateTest, DestinationTypeAwareEstimation) {
                 {"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_LARGEINT)});
         EXPECT_EQ(2600, estimate_default_column_output_bytes(struct_type, 100));
     }
+
+    // Case 7 (JSON-serialized STRUCT repeated field-name keys):
+    // 4,096 rows of struct<huge_key: int8> where huge_key is 512 KiB targeting JSON and VARCHAR,
+    // plus nested list<struct<huge_key: int8>> and map<int8, struct<huge_key: int8>> targeting JSON.
+    {
+        constexpr int32_t kRows = 4096;
+        const std::string huge_key(512 * 1024, 'k');
+        arrow::Int8Builder i8_builder;
+        ASSERT_TRUE(i8_builder.AppendValues(std::vector<int8_t>(kRows, 1)).ok());
+        std::shared_ptr<arrow::Array> i8_arr;
+        ASSERT_TRUE(i8_builder.Finish(&i8_arr).ok());
+
+        auto struct_arr = arrow::StructArray::Make({i8_arr}, std::vector<std::string>{huge_key}).ValueOrDie();
+        auto json_type = TypeDescriptor::from_logical_type(TYPE_JSON);
+        auto varchar_type = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+        const int64_t min_expected_key_bytes = static_cast<int64_t>(kRows) * static_cast<int64_t>(huge_key.size());
+
+        EXPECT_GE(estimate_arrow_array_output_bytes(*struct_arr, 0, kRows, &json_type), min_expected_key_bytes);
+        EXPECT_GE(estimate_arrow_array_output_bytes(*struct_arr, 0, kRows, &varchar_type), min_expected_key_bytes);
+
+        // Nested 1-row list<struct<huge_key: int8>> with 4,096 child structs targeting JSON.
+        auto list_of_struct = arrow::ListArray::FromArrays(*make_offsets32({0, kRows}), *struct_arr).ValueOrDie();
+        EXPECT_GE(estimate_arrow_array_output_bytes(*list_of_struct, 0, 1, &json_type), min_expected_key_bytes);
+
+        // Nested 1-row map<int8, struct<huge_key: int8>> with 4,096 entries targeting JSON.
+        auto map_of_struct = arrow::MapArray::FromArrays(make_offsets32({0, kRows}), i8_arr, struct_arr).ValueOrDie();
+        EXPECT_GE(estimate_arrow_array_output_bytes(*map_of_struct, 0, 1, &json_type), min_expected_key_bytes);
+    }
 }
 
 } // namespace starrocks
