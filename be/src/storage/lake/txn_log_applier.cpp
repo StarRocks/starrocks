@@ -193,8 +193,7 @@ public:
             _index_entry->value().unload();
             // The entry outlives this publish when another holder still references it, so it must not stay
             // charged for the memory the unload just freed.
-            _tablet.primary_key_mgr()->index_cache().update_object_size(_index_entry,
-                                                                        _index_entry->value().memory_usage());
+            _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
             // 2. and then release guard
             _guard.reset(nullptr);
             // 3. remove index from cache to save resource
@@ -335,18 +334,11 @@ private:
     Status recover() {
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_key_recover");
         LOG(INFO) << "Primary Key recover begin, tablet_id: " << _tablet.id() << " base_ver: " << _base_version;
-<<<<<<< HEAD
-        // release and remove index entry's reference
-        _tablet.update_mgr()->release_primary_index_cache(_index_entry);
-        _guard.reset(nullptr);
-        _index_entry = nullptr;
-=======
         // Unload the index before letting go of it, as a failed publish does: this publish may already
         // have written to it, and recovery cannot remove it from the cache while another holder still
         // references it. The retry must then reload the index from the metadata instead of working on
         // top of this attempt's writes.
         handle_failure();
->>>>>>> 1e2f91a ([BugFix] Unload the primary index before a recovery that may fail to remove it (#81265))
         // rebuild delvec and pk index
         LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
         RETURN_IF_ERROR(recover.recover());
