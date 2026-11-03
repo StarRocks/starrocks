@@ -2558,6 +2558,56 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels_v2_encoding) {
     }
 }
 
+// A publish that asks for recovery has already written to the cached index: the delete vector check fails
+// after the upsert of kKey. Recovery cannot remove the index from the cache while another holder still
+// references the entry, so it fails. Neither that holder nor the retry may then see the failed attempt's upsert.
+// On top of it, kKey already points at the row this same publish writes, so the retry would delete that row and
+// keep the old one.
+TEST_P(LakePrimaryKeyPublishTest, test_retry_reloads_index_when_recover_cannot_remove_it) {
+    constexpr int32_t kKey = 5;
+    constexpr int32_t kOldValue = 50;
+    constexpr int32_t kNewValue = 500;
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    const auto tablet_id = _tablet_metadata->id();
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_single_upsert_txn(tablet_id, kKey, kOldValue)).status());
+    const int64_t txn_id = write_single_upsert_txn(tablet_id, kKey, kNewValue);
+
+    bool injected = false;
+    SyncPoint::GetInstance()->SetCallBack("delvec_inconsistent", [&](void* arg) {
+        if (!injected) {
+            *(Status*)arg = Status::InternalError("ut_test");
+            injected = true;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("delvec_inconsistent");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    {
+        auto* other_holder = _primary_key_mgr->index_cache().get(tablet_id);
+        ASSERT_NE(nullptr, other_holder);
+        DeferOp release_other_holder([&]() { _primary_key_mgr->release_primary_index_cache(other_holder); });
+        ASSERT_FALSE(publish_single_version(tablet_id, 3, txn_id).ok());
+        ASSERT_TRUE(injected);
+        // What a reader that probes the index before the retry checks, e.g. the auto-increment probe of a load.
+        EXPECT_FALSE(other_holder->value().is_load(2));
+        // Nor may the cache keep charging for the memory the unload freed.
+        EXPECT_EQ(other_holder->value().memory_usage(), other_holder->size());
+    }
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+    ASSIGN_OR_ABORT(auto published, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, published->rowsets_size());
+    const IndexValue new_row(uint64_t{published->rowsets(1).id()} << 32);
+    auto visible = visible_oracle(tablet_id, 3, kKey);
+    EXPECT_EQ(1, visible.row_count);
+    EXPECT_EQ(std::optional<int32_t>(kNewValue), visible.target_value);
+    EXPECT_EQ(new_row, cached_point_get(tablet_id, kKey));
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    EXPECT_EQ(new_row, prepare_and_point_get(published, 3, kKey));
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
