@@ -232,6 +232,10 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
     DeltaColumnGroupVerPB& dcg_ver = (*_tablet_meta->mutable_dcg_meta()->mutable_dcgs())[rssid];
     DeltaColumnGroupVerPB new_dcg_ver;
     std::unordered_set<ColumnUID> need_to_remove_cuids_filter;
+    // Keep shared_files 1:1 with column_files when the segment records it: a new file is private, and a kept file
+    // keeps its flag. After a range split a kept file can still be read by the sibling tablet, so losing the flag
+    // would let vacuum delete it once a later update orphans it.
+    const bool record_shared_files = dcg_ver.shared_files_size() > 0;
 
     // 1. append new dcgs
     DCHECK(file_with_encryption_metas.size() == unique_column_id_list.size());
@@ -251,6 +255,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
         }
         new_dcg_ver.add_unique_column_ids()->CopyFrom(unique_cids);
         new_dcg_ver.add_versions(_tablet_meta->version());
+        if (record_shared_files) {
+            new_dcg_ver.add_shared_files(false);
+        }
     }
     // 2. remove old dcgs
     DCHECK(dcg_ver.unique_column_ids_size() == dcg_ver.column_files_size());
@@ -269,6 +276,9 @@ void MetaFileBuilder::append_dcg(uint32_t rssid,
             new_dcg_ver.add_versions(dcg_ver.versions(i));
             if (i < dcg_ver.encryption_metas_size()) {
                 new_dcg_ver.add_encryption_metas(dcg_ver.encryption_metas(i));
+            }
+            if (record_shared_files) {
+                new_dcg_ver.add_shared_files(i < dcg_ver.shared_files_size() && dcg_ver.shared_files(i));
             }
         } else {
             // Put this `.cols` files into orphan files
