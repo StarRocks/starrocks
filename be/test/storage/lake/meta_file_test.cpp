@@ -4514,4 +4514,57 @@ TEST_F(MetaFileTest, test_apply_drop_index_sentinel_id_respects_type) {
     EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
 }
 
+// A column-mode update rewrites some columns of a segment and keeps the other `.cols` files of that segment. A kept
+// file keeps its shared flag: after a range split it is still read by the sibling tablet, and a file that lost the flag
+// would be deleted by vacuum once a later update orphans it. A new file is private.
+TEST_F(MetaFileTest, test_append_dcg_keeps_shared_flags_of_kept_files) {
+    const int64_t tablet_id = next_id();
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(11);
+    metadata->set_next_rowset_id(111);
+    // Segment 110 as a split leaves it: both `.cols` files are shared with the sibling.
+    auto& split_dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[110];
+    for (const auto& [file, cuids, size] : std::vector<std::tuple<std::string, std::vector<ColumnUID>, int64_t>>{
+                 {"aaa.cols", {3, 4}, 111}, {"bbb.cols", {6}, 222}}) {
+        split_dcg.add_column_files(file);
+        auto* ids = split_dcg.add_unique_column_ids();
+        for (ColumnUID cuid : cuids) {
+            ids->add_column_ids(cuid);
+        }
+        split_dcg.add_column_file_sizes(size);
+        split_dcg.add_versions(10);
+        split_dcg.add_shared_files(true);
+    }
+    auto shared_flags = [&]() {
+        const auto& dcg = metadata->dcg_meta().dcgs().at(110);
+        EXPECT_EQ(dcg.column_files_size(), dcg.shared_files_size());
+        std::map<std::string, bool> flags;
+        for (int i = 0; i < dcg.column_files_size() && i < dcg.shared_files_size(); ++i) {
+            flags[dcg.column_files(i)] = dcg.shared_files(i);
+        }
+        return flags;
+    };
+
+    MetaFileBuilder builder(*tablet, metadata);
+    // Column 4 moves to ccc.cols; aaa.cols keeps column 3 and bbb.cols column 6.
+    builder.append_dcg(110, {{"ccc.cols", ""}}, {{4}}, {333});
+    EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"bbb.cols", true}, {"ccc.cols", false}}),
+              shared_flags());
+
+    // Column 6 moves to ddd.cols, so bbb.cols becomes an orphan and still records that it is shared.
+    builder.append_dcg(110, {{"ddd.cols", ""}}, {{6}}, {444});
+    EXPECT_EQ((std::map<std::string, bool>{{"aaa.cols", true}, {"ccc.cols", false}, {"ddd.cols", false}}),
+              shared_flags());
+    bool orphaned = false;
+    for (const auto& file : metadata->orphan_files()) {
+        if (file.name() == "bbb.cols") {
+            orphaned = true;
+            EXPECT_TRUE(file.shared());
+        }
+    }
+    EXPECT_TRUE(orphaned);
+}
+
 } // namespace starrocks::lake
