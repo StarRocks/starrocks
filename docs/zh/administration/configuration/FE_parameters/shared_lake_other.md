@@ -785,7 +785,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: 计数
 - 是否可变: Yes
-- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），并与 `lake_batch_publish_min_version_num` 一起确定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且当版本不连续时可能会在运行时受到限制。根据工作负载和可见性/延迟要求进行调整。
+- 描述: 设置在为 lake（云原生）表构建发布批次时，可能分组的连续事务版本的上限。该值传递给事务图批处理例程（参见 getReadyToPublishTxnListBatch），用于限定 TransactionStateBatch 的候选范围大小。较大的值可以通过批处理更多提交来提高发布吞吐量，但会增加原子发布的范围（更长的可见性延迟和更大的回滚表面），并且当版本不连续时可能会在运行时受到限制。根据工作负载和可见性/延迟要求进行调整。
 - 引入版本: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -794,7 +794,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 设置构成 lake 表发布批次所需的最小连续事务版本数。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 以选择依赖事务。值为 `1` 允许单事务发布（不批处理）。值 `>1` 要求至少有相同数量的连续版本、单表、非复制事务可用；如果版本不连续，出现复制事务，或 schema 更改消耗版本，则批处理中止。增加此值可以通过分组提交来提高发布吞吐量，但可能会在等待足够连续的事务时延迟发布。
+- 描述: 已废弃，设置后不生效。保留该参数只是为了让 **fe.conf** 中已有的配置以及针对该参数的 `ADMIN SET FRONTEND CONFIG` 语句不会报错。存算分离模式下，批量发布每一轮都会从每个无需再等待其他事务的已提交事务开始组成批次，不论批次大小都会发布，每个批次最多包含 `lake_batch_publish_max_version_num` 个事务。此前，该参数指定一个批次至少包含的事务数，事务数不足的批次在当轮不发布。如果某个批次始终达不到这一数量（例如某张表最后几次导入之后再没有新的导入，或者导入排在一个同时写入多张表的事务之后），该批次每一轮都会被跳过，其中已提交的事务一直不可见，后续写入这些表的导入也只能排队等待。
 - 引入版本: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`

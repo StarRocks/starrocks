@@ -1148,19 +1148,18 @@ public class DatabaseTransactionMgr {
                 // A head that was already sent belongs to a publish attempt that did not finish. Retry it with
                 // only the txns of that attempt, the only ones sent: taking in txns committed since would move
                 // every partition's new version and waste what the attempt already published. Such a retry is
-                // as big as the attempt was, even below lake_batch_publish_min_version_num.
+                // as big as the attempt was.
                 TransactionState head = idToRunningTransactionState.get(txnId);
                 boolean retryLastAttempt = Config.lake_enable_batch_publish_retry_freeze
                         && head != null && head.hasSendTask();
-                int minBatchSize = retryLastAttempt ? 1 : Config.lake_batch_publish_min_version_num;
                 LongPredicate canJoin = retryLastAttempt ? this::hasSentPublishTask : id -> true;
                 List<Long> txnsWithDependency;
                 if (Config.lake_enable_batch_publish_multi_table) {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatchMultiTable(
-                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
+                            Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 } else {
                     txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
-                            minBatchSize, Config.lake_batch_publish_max_version_num, txnId, canJoin);
+                            Config.lake_batch_publish_max_version_num, txnId, canJoin);
                 }
                 List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)

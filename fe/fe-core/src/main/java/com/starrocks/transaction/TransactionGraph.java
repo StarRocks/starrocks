@@ -244,12 +244,12 @@ public class TransactionGraph {
     }
 
     // The size of ins of node with txnId must be zero
-    public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId) {
-        return getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, txnId, id -> true);
+    public List<Long> getTxnsWithTxnDependencyBatch(int maxBatchSize, long txnId) {
+        return getTxnsWithTxnDependencyBatch(maxBatchSize, txnId, id -> true);
     }
 
     // Same as above, but the batch ends at the first txn canJoin rejects.
-    public List<Long> getTxnsWithTxnDependencyBatch(int minBatchSize, int maxBatchSize, long txnId,
+    public List<Long> getTxnsWithTxnDependencyBatch(int maxBatchSize, long txnId,
                                                     LongPredicate canJoin) {
         List<Long> txns = new ArrayList<>();
         if (nodes.containsKey(txnId)) {
@@ -274,7 +274,7 @@ public class TransactionGraph {
                 }
             }
         }
-        return txns.size() >= minBatchSize ? txns : new ArrayList<>();
+        return txns;
     }
 
     /**
@@ -293,12 +293,12 @@ public class TransactionGraph {
      *
      * The size of ins of node with txnId must be zero.
      */
-    public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int minBatchSize, int maxBatchSize, long txnId) {
-        return getTxnsWithTxnDependencyBatchMultiTable(minBatchSize, maxBatchSize, txnId, id -> true);
+    public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int maxBatchSize, long txnId) {
+        return getTxnsWithTxnDependencyBatchMultiTable(maxBatchSize, txnId, id -> true);
     }
 
     // Same as above, but only txns canJoin accepts may join after the head.
-    public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int minBatchSize, int maxBatchSize, long txnId,
+    public List<Long> getTxnsWithTxnDependencyBatchMultiTable(int maxBatchSize, long txnId,
                                                               LongPredicate canJoin) {
         List<Long> txns = new ArrayList<>();
         Node head = nodes.get(txnId);
@@ -330,7 +330,7 @@ public class TransactionGraph {
             inBatch.add(nextInChain);
             current = nextInChain;
         }
-        return txns.size() >= minBatchSize ? txns : new ArrayList<>();
+        return txns;
     }
 
     // print the graph for debug

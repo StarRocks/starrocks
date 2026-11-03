@@ -100,7 +100,6 @@ public class LakePublishBatchTest {
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
     private static boolean enable_batch_publish_version;
-    private static int batch_publish_min_version_num;
     private static int alterSchedulerIntervalMs;
 
     private void generateSimpleTabletCommitInfo(Database db, Table table,
@@ -162,10 +161,8 @@ public class LakePublishBatchTest {
     public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         enable_batch_publish_version = Config.lake_enable_batch_publish_version;
-        batch_publish_min_version_num = Config.lake_batch_publish_min_version_num;
         alterSchedulerIntervalMs = Config.alter_scheduler_interval_millisecond;
         Config.lake_enable_batch_publish_version = true;
-        Config.lake_batch_publish_min_version_num = 2;
         Config.alter_scheduler_interval_millisecond = 100;
 
         new MockUp<PublishVersionDaemon>() {
@@ -232,7 +229,6 @@ public class LakePublishBatchTest {
     @AfterAll
     public static void afterClass() {
         Config.lake_enable_batch_publish_version = enable_batch_publish_version;
-        Config.lake_batch_publish_min_version_num = batch_publish_min_version_num;
         Config.alter_scheduler_interval_millisecond = alterSchedulerIntervalMs;
         FeConstants.runningUnitTest = false;
     }
@@ -360,6 +356,74 @@ public class LakePublishBatchTest {
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
             awaitPublish(publishVersionDaemon, waiter1, waiter2, waiter3, waiter4);
         } finally {
+            Config.lake_enable_batch_publish_multi_table = oldMultiTable;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    @SuppressWarnings("deprecation")
+    public void testPublishIgnoresMinVersionNum(boolean multiTable) throws Exception {
+        // txn1 and txn2 are dependency-free heads on one table each, and txn3 writes both tables, so no
+        // batch can grow past its head: txn3 depends on a txn outside either batch, and after both have
+        // published it is a head with no successor. A minimum of 2 used to drop all of these batches in
+        // every round and leave the txns COMMITTED forever. The deprecated setting must be ignored.
+        int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
+        boolean oldMultiTable = Config.lake_enable_batch_publish_multi_table;
+        Config.lake_batch_publish_min_version_num = 2;
+        Config.lake_enable_batch_publish_multi_table = multiTable;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
+            Table table1 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), TABLE_AGG_OFF);
+            Table table2 = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), TABLE_AGG_ON);
+
+            List<TabletCommitInfo> table1Tablets = Lists.newArrayList();
+            for (Partition partition : table1.getPartitions()) {
+                table1Tablets.addAll(getPartitionTabletCommitInfos(partition));
+            }
+            List<TabletCommitInfo> table2Tablets = Lists.newArrayList();
+            for (Partition partition : table2.getPartitions()) {
+                table2Tablets.addAll(getPartitionTabletCommitInfos(partition));
+            }
+            List<TabletCommitInfo> bothTableTablets = Lists.newArrayList(table1Tablets);
+            bothTableTablets.addAll(table2Tablets);
+
+            GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+
+            long txnId1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table1.getId()),
+                    "min_version_1_" + UUIDUtil.genUUID(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(
+                    db.getId(), txnId1, table1Tablets, Lists.newArrayList(), null);
+
+            long txnId2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table2.getId()),
+                    "min_version_2_" + UUIDUtil.genUUID(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(
+                    db.getId(), txnId2, table2Tablets, Lists.newArrayList(), null);
+
+            long txnId3 = globalTransactionMgr.beginTransaction(db.getId(),
+                    Lists.newArrayList(table1.getId(), table2.getId()),
+                    "min_version_3_" + UUIDUtil.genUUID(), transactionSource,
+                    TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+            VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(
+                    db.getId(), txnId3, bothTableTablets, Lists.newArrayList(), null);
+
+            List<TransactionStateBatch> batches = globalTransactionMgr.getReadyPublishTransactionsBatch();
+            for (long headTxnId : Lists.newArrayList(txnId1, txnId2)) {
+                TransactionStateBatch headBatch = batches.stream()
+                        .filter(batch -> batch.getTxnIds().contains(headTxnId))
+                        .findFirst().orElse(null);
+                assertNotNull(headBatch, "no ready batch for head txn " + headTxnId);
+                assertEquals(Lists.newArrayList(headTxnId), headBatch.getTxnIds());
+            }
+
+            PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
+            awaitPublish(publishVersionDaemon, waiter1, waiter2, waiter3);
+        } finally {
+            Config.lake_batch_publish_min_version_num = oldMinVersionNum;
             Config.lake_enable_batch_publish_multi_table = oldMultiTable;
         }
     }
@@ -568,7 +632,6 @@ public class LakePublishBatchTest {
 
         // test publish transactionStateBatch which size is one
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        Config.lake_batch_publish_min_version_num = 1;
         long transactionId9 = globalTransactionMgr.
                 beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
                         GlobalStateMgrTestUtil.testTxnLable9 + "_" + UUIDUtil.genUUID().toString(),
@@ -930,21 +993,6 @@ public class LakePublishBatchTest {
 
     @Test
     public void testBatchPublishShadowIndex() throws Exception {
-        // Strict cut on diverging loaded-index snapshots (see
-        // DatabaseTransactionMgr.getReadyToPublishTxnListBatch) breaks this scenario into
-        // single-txn batches per snapshot, but TransactionGraph.getTxnsWithTxnDependencyBatch
-        // refuses to return chains smaller than min_version_num. Production default is 1; the
-        // class-level setUp raises it to 2 to stress batching. Lower it back for this one
-        // test so the post-cut single-txn batches actually publish.
-        Config.lake_batch_publish_min_version_num = 1;
-        try {
-            doTestBatchPublishShadowIndex();
-        } finally {
-            Config.lake_batch_publish_min_version_num = 2;
-        }
-    }
-
-    private void doTestBatchPublishShadowIndex() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
@@ -1411,7 +1459,7 @@ public class LakePublishBatchTest {
 
     @Test
     public void testFailedSingleTxnBatchIsRetriedAlone() throws Exception {
-        // A lone txn is published only when a one-txn batch is allowed.
+        // A one-transaction attempt must stay alone when it is retried.
         int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
         Config.lake_batch_publish_min_version_num = 1;
         try {
