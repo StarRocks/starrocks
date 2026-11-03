@@ -69,11 +69,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
-<<<<<<< HEAD
-=======
-import com.starrocks.thrift.TCdcErrorCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
->>>>>>> c51085d66c7... [BugFix][RB-899] Wait for the MV's committed transactions to become visible before an incremental refresh plans (#67605)
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;

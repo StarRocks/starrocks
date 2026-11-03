@@ -16,15 +16,9 @@ package com.starrocks.scheduler.mv.ivm;
 
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.scheduler.Constants;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.TaskRunBuilder;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import mockit.Invocation;
 import mockit.Mock;
@@ -32,9 +26,7 @@ import mockit.MockUp;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -44,110 +36,93 @@ import java.util.function.IntConsumer;
  * An incremental run must not plan on the view while one of the view's transactions is committed but not yet
  * visible: the merge reads the view as it was before that transaction, whose window is already recorded.
  */
-public class IvmWaitPendingMvPublishTest extends IvmCloudNativeRefreshTestBase {
-    private static final String DB = "db_ivm_wait_pending_mv_publish";
-    private static final AtomicInteger VIEWS = new AtomicInteger();
+public class IvmWaitPendingMvPublishTest extends MVIVMIcebergTestBase {
+    private static final String MV_QUERY =
+            "SELECT id, count(*) AS cnt FROM `iceberg0`.`unpartitioned_db`.`t0` GROUP BY id";
     private static final long DEFAULT_WAIT_MS = Config.mv_incremental_refresh_wait_visible_timeout_ms;
-
-    @BeforeAll
-    public static void beforeClass() throws Exception {
-        setUpSharedDataCluster(DB);
-    }
 
     @AfterEach
     public void restoreWaitTimeout() {
         Config.mv_incremental_refresh_wait_visible_timeout_ms = DEFAULT_WAIT_MS;
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"incremental", "auto"})
-    public void testPlansOnlyAfterThePendingTransactionIsVisible(String refreshMode) throws Exception {
-        OlapTable fact = newFact();
-        MaterializedView mv = refreshedMv(fact, refreshMode);
-        loadPartition(fact, "p1");
-        AtomicInteger pendingChecks = pendingFor(mv, 3, check -> { });
-        AtomicInteger checksBeforeWrite = new AtomicInteger(-1);
-        mockLakeDml(insertStmt -> checksBeforeWrite.compareAndSet(-1, pendingChecks.get()));
+    @Test
+    public void testPlansOnlyAfterThePendingTransactionIsVisible() throws Exception {
+        MaterializedView mv = incrementalMvWithANewBaseVersion();
+        AtomicInteger checks = pendingFor(mv, 3, check -> { });
+        TaskRun run = buildMVTaskRun(mv, "test");
 
-        TaskRun run = newRun(mv);
+        initAndExecuteTaskRun(run);
 
-        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, executeBatch(run));
-        Assertions.assertEquals("INCREMENTAL", executedRefreshMode(run));
-        Assertions.assertTrue(checksBeforeWrite.get() > 3,
-                "the run wrote after " + checksBeforeWrite.get() + " checks, while the transaction was pending");
+        Assertions.assertEquals(4, checks.get());
+        Assertions.assertNotNull(getMVTaskRunProcessor(run).getMvTaskRunContext().getExecPlan());
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"incremental", "auto"})
-    public void testFailsWithoutWritingWhenTheTransactionStaysPending(String refreshMode) throws Exception {
-        OlapTable fact = newFact();
-        MaterializedView mv = refreshedMv(fact, refreshMode);
-        loadPartition(fact, "p1");
+    @Test
+    public void testFailsWithoutPlanningWhenTheTransactionStaysPending() throws Exception {
+        MaterializedView mv = incrementalMvWithANewBaseVersion();
         Config.mv_incremental_refresh_wait_visible_timeout_ms = 200;
         pendingFor(mv, Integer.MAX_VALUE, check -> { });
         Map<BaseTableInfo, TvrVersionRange> baselineBefore = tvrBaseline(mv);
-        int scansBefore = SCANNED_VERSIONS.size();
+        TaskRun run = buildMVTaskRun(mv, "test");
 
-        TaskRun run = newRun(mv);
-        Exception failure = Assertions.assertThrows(Exception.class, () -> executeBatch(run));
+        Exception failure = Assertions.assertThrows(Exception.class, () -> initAndExecuteTaskRun(run));
 
         Assertions.assertTrue(ExceptionUtils.indexOfType(failure, MvPublishPendingException.class) >= 0,
                 ExceptionUtils.getStackTrace(failure));
-        Assertions.assertEquals("INCREMENTAL", executedRefreshMode(run));
-        Assertions.assertEquals(scansBefore, SCANNED_VERSIONS.size(), "the run wrote the view");
+        Assertions.assertNull(getMVTaskRunProcessor(run).getMvTaskRunContext().getExecPlan());
         Assertions.assertEquals(baselineBefore, tvrBaseline(mv));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"incremental", "auto"})
-    public void testStopsWaitingWhenTheRunIsKilled(String refreshMode) throws Exception {
-        OlapTable fact = newFact();
-        MaterializedView mv = refreshedMv(fact, refreshMode);
-        loadPartition(fact, "p1");
+    @Test
+    public void testStopsWaitingWhenTheRunIsKilled() throws Exception {
+        MaterializedView mv = incrementalMvWithANewBaseVersion();
         Config.mv_incremental_refresh_wait_visible_timeout_ms = 60_000;
-        TaskRun run = newRun(mv);
+        TaskRun run = buildMVTaskRun(mv, "test");
         AtomicInteger checks = pendingFor(mv, Integer.MAX_VALUE, check -> {
             if (check == 3) {
                 run.kill();
             }
         });
-        int scansBefore = SCANNED_VERSIONS.size();
 
-        Exception failure = Assertions.assertThrows(Exception.class, () -> executeBatch(run));
+        Exception failure = Assertions.assertThrows(Exception.class, () -> initAndExecuteTaskRun(run));
 
-        assertStoppedWaiting(failure, checks, run, scansBefore);
+        assertStoppedWaiting(failure, checks, run);
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"incremental", "auto"})
-    public void testStopsWaitingWhenTheThreadIsInterrupted(String refreshMode) throws Exception {
-        OlapTable fact = newFact();
-        MaterializedView mv = refreshedMv(fact, refreshMode);
-        loadPartition(fact, "p1");
+    @Test
+    public void testStopsWaitingWhenTheThreadIsInterrupted() throws Exception {
+        MaterializedView mv = incrementalMvWithANewBaseVersion();
         Config.mv_incremental_refresh_wait_visible_timeout_ms = 60_000;
-        TaskRun run = newRun(mv);
+        TaskRun run = buildMVTaskRun(mv, "test");
         AtomicInteger checks = pendingFor(mv, Integer.MAX_VALUE, check -> {
             if (check == 3) {
                 Thread.currentThread().interrupt();
             }
         });
-        int scansBefore = SCANNED_VERSIONS.size();
 
         try {
-            Exception failure = Assertions.assertThrows(Exception.class, () -> executeBatch(run));
+            Exception failure = Assertions.assertThrows(Exception.class, () -> initAndExecuteTaskRun(run));
 
-            assertStoppedWaiting(failure, checks, run, scansBefore);
+            assertStoppedWaiting(failure, checks, run);
         } finally {
             Thread.interrupted();
         }
     }
 
-    private static void assertStoppedWaiting(Exception failure, AtomicInteger checks, TaskRun run, int scansBefore) {
+    private static void assertStoppedWaiting(Exception failure, AtomicInteger checks, TaskRun run) {
         Assertions.assertTrue(ExceptionUtils.indexOfType(failure, MvPublishPendingException.class) >= 0,
                 ExceptionUtils.getStackTrace(failure));
         Assertions.assertTrue(checks.get() <= 4, "kept waiting for " + checks.get() + " checks");
-        Assertions.assertEquals("INCREMENTAL", executedRefreshMode(run));
-        Assertions.assertEquals(scansBefore, SCANNED_VERSIONS.size(), "the run wrote the view");
+        Assertions.assertNull(getMVTaskRunProcessor(run).getMvTaskRunContext().getExecPlan());
+    }
+
+    private MaterializedView incrementalMvWithANewBaseVersion() throws Exception {
+        MaterializedView mv = createMaterializedViewWithRefreshMode(MV_QUERY, "incremental");
+        seedTvrBaselineAtVersionZero(mv);
+        advanceTableVersionTo(1L);
+        mockListTableDeltaTraitsPerVersion(0L, 0L);
+        return mv;
     }
 
     /** Reports a committed transaction on {@code mv} for its first {@code times} checks, handing each check to onCheck. */
@@ -156,7 +131,7 @@ public class IvmWaitPendingMvPublishTest extends IvmCloudNativeRefreshTestBase {
         new MockUp<GlobalTransactionMgr>() {
             @Mock
             public boolean existCommittedTxns(Invocation invocation, Long dbId, Long tableId, Long partitionId) {
-                if (dbId == db.getId() && tableId != null && tableId == mv.getId() && partitionId == null) {
+                if (dbId == mv.getDbId() && tableId != null && tableId == mv.getId() && partitionId == null) {
                     int check = checks.incrementAndGet();
                     onCheck.accept(check);
                     return check <= times;
@@ -167,22 +142,7 @@ public class IvmWaitPendingMvPublishTest extends IvmCloudNativeRefreshTestBase {
         return checks;
     }
 
-    private static OlapTable newFact() throws Exception {
-        OlapTable fact = createFact("fact_wait_publish_" + VIEWS.incrementAndGet());
-        loadEveryPartition(fact);
-        return fact;
-    }
-
-    private static MaterializedView refreshedMv(OlapTable fact, String refreshMode) throws Exception {
-        MaterializedView mv = createMv("mv_wait_publish_" + VIEWS.get(), fact, refreshMode);
-        mockLakeDml();
-        runJob(mv, fact);
-        return mv;
-    }
-
-    private static TaskRun newRun(MaterializedView mv) {
-        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(TaskBuilder.getMvTaskName(mv.getId()));
-        task.getProperties().put(TaskRun.IS_TEST, "true");
-        return TaskRunBuilder.newBuilder(task).properties(Map.of()).build();
+    private static Map<BaseTableInfo, TvrVersionRange> tvrBaseline(MaterializedView mv) {
+        return Map.copyOf(mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap());
     }
 }
