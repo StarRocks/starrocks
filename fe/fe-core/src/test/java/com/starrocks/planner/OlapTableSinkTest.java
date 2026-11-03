@@ -27,6 +27,7 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.FlatJsonConfig;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -71,6 +72,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import com.starrocks.thrift.TFlatJsonConfig;
 import com.starrocks.thrift.TOlapTableIndexSchema;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTableLocationParam;
@@ -766,6 +768,100 @@ public class OlapTableSinkTest {
 
         Assertions.assertEquals(1, sink.toThrift().getOlap_table_sink().getNum_replicas(),
                 "shared-data sink must report a single replica so any node channel failure aborts the load");
+    }
+
+    /**
+     * The CN writer takes the table's flat_json.* properties from the sink. Without them it reads
+     * its tablet metadata cache and falls back to be.conf on a miss, which under
+     * light_weight_tablet_creation is every tablet's first write.
+     */
+    @Test
+    public void testCloudNativeSinkCarriesTableFlatJsonConfig(@Mocked GlobalStateMgr globalStateMgr,
+                                                            @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        FlatJsonConfig flatJsonConfig = new FlatJsonConfig(false, 0.25, 0.75, 12);
+        flatJsonConfig.setVersion(3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                dstTable.getFlatJsonConfig();
+                result = flatJsonConfig;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink tSink = sink.toThrift().getOlap_table_sink();
+        Assertions.assertTrue(tSink.isSetFlat_json_config(), "a table with flat_json.* properties must send them");
+        TFlatJsonConfig tConfig = tSink.getFlat_json_config();
+        Assertions.assertFalse(tConfig.isFlat_json_enable());
+        Assertions.assertEquals(0.25, tConfig.getFlat_json_null_factor(), 1e-9);
+        Assertions.assertEquals(0.75, tConfig.getFlat_json_sparsity_factor(), 1e-9);
+        Assertions.assertEquals(12, tConfig.getFlat_json_column_max());
+        Assertions.assertEquals(3, tConfig.getVersion());
+    }
+
+    /**
+     * A table without flat_json.* properties sends none, so the CN keeps following be.conf exactly as
+     * an eagerly created tablet (whose version 1 carries no flat_json_config) does.
+     */
+    @Test
+    public void testCloudNativeSinkWithoutTableFlatJsonConfigSendsNone(@Mocked GlobalStateMgr globalStateMgr,
+                                                                       @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                dstTable.getFlatJsonConfig();
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isSetFlat_json_config());
     }
 
     /**

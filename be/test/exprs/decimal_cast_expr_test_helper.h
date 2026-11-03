@@ -134,10 +134,8 @@ ColumnPtr cast_single_test_case(CastTestCase const& test_case, size_t front_fill
 
     [[maybe_unused]] auto output_precision = std::get<3>(test_case);
     [[maybe_unused]] auto output_scale = std::get<4>(test_case);
-    TypeDescriptor from_type = TypeDescriptor::from_logical_type(FromType, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                                 input_precision, input_scale);
-    TypeDescriptor to_type = TypeDescriptor::from_logical_type(ToType, TypeDescriptor::MAX_VARCHAR_LENGTH,
-                                                               output_precision, output_scale);
+    TypeDescriptor from_type = TypeDescriptor::from_logical_type(FromType, input_precision, input_scale);
+    TypeDescriptor to_type = TypeDescriptor::from_logical_type(ToType, output_precision, output_scale);
 
     auto s = Slice{input_value.c_str(), input_value.size()};
     auto from_column =
@@ -174,8 +172,8 @@ using CastParamCppType = typename CastParamCppTypeTrait<Type>::type;
 template <LogicalType FromType, LogicalType ToType>
 CastParamCppType<ToType> cast_value(CastParamCppType<FromType> const& value, int from_precision, int from_scale,
                                     int to_precision, int to_scale) {
-    TypeDescriptor from_type = TypeDescriptor::from_logical_type(FromType, 65535, from_precision, from_scale);
-    TypeDescriptor to_type = TypeDescriptor::from_logical_type(ToType, 65535, to_precision, to_scale);
+    TypeDescriptor from_type = TypeDescriptor::from_logical_type(FromType, from_precision, from_scale);
+    TypeDescriptor to_type = TypeDescriptor::from_logical_type(ToType, to_precision, to_scale);
     ColumnPtr column = cast<FromType, ToType, CONST>(RunTimeCppType<FromType>(value), from_type, to_type, 0, 0);
     DCHECK(column->is_constant() && !column->only_null());
     RunTimeCppType<ToType> result = ColumnHelper::get_const_value<ToType>(column);

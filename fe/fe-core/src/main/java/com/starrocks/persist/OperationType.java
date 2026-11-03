@@ -410,6 +410,9 @@ public class OperationType {
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
     public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 12112;
+    // Must stay below OP_TYPE_EOF and must not be @IgnorableOnReplayFailed: skipping a batch
+    // record would let a later leader reissue gtids that were already handed out.
+    public static final short OP_SAVE_GTID = 12113;
 
     //colocate table json format log
     @IgnorableOnReplayFailed

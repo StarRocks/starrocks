@@ -69,6 +69,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.Collection;
@@ -110,6 +111,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // Reset per-call buffer to prevent accumulation across retries within the same task run
         // (processor instance is reused by retryProcessTaskRun).
         this.stagedTvrDeltaMap.clear();
+        waitForCommittedMvTransactionsVisible();
         mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
         // collect change snapshots
@@ -169,6 +171,42 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         }
         recordImvSourceRangesOnTaskRun();
         return ProcessExecPlan.success(mvContext.getExecPlan(), insertStmt);
+    }
+
+    /**
+     * A refresh insert may return once committed, before it is visible, and its window is recorded at commit. Planning
+     * before it is visible reads the view without it, so a merge with the view's stored state drops that window.
+     */
+    private void waitForCommittedMvTransactionsVisible() {
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        if (!txnMgr.existCommittedTxns(db.getId(), mv.getId(), null)) {
+            return;
+        }
+        long timeoutMs = Config.mv_incremental_refresh_wait_visible_timeout_ms;
+        long startMs = System.currentTimeMillis();
+        try (Timer ignored = Tracers.watchScope("MVRefreshWaitCommittedTxnsVisible")) {
+            do {
+                if (mvContext.getTaskRun() != null && mvContext.getTaskRun().isKilled()) {
+                    throw new MvPublishPendingException(String.format("Refresh of materialized view %s was " +
+                            "cancelled while waiting for its committed transactions to become visible", mv.getName()));
+                }
+                long remainingMs = startMs + timeoutMs - System.currentTimeMillis();
+                if (remainingMs <= 0) {
+                    throw new MvPublishPendingException(String.format("Materialized view %s still has committed " +
+                            "transactions that are not visible after %d ms, see %s; the next refresh tries again",
+                            mv.getName(), timeoutMs, "mv_incremental_refresh_wait_visible_timeout_ms"));
+                }
+                try {
+                    Thread.sleep(Math.min(remainingMs, 100));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new MvPublishPendingException(String.format("Refresh of materialized view %s was " +
+                            "interrupted while waiting for its committed transactions to become visible", mv.getName()));
+                }
+            } while (txnMgr.existCommittedTxns(db.getId(), mv.getId(), null));
+        }
+        logger.info("Waited {} ms for the committed transactions of materialized view {} to become visible",
+                System.currentTimeMillis() - startMs, mv.getName());
     }
 
     /**
@@ -508,6 +546,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
                             ? String.valueOf(processStartTime) : "0");
         }
         TaskRun.seedVersionMapResetEpoch(newProperties, mvContext.getVersionMapResetEpoch());
+        TaskRun.seedRefreshJobProcessStartTime(newProperties, mvContext.getStatus());
         // warehouse
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));

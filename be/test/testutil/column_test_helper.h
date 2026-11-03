@@ -16,6 +16,7 @@
 
 #include <initializer_list>
 #include <optional>
+#include <type_traits>
 #include <vector>
 
 #include "column/array_column.h"
@@ -29,19 +30,46 @@ namespace starrocks {
 // A NULL row for ColumnTestHelper::build_array_column.
 struct NullArrayRow {};
 
+template <class T>
+class ArrayRow;
+
+template <class T>
+struct IsArrayRow : std::false_type {};
+template <class T>
+struct IsArrayRow<ArrayRow<T>> : std::true_type {};
+
 // One row for ColumnTestHelper::build_array_column: {1, std::nullopt, 3} is an array with a NULL element, {} is an
-// empty array and NullArrayRow{} is a NULL array.
+// empty array and NullArrayRow{} is a NULL array. Rows nest for ARRAY<ARRAY<...>>: an ArrayRow<ArrayRow<int32_t>>
+// such as {{1, 2}, {}, NullArrayRow{}} holds its inner arrays directly, with NullArrayRow{} for a NULL inner array.
 template <class T>
 class ArrayRow {
 public:
-    ArrayRow(std::initializer_list<std::optional<T>> elements) : _elements(elements) {}
+    using Element = std::conditional_t<IsArrayRow<T>::value, T, std::optional<T>>;
+
+    ArrayRow(std::initializer_list<Element> elements) : _elements(elements) {}
     ArrayRow(NullArrayRow) : _is_null(true) {}
 
     bool is_null() const { return _is_null; }
-    const std::vector<std::optional<T>>& elements() const { return _elements; }
+    const std::vector<Element>& elements() const { return _elements; }
+
+    Datum to_datum() const {
+        if (_is_null) {
+            return {};
+        }
+        DatumArray array;
+        array.reserve(_elements.size());
+        for (const auto& element : _elements) {
+            if constexpr (IsArrayRow<T>::value) {
+                array.emplace_back(element.to_datum());
+            } else {
+                array.emplace_back(element.has_value() ? Datum(*element) : Datum());
+            }
+        }
+        return Datum(std::move(array));
+    }
 
 private:
-    std::vector<std::optional<T>> _elements;
+    std::vector<Element> _elements;
     bool _is_null = false;
 };
 
@@ -79,7 +107,7 @@ public:
     }
 
     // Builds a column of |type|, an ARRAY of T, from |rows|. It replaces appending one DatumArray per row, which
-    // instantiates the Datum variant for every element at every call site.
+    // instantiates the Datum variant for every element at every call site. For ARRAY<ARRAY<U>>, T is ArrayRow<U>.
     template <class T>
     static MutableColumnPtr build_array_column(const TypeDescriptor& type, bool nullable,
                                                const std::vector<ArrayRow<T>>& rows) {
@@ -87,14 +115,9 @@ public:
         for (const auto& row : rows) {
             if (row.is_null()) {
                 column->append_nulls(1);
-                continue;
+            } else {
+                column->append_datum(row.to_datum());
             }
-            DatumArray array;
-            array.reserve(row.elements().size());
-            for (const auto& element : row.elements()) {
-                array.emplace_back(element.has_value() ? Datum(*element) : Datum());
-            }
-            column->append_datum(Datum(std::move(array)));
         }
         return column;
     }

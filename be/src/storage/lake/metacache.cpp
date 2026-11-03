@@ -16,6 +16,8 @@
 
 #include <bvar/bvar.h>
 
+#include <algorithm>
+
 #include "base/container/lru_cache.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
@@ -84,21 +86,54 @@ static Metacache* get_metacache() {
     return (mgr != nullptr) ? mgr->metacache() : nullptr;
 }
 
-static size_t get_metacache_capacity(void*) {
+static size_t get_tablet_metadata_cache_capacity(void*) {
     auto cache = get_metacache();
-    return (cache != nullptr) ? cache->capacity() : 0;
+    return (cache != nullptr) ? cache->tablet_metadata_capacity() : 0;
+}
+
+static size_t get_tablet_metadata_cache_usage(void*) {
+    auto cache = get_metacache();
+    return (cache != nullptr) ? cache->tablet_metadata_memory_usage() : 0;
+}
+
+static size_t get_segment_metadata_cache_capacity(void*) {
+    auto cache = get_metacache();
+    return (cache != nullptr) ? cache->segment_metadata_capacity() : 0;
+}
+
+static size_t get_segment_metadata_cache_usage(void*) {
+    auto cache = get_metacache();
+    return (cache != nullptr) ? cache->segment_metadata_memory_usage() : 0;
+}
+
+// Totals over both caches.
+static size_t get_metacache_capacity(void*) {
+    return get_tablet_metadata_cache_capacity(nullptr) + get_segment_metadata_cache_capacity(nullptr);
 }
 
 static size_t get_metacache_usage(void*) {
-    auto cache = get_metacache();
-    return (cache != nullptr) ? cache->memory_usage() : 0;
+    return get_tablet_metadata_cache_usage(nullptr) + get_segment_metadata_cache_usage(nullptr);
 }
 
 static bvar::PassiveStatus<size_t> g_metacache_capacity("lake", "metacache_capacity", get_metacache_capacity, nullptr);
 static bvar::PassiveStatus<size_t> g_metacache_usage("lake", "metacache_usage", get_metacache_usage, nullptr);
+static bvar::PassiveStatus<size_t> g_tablet_metadata_cache_capacity("lake", "tablet_metadata_cache_capacity",
+                                                                    get_tablet_metadata_cache_capacity, nullptr);
+static bvar::PassiveStatus<size_t> g_tablet_metadata_cache_usage("lake", "tablet_metadata_cache_usage",
+                                                                 get_tablet_metadata_cache_usage, nullptr);
+static bvar::PassiveStatus<size_t> g_segment_metadata_cache_capacity("lake", "segment_metadata_cache_capacity",
+                                                                     get_segment_metadata_cache_capacity, nullptr);
+static bvar::PassiveStatus<size_t> g_segment_metadata_cache_usage("lake", "segment_metadata_cache_usage",
+                                                                  get_segment_metadata_cache_usage, nullptr);
 #endif
 
-Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capacity)) {}
+int64_t metacache_capacity(int64_t mem_limit, int32_t percent) {
+    return mem_limit * std::clamp(percent, 0, 100) / 100;
+}
+
+Metacache::Metacache(int64_t tablet_metadata_capacity, int64_t segment_metadata_capacity)
+        : _tablet_metadata_cache(new_lru_cache(tablet_metadata_capacity)),
+          _segment_metadata_cache(new_lru_cache(segment_metadata_capacity)) {}
 
 Metacache::~Metacache() = default;
 
@@ -107,21 +142,21 @@ void Metacache::cache_value_deleter(const CacheKey& /*key*/, void* value) {
     delete static_cast<CacheValue*>(value);
 }
 
-void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size) {
-    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, cache_value_deleter);
-    _cache->release(handle);
+void Metacache::insert(Cache* cache, std::string_view key, CacheValue* ptr, size_t size) {
+    Cache::Handle* handle = cache->insert(CacheKey(key), ptr, size, cache_value_deleter);
+    cache->release(handle);
 }
 
 std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_metadata(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
+    auto handle = _tablet_metadata_cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_metadata_cache_miss << 1;
         return nullptr;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _tablet_metadata_cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = static_cast<CacheValue*>(_tablet_metadata_cache->value(handle));
         auto metadata = std::get<std::shared_ptr<const TabletMetadataPB>>(*value);
         g_metadata_cache_hit << 1;
         return metadata;
@@ -131,15 +166,15 @@ std::shared_ptr<const TabletMetadataPB> Metacache::lookup_tablet_metadata(std::s
 }
 
 std::shared_ptr<const TxnLogPB> Metacache::lookup_txn_log(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
+    auto handle = _tablet_metadata_cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_txnlog_cache_miss << 1;
         return nullptr;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _tablet_metadata_cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = static_cast<CacheValue*>(_tablet_metadata_cache->value(handle));
         auto log = std::get<std::shared_ptr<const TxnLogPB>>(*value);
         g_txnlog_cache_hit << 1;
         return log;
@@ -149,15 +184,15 @@ std::shared_ptr<const TxnLogPB> Metacache::lookup_txn_log(std::string_view key) 
 }
 
 std::shared_ptr<const CombinedTxnLogPB> Metacache::lookup_combined_txn_log(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
+    auto handle = _tablet_metadata_cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_txnlog_cache_miss << 1;
         return nullptr;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _tablet_metadata_cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = static_cast<CacheValue*>(_tablet_metadata_cache->value(handle));
         auto log = std::get<std::shared_ptr<const CombinedTxnLogPB>>(*value);
         g_txnlog_cache_hit << 1;
         return log;
@@ -167,15 +202,15 @@ std::shared_ptr<const CombinedTxnLogPB> Metacache::lookup_combined_txn_log(std::
 }
 
 std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
+    auto handle = _segment_metadata_cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_schema_cache_miss << 1;
         return nullptr;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = static_cast<CacheValue*>(_segment_metadata_cache->value(handle));
         auto schema = std::get<std::shared_ptr<const TabletSchema>>(*value);
         g_schema_cache_hit << 1;
         return schema;
@@ -185,14 +220,15 @@ std::shared_ptr<const TabletSchema> Metacache::lookup_tablet_schema(std::string_
 }
 
 std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
+    auto handle = _segment_metadata_cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_segment_cache_miss << 1;
         return nullptr;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
 
-    auto* segment = std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(_cache->value(handle)));
+    auto* segment =
+            std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(_segment_metadata_cache->value(handle)));
     if (segment == nullptr) {
         return nullptr;
     }
@@ -201,15 +237,15 @@ std::shared_ptr<Segment> Metacache::lookup_segment(std::string_view key) {
 }
 
 std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
+    auto handle = _segment_metadata_cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_dv_cache_miss << 1;
         return nullptr;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = static_cast<CacheValue*>(_segment_metadata_cache->value(handle));
         auto delvec = std::get<std::shared_ptr<const DelVector>>(*value);
         g_dv_cache_hit << 1;
         return delvec;
@@ -219,15 +255,15 @@ std::shared_ptr<const DelVector> Metacache::lookup_delvec(std::string_view key) 
 }
 
 bool Metacache::lookup_bundled_metadata_marker(std::string_view key) {
-    auto handle = _cache->lookup(CacheKey(key));
+    auto handle = _tablet_metadata_cache->lookup(CacheKey(key));
     if (handle == nullptr) {
         g_aggregate_partition_cache_miss << 1;
         return false;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _tablet_metadata_cache->release(handle); });
 
     try {
-        auto value = static_cast<CacheValue*>(_cache->value(handle));
+        auto value = static_cast<CacheValue*>(_tablet_metadata_cache->value(handle));
         auto is_bundled_metadata = std::get<bool>(*value);
         g_aggregate_partition_cache_hit << 1;
         return is_bundled_metadata;
@@ -239,7 +275,7 @@ bool Metacache::lookup_bundled_metadata_marker(std::string_view key) {
 void Metacache::cache_segment(std::string_view key, std::shared_ptr<Segment> segment) {
     auto mem_cost = segment->mem_usage();
     auto value = std::make_unique<CacheValue>(std::move(segment));
-    insert(key, value.release(), mem_cost);
+    insert(_segment_metadata_cache.get(), key, value.release(), mem_cost);
 }
 
 std::shared_ptr<Segment> Metacache::cache_segment_if_absent(std::string_view key,
@@ -248,18 +284,20 @@ std::shared_ptr<Segment> Metacache::cache_segment_if_absent(std::string_view key
     // Destroyed on return unless the cache adopts it, i.e. never under a cache lock.
     auto value = std::make_unique<CacheValue>(segment);
     bool inserted = false;
-    auto* handle = _cache->insert_if_absent(CacheKey(key), value.get(), mem_cost, cache_value_deleter, &inserted);
+    auto* handle = _segment_metadata_cache->insert_if_absent(CacheKey(key), value.get(), mem_cost, cache_value_deleter,
+                                                             &inserted);
     if (handle == nullptr) {
         return nullptr;
     }
-    DeferOp defer([this, handle]() { _cache->release(handle); });
+    DeferOp defer([this, handle]() { _segment_metadata_cache->release(handle); });
 
     if (inserted) {
         (void)value.release(); // ownership moved into the cache
         return segment;
     }
     // Another thread won the race, return the segment that is actually cached.
-    auto* cached = std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(_cache->value(handle)));
+    auto* cached =
+            std::get_if<std::shared_ptr<Segment>>(static_cast<CacheValue*>(_segment_metadata_cache->value(handle)));
     return cached != nullptr ? *cached : nullptr;
 }
 
@@ -272,14 +310,15 @@ bool segment_ptr_matches(void* value, const void* ctx) {
 } // namespace
 
 bool Metacache::update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment) {
-    return _cache->update_charge_if(CacheKey(key), mem_cost, segment_ptr_matches, segment);
+    return _segment_metadata_cache->update_charge_if(CacheKey(key), mem_cost, segment_ptr_matches, segment);
 }
 
 bool Metacache::replace_segment_if_matches(std::string_view key, const Segment* expected,
                                            const std::shared_ptr<Segment>& replacement) {
     const auto mem_cost = replacement->mem_usage();
     auto value = std::make_unique<CacheValue>(replacement);
-    if (!_cache->replace_if(CacheKey(key), value.get(), mem_cost, cache_value_deleter, segment_ptr_matches, expected)) {
+    if (!_segment_metadata_cache->replace_if(CacheKey(key), value.get(), mem_cost, cache_value_deleter,
+                                             segment_ptr_matches, expected)) {
         return false;
     }
     (void)value.release(); // ownership moved into the cache
@@ -289,57 +328,75 @@ bool Metacache::replace_segment_if_matches(std::string_view key, const Segment* 
 void Metacache::cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec) {
     auto mem_cost = delvec->memory_usage();
     auto value = std::make_unique<CacheValue>(std::move(delvec));
-    insert(key, value.release(), mem_cost);
+    insert(_segment_metadata_cache.get(), key, value.release(), mem_cost);
 }
 
 void Metacache::cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata) {
     auto value_ptr = std::make_unique<CacheValue>(metadata);
-    insert(key, value_ptr.release(), metadata->SpaceUsedLong());
+    insert(_tablet_metadata_cache.get(), key, value_ptr.release(), metadata->SpaceUsedLong());
 }
 
 void Metacache::cache_txn_log(std::string_view key, std::shared_ptr<const TxnLogPB> log) {
     auto value_ptr = std::make_unique<CacheValue>(log);
-    insert(key, value_ptr.release(), log->SpaceUsedLong());
+    insert(_tablet_metadata_cache.get(), key, value_ptr.release(), log->SpaceUsedLong());
 }
 
 void Metacache::cache_combined_txn_log(std::string_view key, std::shared_ptr<const CombinedTxnLogPB> log) {
     auto value_ptr = std::make_unique<CacheValue>(log);
-    insert(key, value_ptr.release(), log->SpaceUsedLong());
+    insert(_tablet_metadata_cache.get(), key, value_ptr.release(), log->SpaceUsedLong());
 }
 
 void Metacache::cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size) {
     auto cache_value = std::make_unique<CacheValue>(schema);
-    insert(key, cache_value.release(), size);
+    insert(_segment_metadata_cache.get(), key, cache_value.release(), size);
 }
 
 void Metacache::cache_bundled_metadata_marker(std::string_view key) {
     auto cache_value = std::make_unique<CacheValue>(true);
-    insert(key, cache_value.release(), sizeof(bool));
+    insert(_tablet_metadata_cache.get(), key, cache_value.release(), sizeof(bool));
 }
 
 void Metacache::erase(std::string_view key) {
-    _cache->erase(CacheKey(key));
+    _tablet_metadata_cache->erase(CacheKey(key));
+    _segment_metadata_cache->erase(CacheKey(key));
 }
 
-void Metacache::update_capacity(size_t new_capacity) {
-    size_t old_capacity = _cache->get_capacity();
+void Metacache::update_capacity(Cache* cache, size_t new_capacity) {
+    size_t old_capacity = cache->get_capacity();
     int64_t delta = (int64_t)new_capacity - (int64_t)old_capacity;
     if (delta != 0) {
-        (void)_cache->adjust_capacity(delta);
-        VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << _cache->get_capacity();
+        (void)cache->adjust_capacity(delta);
+        VLOG(5) << "Changed metadache capacity from " << old_capacity << " to " << cache->get_capacity();
     }
 }
 
+void Metacache::update_tablet_metadata_capacity(size_t new_capacity) {
+    update_capacity(_tablet_metadata_cache.get(), new_capacity);
+}
+
+void Metacache::update_segment_metadata_capacity(size_t new_capacity) {
+    update_capacity(_segment_metadata_cache.get(), new_capacity);
+}
+
 void Metacache::prune() {
-    _cache->prune();
+    _tablet_metadata_cache->prune();
+    _segment_metadata_cache->prune();
 }
 
-size_t Metacache::memory_usage() const {
-    return _cache->get_memory_usage();
+size_t Metacache::tablet_metadata_memory_usage() const {
+    return _tablet_metadata_cache->get_memory_usage();
 }
 
-size_t Metacache::capacity() const {
-    return _cache->get_capacity();
+size_t Metacache::tablet_metadata_capacity() const {
+    return _tablet_metadata_cache->get_capacity();
+}
+
+size_t Metacache::segment_metadata_memory_usage() const {
+    return _segment_metadata_cache->get_memory_usage();
+}
+
+size_t Metacache::segment_metadata_capacity() const {
+    return _segment_metadata_cache->get_capacity();
 }
 
 } // namespace starrocks::lake

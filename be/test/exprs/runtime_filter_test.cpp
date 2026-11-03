@@ -1226,7 +1226,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
 }
 
 ColumnPtr CreateSeriesColumnInt32(int32_t num_rows, bool nullable) {
-    auto type_desc = TypeDescriptor(TYPE_INT);
+    auto type_desc = TYPE_INT_DESC;
     MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
     std::vector<int32_t> elements(num_rows);
     std::iota(elements.begin(), elements.end(), 0);

@@ -14,9 +14,11 @@
 
 package com.starrocks.connector.iceberg.procedure;
 
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
+import com.starrocks.connector.iceberg.IcebergRewriteFileSelector;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -27,6 +29,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -395,5 +398,61 @@ public class RewriteDataFilesTest {
         Assertions.assertNotNull(capturedSql[0]);
         Assertions.assertFalse(capturedSql[0].contains("_row_id"),
                 "SQL should NOT include _row_id for v2 table: " + capturedSql[0]);
+    }
+
+    private static IcebergTableProcedureContext newProcedureContext(org.apache.iceberg.Table table,
+                                                                    IcebergHiveCatalog catalog) {
+        AlterTableStmt stmt = Mockito.mock(AlterTableStmt.class);
+        Mockito.when(stmt.getCatalogName()).thenReturn("c1");
+        Mockito.when(stmt.getDbName()).thenReturn("db");
+        Mockito.when(stmt.getTableName()).thenReturn("table");
+        AlterTableOperationClause clause = Mockito.mock(AlterTableOperationClause.class);
+        ConnectContext ctx = Mockito.mock(ConnectContext.class);
+        Mockito.when(ctx.getState()).thenReturn(new QueryState());
+        return new IcebergTableProcedureContext(catalog, table, ctx, null, HDFS_ENVIRONMENT, stmt, clause);
+    }
+
+    @Test
+    void rewriteDataFilesShouldPassDeleteThresholdsToJob(@Mocked org.apache.iceberg.Table table,
+                                                         @Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        IcebergRewriteFileSelector[] captured = new IcebergRewriteFileSelector[2];
+        new MockUp<IcebergRewriteDataJob>() {
+            @Mock
+            public void prepare(Invocation inv) {
+                Object job = inv.getInvokedInstance();
+                IcebergRewriteFileSelector selector = Deencapsulation.getField(job, "fileSelector");
+                captured[captured[0] == null ? 0 : 1] = selector;
+            }
+
+            @Mock
+            public IcebergRewriteDataJob.RewriteMetrics execute() {
+                return new IcebergRewriteDataJob.RewriteMetrics(0, 0, 0);
+            }
+        };
+
+        IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
+        procedure.execute(newProcedureContext(table, icebergHiveCatalog), Map.of());
+        Assertions.assertEquals(IcebergRewriteFileSelector.withDefaults(false,
+                IcebergRewriteFileSelector.DEFAULT_MIN_FILE_SIZE_BYTES), captured[0]);
+
+        procedure.execute(newProcedureContext(table, icebergHiveCatalog), Map.of(
+                "min_file_size_bytes", ConstantOperator.createBigint(128L),
+                "delete_ratio_threshold", ConstantOperator.createDouble(0.5),
+                "delete_file_threshold", ConstantOperator.createBigint(3L)));
+        Assertions.assertEquals(new IcebergRewriteFileSelector(false, 128L, 0.5, 3L), captured[1]);
+    }
+
+    @Test
+    void rewriteDataFilesShouldRejectInvalidDeleteThresholds(@Mocked org.apache.iceberg.Table table,
+                                                             @Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        IcebergTableProcedure procedure = RewriteDataFilesProcedure.getInstance();
+        StarRocksConnectorException ratio = Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                procedure.execute(newProcedureContext(table, icebergHiveCatalog),
+                        Map.of("delete_ratio_threshold", ConstantOperator.createDouble(1.5))));
+        Assertions.assertTrue(ratio.getMessage().contains("delete_ratio_threshold"), ratio.getMessage());
+        StarRocksConnectorException files = Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                procedure.execute(newProcedureContext(table, icebergHiveCatalog),
+                        Map.of("delete_file_threshold", ConstantOperator.createBigint(0L))));
+        Assertions.assertTrue(files.getMessage().contains("delete_file_threshold"), files.getMessage());
     }
 }

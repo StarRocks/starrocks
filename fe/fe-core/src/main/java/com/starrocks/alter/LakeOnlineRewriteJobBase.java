@@ -46,6 +46,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -108,6 +109,9 @@ import javax.validation.constraints.NotNull;
 public abstract class LakeOnlineRewriteJobBase
         extends LakeTableSchemaChangeJobBase {
     private static final Logger LOG = LogManager.getLogger(LakeOnlineRewriteJobBase.class);
+
+    // Prefix of the retry diagnostic published while settleBeforeFinishingRewrite keeps the job RUNNING.
+    private static final String FINISH_WAIT_DIAGNOSTIC_PREFIX = "every partition is rewritten, waiting for ";
 
     // The shadow index meta id shared across all physical partitions (one new index per table).
     @SerializedName(value = "shadowIndexMetaId")
@@ -392,6 +396,35 @@ public abstract class LakeOnlineRewriteJobBase
     }
 
     /**
+     * Seam invoked in {@link #runPendingJob} stage 1, under the table READ lock, before any partition is planned.
+     * Default no-op. A subclass captures here the table-level inputs of {@link #planPartitionShadow}, so that every
+     * partition is planned against the same snapshot.
+     */
+    protected void capturePlanningInputs(OlapTable table) throws AlterCancelException {
+    }
+
+    /**
+     * Seam invoked in {@link #runPendingJob} stage 3, under the table WRITE lock, after the partition set was
+     * re-validated and before the WAITING_TXN journal. Default no-op. An AlterCancelException here cancels the job
+     * before the WAITING_TXN entry is journaled, and the shards built in stage 2 are dropped.
+     */
+    protected void validateShadowBeforeCommit(OlapTable table, List<PendingPartitionPlan> plans)
+            throws AlterCancelException {
+    }
+
+    /**
+     * Seam invoked on the leader by {@link #runRunningJob} once every partition's rewrite has published, before the
+     * FINISHED_REWRITING journal: the job is still cancellable and no commit version is reserved yet, so waiting here
+     * holds back no load. Default: nothing to wait for. A non-null return says what the job still waits for; the job
+     * stays RUNNING, publishes it as the retry diagnostic and calls this again on the next tick. A leader failover
+     * re-runs RUNNING, so this must be idempotent, and it must not write the journal. An AlterCancelException cancels
+     * the job.
+     */
+    protected String settleBeforeFinishingRewrite() throws AlterCancelException {
+        return null;
+    }
+
+    /**
      * Seam invoked once the job has reached a terminal state, after the FINISHED flip applier
      * ({@code cancelled=false}) and after the CANCELLED applier in {@link #cancelImpl}
      * ({@code cancelled=true}). Default no-op. A subclass that quiesced a writer in
@@ -569,6 +602,7 @@ public abstract class LakeOnlineRewriteJobBase
                     table.getState());
             cachedDbName = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId).getFullName();
             String tableName = table.getName();
+            capturePlanningInputs(table);
 
             for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
                 long physicalPartitionId = physicalPartition.getId();
@@ -633,6 +667,7 @@ public abstract class LakeOnlineRewriteJobBase
                     throw new AlterCancelException(
                             "partition set changed while building the range-rewrite shadow index");
                 }
+                validateShadowBeforeCommit(committedTable, pendingPlans);
 
                 for (PendingPartitionPlan plan : pendingPlans) {
                     PartitionRewriteState partitionState = stateOf(plan.physicalPartitionId);
@@ -849,7 +884,8 @@ public abstract class LakeOnlineRewriteJobBase
             OlapTable table = getTableOrThrow();
             Preconditions.checkState(table.getState() == jobTableState(), table.getState());
             watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
+            // Only for an older FE taking the job over after a downgrade; this FE redraws it when reserving versions.
+            commitGtid = getNextGtid();
             exposeShadowIndexToCatalog(table);
 
             // Getting the watershed and exposing the shadow are not atomic, and the id generator is shared
@@ -927,8 +963,9 @@ public abstract class LakeOnlineRewriteJobBase
      * The shadow tablets are never dropped/rebuilt on resume: post-watershed double-writes have
      * already published into them, so dropping would lose data.
      *
-     * <p>When every partition's rewrite has published, the job transitions to
-     * {@code FINISHED_REWRITING}; the atomic flip is performed there (a later phase).
+     * <p>When every partition's rewrite has published and {@link #settleBeforeFinishingRewrite} has nothing
+     * left to wait for, the job transitions to {@code FINISHED_REWRITING}; the atomic flip is performed there
+     * (a later phase).
      */
     @Override
     protected void runRunningJob() throws AlterCancelException {
@@ -997,6 +1034,17 @@ public abstract class LakeOnlineRewriteJobBase
                     // the next scheduler tick rather than blocking the scheduler thread on every partition.
                     return;
             }
+        }
+
+        String waitingFor = settleBeforeFinishingRewrite();
+        if (waitingFor != null) {
+            LOG.info("online rewrite job {}: every partition is rewritten, waiting for {}", jobId, waitingFor);
+            setRetryDiagnostic(FINISH_WAIT_DIAGNOSTIC_PREFIX + waitingFor);
+            return;
+        }
+        if (errMsg != null && errMsg.startsWith(FINISH_WAIT_DIAGNOSTIC_PREFIX)) {
+            // Cleared in the FINISHED_REWRITING entry journaled below.
+            errMsg = "";
         }
 
         // Every partition has durably recorded completion and its empty-source fact. The flip uses
@@ -1565,6 +1613,9 @@ public abstract class LakeOnlineRewriteJobBase
         }
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
             OlapTable table = getTableOrThrow();
+            // Same lock as the version reservation, so the gtid falls between those of commits before and after.
+            // Drawn first: a recorded commit version marks the reservation as done.
+            commitGtid = getNextGtid();
             for (long physicalPartitionId : partitionStates.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
@@ -1651,12 +1702,8 @@ public abstract class LakeOnlineRewriteJobBase
 
         try {
             // txnId == -1 means BE does nothing, just upgrades the tablet_meta version (no-op publish).
-            TxnInfoPB originTxnInfo = new TxnInfoPB();
-            originTxnInfo.txnId = -1L;
-            originTxnInfo.combinedTxnLog = false;
-            originTxnInfo.commitTime = finishedTimeMs / 1000;
-            originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
-            originTxnInfo.gtid = watershedGtid;
+            TxnInfoPB originTxnInfo = TxnInfoHelper.forJobPublish(-1L, TxnTypePB.TXN_EMPTY, finishedTimeMs,
+                    commitGtid);
 
             for (PartitionPublishInfo info : publishInfos) {
                 // The shadow tablets publish through the ordinary tablet_ids path (base_version 1); the
@@ -1664,12 +1711,8 @@ public abstract class LakeOnlineRewriteJobBase
                 // op_schema_change@watershedVersion and replay the post-watershed double-writes. So this
                 // reuses the same Utils.publishVersion / createSubRequestForAggregatePublish as any publish,
                 // just with a shadow-rewrite TxnInfoPB.
-                TxnInfoPB shadowTxnInfo = new TxnInfoPB();
-                shadowTxnInfo.txnId = info.rewriteTxnId;
-                shadowTxnInfo.txnType = TxnTypePB.TXN_SHADOW_REWRITE;
-                shadowTxnInfo.combinedTxnLog = false;
-                shadowTxnInfo.commitTime = finishedTimeMs / 1000;
-                shadowTxnInfo.gtid = watershedGtid;
+                TxnInfoPB shadowTxnInfo = TxnInfoHelper.forJobPublish(info.rewriteTxnId,
+                        TxnTypePB.TXN_SHADOW_REWRITE, finishedTimeMs, commitGtid);
                 shadowTxnInfo.shadowRewriteAlterVersion = info.watershedVersion;
                 // Empty at the watershed: BE synthesizes an empty op_schema_change@W with no source load.
                 shadowTxnInfo.shadowRewriteSourceEmpty = info.sourceEmpty;
@@ -1752,7 +1795,7 @@ public abstract class LakeOnlineRewriteJobBase
                 }
             }
         }
-        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid,
+        return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, commitGtid,
                 commitVersionMapView(), tabletsByPartition, computeResource, useAggregatePublish);
     }
 
@@ -2058,7 +2101,7 @@ public abstract class LakeOnlineRewriteJobBase
             this.shadowIndexName = other.shadowIndexName;
             this.partitionStates = other.partitionStates;
             this.watershedTxnId = other.watershedTxnId;
-            this.watershedGtid = other.watershedGtid;
+            this.commitGtid = other.commitGtid;
             this.forceSkippedAtCommitted = other.forceSkippedAtCommitted;
         }
 

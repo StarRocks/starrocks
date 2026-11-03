@@ -164,6 +164,10 @@ public:
 
     StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
     StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets) override;
+
+    // Whether an UNSHARE of this tablet rewrites anything: a rowset it picks or, without a separate sort key, an
+    // index file the tablet cannot keep.
+    static StatusOr<bool> has_work(const TabletMetadataPB& metadata);
 };
 
 } // namespace starrocks::lake

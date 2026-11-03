@@ -188,7 +188,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：`true` の場合、パーティション作成（手動の `ALTER TABLE ... ADD PARTITION`、ロード中の自動作成、および動的パーティションスケジューラ）は、安全であることが証明されているメタデータのみの ALTER 操作（現在は存算分離モードの ADD/DROP INDEX ファストパスジョブ、および fast schema evolution の一時的な `UPDATING_META` 状態）と並行して実行できます。DDL を拒否したり ALTER ジョブをキャンセルしたりしません。`false` に設定すると、従来の排他的な動作に戻ります。この設定はパーティション作成のみを緩和し、その他のすべての ALTER ジョブと `ADD PARTITION` 以外のすべての DDL は従来の状態チェックを維持します。
+- 説明：`true` の場合、パーティション作成（手動の `ALTER TABLE ... ADD PARTITION`、ロード中の自動作成、および動的パーティションスケジューラ）は、安全であることが証明されているメタデータのみの ALTER 操作（現在は存算分離モードの ADD/DROP INDEX ファストパスジョブ、および fast schema evolution の一時的な `UPDATING_META` 状態）と並行して実行できます。DDL を拒否したり ALTER ジョブをキャンセルしたりしません。また、最適化ジョブは開始前にテーブルのすべてのレプリカが健全になるまで待機し、これはレプリカ修復が完了するまで続く場合があります。この待機中もパーティションの作成が許可されます。`false` に設定すると、従来の排他的な動作に戻ります。この設定はパーティション作成のみを緩和し、その他のすべての ALTER ジョブと `ADD PARTITION` 以外のすべての DDL は従来の状態チェックを維持します。
 - 導入時期：-
 
 ### `capacity_used_percent_high_water`
@@ -330,7 +330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：最適化ジョブ作成時に StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェックを満たす場合 (パーティション/キー/ソート指定なし、分散が `RandomDistributionDesc` でない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートストレージが有効、テーブルがクラウドネイティブテーブルまたはマテリアライズドビューでない)、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件が失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックします。これは、最適化中に書き込み操作をブロックする可能性があります。
+- 説明：最適化ジョブ作成時に StarRocks が非ブロッキングのオンライン最適化パスを使用するかどうかを制御します。`enable_online_optimize_table` が true で、ターゲットテーブルが互換性チェックを満たす場合 (パーティション/キー/ソート指定なし、分散が `RandomDistributionDesc` でない、バケッティング方法とバケットキーを変更しない、ストレージタイプが `COLUMN_WITH_ROW` でない、レプリケートストレージが有効、テーブルがクラウドネイティブテーブルまたはマテリアライズドビューでない)、プランナーは書き込みをブロックせずに最適化を実行するために `OnlineOptimizeJobV2` を作成します。false の場合、または互換性条件が失敗した場合、StarRocks は `OptimizeJobV2` にフォールバックします。これは、最適化中に書き込み操作をブロックする可能性があります。オンライン最適化パスは `enable_new_publish_mechanism` をサポートしていません。`enable_new_publish_mechanism` も true の場合、互換性チェックを満たす最適化ジョブの作成はエラーで失敗します。この場合は、`enable_new_publish_mechanism` または `enable_online_optimize_table` を false に設定してください。
 - 導入時期：v3.3.3, v3.4.0, v3.5.0
 
 ### `enable_strict_storage_medium_check`
@@ -393,7 +393,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：INSERT OVERWRITE またはマテリアライズドビュー更新操作によって削除されたパーティションのメタデータ保持時間。このようなメタデータは、RECOVER の実行によって回復できないことに注意してください。
+- 説明：INSERT OVERWRITE、マテリアライズドビュー更新操作、またはパーティション TTL（`partition_live_number`、`partition_ttl`、`partition_retention_condition`）によって削除されたパーティションのメタデータ保持時間。このようなメタデータは、RECOVER の実行によって回復できないことに注意してください。
 - 導入時期：v3.5.9
 
 ### `recover_with_empty_tablet`

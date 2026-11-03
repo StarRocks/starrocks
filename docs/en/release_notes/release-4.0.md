@@ -24,6 +24,94 @@ description: "StarRocks 4.0 release notes: DECIMAL256 type, File Bundling for sh
 
 :::
 
+## 4.0.17
+
+Release Date: October 24, 2026
+
+### Behavior Changes
+
+- Credential values are now masked in the BE `/varz` endpoint, `information_schema.be_configs`, the FE `ADMIN SHOW FRONTEND CONFIG` output and `/variable` endpoint, BE HTTP request logs, and the values echoed back by BE `/api/update_config`, BE `/api/_set_config`, and `ADMIN SET FRONTEND CONFIG`. [#80040](https://github.com/StarRocks/starrocks/pull/80040) [#80097](https://github.com/StarRocks/starrocks/pull/80097) [#80203](https://github.com/StarRocks/starrocks/pull/80203) [#80280](https://github.com/StarRocks/starrocks/pull/80280) [#80444](https://github.com/StarRocks/starrocks/pull/80444) [#80492](https://github.com/StarRocks/starrocks/pull/80492)
+- Sensitive query parameters are no longer written to the request URIs that the HTTP layer logs, and request URIs are sanitized with the same query parser as the actions that serve them. [#80515](https://github.com/StarRocks/starrocks/pull/80515) [#80461](https://github.com/StarRocks/starrocks/pull/80461)
+- Values shown in the FE web console (shared table renderer, `/query`, `/system`, and admin- and host-provided values) are now HTML-encoded, and the `/system` page looks up the raw proc path. [#80565](https://github.com/StarRocks/starrocks/pull/80565) [#80582](https://github.com/StarRocks/starrocks/pull/80582) [#80639](https://github.com/StarRocks/starrocks/pull/80639) [#80648](https://github.com/StarRocks/starrocks/pull/80648) [#80656](https://github.com/StarRocks/starrocks/pull/80656)
+- The FE `/dump`, `/dump_starmgr`, and `/service_id` endpoints now apply an admin check. [#80701](https://github.com/StarRocks/starrocks/pull/80701) [#80749](https://github.com/StarRocks/starrocks/pull/80749)
+- `lookup_string` now runs its internal query with the caller's identity and escapes its arguments to prevent SQL injection. [#79959](https://github.com/StarRocks/starrocks/pull/79959) [#79991](https://github.com/StarRocks/starrocks/pull/79991)
+- The tablet metadata dump endpoint `/api/cloudnative/dump_tablet_metadata` is restricted to metadata already present in the local cache of the selected CN. [#78449](https://github.com/StarRocks/starrocks/pull/78449)
+- The default value of the BE configuration `spill_max_dir_bytes_ratio` is lowered from `0.8` to `0.5`, so spill on a disk shared with `storage_root_path` is limited to 50% of the disk capacity. [#80189](https://github.com/StarRocks/starrocks/pull/80189)
+- Explicit `CAST(x AS CHAR(N))` now truncates the result to the first `N` characters, consistent with MySQL. [#75909](https://github.com/StarRocks/starrocks/pull/75909)
+- `yearweek(str_to_date('0000-01-00', '%Y-%m-%d'))` and similar inputs with a zero month or day now return `NULL` instead of crashing the BE in ASAN/debug builds. [#78358](https://github.com/StarRocks/starrocks/pull/78358)
+- A `SHOW` statement whose `LIMIT` offset is past the end of the result now returns no rows. [#79764](https://github.com/StarRocks/starrocks/pull/79764)
+- `SHOW ALTER TABLE OPTIMIZE ... ORDER BY` now resolves the column against the columns of its own result instead of those of `SHOW ALTER TABLE COLUMN`. [#79687](https://github.com/StarRocks/starrocks/pull/79687)
+- `SHOW` statements backed by proc directories now check that each row's width matches the column headers. [#79619](https://github.com/StarRocks/starrocks/pull/79619)
+- `sys.fe_memory_usage` is now populated by collecting memory usage when queried instead of reading an empty map. [#79809](https://github.com/StarRocks/starrocks/pull/79809)
+- `COM_STMT_CLOSE` now reads the statement ID in little-endian order, so closed prepared statements are released from the connection instead of being retained. [#79860](https://github.com/StarRocks/starrocks/pull/79860)
+- A `custom_query_id` set through a `SET_VAR` hint is now recorded in the audit log. [#79871](https://github.com/StarRocks/starrocks/pull/79871)
+- NGRAMBF pushdown is disabled for `NOT`, so `NOT LIKE` no longer drops pages that satisfy the predicate. [#79243](https://github.com/StarRocks/starrocks/pull/79243)
+- The transaction stream load endpoint now rejects a non-boolean `partial_update` header instead of treating it as `false`. [#79350](https://github.com/StarRocks/starrocks/pull/79350)
+- A non-positive `compact_threads` value is now rejected instead of crashing the CN. [#79641](https://github.com/StarRocks/starrocks/pull/79641)
+- Dropping a Primary Key tablet no longer increments `primary_key_table_error_state_total`. [#79558](https://github.com/StarRocks/starrocks/pull/79558)
+- With `enable_short_circuit`, a point lookup whose `IN` list repeats a key now returns the row once. [#80318](https://github.com/StarRocks/starrocks/pull/80318)
+- Bloom filter columns of unsupported types are now rejected when the column type is changed, instead of failing the schema change later. [#80871](https://github.com/StarRocks/starrocks/pull/80871)
+- An analyze job now keeps collecting the remaining tables after one table fails, instead of ending the round at the first failure. [#81028](https://github.com/StarRocks/starrocks/pull/81028)
+- Materialized view (MV) behavior changes: `lastRefreshTime` is logged instead of recomputed on replay; the version-map repair is no longer skipped by the physical partition id lookup; list-partition drift is compared against the live table; MV partitions that outlived a dropped base partition are refreshed; the legacy MV task `postRun` is ignored during refresh; and adaptive partition refresh supports cloud-native tables. [#78467](https://github.com/StarRocks/starrocks/pull/78467) [#78469](https://github.com/StarRocks/starrocks/pull/78469) [#78470](https://github.com/StarRocks/starrocks/pull/78470) [#79057](https://github.com/StarRocks/starrocks/pull/79057) [#79943](https://github.com/StarRocks/starrocks/pull/79943) [#80270](https://github.com/StarRocks/starrocks/pull/80270)
+- GCS Broker Load with an inline service account key now works with gcs-connector 3.x. [#78649](https://github.com/StarRocks/starrocks/pull/78649)
+- Failed multi-table transaction stream load commits now report their errors correctly. [#80351](https://github.com/StarRocks/starrocks/pull/80351)
+- The LDAP group provider stays usable after an FE restart and when Active Directory returns referrals. [#80361](https://github.com/StarRocks/starrocks/pull/80361)
+- A broken Ranger audit configuration no longer fails catalog access, and the ZooKeeper classes that Solr audit needs are shipped with the FE. [#81075](https://github.com/StarRocks/starrocks/pull/81075) [#77294](https://github.com/StarRocks/starrocks/pull/77294)
+- Standalone vector index files are now copied during rowset migration. [#80391](https://github.com/StarRocks/starrocks/pull/80391)
+- Peer cache data is now copied to the output when `datacache_block_buffer_enable` is `false`, and memory cache writes into free space are accepted regardless of the evict probability. [#80438](https://github.com/StarRocks/starrocks/pull/80438) [#80542](https://github.com/StarRocks/starrocks/pull/80542)
+- Primary Key compaction no longer overflows the row source mask when there are more than 32,767 sources. [#80472](https://github.com/StarRocks/starrocks/pull/80472)
+- Internal statistics DML now binds its own context, so `DROP STATS` in an external catalog session no longer reports `Unknown database '_statistics_'`. [#80473](https://github.com/StarRocks/starrocks/pull/80473)
+- Driver capacity is now reserved before drivers and operators are instantiated, so a fragment that exceeds the limit is rejected before it allocates them. [#80495](https://github.com/StarRocks/starrocks/pull/80495)
+- `hasDelete` is now restored when visible DELETE transactions are applied. [#80592](https://github.com/StarRocks/starrocks/pull/80592)
+- The FE brpc client now uses `com.starrocks:jprotobuf-rpc-core`, so an `OutOfMemoryError` no longer leaves event loops dead and makes `exec_plan_fragment` requests wait for their full timeout. [#80684](https://github.com/StarRocks/starrocks/pull/80684)
+- Heavy expressions that depend on each other are no longer pushed down. [#80710](https://github.com/StarRocks/starrocks/pull/80710)
+- `/greplog` now supports year-prefixed glog entries. [#80990](https://github.com/StarRocks/starrocks/pull/80990)
+
+### Improvements
+
+- A table can now opt out of automatic statistics collection. [#81027](https://github.com/StarRocks/starrocks/pull/81027)
+- A fragment's plan is now serialized once for all of its instance requests. [#80716](https://github.com/StarRocks/starrocks/pull/80716)
+
+### Bug fixes
+
+The following issues have been fixed:
+
+- Materialized view refresh issues: partition cache in Paimon did not distinguish tables, which caused wrong results when an MV refresh covered multiple tables. [#61763](https://github.com/StarRocks/starrocks/pull/61763)
+- Materialized view issues involving MV version maps, base-table partition churn, batched refresh, inactivation journaling, task scheduling, lock timeouts, shared-data base partition versions, `TRUE` transparent rewrite, and archived task run history. [#79945](https://github.com/StarRocks/starrocks/pull/79945) [#80893](https://github.com/StarRocks/starrocks/pull/80893) [#80944](https://github.com/StarRocks/starrocks/pull/80944) [#81030](https://github.com/StarRocks/starrocks/pull/81030) [#81033](https://github.com/StarRocks/starrocks/pull/81033) [#81034](https://github.com/StarRocks/starrocks/pull/81034) [#81036](https://github.com/StarRocks/starrocks/pull/81036) [#81088](https://github.com/StarRocks/starrocks/pull/81088)
+- A query could fail with `Vectorized engine does not support the operator, node_type: 0` because an MV rewrite left an aggregate in a projection. [#79611](https://github.com/StarRocks/starrocks/pull/79611)
+- Metadata lock races and gaps in the planner, `ALTER VIEW`, `INSERT OVERWRITE`, MV refresh, and other FE metadata paths. [#80784](https://github.com/StarRocks/starrocks/pull/80784) [#80786](https://github.com/StarRocks/starrocks/pull/80786) [#80891](https://github.com/StarRocks/starrocks/pull/80891) [#80892](https://github.com/StarRocks/starrocks/pull/80892) [#80943](https://github.com/StarRocks/starrocks/pull/80943) [#81037](https://github.com/StarRocks/starrocks/pull/81037)
+- `information_schema.views` queries failed when Ranger authorization was enabled because of a database-wide read lock. [#78344](https://github.com/StarRocks/starrocks/pull/78344)
+- A Primary Key table column check failed to account for a generated column. [#69054](https://github.com/StarRocks/starrocks/pull/69054)
+- Iceberg issues: decimal manifest bounds are now encoded with the minimum-length two's-complement form; time travel is kept when the SQL dialect is Trino; a table cache refresh no longer overwrites a concurrent invalidation; the metadata cache executor and REST catalog are closed on shutdown; and a nested REST namespace dropped during listing is skipped. [#78456](https://github.com/StarRocks/starrocks/pull/78456) [#79171](https://github.com/StarRocks/starrocks/pull/79171) [#79968](https://github.com/StarRocks/starrocks/pull/79968) [#80598](https://github.com/StarRocks/starrocks/pull/80598) [#80712](https://github.com/StarRocks/starrocks/pull/80712) [#80846](https://github.com/StarRocks/starrocks/pull/80846)
+- Hive issues: `INSERT` no longer misses source rows and `SELECT *` no longer drops resource-mapping Hive columns. [#81032](https://github.com/StarRocks/starrocks/pull/81032)
+- Data-driven allocations in the Parquet, ORC, and CSV read paths are now bounded by the query memory limit. [#78573](https://github.com/StarRocks/starrocks/pull/78573)
+- Parquet nested type edge cases in schema resolution, inference, writer, and reader, and ORC `TINYINT` min/max statistics on platforms with unsigned `char`. [#80085](https://github.com/StarRocks/starrocks/pull/80085) [#81086](https://github.com/StarRocks/starrocks/pull/81086)
+- CSV files are no longer split into byte ranges when `enclose` or `escape` is set. [#80386](https://github.com/StarRocks/starrocks/pull/80386)
+- `INSERT INTO FILES` now allows duplicate output column names when unloading to CSV. [#79897](https://github.com/StarRocks/starrocks/pull/79897)
+- `INSERT OVERWRITE` now reports a clear error when a source partition is gone at commit. [#79902](https://github.com/StarRocks/starrocks/pull/79902)
+- JSON extended columns are no longer registered on the shared catalog table, which could crash the BE and corrupt catalog state during `INSERT ... SELECT` and MV refresh. [#78611](https://github.com/StarRocks/starrocks/pull/78611)
+- A corrupted local cache is now dropped when a shared-data txn log read hits corruption. [#78733](https://github.com/StarRocks/starrocks/pull/78733)
+- A GTID and partition version epoch are now generated only on the leader FE. [#78799](https://github.com/StarRocks/starrocks/pull/78799)
+- Shared buffer reuse after failed remote reads, and the filesystem connection on cache eviction. [#79965](https://github.com/StarRocks/starrocks/pull/79965) [#80087](https://github.com/StarRocks/starrocks/pull/80087)
+- BE or CN crashes and hangs: a cancelled spillable hash join probe, a cancelled load spill merge task that left the BE unable to exit, `CUBE` with an only-null constant group-by key, `MemSpaceMonitor` on BE startup failure, `convert_hash_set_to_chunk` read overflow, a hash join partition outgrowing 32-bit binary offsets, a lost sink wake-up in local exchange, a Primary Key `get_compaction_status` race, and a leaked `MultiGet` index block iterator. [#79085](https://github.com/StarRocks/starrocks/pull/79085) [#79360](https://github.com/StarRocks/starrocks/pull/79360) [#79499](https://github.com/StarRocks/starrocks/pull/79499) [#79691](https://github.com/StarRocks/starrocks/pull/79691) [#80709](https://github.com/StarRocks/starrocks/pull/80709) [#80489](https://github.com/StarRocks/starrocks/pull/80489) [#80547](https://github.com/StarRocks/starrocks/pull/80547) [#80167](https://github.com/StarRocks/starrocks/pull/80167) [#79380](https://github.com/StarRocks/starrocks/pull/79380)
+- `EvHttpServer` closed unrelated file descriptors on shutdown. [#79699](https://github.com/StarRocks/starrocks/pull/79699)
+- A memtable now counts only the rows it receives toward its row limit. [#79705](https://github.com/StarRocks/starrocks/pull/79705)
+- `QueryCumulativeCpuTime` and `QuerySpillBytes` were counted once per fragment instance. [#79774](https://github.com/StarRocks/starrocks/pull/79774)
+- A Primary Key distinct rewrite no longer drops other aggregates. [#79895](https://github.com/StarRocks/starrocks/pull/79895)
+- An outer join is converted, and filters and join predicates are kept, correctly in the presence of NULL rejection, `LIMIT`, top-n, window, `ASOF` join, and join reorder. [#79974](https://github.com/StarRocks/starrocks/pull/79974) [#80303](https://github.com/StarRocks/starrocks/pull/80303) [#80510](https://github.com/StarRocks/starrocks/pull/80510) [#80511](https://github.com/StarRocks/starrocks/pull/80511)
+- NULL-passing runtime filters are no longer pushed below `RepeatNode` on nulled grouping keys. [#80051](https://github.com/StarRocks/starrocks/pull/80051)
+- Window function errors are now checked before an analytic result chunk is published. [#81022](https://github.com/StarRocks/starrocks/pull/81022)
+- Cardinality estimation of join and range predicates. [#80242](https://github.com/StarRocks/starrocks/pull/80242)
+- Statistics issues: unloaded or failed statistics are no longer cached as no statistics, `AnalyzeMgr.clearStalePartitionStats` no longer throws `IllegalStateException` when no table needs cleaning, and a connector query-triggered analyze no longer leaks a running task. [#80236](https://github.com/StarRocks/starrocks/pull/80236) [#80265](https://github.com/StarRocks/starrocks/pull/80265) [#80329](https://github.com/StarRocks/starrocks/pull/80329)
+- A finished transaction is enqueued only once in `finalStatusTransactionStateDeque`, and 0-row commits no longer count the whole table as loaded rows. [#79988](https://github.com/StarRocks/starrocks/pull/79988) [#80182](https://github.com/StarRocks/starrocks/pull/80182)
+- `information_schema.columns` with `LIMIT` is now answered from the queried catalog. [#80448](https://github.com/StarRocks/starrocks/pull/80448)
+- `CANCEL ALTER TABLE ROLLUP` without ids now cancels all rollup jobs. [#80450](https://github.com/StarRocks/starrocks/pull/80450)
+- The brpc future timeout contract is restored. [#80783](https://github.com/StarRocks/starrocks/pull/80783)
+- The primary index cache is now resized correctly by `update_memory_limit_percent`. [#81067](https://github.com/StarRocks/starrocks/pull/81067)
+- Upgraded StarOS and starlet to v4.0.9. [#80376](https://github.com/StarRocks/starrocks/pull/80376)
+- Fixed a ZooKeeper version conflict. [#79718](https://github.com/StarRocks/starrocks/pull/79718)
+- Security vulnerabilities fixed by bumping dependencies: ZooKeeper to 3.8.7 and 3.9.6, the broker Tomcat to 9.0.121, BouncyCastle to 1.86, jackson to 2.21.7, zstd-jni to 1.5.7-15, parquet to 1.18.1, and lz4-java to 1.11.4. [#79707](https://github.com/StarRocks/starrocks/pull/79707) [#79719](https://github.com/StarRocks/starrocks/pull/79719) [#80248](https://github.com/StarRocks/starrocks/pull/80248) [#80319](https://github.com/StarRocks/starrocks/pull/80319)
+
 ## 4.0.16
 
 Release Date: September 30, 2026

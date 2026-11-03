@@ -72,8 +72,7 @@ public:
         _array_expr.push_back(const_null);
 
         // [null]
-        array = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
-        array->append_datum(DatumArray{Datum()});
+        array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, true, {{std::nullopt}});
         auto* null_array = new_fake_const_expr(std::move(array), TYPE_ARRAY_INT_DESC);
         _array_expr.push_back(null_array);
 
@@ -444,10 +443,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 ASSERT_EQ(-110, result->get(2).get_array()[0].get_int32());
                 ASSERT_EQ(-110, result->get(2).get_array()[1].get_int32());
             } else if (i == 6) { // array_map(x -> x || x->x is null || x -> x+a, array<const(null...)>)
-                ASSERT_EQ(3, result->size());
-                ASSERT_TRUE(result->is_null(0));
-                ASSERT_TRUE(result->is_null(1));
-                ASSERT_TRUE(result->is_null(2));
+                ASSERT_EQ("[NULL, NULL, NULL]", result->debug_string());
             } else if (i == 7 && (j == 0 || j == 2)) { // array_map(x -> x || x-> x+a,array<const([null]...)>)
                 ASSERT_EQ(3, result->size());
                 ASSERT_TRUE(result->get(0).get_array()[0].is_null());
@@ -691,7 +687,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     add_node.type = gen_type_desc(TPrimitiveType::INT);
     auto* add_expr = _objpool.add(VectorizedArithmeticExprFactory::from_thrift(add_node));
     add_expr->add_child(array_length_expr);
-    add_expr->add_child(make_slot_ref(kInnerArg, TypeDescriptor(TYPE_INT)));
+    add_expr->add_child(make_slot_ref(kInnerArg, TYPE_INT_DESC));
 
     // inner lambda: b -> array_length(a) + b
     TExprNode tlambda_inner;
@@ -704,7 +700,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, nested_array_map_captures_outer_arg_con
     tlambda_inner.type = gen_type_desc(TPrimitiveType::INT);
     auto* inner_lambda = _objpool.add(new LambdaFunction(tlambda_inner));
     inner_lambda->add_child(add_expr);
-    inner_lambda->add_child(make_slot_ref(kInnerArg, TypeDescriptor(TYPE_INT)));
+    inner_lambda->add_child(make_slot_ref(kInnerArg, TYPE_INT_DESC));
 
     // inner array_map: array_map(b -> array_length(a) + b, a)
     auto* inner_map = _objpool.add(new ArrayMapExpr(TYPE_ARRAY_INT_DESC));

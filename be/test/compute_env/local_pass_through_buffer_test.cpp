@@ -25,6 +25,7 @@
 #include "common/memory/column_allocator.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -175,8 +176,7 @@ protected:
         _source->init();
 
         _input = std::make_unique<Chunk>();
-        auto column = Int64Column::create();
-        column->append(42);
+        auto column = ColumnTestHelper::build_column<int64_t>({42});
         _input->append_column(std::move(column), 0);
         flush();
         _before_buffering = _process->consumption();
@@ -501,8 +501,7 @@ TEST(LocalPassThroughBufferTest, falls_back_to_process_tracker_without_query_tra
         source.init();
 
         auto input = std::make_unique<Chunk>();
-        auto column = Int64Column::create();
-        column->append(42);
+        auto column = ColumnTestHelper::build_column<int64_t>({42});
         input->append_column(std::move(column), 0);
         CurrentThread::current().mem_tracker_ctx_shift();
         const int64_t sender_before = sender->consumption();

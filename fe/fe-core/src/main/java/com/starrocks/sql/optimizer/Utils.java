@@ -74,6 +74,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -565,14 +567,18 @@ public class Utils {
             return Optional.of(ConstantOperator.createNull(descType));
         }
 
-        Optional<ConstantOperator> result = ((ConstantOperator) op).castToStrictly(descType);
+        boolean exactNumeric = op.getType().isExactNumericType() && descType.isExactNumericType()
+                && !op.getType().isDecimalV2() && !descType.isDecimalV2();
+        Optional<ConstantOperator> result = exactNumeric
+                ? tryCastExactNumericConstant((ConstantOperator) op, descType, true)
+                : ((ConstantOperator) op).castToStrictly(descType);
         if (result.isEmpty()) {
             if (LOG.isDebugEnabled()) {
                 LOG.debug("invalid value: {} to type {}", op, descType);
             }
             return Optional.empty();
         }
-        if (result.get().toString().equalsIgnoreCase(op.toString())) {
+        if (exactNumeric || result.get().toString().equalsIgnoreCase(op.toString())) {
             return Optional.of(result.get());
         } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
             if (op.toString().equalsIgnoreCase(result.get().toString().replaceAll("-", ""))) {
@@ -582,10 +588,38 @@ public class Utils {
         return Optional.empty();
     }
 
+    private static Optional<ConstantOperator> tryCastExactNumericConstant(
+            ConstantOperator constant, Type targetType, boolean strictDecimalPrecision) {
+        BigDecimal value = new BigDecimal(constant.getValue().toString());
+        try {
+            Optional<ConstantOperator> result;
+            if (targetType.isFixedPointType()) {
+                // Decimal display text can contain a scale or exponent, even for an exact integer.
+                // Do not route it through the string-based integer parser or truncate a fraction.
+                BigInteger integer = value.toBigIntegerExact();
+                if (integer.bitLength() > 127) {
+                    return Optional.empty();
+                }
+                result = ConstantOperator.createLargeInt(integer).castToStrictly(targetType);
+            } else {
+                // An implicit cast respects declared decimal precision. Cast reduction also permits
+                // exact constants within the decimal's physical range, preserving its existing behavior.
+                result = strictDecimalPrecision ? constant.castToStrictly(targetType) : constant.castTo(targetType);
+            }
+            if (result.isPresent() && !result.get().isNull()
+                    && value.compareTo(new BigDecimal(result.get().getValue().toString())) == 0) {
+                return result;
+            }
+        } catch (ArithmeticException ignored) {
+            // A fractional or overflowing value cannot be folded into the column's integer type.
+        }
+        return Optional.empty();
+    }
+
     // tryDecimalCastConstant is employed by ReduceCastRule to reduce BinaryPredicateOperator involving DecimalV3
     // ReduceCastRule try to reduce 'CAST(Expr<T> as U) BINOP LITERAL<S>' to
-    // 'EXPR<T> BINOP CAST(LITERAL<S> as T>', only T->U casting and S->T casting are both legal, then this
-    // reduction is legal, so for numerical types, S is not wider than T and T is not wider than U. for examples:
+    // 'EXPR<T> BINOP CAST(LITERAL<S> as T>'. The column's T->U cast must be lossless for its entire domain,
+    // while the particular S literal only needs to be exactly representable in T. For examples:
     //     CAST(IntLiteral(100,TINYINT) as DECIMAL32(9,9)) < IntLiteral(0x7f50, SMALLINT) cannot be reduced.
     //     CAST(IntLiteral(100,SMALLINT) as DECIMAL64(13,10)) < IntLiteral(101, TINYINT) can be reduced.
     public static Optional<ScalarOperator> tryDecimalCastConstant(CastOperator lhs, ConstantOperator rhs) {
@@ -609,14 +643,14 @@ public class Utils {
             return Optional.of(ConstantOperator.createNull(childType));
         }
 
-        Optional<ConstantOperator> result = rhs.castTo(childType);
-        if (result.isEmpty()) {
-            return Optional.empty();
+        if (!lhsType.isDecimalV2() && !rhsType.isDecimalV2() && !childType.isDecimalV2()) {
+            return tryCastExactNumericConstant(rhs, childType, false).map(result -> result);
         }
-        if (TypeManager.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)) {
-            return Optional.of(result.get());
-        } else if (result.get().toString().equalsIgnoreCase(rhs.toString())) {
-            // check lossless
+
+        // Preserve legacy DECIMALV2 folding: its FE BigDecimal does not model the BE's fixed scale.
+        Optional<ConstantOperator> result = rhs.castTo(childType);
+        if (result.isPresent() && (TypeManager.isAssignable2Decimal((ScalarType) childType, (ScalarType) rhsType)
+                || result.get().toString().equalsIgnoreCase(rhs.toString()))) {
             return Optional.of(result.get());
         }
         return Optional.empty();

@@ -267,6 +267,13 @@ public class OlapTableSink extends DataSink {
         tSink.setAutomatic_bucket_size(automaticBucketSize);
         tSink.setEncryption_meta(GlobalStateMgr.getCurrentState().getKeyMgr().getCurrentKEKAsEncryptionMeta());
         tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
+        // Shared-data writers decide the physical shape of JSON columns from the table's flat_json.*
+        // properties. Carry them on the sink: the CN otherwise reads them from its tablet metadata cache
+        // and falls back to be.conf on a miss, and under light_weight_tablet_creation nothing is cached
+        // before a tablet's first publish, so every first write would ignore the table's settings.
+        if (writesToCloudNativeTable() && dstTable.getFlatJsonConfig() != null) {
+            tSink.setFlat_json_config(dstTable.getFlatJsonConfig().toTFlatJsonConfig());
+        }
         tSink.setEnable_lake_per_partition_coordinator_txn_log(
                 Config.lake_enable_per_partition_coordinator_txn_log);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);

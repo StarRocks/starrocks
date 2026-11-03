@@ -18,12 +18,21 @@ on:
     types: [created, edited, deleted]
   # These workflows set labels with GITHUB_TOKEN, which emits no labeled event, so the PR is
   # recorded again once they finish: ERROR / conflict / automerge (sync pipeline), version and
-  # behavior labels (PR CHECKER), the doc label (CI DOC Checker), version labels removed
+  # behavior labels (PR CHECKER), the doc label (CI DOC Checker), docs-maintainer (Translation
+  # Status Check, which runs after CI DOC Checker), version labels removed
   # after the backport comment (MERGE PIPELINE), PAI-contributed on a backport (Contributed
   # Backport Label).
   workflow_run:
-    workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "MERGE PIPELINE", "Contributed Backport Label"]
+    workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "Translation Status Check", "MERGE PIPELINE", "Contributed Backport Label"]
     types: [completed]
+
+  # Every 2 hours, and by hand for a backfill: record again every open PR whose CI Metrics
+  # row disagrees with GitHub (a PR never recorded, a close or an edit no event reported, a
+  # run lost while the runners update) and report which ones to #jackie-test-channel, so
+  # each gap's cause is found. A run costs ~25 GraphQL points. See `reconcile`.
+  schedule:
+    - cron: '17 */2 * * *'  # :17 past every even hour (UTC)
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -71,3 +80,19 @@ jobs:
     steps:
       - name: record the PR
         run: python3 /var/lib/ci-tool/lib/pr_record.py --event "${GITHUB_EVENT_NAME}"
+
+  reconcile:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    concurrency:
+      group: pr-record-reconcile
+      cancel-in-progress: false
+    runs-on: [self-hosted, pr-record]
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CI_METRICS_TOKEN: ${{ secrets.CI_METRICS_TOKEN }}
+      CI_METRICS_CA: ${{ secrets.CI_METRICS_CA }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+    steps:
+      - name: record the open PRs whose CI Metrics row disagrees with GitHub
+        run: python3 /var/lib/ci-tool/lib/pr_record.py --reconcile --repo "${GITHUB_REPOSITORY}"
