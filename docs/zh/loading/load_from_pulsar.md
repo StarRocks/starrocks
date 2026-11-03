@@ -95,6 +95,27 @@ Routine Load 支持以下 Pulsar 的自定义参数。
 | ---------------------------------------- | -------- | ------------------------------------------------------------ |
 | property.pulsar_default_initial_position | 否       | 当订阅 Topic 的分区时的默认初始位置。该参数在未指定 `pulsar_initial_positions` 时生效。其有效值与 `pulsar_initial_positions` 的有效值相同。示例：`"``property.pulsar_default_initial_position" = "POSITION_EARLIEST"` |
 | property.auth.token                      | 否       | 如果 Pulsar 启用了使用安全令牌验证客户端身份，则需要令牌字符串来验证您的身份。示例：`"p``roperty.auth.token" = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUJzdWIiOiJqaXV0aWFuY2hlbiJ9.lulGngOC72vE70OW54zcbyw7XdKSOxET94WT_hIqD"` |
+| property.connection_timeout_ms | 否 | 连接超时时间，单位为毫秒。有效范围为 `1` 到 `2147483647`。未指定时使用 Pulsar 客户端默认值（`10000` 毫秒）。 |
+| property.operation_timeout_seconds | 否 | 客户端操作超时时间，单位为秒，包括创建消费者。有效范围为 `1` 到 `2147483`。未指定时使用 Pulsar 客户端默认值（`30` 秒）。 |
+
+### 配置 Pulsar 客户端超时
+
+创建作业时，可以在 `FROM PULSAR` 属性中设置 `property.connection_timeout_ms` 和 `property.operation_timeout_seconds`。这两个属性均为可选，仅影响该作业的 Pulsar 客户端。它们不会更改 Routine Load 任务的超时时间，也不能保证从 Broker 或网络故障中恢复。请为 `task_timeout_second` 设置足够的时间，以完成客户端操作和数据导入。
+
+修改现有作业的超时配置：
+
+```sql
+PAUSE ROUTINE LOAD FOR routine_wiki_edit_1;
+ALTER ROUTINE LOAD FOR routine_wiki_edit_1
+FROM PULSAR
+(
+    "property.connection_timeout_ms" = "25000",
+    "property.operation_timeout_seconds" = "60"
+);
+RESUME ROUTINE LOAD FOR routine_wiki_edit_1;
+```
+
+更新后的属性在后续任务中生效，无需重启 BE。属性不同的缓存消费者不会被复用。修改这些超时时间不会更改订阅或初始位置设置。使用这些属性前，请将所有 FE 和 BE 升级至支持它们的版本；旧版 BE 会忽略不支持的自定义属性。
 
 ## 检查导入作业和任务
 
@@ -144,6 +165,6 @@ MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "routine_wiki_edit_1"
 
 **请注意以下几点**：
 
-- 在与 `data_source_properties` 相关的参数中，目前仅支持修改 `pulsar_partitions`、`pulsar_initial_positions` 和自定义 Pulsar 参数 `property.pulsar_default_initial_position` 和 `property.auth.token`。参数 `pulsar_service_url`、`pulsar_topic` 和 `pulsar_subscription` 不能修改。
+- 在与 `data_source_properties` 相关的参数中，目前仅支持修改 `pulsar_partitions`、`pulsar_initial_positions` 和自定义 Pulsar 参数 `property.pulsar_default_initial_position`、`property.auth.token`、`property.connection_timeout_ms` 和 `property.operation_timeout_seconds`。参数 `pulsar_service_url`、`pulsar_topic` 和 `pulsar_subscription` 不能修改。
 - 如果需要修改要消费的分区和匹配的初始位置，您需要确保在创建 Routine Load 作业时使用 `pulsar_partitions` 指定分区，并且只能修改指定分区的初始位置 `pulsar_initial_positions`。
 - 如果在创建 Routine Load 作业时仅指定了 Topic `pulsar_topic`，而未指定分区 `pulsar_partitions`，则可以通过 `pulsar_default_initial_position` 修改 Topic 下所有分区的起始位置。

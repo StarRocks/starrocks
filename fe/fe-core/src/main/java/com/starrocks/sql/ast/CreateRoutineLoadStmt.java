@@ -1040,6 +1040,18 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 if (propertyValueArr.length < 2) {
                     throw new AnalysisException("pulsar property value could not be a empty string");
                 }
+                if (propertyKey.equals("property.connection_timeout_ms")
+                        || propertyKey.equals("property.operation_timeout_seconds")) {
+                    int maximum = propertyKey.equals("property.connection_timeout_ms")
+                            ? Integer.MAX_VALUE : Integer.MAX_VALUE / 1000;
+                    if (propertyValue == null || !propertyValue.matches("[0-9]+")) {
+                        throw new AnalysisException(propertyKey + " must be an integer between 1 and " + maximum);
+                    }
+                    int timeout = getIntegerValueFromString(propertyValue, propertyKey);
+                    if (timeout <= 0 || timeout > maximum) {
+                        throw new AnalysisException(propertyKey + " must be an integer between 1 and " + maximum);
+                    }
+                }
                 customPulsarProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
             }
             // can be extended in the future which other prefix

@@ -34,11 +34,14 @@
 
 #include "data_workflows/load/routine_load/data_consumer.h"
 
+#include <charconv>
 #include <functional>
+#include <limits>
 #include <string>
 #include <vector>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
@@ -522,6 +525,21 @@ Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
     for (auto& item : ctx->pulsar_info->properties) {
         if (item.first == "auth.token") {
             config.setAuth(pulsar::AuthToken::createWithToken(item.second));
+        } else if (item.first == "connection_timeout_ms" || item.first == "operation_timeout_seconds") {
+            int timeout = 0;
+            const auto& value = item.second;
+            auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), timeout);
+            const int maximum = item.first == "connection_timeout_ms" ? std::numeric_limits<int>::max()
+                                                                      : std::numeric_limits<int>::max() / 1000;
+            if (error != std::errc() || end != value.data() + value.size() || timeout <= 0 || timeout > maximum) {
+                return Status::InvalidArgument(
+                        fmt::format("PAUSE: property.{} must be an integer between 1 and {}", item.first, maximum));
+            }
+            if (item.first == "connection_timeout_ms") {
+                config.setConnectionTimeout(timeout);
+            } else {
+                config.setOperationTimeoutSeconds(timeout);
+            }
         } else {
             LOG(WARNING) << "Config " << item.first << " not supported for now.";
         }
@@ -537,6 +555,7 @@ Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
         config.setLogger(new pulsar::FileLoggerFactory(pulsar::Logger::Level::LEVEL_WARN, log_file_path));
     }
 
+    TEST_SYNC_POINT_CALLBACK("PulsarDataConsumer::init:config", &config);
     _p_client = new pulsar::Client(_service_url, config);
 
     VLOG(3) << "finished to init pulsar consumer. " << ctx->brief();
