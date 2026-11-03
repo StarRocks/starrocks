@@ -24,8 +24,11 @@ on:
         type: boolean
         default: false
 
+# Releases are created as starrocks-bot (the author of the release-notes PRs), with a token
+# scoped to contents: write, which also lets the job see existing drafts. Unlike GITHUB_TOKEN,
+# a Release it publishes does trigger `release` workflows.
 permissions:
-  contents: write  # create Releases; also lets the job see existing drafts
+  contents: read
 
 # No concurrency group: GitHub keeps only one pending run per group, so a queued push would be
 # cancelled and its new version never published. Parallel runs cannot publish the same version:
@@ -37,14 +40,23 @@ jobs:
     if: github.repository == 'StarRocks/starrocks'
     runs-on: [self-hosted, quick]
     env:
-      GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       BEFORE: ${{ github.event.before }}
       AFTER: ${{ github.event.after }}
       VERSION: ${{ inputs.version }}
       DRY_RUN: ${{ inputs.dry_run }}
     steps:
+      - name: starrocks-bot token
+        id: bot-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.STARROCKS_BOT_APP_ID }}
+          private-key: ${{ secrets.STARROCKS_BOT_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: release-publish
+        env:
+          GH_TOKEN: ${{ steps.bot-token.outputs.token }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
