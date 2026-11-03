@@ -38,7 +38,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AlterMVClauseAnalyzer;
+import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -439,7 +439,7 @@ public class LakeMvSortKeyRewriteJobTest {
     private static void assertSwappedInMvRejected(MaterializedView swappedIn, String colocateWith,
                                                   String expectedMessage) throws Exception {
         ReorderColumnsClause clause = new ReorderColumnsClause(List.of("k2", "k1"), null, null, NodePosition.ZERO);
-        new AlterMVClauseAnalyzer(lakeMv(MV_ID + 10, KeysType.DUP_KEYS, false)).analyze(null, clause);
+        new AlterMVClauseAnalyzerVisitor(lakeMv(MV_ID + 10, KeysType.DUP_KEYS, false)).analyze(null, clause);
 
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         colocateTableIndex.addTableToGroup(DB_ID, swappedIn, colocateWith,

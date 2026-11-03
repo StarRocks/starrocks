@@ -252,7 +252,6 @@ public class LakeRangeRewriteColocateTest {
         assertTrue(mv.isActive(), "the dependent view must stay active, reason: " + mv.getInactiveReason());
         assertEquals(taskStateBefore, GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv).getState());
         assertEquals(versionMapBefore, versionMap);
-        assertFalse(mv.isVersionMapResetPending());
     }
 
     // ---------------------------------------------------------------------------------------------

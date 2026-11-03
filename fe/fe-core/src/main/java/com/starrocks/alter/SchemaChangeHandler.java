@@ -2868,14 +2868,9 @@ public class SchemaChangeHandler extends AlterHandler {
      *
      * <p>Unlike {@link #buildRangeRewriteJob}, this does not re-run the AUTO_INCREMENT gate from
      * {@link #needsRangeRewriteSchemaChange}: an AUTO_INCREMENT row-id column implies a PRIMARY_KEYS MV,
-<<<<<<< HEAD
-     * which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects. The colocate gate is re-checked
-     * here because the statement resolves the MV by name again under the lock, and
-=======
-     * which {@code AlterMVClauseAnalyzer#validateKeysTypeRule} already rejects. Nor does it check the colocate prefix
+     * which {@code AlterMVClauseAnalyzerVisitor#validateKeysTypeRule} already rejects. Nor does it check the colocate prefix
      * rule ({@link #checkRangeColocatePrefix}) itself: {@code AlterMVJobExecutor#visitReorderColumnsClause} runs every
      * analysis rule of the statement, that one included, again on this MV under the lock, because
->>>>>>> 99434f2add1... [Enhancement][RB-97] Support sort key changes on range colocate tables and materialized views (#68025)
      * {@code ALTER MATERIALIZED VIEW ... SWAP WITH} can have put a different MV under the analyzed name.
      */
     void submitMvSortKeyRewriteJob(Database db, MaterializedView mv, List<Integer> sortKeyIdxes,

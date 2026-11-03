@@ -24,12 +24,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.lake.LakeMaterializedView;
-<<<<<<< HEAD
-import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
-=======
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AlterMVClauseAnalyzer;
->>>>>>> 99434f2add1... [Enhancement][RB-97] Support sort key changes on range colocate tables and materialized views (#68025)
+import com.starrocks.sql.analyzer.AlterMVClauseAnalyzerVisitor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
@@ -157,9 +153,9 @@ public class AlterMvOrderByAnalyzerTest {
         colocateTableIndex.addTableToGroup(DB_ID, mv, "g:k1", new ColocateTableIndex.GroupId(DB_ID, MV_ID), true);
         mv.setColocateGroup("g:k1");
         try {
-            assertDoesNotThrow(() -> new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k1", "v1"))));
+            assertDoesNotThrow(() -> new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k1", "v1"))));
             SemanticException ex = assertThrows(SemanticException.class, () ->
-                    new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k2", "k1"))));
+                    new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
             assertEquals("The sort key of a materialized view in a range colocate group must start with its colocate "
                     + "columns [k1] (same order and types). Got: [k2, k1]", ex.getDetailMsg());
         } finally {
@@ -176,11 +172,7 @@ public class AlterMvOrderByAnalyzerTest {
         MaterializedView mv = dupRangeMv();
         mv.setColocateGroup("g:k1");
         SemanticException ex = assertThrows(SemanticException.class, () ->
-<<<<<<< HEAD
-                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k2", "k1"))));
-=======
-                new AlterMVClauseAnalyzer(mv).analyze(null, makeClause(List.of("k1", "v1"))));
->>>>>>> 99434f2add1... [Enhancement][RB-97] Support sort key changes on range colocate tables and materialized views (#68025)
+                new AlterMVClauseAnalyzerVisitor(mv).analyze(null, makeClause(List.of("k1", "v1"))));
         assertTrue(ex.getMessage().contains("not supported on a materialized view with 'colocate_with'"),
                 "expected colocate_with message, got: " + ex.getMessage());
     }
