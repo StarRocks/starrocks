@@ -118,6 +118,7 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
+        update_peak(_peak_request_bytes, static_cast<int64_t>(request.attachment.size()));
     }
     {
         // set stats every _sent_audit_stats_frequency, so FE can get approximate stats even missing eos chunks.
@@ -235,6 +236,10 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     RuntimeProfile::Counter* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
     COUNTER_SET(bytes_sent_counter, _bytes_sent.load());
     COUNTER_SET(request_sent_counter, _request_sent.load());
+
+    RuntimeProfile::Counter* peak_request_bytes_counter = profile->add_counter(
+            "PeakRequestBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
+    COUNTER_SET(peak_request_bytes_counter, _peak_request_bytes.load());
 
     RuntimeProfile::Counter* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
     RuntimeProfile::Counter* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);

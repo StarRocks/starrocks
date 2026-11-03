@@ -301,6 +301,7 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | ShuffleBufferFlushRows | この早期送信で送信された行数。 |
 | ShuffleBufferReleasedChunks | 早期送信の後、残りのメモリが `exchange_sink_buffer_flush_threshold_bytes` の半分を超えていたために解放された Partial Chunk の数。 |
 | PeakSerializedChunkBytes | シリアライズ後（圧縮前）の Chunk サイズの最大値。 |
+| PeakRequestBytes | ネットワーク経由で送信された単一リクエストのサイズの最大値（圧縮される場合は圧縮後のサイズ）。`BytesSent / RequestSent` がリクエストの平均サイズです。パススルーデータは含まれません。 |
 | SinkBufferPeakMemoryUsage | Sink Buffer で送信待ちまたは送信中のリクエストが使用するメモリのピーク値。 |
 | SinkBufferMemoryLimit | Sink Buffer のメモリ上限。デフォルトは `sink_buffer_mem_limit_per_driver` × 宛先の数です。上限に達すると、リクエストが完了するまで Sink はデータの受け入れを停止します。 |
 | SinkBufferPeakInFlightRpcNum | 同時に実行中の RPC 数のピーク値。 |
