@@ -267,13 +267,9 @@ public class ScalarOperatorsReuse {
 
         @Override
         public ScalarOperator visitSubfield(SubfieldOperator predicate, Void context) {
-            // only rewrite subfield operator if and only if child is DictionaryGetOperator
-            if (predicate.getChild(0) instanceof DictionaryGetOperator) {
-                ScalarOperator operator = new SubfieldOperator(predicate.getChild(0).accept(this, null),
-                                predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
-                return tryRewrite(operator);
-            }
-            return predicate;
+            ScalarOperator operator = new SubfieldOperator(predicate.getChild(0).accept(this, null),
+                    predicate.getType(), predicate.getFieldNames(), predicate.getCopyFlag());
+            return tryRewrite(operator);
         }
 
         @Override
