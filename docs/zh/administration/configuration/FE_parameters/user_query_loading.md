@@ -434,6 +434,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用系统自动检查和重新激活那些因基表（视图）进行 Schema Change 或被删除和重新创建而变为 Inactive 的异步物化视图。请注意，此功能不会重新激活用户手动设置为 Inactive 的物化视图。
 - 引入版本: v3.1.6
 
+### `enable_mv_automatic_inactive_by_base_table_changes`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在基表（视图）被删除、进行 Schema Change 或视图被重新定义时，将基于它的异步物化视图设置为 Inactive。对基表执行重命名或 SWAP，以及对基表物化视图执行重命名时，无论该参数取值如何，基于它的物化视图都会被设置为 Inactive。
+- 引入版本: v3.3.10, v3.4.1, v3.5.0
+
 ### `enable_mv_automatic_repairing_for_broken_base_tables`
 
 - 默认值: true

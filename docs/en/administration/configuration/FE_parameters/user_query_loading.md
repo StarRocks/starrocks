@@ -434,6 +434,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users.
 - Introduced in: v3.1.6
 
+### `enable_mv_automatic_inactive_by_base_table_changes`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to set the asynchronous materialized views on a base table (view) inactive when the base table (view) is dropped, undergoes a Schema Change, or the view is redefined. Renaming or swapping a base table, and renaming a base materialized view, always set the materialized views on it inactive, regardless of this item.
+- Introduced in: v3.3.10, v3.4.1, v3.5.0
+
 ### `enable_mv_automatic_repairing_for_broken_base_tables`
 
 - Default: true
