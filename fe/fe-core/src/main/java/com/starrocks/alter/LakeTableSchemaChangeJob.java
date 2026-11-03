@@ -675,6 +675,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setEnablePersistentIndex(table.enablePersistentIndex())
                                 .setPersistentIndexType(table.getPersistentIndexType())
                                 .setPrimaryIndexCacheExpireSec(table.primaryIndexCacheExpireSec())
+                                // Carry the table's flat-json config so the shadow tablets' metadata has it, as every
+                                // other create-replica path does; without it later compactions of the new index
+                                // write JSON columns with the be.conf globals.
+                                .setFlatJsonConfig(table.getFlatJsonConfig())
                                 .setTabletType(TTabletType.TABLET_TYPE_LAKE)
                                 .setCompressionType(table.getCompressionType())
                                 .setCompressionLevel(table.getCompressionLevel())

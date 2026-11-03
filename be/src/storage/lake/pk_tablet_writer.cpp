@@ -354,6 +354,7 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalPkTabletWriter::clone() const 
                                                              _is_compaction, _bundle_file_context,
                                                              const_cast<GlobalDictByNameMaps*>(_global_dicts));
     RETURN_IF_ERROR(writer->open());
+    writer->set_flat_json_config(_flat_json_config);
     if (enable_pk_index_eager_build()) {
         writer->force_set_enable_pk_index_eager_build();
     }
