@@ -46,7 +46,6 @@ struct GeoTypeDescriptor {
 struct GeoStorageDescriptor {
     GeoEncodingPB encoding = GEO_ENCODING_UNKNOWN;
     GeoDimensionPB dimension = GEO_DIMENSION_UNKNOWN;
-    GeoValidationStatePB validation_state = GEO_VALIDATION_STATE_UNKNOWN;
 
     static GeoStorageDescriptor from_protobuf(const GeoStorageDescPB& protobuf);
     GeoStorageDescPB to_protobuf() const;
