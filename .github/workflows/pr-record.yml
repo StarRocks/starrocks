@@ -26,11 +26,12 @@ on:
     workflows: ["CD SYNC CI PIPELINE", "PR CHECKER", "CI DOC Checker", "Translation Status Check", "MERGE PIPELINE", "Contributed Backport Label"]
     types: [completed]
 
-  # Daily, and by hand for a backfill: record again every open PR whose CI Metrics row
-  # disagrees with GitHub (a PR never recorded, a close or an edit no event reported) and
-  # report which ones to #phx-cd-rd-ci, so each gap's cause is found. See `reconcile`.
+  # Every 2 hours, and by hand for a backfill: record again every open PR whose CI Metrics
+  # row disagrees with GitHub (a PR never recorded, a close or an edit no event reported, a
+  # run lost while the runners update) and report which ones to #jackie-test-channel, so
+  # each gap's cause is found. A run costs ~25 GraphQL points. See `reconcile`.
   schedule:
-    - cron: '17 19 * * *'  # 03:17 Asia/Shanghai
+    - cron: '17 */2 * * *'  # :17 past every even hour (UTC)
   workflow_dispatch:
 
 permissions:
