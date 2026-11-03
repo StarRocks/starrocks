@@ -19,6 +19,7 @@
 #include <variant>
 
 #include "gutil/macros.h"
+#include "storage/lake/metacache_key.h"
 
 namespace starrocks {
 class Cache;
@@ -52,50 +53,50 @@ public:
 
     DISALLOW_COPY_AND_MOVE(Metacache);
 
-    std::shared_ptr<const TabletMetadataPB> lookup_tablet_metadata(std::string_view key);
+    std::shared_ptr<const TabletMetadataPB> lookup_tablet_metadata(const MetacacheKey& key);
 
-    std::shared_ptr<const TxnLogPB> lookup_txn_log(std::string_view key);
+    std::shared_ptr<const TxnLogPB> lookup_txn_log(const MetacacheKey& key);
 
-    std::shared_ptr<const CombinedTxnLogPB> lookup_combined_txn_log(std::string_view key);
+    std::shared_ptr<const CombinedTxnLogPB> lookup_combined_txn_log(const MetacacheKey& key);
 
-    std::shared_ptr<const TabletSchema> lookup_tablet_schema(std::string_view key);
+    std::shared_ptr<const TabletSchema> lookup_tablet_schema(const MetacacheKey& key);
 
-    std::shared_ptr<Segment> lookup_segment(std::string_view key);
+    std::shared_ptr<Segment> lookup_segment(const MetacacheKey& key);
 
-    std::shared_ptr<const DelVector> lookup_delvec(std::string_view key);
+    std::shared_ptr<const DelVector> lookup_delvec(const MetacacheKey& key);
 
-    bool lookup_bundled_metadata_marker(std::string_view key);
+    bool lookup_bundled_metadata_marker(const MetacacheKey& key);
 
-    void cache_tablet_metadata(std::string_view key, std::shared_ptr<const TabletMetadataPB> metadata);
+    void cache_tablet_metadata(const MetacacheKey& key, std::shared_ptr<const TabletMetadataPB> metadata);
 
-    void cache_tablet_schema(std::string_view key, std::shared_ptr<const TabletSchema> schema, size_t size);
+    void cache_tablet_schema(const MetacacheKey& key, std::shared_ptr<const TabletSchema> schema, size_t size);
 
-    void cache_txn_log(std::string_view key, std::shared_ptr<const TxnLogPB> log);
+    void cache_txn_log(const MetacacheKey& key, std::shared_ptr<const TxnLogPB> log);
 
-    void cache_combined_txn_log(std::string_view key, std::shared_ptr<const CombinedTxnLogPB> log);
+    void cache_combined_txn_log(const MetacacheKey& key, std::shared_ptr<const CombinedTxnLogPB> log);
 
-    void cache_segment(std::string_view key, std::shared_ptr<Segment> segment);
+    void cache_segment(const MetacacheKey& key, std::shared_ptr<Segment> segment);
 
     // Update the cached memory footprint of an already cached segment in place, without
     // rebuilding the cache entry. Does nothing and returns false when the key is absent
     // or no longer maps to `segment`.
-    bool update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment);
+    bool update_segment_cache_size(const MetacacheKey& key, size_t mem_cost, const Segment* segment);
 
     // Replace only the entry that still points to expected. A failed comparison
     // neither inserts replacement nor changes the existing entry or its charge.
     // Readers holding the old Segment remain valid after a successful replacement.
-    bool replace_segment_if_matches(std::string_view key, const Segment* expected,
+    bool replace_segment_if_matches(const MetacacheKey& key, const Segment* expected,
                                     const std::shared_ptr<Segment>& replacement);
 
     // cache the segment if the given key not exists in the cache, returns the segment shared_ptr stored in the cache.
-    std::shared_ptr<Segment> cache_segment_if_absent(std::string_view key, const std::shared_ptr<Segment>& segment);
+    std::shared_ptr<Segment> cache_segment_if_absent(const MetacacheKey& key, const std::shared_ptr<Segment>& segment);
 
-    void cache_delvec(std::string_view key, std::shared_ptr<const DelVector> delvec);
+    void cache_delvec(const MetacacheKey& key, std::shared_ptr<const DelVector> delvec);
 
-    void cache_bundled_metadata_marker(std::string_view key);
+    void cache_bundled_metadata_marker(const MetacacheKey& key);
 
     // Erases |key| from both caches.
-    void erase(std::string_view key);
+    void erase(const MetacacheKey& key);
 
     void update_tablet_metadata_capacity(size_t new_capacity);
 

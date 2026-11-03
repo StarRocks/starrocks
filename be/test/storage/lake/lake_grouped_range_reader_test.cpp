@@ -560,8 +560,8 @@ TEST_F(LakeGroupedRangeReaderTest, PhysicalRootPrepassPreservesColdCachePolicyAn
     EXPECT_EQ(2, root.stats().segments_opened);
     EXPECT_GT(root.stats().io_ns, 0);
     for (const auto& sm : meta->rowsets(0).segment_metas()) {
-        EXPECT_EQ(nullptr,
-                  _tablet_mgr->metacache()->lookup_segment(_tablet_mgr->segment_location(meta->id(), sm.filename())));
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::segment(
+                                   FileInfo{.path = _tablet_mgr->segment_location(meta->id(), sm.filename())})));
     }
     // Physical planning has already consumed the prepass's memo, without a second footer load.
     ASSIGN_OR_ABORT(auto memo, rowsets[0]->get_segments_checked());

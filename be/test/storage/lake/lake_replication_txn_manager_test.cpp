@@ -1121,7 +1121,7 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasse
     stale_metadata->set_id(_src_tablet_id);
     stale_metadata->set_version(_version);
     stale_metadata->set_gtid(101);
-    _tablet_mgr->metacache()->cache_tablet_metadata(metadata_path, stale_metadata);
+    _tablet_mgr->metacache()->cache_tablet_metadata(MetacacheKey::tablet_metadata(metadata_path), stale_metadata);
 
     auto source_fs_a = std::make_shared<MemoryFileSystem>();
     auto source_fs_b = std::make_shared<MemoryFileSystem>();
@@ -1143,7 +1143,7 @@ TEST_F(TryBuildSourceTabletMetaWithFallbackTest, replication_source_read_bypasse
     ASSERT_OK(result_b);
     EXPECT_EQ(202, result_a.value()->gtid());
     EXPECT_EQ(303, result_b.value()->gtid());
-    auto cached = _tablet_mgr->metacache()->lookup_tablet_metadata(metadata_path);
+    auto cached = _tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(metadata_path));
     ASSERT_NE(nullptr, cached);
     EXPECT_EQ(101, cached->gtid());
 }

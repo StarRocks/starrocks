@@ -345,7 +345,7 @@ public:
 
         // Clear only metacache: a PK rebuild can open the full base schema first and hide the bug.
         _tablet_mgr->prune_metacache();
-        ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_cache_key));
+        ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_cache_key)));
         ASSERT_EQ(base_version, _primary_key_mgr->get_primary_index_data_version(tablet_id));
         ASSERT_GE(_tablet_mgr->metacache()->segment_metadata_capacity(), 2 * 1024);
         ASSIGN_OR_ABORT(auto new_metadata, publish_single_version(tablet_id, base_version + 1, txn_id));
@@ -361,7 +361,7 @@ public:
             ASSERT_EQ(_tablet_schema->id(), new_metadata->rowset_to_schema().at(old_metadata->rowsets(0).id()));
         }
 
-        auto cached = _tablet_mgr->metacache()->lookup_segment(base_cache_key);
+        auto cached = _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_cache_key));
         if (legacy_schema_change) {
             // With no schema pin, publish can cache S1. Force that precondition to prove the old
             // reader uses a private full-schema Segment without replacing the narrowed shared one.
@@ -416,7 +416,8 @@ public:
         };
         read_and_check(old_reader, _tablet_schema, /*c1_multiplier=*/3);
         if (legacy_schema_change) {
-            auto cached_after_old_read = _tablet_mgr->metacache()->lookup_segment(base_cache_key);
+            auto cached_after_old_read =
+                    _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_cache_key));
             ASSERT_NE(nullptr, cached_after_old_read);
             EXPECT_NE(cached.get(), cached_after_old_read.get());
             EXPECT_EQ(_tablet_schema->id(), cached_after_old_read->tablet_schema().id());
@@ -1891,18 +1892,19 @@ TEST_P(LakePartialUpdateTest, test_row_mode_partial_update_reads_base_segment_th
     _tablet_mgr->prune_metacache();
     config::lake_pk_partial_update_use_segment_cache = false;
     write_and_publish(chunk_range0, /*row_mode_partial_update=*/true);
-    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(base_segment_key));
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_segment_key)));
 
     // Switched on, the first publish after a prune populates the cache ...
     _tablet_mgr->prune_metacache();
     config::lake_pk_partial_update_use_segment_cache = true;
     write_and_publish(chunk_range1, /*row_mode_partial_update=*/true);
-    auto cached_segment = _tablet_mgr->metacache()->lookup_segment(base_segment_key);
+    auto cached_segment = _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_segment_key));
     ASSERT_NE(nullptr, cached_segment);
 
     // ... and the next publish reuses that very object rather than parsing the footer again.
     write_and_publish(chunk_range2, /*row_mode_partial_update=*/true);
-    auto cached_segment_again = _tablet_mgr->metacache()->lookup_segment(base_segment_key);
+    auto cached_segment_again =
+            _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(base_segment_key));
     EXPECT_EQ(cached_segment.get(), cached_segment_again.get());
 
     // The row count catches a cached Segment carrying the wrong id: the delvec lookup key a query
@@ -2138,7 +2140,7 @@ TEST_P(LakeNestedSegmentCacheTest, get_column_values_bypasses_complex_readers) {
     // cannot fit in a shard. Opening the probe privately must not seed the segment cache.
     ASSERT_LE(tablet_schema->num_columns() * 1024, kCacheCapacity / kNumShards);
     ASSERT_GT(probe->mem_usage(), kCacheCapacity / kNumShards);
-    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(file_info.cache_key())));
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(1);
     rowset->set_num_rows(kChunkSize);
@@ -2288,7 +2290,7 @@ TEST_F(LakeZstdSegmentCacheTest, get_column_values_bypasses_persisted_compressio
         RecordProperty("cache_shard_bytes", static_cast<int>(kCacheCapacity / kNumShards));
         ASSERT_GT(dictionary_bytes, kCacheCapacity / kNumShards);
     }
-    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(file_info.cache_key()));
+    ASSERT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(MetacacheKey::TEST_from_string(file_info.cache_key())));
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(1);
     rowset->set_num_rows(kRows);

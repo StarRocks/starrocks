@@ -272,8 +272,9 @@ protected:
         metadata->set_version(version);
         metadata->set_gtid(gtid);
         if (range != nullptr) *metadata->mutable_range() = *range;
-        _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(key_id, version),
-                                                            metadata);
+        _tablet_manager->metacache()->cache_tablet_metadata(
+                lake::MetacacheKey::tablet_metadata(_tablet_manager->tablet_metadata_location(key_id, version)),
+                metadata);
         return metadata;
     }
 
