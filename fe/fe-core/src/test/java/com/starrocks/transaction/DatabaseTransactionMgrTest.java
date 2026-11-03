@@ -87,6 +87,7 @@ import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
@@ -1420,6 +1421,14 @@ public class DatabaseTransactionMgrTest {
             }
         };
 
+        List<Long> loadRowsTxnIds = new ArrayList<>();
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void updateLoadRows(TransactionState transactionState) {
+                loadRowsTxnIds.add(transactionState.getTransactionId());
+            }
+        };
+
         TransactionStateBatch stateBatch = new TransactionStateBatch(states);
         masterTransMgr.finishTransactionBatch(GlobalStateMgrTestUtil.testDbId1, stateBatch, null);
 
@@ -1428,14 +1437,19 @@ public class DatabaseTransactionMgrTest {
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId6).getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId7).getTransactionStatus());
         assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTransactionState(txnId8).getTransactionStatus());
+        // every txn of the batch updates load rows, as an individually published txn does
+        assertEquals(Lists.newArrayList(txnId6, txnId7, txnId8), loadRowsTxnIds);
 
         FakeGlobalStateMgr.setGlobalStateMgr(slaveGlobalStateMgr);
         TransactionStateBatch replayStateBatch = new TransactionStateBatch(List.of(
                 fakeEditLog.getTransaction(txnId6),
                 fakeEditLog.getTransaction(txnId7),
                 fakeEditLog.getTransaction(txnId8)));
+        loadRowsTxnIds.clear();
         slaveTransMgr.replayUpsertTransactionStateBatch(replayStateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+        // the follower counts them too when replaying the batch
+        assertEquals(Lists.newArrayList(txnId6, txnId7, txnId8), loadRowsTxnIds);
     }
 
     // The committed txns 6, 7 and 8 of the fixture, alone in a fresh graph, so that the next publish batch
@@ -1606,12 +1620,21 @@ public class DatabaseTransactionMgrTest {
                 return true;
             }
         };
+        List<Long> loadRowsTxnIds = new ArrayList<>();
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public void updateLoadRows(TransactionState transactionState) {
+                loadRowsTxnIds.add(transactionState.getTransactionId());
+            }
+        };
 
         slaveTransMgr.replayUpsertTransactionStateBatch(stateBatch);
 
         // both tables' visible versions advanced; table2 only by the two txns that write it
         assertEquals(t1BaseVersion + 3, slaveT1Partition.getVisibleVersion());
         assertEquals(t2BaseVersion + 2, slaveT2Partition.getVisibleVersion());
+        // every txn of the batch updates load rows, as an individually published txn does
+        assertEquals(Lists.newArrayList(9001L, 9002L, 9003L), loadRowsTxnIds);
         assertEquals(deleteOnlySubset, slaveTable1.hasDelete());
         Assertions.assertFalse(table2.hasDelete(), "the DELETE does not write table2");
 
