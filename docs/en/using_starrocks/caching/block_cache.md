@@ -72,6 +72,8 @@ You can download the following Grafana Dashboard templates based on your StarRoc
 - [Dashboard template for StarRocks shared-data cluster on virtual machines](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-vm.json)
 - [Dashboard template for StarRocks shared-data cluster on Kubernetes](http://starrocks-thirdparty.oss-cn-zhangjiakou.aliyuncs.com/StarRocks-Shared_data-for-k8s.json)
 
+For more instructions on setting up a monitoring and alerting service for StarRocks, see [Monitor and Alert with Prometheus and Grafana](../../administration/management/monitoring/prometheus_grafana.md).
+
 ### Important metrics
 
 #### fslib read io_latency
