@@ -118,10 +118,7 @@ Status CoverageWindowFunction::prepare_partition(FunctionContext* ctx, CoverageW
         const auto* geo = dynamic_cast<const GeoColumn*>(physical);
         if ((!geo && !input->only_null()) ||
             (geo && (!is_geo_semantically_compatible(geo->descriptor().type, *ctx->get_return_type().geo_type) ||
-                     geo->descriptor().storage.encoding != GEO_ENCODING_WKB ||
-                     (geo->descriptor().storage.dimension != GEO_DIMENSION_XY &&
-                      geo->descriptor().storage.dimension != GEO_DIMENSION_UNKNOWN &&
-                      geo->descriptor().storage.dimension != GEO_DIMENSION_MIXED))))
+                     geo->descriptor().storage.encoding != GEO_ENCODING_WKB)))
             return Status::InvalidArgument("ST_CoverageSimplify requires compatible native planar XY GEOMETRY input");
         std::optional<Slice> bytes;
         if (!skip && !null) bytes = geo->get_wkb(position);

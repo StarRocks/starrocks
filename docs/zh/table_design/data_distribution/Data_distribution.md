@@ -861,6 +861,7 @@ PRIMARY KEY (tenant_id, created_time, id);
 除了 Colocation Group 之外，您还必须在 `colocate_with` 属性中以 `<colocation_group>:<colocated_column>[,<colocated_column>]` 的格式指定 Colocated Column：
 - Colocated Column 必须是排序列的前缀。
 - 同一 Colocation Group 中的表必须具有相同类型的 Colocated Column，且 Colocated Column 的数量和顺序必须一致。
+- 建表后不能修改 Colocated Column 的类型，包括增加 VARCHAR 列的长度。
 - 默认的 Colocated Column 即为排序列。
 :::
 

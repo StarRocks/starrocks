@@ -41,6 +41,7 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_JOB_PLANNING_THREAD_NUM = "iceberg_job_planning_thread_num";
     public static final String BACKGROUND_ICEBERG_JOB_PLANNING_THREAD_NUM = "background_iceberg_job_planning_thread_num";
     public static final String ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS = "iceberg_manifest_cache_with_column_statistics";
+    public static final String ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS = "iceberg_manifest_cache_statistics_max_columns";
     public static final String ICEBERG_MANIFEST_CACHE_MAX_NUM = "iceberg_manifest_cache_max_num";
     public static final String ICEBERG_DATA_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_data_file_cache_memory_usage_ratio";
     public static final String ICEBERG_DELETE_FILE_CACHE_MEMORY_SIZE_RATIO = "iceberg_delete_file_cache_memory_usage_ratio";
@@ -62,6 +63,7 @@ public class IcebergCatalogProperties {
     private int icebergJobPlanningThreadNum;
     private int backgroundIcebergJobPlanningThreadNum;
     private boolean icebergManifestCacheWithColumnStatistics;
+    private int icebergManifestCacheStatisticsMaxColumns;
     private long refreshIcebergManifestMinLength;
     private long localPlanningMaxSlotBytes;
     private boolean enableDistributedPlanLoadColumnStatsWithEqDelete;
@@ -114,6 +116,8 @@ public class IcebergCatalogProperties {
                     properties, ICEBERG_PARTITION_CACHE_MEMORY_SIZE_RATIO, 0.1);
         this.icebergManifestCacheWithColumnStatistics = PropertyUtil.propertyAsBoolean(
                 properties, ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, true);
+        this.icebergManifestCacheStatisticsMaxColumns = PropertyUtil.propertyAsInt(
+                properties, ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, 100);
         this.refreshIcebergManifestMinLength = PropertyUtil.propertyAsLong(properties, REFRESH_ICEBERG_MANIFEST_MIN_LENGTH,
                 2 * 1024 * 1024);
         this.enableCacheDataFileIdentifierColumnStatistics = PropertyUtil.propertyAsBoolean(properties,
@@ -165,6 +169,10 @@ public class IcebergCatalogProperties {
 
     public boolean isIcebergManifestCacheWithColumnStatistics() {
         return icebergManifestCacheWithColumnStatistics;
+    }
+
+    public int getIcebergManifestCacheStatisticsMaxColumns() {
+        return icebergManifestCacheStatisticsMaxColumns;
     }
 
     public boolean isEnableIcebergMetadataCache() {

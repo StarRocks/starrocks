@@ -28,6 +28,7 @@ import com.starrocks.connector.iceberg.IcebergMetadata.RewriteData;
 import com.starrocks.connector.iceberg.IcebergRemoteFileInfo;
 import com.starrocks.connector.iceberg.IcebergRewriteData;
 import com.starrocks.connector.iceberg.IcebergRewriteDataJob;
+import com.starrocks.connector.iceberg.IcebergRewriteFileSelector;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.credential.CloudConfiguration;
@@ -280,7 +281,7 @@ public class IcebergScanNodeTest {
             @Mocked PartitionSpec mockSpec) {
 
         new Expectations() {{
-            mockSource.getSourceFileScanOutputs(anyInt, anyLong, anyBoolean);
+            mockSource.getSourceFileScanOutputs(anyInt, (IcebergRewriteFileSelector) any);
             result = Collections.singletonList(mockTask);
             minTimes = 0;
             result = Collections.emptyList();
@@ -308,7 +309,7 @@ public class IcebergScanNodeTest {
         rewriteData.setBatchSize(10 * 1024);
         rewriteData.setMaxScanRangeLength(5);
 
-        rewriteData.buildNewScanNodeRange(10512L, false);
+        rewriteData.buildNewScanNodeRange(IcebergRewriteFileSelector.withDefaults(false, 10512L));
 
         Assertions.assertTrue(rewriteData.hasMoreTaskGroup(), "task group should exist");
         List<RemoteFileInfo> group = rewriteData.nextTaskGroup();
@@ -860,9 +861,8 @@ public class IcebergScanNodeTest {
 
         List<FileScanTask> result = source.getSourceFileScanOutputs(
                 10, // maxSize
-                100L, // threshold - dataFile is 500, so it's too big
-                false // allFiles == false
-        );
+                // threshold - dataFile is 500, so it's too big
+                IcebergRewriteFileSelector.withDefaults(false, 100L));
 
         Assertions.assertEquals(1, result.size());
         Assertions.assertSame(fileScanTask, result.get(0));
@@ -1039,7 +1039,7 @@ public class IcebergScanNodeTest {
         };
         new MockUp<IcebergRewriteData>() {
             @Mock
-            public void buildNewScanNodeRange(long fileSizeThreshold, boolean allFiles) {
+            public void buildNewScanNodeRange(IcebergRewriteFileSelector selector) {
                 return;
             }
         };
@@ -1052,7 +1052,8 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select * from t", "insert into t select * from t", false, false, 0L, 10L, 1L, false,
+                "insert into t select * from t", "insert into t select * from t", false,
+                IcebergRewriteFileSelector.withDefaults(false, 0L), 10L, 1L, false,
                 context, alter);
 
         job.prepare();
@@ -1145,7 +1146,8 @@ public class IcebergScanNodeTest {
         };
 
         IcebergRewriteDataJob job = new IcebergRewriteDataJob(
-                "insert into t select 1", "insert into t select 1", false, false, 0L, 10L, 1L, false, context, alter);
+                "insert into t select 1", "insert into t select 1", false,
+                IcebergRewriteFileSelector.withDefaults(false, 0L), 10L, 1L, false, context, alter);
 
         Deencapsulation.setField(job, "rewriteStmt", rewriteStmt);
         Deencapsulation.setField(job, "parsedStmt", parsedInsert);

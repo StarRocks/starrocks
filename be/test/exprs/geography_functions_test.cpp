@@ -1364,21 +1364,25 @@ TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityA
     std::string wkb;
     ASSERT_TRUE(WkbCodec::to_wkb(point, &wkb).ok());
 
-    for (auto descriptor : {
-                 GeoColumnDescriptor{
-                         {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
-                          "OGC:CRS84", 4326},
-                         {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}},
-                 GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
-                                      GEO_EDGE_ALGORITHM_VINCENTY, "OGC:CRS84", 4326},
-                                     {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}},
-         }) {
-        auto input = GeoColumn::create(std::move(descriptor));
-        input->append_wkb(Slice(wkb));
-        auto result = GeoFunctions::st_geography_x(nullptr, {input});
-        ASSERT_FALSE(result.ok());
-        EXPECT_TRUE(result.status().is_not_supported());
-    }
+    // An unsupported edge algorithm is a semantic type mismatch and stays NotSupported.
+    auto vincenty = GeoColumn::create(
+            GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                 GEO_EDGE_ALGORITHM_VINCENTY, "OGC:CRS84", 4326},
+                                {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+    vincenty->append_wkb(Slice(wkb));
+    auto rejected = GeoFunctions::st_geography_x(nullptr, {vincenty});
+    ASSERT_FALSE(rejected.ok());
+    EXPECT_TRUE(rejected.status().is_not_supported());
+
+    // The storage dimension label is not a gate: the row's own XY header decides.
+    auto xyz_label = GeoColumn::create(
+            GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                 GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326},
+                                {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}});
+    xyz_label->append_wkb(Slice(wkb));
+    auto admitted = GeoFunctions::st_geography_x(nullptr, {xyz_label});
+    ASSERT_TRUE(admitted.ok()) << admitted.status();
+    EXPECT_DOUBLE_EQ(1, ColumnViewer<TYPE_DOUBLE>(*admitted).value(0));
 }
 
 TEST_F(geographyFunctionsTest, nativeGeometryPointWkbConstructorMatchesCodec) {
@@ -1495,13 +1499,8 @@ TEST_F(geographyFunctionsTest, nativeGeometryPointFastPathRetainsNullsAndDescrip
             auto output =
                     x ? GeoFunctions::st_geometry_x(nullptr, {input}) : GeoFunctions::st_geometry_y(nullptr, {input});
             ASSERT_FALSE(output.ok());
-            if (dimension == GEO_DIMENSION_XYZ) {
-                EXPECT_TRUE(output.status().is_not_supported());
-                EXPECT_EQ("Unsupported GEOMETRY SQL boundary descriptor", output.status().message());
-            } else {
-                // UNKNOWN/MIXED labels are admitted; the row's own bytes are rejected.
-                EXPECT_TRUE(output.status().is_invalid_argument()) << output.status();
-            }
+            // Storage dimension labels are not gates; the row's own bytes are rejected.
+            EXPECT_TRUE(output.status().is_invalid_argument()) << output.status();
         }
     }
 }
@@ -1574,9 +1573,10 @@ TEST_F(geographyFunctionsTest, nativeGeometryComputeRejectsUnsupportedInputs) {
             {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
     auto xyz = GeoColumn::create(std::move(descriptor));
     xyz->append_wkb(Slice(wkb));
-    auto unsupported_dimension = GeoFunctions::st_geometry_type(nullptr, {xyz});
-    ASSERT_FALSE(unsupported_dimension.ok());
-    EXPECT_TRUE(unsupported_dimension.status().is_not_supported());
+    // The storage dimension label is not a gate: the row's own XY header decides.
+    auto xyz_label = GeoFunctions::st_geometry_type(nullptr, {xyz});
+    ASSERT_TRUE(xyz_label.ok()) << xyz_label.status();
+    EXPECT_EQ("ST_Point", ColumnViewer<TYPE_VARCHAR>(*xyz_label).value(0).to_string());
 }
 
 TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
@@ -3079,9 +3079,10 @@ TEST_F(geographyFunctionsTest, nativeGeoValiditySeparatesTopologyFromBoundaryErr
     point_wkb[0] = 1;
     point_wkb[1] = 1;
     unsupported->append_wkb(Slice(point_wkb));
-    auto rejected = GeoFunctions::st_geometry_is_valid(nullptr, {unsupported});
-    ASSERT_FALSE(rejected.ok());
-    EXPECT_TRUE(rejected.status().is_not_supported());
+    // The storage dimension label is not a gate: the row's own XY header decides.
+    auto xyz_label = GeoFunctions::st_geometry_is_valid(nullptr, {unsupported});
+    ASSERT_TRUE(xyz_label.ok()) << xyz_label.status();
+    EXPECT_TRUE(ColumnViewer<TYPE_BOOLEAN>(*xyz_label).value(0));
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyValidityAcrossDirectCheckCutoff) {
@@ -3524,6 +3525,9 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
     auto value = GeoFunctions::st_geom_from_text(context.get(), {wkt, crs});
     ASSERT_TRUE(value.ok()) << value.status();
     const auto expected = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(value->get()))->descriptor();
+    // Copies do not propagate storage metadata; factory-created destinations keep their default storage.
+    const GeoStorageDescriptor destination_storage{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN,
+                                                   GEO_VALIDATION_STATE_UNVALIDATED};
     for (bool nullable : {false, true}) {
         // A non-nullable destination receives a non-nullable constant payload.
         ColumnPtr source =
@@ -3533,7 +3537,9 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
         EXPECT_FALSE(unfolded->is_constant());
         EXPECT_EQ(nullable, unfolded->is_nullable());
         auto* geo = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(unfolded.get()));
-        EXPECT_EQ(expected, geo->descriptor());
+        // Unfolding copies into a factory-created column: the type is kept, storage stays destination-owned.
+        EXPECT_EQ(expected.type, geo->descriptor().type);
+        EXPECT_EQ(destination_storage, geo->descriptor().storage);
         auto x = GeoFunctions::st_geometry_x(nullptr, {unfolded});
         ASSERT_TRUE(x.ok()) << x.status();
         for (size_t i = 0; i < 3; ++i) EXPECT_DOUBLE_EQ(1.0, x.value()->get(i).get_double());
@@ -3547,7 +3553,9 @@ TEST_F(geographyFunctionsTest, nativeGeometryConstantMaterialization) {
     auto null_row = ColumnHelper::move_column(type, true, ColumnHelper::create_const_null_column(1), 1);
     destination->append(*null_row, 0, 1);
     destination->append(*row, 0, 1);
-    EXPECT_EQ(expected, down_cast<const GeoColumn*>(ColumnHelper::get_data_column(destination.get()))->descriptor());
+    const auto& copied = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(destination.get()))->descriptor();
+    EXPECT_EQ(expected.type, copied.type);
+    EXPECT_EQ(destination_storage, copied.storage);
     auto x = GeoFunctions::st_geometry_x(nullptr, {destination});
     ASSERT_TRUE(x.ok()) << x.status();
     ASSERT_EQ(4, x.value()->size());
@@ -5644,7 +5652,7 @@ TEST_F(GeoNonXYPayloadTest, H3FromGeo) {
     const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
     expect_rejects_non_xy(type, POINT, [&](const ColumnPtr& input) {
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+                FunctionContext::create_test_context({type, TYPE_INT_DESC}, TYPE_BIGINT_DESC));
         return GeoFunctions::h3_from_geo(context.get(), {input, resolution});
     });
 }
@@ -5661,7 +5669,7 @@ TEST_F(GeoNonXYPayloadTest, StBuffer) {
     for (WkbGeometryType kind : {POINT, LINESTRING, POLYGON}) {
         expect_rejects_non_xy(type, kind, [&](const ColumnPtr& input) {
             std::unique_ptr<FunctionContext> context(
-                    FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+                    FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
             auto distance = DoubleColumn::create();
             distance->append(1.0);
             return GeoFunctions::st_geometry_buffer(context.get(), {input, std::move(distance)});
@@ -5674,7 +5682,7 @@ TEST_F(GeoNonXYPayloadTest, StSimplifyPreserveTopology) {
     for (WkbGeometryType kind : {LINESTRING, POLYGON}) {
         expect_rejects_non_xy(type, kind, [&](const ColumnPtr& input) {
             std::unique_ptr<FunctionContext> context(
-                    FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+                    FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
             auto distance = DoubleColumn::create();
             distance->append(1.0);
             return GeoFunctions::st_geometry_simplify_preserve_topology(context.get(), {input, std::move(distance)});
@@ -5734,8 +5742,7 @@ TEST_F(GeoNonXYPayloadTest, UnknownLabelGeometryKernelsCompute) {
     expect_unknown_label_admitted(type, POINT, binary(GeoFunctions::st_geometry_distance, type, POINT, true));
     expect_unknown_label_admitted(type, POLYGON, binary(GeoFunctions::st_geometry_contains, type, POINT, true));
     expect_unknown_label_admitted(type, POLYGON, [&](const ColumnPtr& input) {
-        std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
         auto distance = DoubleColumn::create();
         distance->append(1.0);
         return GeoFunctions::st_geometry_buffer(context.get(), {input, std::move(distance)});
@@ -5751,7 +5758,7 @@ TEST_F(GeoNonXYPayloadTest, UnknownLabelGeographyFeedsH3) {
     const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
     expect_unknown_label_admitted(type, POINT, [&](const ColumnPtr& input) {
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+                FunctionContext::create_test_context({type, TYPE_INT_DESC}, TYPE_BIGINT_DESC));
         return GeoFunctions::h3_from_geo(context.get(), {input, resolution});
     });
     expect_unknown_label_admitted(type, POLYGON, [&](const ColumnPtr& input) {
@@ -5759,20 +5766,26 @@ TEST_F(GeoNonXYPayloadTest, UnknownLabelGeographyFeedsH3) {
     });
 }
 
-TEST_F(GeoNonXYPayloadTest, NonXYStorageLabelsStayRejected) {
+// Explicit non-XY storage labels are producer claims too: XY rows compute and Z rows are rejected per row.
+TEST_F(GeoNonXYPayloadTest, NonXYStorageLabelsAreNotGates) {
     for (auto dimension : {GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
         SCOPED_TRACE(dimension);
-        auto geometry = GeoColumn::create(GeoColumnDescriptor{
-                geometry_type().geo_type.value(), {GEO_ENCODING_WKB, dimension, GEO_VALIDATION_STATE_UNVALIDATED}});
-        geometry->append_wkb(Slice(iso_wkb(POINT, 0)));
-        EXPECT_TRUE(GeoFunctions::st_geometry_x(nullptr, {geometry}).status().is_not_supported());
-        auto geography = GeoColumn::create(GeoColumnDescriptor{
-                geography_type().geo_type.value(), {GEO_ENCODING_WKB, dimension, GEO_VALIDATION_STATE_UNVALIDATED}});
-        geography->append_wkb(Slice(iso_wkb(POLYGON, 0)));
-        EXPECT_TRUE(GeoFunctions::h3_polygon_to_cells(nullptr,
-                                                      {geography, ColumnHelper::create_const_column<TYPE_INT>(3, 1)})
-                            .status()
-                            .is_not_supported());
+        auto labelled = [dimension](const TypeDescriptor& type, const std::string& wkb) {
+            auto column = GeoColumn::create(GeoColumnDescriptor{
+                    type.geo_type.value(), {GEO_ENCODING_WKB, dimension, GEO_VALIDATION_STATE_UNVALIDATED}});
+            column->append_wkb(Slice(wkb));
+            return ColumnPtr(std::move(column));
+        };
+        const auto planar = geometry_type();
+        EXPECT_TRUE(GeoFunctions::st_geometry_x(nullptr, {labelled(planar, iso_wkb(POINT, 0))}).ok());
+        EXPECT_FALSE(GeoFunctions::st_geometry_x(nullptr, {labelled(planar, iso_wkb(POINT, 1000))}).ok());
+        const auto spherical = geography_type();
+        const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+        EXPECT_TRUE(GeoFunctions::h3_polygon_to_cells(nullptr, {labelled(spherical, iso_wkb(POLYGON, 0)), resolution})
+                            .ok());
+        EXPECT_FALSE(
+                GeoFunctions::h3_polygon_to_cells(nullptr, {labelled(spherical, iso_wkb(POLYGON, 1000)), resolution})
+                        .ok());
     }
 }
 

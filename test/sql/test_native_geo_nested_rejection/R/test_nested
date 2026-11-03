@@ -9,7 +9,7 @@ function: assert_query_error_contains("select array_agg(g) from (select ST_GeogF
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeogFromText(wkt) g, id from nested_fixture_${uuid0}) t", "DISTINCT aggregation is not supported for GEOGRAPHY type")
 -- result:
 None
 -- !result
@@ -73,7 +73,7 @@ function: assert_query_error_contains("select array_agg(g) from (select ST_GeomF
 -- result:
 None
 -- !result
-function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "Nested GEOGRAPHY/GEOMETRY types are not supported in ARRAY, MAP or STRUCT")
+function: assert_query_error_contains("select array_agg(distinct g) from (select ST_GeomFromText(wkt, 'EPSG:3857') g, id from nested_fixture_${uuid0}) t", "DISTINCT aggregation is not supported for GEOMETRY type")
 -- result:
 None
 -- !result

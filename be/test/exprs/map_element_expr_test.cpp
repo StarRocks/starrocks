@@ -93,8 +93,6 @@ TEST_F(MapElementExprTest, test_map_int_int) {
     type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
     type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
 
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
-
     auto column = ColumnHelper::create_column(type_map_int_int, false);
 
     DatumMap map;
@@ -139,10 +137,10 @@ TEST_F(MapElementExprTest, test_map_int_int) {
     //   99
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
-        expr->add_child(new_fake_const_expr(const_int_column(2, column->size()), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(2, column->size()), TYPE_INT_DESC));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
@@ -169,10 +167,10 @@ TEST_F(MapElementExprTest, test_map_int_int) {
     //   NULL
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
-        expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), TYPE_INT_DESC));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
@@ -200,7 +198,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
     //   NULL
 
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
         auto type = TYPE_INT_DESC;
@@ -224,8 +222,6 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
 
     TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
     type_varchar.len = 10;
-
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_varchar_int, true);
 
@@ -274,7 +270,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     //   NULL
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
         expr->add_child(new_fake_const_expr(const_varchar_column("b", column->size()), type_varchar));
@@ -306,7 +302,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     //   NULL
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
         expr->add_child(new_fake_const_expr(const_varchar_column("c", column->size()), type_varchar));
@@ -323,8 +319,6 @@ TEST_F(MapElementExprTest, test_map_const) {
     type_map_int_int.type = LogicalType::TYPE_MAP;
     type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
     type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
-
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_int_int, false);
 
@@ -370,10 +364,10 @@ TEST_F(MapElementExprTest, test_map_const) {
     //   null
     //   NULL
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(column, type_map_int_int));
-        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
+        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), TYPE_INT_DESC));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
@@ -381,10 +375,10 @@ TEST_F(MapElementExprTest, test_map_const) {
         EXPECT_EQ("[NULL, NULL, NULL, NULL, NULL]", result->debug_string());
     }
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
-        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
-        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), type_int));
+        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), TYPE_INT_DESC));
+        expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(column->size()), TYPE_INT_DESC));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
@@ -403,10 +397,10 @@ TEST_F(MapElementExprTest, test_map_const) {
 
     {
         ColumnPtr const_map = ConstColumn::create(column->clone(), column->size());
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(const_map, type_map_int_int));
-        expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), type_int));
+        expr->add_child(new_fake_const_expr(const_int_column(3, column->size()), TYPE_INT_DESC));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         // corner test
@@ -423,8 +417,6 @@ TEST_F(MapElementExprTest, test_const_map_int_variable_int) {
     type_map_int_int.type = LogicalType::TYPE_MAP;
     type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
     type_map_int_int.children.emplace_back(LogicalType::TYPE_INT);
-
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_int_int, false);
 
@@ -457,10 +449,10 @@ TEST_F(MapElementExprTest, test_const_map_int_variable_int) {
     key->append(3);
 
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(const_column, type_map_int_int));
-        expr->add_child(new_fake_col_expr(key, type_int));
+        expr->add_child(new_fake_col_expr(key, TYPE_INT_DESC));
         ASSERT_TRUE(expr->prepare(nullptr, nullptr).ok());
         ASSERT_TRUE(expr->open(nullptr, nullptr, FunctionContext::FRAGMENT_LOCAL).ok());
         auto result = expr->evaluate(nullptr, nullptr);
@@ -479,8 +471,6 @@ TEST_F(MapElementExprTest, test_map_null_key) {
 
     TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
     type_varchar.len = 10;
-
-    TypeDescriptor type_int(LogicalType::TYPE_INT);
 
     auto column = ColumnHelper::create_column(type_map_varchar_int, false);
 
@@ -512,7 +502,7 @@ TEST_F(MapElementExprTest, test_map_null_key) {
     //   Null
     //   66
     {
-        std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
+        std::unique_ptr<Expr> expr = create_map_element_expr(TYPE_INT_DESC);
 
         expr->add_child(new_fake_col_expr(column, type_map_varchar_int));
         expr->add_child(new_fake_const_expr(ColumnHelper::create_const_null_column(1), type_varchar));
