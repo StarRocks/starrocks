@@ -17,6 +17,7 @@
 #include <filesystem>
 
 #include "connector/jdbc/type_checker_manager.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -44,7 +45,7 @@ TEST_F(TypeCheckerTest, SupportByteType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportByteType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_CHAR));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_CHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Byte", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -69,7 +70,7 @@ TEST_F(TypeCheckerTest, SupportClickHouseUnsignedByteType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportClickHouseUnsignedByteType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_CHAR));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_CHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedByte", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -98,7 +99,7 @@ TEST_F(TypeCheckerTest, SupportShortType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportShortType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_CHAR));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_CHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Short", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
@@ -117,7 +118,7 @@ TEST_F(TypeCheckerTest, SupportClickHouseUnsignedShortType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportClickHouseUnsignedShortType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_CHAR));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_CHAR_DESC);
     auto status_or_type =
             type_checker_manager_.checkType("com.clickhouse.data.value.UnsignedShort", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
@@ -147,14 +148,14 @@ TEST_F(TypeCheckerTest, SupportIntegerType) {
 }
 
 TEST_F(TypeCheckerTest, NotSupportIntegerType) {
-    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_CHAR));
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TYPE_CHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.Integer", &unknown_type_slot);
     ASSERT_FALSE(status_or_type.ok());
 }
 
 // Define unit test for java.lang.String
 TEST_F(TypeCheckerTest, SupportStringType) {
-    SlotDescriptor char_type_slot(0, "char_type_slot", TypeDescriptor(TYPE_CHAR));
+    SlotDescriptor char_type_slot(0, "char_type_slot", TYPE_CHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("java.lang.String", &char_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);

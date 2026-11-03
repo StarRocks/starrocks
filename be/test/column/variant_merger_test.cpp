@@ -810,10 +810,9 @@ PARALLEL_TEST(VariantColumnMergerTest, choose_common_type_string_like_types_are_
     ASSERT_TRUE(varchar_varbinary.ok());
     EXPECT_EQ(TypeDescriptor(TYPE_VARCHAR), varchar_varbinary.value());
 
-    auto char_varchar =
-            VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_CHAR), TypeDescriptor(TYPE_VARCHAR));
+    auto char_varchar = VariantColumnMerger::choose_common_type(TYPE_CHAR_DESC, TypeDescriptor(TYPE_VARCHAR));
     ASSERT_TRUE(char_varchar.ok());
-    EXPECT_EQ(TypeDescriptor(TYPE_CHAR), char_varchar.value());
+    EXPECT_EQ(TYPE_CHAR_DESC, char_varchar.value());
 
     auto varbinary_binary =
             VariantColumnMerger::choose_common_type(TypeDescriptor(TYPE_VARBINARY), TypeDescriptor(TYPE_BINARY));
@@ -841,8 +840,7 @@ PARALLEL_TEST(VariantColumnMergerTest, cast_typed_column_string_like_is_noop_clo
     EXPECT_EQ(Slice("world"), result_bin->get_slice(1));
     EXPECT_EQ(1, result->null_column_data()[2]);
 
-    auto to_char =
-            VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_CHAR));
+    auto to_char = VariantColumnMerger::cast_typed_column(*src, TypeDescriptor(TYPE_VARCHAR), TYPE_CHAR_DESC);
     ASSERT_TRUE(to_char.ok()) << to_char.status().to_string();
     ASSERT_EQ(3, to_char.value()->size());
 }
