@@ -193,12 +193,15 @@ protected:
     // context for the partition, every writer open before any of them finishes. `flushes` holds the
     // keys of each flush: with a single one, the tablet's only segment is written at the end of the
     // load and goes into the bundle file; with more, write_buffer_size is 1 so every write() flushes,
-    // and those segments are standalone files.
+    // and those segments are standalone files. Load spill is off then: it would merge the flushes of a
+    // full-row load into one segment at the end of the load.
     void write_statement(int64_t txn_id, const PUniqueId& load_id, Write kind,
                          const std::vector<std::vector<int>>& flushes, int factor) {
         std::optional<ConfigResetGuard<int64_t>> one_segment_per_write;
+        std::optional<ConfigResetGuard<bool>> no_load_spill;
         if (flushes.size() > 1) {
             one_segment_per_write.emplace(&config::write_buffer_size, 1);
+            no_load_spill.emplace(&config::enable_load_spill, false);
         }
         auto bundle = std::make_unique<BundleWritableFileContext>();
         std::vector<std::unique_ptr<DeltaWriter>> writers;
