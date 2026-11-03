@@ -72,11 +72,32 @@ Use an endpoint reachable from both FE and BE. CI supplies its own OSS settings;
 keep credentials out of committed files. The original six fixtures originate from
 [starrocks-testing-data](https://github.com/StarRocks/starrocks-testing-data/tree/4bce0eac1a87b23982561b7c53636d125e13abf2/catalog/paimon).
 
-Cases create unique Catalog names and drop only those Catalogs when finished.
+Fixture-based cases create unique Catalog names and drop only those Catalogs when finished.
 They do not upload, modify or delete the shared data. An early failure may leave
 a Catalog requiring cleanup. Tests that generate or modify data must use a
 separate `tmp/<case-name>/<UUID>/` prefix, not this persistent warehouse.
 See [T/test_paimon_reader_modes](T/test_paimon_reader_modes) for an example.
+
+## DDL tests
+
+`T/test_paimon_catalog_ddl` creates and drops native databases and tables through SQL.
+Each case uses its own `oss://${oss_bucket}/tmp/paimon_catalog_ddl/${uuid0}/`
+filesystem warehouse; the configured OSS credentials need write/delete permission there.
+Set `paimon_ddl_warehouse_root` under `[replace]` in a private config to use a personal
+OSS prefix instead of the default CI prefix. The case UUID is appended to that root.
+The cases do not use or change the persistent fixtures. A second Catalog reads the
+native `$schemas` system tables to verify persisted types, primary keys, partitions
+and inferred NOT NULL constraints. Existing DESC nullability conversion is not used
+as evidence of native nullability.
+
+For local execution, add `paimon_ddl_local_warehouse_root` under `[replace]` in a
+private SQL-tester config and pass it with `--config`. This selects a local filesystem
+warehouse without OSS credentials. The absolute directory must be visible at the same
+path to the test runner, FE and BE. Each case creates its own UUID subdirectory.
+Cases skip if neither local storage nor OSS credentials are configured. CLEANUP
+blocks drop the temporary SQL objects even after an assertion fails. Empty warehouse
+directories or OSS directory markers may remain after SQL cleanup.
+Run `python3 run.py -d sql/test_paimon_catalog/R/test_paimon_catalog_ddl -v`.
 
 ## Reader assertions
 
@@ -121,6 +142,7 @@ rows to verify results as well as the reader path.
 
 | Cases | Coverage |
 | --- | --- |
+| `catalog_ddl` | Database/table lifecycle, IF [NOT] EXISTS, non-cascading FORCE, persisted append schemas, SQL/property primary keys, implicit/explicit nullability and rejected defaults |
 | `filesystem_catalog`, `reader_modes` | Scalar, NULL, VARIANT, BLOB and reader routing/profile |
 | `scalar_predicates` | Projection order, NULL logic, decimals, date/time, Unicode, compound predicates, aggregates and LIMIT |
 | `primary_key_merge`, `primary_key_sequence` | Update/delete, reinsert, repeated updates, NULL replacement across Parquet/ORC/Avro, and predicates on obsolete values |
@@ -171,8 +193,8 @@ written after index creation; these cases do not build or refresh indexes at run
 Run the reader assertion helper tests from `test/` with
 `python3 -m unittest lib.test_paimon_fixture -v`.
 
-All table mutations happen during offline data preparation, not during these cases.
-In particular, schema evolution and writer-snapshot cases read already prepared
+Fixture table mutations happen during offline data preparation. The DDL cases above
+mutate only their isolated warehouses. Schema evolution and writer-snapshot cases read already prepared
 files; they do not test live cache invalidation or schema refresh. This suite does
 not require a writer JDK/classpath or a Spark/Flink environment.
 

@@ -1,0 +1,66 @@
+-- name: test_paimon_catalog_ddl_lifecycle
+function: create_paimon_ddl_catalog("paimon_ddl_${uuid0}", "${uuid0}")
+create database paimon_ddl_${uuid0}.ddl_db;
+create database if not exists paimon_ddl_${uuid0}.ddl_db;
+function: assert_query_error_contains("create database paimon_ddl_${uuid0}.ddl_db", "database exists")
+create table paimon_ddl_${uuid0}.ddl_db.append_demo (id bigint not null, payload varchar(17) default null, dt date) comment 'append schema' partition by (dt) properties ('bucket'='-1', 'file.format'='parquet');
+create table if not exists paimon_ddl_${uuid0}.ddl_db.append_demo (ignored int);
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.append_demo (ignored int)", "already exists")
+set paimon_reader_mode = 'jni';
+select count(*) from paimon_ddl_${uuid0}.ddl_db.append_demo;
+-- A separate Catalog loads the persisted schema instead of reusing the writer's metadata.
+function: create_paimon_ddl_catalog("paimon_ddl_reader_${uuid0}", "${uuid0}")
+select get_json_string(fields, '$[0].name'), get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type'), get_json_string(fields, '$[2].type'), partition_keys, primary_keys, get_json_string(options, '$.bucket'), comment from paimon_ddl_reader_${uuid0}.ddl_db.`append_demo$schemas`;
+function: assert_query_error_contains("drop database paimon_ddl_${uuid0}.ddl_db", "nonempty")
+function: assert_query_error_contains("drop database paimon_ddl_${uuid0}.ddl_db force", "nonempty")
+select count(*) from paimon_ddl_${uuid0}.ddl_db.append_demo;
+drop table paimon_ddl_${uuid0}.ddl_db.append_demo;
+drop table if exists paimon_ddl_${uuid0}.ddl_db.append_demo;
+create table paimon_ddl_${uuid0}.ddl_db.append_demo (replacement int);
+select get_json_string(fields, '$[0].name'), get_json_string(fields, '$[0].type'), json_length(fields) from paimon_ddl_${uuid0}.ddl_db.`append_demo$schemas`;
+drop table paimon_ddl_${uuid0}.ddl_db.append_demo;
+drop database paimon_ddl_${uuid0}.ddl_db;
+drop database if exists paimon_ddl_${uuid0}.ddl_db;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.append_demo;
+  drop database if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db;
+  drop catalog if exists paimon_ddl_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_ddl_${paimon_ddl_warehouse_id};
+} END CLEANUP
+
+-- name: test_paimon_catalog_ddl_primary_keys
+function: create_paimon_ddl_catalog("paimon_ddl_${uuid0}", "${uuid0}")
+create database paimon_ddl_${uuid0}.ddl_db;
+-- The keys need not lead the schema; omitted nullability is inferred as NOT NULL.
+create table paimon_ddl_${uuid0}.ddl_db.pk_sql (payload varchar(17), Id bigint, dt date) primary key (Id, dt) partition by (DT) properties ('bucket'='4', 'bucket-key'='Id');
+create table paimon_ddl_${uuid0}.ddl_db.pk_property (payload int, Id bigint) properties ('primary-key'='ID', 'bucket'='2');
+create table paimon_ddl_${uuid0}.ddl_db.pk_explicit (Id bigint not null) primary key (Id);
+-- Explicit NULL must still be rejected for both primary-key spellings.
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_sql (id bigint null) primary key(id)", "cannot be nullable")
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_property (id bigint null) properties ('primary-key'='id')", "cannot be nullable")
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_default_sql (id bigint default null) primary key(id)", "Invalid default value")
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_default_property (id bigint default null) properties ('primary-key'='id')", "Invalid default value")
+function: assert_query_error_contains("create table paimon_ddl_${uuid0}.ddl_db.bad_default (id int default '1')", "Paimon only supports DEFAULT NULL")
+-- Failed analysis must not leave partial native tables behind.
+[ORDER]show tables from paimon_ddl_${uuid0}.ddl_db;
+function: create_paimon_ddl_catalog("paimon_ddl_reader_${uuid0}", "${uuid0}")
+set paimon_reader_mode = 'jni';
+-- DESC currently uses the nullable read conversion; $schemas exposes the native constraints.
+select get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type'), get_json_string(fields, '$[2].type'), primary_keys, partition_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_sql$schemas`;
+select get_json_string(fields, '$[0].type'), get_json_string(fields, '$[1].type'), primary_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_property$schemas`;
+select get_json_string(fields, '$[0].type'), primary_keys from paimon_ddl_reader_${uuid0}.ddl_db.`pk_explicit$schemas`;
+CLEANUP {
+  set catalog default_catalog;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_sql;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_property;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_default_sql;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_default_property;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.bad_default;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_sql;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_property;
+  drop table if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db.pk_explicit;
+  drop database if exists paimon_ddl_${paimon_ddl_warehouse_id}.ddl_db;
+  drop catalog if exists paimon_ddl_reader_${paimon_ddl_warehouse_id};
+  drop catalog if exists paimon_ddl_${paimon_ddl_warehouse_id};
+} END CLEANUP
