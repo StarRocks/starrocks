@@ -160,6 +160,12 @@ description: "Alphabetical t - z"
 - 单位: -
 - 描述: BEGIN、COMMIT、ROLLBACK和EXEC的事务请求。
 
+## `txn_running_routine_load`
+
+- 单位: 计数
+- 标签: `db`、`warehouse_name`
+- 描述: 每个数据库中正在运行的 Routine Load 事务数，按 task 所在的 warehouse 拆分；数据库中有此类事务的每个 warehouse 各一条序列，`sum by (db)` 即为该数据库的总数。Routine Load 的事务不受 `max_running_txn_num_per_db` 限制，因此不计入 `txn_running`，它的并发由 BE/CN 的 task 槽位限制（见 `routine_load_task_slots`）。
+
 ## `uint8_column_pool_bytes`
 
 - 单位: 字节

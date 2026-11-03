@@ -83,6 +83,7 @@ import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.OptimisticVersion;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AggregateType;
@@ -742,6 +743,8 @@ public class DatabaseTransactionMgrTest {
         assertEquals(8, masterDbTransMgr.getTransactionNum());
         assertEquals(6, masterDbTransMgr.getRunningTxnNums());
         assertEquals(1, masterDbTransMgr.getRunningRoutineLoadTxnNums());
+        assertEquals(Map.of(WarehouseManager.DEFAULT_WAREHOUSE_ID, 1),
+                masterDbTransMgr.getRunningRoutineLoadTxnNumsByWarehouse());
         assertEquals(1, masterDbTransMgr.getFinishedTxnNums());
         DatabaseTransactionMgr slaveDbTransMgr =
                 slaveTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);

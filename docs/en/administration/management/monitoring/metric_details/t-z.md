@@ -160,6 +160,12 @@ description: "Alphabetical t - z"
 - Unit: -
 - Description: Transaction requests of BEGIN, COMMIT, ROLLBACK, and EXEC.
 
+## `txn_running_routine_load`
+
+- Unit: Count
+- Labels: `db`, `warehouse_name`
+- Description: The number of running Routine Load transactions in each database, split by the warehouse the task runs in; a series appears for each warehouse that has such transactions in the database, and `sum by (db)` gives the per-database total. Routine Load transactions are exempt from `max_running_txn_num_per_db` and are therefore not included in `txn_running`; their concurrency is bounded by BE/CN task slots instead (see `routine_load_task_slots`).
+
 ## `uint8_column_pool_bytes`
 
 - Unit: Bytes

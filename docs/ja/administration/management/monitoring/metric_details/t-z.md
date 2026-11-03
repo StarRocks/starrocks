@@ -160,6 +160,12 @@ description: "Alphabetical t - z"
 - 単位: -
 - 説明: BEGIN、COMMIT、ROLLBACK、EXECのトランザクションリクエスト。
 
+## `txn_running_routine_load`
+
+- 単位: カウント
+- ラベル: `db`, `warehouse_name`
+- 説明: 各データベースで実行中の Routine Load トランザクション数。タスクが実行されている warehouse ごとに分割され、そのようなトランザクションを持つ warehouse ごとに 1 系列が出力されます。`sum by (db)` でデータベースごとの合計になります。Routine Load のトランザクションは `max_running_txn_num_per_db` の対象外のため `txn_running` には含まれず、その並行数は BE/CN のタスクスロットで制限されます（`routine_load_task_slots` を参照）。
+
 ## `uint8_column_pool_bytes`
 
 - 単位: バイト

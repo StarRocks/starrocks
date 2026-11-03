@@ -78,6 +78,7 @@ import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
+import com.starrocks.load.routineload.WarehouseTaskSlots;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
@@ -101,7 +102,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
-import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -203,6 +203,10 @@ public final class MetricRepo {
                     () -> new LeaderAwareCounterMetricLong("txn_commit_throttle_delay_ms_total",
                             MetricUnit.MILLISECONDS,
                             "total milliseconds transaction commits were delayed by the lake ingestion slowdown"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ROUTINE_LOAD_SCHEDULE_BLOCKED =
+            new MetricWithLabelGroup<>("warehouse_name",
+                    () -> new LongCounterMetric("routine_load_schedule_blocked", MetricUnit.REQUESTS,
+                            "routine load scheduling attempts that found no free BE task slot in the warehouse"));
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL =
             new MetricWithLabelGroup<>("result",
                     () -> new LongCounterMetric(SPM_CAPTURE_CANDIDATE_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
@@ -1914,6 +1918,7 @@ public final class MetricRepo {
         // collect routine load process metrics
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
+            collectRoutineLoadSlotMetrics(visitor);
         }
 
         // ADD: Collect Kafka routine load lag time metrics
@@ -2097,6 +2102,39 @@ public final class MetricRepo {
         }
     }
 
+    // Per warehouse: a task can only take a slot in its own warehouse, so one full warehouse blocks
+    // its jobs while the cluster total still shows room.
+    private static void collectRoutineLoadSlotMetrics(MetricVisitor visitor) {
+        RoutineLoadMgr routineLoadMgr = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        if (routineLoadMgr == null) {
+            return;
+        }
+        for (Map.Entry<Long, WarehouseTaskSlots> entry : routineLoadMgr.getWarehouseSlotNums().entrySet()) {
+            String warehouseName = warehouseLabel(entry.getKey());
+            WarehouseTaskSlots slots = entry.getValue();
+            LeaderAwareGaugeMetric<Long> used = new LeaderAwareGaugeMetricLong("routine_load_task_slots",
+                    MetricUnit.NOUNIT, "routine load task slots") {
+                @Override
+                public Long getValueLeader() {
+                    return (long) slots.used;
+                }
+            };
+            used.addLabel(new MetricLabel("warehouse_name", warehouseName));
+            used.addLabel(new MetricLabel("state", "used"));
+            visitor.visit(used);
+            LeaderAwareGaugeMetric<Long> total = new LeaderAwareGaugeMetricLong("routine_load_task_slots",
+                    MetricUnit.NOUNIT, "routine load task slots") {
+                @Override
+                public Long getValueLeader() {
+                    return (long) slots.total;
+                }
+            };
+            total.addLabel(new MetricLabel("warehouse_name", warehouseName));
+            total.addLabel(new MetricLabel("state", "total"));
+            visitor.visit(total);
+        }
+    }
+
     private static void collectMemoryUsageMetrics(MetricVisitor visitor) {
         for (GaugeMetricImpl<Long> metric : GAUGE_MEMORY_USAGE_STATS) {
             visitor.visit(metric);
@@ -2141,6 +2179,24 @@ public final class MetricRepo {
             };
             txnNum.addLabel(new MetricLabel("db", db.getFullName()));
             visitor.visit(txnNum);
+
+            // Counted apart from txn_running: routine load transactions are exempt from
+            // max_running_txn_num_per_db, which txn_running is compared against. Split by the warehouse
+            // the task ran in, since that is where its BE slot was taken.
+            for (Map.Entry<Long, Integer> entry : mgr.getRunningRoutineLoadTxnNumsByWarehouse().entrySet()) {
+                int running = entry.getValue();
+                LeaderAwareGaugeMetric<Integer> routineLoadTxnNum = new LeaderAwareGaugeMetricInteger(
+                        "txn_running_routine_load", MetricUnit.NOUNIT,
+                        "number of running routine load transactions") {
+                    @Override
+                    public Integer getValueLeader() {
+                        return running;
+                    }
+                };
+                routineLoadTxnNum.addLabel(new MetricLabel("db", db.getFullName()));
+                routineLoadTxnNum.addLabel(new MetricLabel("warehouse_name", warehouseLabel(entry.getKey())));
+                visitor.visit(routineLoadTxnNum);
+            }
 
             LeaderAwareGaugeMetric<Long> maxCommittedPendingPublish = new LeaderAwareGaugeMetricLong(
                     "txn_max_committed_pending_publish_ms", MetricUnit.MILLISECONDS,

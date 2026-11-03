@@ -805,9 +805,24 @@ public class DatabaseTransactionMgr {
         return runningTxnNums;
     }
 
-    @VisibleForTesting
-    protected int getRunningRoutineLoadTxnNums() {
+    public int getRunningRoutineLoadTxnNums() {
         return runningRoutineLoadTxnNums;
+    }
+
+    /** Running routine load transactions keyed by the warehouse they run in; sums to getRunningRoutineLoadTxnNums. */
+    public Map<Long, Integer> getRunningRoutineLoadTxnNumsByWarehouse() {
+        readLock();
+        try {
+            Map<Long, Integer> nums = new HashMap<>();
+            for (TransactionState transactionState : idToRunningTransactionState.values()) {
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
+                    nums.merge(transactionState.getWarehouseId(), 1, Integer::sum);
+                }
+            }
+            return nums;
+        } finally {
+            readUnlock();
+        }
     }
 
     @VisibleForTesting
