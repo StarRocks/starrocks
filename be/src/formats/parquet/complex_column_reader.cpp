@@ -49,11 +49,11 @@ namespace {
 
 TypeDescriptor resolve_virtual_slot_type(VariantColumnReader* source, const VariantPath& leaf_path) {
     if (source == nullptr) {
-        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+        return TYPE_UNKNOWN_DESC;
     }
     const TypeDescriptor* leaf_type = source->typed_value_read_type_for_path(leaf_path);
     if (leaf_type == nullptr) {
-        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+        return TYPE_UNKNOWN_DESC;
     }
     return *leaf_type;
 }

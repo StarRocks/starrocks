@@ -20,6 +20,7 @@ import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hasher;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -29,6 +30,9 @@ import java.util.SortedMap;
 import java.util.TreeMap;
 
 public class ConsistentHashRing<K, N> implements HashRing<K, N> {
+    // Lookups with at most this many distinct nodes walk a sorted array snapshot of the ring instead of the TreeMap.
+    private static final int MAX_ARRAY_LOOKUP_DISTINCT_NUMBER = 8;
+
     HashFunction hashFunction;
 
     TreeMap<Long, VNode> hashRing = new TreeMap<>();
@@ -39,6 +43,11 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
     int virtualNumber;
     long vNodeHashDelta;
     final boolean vNodeEvenlyDistributed = false;
+    // The ring as parallel arrays sorted by hash; rebuilt on the first lookup after the ring changes.
+    private volatile Snapshot snapshot = null;
+
+    private record Snapshot(long[] hashes, Object[] nodes) {
+    }
 
     class VNode {
         N node;
@@ -88,6 +97,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
 
     @Override
     public void addNode(N node) {
+        snapshot = null;
         nodes.add(node);
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
@@ -100,6 +110,7 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
 
     @Override
     public void removeNode(N node) {
+        snapshot = null;
         nodes.remove(node);
         for (int i = 0; i < virtualNumber; i++) {
             VNode vnode = new VNode(node, i);
@@ -125,6 +136,44 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
         }
     }
 
+    private Snapshot getSnapshot() {
+        Snapshot current = snapshot;
+        if (current == null) {
+            long[] hashes = new long[hashRing.size()];
+            Object[] ringNodes = new Object[hashRing.size()];
+            int i = 0;
+            for (Map.Entry<Long, VNode> entry : hashRing.entrySet()) {
+                hashes[i] = entry.getKey();
+                ringNodes[i] = entry.getValue().node;
+                i++;
+            }
+            current = new Snapshot(hashes, ringNodes);
+            snapshot = current;
+        }
+        return current;
+    }
+
+    // Walks the ring once, clockwise from the first virtual node whose hash is >= `hash`: the same order as the
+    // tail-then-whole-ring walk below, without a TreeMap view and a visited set per lookup.
+    @SuppressWarnings("unchecked")
+    private void collectNodes(Snapshot ring, long hash, List<N> ans, int distinctNumber) {
+        int size = ring.hashes().length;
+        int start = Arrays.binarySearch(ring.hashes(), hash);
+        if (start < 0) {
+            start = -(start + 1);
+        }
+        for (int step = 0; step < size && ans.size() < distinctNumber; step++) {
+            int index = start + step;
+            if (index >= size) {
+                index -= size;
+            }
+            N node = (N) ring.nodes()[index];
+            if (!ans.contains(node)) {
+                ans.add(node);
+            }
+        }
+    }
+
     @Override
     public List<N> get(K key, int distinctNumber) {
         List<N> ans = new ArrayList<>();
@@ -134,6 +183,11 @@ public class ConsistentHashRing<K, N> implements HashRing<K, N> {
         }
         Hasher hasher = hashFunction.newHasher();
         long hash = hasher.putObject(key, keyFunnel).hash().asLong();
+
+        if (distinctNumber > 0 && distinctNumber <= MAX_ARRAY_LOOKUP_DISTINCT_NUMBER) {
+            collectNodes(getSnapshot(), hash, ans, distinctNumber);
+            return ans;
+        }
 
         // search from `hash` to end.
         collectNodes(hashRing.tailMap(hash, true), ans, distinctNumber);

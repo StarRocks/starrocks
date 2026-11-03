@@ -747,6 +747,8 @@ TEST_F(SpillTest, order_by_restore_large_offsets_binary) {
     std::vector<int32_t> keys;
     std::vector<std::string> values;
     ASSERT_OK(caller.trigger_restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    // Marks the merge cursors data-ready, which restore() requires before it reads.
+    ASSERT_TRUE(caller._spiller->has_output_data());
     while (true) {
         auto chunk_st = caller.restore<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{});
         if (chunk_st.status().is_end_of_file()) {
@@ -808,8 +810,7 @@ TEST_F(SpillTest, ordered_mem_table_keeps_binary_over_4g_before_sort) {
 
     // The capacity check is kept: a chunk over the row limit is still rejected. A ConstColumn reports the rows without
     // allocating them.
-    auto value = BinaryColumn::create();
-    value->append(Slice("v"));
+    auto value = ColumnTestHelper::build_column<Slice>({"v"});
     Chunk too_many_rows(Columns{ConstColumn::create(std::move(value), capacity_limit + 1)}, slot_map);
     auto status = spill::OrderedMemTable::check_chunk_before_sort(too_many_rows);
     EXPECT_TRUE(status.is_capacity_limit_exceeded()) << status;

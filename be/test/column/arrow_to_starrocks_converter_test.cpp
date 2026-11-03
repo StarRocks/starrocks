@@ -37,6 +37,7 @@
 #include "column/map_column.h"
 #include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
+#include "testutil/type_test_helper.h"
 #include "types/datetime_value.h"
 #include "types/type_descriptor.h"
 #include "types/variant_value.h"
@@ -221,47 +222,44 @@ std::tuple<bool, Status> get_conv_func(const TypeDescriptor& type, const TypeDes
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanDirectScalar) {
     auto arrow_type = arrow::int32();
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, true, &raw_type_desc, &conv_func,
                                                      need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_INT, raw_type_desc.type);
     ASSERT_NE(nullptr, conv_func.func);
 
-    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, true);
+    auto column = create_arrow_column_convert_dest(TYPE_INT_DESC, raw_type_desc, need_cast, true);
     ASSERT_TRUE(column->is_nullable());
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanCastNeededScalar) {
     auto arrow_type = arrow::utf8();
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, false, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, false, &raw_type_desc,
+                                                     &conv_func, need_cast, false));
     ASSERT_TRUE(need_cast);
     ASSERT_EQ(TYPE_VARCHAR, raw_type_desc.type);
     ASSERT_EQ(TypeDescriptor::MAX_VARCHAR_LENGTH, raw_type_desc.len);
     ASSERT_NE(nullptr, conv_func.func);
 
-    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, false);
+    auto column = create_arrow_column_convert_dest(TYPE_INT_DESC, raw_type_desc, need_cast, false);
     ASSERT_TRUE(column->is_binary());
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanUnwrapsDictionary) {
     auto arrow_type = arrow::dictionary(arrow::int8(), arrow::int32());
-    TypeDescriptor type_desc(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_INT_DESC, true, &raw_type_desc, &conv_func,
                                                      need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_INT, raw_type_desc.type);
@@ -270,14 +268,12 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanUnwrapsDictionary) {
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanArray) {
     auto arrow_type = arrow::list(arrow::int32());
-    TypeDescriptor type_desc(TYPE_ARRAY);
-    type_desc.children.emplace_back(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
-                                                     need_cast, false));
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc,
+                                                     &conv_func, need_cast, false));
     ASSERT_FALSE(need_cast);
     ASSERT_EQ(TYPE_ARRAY, raw_type_desc.type);
     ASSERT_EQ(1, raw_type_desc.children.size());
@@ -289,7 +285,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMap) {
     auto arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     TypeDescriptor type_desc(TYPE_MAP);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
@@ -308,7 +304,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanStruct) {
     auto arrow_type = arrow::struct_({arrow::field("c0", arrow::int32()), arrow::field("c1", arrow::utf8())});
     TypeDescriptor type_desc(TYPE_STRUCT);
     type_desc.children.emplace_back(TYPE_INT);
-    type_desc.children.emplace_back(TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH));
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     type_desc.field_names = {"c0", "c1"};
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
@@ -346,17 +342,15 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanPrunedStruct) {
 }
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildren) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(TYPE_INT);
     TypeDescriptor map_type(TYPE_MAP);
-    map_type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
+    map_type.children = {TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
     TypeDescriptor struct_type(TYPE_STRUCT);
     struct_type.field_names = {"value"};
     struct_type.children.emplace_back(TYPE_INT);
     std::vector<std::shared_ptr<arrow::DataType>> arrow_children = {
             arrow::list(arrow::int32()), arrow::map(arrow::utf8(), arrow::int32()),
             arrow::struct_({arrow::field("value", arrow::int32())})};
-    std::vector<TypeDescriptor> children = {array_type, map_type, struct_type};
+    std::vector<TypeDescriptor> children = {TYPE_ARRAY_INT_DESC, map_type, struct_type};
     for (size_t i = 0; i < children.size(); ++i) {
         SCOPED_TRACE(children[i].debug_string());
         auto arrow_type =
@@ -364,7 +358,7 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildr
         auto array = arrow::ArrayFromJSON(arrow_type, R"([{"keep":7},null,{"keep":9}])");
         TypeDescriptor type(TYPE_STRUCT);
         type.field_names = {"new", "keep"};
-        type.children = {children[i], TypeDescriptor(TYPE_INT)};
+        type.children = {children[i], TYPE_INT_DESC};
         TypeDescriptor raw_type;
         ConvertFuncTree plan;
         bool need_cast = false;
@@ -383,14 +377,12 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanMissingComplexStructChildr
 
 TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) {
     auto arrow_type = arrow::int32();
-    TypeDescriptor type_desc(TYPE_ARRAY);
-    type_desc.children.emplace_back(TYPE_INT);
     TypeDescriptor raw_type_desc;
     ConvertFuncTree conv_func;
     bool need_cast = false;
 
-    auto st = build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func, need_cast,
-                                              false);
+    auto st = build_arrow_column_convert_plan(arrow_type.get(), &TYPE_ARRAY_INT_DESC, true, &raw_type_desc, &conv_func,
+                                              need_cast, false);
     ASSERT_FALSE(st.ok());
     ASSERT_NE(std::string::npos, st.message().find("does not match"));
 }
@@ -1949,15 +1941,12 @@ static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssi
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(LogicalType::TYPE_INT);
-
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(array_type, false);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, false);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -1992,10 +1981,8 @@ static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_parents,
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
-    TypeDescriptor array_type0(TYPE_ARRAY);
-    array_type0.children.emplace_back(LogicalType::TYPE_BIGINT);
     TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(array_type0);
+    array_type.children.emplace_back(TYPE_ARRAY_BIGINT_DESC);
 
     ConvertFuncTree cf;
     auto [need_cast, st] = get_conv_func(array_type, array_type, cf);
@@ -2015,15 +2002,12 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
-    TypeDescriptor array_type(TYPE_ARRAY);
-    array_type.children.emplace_back(LogicalType::TYPE_INT);
-
     ConvertFuncTree cf;
-    auto [need_cast, st] = get_conv_func(array_type, array_type, cf, true);
+    auto [need_cast, st] = get_conv_func(TYPE_ARRAY_INT_DESC, TYPE_ARRAY_INT_DESC, cf, true);
     ASSERT_STATUS_OK(st);
     ASSERT_FALSE(need_cast);
 
-    auto column = ColumnHelper::create_column(array_type, true);
+    auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     column->reserve(4096);
     ssize_t counter = 0;
     int num = 100;
@@ -2088,8 +2072,8 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_pruned_map) {
 
     for (int pruned_child : {0, 1}) {
         TypeDescriptor type(TYPE_MAP);
-        type.children = {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
-        type.children[pruned_child] = TypeDescriptor(TYPE_UNKNOWN);
+        type.children = {TypeDescriptor(TYPE_VARCHAR), TYPE_INT_DESC};
+        type.children[pruned_child] = TYPE_UNKNOWN_DESC;
         TypeDescriptor raw_type;
         ConvertFuncTree plan;
         bool need_cast = false;

@@ -76,13 +76,13 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
 
     switch (physical_type) {
     case parquet::Type::BOOLEAN:
-        *type_desc = TypeDescriptor(TYPE_BOOLEAN);
+        *type_desc = TYPE_BOOLEAN_DESC;
         break;
     case parquet::Type::FLOAT:
-        *type_desc = TypeDescriptor(TYPE_FLOAT);
+        *type_desc = TYPE_FLOAT_DESC;
         break;
     case parquet::Type::DOUBLE:
-        *type_desc = TypeDescriptor(TYPE_DOUBLE);
+        *type_desc = TYPE_DOUBLE_DESC;
         break;
     case parquet::Type::INT32:
         if (logical_type->is_int()) {
@@ -94,47 +94,47 @@ static Status get_parquet_type_from_primitive(const ::parquet::schema::NodePtr& 
                 // inferred type matches the loaded value.
                 switch (int_logical_type->bit_width()) {
                 case 8:
-                    *type_desc = TypeDescriptor(TYPE_SMALLINT);
+                    *type_desc = TYPE_SMALLINT_DESC;
                     break;
                 case 16:
-                    *type_desc = TypeDescriptor(TYPE_INT);
+                    *type_desc = TYPE_INT_DESC;
                     break;
                 default:
-                    *type_desc = TypeDescriptor(TYPE_BIGINT);
+                    *type_desc = TYPE_BIGINT_DESC;
                     break;
                 }
             } else {
-                *type_desc = TypeDescriptor(TYPE_INT);
+                *type_desc = TYPE_INT_DESC;
             }
         } else if (logical_type->is_date()) {
-            *type_desc = TypeDescriptor(TYPE_DATE);
+            *type_desc = TYPE_DATE_DESC;
         } else if (logical_type->is_time()) {
-            *type_desc = TypeDescriptor(TYPE_TIME);
+            *type_desc = TYPE_TIME_DESC;
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
             *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
                                                               decimal_logical_type->scale());
         } else {
-            *type_desc = TypeDescriptor(TYPE_INT);
+            *type_desc = TYPE_INT_DESC;
         }
         break;
     case parquet::Type::INT64:
         if (logical_type->is_int()) {
-            *type_desc = TypeDescriptor(TYPE_BIGINT);
+            *type_desc = TYPE_BIGINT_DESC;
         } else if (logical_type->is_time()) {
-            *type_desc = TypeDescriptor(TYPE_TIME);
+            *type_desc = TYPE_TIME_DESC;
         } else if (logical_type->is_timestamp()) {
-            *type_desc = TypeDescriptor(TYPE_DATETIME);
+            *type_desc = TYPE_DATETIME_DESC;
         } else if (logical_type->is_decimal()) {
             auto decimal_logical_type = std::dynamic_pointer_cast<const parquet::DecimalLogicalType>(logical_type);
             *type_desc = TypeDescriptor::promote_decimal_type(decimal_logical_type->precision(),
                                                               decimal_logical_type->scale());
         } else {
-            *type_desc = TypeDescriptor(TYPE_BIGINT);
+            *type_desc = TYPE_BIGINT_DESC;
         }
         break;
     case parquet::Type::INT96:
-        *type_desc = TypeDescriptor(TYPE_DATETIME);
+        *type_desc = TYPE_DATETIME_DESC;
         break;
     case parquet::Type::BYTE_ARRAY:
         if (logical_type->is_string()) {

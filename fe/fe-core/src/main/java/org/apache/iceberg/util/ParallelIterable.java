@@ -30,14 +30,20 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Deque;
 import java.util.Iterator;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -45,11 +51,14 @@ import java.util.function.Supplier;
 /**
  * Copy of Iceberg 1.11.0 {@code ParallelIterable}, shadowing the one in iceberg-core.
  *
- * <p>The only change: the queue length is tracked in an {@link AtomicInteger}. Upstream calls
+ * <p>Two changes. First, the queue length is tracked in an {@link AtomicInteger}. Upstream calls
  * {@link ConcurrentLinkedQueue#size()}, which walks the whole queue, once per task slot on every
  * {@code checkTasks()} pass (2 x worker threads slots) and once per task start. When the workers dump
  * whole manifests into the queue while the consumer waits for the first item, that walk is O(slots x
  * queued files) and cost seconds of planning on tables with ~100k files.
+ *
+ * <p>Second, a consumer waiting for items wakes up when a task finishes instead of after a fixed
+ * 10ms sleep (see {@code waitForTasks()}).
  */
 public class ParallelIterable<T> extends CloseableGroup implements CloseableIterable<T> {
 
@@ -98,6 +107,10 @@ public class ParallelIterable<T> extends CloseableGroup implements CloseableIter
         private final AtomicInteger queueSize = new AtomicInteger(0);
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private final int maxQueueSize;
+        // what waitForTasks() last waited on, reused while the running tasks stay the same: a timed out get()
+        // leaves anyOf's callback on every source, so a new anyOf per 10ms would pile them up on a slow task
+        private CompletableFuture<?>[] waitedTasks = new CompletableFuture<?>[0];
+        private CompletableFuture<Object> anyWaitedTaskDone = null;
 
         private ParallelIterator(
                 Iterable<? extends Iterable<T>> iterables, ExecutorService workerPool, int maxQueueSize) {
@@ -225,8 +238,7 @@ public class ParallelIterable<T> extends CloseableGroup implements CloseableIter
                 }
 
                 try {
-                    Thread.sleep(10);
-
+                    waitForTasks();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException(e);
@@ -235,6 +247,36 @@ public class ParallelIterable<T> extends CloseableGroup implements CloseableIter
 
             // when tasks are no longer running, return whether the queue has items
             return !queue.isEmpty();
+        }
+
+        // Upstream sleeps a fixed 10ms here. On a warm manifest cache a task finishes a manifest in
+        // microseconds, so each pass of 2 x worker-threads tasks ends in a 10ms sleep and planning a
+        // table with thousands of small manifests costs (manifests / slots) x 10ms. Wake up as soon as
+        // any running task finishes instead; 10ms stays the upper bound, as before.
+        private void waitForTasks() throws InterruptedException {
+            List<CompletableFuture<?>> running = new ArrayList<>(taskFutures.length);
+            for (CompletableFuture<Optional<Task<T>>> taskFuture : taskFutures) {
+                if (taskFuture != null) {
+                    if (taskFuture.isDone()) {
+                        return;
+                    }
+                    running.add(taskFuture);
+                }
+            }
+            if (running.isEmpty()) {
+                Thread.sleep(10);
+                return;
+            }
+            CompletableFuture<?>[] runningTasks = running.toArray(new CompletableFuture<?>[0]);
+            if (anyWaitedTaskDone == null || !Arrays.equals(runningTasks, waitedTasks)) {
+                waitedTasks = runningTasks;
+                anyWaitedTaskDone = CompletableFuture.anyOf(runningTasks);
+            }
+            try {
+                anyWaitedTaskDone.get(10, TimeUnit.MILLISECONDS);
+            } catch (ExecutionException | CancellationException | TimeoutException e) {
+                // checkTasks() rethrows a failed task and rejects a closed iterator; a timeout means no task finished yet
+            }
         }
 
         @Override
@@ -248,6 +290,17 @@ public class ParallelIterable<T> extends CloseableGroup implements CloseableIter
                 queueSize.decrementAndGet();
             }
             return item;
+        }
+
+        @VisibleForTesting
+        int maxRunningTaskDependents() {
+            int max = 0;
+            for (CompletableFuture<Optional<Task<T>>> taskFuture : taskFutures) {
+                if (taskFuture != null) {
+                    max = Math.max(max, taskFuture.getNumberOfDependents());
+                }
+            }
+            return max;
         }
 
         @VisibleForTesting

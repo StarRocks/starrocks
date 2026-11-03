@@ -33,17 +33,16 @@ public:
     void SetUp() override {
         config::vector_chunk_size = 1024;
 
-        const auto& int_type_desc = TypeDescriptor(TYPE_INT);
-        const auto& varchar_type_desc = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        const auto& int_type_desc = TYPE_INT_DESC;
         MutableColumnPtr col_cust_key_1 = ColumnHelper::create_column(int_type_desc, false);
         MutableColumnPtr col_cust_key_2 = ColumnHelper::create_column(int_type_desc, false);
         MutableColumnPtr col_cust_key_3 = ColumnHelper::create_column(int_type_desc, false);
-        MutableColumnPtr col_nation_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_nation_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_nation_3 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_region_1 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_region_2 = ColumnHelper::create_column(varchar_type_desc, true);
-        MutableColumnPtr col_region_3 = ColumnHelper::create_column(varchar_type_desc, true);
+        MutableColumnPtr col_nation_1 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_nation_2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_nation_3 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_region_1 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_region_2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+        MutableColumnPtr col_region_3 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
 
         col_cust_key_1->append_datum(int32_t(71));
         col_cust_key_1->append_datum(int32_t(70));
@@ -108,7 +107,7 @@ public:
 
         auto* expr1 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 2); // refer to region
         auto* expr2 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 1); // refer to nation
-        auto* expr3 = new ColumnRef(TypeDescriptor(TYPE_INT), 0);     // refer to cust_key
+        auto* expr3 = new ColumnRef(TYPE_INT_DESC, 0);                // refer to cust_key
         _exprs.push_back(expr1);
         _exprs.push_back(expr2);
         _exprs.push_back(expr3);

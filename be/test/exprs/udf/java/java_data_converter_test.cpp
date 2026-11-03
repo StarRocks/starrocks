@@ -31,6 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/udf/java/java_udf.h"
+#include "testutil/type_test_helper.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/decimalv3.h"
@@ -83,8 +84,6 @@ TEST_F(DataConverterTest, cast_to_jval) {
     }
 
     {
-        TypeDescriptor tdesc(TYPE_ARRAY);
-        tdesc.children.emplace_back(TYPE_INT);
         auto i32c = Int32Column::create();
         auto& elements_data = i32c->get_data();
         elements_data.resize(20);
@@ -102,7 +101,7 @@ TEST_F(DataConverterTest, cast_to_jval) {
         auto arr_col = ArrayColumn::create(std::move(nullable), std::move(offsets));
         auto& jvm = JVMHelper::getInstance();
         for (size_t i = 0; i < 3; ++i) {
-            ASSIGN_OR_ASSERT_FAIL(jvalue v, cast_to_jvalue(tdesc, true, arr_col.get(), i));
+            ASSIGN_OR_ASSERT_FAIL(jvalue v, cast_to_jvalue(TYPE_ARRAY_INT_DESC, true, arr_col.get(), i));
             jobject obj = v.l;
             target = target + jvm.to_string(obj);
             LOCAL_REF_GUARD(obj);
@@ -130,10 +129,8 @@ TEST_F(DataConverterTest, cast_to_jval) {
 
     {
         TypeDescriptor tdesc(TYPE_MAP);
-        TypeDescriptor ta(TYPE_ARRAY);
-        ta.children.emplace_back(TYPE_INT);
-        tdesc.children.emplace_back(ta);
-        tdesc.children.emplace_back(ta);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
         auto c1 = ColumnHelper::create_column(tdesc, true);
         c1->append_default();
         auto c2 = ColumnHelper::create_column(tdesc, false);
@@ -148,9 +145,8 @@ TEST_F(DataConverterTest, cast_to_jval) {
 
     {
         TypeDescriptor tdesc(TYPE_MAP);
-        TypeDescriptor ta(TYPE_INT);
-        tdesc.children.emplace_back(ta);
-        tdesc.children.emplace_back(ta);
+        tdesc.children.emplace_back(TYPE_INT_DESC);
+        tdesc.children.emplace_back(TYPE_INT_DESC);
 
         auto keys = Int32Column::create();
         size_t num_elements = 20;
@@ -195,10 +191,8 @@ TEST_F(DataConverterTest, convert_to_boxed_array) {
         args.emplace_back(type);
         context._arg_types = args;
         TypeDescriptor tdesc(TYPE_MAP);
-        TypeDescriptor ta(TYPE_ARRAY);
-        ta.children.emplace_back(TYPE_INT);
-        tdesc.children.emplace_back(ta);
-        tdesc.children.emplace_back(ta);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
+        tdesc.children.emplace_back(TYPE_ARRAY_INT_DESC);
 
         auto c1 = ColumnHelper::create_column(tdesc, true);
         c1->append_default();
@@ -219,16 +213,14 @@ TEST_F(DataConverterTest, convert_to_boxed_array) {
 
 TEST_F(DataConverterTest, append_jvalue) {
     {
-        TypeDescriptor tdesc(TYPE_ARRAY);
-        tdesc.children.emplace_back(TYPE_INT);
-        auto c1 = ColumnHelper::create_column(tdesc, true);
-        auto c2 = ColumnHelper::create_column(tdesc, true);
+        auto c1 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
+        auto c2 = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         Datum datum = std::vector<Datum>{1, 2, 3};
         c2->append_datum(datum);
-        ASSIGN_OR_ASSERT_FAIL(jvalue val2, cast_to_jvalue(tdesc, true, c2.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val2, cast_to_jvalue(TYPE_ARRAY_INT_DESC, true, c2.get(), 0));
         jobject obj = val2.l;
         LOCAL_REF_GUARD(obj);
-        ASSERT_OK(append_jvalue(tdesc, true, c1.get(), val2));
+        ASSERT_OK(append_jvalue(TYPE_ARRAY_INT_DESC, true, c1.get(), val2));
     }
     {
         TypeDescriptor tdesc(TYPE_MAP);
@@ -523,20 +515,18 @@ TEST_F(DataConverterTest, cast_to_jvalue_date_datetime) {
     auto& helper = JVMFunctionHelper::getInstance();
 
     {
-        TypeDescriptor td(TYPE_DATE);
         DateValue dv = DateValue::create(2024, 1, 15);
         auto src = make_date_column({dv});
-        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATE_DESC, true, src.get(), 0));
         jobject obj = val.l;
         LOCAL_REF_GUARD(obj);
         ASSERT_NE(obj, nullptr);
         EXPECT_EQ(dv._julian, helper.valLocalDate(obj));
     }
     {
-        TypeDescriptor td(TYPE_DATETIME);
         TimestampValue tv = TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000);
         auto src = make_datetime_column({tv});
-        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATETIME_DESC, true, src.get(), 0));
         jobject obj = val.l;
         LOCAL_REF_GUARD(obj);
         ASSERT_NE(obj, nullptr);
@@ -548,17 +538,15 @@ TEST_F(DataConverterTest, cast_to_jvalue_date_datetime) {
 // the resulting jvalue.l must be nullptr without throwing.
 TEST_F(DataConverterTest, cast_to_jvalue_date_datetime_null) {
     {
-        TypeDescriptor td(TYPE_DATE);
-        auto col = ColumnHelper::create_column(td, true);
+        auto col = ColumnHelper::create_column(TYPE_DATE_DESC, true);
         col->append_nulls(1);
-        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, col.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATE_DESC, true, col.get(), 0));
         EXPECT_EQ(val.l, nullptr);
     }
     {
-        TypeDescriptor td(TYPE_DATETIME);
-        auto col = ColumnHelper::create_column(td, true);
+        auto col = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
         col->append_nulls(1);
-        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, col.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATETIME_DESC, true, col.get(), 0));
         EXPECT_EQ(val.l, nullptr);
     }
 }
@@ -567,7 +555,6 @@ TEST_F(DataConverterTest, cast_to_jvalue_date_datetime_null) {
 // (the UDAF finalize / UDTF emit path).
 TEST_F(DataConverterTest, append_jvalue_date_datetime_roundtrip) {
     {
-        TypeDescriptor td(TYPE_DATE);
         DateValue values[] = {
                 DateValue::create(1970, 1, 1),
                 DateValue::create(2024, 12, 31),
@@ -575,16 +562,15 @@ TEST_F(DataConverterTest, append_jvalue_date_datetime_roundtrip) {
         };
         for (auto v : values) {
             auto src = make_date_column({v});
-            ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+            ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATE_DESC, true, src.get(), 0));
             jobject obj = val.l;
             LOCAL_REF_GUARD(obj);
-            auto dst = ColumnHelper::create_column(td, true);
-            ASSERT_OK(append_jvalue(td, true, dst.get(), val));
+            auto dst = ColumnHelper::create_column(TYPE_DATE_DESC, true);
+            ASSERT_OK(append_jvalue(TYPE_DATE_DESC, true, dst.get(), val));
             EXPECT_EQ(src->debug_item(0), dst->debug_item(0));
         }
     }
     {
-        TypeDescriptor td(TYPE_DATETIME);
         TimestampValue values[] = {
                 TimestampValue::create(1970, 1, 1, 0, 0, 0, 0),
                 TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000),
@@ -592,11 +578,11 @@ TEST_F(DataConverterTest, append_jvalue_date_datetime_roundtrip) {
         };
         for (auto v : values) {
             auto src = make_datetime_column({v});
-            ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+            ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATETIME_DESC, true, src.get(), 0));
             jobject obj = val.l;
             LOCAL_REF_GUARD(obj);
-            auto dst = ColumnHelper::create_column(td, true);
-            ASSERT_OK(append_jvalue(td, true, dst.get(), val));
+            auto dst = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
+            ASSERT_OK(append_jvalue(TYPE_DATETIME_DESC, true, dst.get(), val));
             EXPECT_EQ(src->debug_item(0), dst->debug_item(0));
         }
     }
@@ -616,27 +602,25 @@ TEST_F(DataConverterTest, append_jvalue_date_datetime_null) {
 // Round-trip via assign_jvalue at a specified row (Java window function path).
 TEST_F(DataConverterTest, assign_jvalue_date_datetime_roundtrip) {
     {
-        TypeDescriptor td(TYPE_DATE);
         DateValue dv = DateValue::create(2024, 1, 15);
         auto src = make_date_column({dv});
-        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATE_DESC, true, src.get(), 0));
         jobject obj = val.l;
         LOCAL_REF_GUARD(obj);
-        auto dst = ColumnHelper::create_column(td, true);
+        auto dst = ColumnHelper::create_column(TYPE_DATE_DESC, true);
         dst->resize(2);
-        ASSERT_OK(assign_jvalue(td, true, dst.get(), 1, val, /*error_if_overflow=*/true));
+        ASSERT_OK(assign_jvalue(TYPE_DATE_DESC, true, dst.get(), 1, val, /*error_if_overflow=*/true));
         EXPECT_EQ(src->debug_item(0), dst->debug_item(1));
     }
     {
-        TypeDescriptor td(TYPE_DATETIME);
         TimestampValue tv = TimestampValue::create(2024, 1, 15, 12, 34, 56, 789000);
         auto src = make_datetime_column({tv});
-        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(td, true, src.get(), 0));
+        ASSIGN_OR_ASSERT_FAIL(jvalue val, cast_to_jvalue(TYPE_DATETIME_DESC, true, src.get(), 0));
         jobject obj = val.l;
         LOCAL_REF_GUARD(obj);
-        auto dst = ColumnHelper::create_column(td, true);
+        auto dst = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
         dst->resize(2);
-        ASSERT_OK(assign_jvalue(td, true, dst.get(), 1, val, /*error_if_overflow=*/true));
+        ASSERT_OK(assign_jvalue(TYPE_DATETIME_DESC, true, dst.get(), 1, val, /*error_if_overflow=*/true));
         EXPECT_EQ(src->debug_item(0), dst->debug_item(1));
     }
 }
@@ -656,34 +640,31 @@ TEST_F(DataConverterTest, assign_jvalue_date_datetime_null) {
 // check_type_matched accepts LocalDate/LocalDateTime for their respective types
 // and rejects mismatches (e.g. swapping the two, or passing a String).
 TEST_F(DataConverterTest, check_type_matched_date_datetime) {
-    TypeDescriptor date_td(TYPE_DATE);
-    TypeDescriptor dt_td(TYPE_DATETIME);
-
     auto date_src = make_date_column({DateValue::create(2024, 1, 15)});
-    ASSIGN_OR_ASSERT_FAIL(jvalue date_val, cast_to_jvalue(date_td, true, date_src.get(), 0));
+    ASSIGN_OR_ASSERT_FAIL(jvalue date_val, cast_to_jvalue(TYPE_DATE_DESC, true, date_src.get(), 0));
     jobject date_obj = date_val.l;
     LOCAL_REF_GUARD(date_obj);
 
     auto dt_src = make_datetime_column({TimestampValue::create(2024, 1, 15, 12, 0, 0, 0)});
-    ASSIGN_OR_ASSERT_FAIL(jvalue dt_val, cast_to_jvalue(dt_td, true, dt_src.get(), 0));
+    ASSIGN_OR_ASSERT_FAIL(jvalue dt_val, cast_to_jvalue(TYPE_DATETIME_DESC, true, dt_src.get(), 0));
     jobject dt_obj = dt_val.l;
     LOCAL_REF_GUARD(dt_obj);
 
-    EXPECT_OK(check_type_matched(date_td, date_obj));
-    EXPECT_OK(check_type_matched(dt_td, dt_obj));
+    EXPECT_OK(check_type_matched(TYPE_DATE_DESC, date_obj));
+    EXPECT_OK(check_type_matched(TYPE_DATETIME_DESC, dt_obj));
     // null val is always OK.
-    EXPECT_OK(check_type_matched(date_td, nullptr));
-    EXPECT_OK(check_type_matched(dt_td, nullptr));
+    EXPECT_OK(check_type_matched(TYPE_DATE_DESC, nullptr));
+    EXPECT_OK(check_type_matched(TYPE_DATETIME_DESC, nullptr));
 
     // Cross-type: LocalDate vs DATETIME and LocalDateTime vs DATE both fail.
-    EXPECT_FALSE(check_type_matched(date_td, dt_obj).ok());
-    EXPECT_FALSE(check_type_matched(dt_td, date_obj).ok());
+    EXPECT_FALSE(check_type_matched(TYPE_DATE_DESC, dt_obj).ok());
+    EXPECT_FALSE(check_type_matched(TYPE_DATETIME_DESC, date_obj).ok());
 
     // String against DATE / DATETIME is rejected.
     jobject jstr = JVMHelper::getInstance().newString("not-a-date", 10);
     LOCAL_REF_GUARD(jstr);
-    EXPECT_FALSE(check_type_matched(date_td, jstr).ok());
-    EXPECT_FALSE(check_type_matched(dt_td, jstr).ok());
+    EXPECT_FALSE(check_type_matched(TYPE_DATE_DESC, jstr).ok());
+    EXPECT_FALSE(check_type_matched(TYPE_DATETIME_DESC, jstr).ok());
 }
 
 // convert_to_boxed_array drives the batch input path via JavaArrayConverter.
@@ -710,9 +691,8 @@ TEST_F(DataConverterTest, convert_to_boxed_array_date_datetime) {
 
     // all-null short-circuit
     {
-        TypeDescriptor td(TYPE_DATE);
-        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
-        auto col = ColumnHelper::create_column(td, true);
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({TYPE_DATE_DESC}, TYPE_DATE_DESC));
+        auto col = ColumnHelper::create_column(TYPE_DATE_DESC, true);
         col->append_nulls(3);
         std::vector<jobject> res;
         std::vector<const Column*> cols = {col.get()};
@@ -796,12 +776,12 @@ TEST_F(DataConverterTest, convert_to_boxed_array_with_null_descs) {
     auto* env = JVMHelper::getInstance().getEnv();
 
     // ARRAY<INT> column with one populated row.
-    TypeDescriptor td = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto col = ColumnHelper::create_column(td, true);
+    auto col = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     Datum datum = std::vector<Datum>{1, 2, 3};
     col->append_datum(datum);
 
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_ARRAY_INT_DESC}, TYPE_ARRAY_INT_DESC));
     std::vector<const Column*> cols = {col.get()};
     std::vector<jobject> arg_descs = {nullptr};
     std::vector<jobject> res;
@@ -817,11 +797,10 @@ TEST_F(DataConverterTest, convert_to_boxed_array_with_null_descs) {
 TEST_F(DataConverterTest, convert_to_boxed_array_constant_short_circuit) {
     auto* env = JVMHelper::getInstance().getEnv();
 
-    TypeDescriptor td(TYPE_INT);
-    auto inner = ColumnHelper::create_column(td, false);
+    auto inner = ColumnHelper::create_column(TYPE_INT_DESC, false);
     inner->append_datum(Datum(int32_t{42}));
     auto const_col = ConstColumn::create(std::move(inner));
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({TYPE_INT_DESC}, TYPE_INT_DESC));
 
     std::vector<const Column*> cols = {const_col.get()};
     std::vector<jobject> res;
@@ -838,11 +817,10 @@ TEST_F(DataConverterTest, convert_to_boxed_array_constant_short_circuit) {
 TEST_F(DataConverterTest, convert_to_boxed_array_all_null_short_circuit) {
     auto* env = JVMHelper::getInstance().getEnv();
 
-    TypeDescriptor td(TYPE_BIGINT);
-    auto col = ColumnHelper::create_column(td, true);
+    auto col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
     col->append_nulls(5);
 
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({td}, td));
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context({TYPE_BIGINT_DESC}, TYPE_BIGINT_DESC));
     std::vector<const Column*> cols = {col.get()};
     std::vector<jobject> res;
     ASSERT_OK(JavaDataTypeConverter::convert_to_boxed_array(ctx.get(), cols.data(), 1, /*num_rows=*/5, &res));
@@ -1151,7 +1129,7 @@ TEST_F(DataConverterTest, build_method_udf_type_descs_no_struct_short_circuit) {
     LOCAL_REF_GUARD(method);
 
     // SQL signature: udf(INT, BIGINT) -> VARCHAR — no STRUCT anywhere.
-    std::vector<TypeDescriptor> args = {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_BIGINT)};
+    std::vector<TypeDescriptor> args = {TYPE_INT_DESC, TYPE_BIGINT_DESC};
     TypeDescriptor ret(TYPE_VARCHAR);
 
     ASSIGN_OR_ASSERT_FAIL(JavaUdfMethodTypeDescs descs,

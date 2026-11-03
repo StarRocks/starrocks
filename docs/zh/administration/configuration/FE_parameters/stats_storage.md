@@ -393,7 +393,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: INSERT OVERWRITE 或物化视图刷新操作删除的分区的元数据保留时间。请注意，此类元数据无法通过执行 RECOVER 恢复。
+- 描述: 被 INSERT OVERWRITE、物化视图刷新操作或分区 TTL（`partition_live_number`、`partition_ttl`、`partition_retention_condition`）删除的分区，其元数据的保留时间。请注意，此类元数据无法通过执行 RECOVER 恢复。
 - 引入版本: v3.5.9
 
 ### `recover_with_empty_tablet`

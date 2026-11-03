@@ -465,7 +465,7 @@ class DeleteFileIndex {
             return this;
         }
 
-        Builder cachedDeleteFiles(Set<DeleteFile> deleteFiles) {
+        Builder cachedDeleteFiles(Iterable<DeleteFile> deleteFiles) {
             this.cachedDeleteFiles = deleteFiles;
             return this;
         }

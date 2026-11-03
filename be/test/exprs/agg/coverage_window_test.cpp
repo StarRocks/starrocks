@@ -88,7 +88,7 @@ struct WindowHarness {
                            int64_t limit = -1, TypeDescriptor type = coverage_type()) {
         query = std::make_shared<MemTracker>(limit);
         runtime.init_mem_trackers(query);
-        std::vector<TypeDescriptor> args{type, TypeDescriptor(TYPE_DOUBLE)};
+        std::vector<TypeDescriptor> args{type, TYPE_DOUBLE_DESC};
         if (third) args.emplace_back(TYPE_BOOLEAN);
         ctx.reset(FunctionContext::create_context(&runtime, &pool, type, args));
         Columns constants{nullptr, tolerance ? ColumnHelper::create_const_column<TYPE_DOUBLE>(*tolerance, 1)

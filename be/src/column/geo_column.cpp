@@ -73,27 +73,11 @@ GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
     resize(size);
 }
 
-bool GeoColumn::_is_storage_placeholder() const {
-    return _descriptor.storage ==
-                   GeoStorageDescriptor{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED} &&
-           _data->get_immutable_bytes().empty();
-}
-
-const GeoColumn& GeoColumn::_source(const Column& src) {
+const GeoColumn& GeoColumn::_source(const Column& src) const {
     const auto& geo = down_cast<const GeoColumn&>(src);
-    if (_descriptor != geo._descriptor) {
-        if (_descriptor.type != geo._descriptor.type) throw std::invalid_argument("GeoColumn descriptor mismatch");
-        // TypeDescriptor factories have semantic identity but no physical metadata yet.
-        // Empty WKB bytes are only NULL/default placeholders, so binding storage here does
-        // not relabel any existing geometry. Populated UNKNOWN/MIXED data is never upgraded.
-        if (_is_storage_placeholder()) {
-            _descriptor.storage = geo._descriptor.storage;
-        } else if (!geo._is_storage_placeholder()) {
-            throw std::invalid_argument("GeoColumn descriptor mismatch");
-        }
-        // Copying a source containing only default placeholders preserves the destination's
-        // physical descriptor (for example a materialized NULL after a non-NULL UNION row).
-    }
+    // Only the semantic type must match. The storage descriptor is a producer claim that no kernel reads,
+    // so copies neither compare nor propagate it; kernels check each row's own WKB.
+    if (_descriptor.type != geo._descriptor.type) throw std::invalid_argument("GeoColumn descriptor mismatch");
     return geo;
 }
 
@@ -136,7 +120,10 @@ void GeoColumn::remove_first_n_values(size_t count) {
 }
 
 void GeoColumn::append(const Column& src, size_t offset, size_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append(*copy, offset, count);
@@ -147,7 +134,10 @@ void GeoColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_selective(*copy, indexes, from, count);
@@ -158,7 +148,10 @@ void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uin
 }
 
 void GeoColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_value_multiple_times(*copy, index, count);

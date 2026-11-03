@@ -48,7 +48,7 @@ static ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t
 static void test_array_column_view_helper(bool nullable, bool append_default, long concat_row_limit,
                                           long concat_bytes_limit, std::vector<uint32_t> selection,
                                           const std::string& expect_result) {
-    auto child_type_desc = TypeDescriptor(LogicalType::TYPE_INT);
+    auto child_type_desc = TYPE_INT_DESC;
     auto type_desc = TypeDescriptor::create_array_type(child_type_desc);
     auto opt_array_column_view =
             ColumnViewHelper::create_column_view(type_desc, nullable, concat_row_limit, concat_bytes_limit);
@@ -119,10 +119,8 @@ PARALLEL_TEST(ColumnViewTest, test_create_struct_column_view) {
     TypeDescriptor type_desc = TypeDescriptor(LogicalType::TYPE_STRUCT);
     type_desc.field_names.emplace_back("field1");
     type_desc.field_names.emplace_back("field2");
-    TypeDescriptor field1_type_desc = TypeDescriptor::create_varchar_type(20);
-    TypeDescriptor field2_type_desc = TypeDescriptor::create_varchar_type(20);
-    type_desc.children.emplace_back(field1_type_desc);
-    type_desc.children.emplace_back(field2_type_desc);
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     for (auto nullable : {true, false}) {
         auto opt_struct_column_view = ColumnViewHelper::create_column_view(type_desc, nullable, 0, 0);
         DCHECK(opt_struct_column_view.has_value());
@@ -162,10 +160,8 @@ PARALLEL_TEST(ColumnViewTest, test_create_binary_column_view) {
 }
 PARALLEL_TEST(ColumnViewTest, test_create_map_column_view) {
     TypeDescriptor type_desc = TypeDescriptor(LogicalType::TYPE_MAP);
-    TypeDescriptor field1_type_desc = TypeDescriptor::create_varchar_type(20);
-    TypeDescriptor field2_type_desc = TypeDescriptor::create_varchar_type(20);
-    type_desc.children.emplace_back(field1_type_desc);
-    type_desc.children.emplace_back(field2_type_desc);
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
+    type_desc.children.emplace_back(TYPE_VARCHAR_DESC);
     for (auto nullable : {true, false}) {
         auto opt_map_column_view = ColumnViewHelper::create_column_view(type_desc, nullable, 0, 0);
         DCHECK(opt_map_column_view.has_value());
@@ -184,8 +180,8 @@ PARALLEL_TEST(ColumnViewTest, test_create_map_column_view) {
 // positions against the number of rows, and aborted debug builds on exactly this input. Both
 // concat settings are covered because the assertion sat before the concat branch.
 static void test_select_more_positions_than_rows(long concat_rows_limit, long concat_bytes_limit) {
-    TypeDescriptor type_desc = TypeDescriptor::create_varchar_type(20);
-    auto opt_view = ColumnViewHelper::create_column_view(type_desc, true, concat_rows_limit, concat_bytes_limit);
+    auto opt_view =
+            ColumnViewHelper::create_column_view(TYPE_VARCHAR_DESC, true, concat_rows_limit, concat_bytes_limit);
     ASSERT_TRUE(opt_view.has_value());
     auto column_view = std::move(opt_view.value());
 

@@ -29,6 +29,7 @@
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "platform/llm/openai_compatible_provider.h"
+#include "testutil/column_test_helper.h"
 #include "types/json_value.h"
 #include "types/type_descriptor.h"
 
@@ -145,8 +146,7 @@ TEST(AIProviderOptionsBuilderTest, OnlyJsonTypedColumnsAreAccepted) {
     auto json = make_json("{}");
     EXPECT_FALSE(build_ai_provider_options(*json, TypeDescriptor(TYPE_VARCHAR), 0).ok());
     EXPECT_FALSE(build_ai_provider_options(*json, TypeDescriptor(TYPE_MAP), 0).ok());
-    auto string = BinaryColumn::create();
-    string->append("secret-value");
+    auto string = ColumnTestHelper::build_column<Slice>({"secret-value"});
     auto result = build_ai_provider_options(*string, TypeDescriptor(TYPE_JSON), 0);
     ASSERT_FALSE(result.ok());
     expect_redacted(result.status(), {"secret-value"});

@@ -16,6 +16,9 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.alter.reshard.ReshardingPhysicalPartition;
+import com.starrocks.alter.reshard.SplitTabletJob;
+import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.common.Config;
@@ -55,6 +58,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -1031,6 +1037,7 @@ public class TabletStatMgrTest {
         // row-count collection carry no such risk and must keep refreshing regardless.
         LakeTable table = createLakeTableForTest();
         table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        companionJobManager(table, PH_PARTITION_ID);
 
         long tablet1Id =
                 table.getPartition(PARTITION_ID).getDefaultPhysicalPartition().getLatestBaseIndex().getTablets()
@@ -1259,5 +1266,94 @@ public class TabletStatMgrTest {
         List<?> tablets = Deencapsulation.getField(snapshot, "tablets");
 
         Assertions.assertEquals(baseTabletCount + rollupTabletCount, tablets.size());
+    }
+
+    @Test
+    public void testFreePartitionAcceptsSharedFileProofWithRetainedJobs(@Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        TabletReshardJobMgr manager = companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        List<Tablet> tablets = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex().getTablets();
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> cleanTabletResponse(tablets));
+        for (Tablet tablet : tablets) {
+            Assertions.assertFalse(((LakeTablet) tablet).hasSharedFiles());
+            Assertions.assertEquals(10L, ((LakeTablet) tablet).getRowCount(-1));
+        }
+        Mockito.verify(manager, Mockito.times(1)).isPhysicalPartitionReshardingLocked(table, PH_PARTITION_ID);
+    }
+
+    @Test
+    public void testDelayedSharedFileProofStaysWithOriginalTabletGeneration(@Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(OlapTable.OlapTableState.TABLET_RESHARD);
+        companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        MaterializedIndex index = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex();
+        List<Tablet> original = new ArrayList<>(index.getTablets());
+        LakeTablet replacement = new LakeTablet(original.get(0).getId());
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> {
+            index.removeTablet(replacement.getId());
+            index.addTablet(replacement, new TabletMeta(DB_ID, TABLE_ID, PH_PARTITION_ID, INDEX_ID,
+                    TStorageMedium.HDD, true));
+            return cleanTabletResponse(original);
+        });
+        Assertions.assertFalse(((LakeTablet) original.get(0)).hasSharedFiles());
+        Assertions.assertTrue(replacement.hasSharedFiles());
+        Assertions.assertEquals(0L, replacement.getDataSize(true));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OlapTable.OlapTableState.class, names = {"NORMAL", "TABLET_RESHARD"},
+            mode = EnumSource.Mode.EXCLUDE)
+    public void testOtherAlterStatesKeepSharedFileProofConservative(OlapTable.OlapTableState state,
+            @Mocked LakeService lakeService) {
+        LakeTable table = createRangeLakeTableForTest();
+        table.setState(state);
+        companionJobManager(table, PH_PARTITION_ID - 1);
+        Database db = new Database(DB_ID, "db");
+        db.registerTableUnlocked(table);
+        List<Tablet> tablets = table.getPhysicalPartition(PH_PARTITION_ID).getLatestBaseIndex().getTablets();
+        collectLakeTabletStatsOnce(lakeService, db, table, () -> cleanTabletResponse(tablets));
+        for (Tablet tablet : tablets) {
+            Assertions.assertTrue(((LakeTablet) tablet).hasSharedFiles());
+            Assertions.assertEquals(10L, ((LakeTablet) tablet).getRowCount(-1));
+        }
+    }
+
+    private TabletStatResponse cleanTabletResponse(List<Tablet> tablets) {
+        TabletStatResponse response = new TabletStatResponse();
+        response.tabletStats = new ArrayList<>();
+        for (Tablet tablet : tablets) {
+            TabletStat stat = new TabletStat();
+            stat.tabletId = tablet.getId();
+            stat.numRows = 10L;
+            stat.dataSize = 100L;
+            stat.hasSharedFiles = false;
+            response.tabletStats.add(stat);
+        }
+        return response;
+    }
+
+    private TabletReshardJobMgr companionJobManager(OlapTable table, long busyPartitionId) {
+        TabletReshardJobMgr manager = Mockito.spy(new TabletReshardJobMgr());
+        Map<Long, TabletReshardJob> jobs = manager.getTabletReshardJobs();
+        jobs.put(1L, new SplitTabletJob(1L, 1L, table.getId(),
+                Map.of(busyPartitionId, new ReshardingPhysicalPartition(busyPartitionId, Map.of()))));
+        for (long id = 2; id <= 20; id++) {
+            SplitTabletJob historical = new SplitTabletJob(id, 1L, table.getId(),
+                    Map.of(busyPartitionId + 1, new ReshardingPhysicalPartition(busyPartitionId + 1, Map.of())));
+            Deencapsulation.setField(historical, "jobState", TabletReshardJob.JobState.FINISHED);
+            jobs.put(id, historical);
+        }
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public TabletReshardJobMgr getTabletReshardJobMgr() {
+                return manager;
+            }
+        };
+        return manager;
     }
 }

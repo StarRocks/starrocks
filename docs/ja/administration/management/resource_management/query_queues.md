@@ -370,7 +370,7 @@ FE の監査ログファイル **fe.audit.log** を確認できます。フィ�
 
 ### Monitoring metrics
 
-[Monitor and Alert](../monitoring/monitoring.md) 機能を使用して、StarRocks のクエリキューのメトリクスを取得できます。次の FE メトリクスは、各 FE ノードの統計データから導出されます。
+[Monitor and Alert](../monitoring/prometheus_grafana.md) 機能を使用して、StarRocks のクエリキューのメトリクスを取得できます。次の FE メトリクスは、各 FE ノードの統計データから導出されます。
 
 | Metric                                          | Unit | Type    | Description                                                    |
 | ----------------------------------------------- | ---- | ------- | -------------------------------------------------------------- |

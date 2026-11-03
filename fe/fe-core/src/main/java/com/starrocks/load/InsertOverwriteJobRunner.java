@@ -352,7 +352,9 @@ public class InsertOverwriteJobRunner {
         try {
             OlapTable targetTable;
             targetTable = checkAndGetTable(db, tableId);
-            if (targetTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            if (targetTable.getState() != OlapTable.OlapTableState.NORMAL
+                    && !(targetTable.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                        && targetTable.isCloudNativeTableOrMaterializedView() && targetTable.isRangeDistribution())) {
                 throw new DmlException("table state is %s, please wait to insert overwrite until table state is normal",
                         targetTable.getState());
             }

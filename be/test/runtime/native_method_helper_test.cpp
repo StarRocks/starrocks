@@ -34,6 +34,7 @@
 #include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "runtime/java/jni_env.h"
+#include "testutil/type_test_helper.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
@@ -165,9 +166,7 @@ TEST_F(NativeMethodHelperTest, get_addrs_int) {
     // test array/map
     // array with scalar types
     {
-        TypeDescriptor array_type(TYPE_ARRAY);
-        array_type.children.emplace_back(TYPE_INT);
-        auto column = ColumnHelper::create_column(array_type, true);
+        auto column = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         column->resize(10);
         auto arr = NativeMethodHelperTestBridge::getAddrs(env, nullptr, reinterpret_cast<size_t>(column.get()));
         jlong results[5];
@@ -220,9 +219,7 @@ TEST_F(NativeMethodHelperTest, get_column_logical_type) {
     // (UDFHelper.getResultFromListArray / getResultFromMapArray) calls back into
     // getColumnLogicalType on element/key/value columns to dispatch nested writes.
     {
-        TypeDescriptor array_type(TYPE_ARRAY);
-        array_type.children.emplace_back(TYPE_INT);
-        auto c = ColumnHelper::create_column(array_type, true);
+        auto c = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
         ASSERT_EQ(TYPE_ARRAY,
                   NativeMethodHelperTestBridge::getColumnLogicalType(env, nullptr, reinterpret_cast<size_t>(c.get())));
     }
@@ -307,7 +304,7 @@ TEST_F(NativeMethodHelperTest, get_column_logical_type_array_of_date_datetime) {
 TEST_F(NativeMethodHelperTest, get_addrs_date_datetime) {
     auto env = getJNIEnv();
     {
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_DATE), true);
+        auto col = ColumnHelper::create_column(TYPE_DATE_DESC, true);
         col->resize(8);
         auto arr = NativeMethodHelperTestBridge::getAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
         ASSERT_NE(arr, nullptr);
@@ -320,7 +317,7 @@ TEST_F(NativeMethodHelperTest, get_addrs_date_datetime) {
         env->DeleteLocalRef(arr);
     }
     {
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_DATETIME), true);
+        auto col = ColumnHelper::create_column(TYPE_DATETIME_DESC, true);
         col->resize(8);
         auto arr = NativeMethodHelperTestBridge::getAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));
         ASSERT_NE(arr, nullptr);
@@ -491,7 +488,7 @@ TEST_F(NativeMethodHelperTest, get_struct_field_addrs_rejects_non_nullable) {
 // rejected — the caller passed a non-STRUCT column to a struct-only API.
 TEST_F(NativeMethodHelperTest, get_struct_field_addrs_rejects_non_struct) {
     auto env = getJNIEnv();
-    auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), /*nullable=*/true);
+    auto col = ColumnHelper::create_column(TYPE_INT_DESC, /*nullable=*/true);
 
     jlongArray jarr =
             NativeMethodHelperTestBridge::getStructFieldAddrs(env, nullptr, reinterpret_cast<size_t>(col.get()));

@@ -25,6 +25,8 @@ set(EXEC_FILES
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./formats/parquet/decrypt_metadata_module_test.cpp
+        ./formats/parquet/encrypted_file_reader_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/exchange_compression_strategy_test.cpp
@@ -308,6 +310,7 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
     ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
+    ./storage/lake/lake_multi_statement_publish_test.cpp
     ./storage/lake/tablet_merger_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp

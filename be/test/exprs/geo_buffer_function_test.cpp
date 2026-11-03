@@ -38,8 +38,7 @@ TypeDescriptor geo_type(std::string crs = "EPSG:3857") {
                             crs == "EPSG:4326" ? 4326 : 3857});
 }
 std::unique_ptr<FunctionContext> context(const TypeDescriptor& type = geo_type()) {
-    return std::unique_ptr<FunctionContext>(
-            FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+    return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
 }
 ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescriptor& type = geo_type()) {
     auto text = BinaryColumn::create();
@@ -189,11 +188,13 @@ TEST(GeoBufferFunctionTest, RejectsMalformedDimensionsKindsAndIncompatibleReturn
     const auto wkb = ColumnViewer<TYPE_VARBINARY>(*data).value(0).to_string();
     GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
                                    {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    // Storage dimension labels are not gates; each row's WKB is checked instead.
     for (auto dimension :
          {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
         auto other = descriptor;
         other.storage.dimension = dimension;
-        EXPECT_FALSE(GeoFunctions::st_geometry_buffer(ctx.get(), {raw_geometry(wkb, other), radius(1)}).ok());
+        auto result = GeoFunctions::st_geometry_buffer(ctx.get(), {raw_geometry(wkb, other), radius(1)});
+        EXPECT_TRUE(result.ok()) << dimension << ": " << result.status();
     }
     auto geography = descriptor;
     geography.type.logical_type = GEO_LOGICAL_TYPE_GEOGRAPHY;
@@ -323,7 +324,7 @@ TEST(GeoBufferFunctionTest, ExpressionOwnerAndCloneShareImmutablePreparationAndC
     function.__set_name(name);
     function.__set_binary_type(TFunctionBinaryType::BUILTIN);
     function.__set_fid(120401);
-    function.__set_arg_types({geo_type().to_thrift(), TypeDescriptor(TYPE_DOUBLE).to_thrift()});
+    function.__set_arg_types({geo_type().to_thrift(), TYPE_DOUBLE_DESC.to_thrift()});
     function.__set_ret_type(geo_type().to_thrift());
     function.__set_has_var_args(false);
     node.__set_fn(function);
@@ -334,7 +335,7 @@ TEST(GeoBufferFunctionTest, ExpressionOwnerAndCloneShareImmutablePreparationAndC
     operand_node.__set_num_children(0);
     operand_node.__set_is_nullable(true);
     Operand left(operand_node, ConstColumn::create(geometries({kSquare}), 1), true);
-    operand_node.__set_type(TypeDescriptor(TYPE_DOUBLE).to_thrift());
+    operand_node.__set_type(TYPE_DOUBLE_DESC.to_thrift());
     Operand right(operand_node, distances({-1}), false);
     expr.add_child(&left);
     expr.add_child(&right);

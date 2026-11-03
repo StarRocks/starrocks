@@ -393,7 +393,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Long
 - 単位：Seconds
 - 変更可能：Yes
-- 説明：INSERT OVERWRITE またはマテリアライズドビュー更新操作によって削除されたパーティションのメタデータ保持時間。このようなメタデータは、RECOVER の実行によって回復できないことに注意してください。
+- 説明：INSERT OVERWRITE、マテリアライズドビュー更新操作、またはパーティション TTL（`partition_live_number`、`partition_ttl`、`partition_retention_condition`）によって削除されたパーティションのメタデータ保持時間。このようなメタデータは、RECOVER の実行によって回復できないことに注意してください。
 - 導入時期：v3.5.9
 
 ### `recover_with_empty_tablet`

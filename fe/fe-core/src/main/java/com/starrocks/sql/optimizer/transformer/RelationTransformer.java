@@ -661,7 +661,9 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
 
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTableOrMaterializedView()) {
-            DistributionSpec distributionSpec = getTableDistributionSpec(node, columnMetaToColRefMap);
+            boolean parallelRangeScan = session.getSessionVariable().isParallelRangeScan();
+            DistributionSpec distributionSpec = parallelRangeScan ? DistributionSpec.createAnyDistributionSpec()
+                    : getTableDistributionSpec(node, columnMetaToColRefMap);
             if (node.isMetaQuery()) {
                 scanOperator = LogicalMetaScanOperator.builder().setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -683,6 +685,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .build();
             } else {
                 scanOperator = LogicalOlapScanOperator.builder()
+                        .setParallelRangeScan(parallelRangeScan)
                         .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)

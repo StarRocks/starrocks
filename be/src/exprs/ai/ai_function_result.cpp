@@ -64,10 +64,14 @@ StatusOr<JsonValue> parse_object(std::string_view text) {
     if (text.size() > kJSONLengthLimit) {
         return Status::CapacityLimitExceed("AI JSON result exceeds maximum JSON length");
     }
-    // VPack's conversion is recursive and has no nesting limit. Validate the
-    // provider-controlled JSON with the bounded, non-recursive DOM parser first.
+    // VPack's conversion is recursive. Validate the provider-controlled JSON with the bounded,
+    // non-recursive DOM parser first, then parse under the same cap. The depth limit follows
+    // json_max_parse_nesting_depth, but this provider-controlled path never allows more than 64
+    // levels, which also bounds VPack's recursion.
+    int max_depth = JsonValue::max_nesting_depth();
+    size_t simdjson_depth = max_depth < 64 ? static_cast<size_t>(max_depth) : 64;
     simdjson::dom::parser parser;
-    auto error = parser.allocate(text.size(), 64);
+    auto error = parser.allocate(text.size(), simdjson_depth);
     if (error == simdjson::SUCCESS) {
         error = parser.parse(text.data(), text.size()).error();
     }
@@ -78,7 +82,8 @@ StatusOr<JsonValue> parse_object(std::string_view text) {
         return malformed_result();
     }
     try {
-        auto builder = vpack::Parser::fromJson(text.data(), text.size());
+        vpack::Options options = JsonValue::parse_options_from_config();
+        auto builder = vpack::Parser::fromJson(text.data(), text.size(), &options);
         JsonValue json;
         json.assign(*builder);
         return json;

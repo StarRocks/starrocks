@@ -175,6 +175,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `agg_hash_map_prefetch_dist`。
 - 引入版本：-
 
+### arrow_io_thread_pool_size
+
+- 默认值：0
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：Apache Arrow 进程级 I/O 线程池的线程数，Arrow 的异步 I/O 任务都在这个线程池中执行。设为 `0` 时沿用 Arrow 启动时自行确定的大小：环境变量 `ARROW_IO_THREADS` 为正整数时取该值，否则为 8。设为大于 `0` 的值时，该值优先于 `ARROW_IO_THREADS`。取值范围为 [0, 32768]。修改后立即生效，无需重启：调大时立即为排队中的任务启动新线程；调小时，多出的线程在完成手头的任务后退出。改回 `0` 即恢复为 Arrow 启动时确定的大小。如果配置文件中的值超出取值范围，BE 会打印告警日志，并保留 Arrow 自行确定的大小。
+- 引入版本：-
+
 ### clear_udf_cache_when_start
 
 - 默认值：false
@@ -458,6 +467,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制 Flat JSON 时，同名列的占比阈值，当同名列占比低于该值时不进行提取，默认为 0.9。该参数仅在 `enable_json_flat` 为 `true` 时生效。
 - 引入版本：v3.3.0
+
+### json_max_parse_nesting_depth
+
+- 默认值：1024
+- 类型：Int
+- 单位：
+- 是否动态：是
+- 描述：解析 JSON（例如 `parse_json`、`CAST AS JSON` 以及 JSON 列导入）时允许的最大对象/数组嵌套深度。解析器每层嵌套递归一次，若不加限制，超深文档会耗尽线程栈并导致 BE 崩溃。嵌套深度超过该值的输入会返回数据质量错误。正值表示生效的上限；设置为 `0` 或负数时保留内置默认值（1024），而非关闭该检查。
+- 引入版本：v4.2.0
 
 ### lake_tablet_ignore_invalid_delete_predicate
 

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <orc/OrcFile.hh>
+#include <unordered_set>
 
 #include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/disk_range.hpp"
@@ -54,8 +55,13 @@ private:
     Status build_iceberg_delete_builder();
     Status build_paimon_delete_file_builder();
     Status build_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes);
+    // Drops from `stripes` every stripe whose rows are all in the deletion bitmap; the row reader skips them.
+    void skip_deleted_stripes(orc::Reader* reader, std::vector<DiskRange>* stripes);
     Status build_split_tasks(orc::Reader* reader, const std::vector<DiskRange>& stripes);
-    Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes);
+    // tiny_stripe_read: coalesce whole stripes; decided on all the stripes of the scan range, deleted ones
+    // included, so skipping deleted stripes never switches the survivors to whole-stripe reads.
+    Status build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes,
+                           bool tiny_stripe_read);
     Status resolve_columns(orc::Reader* reader);
     const std::vector<std::string>* column_names() const {
         return _iceberg_column_names.empty() ? &_scanner_ctx->hive_column_names : &_iceberg_column_names;
@@ -74,6 +80,8 @@ private:
     Filter _dict_filter;
     Filter _chunk_filter;
     SkipRowsContextPtr _skip_rows_ctx;
+    // Indexes of the stripes skip_deleted_stripes dropped.
+    std::unordered_set<uint64_t> _deleted_stripes;
     std::unique_ptr<ORCHdfsFileStream> _input_stream;
     // Current Iceberg name of each top-level ORC column, set when the file carries Iceberg field ids.
     std::vector<std::string> _iceberg_column_names;

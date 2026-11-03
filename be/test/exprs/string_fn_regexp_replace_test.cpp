@@ -26,6 +26,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/string_functions.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -113,24 +114,19 @@ TEST_F(StringFunctionRegexpReplaceTest, testHyperscanVec) {
 
 TEST_F(StringFunctionRegexpReplaceTest, testMultipleRowsWithPackagePattern) {
     // Test case for the reported issue with '_package_.*' pattern
-    const TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
     Columns columns;
 
     // Create input column with two rows
-    auto str_column = BinaryColumn::create();
-    str_column->append("activity_60_package_2");
-    str_column->append("activity_50_package_7");
+    auto str_column = ColumnTestHelper::build_column<Slice>({"activity_60_package_2", "activity_50_package_7"});
     columns.push_back(std::move(str_column));
 
     // Create pattern column (constant)
-    MutableColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
-    pattern_data->append_datum(Datum(Slice("_package_.*")));
+    auto pattern_data = ColumnTestHelper::build_column<Slice>({"_package_.*"});
     auto pattern_column = ConstColumn::create(std::move(pattern_data), 2);
     columns.push_back(std::move(pattern_column));
 
     // Create replacement column (constant empty string)
-    MutableColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
-    rpl_data->append_datum(Datum(Slice("")));
+    auto rpl_data = ColumnTestHelper::build_column<Slice>({""});
     auto rpl_column = ConstColumn::create(std::move(rpl_data), 2);
     columns.push_back(std::move(rpl_column));
 

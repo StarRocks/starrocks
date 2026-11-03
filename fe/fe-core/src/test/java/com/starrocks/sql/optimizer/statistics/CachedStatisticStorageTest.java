@@ -40,6 +40,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -56,6 +57,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -289,6 +291,67 @@ public class CachedStatisticStorageTest {
                 "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
         Assertions.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                 "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
+    }
+
+    @Test
+    public void testConnectorTableStatisticsResolveAnalyzeMetaOnce() {
+        Table table = connectContext.getGlobalStateMgr().getMetadataMgr()
+                .getTable(connectContext, "hive0", "partitioned_db", "t1");
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public static boolean checkStatisticTableStateNormal() {
+                return true;
+            }
+        };
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
+            @Mock
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                List<TStatisticData> rows = new ArrayList<>();
+                for (String column : columns) {
+                    TStatisticData data = new TStatisticData();
+                    data.setColumnName(column);
+                    data.setRowCount(5);
+                    data.setDataSize(100);
+                    data.setCountDistinct(5);
+                    data.setNullCount(0);
+                    data.setMin("0");
+                    data.setMax("10");
+                    rows.add(data);
+                }
+                return rows;
+            }
+        };
+        // Resolving the analyze metadata rebuilds the table; it must happen once per call, not once per column.
+        AtomicInteger lookups = new AtomicInteger();
+        new MockUp<StatisticsUtils>() {
+            @Mock
+            public Table getTableByUUID(ConnectContext context, String tableUUID) {
+                return table;
+            }
+
+            @Mock
+            public ExternalBasicStatsMeta getExternalBasicStatsMeta(Table t) {
+                lookups.incrementAndGet();
+                return null;
+            }
+        };
+
+        CachedStatisticStorage storage = new CachedStatisticStorage();
+        // Load inline so the first lookup already finds the statistics.
+        Deencapsulation.setField(storage, "connectorTableCachedStatistics",
+                Caffeine.newBuilder().executor(Runnable::run).buildAsync(new ConnectorColumnStatsCacheLoader()));
+        try {
+            List<ConnectorTableColumnStats> stats =
+                    storage.getConnectorTableStatistics(table, ImmutableList.of("c1", "c2", "c3"));
+            Assertions.assertEquals(3, stats.size());
+            Assertions.assertEquals(1, lookups.get());
+            // No analyze metadata still means unknown for every column, as before.
+            Assertions.assertTrue(stats.stream().allMatch(ConnectorTableColumnStats::isUnknown));
+        } finally {
+            // The inline load clears the thread's context when it finishes.
+            connectContext.setThreadLocalInfo();
+        }
     }
 
     @Test

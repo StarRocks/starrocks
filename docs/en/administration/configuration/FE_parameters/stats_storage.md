@@ -393,7 +393,7 @@ This topic introduces the following types of FE configurations:
 - Type: Long
 - Unit: Seconds
 - Is mutable: Yes
-- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE or materialized view refresh operations. Note that such metadata cannot be recovered by executing RECOVER.
+- Description: The metadata retention time for the partition that is dropped by INSERT OVERWRITE, materialized view refresh operations, or partition TTL (`partition_live_number`, `partition_ttl`, or `partition_retention_condition`). Note that such metadata cannot be recovered by executing RECOVER.
 - Introduced in: v3.5.9
 
 ### `recover_with_empty_tablet`

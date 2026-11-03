@@ -39,6 +39,8 @@ protected:
 private:
     std::shared_ptr<parquet::FileReader> _reader = nullptr;
     SkipRowsContextPtr _skip_rows_ctx;
+    // Every row of the data file is in the deletion bitmap: the file is never opened.
+    bool _all_rows_deleted = false;
 };
 
 } // namespace starrocks

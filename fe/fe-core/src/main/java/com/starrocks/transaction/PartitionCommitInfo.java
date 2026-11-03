@@ -128,6 +128,11 @@ public class PartitionCommitInfo implements Writable {
     // over should attempt a publish immediately rather than inherit a stale back-off.
     private long lastPublishFailureTime = 0;
 
+    // Whether a publish request for this partition's tablets has been sent, see
+    // PublishVersionRequest.is_retry_publish. Deliberately not serialized, like lastPublishFailureTime: a leader
+    // that has just taken over sends its first request as a first attempt.
+    private volatile boolean publishSent = false;
+
     public PartitionCommitInfo() {
 
     }
@@ -188,6 +193,14 @@ public class PartitionCommitInfo implements Writable {
     public void markPublishSucceeded(long now) {
         this.lastPublishFailureTime = 0;
         this.versionTime = now;
+    }
+
+    // Marks the publish request as sent and returns whether an earlier request was already sent. Call it right
+    // before sending, after every check that can still skip the send.
+    public boolean getAndMarkPublishSent() {
+        boolean sent = publishSent;
+        publishSent = true;
+        return sent;
     }
 
     // 0 when the last attempt did not fail.

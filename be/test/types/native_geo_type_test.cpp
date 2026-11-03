@@ -105,7 +105,6 @@ TEST(NativeGeoTypeTest, ColumnRepresentationIsSeparateFromType) {
     column.type = *type.geo_type;
     column.storage.dimension = GEO_DIMENSION_XYZ;
     column.storage.validation_state = GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED;
-    EXPECT_EQ(column, GeoColumnDescriptor::from_thrift(column.to_thrift()));
     EXPECT_EQ(column, GeoColumnDescriptor::from_protobuf(column.to_protobuf()));
     auto thrift = type.to_thrift();
     thrift.types[0].scalar_type.__set_geo(column.type.to_thrift());

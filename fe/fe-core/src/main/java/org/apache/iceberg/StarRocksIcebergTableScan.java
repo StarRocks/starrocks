@@ -15,6 +15,7 @@
 package org.apache.iceberg;
 
 import com.github.benmanes.caffeine.cache.Cache;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
@@ -23,6 +24,7 @@ import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.AsyncIterable;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
+import com.starrocks.connector.iceberg.DataFileWrapper;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.StarRocksIcebergTableScanContext;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
@@ -43,6 +45,9 @@ import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.metrics.MetricsReporter;
 import org.apache.iceberg.metrics.ScanMetricsUtil;
+import org.apache.iceberg.types.Type;
+import org.apache.iceberg.types.TypeUtil;
+import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ParallelIterable;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.TableScanUtil;
@@ -51,6 +56,8 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -72,6 +79,7 @@ public class StarRocksIcebergTableScan
     private final PlanMode planMode;
     private final Cache<String, Set<DataFile>> dataFileCache;
     private final Cache<String, Set<DeleteFile>> deleteFileCache;
+    private final DeleteFileIndexCache deleteFileIndexCache;
     private final Map<IcebergTableName, Set<String>> metaFileCacheMap;
     private final Map<Integer, PartitionSpec> scanSpecsById;
     private final Map<Integer, String> specStringCache;
@@ -81,6 +89,8 @@ public class StarRocksIcebergTableScan
     private final String schemaString;
     private DeleteFileIndex deleteFileIndex;
     private boolean dataFileCacheWithMetrics;
+    // Set only when the catalog caches column statistics; identifier-only caching keeps per-file copies.
+    private final int cacheStatsColumnLimit;
     private boolean enableCacheDataFileIdentifierColumnMetrics;
     private final StarRocksIcebergTableScanContext scanContext;
     private final boolean onlyReadCache;
@@ -128,8 +138,10 @@ public class StarRocksIcebergTableScan
         this.schemaString = SchemaParser.toJson(tableSchema());
         this.dataFileCache = scanContext.getDataFileCache();
         this.deleteFileCache = scanContext.getDeleteFileCache();
+        this.deleteFileIndexCache = scanContext.getDeleteFileIndexCache();
         this.metaFileCacheMap = scanContext.getMetaFileCacheMap();
         this.dataFileCacheWithMetrics = scanContext.isDataFileCacheWithMetrics();
+        this.cacheStatsColumnLimit = dataFileCacheWithMetrics ? scanContext.getDataFileCacheStatsColumnLimit() : -1;
         this.enableCacheDataFileIdentifierColumnMetrics = scanContext.isEnableCacheDataFileIdentifierColumnMetrics();
         this.onlyReadCache = scanContext.isOnlyReadCache();
         this.localParallelism = scanContext.getLocalParallelism();
@@ -284,6 +296,10 @@ public class StarRocksIcebergTableScan
     }
 
     private void planDeletesLocallyWithCache(List<ManifestFile> deleteManifests) {
+        if (reuseCachedDeleteFileIndex(deleteManifests)) {
+            return;
+        }
+
         List<ManifestFile> deleteManifestWithoutCache = new ArrayList<>();
         Set<DeleteFile> matchingCachedDeleteFiles = Sets.newHashSet();
         if (deleteFileCache != null) {
@@ -316,6 +332,54 @@ public class StarRocksIcebergTableScan
         }
 
         this.deleteFileIndex = planDeletesLocally(deleteManifestWithoutCache, matchingCachedDeleteFiles);
+    }
+
+    // Position deletes and DVs reach a data file only through its path or its (spec, partition), and every
+    // delete for a data file the filter keeps lives in a delete manifest the filter keeps. So an index built
+    // without the scan filter returns the deletes a filtered one would for those data files (the filter has no
+    // bounds of data columns to prune them with), and can be shared by every scan over the same delete
+    // manifests. Equality deletes are excluded: the filter prunes them by column bounds, and a filter-free
+    // index would hand the BE extra delete files.
+    private boolean reuseCachedDeleteFileIndex(List<ManifestFile> deleteManifests) {
+        if (deleteFileIndexCache == null || deleteFileCache == null || deleteManifests.isEmpty()
+                || mayHaveEqualityDeletes(snapshot())) {
+            return false;
+        }
+
+        DeleteFileIndexCache.Key key = new DeleteFileIndexCache.Key(icebergTableName, tableSchema().schemaId(),
+                Set.copyOf(table().specs().keySet()),
+                deleteManifests.stream().map(ManifestFile::path).collect(Collectors.toUnmodifiableSet()));
+        DeleteFileIndex index = deleteFileIndexCache.get(key);
+        if (index == null) {
+            // Build only from complete cache entries, so the index shares the cached delete file objects.
+            // Otherwise the regular path reads the missing manifests and fills the cache for the next scan.
+            List<Set<DeleteFile>> deleteFiles = new ArrayList<>();
+            for (ManifestFile manifestFile : deleteManifests) {
+                Set<DeleteFile> files = getCompleteCachedFiles(deleteFileCache, manifestFile);
+                if (files == null) {
+                    return false;
+                }
+                deleteFiles.add(files);
+            }
+
+            index = DeleteFileIndex.builderFor(io(), Collections.emptyList())
+                    .cachedDeleteFiles(Iterables.concat(deleteFiles))
+                    .specsById(scanSpecsById)
+                    .schemasById(table().schemas())
+                    .caseSensitive(isCaseSensitive())
+                    .scanMetrics(scanMetrics())
+                    .build();
+            if (index.hasEqualityDeletes()) {
+                return false;
+            }
+            // Sort every group now rather than on first lookup: the index is read by concurrent scans.
+            index.referencedDeleteFiles();
+            deleteFileIndexCache.put(key, index, deleteFiles);
+        }
+
+        scanMetrics().scannedDeleteManifests().increment(deleteManifests.size());
+        this.deleteFileIndex = index;
+        return true;
     }
 
     private CloseableIterable<FileScanTask> planTaskWithCache(List<ManifestFile> dataManifests) {
@@ -388,7 +452,10 @@ public class StarRocksIcebergTableScan
                         .withDataFileCache(dataFileCache)
                         .preparedDeleteFileIndex(deleteFileIndex)
                         .identifierFieldIds(getIdentifierFieldIds())
-                        .cacheWithMetrics(dataFileCacheWithMetrics);
+                        .cacheWithMetrics(dataFileCacheWithMetrics)
+                        .cacheStatsColumnLimit(cacheStatsColumnLimit)
+                        .cacheStatsCandidateRanks(cacheStatsColumnLimit > 0 ? statsCandidateRanks(table()) : null)
+                        .cacheStatsTruncatedTypes(cacheStatsColumnLimit >= 0 ? statsTruncatedTypes(table()) : null);
 
         if (shouldIgnoreResiduals()) {
             manifestGroup = manifestGroup.ignoreResiduals();
@@ -407,9 +474,11 @@ public class StarRocksIcebergTableScan
         }
 
         if (dataFileCacheWithMetrics) {
-            // Cache statistics only for the prune-effective keep-set; an empty keep set caches all
-            // columns. Scans that need full column stats never reach here -- useCache() routes them
-            // to the non-cache path.
+            // The keep-set is always cached; with a column limit (ManifestColumnStats) other columns are
+            // cached too, up to the limit in total, so file-level min/max still prunes on columns that
+            // correlate with the file layout without being partition or sort keys. Without a limit an
+            // empty keep set caches all columns. Scans that need full column stats never reach here --
+            // useCache() routes them to the non-cache path.
             Set<Integer> keepColumnIds = statsKeepColumnIds(table(), tableSchema());
             if (!keepColumnIds.isEmpty()) {
                 return keepColumnIds;
@@ -434,6 +503,38 @@ public class StarRocksIcebergTableScan
         table.specs().values().forEach(spec -> spec.fields().forEach(field -> ids.add(field.sourceId())));
         table.sortOrders().values().forEach(order -> order.fields().forEach(field -> ids.add(field.sourceId())));
         return ids;
+    }
+
+    // Columns whose file-level min/max can prune, in every schema of the table, ranked for the cached statistics
+    // column limit: top-level primitive columns first, then primitive fields inside structs, each in field id order.
+    // Predicates cannot reference fields inside lists or maps, so their statistics are not cached.
+    static Map<Integer, Long> statsCandidateRanks(Table table) {
+        Map<Integer, Long> ranks = new HashMap<>();
+        table.schemas().values().forEach(schema -> collectPrunableFields(schema.asStruct(), true, ranks));
+        return ranks;
+    }
+
+    // STRING and BINARY fields of every schema of the table: the cached statistics truncate their long bounds.
+    static Map<Integer, Type.TypeID> statsTruncatedTypes(Table table) {
+        Map<Integer, Type.TypeID> types = new HashMap<>();
+        table.schemas().values().forEach(schema -> TypeUtil.indexById(schema.asStruct()).forEach((id, field) -> {
+            Type.TypeID type = field.type().typeId();
+            if (type == Type.TypeID.STRING || type == Type.TypeID.BINARY) {
+                types.put(id, type);
+            }
+        }));
+        return types;
+    }
+
+    private static void collectPrunableFields(Types.StructType struct, boolean topLevel, Map<Integer, Long> ranks) {
+        for (Types.NestedField field : struct.fields()) {
+            if (field.type().isPrimitiveType()) {
+                long rank = (topLevel ? 0L : 1L << 32) + Integer.toUnsignedLong(field.fieldId());
+                ranks.merge(field.fieldId(), rank, Math::min);
+            } else if (field.type().isStructType()) {
+                collectPrunableFields(field.type().asStructType(), false, ranks);
+            }
+        }
     }
 
     public void refreshDataFileCache(List<ManifestFile> manifestFiles) {
@@ -524,8 +625,11 @@ public class StarRocksIcebergTableScan
 
         ScanMetricsUtil.fileTask(scanMetrics(), dataFile, deleteFiles);
 
+        // Pruning and delete matching are done; scans that need file statistics bypass the cache.
+        DataFile taskFile = dataFile instanceof DataFileWrapper ? ((DataFileWrapper) dataFile).withoutSharedStats() :
+                dataFile;
         return new BaseFileScanTask(
-                dataFile,
+                taskFile,
                 deleteFiles,
                 schemaString,
                 specString,

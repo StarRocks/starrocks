@@ -82,6 +82,8 @@ Status HdfsScanner::_build_scanner_context() {
     if (ctx.scan_range->__isset.first_row_id) {
         ctx.format_scan_context.first_row_id = ctx.scan_range->first_row_id;
     }
+    ctx.format_scan_context.parquet_encryption_info =
+            ctx.scan_range->__isset.parquet_encryption_info ? &ctx.scan_range->parquet_encryption_info : nullptr;
 
     Columns& partition_values = ctx.format_scan_context.partition_values;
 
@@ -542,6 +544,7 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->datacache_read_timer, stats.read_block_cache_ns);
         COUNTER_UPDATE(profile->datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(profile->datacache_skip_read_bytes, stats.skip_read_cache_bytes);
+        COUNTER_UPDATE(profile->datacache_read_error_counter, stats.read_cache_error_count);
         COUNTER_UPDATE(profile->datacache_read_peer_bytes, stats.read_peer_cache_bytes);
         COUNTER_UPDATE(profile->datacache_read_peer_counter, stats.read_peer_cache_count);
         COUNTER_UPDATE(profile->datacache_read_peer_timer, stats.read_peer_cache_ns);

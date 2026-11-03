@@ -721,6 +721,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_read_iceberg_equality_delete_with_partition_evolution";
     public static final String ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING =
             "enable_iceberg_eq_delete_runtime_filter_pruning";
+    public static final String ENABLE_ICEBERG_FUNCTION_PREDICATE_PRUNING =
+            "enable_iceberg_function_predicate_pruning";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
 
     public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
@@ -1463,6 +1465,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // read state is unsafe across sibling scans of the same table. Set true to opt such scans back in.
     @VariableMgr.VarAttr(name = ENABLE_LAKE_PREPARED_SPLIT_ON_DUP_TABLE_SCAN)
     private boolean enableLakePreparedSplitOnDupTableScan = false;
+
+    @VariableMgr.VarAttr(name = "range_scan_execution_mode", flag = VariableMgr.SESSION_ONLY)
+    private String rangeScanExecutionMode = "colocate";
 
     // The strategy mode of TabletInternalParallel, which is effective only when enableTabletInternalParallel is true.
     // The optional values are "auto" and "force_split".
@@ -3552,6 +3557,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_ICEBERG_EQ_DELETE_RUNTIME_FILTER_PRUNING)
     private boolean enableIcebergEqDeleteRuntimeFilterPruning = true;
 
+    // Prune Iceberg files on the column preimage of predicates on functions of it (year(), date_trunc(), left(), ...).
+    @VarAttr(name = ENABLE_ICEBERG_FUNCTION_PREDICATE_PRUNING)
+    private boolean enableIcebergFunctionPredicatePruning = true;
+
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
 
@@ -3732,6 +3741,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIcebergEqDeleteRuntimeFilterPruning(boolean enableIcebergEqDeleteRuntimeFilterPruning) {
         this.enableIcebergEqDeleteRuntimeFilterPruning = enableIcebergEqDeleteRuntimeFilterPruning;
+    }
+
+    public boolean isEnableIcebergFunctionPredicatePruning() {
+        return enableIcebergFunctionPredicatePruning;
+    }
+
+    public void setEnableIcebergFunctionPredicatePruning(boolean enableIcebergFunctionPredicatePruning) {
+        this.enableIcebergFunctionPredicatePruning = enableIcebergFunctionPredicatePruning;
     }
 
     public boolean enablePaimonColumnStatistics() {
@@ -5123,6 +5140,21 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLogRejectedRecordNum(long logRejectedRecordNum) {
         this.logRejectedRecordNum = logRejectedRecordNum;
+    }
+
+    public String getRangeScanExecutionMode() {
+        return rangeScanExecutionMode;
+    }
+
+    public void setRangeScanExecutionMode(String mode) {
+        if (!"colocate".equalsIgnoreCase(mode) && !"parallel".equalsIgnoreCase(mode)) {
+            throw new IllegalArgumentException("Legal values of range_scan_execution_mode are colocate|parallel");
+        }
+        rangeScanExecutionMode = mode.toLowerCase(Locale.ROOT);
+    }
+
+    public boolean isParallelRangeScan() {
+        return "parallel".equals(rangeScanExecutionMode);
     }
 
     public boolean isEnablePipelineEngine() {

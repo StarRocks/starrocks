@@ -19,6 +19,7 @@
 #include <bvar/bvar.h>
 #include <fmt/format.h>
 
+#include <map>
 #include <optional>
 #include <set>
 #include <string_view>
@@ -312,6 +313,17 @@ void run_clear_task_async(std::function<void()> task) {
     LOG_IF(ERROR, !st.ok()) << st;
 }
 
+// Reads |tablet_id|'s metadata at |version| for vacuum, resolving storage through |anchor_tablet_id|, a
+// tablet of the same partition that this node preferably holds (see pick_local_anchor_tablet_id). The FE
+// sends a file-bundling partition's whole tablet set to one aggregator node, which holds few of them, and
+// resolving every other tablet through its own shard costs StarMgr GetShard RPCs on each read.
+static StatusOr<TabletMetadataPtr> get_tablet_metadata_for_vacuum(TabletManager* tablet_mgr, int64_t anchor_tablet_id,
+                                                                  int64_t tablet_id, int64_t version,
+                                                                  bool fill_data_cache) {
+    CacheOptions cache_opts{.fill_meta_cache = false, .fill_data_cache = fill_data_cache};
+    return tablet_mgr->get_tablet_metadata_via_anchor(tablet_id, version, anchor_tablet_id, cache_opts);
+}
+
 static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
                                     AsyncFileDeleter* deleter, AsyncSharedFileDeleter* shared_file_deleter,
                                     int64_t* garbage_data_size, const TabletRetainInfo& retain_info) {
@@ -381,16 +393,91 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     return Status::OK();
 }
 
+// Register active file paths, optionally including non-shared references. Historical snapshot
+// references may predate shared flags and therefore include all paths. These paths filter shared
+// deletion candidates only; ordinary files remain protected by the version-interval checks in
+// collect_garbage_files.
+static Status collect_protected_file_paths(const TabletMetadataPB& metadata, std::string_view data_dir,
+                                           AsyncSharedFileDeleter* deleter, bool include_non_shared,
+                                           int64_t deadline_ms) {
+    for (const auto& rowset : metadata.rowsets()) {
+        RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+        for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+            RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+            if (include_non_shared || is_shared_segment(rowset, i)) {
+                const auto& segment_meta = rowset.segment_metas(i);
+                RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, segment_meta.filename())));
+                // The segment's per-segment .vi sidecars follow the segment; they are named by
+                // its recorded owner, so delay-delete them under that owner-based name (covers
+                // both split-shared and bundled segments, matching is_shared_segment above).
+                for (int64_t vi_id : segment_meta.vector_index_ids()) {
+                    RETURN_IF_ERROR(deleter->delay_delete(
+                            join_path(data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
+                }
+            }
+        }
+        for (const auto& del_file : rowset.del_files()) {
+            RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+            if (include_non_shared || del_file.shared()) {
+                RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, del_file.name())));
+            }
+        }
+    }
+    if (metadata.has_delvec_meta()) {
+        for (const auto& [_, file] : metadata.delvec_meta().version_to_file()) {
+            RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+            if (include_non_shared || file.shared()) {
+                RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, file.name())));
+            }
+        }
+    }
+    if (metadata.has_dcg_meta()) {
+        for (const auto& [_, dcg] : metadata.dcg_meta().dcgs()) {
+            int file_count = include_non_shared ? dcg.column_files_size()
+                                                : std::min(dcg.column_files_size(), dcg.shared_files_size());
+            for (int i = 0; i < file_count; ++i) {
+                RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+                if (include_non_shared || dcg.shared_files(i)) {
+                    RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, dcg.column_files(i))));
+                }
+            }
+        }
+    }
+    // IDG .idx files: delayed-delete shared ones, symmetrically with DCG.
+    if (metadata.has_idg_meta()) {
+        for (const auto& [_, idg_ver] : metadata.idg_meta().idgs()) {
+            for (const auto& entry : idg_ver.entries()) {
+                RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+                if ((include_non_shared || entry.shared_file()) && entry.has_index_file() &&
+                    !entry.index_file().empty()) {
+                    RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, entry.index_file())));
+                }
+            }
+        }
+    }
+    if (metadata.has_sstable_meta()) {
+        for (const auto& sstable : metadata.sstable_meta().sstables()) {
+            RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+            if (include_non_shared || sstable.shared()) {
+                RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, sstable.filename())));
+            }
+        }
+    }
+    return check_vacuum_deadline(deadline_ms);
+}
+
 static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::vector<TabletInfoPB>& tablet_infos,
                                          int64_t version, int64_t max_empty_walk_versions, std::string_view root_dir,
-                                         AsyncSharedFileDeleter* deleter) {
+                                         int64_t anchor_tablet_id, AsyncSharedFileDeleter* deleter,
+                                         int64_t deadline_ms) {
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     for (const auto& tablet_info : tablet_infos) {
+        RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
         auto tablet_id = tablet_info.tablet_id();
         int64_t v = version;
         // fill data cache to avoid read bundle meta file from remote storage repeatedly.
-        auto res = tablet_mgr->get_tablet_metadata(tablet_id, v, false /* Not need to fill meta cache */,
-                                                   true /* fill data cache when enable file bundle */);
+        auto res = get_tablet_metadata_for_vacuum(tablet_mgr, anchor_tablet_id, tablet_id, v,
+                                                  true /* fill data cache when enable file bundle */);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (max_empty_walk_versions > 0) {
             // A non-bundle range-distribution table is the only case that reaches here with the partition retain
@@ -412,7 +499,9 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
                     deleter->clear();
                     return Status::OK();
                 }
-                res = tablet_mgr->get_tablet_metadata(tablet_id, ++v, false /* fill_meta */, true /* fill_data */);
+                RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+                res = get_tablet_metadata_for_vacuum(tablet_mgr, anchor_tablet_id, tablet_id, ++v,
+                                                     true /* fill_data */);
             }
             if (res.ok() && v != version) {
                 LOG(INFO) << "incremental vacuum shared-file cleanup: tablet " << tablet_id << " floor " << version
@@ -422,65 +511,64 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
         if (!res.ok()) {
             return res.status();
         }
-        {
-            auto metadata = std::move(res).value();
-            for (const auto& rowset : metadata->rowsets()) {
-                for (int i = 0; i < rowset.segment_metas_size(); ++i) {
-                    if (is_shared_segment(rowset, i)) {
-                        const auto& segment_meta = rowset.segment_metas(i);
-                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, segment_meta.filename())));
-                        // The segment's per-segment .vi sidecars follow the segment; they are named by
-                        // its recorded owner, so delay-delete them under that owner-based name (covers
-                        // both split-shared and bundled segments, matching is_shared_segment above).
-                        for (int64_t vi_id : segment_meta.vector_index_ids()) {
-                            RETURN_IF_ERROR(deleter->delay_delete(
-                                    join_path(data_dir, gen_vector_index_filename_for_segment(segment_meta, vi_id))));
-                        }
-                    }
-                }
-                for (const auto& del_file : rowset.del_files()) {
-                    if (del_file.shared()) {
-                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, del_file.name())));
-                    }
-                }
+        RETURN_IF_ERROR(collect_protected_file_paths(*res.value(), data_dir, deleter, false /* include_non_shared */,
+                                                     deadline_ms));
+    }
+    return check_vacuum_deadline(deadline_ms);
+}
+
+// Complete snapshot protection before either data or metadata deletion starts. The tablet IDs
+// come from the snapshot, not the current generation. An empty tablet list is a version-only fence.
+static StatusOr<bool> protect_snapshot_files(TabletManager* tablet_mgr, const VacuumRequest& request,
+                                             const std::vector<TabletInfoPB>& tablet_infos, std::string_view root_dir,
+                                             AsyncSharedFileDeleter* deleter, int64_t deadline_ms) {
+    std::map<int64_t, std::set<int64_t>> tablets_by_version;
+    if (request.retain_snapshots_size() > 0) {
+        for (const auto& snapshot : request.retain_snapshots()) {
+            if (!snapshot.has_version() || snapshot.version() <= 0) {
+                return Status::InvalidArgument("vacuum snapshot version must be positive");
             }
-            if (metadata->has_delvec_meta()) {
-                for (const auto& [_, file] : metadata->delvec_meta().version_to_file()) {
-                    if (file.shared()) {
-                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, file.name())));
-                    }
+            auto& tablets = tablets_by_version[snapshot.version()];
+            for (int64_t tablet_id : snapshot.tablet_ids()) {
+                if (tablet_id <= 0) {
+                    return Status::InvalidArgument("vacuum snapshot tablet id must be positive");
                 }
+                tablets.insert(tablet_id);
             }
-            if (metadata->has_dcg_meta()) {
-                for (const auto& [_, dcg] : metadata->dcg_meta().dcgs()) {
-                    int file_count = std::min(dcg.column_files_size(), dcg.shared_files_size());
-                    for (int i = 0; i < file_count; ++i) {
-                        if (dcg.shared_files(i)) {
-                            RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, dcg.column_files(i))));
-                        }
-                    }
-                }
-            }
-            // IDG .idx files: delayed-delete shared ones, symmetrically with DCG.
-            if (metadata->has_idg_meta()) {
-                for (const auto& [_, idg_ver] : metadata->idg_meta().idgs()) {
-                    for (const auto& entry : idg_ver.entries()) {
-                        if (entry.shared_file() && entry.has_index_file() && !entry.index_file().empty()) {
-                            RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, entry.index_file())));
-                        }
-                    }
-                }
-            }
-            if (metadata->has_sstable_meta()) {
-                for (const auto& sstable : metadata->sstable_meta().sstables()) {
-                    if (sstable.shared()) {
-                        RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, sstable.filename())));
-                    }
-                }
+        }
+    } else {
+        // Compatibility with older FEs: reconstruct protection from their current tablet set.
+        // Missing historical metadata disables shared cleanup because only upgraded FEs
+        // can supply snapshot-owned tablet IDs and distinguish shadow indexes.
+        for (int64_t version : request.retain_versions()) {
+            for (const auto& tablet : tablet_infos) {
+                tablets_by_version[version].insert(tablet.tablet_id());
             }
         }
     }
-    return Status::OK();
+    for (const auto& [version, tablets] : tablets_by_version) {
+        for (int64_t tablet_id : tablets) {
+            RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+            auto metadata = tablet_mgr->get_tablet_metadata(tablet_id, version, false, true);
+            TEST_SYNC_POINT_CALLBACK("vacuum:read_snapshot_metadata", &metadata);
+            RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+            if (metadata.status().is_not_found() && request.retain_snapshots_size() == 0) {
+                LOG(WARNING) << "vacuum shared cleanup disabled: legacy snapshot metadata unavailable, tablet="
+                             << tablet_id << " version=" << version;
+                return false;
+            }
+            if (!metadata.ok()) {
+                LOG(WARNING) << "vacuum snapshot protection failed: tablet=" << tablet_id << " version=" << version
+                             << ": " << metadata.status();
+                return metadata.status();
+            }
+            auto data_dir = join_path(root_dir, kSegmentDirectoryName);
+            RETURN_IF_ERROR(collect_protected_file_paths(*metadata.value(), data_dir, deleter,
+                                                         true /* include_non_shared */, deadline_ms));
+        }
+    }
+    RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
+    return true;
 }
 
 static size_t collect_extra_files_size(const TabletMetadataPB& metadata, int64_t min_retain_version) {
@@ -498,8 +586,8 @@ static size_t collect_extra_files_size(const TabletMetadataPB& metadata, int64_t
     return extra_file_size;
 }
 
-static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, TabletInfoPB& tablet_info,
-                                      int64_t grace_timestamp, int64_t min_retain_version,
+static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, int64_t anchor_tablet_id,
+                                      TabletInfoPB& tablet_info, int64_t grace_timestamp, int64_t min_retain_version,
                                       VacuumTabletMetaVerionRange* vacuum_version_range,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
                                       AsyncSharedFileDeleter* shared_file_deleter, int64_t* total_datafile_size,
@@ -534,8 +622,8 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
         }
         // fill data cache to avoid read bundle meta file from remote storage repeatedly.
-        auto res = tablet_mgr->get_tablet_metadata(
-                tablet_id, version, false /* Not need to fill meta cache */,
+        auto res = get_tablet_metadata_for_vacuum(
+                tablet_mgr, anchor_tablet_id, tablet_id, version,
                 vacuum_version_range != nullptr /* fill data cache when enable file bundle */);
         TEST_SYNC_POINT_CALLBACK("collect_files_to_vacuum:get_tablet_metadata", &res);
         if (res.status().is_not_found()) {
@@ -660,22 +748,25 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     return Status::OK();
 }
 
-static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
+void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::vector<std::string>& metafiles) {
     auto cache = tablet_mgr->metacache();
     DCHECK(cache != nullptr);
-    // Assuming the cache key for tablet metadata is the path to tablet metadata.
-    // TODO: Refactor the code to extract a separate function that constructs the tablet metadata cache key
     for (const auto& path : metafiles) {
         cache->erase(path);
+        auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
+        if (tablet_id != 0) {
+            cache->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+        }
     }
 }
 
-static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
+static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir, int64_t anchor_tablet_id,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
                                      int64_t grace_timestamp, bool enable_file_bundling,
                                      bool enable_shared_file_cleanup, int64_t* vacuumed_files,
                                      int64_t* vacuumed_file_size, int64_t* vacuumed_version, int64_t* extra_file_size,
-                                     const std::unordered_set<int64_t>& retain_versions, int64_t deadline_ms) {
+                                     const std::unordered_set<int64_t>& retain_versions, int64_t deadline_ms,
+                                     AsyncSharedFileDeleter& shared_file_deleter) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_infos.begin(), tablet_infos.end(),
                           [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); }));
@@ -691,7 +782,6 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     if (enable_file_bundling) {
         vacuum_version_range = std::make_unique<VacuumTabletMetaVerionRange>();
     }
-    AsyncSharedFileDeleter shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
     int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
     int64_t max_vacuum_version = 0;
     for (auto& tablet_info : tablet_infos) {
@@ -701,10 +791,10 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
-        RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_info, grace_timestamp, min_retain_version,
-                                                vacuum_version_range.get(), &datafile_deleter, &metafile_deleter,
-                                                &shared_file_deleter, vacuumed_file_size, &tablet_vacuumed_version,
-                                                extra_file_size, tablet_retain_info, deadline_ms));
+        RETURN_IF_ERROR(collect_files_to_vacuum(
+                tablet_mgr, root_dir, anchor_tablet_id, tablet_info, grace_timestamp, min_retain_version,
+                vacuum_version_range.get(), &datafile_deleter, &metafile_deleter, &shared_file_deleter,
+                vacuumed_file_size, &tablet_vacuumed_version, extra_file_size, tablet_retain_info, deadline_ms));
         RETURN_IF_ERROR(datafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
         if (!enable_file_bundling) {
@@ -725,7 +815,8 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     if (max_vacuum_version > 0 && !shared_file_deleter.is_empty()) {
         RETURN_IF_ERROR(collect_alive_shared_files(tablet_mgr, tablet_infos, max_vacuum_version,
                                                    0 /* step-up bound (unused: floor is materialized here) */, root_dir,
-                                                   &shared_file_deleter));
+                                                   anchor_tablet_id, &shared_file_deleter, deadline_ms));
+        RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
         RETURN_IF_ERROR(shared_file_deleter.finish());
         (*vacuumed_files) += shared_file_deleter.delete_count();
     }
@@ -745,7 +836,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         // freshly created partition still inside the grace window that file is the tablet's only metadata.
         // A merged range always has min_version >= 1 (it is a `version + 1`), so a non-empty range with
         // min_version <= 1 is exactly one that contains version 1.
-        if (!vacuum_version_range->empty() && vacuum_version_range->min_version <= 1) {
+        if (!retain_versions.contains(1) && !vacuum_version_range->empty() && vacuum_version_range->min_version <= 1) {
             for (auto& tablet_info : tablet_infos) {
                 RETURN_IF_ERROR(metafile_deleter.delete_file(
                         join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
@@ -756,6 +847,10 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                 continue;
             }
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
+            // A bundle contains one metadata object per tablet, cached under the tablet's own path.
+            for (const auto& tablet_info : tablet_infos) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
+            }
         }
         RETURN_IF_ERROR(metafile_deleter.finish());
         (*vacuumed_files) += metafile_deleter.delete_count();
@@ -794,8 +889,9 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
 //   - *pass_start_version = the retained floor g (the lowest surviving version this pass; equals
 //     to_delete_high on a fresh round). Set only on a fresh round; the FE persists it pass-constant and
 //     replays it so every commit round can read which shared files are still referenced (see commit).
-static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<TabletInfoPB>& tablet_infos,
-                                     int64_t min_retain_version, int64_t grace_timestamp, int64_t resume_from_version,
+static Status propose_metadata_range(TabletManager* tablet_mgr, int64_t anchor_tablet_id,
+                                     std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
+                                     int64_t grace_timestamp, int64_t resume_from_version,
                                      int64_t max_versions_per_round, int64_t max_empty_walk_versions,
                                      int64_t deadline_ms, int64_t* to_delete_low, int64_t* to_delete_high,
                                      int64_t* next_propose_start_version, int64_t* pass_start_version,
@@ -830,8 +926,8 @@ static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<Tabl
                 return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
             }
             // fill data cache to avoid reading the bundle meta file from remote storage repeatedly.
-            auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* fill_meta_cache */,
-                                                       true /* fill_data_cache */);
+            auto res = get_tablet_metadata_for_vacuum(tablet_mgr, anchor_tablet_id, tablet_id, version,
+                                                      true /* fill_data_cache */);
             if (res.status().is_not_found()) {
                 // The prev_garbage_version chain links only materialized versions, so once the walk is
                 // anchored a NotFound is the genuine chain bottom (a version already vacuumed, or below this
@@ -1016,12 +1112,13 @@ static Status propose_metadata_range(TabletManager* tablet_mgr, std::vector<Tabl
 // grace-checked when proposed and the FE persisted it as a firm delete commitment, so re-narrowing it
 // here would risk a version that can never be reclaimed. Deletions run data-first then metadata so a
 // crash never leaves metadata pointing at an already-deleted data file.
-static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view root_dir,
+static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view root_dir, int64_t anchor_tablet_id,
                                     std::vector<TabletInfoPB>& tablet_infos, int64_t to_delete_low,
                                     int64_t to_delete_high, int64_t pass_start_version, bool enable_file_bundling,
                                     bool enable_shared_file_cleanup, int64_t max_empty_walk_versions,
                                     const std::unordered_set<int64_t>& retain_versions, int64_t* vacuumed_files,
-                                    int64_t* vacuumed_file_size, int64_t deadline_ms) {
+                                    int64_t* vacuumed_file_size, int64_t deadline_ms,
+                                    AsyncSharedFileDeleter& shared_file_deleter) {
     if (to_delete_low >= to_delete_high) {
         return Status::OK();
     }
@@ -1038,7 +1135,6 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
     };
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
-    AsyncSharedFileDeleter shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
 
     // Step 1: walk each tablet's prev_garbage_version chain from the range's top real node down to
     // |to_delete_low|, deleting the garbage data files each metadata references. The entry is derived
@@ -1061,8 +1157,8 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
         int64_t version;
         bool anchored = false;
         if (is_fresh) {
-            auto res = tablet_mgr->get_tablet_metadata(tablet_id, to_delete_high, false /* fill_meta_cache */,
-                                                       true /* fill_data_cache */);
+            auto res = get_tablet_metadata_for_vacuum(tablet_mgr, anchor_tablet_id, tablet_id, to_delete_high,
+                                                      true /* fill_data_cache */);
             if (res.ok()) {
                 // Floor exists: collect its garbage and enter the chain directly from its prev_garbage_version
                 // -- the walk is already anchored on a materialized version.
@@ -1088,8 +1184,8 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
             if (auto st = check_vacuum_deadline(deadline_ms); !st.ok()) {
                 return Status::TimedOut(fmt::format("{} tablet_id={}", st.message(), tablet_id));
             }
-            auto res = tablet_mgr->get_tablet_metadata(tablet_id, version, false /* fill_meta_cache */,
-                                                       true /* fill_data_cache */);
+            auto res = get_tablet_metadata_for_vacuum(tablet_mgr, anchor_tablet_id, tablet_id, version,
+                                                      true /* fill_data_cache */);
             if (res.status().is_not_found()) {
                 // The prev_garbage_version chain links only materialized versions, so once anchored a NotFound
                 // is the genuine chain bottom (a version already deleted by an earlier pass, or below this
@@ -1127,7 +1223,9 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
     }
     if (!shared_file_deleter.is_empty()) {
         RETURN_IF_ERROR(collect_alive_shared_files(tablet_mgr, tablet_infos, pass_start_version,
-                                                   max_empty_walk_versions, root_dir, &shared_file_deleter));
+                                                   max_empty_walk_versions, root_dir, anchor_tablet_id,
+                                                   &shared_file_deleter, deadline_ms));
+        RETURN_IF_ERROR(check_vacuum_deadline(deadline_ms));
         RETURN_IF_ERROR(shared_file_deleter.finish());
         (*vacuumed_files) += shared_file_deleter.delete_count();
     }
@@ -1138,7 +1236,7 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
     if (enable_file_bundling) {
         // Special case mirrored from vacuum_tablet_metadata: after an alter, the version-1 initial
         // metadata may be written under each tablet's own id, so delete those by tablet_id.
-        if (to_delete_low <= 1) {
+        if (to_delete_low <= 1 && !retain_versions.contains(1)) {
             for (auto& tablet_info : tablet_infos) {
                 RETURN_IF_ERROR(metafile_deleter.delete_file(
                         join_path(meta_dir, tablet_metadata_filename(tablet_info.tablet_id(), 1))));
@@ -1151,8 +1249,7 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
             // Bundle layout: the deleted file is the shared bundle path, but each tablet's metadata OBJECT is
             // cached under its own per-tablet path (tablet_metadata_location), so the delete callback's
-            // metacache erase (keyed by the bundle path) is a no-op for them. Evict them here. The non-bundle
-            // branch below deletes per-tablet files directly, so the callback's erase already matches their key.
+            // metacache erase (keyed by the bundle path) is a no-op for them. Evict them here.
             for (auto& tablet_info : tablet_infos) {
                 tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
             }
@@ -1384,13 +1481,23 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
     for (const auto& info : tablet_infos) {
         candidate_tablet_ids.push_back(info.tablet_id());
     }
-    auto root_loc = tablet_mgr->tablet_root_location(tablet_mgr->pick_local_anchor_tablet_id(candidate_tablet_ids));
+    // The same anchor resolves every tablet's metadata read, not just |root_loc|; see
+    // get_tablet_metadata_for_vacuum().
+    const int64_t anchor_tablet_id = tablet_mgr->pick_local_anchor_tablet_id(candidate_tablet_ids);
+    auto root_loc = tablet_mgr->tablet_root_location(anchor_tablet_id);
     auto min_retain_version = request.min_retain_version();
     auto grace_timestamp = request.grace_timestamp();
     auto min_active_txn_id = request.min_active_txn_id();
     std::unordered_set<int64_t> retain_versions;
     if (request.retain_versions_size() > 0) {
         retain_versions.insert(request.retain_versions().begin(), request.retain_versions().end());
+    }
+
+    for (const auto& snapshot : request.retain_snapshots()) {
+        if (!snapshot.has_version() || snapshot.version() <= 0) {
+            return Status::InvalidArgument("vacuum snapshot version must be positive");
+        }
+        retain_versions.insert(snapshot.version());
     }
 
     int64_t vacuumed_files = 0;
@@ -1402,8 +1509,13 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
               [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); });
 
     const bool enable_file_bundling = request.has_enable_file_bundling() && request.enable_file_bundling();
-    const bool enable_shared_file_cleanup =
+    bool enable_shared_file_cleanup =
             request.has_enable_shared_file_cleanup() ? request.enable_shared_file_cleanup() : enable_file_bundling;
+    AsyncSharedFileDeleter shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
+    if (enable_shared_file_cleanup) {
+        ASSIGN_OR_RETURN(enable_shared_file_cleanup, protect_snapshot_files(tablet_mgr, request, tablet_infos, root_loc,
+                                                                            &shared_file_deleter, deadline_ms));
+    }
     // The presence of |max_versions_per_round| is the sole switch into the incremental/resumable vacuum
     // protocol (no mode flag): an old FE never sets it, so the request falls through to the legacy
     // one-shot path below and behaves exactly as before.
@@ -1429,10 +1541,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         // Phase 1 (commit): physically delete the inclusive range the previous round proposed and the FE
         // has persisted. Absent/empty on the very first incremental round for a partition.
         if (req_to_delete_low < req_to_delete_high) {
-            if (auto st = commit_metadata_range(tablet_mgr, root_loc, tablet_infos, req_to_delete_low,
+            if (auto st = commit_metadata_range(tablet_mgr, root_loc, anchor_tablet_id, tablet_infos, req_to_delete_low,
                                                 req_to_delete_high, pass_start_version, enable_file_bundling,
                                                 enable_shared_file_cleanup, max_empty_walk_versions, retain_versions,
-                                                &vacuumed_files, &vacuumed_file_size, deadline_ms);
+                                                &vacuumed_files, &vacuumed_file_size, deadline_ms, shared_file_deleter);
                 !st.ok()) {
                 LOG(WARNING) << "incremental vacuum commit failed: partition=" << request.partition_id()
                              << " resume_from=" << resume_from << " pass_start_version=" << pass_start_version
@@ -1449,10 +1561,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         int64_t next_cursor = 0;
         int64_t next_pass_start = 0;
         bool next_grace_blocked = false;
-        if (auto st = propose_metadata_range(tablet_mgr, tablet_infos, min_retain_version, grace_timestamp, resume_from,
-                                             request.max_versions_per_round(), max_empty_walk_versions, deadline_ms,
-                                             &next_to_delete_low, &next_to_delete_high, &next_cursor, &next_pass_start,
-                                             &next_grace_blocked);
+        if (auto st = propose_metadata_range(tablet_mgr, anchor_tablet_id, tablet_infos, min_retain_version,
+                                             grace_timestamp, resume_from, request.max_versions_per_round(),
+                                             max_empty_walk_versions, deadline_ms, &next_to_delete_low,
+                                             &next_to_delete_high, &next_cursor, &next_pass_start, &next_grace_blocked);
             !st.ok()) {
             LOG(WARNING) << "incremental vacuum propose failed: partition=" << request.partition_id()
                          << " resume_from=" << resume_from << " min_retain=" << min_retain_version << ": " << st;
@@ -1486,10 +1598,10 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
         // extra_file_size is also left at 0: propose computes no orphan-size estimate, so the legacy
         // "extra minus vacuumed" adjustment below is skipped (it would otherwise report a negative).
     } else {
-        RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_infos, min_retain_version, grace_timestamp,
-                                               enable_file_bundling, enable_shared_file_cleanup, &vacuumed_files,
-                                               &vacuumed_file_size, &vacuumed_version, &extra_file_size,
-                                               retain_versions, deadline_ms));
+        RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, anchor_tablet_id, tablet_infos, min_retain_version,
+                                               grace_timestamp, enable_file_bundling, enable_shared_file_cleanup,
+                                               &vacuumed_files, &vacuumed_file_size, &vacuumed_version,
+                                               &extra_file_size, retain_versions, deadline_ms, shared_file_deleter));
         extra_file_size -= vacuumed_file_size;
     }
     if (request.delete_txn_log()) {
@@ -1744,6 +1856,17 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
     }
 
+    // The walk may need cached metadata. Evict on exit, including after a partial deletion failure:
+    // already-deleted bundles will not be listed on a retry.
+    DeferOp evict_dropped_metadata([&] {
+        for (auto tablet_id : tablet_ids) {
+            for (const auto& [version, state] : bundle_version_states) {
+                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+            }
+            tablet_mgr->erase_latest_cached_tablet_metadata(tablet_id);
+        }
+    });
+
     // Shared files may go only at a version whose bundle holds nothing but tablets being deleted. A tablet's
     // own file at such a version follows the bundle, and a version no listing recorded (reachable only
     // through a stale metacache entry) keeps its shared files.
@@ -1781,7 +1904,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         // Find metadata files that has garbage data files and delete all those files
         for (int64_t garbage_version = max_version; garbage_version >= min_version;
              /**/) {
-            auto res = tablet_mgr->get_tablet_metadata(tablet_id, garbage_version, false);
+            auto res = tablet_mgr->get_tablet_metadata_via_anchor(
+                    tablet_id, garbage_version, anchor_tablet_id,
+                    CacheOptions{.fill_meta_cache = false, .fill_data_cache = false});
             if (res.status().is_not_found()) {
                 break;
             } else if (!res.ok()) {
@@ -1893,6 +2018,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter));
             }
             // delete txnlog
+            auto [tablet_id, txn_id] = parse_txn_log_filename(log_name);
+            tablet_mgr->metacache()->erase(
+                    join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name));
             RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
         }
     }
@@ -1916,13 +2044,19 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             }
             // delete files under txnlog
             for (const auto& log : combine_log_ptr->txn_logs()) {
-                if (!is_range_distribution &&
-                    std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
-                    RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
+                if (std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
+                    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id()));
+                    if (!is_range_distribution) {
+                        RETURN_IF_ERROR(
+                                delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
+                    }
                 }
             }
             // delete txnlog
             if (!contains_alive_tablets) {
+                ASSIGN_OR_RETURN(auto cache_key,
+                                 tablet_mgr->location_provider()->real_location(join_path(log_dir, log_name)));
+                tablet_mgr->metacache()->erase(cache_key);
                 RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
             }
         }
@@ -1935,6 +2069,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             if (bundle_version_states.count(version) == 0) {
                 // delete the individual tablet metadata file
                 auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
+                erase_tablet_metadata_from_metacache(tablet_mgr, {path});
                 RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
             }
         }
@@ -1981,9 +2116,20 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
             tablet_mgr->metacache()->erase(log_path);
         }
         for (auto&& info : request.txn_infos()) {
+            // Writers also cache the individual tablet log when the persisted file is combined.
+            tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, info.txn_id()));
             auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
                                                     : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
             files_to_delete.emplace_back(log_path);
+            if (info.combined_txn_log()) {
+                auto cache_key = tablet_mgr->location_provider()->real_location(log_path);
+                if (cache_key.ok()) {
+                    tablet_mgr->metacache()->erase(*cache_key);
+                } else {
+                    LOG(WARNING) << "Fail to resolve combined txn log cache key for " << log_path << ": "
+                                 << cache_key.status();
+                }
+            }
         }
     }
 

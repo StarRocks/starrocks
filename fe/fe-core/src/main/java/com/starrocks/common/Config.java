@@ -1417,6 +1417,11 @@ public class Config extends ConfigBase {
             "are upgraded to a version that supports it.")
     public static boolean lake_enable_batch_publish_multi_table = false;
 
+    @ConfField(mutable = true, comment = "Retry a lake publish batch that did not finish with only the transactions " +
+            "of that attempt, so that every partition keeps the new version of the attempt. When false, a retry " +
+            "batch is rebuilt as usual and may take in transactions committed since.")
+    public static boolean lake_enable_batch_publish_retry_freeze = true;
+
     /**
      * Minimum interval, in milliseconds, before PublishVersionDaemon retries a partition whose last publish
      * attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch
@@ -1764,7 +1769,7 @@ public class Config extends ConfigBase {
     public static long catalog_trash_expire_second = 86400L; // 1day
 
     /**
-     * The retention time for partition dropped by insert overwrite/mv rewrite etc.
+     * The retention time for partition dropped by insert overwrite/mv rewrite/partition ttl etc.
      */
     @ConfField(mutable = true)
     public static long partition_recycle_retention_period_secs = 30 * 60L; // 30mins
@@ -4460,6 +4465,18 @@ public class Config extends ConfigBase {
     public static String ssl_keystore_location = "";
 
     /**
+     * the keystore type. Empty means auto detection.
+     */
+    @ConfField
+    public static String ssl_keystore_type = "";
+
+    /**
+     * the keystore security provider
+     */
+    @ConfField
+    public static String ssl_keystore_provider = "";
+
+    /**
      * the password of keystore file
      */
     @ConfField(sensitive = true)
@@ -4478,10 +4495,40 @@ public class Config extends ConfigBase {
     public static String ssl_truststore_location = "";
 
     /**
+     * the truststore type. Empty means auto detection.
+     */
+    @ConfField
+    public static String ssl_truststore_type = "";
+
+    /**
+     * the truststore security provider
+     */
+    @ConfField
+    public static String ssl_truststore_provider = "";
+
+    /**
      * the password of truststore file
      */
     @ConfField(sensitive = true)
     public static String ssl_truststore_password = "";
+
+    /**
+     * the security provider class for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_class = "";
+
+    /**
+     * the security provider name for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_name = "";
+
+    /**
+     * the security provider jar path for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_path = "";
 
     /**
      * Allow only secure transport from clients
@@ -4649,8 +4696,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
-    @ConfField(mutable = true, comment = "Whether to enable the automatic related materialized views since of base table's " +
-            "schema changes")
+    @ConfField(mutable = true, comment = "Whether to inactivate the materialized views on a base table or view when its " +
+            "schema or definition changes or it is dropped. Renaming or swapping a base table, or renaming a base " +
+            "materialized view, always inactivates them")
     public static boolean enable_mv_automatic_inactive_by_base_table_changes = true;
 
     @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
