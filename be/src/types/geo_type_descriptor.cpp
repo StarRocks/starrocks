@@ -81,28 +81,13 @@ GeoTypeDescPB GeoTypeDescriptor::to_protobuf() const {
     return result;
 }
 
-GeoStorageDescriptor GeoStorageDescriptor::from_protobuf(const GeoStorageDescPB& protobuf) {
-    GeoStorageDescriptor result;
-    result.encoding = protobuf.encoding();
-    result.dimension = protobuf.dimension();
-    return result;
-}
-
-GeoStorageDescPB GeoStorageDescriptor::to_protobuf() const {
-    GeoStorageDescPB result;
-    result.set_encoding(encoding);
-    result.set_dimension(dimension);
-    return result;
-}
-
 GeoColumnDescriptor GeoColumnDescriptor::from_protobuf(const GeoColumnDescPB& protobuf) {
-    return {GeoTypeDescriptor::from_protobuf(protobuf.type()), GeoStorageDescriptor::from_protobuf(protobuf.storage())};
+    return {GeoTypeDescriptor::from_protobuf(protobuf.type())};
 }
 
 GeoColumnDescPB GeoColumnDescriptor::to_protobuf() const {
     GeoColumnDescPB result;
     *result.mutable_type() = type.to_protobuf();
-    *result.mutable_storage() = storage.to_protobuf();
     return result;
 }
 
