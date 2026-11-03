@@ -188,7 +188,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
+- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。此外，优化作业在开始执行前会等待表的所有副本都恢复健康，这可能持续整个副本修复过程，在此期间同样允许创建分区。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
 - 引入版本: -
 
 ### `capacity_used_percent_high_water`
