@@ -109,6 +109,26 @@ public class TransactionStateTest {
     }
 
     @Test
+    public void testSetHasSendTaskKeepsPublishVersionTime() {
+        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L),
+                3000, "label_send_task", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        transactionState.setHasSendTask(true);
+        Assertions.assertTrue(transactionState.hasSendTask());
+        assertEquals(-1, transactionState.getPublishVersionTime());
+        assertEquals(-1, transactionState.getPublishRequestSentTime());
+        transactionState.recordPublishRequestSentTime();
+        long firstRequestSentTime = transactionState.getPublishRequestSentTime();
+        Assertions.assertTrue(firstRequestSentTime > 0);
+        // A later request carrying the same txn keeps the time of the first one.
+        transactionState.recordPublishRequestSentTime();
+        assertEquals(firstRequestSentTime, transactionState.getPublishRequestSentTime());
+        transactionState.updateSendTaskTime();
+        Assertions.assertTrue(transactionState.getPublishVersionTime() > 0);
+    }
+
+    @Test
     public void testCopyConstructor() {
         TxnCoordinator coordinator = new TxnCoordinator(TxnSourceType.BE, "127.0.0.1");
         TransactionState original = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
@@ -128,8 +148,12 @@ public class TransactionStateTest {
         partitionCommitInfo.getTabletStats().put(40000L, stat);
         tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
         original.putIdToTableCommitInfo(20000L, tableCommitInfo);
+        original.setHasSendTask(true);
+        original.recordPublishRequestSentTime();
 
         TransactionState copied = new TransactionState(original);
+        Assertions.assertTrue(copied.hasSendTask());
+        assertEquals(original.getPublishRequestSentTime(), copied.getPublishRequestSentTime());
         Assertions.assertSame(original.getTableIdList(), copied.getTableIdList());
         Assertions.assertSame(original.getCoordinator(), copied.getCoordinator());
         Assertions.assertSame(original.getErrorReplicas(), copied.getErrorReplicas());

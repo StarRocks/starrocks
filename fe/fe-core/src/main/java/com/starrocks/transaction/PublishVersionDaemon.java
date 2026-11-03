@@ -392,7 +392,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 batchTask.addTask(task);
             }
             if (!tasks.isEmpty()) {
+                transactionState.updateSendTaskTime();
                 transactionState.setHasSendTask(true);
+                transactionState.recordPublishRequestSentTime();
                 transactionIds.add(transactionState.getTransactionId());
             }
         }
@@ -670,7 +672,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
             return CompletableFuture.completedFuture(null);
         }
 
-        txnState.setHasSendTask(true);
+        // The attempt starts now; hasSendTask is set only once a request goes out, see publishPartition().
+        txnState.updateSendTaskTime();
         CompletableFuture<Boolean> publishFuture;
         Collection<TableCommitInfo> tableCommitInfos = txnState.getIdToTableCommitInfos().values();
         if (tableCommitInfos.size() == 1) {
@@ -803,6 +806,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
         long startVersion = versions.get(0);
         long endVersion = versions.get(versions.size() - 1);
 
+        // Marked only once a request goes out, after the version-order check, so that a batch that merely waited
+        // for an earlier version is not retried as a sent one. Every txn of the batch is marked: a batch that sent
+        // anything is retried with the same txns, see DatabaseTransactionMgr.getReadyToPublishTxnListBatch(). The
+        // request time is recorded only for the txns this request carries.
+        stateBatch.getTransactionStates().forEach(state -> state.setHasSendTask(true));
+        transactionStates.forEach(TransactionState::recordPublishRequestSentTime);
         try {
             if (shadowIndexTxnBatches != null) {
                 for (ShadowIndexTxnBatch txnBatch : shadowIndexTxnBatches.values()) {
@@ -1167,7 +1176,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         List<TransactionState> states = txnStateBatch.getTransactionStates();
         Map<Long, PartitionPublishVersionData> publishVersionDataMap = new HashMap<>();
 
-        states.forEach(state -> state.setHasSendTask(true));
+        // The attempt starts now; hasSendTask is set only once a request goes out, see publishPartitionBatch().
+        states.forEach(TransactionState::updateSendTaskTime);
         for (TransactionState state : states) {
             for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
                 long tableId = tableCommitInfo.getTableId();
@@ -1407,6 +1417,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // op_schema_change@W via the TXN_SHADOW_REWRITE publish txn; nothing to publish here.
                 return true;
             }
+            // Marked only once a request goes out, after the version-order check, so that a txn that merely waited
+            // for an earlier version is not retried as a sent one.
+            txnState.setHasSendTask(true);
+            txnState.recordPublishRequestSentTime();
             if (CollectionUtils.isNotEmpty(shadowTablets)) {
                 Utils.publishLogVersion(shadowTablets, txnInfo, txnVersion, computeResource);
             }
