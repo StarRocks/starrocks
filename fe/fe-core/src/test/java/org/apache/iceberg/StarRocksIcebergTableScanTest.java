@@ -136,6 +136,67 @@ public class StarRocksIcebergTableScanTest {
         Assertions.assertTrue(ranks.get(3) < ranks.get(5));
     }
 
+    // 150 top-level int columns c1..c150 (field ids 1..150)
+    private static Table wideTable(Map<String, String> properties) {
+        List<Types.NestedField> columns = new ArrayList<>();
+        for (int id = 1; id <= 150; id++) {
+            columns.add(Types.NestedField.optional(id, "c" + id, Types.IntegerType.get()));
+        }
+        Schema schema = new Schema(columns);
+        Table table = Mockito.mock(Table.class);
+        Mockito.when(table.schemas()).thenReturn(ImmutableMap.of(0, schema));
+        Mockito.when(table.schema()).thenReturn(schema);
+        Mockito.when(table.sortOrder()).thenReturn(SortOrder.unsorted());
+        Mockito.when(table.properties()).thenReturn(properties);
+        return table;
+    }
+
+    private static List<Integer> rankOrder(Map<Integer, Long> ranks) {
+        List<Integer> ids = new ArrayList<>(ranks.keySet());
+        ids.sort((a, b) -> Long.compare(ranks.get(a), ranks.get(b)));
+        return ids;
+    }
+
+    @Test
+    public void testStatsCandidateRanksPreferBoundedColumnsOverCountsOnly() {
+        // default counts: only c140 and c150 write bounds; c150 is the explicit truncate column, c140 full
+        Table table = wideTable(ImmutableMap.of(
+                TableProperties.DEFAULT_WRITE_METRICS_MODE, "counts",
+                TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX + "c150", "truncate(16)",
+                TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX + "c140", "full",
+                TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX + "c130", "counts"));
+
+        List<Integer> order = rankOrder(StarRocksIcebergTableScan.statsCandidateRanks(table));
+
+        Assertions.assertEquals(List.of(140, 150, 1, 2), order.subList(0, 4),
+                "explicit bounded columns first, then the counts-only columns by field id");
+    }
+
+    @Test
+    public void testStatsCandidateRanksKeepExplicitColumnBeyondInferredDefaults() {
+        // no explicit default and more than 100 columns: only c1..c100 get the inferred truncate(16), the rest none;
+        // c150 is set explicitly and must rank inside the first 100
+        Table table = wideTable(ImmutableMap.of(TableProperties.METRICS_MODE_COLUMN_CONF_PREFIX + "c150", "truncate(16)"));
+
+        List<Integer> order = rankOrder(StarRocksIcebergTableScan.statsCandidateRanks(table));
+
+        Assertions.assertEquals(150, order.get(0));
+        Assertions.assertEquals(1, order.get(1));
+        Assertions.assertEquals(100, order.get(100));
+        Assertions.assertEquals(101, order.get(101));
+    }
+
+    @Test
+    public void testStatsCandidateRanksWithoutMetricsConfigKeepFieldIdOrder() {
+        Table table = wideTable(ImmutableMap.of());
+        Mockito.when(table.schema()).thenThrow(new IllegalStateException("no current schema"));
+
+        List<Integer> order = rankOrder(StarRocksIcebergTableScan.statsCandidateRanks(table));
+
+        Assertions.assertEquals(1, order.get(0));
+        Assertions.assertEquals(150, order.get(149));
+    }
+
     @Test
     public void testStatsTruncatedTypesCoverStringAndBinaryFields() {
         Schema schema = new Schema(
