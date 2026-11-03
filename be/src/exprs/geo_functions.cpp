@@ -55,14 +55,13 @@ namespace {
 
 constexpr int32_t kCrs84Srid = 4326;
 
+// Row dimensions are not part of the descriptor: kernels decode each row's own WKB header and reject Z/M rows.
 Status check_geography_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    const auto dimension = descriptor.storage.dimension;
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
         type.edge_algorithm != GEO_EDGE_ALGORITHM_SPHERICAL || type.crs != "OGC:CRS84" ||
-        (type.srid.has_value() && type.srid.value() != kCrs84Srid) || descriptor.storage.encoding != GEO_ENCODING_WKB ||
-        (dimension != GEO_DIMENSION_UNKNOWN && dimension != GEO_DIMENSION_XY && dimension != GEO_DIMENSION_MIXED)) {
+        (type.srid.has_value() && type.srid.value() != kCrs84Srid)) {
         return Status::NotSupported("Unsupported GEOGRAPHY SQL boundary descriptor");
     }
     return Status::OK();
@@ -82,20 +81,9 @@ std::optional<int32_t> derive_srid(std::string_view crs) {
 Status check_geometry_boundary(const GeoColumn& column) {
     const auto& descriptor = column.descriptor();
     const auto& type = descriptor.type;
-    const auto dimension = descriptor.storage.dimension;
     if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
-        type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.srid != derive_srid(type.crs) ||
-        descriptor.storage.encoding != GEO_ENCODING_WKB ||
-        (dimension != GEO_DIMENSION_UNKNOWN && dimension != GEO_DIMENSION_XY && dimension != GEO_DIMENSION_MIXED)) {
+        type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.srid != derive_srid(type.crs)) {
         return Status::NotSupported("Unsupported GEOMETRY SQL boundary descriptor");
-    }
-    return Status::OK();
-}
-
-Status check_geometry_compute_boundary(const GeoColumn& column) {
-    RETURN_IF_ERROR(check_geometry_boundary(column));
-    if (column.descriptor().storage.dimension != GEO_DIMENSION_XY) {
-        return Status::NotSupported("GEOMETRY compute functions require XY dimension");
     }
     return Status::OK();
 }
@@ -119,7 +107,7 @@ StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     if constexpr (Type == TYPE_GEOGRAPHY) {
         RETURN_IF_ERROR(check_geography_boundary(*geo));
     } else {
-        RETURN_IF_ERROR(check_geometry_compute_boundary(*geo));
+        RETURN_IF_ERROR(check_geometry_boundary(*geo));
     }
     return GeoInput{geo, nullable, constant};
 }
@@ -1180,8 +1168,7 @@ StatusOr<MutableColumnPtr> create_geography_result(FunctionContext* context) {
     if (type.type != TYPE_GEOGRAPHY || !type.geo_type.has_value()) {
         return Status::NotSupported("GEOGRAPHY constructor requires semantic type metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{type.geo_type.value()};
     auto data = GeoColumn::create(std::move(descriptor));
     RETURN_IF_ERROR(check_geography_boundary(*data));
     return NullableColumn::create(std::move(data), NullColumn::create());
@@ -1192,8 +1179,7 @@ StatusOr<MutableColumnPtr> create_geometry_result(FunctionContext* context) {
     if (type.type != TYPE_GEOMETRY || !type.geo_type.has_value()) {
         return Status::NotSupported("GEOMETRY constructor requires semantic type metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{type.geo_type.value()};
     auto data = GeoColumn::create(std::move(descriptor));
     RETURN_IF_ERROR(check_geometry_boundary(*data));
     return NullableColumn::create(std::move(data), NullColumn::create());
@@ -1569,13 +1555,12 @@ StatusOr<MutableColumnPtr> create_centroid_result(FunctionContext* context) {
     if (type.type != Type || !type.geo_type.has_value()) {
         return Status::NotSupported("ST_Centroid requires native GEO return metadata");
     }
-    GeoColumnDescriptor descriptor{type.geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{type.geo_type.value()};
     auto data = GeoColumn::create(std::move(descriptor));
     if constexpr (Type == TYPE_GEOGRAPHY) {
         RETURN_IF_ERROR(check_geography_boundary(*data));
     } else {
-        RETURN_IF_ERROR(check_geometry_compute_boundary(*data));
+        RETURN_IF_ERROR(check_geometry_boundary(*data));
     }
     return NullableColumn::create(std::move(data), NullColumn::create());
 }

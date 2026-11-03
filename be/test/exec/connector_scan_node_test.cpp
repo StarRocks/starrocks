@@ -142,7 +142,7 @@ std::vector<TScanRangeParams> ConnectorScanNodeTest::create_scan_ranges_cloud(si
 
 TEST_F(ConnectorScanNodeTest, PublishesScanNodeHintsToDataSourceProvider) {
     auto runtime_state = create_runtime_state();
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT)};
+    std::vector<TypeDescriptor> types{TYPE_INT_DESC};
     auto* descs = create_table_desc(runtime_state.get(), types);
     auto tnode = create_tplan_node_cloud();
     auto scan_node = std::make_shared<ConnectorScanNode>(runtime_state->obj_pool(), *tnode, *descs);

@@ -1125,8 +1125,6 @@ static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params
         return Slice(fixed_width_data + i * fixed_width_key_size, fixed_width_key_size);
     };
 
-    const Slice lower(seek_range.seek_key);
-    const Slice upper(seek_range.stop_key);
     // The selection buffer is allocated lazily, on the first out-of-range key. A tablet whose del file
     // is entirely inside its own range -- every non-split tablet, and any child that owns all the keys
     // it was handed -- therefore pays no allocation at all, only the comparisons.
@@ -1135,9 +1133,7 @@ static Status clip_deletes_to_tablet_range(const RowsetUpdateStateParams& params
     for (size_t i = 0; i < num_keys; i++) {
         const Slice key = key_at(i);
         // [seek_key, stop_key): lower inclusive, upper exclusive (see SstSeekRange).
-        const bool in_range = (seek_range.seek_key.empty() || key.compare(lower) >= 0) &&
-                              (seek_range.stop_key.empty() || key.compare(upper) < 0);
-        if (in_range) {
+        if (seek_range.contains(key)) {
             continue;
         }
         if (selection.empty()) {

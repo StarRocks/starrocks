@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
@@ -141,7 +142,6 @@ import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
-import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -213,7 +213,6 @@ import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
-import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL;
@@ -890,21 +889,26 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Encryption states this connector cannot serve, checked once on the scan path.
+     *
+     * <p>This used to refuse encrypted tables outright -- {@code encryption.key-id} present, or
+     * encryption keys in table metadata, meant "not supported". Reading Parquet Modular Encryption is
+     * now implemented, so a blanket refusal would make that support unreachable: the throw sat above
+     * every read path, so the scan died here before any key could be recovered.
+     *
+     * <p>What replaces it is narrower and is the condition that actually matters: a table that
+     * <b>declares</b> encryption which the catalog will not <b>enforce</b>. {@code encryption.key-id} is
+     * a table property and reaches every catalog, but the {@code EncryptionManager} comes from the
+     * catalog's {@code TableOperations}, so the two can disagree -- and when they do, no key can be
+     * recovered and the scan must not proceed as though the table were plaintext. See
+     * {@link IcebergEncryption}.
+     *
+     * <p>Deliberately expressed as that state rather than as a property or version test, so a catalog
+     * gaining encryption support starts working here with no change.
+     */
     static void checkUnsupportedEncryption(org.apache.iceberg.Table icebergTable) {
-        if (icebergTable.properties().containsKey(ENCRYPTION_TABLE_KEY)) {
-            throw new StarRocksConnectorException(
-                    "Iceberg table encryption is not supported. Table '%s' has encryption property '%s' set.",
-                    icebergTable.name(), ENCRYPTION_TABLE_KEY);
-        }
-
-        if (icebergTable instanceof BaseTable) {
-            TableMetadata metadata = ((BaseTable) icebergTable).operations().current();
-            if (metadata.encryptionKeys() != null && !metadata.encryptionKeys().isEmpty()) {
-                throw new StarRocksConnectorException(
-                        "Iceberg table encryption is not supported. Table '%s' has encryption keys set.",
-                        icebergTable.name());
-            }
-        }
+        IcebergEncryption.checkReadSupported(icebergTable, icebergTable.name());
     }
 
     public static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
@@ -1724,12 +1728,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     // Raw string partition values for the file, keyed by (identity) partition column name. Returns an empty map
     // under partition-transform evolution, where getIcebergPartitionValues drops non-identity fields and would
     // misalign the value-to-column mapping (residual pruning then conservatively keeps every file).
-    private static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
-                                                              boolean existPartitionTransformedEvolution) {
+    @VisibleForTesting
+    static Map<String, String> icebergPartitionValues(FileScanTask task, IcebergTable table,
+                                                      boolean existPartitionTransformedEvolution) {
         if (existPartitionTransformedEvolution) {
             return Collections.emptyMap();
         }
-        PartitionSpec spec = table.getNativeTable().spec();
+        // A partition tuple lines up positionally with the spec its file was written under, not the current one.
+        PartitionSpec spec = task.spec();
         org.apache.iceberg.PartitionData partitionData =
                 (org.apache.iceberg.PartitionData) task.file().partition();
         List<String> values = PartitionUtil.getIcebergPartitionValues(spec, partitionData, false);
@@ -1746,8 +1752,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (!field.transform().isIdentity()) {
                 continue;
             }
+            // An older spec can reference a since-dropped column; a null key would NPE in partitionMayMatch.
             String name = table.getPartitionSourceName(table.getNativeTable().schema(), field);
-            if (value != null) {
+            if (name != null && value != null) {
                 result.put(name, value);
             }
         }
@@ -2581,6 +2588,25 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    /**
+     * Drop only the cached table object, with no remote I/O and without the catalog's per-table refresh lock: the
+     * planner's next getTable then loads the table as it is now. A refresh would load it remotely under that lock,
+     * so concurrent INSERTs reading the same source queue behind each other's remote load. The partition and
+     * manifest caches are keyed by snapshot and file path, so they stay valid for whatever snapshot is loaded.
+     */
+    @Override
+    public void invalidateTableForRead(String srDbName, Table table) {
+        if (isResourceMappingCatalog(catalogName)) {
+            refreshTable(srDbName, table, new ArrayList<>(), false);
+            return;
+        }
+        IcebergTable icebergTable = (IcebergTable) table;
+        String dbName = icebergTable.getCatalogDBName();
+        String tableName = icebergTable.getCatalogTableName();
+        tables.remove(TableIdentifier.of(dbName, tableName));
+        icebergCatalog.invalidateTableCache(dbName, tableName);
+    }
+
     private void refreshTableWithResource(Table table) {
         IcebergTable icebergTable = (IcebergTable) table;
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -2757,10 +2783,32 @@ public class IcebergMetadata implements ConnectorMetadata {
                         catalogName, dbName, tableName);
             }
             LOG.error("Failed to commit iceberg transaction on {}.{}", dbName, tableName, e);
-            throw new StarRocksConnectorException(e.getMessage());
+            throw new StarRocksConnectorException(commitFailureMessage(e, catalogName, dbName, tableName));
         } finally {
             cleanupAction.run();
         }
+    }
+
+    // Iceberg's own text for a commit rejected because the table moved on after this statement read it
+    // names neither cause nor remedy. The failed commit drops this FE's cached table (cleanupAction), but a
+    // retry may run on another FE that still caches the old metadata, so point at REFRESH EXTERNAL TABLE.
+    @VisibleForTesting
+    static String commitFailureMessage(Exception e, String catalogName, String dbName, String tableName) {
+        String table = dbName + "." + tableName;
+        String remedy = String.format("Run REFRESH EXTERNAL TABLE %s.%s and retry the statement.", catalogName, table);
+        if (e instanceof ValidationException) {
+            return String.format("Iceberg table %s was changed by another commit after this statement read it, " +
+                    "and the change conflicts with this statement: %s. %s", table, e.getMessage(), remedy);
+        }
+        // Raised by Iceberg when the commit applies the BE's Parquet position deletes to a table that is now
+        // format version 3 or later: the statement was planned against older, format-version-2 metadata.
+        if (e instanceof IllegalArgumentException && e.getMessage() != null
+                && e.getMessage().startsWith("Must use DVs for position deletes")) {
+            return String.format("Iceberg table %s was upgraded to a newer format version after this statement " +
+                    "was planned against its format-version-2 metadata, so the position delete files it wrote " +
+                    "are no longer accepted (%s). %s", table, e.getMessage(), remedy);
+        }
+        return e.getMessage();
     }
 
     private void invalidateCacheAfterCommit(String dbName, String tableName) {

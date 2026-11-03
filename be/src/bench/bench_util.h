@@ -110,7 +110,7 @@ public:
     }
 
     static MutableColumnPtr create_series_int_column(int num_rows) {
-        TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+        TypeDescriptor type_desc = TYPE_INT_DESC;
         auto column = ColumnHelper::create_column(type_desc, false);
         std::vector<int32_t> elements = create_series_values<int32_t>(num_rows, 0, 1);
         for (auto& x : elements) {

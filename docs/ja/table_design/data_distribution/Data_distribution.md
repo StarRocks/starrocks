@@ -874,7 +874,10 @@ PRIMARY KEY (tenant_id, created_time, id);
 コロケーショングループに加えて、`colocate_with` プロパティで、`<colocation_group>:<colocated_column>[,<colocated_column>]` という形式で、コロケーション対象の列を指定する必要があります。
 - コロケーション対象の列は、ソート列のプレフィックスでなければなりません。
 - 同じコロケーショングループ内のテーブルは、コロケーション対象の列の型、数、順序が同一でなければなりません。
+- テーブル作成後は、コロケーション対象の列の型を変更できません（VARCHAR 列の長さを増やす変更も含みます）。
+- テーブル作成後も、ソートキーをオンラインで変更できます（`ALTER TABLE ... ORDER BY`、キー列の追加または削除、整数型のソートキー列の拡張）。ただし、新しいソートキーは、コロケーション対象の列を同じ順序・同じ型のまま先頭に含む必要があります。コロケーション対象の列の削除、順序の入れ替え、型の変更を伴う変更は拒否されます。変更後もテーブルは同じコロケーショングループに属し、Colocate Join を引き続き利用できます。
 - デフォルトのコロケーション対象の列は、ソート列です。
+- `colocate_with` でコロケーショングループのみを指定している場合、ソートキーの変更によってソートキーの列数がコロケーション対象の列数より多くなると、StarRocks はこのプロパティをコロケーション対象の列を明示する形式 `<colocation_group>:<colocated_column>[,<colocated_column>]` に書き換えます。以後、`SHOW CREATE TABLE` にはこの形式が表示されます。
 :::
 
 ```SQL
@@ -920,6 +923,7 @@ PROPERTIES (
 | `CREATE MATERIALIZED VIEW ... AS ...`（`REFRESH` および `DISTRIBUTED BY` 句を持たない同期型） | 同期マテリアライズドビューは本質的に普通の同期 Rollup であり、同じ制限を受けます。 |
 | `ALTER TABLE ... MERGE TABLETS`（`ORDER BY` が主キーと異なる主キーテーブル。サイズに基づく自動マージも同じ形態をスキップします） | この種のテーブルは主キー空間のレンジで行をルーティングする一方、Segment はソートキー順に配置されるため、マージ時に、複数のソースが共有する Segment 内のある行がどのソース Tablet に属しているかを判定できません。SPLIT は影響を受けません。また `ORDER BY` が主キーと同じ主キーテーブルは、これまでどおり MERGE できます。 |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE はパーティション内のデータを再分散・再バケット化するため、レンジ tablet の境界と互換性がありません。 |
+| `colocate_with` を設定したテーブルでの `CREATE TABLE ... ROLLUP (...)` | Rollup の tablet はベーステーブルのソートキーで分割される一方、行は Rollup 自身のソートキーで配置されるため、その Rollup を読む Colocate Join が誤った結果を返す可能性があります。このようなテーブルでは `ALTER TABLE ... ADD ROLLUP` もサポートされません。 |
 
 Rollup のような集計ユースケースには、明示的な `REFRESH` 句または `DISTRIBUTED BY` 句を伴う**非同期マテリアライズドビュー**を使用してください。例：
 

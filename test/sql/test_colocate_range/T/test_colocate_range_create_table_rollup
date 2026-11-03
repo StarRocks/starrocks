@@ -1,0 +1,21 @@
+-- name: test_colocate_range_create_table_rollup @cloud
+-- CREATE TABLE ... ROLLUP is rejected on a range table with colocate_with, and the rejected
+-- statement leaves no table behind.
+set enable_range_distribution = true;
+
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    rollup (r1 (k2, k1))
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+
+show tables;
+
+create table t (k1 int, k2 int, v int)
+    order by(k1, k2)
+    properties('replication_num' = '1', 'colocate_with' = 'g_ctr_${uuid0}:k1');
+
+drop table t;
+drop database db_${uuid0};

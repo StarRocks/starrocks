@@ -443,6 +443,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否启用系统自动检查和重新激活那些因基表（视图）进行 Schema Change 或被删除和重新创建而变为 Inactive 的异步物化视图。请注意，此功能不会重新激活用户手动设置为 Inactive 的物化视图。
 - 引入版本: v3.1.6
 
+### `enable_mv_automatic_inactive_by_base_table_changes`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在基表（视图）被删除、进行 Schema Change 或视图被重新定义时，将基于它的异步物化视图设置为 Inactive。对基表执行重命名或 SWAP，以及对基表物化视图执行重命名时，无论该参数取值如何，基于它的物化视图都会被设置为 Inactive。
+- 引入版本: v3.3.10, v3.4.1, v3.5.0
+
 ### `enable_mv_automatic_repairing_for_broken_base_tables`
 
 - 默认值: true
@@ -1030,6 +1039,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SQL 层检查的任务调度的最小允许调度间隔（以秒为单位）。提交任务时，TaskAnalyzer 将调度周期转换为秒，如果周期小于 `task_min_schedule_interval_s`，则以 `ERR_INVALID_PARAMETER` 拒绝提交。这可以防止创建运行过于频繁的任务，并保护调度器免受高频任务的影响。如果调度没有显式开始时间，TaskAnalyzer 会将开始时间设置为当前纪元秒。
 - 引入版本: v3.3.0, v3.4.0, v3.5.0
 
+### `task_runs_dispatch_interval_ms`
+
+- 默认值: 1000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: Leader FE 检查正在运行的 TaskRun 是否完成、并启动等待中的 TaskRun 的间隔。可通过 `ADMIN SET FRONTEND CONFIG` 修改，无需重启 FE。新间隔在当前调度周期结束后生效。减小该值可使等待中的 TaskRun 更快启动、完成状态更快更新，但会增加 FE CPU 开销；增大该值可降低开销，但会延迟启动。负值按 `1000` 处理。`0` 按 `1` 处理。
+- 引入版本: -
+
 ### `task_runs_timeout_second`
 
 - 默认值: 4 * 3600
@@ -1085,7 +1103,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
+- 描述: 是否为云原生表启用 File Bundling 优化。自 v26.2 起，该配置也作用于存算分离集群中的异步物化视图。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为，或使用 CREATE MATERIALIZED VIEW 属性 `file_bundling` 在物化视图级别控制此行为。
 - 引入版本: v4.0
 
 ### `enable_pipeline_routine_load`

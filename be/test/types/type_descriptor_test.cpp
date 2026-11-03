@@ -17,6 +17,7 @@
 #include <tuple>
 
 #include "gtest/gtest.h"
+#include "testutil/type_test_helper.h"
 
 namespace starrocks {
 
@@ -759,14 +760,11 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
 TEST_F(TypeDescriptorTest, test_promote_types) {
     std::vector<std::tuple<TypeDescriptor, TypeDescriptor, TypeDescriptor>> cases = {
             // input1, input2, output
-            {TypeDescriptor::from_logical_type(TYPE_INT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::from_logical_type(TYPE_BIGINT)},
+            {TYPE_INT_DESC, TYPE_BIGINT_DESC, TYPE_BIGINT_DESC},
 
-            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_DOUBLE),
-             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+            {TYPE_FLOAT_DESC, TYPE_DOUBLE_DESC, TYPE_DOUBLE_DESC},
 
-            {TypeDescriptor::from_logical_type(TYPE_FLOAT), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::from_logical_type(TYPE_DOUBLE)},
+            {TYPE_FLOAT_DESC, TYPE_BIGINT_DESC, TYPE_DOUBLE_DESC},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
              TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 4, 3),
@@ -785,8 +783,7 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
              TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 19, 2)},
 
             {TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 38),
-             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+             TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 38, 0), TYPE_VARCHAR_DESC},
 
             {TypeDescriptor::create_varchar_type(10), TypeDescriptor::create_varchar_type(20),
              TypeDescriptor::create_varchar_type(20)},
@@ -797,8 +794,7 @@ TEST_F(TypeDescriptorTest, test_promote_types) {
             {TypeDescriptor::create_varbinary_type(10), TypeDescriptor::create_varbinary_type(20),
              TypeDescriptor::create_varbinary_type(20)},
 
-            {TypeDescriptor::from_logical_type(TYPE_JSON), TypeDescriptor::from_logical_type(TYPE_BIGINT),
-             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}};
+            {TYPE_JSON_DESC, TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}};
     for (const auto& tuple : cases) {
         EXPECT_TRUE(TypeDescriptor::promote_types(std::get<0>(tuple), std::get<1>(tuple)) == std::get<2>(tuple));
     }
@@ -920,7 +916,7 @@ TEST_F(TypeDescriptorTest, ObjectTypesAreHugeAndUnusableAsKeys) {
 
     // MAP is joinable and groupable but has no ordering; the nested types otherwise delegate to
     // their children, so an ARRAY<JSON> is no more usable as a key than a bare JSON.
-    auto map_of_int = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT));
+    auto map_of_int = TypeDescriptor::create_map_type(TYPE_INT_DESC, TYPE_INT_DESC);
     EXPECT_TRUE(map_of_int.support_groupby());
     EXPECT_FALSE(map_of_int.support_orderby());
 

@@ -51,9 +51,10 @@ public:
             return hash;
         }
     };
-    PassThroughChunkBuffer(const TUniqueId& query_id);
+    PassThroughChunkBuffer(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     ~PassThroughChunkBuffer();
     PassThroughChannelPtr get_or_create_channel(const Key& key);
+    MemTracker* query_mem_tracker() const { return _query_mem_tracker.get(); }
     int ref() { return ++_ref_count; }
     int unref() {
         _ref_count -= 1;
@@ -63,6 +64,9 @@ public:
 private:
     std::mutex _mutex;
     const TUniqueId _query_id;
+    // The query tracker shared by every fragment instance of the query on this BE, handed to each
+    // channel when it is created. Null when the query has none.
+    const std::shared_ptr<MemTracker> _query_mem_tracker;
     std::unordered_map<Key, PassThroughChannelPtr, KeyHash> _key_to_channel;
     int _ref_count{1};
 };
@@ -71,11 +75,7 @@ class PassThroughContext {
 public:
     PassThroughContext(PassThroughChunkBuffer* chunk_buffer, const TUniqueId& fragment_instance_id, PlanNodeId node_id)
             : _chunk_buffer(chunk_buffer), _fragment_instance_id(fragment_instance_id), _node_id(node_id) {}
-    // `query_mem_tracker` is the query tracker shared by the sender and receiver instances (they always
-    // belong to the same query on this BE). Buffered chunks are parked on it while they wait in the
-    // channel, so they stay inside the query, resource group and process budgets. Without it the
-    // chunks are only tracked by the global passthrough tracker, outside the process tree.
-    void init(std::shared_ptr<MemTracker> query_mem_tracker = nullptr);
+    void init();
     void append_chunk(int sender_id, const Chunk* chunk, size_t chunk_size, int32_t driver_sequence);
     void pull_chunks(int sender_id, ChunkUniquePtrVector* chunks, std::vector<size_t>* bytes);
     int64_t total_bytes() const;
@@ -102,7 +102,11 @@ public:
     // We don't care open/close by which fragment instance,
     // just to want to make sure that fragment instances in a query can
     // share the same `PassThroughChunkBuffer*` struct
-    void open_fragment_instance(const TUniqueId& query_id);
+    // `query_mem_tracker` is the query tracker shared by the sender and receiver instances (they always
+    // belong to the same query on this BE). Buffered chunks are parked on it while they wait in a
+    // channel, so they stay inside the query, resource group and process budgets. Without it they are
+    // parked on the process tracker. Every fragment instance of a query must pass the same tracker.
+    void open_fragment_instance(const TUniqueId& query_id, std::shared_ptr<MemTracker> query_mem_tracker);
     void close_fragment_instance(const TUniqueId& query_id);
     PassThroughChunkBuffer* get(const TUniqueId& query_id);
     void close();

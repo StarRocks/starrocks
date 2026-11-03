@@ -602,27 +602,27 @@ void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const 
 
 static TypeDescriptor get_type_desc(const Slice& field, const bool& sampleTypes) {
     if (!sampleTypes) {
-        return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+        return TYPE_VARCHAR_DESC;
     }
     StringParser::ParseResult result;
 
     StringParser::string_to_int<int64_t>(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_BIGINT);
+        return TYPE_BIGINT_DESC;
     }
 
     StringParser::string_to_float<double>(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_DOUBLE);
+        return TYPE_DOUBLE_DESC;
     }
 
     StringParser::string_to_bool(field.get_data(), field.get_size(), &result);
     if (result == StringParser::PARSE_SUCCESS) {
-        return TypeDescriptor(TYPE_BOOLEAN);
+        return TYPE_BOOLEAN_DESC;
     }
 
     // default VARCHAR.
-    return TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    return TYPE_VARCHAR_DESC;
 }
 
 Status CSVScanner::get_schema(std::vector<SlotDescriptor>* schema) {

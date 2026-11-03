@@ -34,6 +34,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/date_value.h"
 #include "types/datetime_value.h"
 #include "types/datum.h"
@@ -2842,14 +2843,13 @@ static ColumnPtr make_root_typed_only_variant_bigint_column(const std::vector<in
         null->append(is_null[i]);
     }
 
-    return cast_to_variant(TypeDescriptor(TYPE_BIGINT), NullableColumn::create(std::move(data), std::move(null)));
+    return cast_to_variant(TYPE_BIGINT_DESC, NullableColumn::create(std::move(data), std::move(null)));
 }
 
 static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<DatumArray>& values,
                                                            const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto array_col = ColumnHelper::create_column(array_type, true);
+    auto array_col = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
             array_col->append_nulls(1);
@@ -2858,7 +2858,7 @@ static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<Dat
         }
     }
 
-    return cast_to_variant(array_type, array_col);
+    return cast_to_variant(TYPE_ARRAY_INT_DESC, array_col);
 }
 
 static ColumnPtr make_base_shredded_root_bigint_variant_column(const std::vector<int64_t>& values,
@@ -2871,13 +2871,13 @@ static ColumnPtr make_base_shredded_root_bigint_variant_column(const std::vector
         null->append(is_null[i]);
     }
 
-    return cast_to_variant(TypeDescriptor(TYPE_BIGINT), NullableColumn::create(std::move(data), std::move(null)));
+    return cast_to_variant(TYPE_BIGINT_DESC, NullableColumn::create(std::move(data), std::move(null)));
 }
 
 static ColumnPtr make_root_typed_only_variant_map_column(const std::vector<DatumMap>& values,
                                                          const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT));
+    TypeDescriptor map_type = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC);
     auto map_col = ColumnHelper::create_column(map_type, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -2892,8 +2892,7 @@ static ColumnPtr make_root_typed_only_variant_map_column(const std::vector<Datum
 static ColumnPtr make_root_typed_only_variant_struct_column(const std::vector<DatumStruct>& values,
                                                             const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor struct_type =
-            TypeDescriptor::create_struct_type({"x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
     auto struct_col = ColumnHelper::create_column(struct_type, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -2987,13 +2986,13 @@ TEST_F(VectorizedCastExprTest, const_json_to_map_keeps_row_count) {
 // Test that struct-to-struct cast correctly reorders fields by name when field order differs
 TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
     // Create source struct type: STRUCT<price INT, product_id VARCHAR>
-    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"price", "product_id"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor from_type =
+            TypeDescriptor::create_struct_type({"price", "product_id"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
 
     // Create target struct type: STRUCT<product_id VARCHAR, price INT>
     // Note: same field names but different order
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"product_id", "price"}, {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor to_type =
+            TypeDescriptor::create_struct_type({"product_id", "price"}, {TYPE_VARCHAR_DESC, TYPE_INT_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -3017,13 +3016,11 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
 // Test struct-to-struct cast with matching field order (no reordering needed)
 TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
     // Create source struct type: STRUCT<a INT, b VARCHAR>
-    TypeDescriptor from_type =
-            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
 
     // Create target struct type: STRUCT<a BIGINT, b VARCHAR>
     // Same field order, just different types
-    TypeDescriptor to_type =
-            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -3045,12 +3042,12 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
 // Test struct-to-struct cast with three fields in different order
 TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
     // Create source struct type: STRUCT<x INT, y INT, z INT>
-    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"x", "y", "z"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor from_type =
+            TypeDescriptor::create_struct_type({"x", "y", "z"}, {TYPE_INT_DESC, TYPE_INT_DESC, TYPE_INT_DESC});
 
     // Create target struct type: STRUCT<z INT, x INT, y INT>
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"z", "x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor to_type =
+            TypeDescriptor::create_struct_type({"z", "x", "y"}, {TYPE_INT_DESC, TYPE_INT_DESC, TYPE_INT_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -3077,10 +3074,8 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
 TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
     // Source: STRUCT<key INT, value INT>  Target: STRUCT<key1 INT, value1 INT>
     // Names don't overlap, so positional mapping should be used: key→key1 (idx 0), value→value1 (idx 1).
-    TypeDescriptor from_type =
-            TypeDescriptor::create_struct_type({"key", "value"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"key1", "value1"},
-                                                                {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type({"key", "value"}, {TYPE_INT_DESC, TYPE_INT_DESC});
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"key1", "value1"}, {TYPE_INT_DESC, TYPE_INT_DESC});
 
     ObjectPool pool;
     auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);
@@ -3100,11 +3095,9 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
 
 // Verifies primitive scalar values encode to variant JSON payloads correctly.
 TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
-    auto column = Int32Column::create();
-    column->append(123);
-    column->append(-7);
+    auto column = ColumnTestHelper::build_column<int32_t>({123, -7});
 
-    ColumnPtr result = cast_to_variant(TypeDescriptor(TYPE_INT), column);
+    ColumnPtr result = cast_to_variant(TYPE_INT_DESC, column);
     auto json0 = variant_json_at(result, 0);
     auto json1 = variant_json_at(result, 1);
     ASSERT_TRUE(json0.ok());
@@ -3202,15 +3195,9 @@ TEST_F(VectorizedCastExprTest, variant_string_cast_constants_and_nullable_rows) 
     }
     auto nulls = NullColumn::create(5, 0);
     nulls->get_data()[3] = 1;
-    auto variants =
-            cast_to_variant(TypeDescriptor(TYPE_VARCHAR), NullableColumn::create(std::move(strings), std::move(nulls)));
+    auto variants = cast_to_variant(TYPE_VARCHAR_DESC, NullableColumn::create(std::move(strings), std::move(nulls)));
     auto result = cast_from_variant(gen_type_desc(TPrimitiveType::TINYINT), variants);
-    ASSERT_EQ(5, result->size());
-    EXPECT_EQ(35, result->get(0).get_int8());
-    EXPECT_TRUE(result->is_null(1));
-    EXPECT_TRUE(result->is_null(2));
-    EXPECT_TRUE(result->is_null(3));
-    EXPECT_EQ(0, result->get(4).get_int8());
+    ASSERT_EQ("[35, NULL, NULL, NULL, 0]", result->debug_string());
 }
 
 TEST_F(VectorizedCastExprTest, variant_string_cast_in_array) {
@@ -3394,7 +3381,7 @@ TEST_F(VectorizedCastExprTest, variant_cast_mixed_rows_non_nullable_input_to_str
 TEST_F(VectorizedCastExprTest, variant_cast_to_nested_struct_with_special_field_name) {
     constexpr size_t kInputSize = 2;
     auto cv = make_const_variant_column_from_json(R"({"inner":{"$x":5}})", kInputSize);
-    TypeDescriptor inner = TypeDescriptor::create_struct_type({"$x"}, {TypeDescriptor(TYPE_INT)});
+    TypeDescriptor inner = TypeDescriptor::create_struct_type({"$x"}, {TYPE_INT_DESC});
     TypeDescriptor outer = TypeDescriptor::create_struct_type({"inner"}, {inner});
     auto result = cast_from_variant(outer.to_thrift(), cv);
     assert_const_or_expanded_result(result, kInputSize, "{inner:{$x:5}}");
@@ -3405,10 +3392,7 @@ TEST_F(VectorizedCastExprTest, root_typed_only_scalar_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_bigint_column({7, 0, -3}, {0, 1, 0});
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
-        ASSERT_EQ(3, result->size());
-        ASSERT_EQ(7, result->get(0).get_int64());
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_EQ(-3, result->get(2).get_int64());
+        ASSERT_EQ("[7, NULL, -3]", result->debug_string());
     }
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
@@ -3432,9 +3416,7 @@ TEST_F(VectorizedCastExprTest, root_typed_only_array_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_array_column(
             {DatumArray{Datum((int32_t)1), Datum((int32_t)2)}, DatumArray{}}, {0, 1});
     auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), variant_col);
-    ASSERT_EQ(2, result->size());
-    ASSERT_EQ("[1,2]", result->debug_item(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[[1,2], NULL]", result->debug_string());
 }
 
 // Verifies base_shredded root scalar keeps cast semantics equivalent to typed-only on same/different target types.
@@ -3442,10 +3424,7 @@ TEST_F(VectorizedCastExprTest, base_shredded_root_scalar_cast_from_variant) {
     auto variant_col = make_base_shredded_root_bigint_variant_column({7, 0, -3}, {0, 1, 0});
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
-        ASSERT_EQ(3, result->size());
-        ASSERT_EQ(7, result->get(0).get_int64());
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_EQ(-3, result->get(2).get_int64());
+        ASSERT_EQ("[7, NULL, -3]", result->debug_string());
     }
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
@@ -3498,14 +3477,14 @@ TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch
 // local buffer. The value must be read while that buffer is alive. The string is longer than the SSO
 // limit so a dangling read lands on freed heap memory (caught by ASAN).
 static ColumnPtr make_object_typed_only_variant_column(const std::vector<std::string>& values) {
-    auto typed = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    auto typed = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     for (const auto& v : values) {
         typed->append_datum(Datum(Slice(v)));
     }
     MutableColumns typed_columns;
     typed_columns.emplace_back(std::move(typed));
     auto variant = VariantColumn::create();
-    variant->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed_columns), nullptr, nullptr);
+    variant->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(typed_columns), nullptr, nullptr);
     return variant;
 }
 

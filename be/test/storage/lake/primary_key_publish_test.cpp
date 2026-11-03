@@ -74,6 +74,7 @@
 #include "storage/variant_tuple.h"
 #include "storage_primitive/primary_key_encoder.h"
 #include "testutil/chunk_assert.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks::lake {
 
@@ -84,9 +85,9 @@ public:
         _tablet_metadata->set_enable_persistent_index(GetParam().enable_persistent_index);
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
 
-        _slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
-        _slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        _slots.emplace_back(0, "c0", TYPE_INT_DESC);
+        _slots.emplace_back(1, "c1", TYPE_INT_DESC);
+        _slots.emplace_back(2, "__op", TYPE_INT_DESC);
         _slot_pointers.emplace_back(&_slots[0]);
         _slot_pointers.emplace_back(&_slots[1]);
         _slot_pointers.emplace_back(&_slots[2]);
@@ -259,8 +260,7 @@ public:
 
     std::string encoded_primary_key(int32_t key) {
         auto chunk = std::make_unique<Chunk>();
-        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
-        column->append_datum(Datum(key));
+        auto column = ColumnTestHelper::build_column<int32_t>({key});
         chunk->append_column(std::move(column), 0);
 
         std::vector<ColumnId> pk_columns = {0};
@@ -687,7 +687,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
     _tablet_mgr->prune_metacache();
     // fill delvec cache again
     ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
-    EXPECT_TRUE(_tablet_mgr->metacache()->memory_usage() > 0);
+    EXPECT_TRUE(_tablet_mgr->metacache()->segment_metadata_memory_usage() > 0);
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
@@ -2558,6 +2558,56 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels_v2_encoding) {
     }
 }
 
+// A publish that asks for recovery has already written to the cached index: the delete vector check fails
+// after the upsert of kKey. Recovery cannot remove the index from the cache while another holder still
+// references the entry, so it fails. Neither that holder nor the retry may then see the failed attempt's upsert.
+// On top of it, kKey already points at the row this same publish writes, so the retry would delete that row and
+// keep the old one.
+TEST_P(LakePrimaryKeyPublishTest, test_retry_reloads_index_when_recover_cannot_remove_it) {
+    constexpr int32_t kKey = 5;
+    constexpr int32_t kOldValue = 50;
+    constexpr int32_t kNewValue = 500;
+    ConfigResetGuard<bool> recover_guard(&config::enable_primary_key_recover, true);
+    const auto tablet_id = _tablet_metadata->id();
+    ASSERT_OK(publish_single_version(tablet_id, 2, write_single_upsert_txn(tablet_id, kKey, kOldValue)).status());
+    const int64_t txn_id = write_single_upsert_txn(tablet_id, kKey, kNewValue);
+
+    bool injected = false;
+    SyncPoint::GetInstance()->SetCallBack("delvec_inconsistent", [&](void* arg) {
+        if (!injected) {
+            *(Status*)arg = Status::InternalError("ut_test");
+            injected = true;
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("delvec_inconsistent");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    {
+        auto* other_holder = _primary_key_mgr->index_cache().get(tablet_id);
+        ASSERT_NE(nullptr, other_holder);
+        DeferOp release_other_holder([&]() { _primary_key_mgr->release_primary_index_cache(other_holder); });
+        ASSERT_FALSE(publish_single_version(tablet_id, 3, txn_id).ok());
+        ASSERT_TRUE(injected);
+        // What a reader that probes the index before the retry checks, e.g. the auto-increment probe of a load.
+        EXPECT_FALSE(other_holder->value().is_load(2));
+        // Nor may the cache keep charging for the memory the unload freed.
+        EXPECT_EQ(other_holder->value().memory_usage(), other_holder->size());
+    }
+
+    ASSERT_OK(publish_single_version(tablet_id, 3, txn_id).status());
+    ASSIGN_OR_ABORT(auto published, _tablet_mgr->get_tablet_metadata(tablet_id, 3));
+    ASSERT_EQ(2, published->rowsets_size());
+    const IndexValue new_row(uint64_t{published->rowsets(1).id()} << 32);
+    auto visible = visible_oracle(tablet_id, 3, kKey);
+    EXPECT_EQ(1, visible.row_count);
+    EXPECT_EQ(std::optional<int32_t>(kNewValue), visible.target_value);
+    EXPECT_EQ(new_row, cached_point_get(tablet_id, kKey));
+    _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+    EXPECT_EQ(new_row, prepare_and_point_get(published, 3, kKey));
+}
+
 TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
     auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
     auto version = 1;
@@ -2790,6 +2840,88 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), 12);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), 0);
     EXPECT_EQ(0, read_rows(tablet_id, new_version));
+}
+
+// A retry whose metadata and primary index were both evicted reads the already written new version instead of
+// re-applying the batch. Without is_retry_publish it re-applies, which reloads the index.
+TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_written_new_version) {
+    auto [chunk0, indexes0] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto [chunk1, indexes1] = gen_data_and_index(kChunkSize, 1, true, true);
+    auto base_version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    std::vector<int64_t> txn_ids;
+    auto write_txn = [&](const Chunk& chunk, const std::vector<uint32_t>& indexes) {
+        auto txn_id = next_id();
+        txn_ids.emplace_back(txn_id);
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+    };
+    write_txn(*chunk0, indexes0);
+    write_txn(*chunk1, indexes1);
+
+    auto new_version = base_version + 2;
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
+
+    auto evict_caches = [&]() {
+        _tablet_mgr->prune_metacache();
+        _primary_key_mgr->unload_and_remove_primary_index(tablet_id);
+        ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+    };
+
+    // A retry answers from the written new version: the index stays unloaded.
+    evict_caches();
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids, /*is_retry_publish=*/true).status());
+    EXPECT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
+
+    // A first attempt does not look: it re-applies the batch and loads the index on the way.
+    evict_caches();
+    ASSERT_OK(batch_publish(tablet_id, base_version, new_version, txn_ids).status());
+    EXPECT_GT(_primary_key_mgr->get_primary_index_data_version(tablet_id), 0);
+
+    // A newer vector index watermark from FE is not covered by the written metadata, so the retry re-applies
+    // to persist it.
+    evict_caches();
+    auto txns = std::vector<TxnInfoPB>();
+    auto commit_time = time(nullptr);
+    for (auto id : txn_ids) {
+        txns.emplace_back(TEST_txn_info(id, commit_time));
+    }
+    constexpr int64_t kBuiltVersion = 7;
+    auto new_metadata_path = _tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    // If that re-apply fails, the rejected metadata must not be left in the metacache for the next retry to take.
+    {
+        TEST_ENABLE_ERROR_POINT("TabletManager::put_tablet_metadata",
+                                Status::IOError("injected put tablet metadata error"));
+        SyncPoint::GetInstance()->EnableProcessing();
+        DeferOp defer([]() {
+            TEST_DISABLE_ERROR_POINT("TabletManager::put_tablet_metadata");
+            SyncPoint::GetInstance()->DisableProcessing();
+        });
+        ASSERT_ERROR(publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
+                                     /*skip_write_tablet_metadata=*/false, kBuiltVersion,
+                                     InitialMetadataOrder::kPerTabletFirst, /*is_retry_publish=*/true));
+    }
+    EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path));
+    evict_caches();
+    ASSIGN_OR_ABORT(auto republished,
+                    publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
+                                    /*skip_write_tablet_metadata=*/false, kBuiltVersion,
+                                    InitialMetadataOrder::kPerTabletFirst, /*is_retry_publish=*/true));
+    EXPECT_EQ(kBuiltVersion, republished->vector_index_built_version());
+
+    EXPECT_EQ(2 * kChunkSize, read_rows(tablet_id, new_version));
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {

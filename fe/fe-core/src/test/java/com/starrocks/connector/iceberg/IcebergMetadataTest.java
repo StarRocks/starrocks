@@ -2145,8 +2145,12 @@ public class IcebergMetadataTest extends TableTestBase {
                                 .setFieldNames(Lists.newArrayList())
                                 .setLimit(10)
                                 .build()));
-        assertTrue(ex.getMessage().contains("encryption is not supported"),
-                "Expected encryption error, got: " + ex.getMessage());
+        // Reading Parquet Modular Encryption is now supported, so this no longer fails because the table
+        // is encrypted. It fails because TestTable's catalog returns a plaintext EncryptionManager while
+        // the table declares encryption.key-id -- the unwired-catalog case, where no key can be
+        // recovered and serving the scan as plaintext would be the fail-open.
+        assertTrue(ex.getMessage().contains("cannot read"),
+                "Expected an unsupported-catalog error, got: " + ex.getMessage());
     }
 
     @Test
@@ -2898,6 +2902,39 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db_name",
                 "table_name", "", new ArrayList<>(), mockedNativeTableD, Maps.newHashMap());
         metadata.refreshTable("db", icebergTable, null, true);
+    }
+
+    @Test
+    public void testInvalidateTableForReadDoesNoRemoteLoad() {
+        AtomicInteger remoteLoads = new AtomicInteger();
+        AtomicReference<org.apache.iceberg.Table> remoteTable = new AtomicReference<>(mockedNativeTableA);
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                remoteLoads.incrementAndGet();
+                return remoteTable.get();
+            }
+        };
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        Assertions.assertSame(mockedNativeTableA, cachingIcebergCatalog.getTable(connectContext, "db", "table"));
+        Assertions.assertEquals(1, remoteLoads.get());
+
+        // The remote table moves on; invalidating it for a read must not load it, only drop the cached object.
+        remoteTable.set(mockedNativeTableB);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "db",
+                "table", "", new ArrayList<>(), mockedNativeTableA, Maps.newHashMap());
+        metadata.invalidateTableForRead("db", icebergTable);
+        Assertions.assertEquals(1, remoteLoads.get());
+
+        // The next read loads the table as it is now.
+        Assertions.assertSame(mockedNativeTableB, cachingIcebergCatalog.getTable(connectContext, "db", "table"));
+        Assertions.assertEquals(2, remoteLoads.get());
     }
 
     @Test
@@ -4103,6 +4140,33 @@ public class IcebergMetadataTest extends TableTestBase {
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> commitPositionDeleteOfFileA(table, 99, "data_bucket=0/", "0"));
         Assertions.assertTrue(ex.getMessage().contains("no longer exists"), ex.getMessage());
+    }
+
+    @Test
+    public void testPositionDeleteAfterUpgradeToV3ExplainsStaleMetadata() throws Exception {
+        // Planned against format-version-2 metadata, so the BE wrote a Parquet position delete; another
+        // engine upgraded the table to v3 before the commit, and Iceberg now accepts only DVs.
+        TestTables.TestTable table = create(SCHEMA_A, SPEC_A, "ta_v2_upgraded_before_commit", 2);
+        table.newFastAppend().appendFile(FILE_A).commit();
+        long snapshotId = table.currentSnapshot().snapshotId();
+        table.updateProperties().set(TableProperties.FORMAT_VERSION, "3").commit();
+
+        StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> commitPositionDeleteOfFileA(table, table.spec().specId(), "data_bucket=0/", "0"));
+        Assertions.assertTrue(ex.getMessage().contains("iceberg_db.iceberg_table was upgraded to a newer format " +
+                "version after this statement was planned"), ex.getMessage());
+        Assertions.assertTrue(ex.getMessage().contains("Run REFRESH EXTERNAL TABLE " + CATALOG_NAME
+                + ".iceberg_db.iceberg_table and retry the statement."), ex.getMessage());
+        table.refresh();
+        Assertions.assertEquals(snapshotId, table.currentSnapshot().snapshotId());
+    }
+
+    @Test
+    public void testCommitFailureMessageKeepsOtherErrors() {
+        Assertions.assertEquals("boom", IcebergMetadata.commitFailureMessage(
+                new IllegalArgumentException("boom"), "c", "db", "t"));
+        Assertions.assertEquals("boom", IcebergMetadata.commitFailureMessage(
+                new RuntimeException("boom"), "c", "db", "t"));
     }
 
     @Test

@@ -775,7 +775,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Count
 - Is mutable: Yes
-- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and works together with `lake_batch_publish_min_version_num` to determine the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and may be limited at runtime when versions are not consecutive. Tune according to workload and visibility/latency requirements.
+- Description: Sets the upper bound on how many consecutive transaction versions may be grouped together when building a publish batch for lake (cloud‑native) tables. The value is passed to the transaction graph batching routine (see getReadyToPublishTxnListBatch) and caps the candidate range size for a TransactionStateBatch. Larger values can increase publish throughput by batching more commits, but increase the scope of an atomic publish (longer visibility latency and larger rollback surface) and may be limited at runtime when versions are not consecutive. Tune according to workload and visibility/latency requirements.
 - Introduced in: v3.2.0
 
 ### `lake_batch_publish_min_version_num`
@@ -784,7 +784,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Sets the minimum number of consecutive transaction versions required to form a publish batch for lake tables. DatabaseTransactionMgr.getReadyToPublishTxnListBatch passes this value to transactionGraph.getTxnsWithTxnDependencyBatch together with `lake_batch_publish_max_version_num` to select dependent transactions. A value of `1` allows single-transaction publishes (no batching). Values `>1` require at least that many consecutively-versioned, single-table, non-replication transactions to be available; batching is aborted if versions are non-consecutive, a replication transaction appears, or a schema change consumes a version. Increasing this value can improve publish throughput by grouping commits but may delay publishing while waiting for enough consecutive transactions.
+- Description: Deprecated. This parameter no longer takes effect. It is kept only so that an existing setting in **fe.conf** or an `ADMIN SET FRONTEND CONFIG` statement on it does not fail. In shared-data mode, batch publish starts a batch in each round from every committed transaction that no longer waits for another transaction, and publishes the batch whatever its size, with at most `lake_batch_publish_max_version_num` transactions in a batch. Previously, this parameter set the minimum number of transactions in a batch, and a batch below the minimum was not published in that round. A batch that could never reach the minimum, for example the last loads into a table that receives no more loads, or loads queued behind a transaction that writes multiple tables, was skipped in every round: its committed transactions never became visible, and later loads into the same tables waited behind them.
 - Introduced in: v3.2.0
 
 ### `lake_publish_version_retry_interval_ms`
@@ -807,12 +807,21 @@ This topic introduces the following types of FE configurations:
 
 ### `lake_enable_batch_publish_multi_table`
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. Enable this parameter only after all FE nodes are upgraded to a version that supports it: an FE follower running an older version that replays a multi-table transaction batch applies the visible log of the first table only.
+- Description: Whether to allow batch publish to group consecutive multi-table transactions into one publish operation. This benefits workloads that commit small atomic transactions spanning the same group of tables at a high rate (for example, CDC pipelines fanning out to multiple tables), where per-transaction publishing serializes on the shared table dependency chain and inflates the commit-to-visible latency. Effective only when `lake_enable_batch_publish_version` is `true`. From v26.3 onwards, the default value is changed from `false` to `true`. FE nodes running a version earlier than v4.1.5 do not support this feature: when such an FE replays a multi-table transaction batch, it applies the visible log of the first table only. Therefore, when you upgrade the cluster from such a version, set this parameter to `false` in **fe.conf** of each upgraded FE node until all FE nodes are upgraded, because a Leader FE failover during the upgrade can make an upgraded FE node the Leader while older FE nodes are still running. When you downgrade the cluster to such a version, set this parameter to `false`, wait until all transactions committed before the change have become visible, and then create the metadata snapshot.
 - Introduced in: v4.1.5
+
+### `lake_enable_batch_publish_retry_freeze`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to retry a batch publish of a shared-data table that did not finish with only the transactions of that attempt, including a batch of one transaction, so that the retry does not take in the transactions committed since. Without it, the retry batch is rebuilt from scratch and takes in those transactions, so the new version of every partition changes and the work the earlier attempt finished at the old version cannot be reused. Set it to `false` to rebuild retry batches as before, from the next publish round. Effective only when `lake_enable_batch_publish_version` is `true`.
+- Introduced in: v26.2
 
 ### `lake_enable_tablet_creation_optimization`
 
@@ -1250,6 +1259,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of low-cardinality dictionary-optimized columns listed in the `dict_col` field of each scan node in `EXPLAIN VERBOSE` output. When a scan node has more applied dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than or equal to `0` are treated as `0`, which truncates the list entirely. This item affects only the `EXPLAIN VERBOSE` output and does not change how dictionary optimization is applied to queries.
 - Introduced in: v4.2.0
 
+### `gtid_batch_window_ms`
+
+- Default: 5000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: How far ahead the FE reserves a batch of gtids when the next gtid would pass the current batch end. Values below `1` are treated as `1`. The window must also fit in the remaining 42-bit snowflake timestamp; a larger value makes gtid allocation fail instead of wrapping the reserved batch end. A larger valid value writes the metadata journal less often. The side effect is that unused reserved gtids are discarded on leader failover, so the timestamp bits of a gtid can jump forward by at most this window.
+- Introduced in: -
+
 ### `hive_meta_cache_refresh_interval_s`
 
 - Default: 60
@@ -1555,6 +1573,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: During materialized view refresh, if multiple partitions need to be created in bulk, the system divides them into batches of 64 partitions each. To reduce the risk of failures caused by frequent partition creation, a default interval (in milliseconds) is set between each batch to control the creation frequency.
 - Introduced in: v3.3
+
+### `mv_incremental_refresh_wait_visible_timeout_ms`
+
+- Default: 300000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: How long an incremental refresh of a materialized view waits, before it plans, for the committed transactions on the materialized view to become visible. If one is still not visible by then, the refresh fails without writing data, and the next refresh waits again.
+- Introduced in: -
 
 ### `mv_plan_cache_max_size`
 
