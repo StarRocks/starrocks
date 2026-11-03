@@ -400,7 +400,6 @@ TEST_F(ColumnHelperTest, create_geo_placeholder_and_copy) {
         EXPECT_EQ(*type.geo_type, geo->descriptor().type);
         EXPECT_EQ(GEO_ENCODING_WKB, geo->descriptor().storage.encoding);
         EXPECT_EQ(GEO_DIMENSION_UNKNOWN, geo->descriptor().storage.dimension);
-        EXPECT_EQ(GEO_VALIDATION_STATE_UNVALIDATED, geo->descriptor().storage.validation_state);
         for (size_t i = 0; i < geo->size(); ++i) {
             EXPECT_TRUE(geo->get_wkb(i).empty());
         }

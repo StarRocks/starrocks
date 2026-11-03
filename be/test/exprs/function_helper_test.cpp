@@ -244,8 +244,7 @@ protected:
         return column;
     }
     MutableColumnPtr physical_input(const TypeDescriptor& arg, int mode) {
-        auto geo = GeoColumn::create(GeoColumnDescriptor{
-                *type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+        auto geo = GeoColumn::create(GeoColumnDescriptor{*type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
         geo->append_wkb(Slice(point));
         auto column = ColumnHelper::create_column(arg, true);
         if (mode == 4) return column; // Empty, with the factory's physical placeholder.
@@ -464,13 +463,11 @@ TEST_P(GeoFunctionHelperTest, CreateColumns) {
             EXPECT_EQ(nullable, column->is_nullable());
             EXPECT_EQ(0, column->size());
             const auto* geo = check_geo_leaf(column.get(), *type.geo_type);
-            EXPECT_EQ((GeoStorageDescriptor{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}),
-                      geo->descriptor().storage);
+            EXPECT_EQ((GeoStorageDescriptor{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN}), geo->descriptor().storage);
             column->check_or_die();
         }
     }
-    auto source = GeoColumn::create(GeoColumnDescriptor{
-            *type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}});
+    auto source = GeoColumn::create(GeoColumnDescriptor{*type.geo_type, {GEO_ENCODING_WKB, GEO_DIMENSION_XY}});
     source->append_wkb(Slice(point));
     auto result = FunctionHelper::create_column(type, false);
     result->append(*source);

@@ -65,10 +65,8 @@ ColumnPtr distances(std::initializer_list<double> values) {
 ColumnPtr radius(double value, size_t size = 1) {
     return ColumnHelper::create_const_column<TYPE_DOUBLE>(value, size);
 }
-ColumnPtr raw_geometry(std::string_view wkb,
-                       GeoColumnDescriptor descriptor = {
-                               geo_type().geo_type.value(),
-                               {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}}) {
+ColumnPtr raw_geometry(std::string_view wkb, GeoColumnDescriptor descriptor = {geo_type().geo_type.value(),
+                                                                               {GEO_ENCODING_WKB, GEO_DIMENSION_XY}}) {
     auto result = GeoColumn::create(std::move(descriptor));
     result->append_wkb(Slice(wkb));
     return result;
@@ -90,7 +88,7 @@ double area(const ColumnPtr& column, size_t row = 0) {
     return result.ok() ? ColumnViewer<TYPE_DOUBLE>(*result).value(row) : -1;
 }
 } // namespace
-TEST(GeoBufferFunctionTest, SignedDistancesPreserveCrsAndValidationState) {
+TEST(GeoBufferFunctionTest, SignedDistancesPreserveCrs) {
     for (const char* crs : {"EPSG:4326", "EPSG:3857"}) {
         auto type = geo_type(crs);
         auto ctx = context(type);
@@ -103,7 +101,6 @@ TEST(GeoBufferFunctionTest, SignedDistancesPreserveCrsAndValidationState) {
         auto* data = down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result->get())->data_column().get());
         EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
         EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
-        EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, data->descriptor().storage.validation_state);
     }
 }
 TEST(GeoBufferFunctionTest, SixFamiliesAndTypedEmptiesExecuteThroughSqlWrapper) {
@@ -186,8 +183,7 @@ TEST(GeoBufferFunctionTest, RejectsMalformedDimensionsKindsAndIncompatibleReturn
     auto data = GeoFunctions::st_geometry_as_wkb(nullptr, {good});
     ASSERT_TRUE(data.ok());
     const auto wkb = ColumnViewer<TYPE_VARBINARY>(*data).value(0).to_string();
-    GeoColumnDescriptor descriptor{geo_type().geo_type.value(),
-                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    GeoColumnDescriptor descriptor{geo_type().geo_type.value(), {GEO_ENCODING_WKB, GEO_DIMENSION_XY}};
     // Storage dimension labels are not gates; each row's WKB is checked instead.
     for (auto dimension :
          {GEO_DIMENSION_UNKNOWN, GEO_DIMENSION_MIXED, GEO_DIMENSION_XYZ, GEO_DIMENSION_XYM, GEO_DIMENSION_XYZM}) {
