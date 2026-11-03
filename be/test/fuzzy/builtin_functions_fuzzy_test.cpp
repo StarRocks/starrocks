@@ -221,8 +221,7 @@ protected:
         case TYPE_MAP: {
             // For map type, use key and value types from TypeDescriptor
             TypeDescriptor key_type = (type_desc.children.size() > 0) ? type_desc.children[0] : TYPE_INT_DESC;
-            TypeDescriptor value_type =
-                    (type_desc.children.size() > 1) ? type_desc.children[1] : TypeDescriptor(TYPE_VARCHAR);
+            TypeDescriptor value_type = (type_desc.children.size() > 1) ? type_desc.children[1] : TYPE_VARCHAR_DESC;
 
             // Wrap keys_column and values_column as nullable columns
             auto keys_column = make_nullable(create_random_column(key_type, size * 2)); // More keys for maps, nullable
@@ -250,7 +249,7 @@ protected:
             // If no field types specified, create default fields
             if (fields.empty()) {
                 fields.push_back(create_random_column(TYPE_INT_DESC, size));
-                fields.push_back(create_random_column(TypeDescriptor(TYPE_VARCHAR), size));
+                fields.push_back(create_random_column(TYPE_VARCHAR_DESC, size));
             }
 
             return StructColumn::create(std::move(fields));
@@ -408,7 +407,7 @@ protected:
             } else if (name_str.find("ANY_ELEMENT") != std::string::npos) {
                 return TYPE_INT_DESC;
             } else if (name_str.find("...") != std::string::npos) {
-                return TypeDescriptor(TYPE_VARCHAR);
+                return TYPE_VARCHAR_DESC;
             } else if (name_str.find("DECIMAL32") != std::string::npos) {
                 return TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2);
             } else if (name_str.find("DECIMAL64") != std::string::npos) {

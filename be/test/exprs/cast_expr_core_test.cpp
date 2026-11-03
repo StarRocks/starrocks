@@ -53,8 +53,7 @@ TEST(CastExprCoreTest, from_thrift_succeeds_for_primitive_cast) {
 TEST(CastExprCoreTest, from_thrift_returns_null_for_unsupported_cast) {
     ObjectPool pool;
     TypeDescriptor from = make_array_type(TYPE_INT);
-    TypeDescriptor to(TYPE_VARCHAR);
-    to.len = 10;
+    TypeDescriptor to = TypeDescriptor::create_varchar_type(10);
     TExprNode node = make_cast_node(from, to);
     Expr* expr = VectorizedCastExprFactory::from_thrift(&pool, node);
     EXPECT_EQ(nullptr, expr);

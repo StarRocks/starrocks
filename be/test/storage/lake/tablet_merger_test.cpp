@@ -836,9 +836,9 @@ TEST_F(LakeTabletMergerTest, test_tablet_merging_metadata_only_source_range_part
                  for (auto& source : sources) {
                      auto* range = source->mutable_range();
                      range->mutable_lower_bound()->mutable_values(0)->mutable_type()->CopyFrom(
-                             TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+                             TYPE_VARCHAR_DESC.to_protobuf());
                      range->mutable_upper_bound()->mutable_values(0)->mutable_type()->CopyFrom(
-                             TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+                             TYPE_VARCHAR_DESC.to_protobuf());
                  }
              }},
             {"invalid inclusivity flag", Outcome::kRejected,

@@ -144,7 +144,7 @@ TEST(AIProviderOptionsBuilderTest, NonObjectJsonIsRejectedWithoutEchoingValues) 
 
 TEST(AIProviderOptionsBuilderTest, OnlyJsonTypedColumnsAreAccepted) {
     auto json = make_json("{}");
-    EXPECT_FALSE(build_ai_provider_options(*json, TypeDescriptor(TYPE_VARCHAR), 0).ok());
+    EXPECT_FALSE(build_ai_provider_options(*json, TYPE_VARCHAR_DESC, 0).ok());
     EXPECT_FALSE(build_ai_provider_options(*json, TypeDescriptor(TYPE_MAP), 0).ok());
     auto string = ColumnTestHelper::build_column<Slice>({"secret-value"});
     auto result = build_ai_provider_options(*string, TypeDescriptor(TYPE_JSON), 0);

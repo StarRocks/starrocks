@@ -370,7 +370,7 @@ TEST_F(NativeMethodHelperTest, resize) {
         auto c1 = ColumnHelper::create_column(TypeDescriptor(type), true);
         NativeMethodHelperTestBridge::resize(env, nullptr, reinterpret_cast<size_t>(c1.get()), 4096);
     }
-    auto str = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    auto str = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     NativeMethodHelperTestBridge::resizeStringData(env, nullptr, (jlong)str.get(), 4096);
     auto binary_column = ColumnHelper::get_binary_column(str.get());
     ASSERT_EQ(binary_column->get_bytes().size(), 4096);

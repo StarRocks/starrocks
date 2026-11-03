@@ -4749,13 +4749,13 @@ TEST_F(GroupReaderTest, MaterializeSlotFinalizesLazyStateBeforeCaching) {
 TEST_F(GroupReaderTest, TempColumnAccretesStaleWithoutReset) {
     MockTempColumnReader reader;
 
-    ColumnPtr col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ColumnPtr col1 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col1));
     EXPECT_EQ(1u, col1->size()) << "First read: 1 row";
 
     // Simulate skipped fill: don't call finalize_lazy_state
 
-    ColumnPtr col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    ColumnPtr col2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
     ASSERT_OK(reader.read_range(Range<uint64_t>(0, 1), nullptr, col2));
     EXPECT_EQ(2u, col2->size()) << "Without reset, second read accretes stale data: 1 stale + 1 new = 2 rows";
 

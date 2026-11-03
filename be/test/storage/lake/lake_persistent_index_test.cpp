@@ -227,8 +227,7 @@ protected:
 
     VariantPB make_string_variant_pb(const std::string& v) {
         VariantPB var;
-        TypeDescriptor type_desc(TYPE_VARCHAR);
-        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
         var.set_value(v);
         return var;
     }
@@ -1735,7 +1734,7 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
         auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
 
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+        auto col2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         col2->append_datum(Datum(Slice(v2)));
         chunk->append_column(std::move(col2), (SlotId)1);
 
