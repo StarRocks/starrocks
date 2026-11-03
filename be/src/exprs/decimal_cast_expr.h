@@ -680,7 +680,9 @@ public:
             return VectorizedUnaryFunction<CastOp>::template evaluate<Type, ResultType>(column, args...);
         }
         const auto* nullable = down_cast<const NullableColumn*>(column.get());
-        NullColumnPtr null_column = nullable->null_column();
+        // Copy the null flags as DealNullableColumnUnaryFunction does: NullableColumn::create takes the null column
+        // without copy-on-write, so sharing it would let a later in-place write to the result's nulls reach the input.
+        NullColumnPtr null_column = NullColumn::static_pointer_cast(nullable->null_column()->clone());
         ColumnPtr result = CastOp::template evaluate<Type, ResultType>(nullable->data_column(), args...,
                                                                        null_column->immutable_data().data());
         return FunctionHelper::merge_column_and_null_column(std::move(result), std::move(null_column));

@@ -136,6 +136,16 @@ TEST_F(DecimalNullRowReportErrorTest, string_to_decimal_ignores_null_row) {
     EXPECT_EQ(value_at<TYPE_DECIMAL128>(result, 1), static_cast<int128_t>(1250000000000000000LL));
 }
 
+TEST_F(DecimalNullRowReportErrorTest, cast_result_owns_its_null_column) {
+    auto input = make_strings({"", "1.25"}, {1, 0});
+    ColumnPtr result = cast_from<TYPE_VARCHAR, TYPE_DECIMAL128>(input, 38, 18);
+    const auto* in = down_cast<const NullableColumn*>(input.get());
+    auto* out = down_cast<NullableColumn*>(result->as_mutable_raw_ptr());
+    ASSERT_NE(in->null_column().get(), out->null_column().get());
+    out->set_null(1);
+    EXPECT_FALSE(input->is_null(1));
+}
+
 TEST_F(DecimalNullRowReportErrorTest, string_to_decimal_reports_non_null_row) {
     // the bad value sits in a non-null row next to a null row: the original error is still raised
     auto input = make_strings({"", "abc", "1"}, {1, 0, 0});
