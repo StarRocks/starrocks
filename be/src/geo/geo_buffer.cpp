@@ -162,11 +162,8 @@ struct PreparedGeoBuffer::Impl {
 PreparedGeoBuffer::PreparedGeoBuffer(std::unique_ptr<Impl> impl) : _impl(std::move(impl)) {}
 PreparedGeoBuffer::~PreparedGeoBuffer() = default;
 
-StatusOr<std::unique_ptr<PreparedGeoBuffer>> PreparedGeoBuffer::prepare(Slice wkb,
-                                                                        const std::function<Status()>& checkpoint) {
+StatusOr<std::unique_ptr<PreparedGeoBuffer>> PreparedGeoBuffer::prepare(Slice wkb) {
     try {
-        auto check = [&]() { return checkpoint ? checkpoint() : Status::OK(); };
-        RETURN_IF_ERROR(check());
         if (wkb.size > kMaxInputBytes) return Status::InvalidArgument("ST_Buffer input exceeds 256 KiB");
         WkbGeometry geometry;
         RETURN_IF_ERROR(WkbCodec::parse_wkb(wkb, &geometry, kSemantics));
@@ -224,11 +221,9 @@ StatusOr<std::unique_ptr<PreparedGeoBuffer>> PreparedGeoBuffer::prepare(Slice wk
         default:
             return Status::NotSupported("ST_Buffer input family is unsupported");
         }
-        RETURN_IF_ERROR(check());
         const bool valid =
                 std::visit([](const auto& model) { return model.empty() || bg::is_valid(model); }, impl->model);
         if (!valid) return Status::InvalidArgument("ST_Buffer input has invalid topology");
-        RETURN_IF_ERROR(check());
         return std::unique_ptr<PreparedGeoBuffer>(new PreparedGeoBuffer(std::move(impl)));
     } catch (const std::bad_alloc&) {
         return Status::MemoryLimitExceeded("ST_Buffer preparation allocation failed");
