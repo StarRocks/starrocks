@@ -1450,6 +1450,9 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(col.getName())) {
                         continue;
                     }
+                    if (col.isHidden() && table.isNativeTableOrMaterializedView()) {
+                        continue;
+                    }
                     final String columnName = col.getName();
                     final String columnType = col.getType().canonicalName().toLowerCase();
                     final String isAllowNull = col.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO;
