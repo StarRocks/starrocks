@@ -120,6 +120,17 @@ public class MetadataMgrTest {
     }
 
     @Test
+    public void testListViewNames() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        ConnectContext ctx = AnalyzeTestUtil.getConnectContext();
+
+        // Missing catalog: no connector metadata -> empty set (same pattern as getDb/getTable).
+        Assertions.assertTrue(metadataMgr.listViewNames(ctx, "not_exist_catalog", "db").isEmpty());
+        // Hive connector has no view listing override -> ConnectorMetadata default empty list.
+        Assertions.assertTrue(metadataMgr.listViewNames(ctx, "hive_catalog", "db2").isEmpty());
+    }
+
+    @Test
     public void testGetDb(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws TException {
         new Expectations() {
             {

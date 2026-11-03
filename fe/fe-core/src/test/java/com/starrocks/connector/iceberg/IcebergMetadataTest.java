@@ -224,6 +224,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
@@ -351,6 +352,25 @@ public class IcebergMetadataTest extends TableTestBase {
                 Executors.newSingleThreadExecutor(), null);
         List<String> expectResult = Lists.newArrayList("tbl1", "tbl2");
         Assertions.assertEquals(expectResult, metadata.listTableNames(connectContext, db1));
+    }
+
+    @Test
+    public void testGetViewTypeAndListViewNames(@Mocked IcebergHiveCatalog icebergHiveCatalog) {
+        String db1 = "db1";
+        String view1 = "view1";
+
+        new Expectations() {
+            {
+                icebergHiveCatalog.listViews(connectContext, db1);
+                result = Lists.newArrayList(view1);
+                minTimes = 0;
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        Assertions.assertEquals(ICEBERG_VIEW, metadata.getViewType());
+        Assertions.assertEquals(Lists.newArrayList(view1), metadata.listViewNames(connectContext, db1));
     }
 
     @Test
