@@ -276,7 +276,9 @@ public:
  * upstream expression (`a + b` with a NULL `a` holds `b`). Pass the operands' null flags down instead, so the op
  * reports an overflow only for a row where both operands are non-null.
  *
- * PRODUCE_NULL_FN, unless void, marks more NULL result rows, as in ProduceNullableColumnBinaryFunction.
+ * PRODUCE_NULL_FN, unless void, marks more NULL result rows, as in ProduceNullableColumnBinaryFunction: the zero
+ * divisor check of div and mod. Those rows are NULL like in every other overflow mode, and the op computes them
+ * with a placeholder divisor whose quotient may overflow, so they are passed down as null rows as well.
  */
 template <typename OP, typename PRODUCE_NULL_FN = void>
 class NullAwareReportErrorDecimalBinaryFunction {
@@ -288,30 +290,35 @@ class NullAwareReportErrorDecimalBinaryFunction {
 public:
     template <LogicalType LType, LogicalType RType, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
-        if (!v1->has_null() && !v2->has_null()) {
-            return NullUnawareFunction::template evaluate<LType, RType, ResultType>(v1, v2);
-        }
         // A constant operand may report fewer rows than the chunk: a decimal const-op-const result has one row.
         const size_t num_rows = std::max(v1->size(), v2->size());
         if (v1->only_null() || v2->only_null()) {
             return ColumnHelper::create_const_null_column(num_rows);
+        }
+        if constexpr (std::is_void_v<PRODUCE_NULL_FN>) {
+            if (!v1->has_null() && !v2->has_null()) {
+                return NullUnawareFunction::template evaluate<LType, RType, ResultType>(v1, v2);
+            }
+        } else if (v1->is_constant() && v2->is_constant()) {
+            // ProduceNullableColumnBinaryFunction checks a constant divisor for zero before calling the op.
+            return NullUnawareFunction::template evaluate<LType, RType, ResultType>(v1, v2);
         }
 
         // Here only a non-constant nullable operand has null rows.
         NullColumn::MutablePtr nulls = NullColumn::create(num_rows, 0);
         _union_nulls(v1, nulls.get());
         _union_nulls(v2, nulls.get());
-        if (SIMD::count_nonzero(nulls->get_data()) == num_rows) {
-            return ColumnHelper::create_const_null_column(num_rows);
-        }
-
         const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(v1);
         const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(v2);
-        ColumnPtr result = Kernel::template evaluate<LType, RType, ResultType>(data1, data2, nulls->get_data().data());
         if constexpr (!std::is_void_v<PRODUCE_NULL_FN>) {
             ColumnPtr produce_null = PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(data1, data2);
             _union_nulls(down_cast<const NullColumn*>(produce_null.get())->immutable_data(), nulls.get());
         }
+        if (SIMD::count_nonzero(nulls->get_data()) == num_rows) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+
+        ColumnPtr result = Kernel::template evaluate<LType, RType, ResultType>(data1, data2, nulls->get_data().data());
         return FunctionHelper::merge_column_and_null_column(std::move(result), std::move(nulls));
     }
 

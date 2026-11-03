@@ -283,10 +283,56 @@ TEST_F(DecimalNullRowReportErrorTest, div_and_mod_ignore_null_divisor) {
     auto const_lhs = ConstColumn::create(make_decimals<TYPE_DECIMAL128>(38, 0, {1}, {}), 2);
     ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(const_lhs, rhs));
     expect_nulls(result, {true, false});
+}
 
-    // unchanged behavior: a non-null zero divisor still reports an error under REPORT_ERROR
-    auto zero_rhs = make_decimals<TYPE_DECIMAL128>(38, 0, {0, 0}, {1, 0});
-    EXPECT_THROW(Div::evaluate<TYPE_DECIMAL128>(lhs, zero_rhs), std::overflow_error);
+// A zero divisor yields NULL as in the other overflow modes, instead of the overflow of the placeholder quotient.
+TEST_F(DecimalNullRowReportErrorTest, div_and_mod_by_zero_yield_null) {
+    using Div = VectorizedUnstrictDecimalBinaryFunction<TYPE_DECIMAL128, DivOp, REPORT>;
+    using Mod = VectorizedUnstrictDecimalBinaryFunction<TYPE_DECIMAL128, ModOp, REPORT>;
+    const int128_t big = kE38 / 10 * 9; // 9e37
+    ColumnPtr result;
+
+    // non-nullable operands, small and large dividends
+    auto lhs = make_decimals<TYPE_DECIMAL128>(38, 2, {100, big, 300}, {});
+    auto rhs = make_decimals<TYPE_DECIMAL128>(38, 2, {0, 0, 200}, {});
+    ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(lhs, rhs));
+    expect_nulls(result, {true, true, false});
+    ASSERT_NO_THROW(result = Mod::evaluate<TYPE_DECIMAL128>(lhs, rhs));
+    expect_nulls(result, {true, true, false});
+    EXPECT_EQ(value_at<TYPE_DECIMAL128>(result, 2), 100);
+
+    // nullable operands: a NULL row next to a zero divisor
+    auto nullable_lhs = make_decimals<TYPE_DECIMAL128>(38, 2, {100, big, 300}, {1, 0, 0});
+    ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(nullable_lhs, rhs));
+    expect_nulls(result, {true, true, false});
+
+    // a constant zero divisor
+    auto const_zero = ConstColumn::create(make_decimals<TYPE_DECIMAL128>(38, 2, {0}, {}), 3);
+    ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(lhs, const_zero));
+    expect_nulls(result, {true, true, true});
+    ASSERT_NO_THROW(result = Mod::evaluate<TYPE_DECIMAL128>(lhs, const_zero));
+    expect_nulls(result, {true, true, true});
+
+    // a constant dividend whose scale-up overflows, over zero divisors only; and constant over constant
+    auto const_big = ConstColumn::create(make_decimals<TYPE_DECIMAL128>(38, 2, {big}, {}), 3);
+    auto zeros = make_decimals<TYPE_DECIMAL128>(38, 2, {0, 0, 0}, {});
+    ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(const_big, zeros));
+    expect_nulls(result, {true, true, true});
+    ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(const_big, const_zero));
+    expect_nulls(result, {true, true, true});
+    auto const_one = ConstColumn::create(make_decimals<TYPE_DECIMAL128>(38, 2, {100}, {}), 3);
+    ASSERT_NO_THROW(result = Div::evaluate<TYPE_DECIMAL128>(const_one, rhs));
+    expect_nulls(result, {true, true, false});
+
+    // a real overflow in a row with a non-zero divisor is still reported
+    auto one_cent = make_decimals<TYPE_DECIMAL128>(38, 2, {0, 1}, {});
+    auto big_lhs = make_decimals<TYPE_DECIMAL128>(38, 2, {big, big}, {});
+    try {
+        (void)Div::evaluate<TYPE_DECIMAL128>(big_lhs, one_cent);
+        FAIL() << "expected an overflow error";
+    } catch (const std::overflow_error& e) {
+        EXPECT_STREQ(e.what(), "The 'div' operation involving decimal values overflows");
+    }
 }
 
 TEST_F(DecimalNullRowReportErrorTest, add_sub_mul_ignore_null_row) {

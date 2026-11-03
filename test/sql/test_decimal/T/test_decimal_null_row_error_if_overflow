@@ -47,10 +47,17 @@ select k, (big + if(k = 1, 90000000000000000000000000000000000000, 0)) - (-90000
 select k, (big + if(k = 1, 10000000000000000000000000000000000000, 0)) * cast(100 as decimal(38,0)) from t order by k;
 select k, (big + if(k = 1, 100000000000000000000, 0)) div cast(1 as decimal(38,0)) from t order by k;
 
+-- a zero divisor yields NULL as in the other sql modes, whatever the dividend
+select k, d1 / cast(0 as decimal(10,2)), d1 % cast(0 as decimal(10,2)), mod(d1, cast(0 as decimal(10,2))) from t order by k;
+select k, d1 / (d2 - d2), d1 % (d2 - d2), d1 div (d2 - d2) from t order by k;
+select k, d1 / if(k = 3, 0, d2) from t order by k;
+select k, (big + 90000000000000000000000000000000000000) / (big - big), big % (big - big) from t order by k;
+select k, 90000000000000000000000000000000000000 / (big - big) from t order by k;
+
 -- a non-null row that overflows is still reported
 select k, cast(s as decimal(9,2)) from t order by k;
-select k, d1 / cast(0 as decimal(10,2)) from t where k = 2;
 select k, cast(big + if(k = 2, 1000, 0) as tinyint) from t order by k;
+select k, (big + 90000000000000000000000000000000000000) / if(k = 3, 0.1, 0) from t order by k;
 
 set sql_mode = default;
 drop database test_decimal_null_row_${uuid0};
