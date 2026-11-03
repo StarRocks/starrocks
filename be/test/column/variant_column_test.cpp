@@ -605,8 +605,7 @@ PARALLEL_TEST(VariantColumnTest, test_clone_shredded_schema_integrity) {
     append_json_variant_row(metadata.get(), remain.get(), R"({})");
     MutableColumns typed;
     typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    src->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(typed), std::move(metadata),
-                              std::move(remain));
+    src->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(typed), std::move(metadata), std::move(remain));
 
     auto cloned_holder = src->clone();
     auto* cloned = down_cast<VariantColumn*>(cloned_holder.get());
@@ -796,7 +795,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_schema_alignment_type_conflict) {
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     ASSERT_FALSE(dst->align_schema_from(*src));
@@ -848,7 +847,7 @@ PARALLEL_TEST(VariantColumnTest, test_append_type_conflict_hoist_variant_via_mer
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 2);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append(*src, 0, src->size());
@@ -1009,8 +1008,7 @@ PARALLEL_TEST(VariantColumnTest, test_multi_key_typed_only_object_materializatio
     MutableColumns typed;
     typed.emplace_back(build_nullable_int64_column({10}, {0}));
     typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    col->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TypeDescriptor(TYPE_VARCHAR)}, std::move(typed), nullptr,
-                              nullptr);
+    col->set_shredded_columns({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC}, std::move(typed), nullptr, nullptr);
 
     ASSERT_TRUE(col->is_typed_only_variant());
     ASSERT_FALSE(col->shredded_paths().size() == 1 && col->shredded_paths()[0].empty());
@@ -1042,7 +1040,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_type_conflict_hoist_varian
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 9);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append(*src, 0, 1);
@@ -1070,7 +1068,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_selective_type_conflict_ho
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 9);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     uint32_t indexes[] = {0};
@@ -1115,7 +1113,7 @@ PARALLEL_TEST(VariantColumnTest, test_shredded_append_value_multiple_times_type_
     append_primitive_int8_row(dst_metadata.get(), dst_remain.get(), 9);
     MutableColumns dst_typed;
     dst_typed.emplace_back(build_nullable_varchar_column({"x"}, {0}));
-    dst->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_VARCHAR)}, std::move(dst_typed), std::move(dst_metadata),
+    dst->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(dst_typed), std::move(dst_metadata),
                               std::move(dst_remain));
 
     dst->append_value_multiple_times(*src, 0, 2);

@@ -561,9 +561,8 @@ TEST_P(GeoFunctionHelperTest, StructCallers) {
         if (mode == 1 || mode == 3) source->append_nulls(mode == 3 ? 2 : 1);
         if (mode == 2) source = ConstColumn::create(std::move(source), 2);
         for (bool named : {false, true}) {
-            auto ctx =
-                    context(result_type, named ? std::vector<TypeDescriptor>{TypeDescriptor(TYPE_VARCHAR), array_type}
-                                               : std::vector<TypeDescriptor>{array_type});
+            auto ctx = context(result_type, named ? std::vector<TypeDescriptor>{TYPE_VARCHAR_DESC, array_type}
+                                                  : std::vector<TypeDescriptor>{array_type});
             auto name = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("g"), source->size());
             auto result = named ? StructFunctions::named_struct(ctx.get(), {name, source})
                                 : StructFunctions::new_struct(ctx.get(), {source});
@@ -591,8 +590,7 @@ TEST_P(GeoFunctionHelperTest, StructCallers) {
 TEST_F(FunctionHelperTest, ArrayV2ColumnCopyControls) {
     MemPool pool;
     ArrayAggAggregateFunctionV2<ArrayAggAggregateStateV2> current;
-    for (const auto& arg :
-         {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
+    for (const auto& arg : {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);
@@ -637,8 +635,7 @@ TEST_F(FunctionHelperTest, MapColumnCopyControls) {
     ASSERT_NE(nullptr, map_function);
     auto keys = Int32Column::create();
     for (int key : {2, 1, 2}) keys->append(key);
-    for (const auto& arg :
-         {TYPE_INT_DESC, TypeDescriptor(TYPE_VARCHAR), TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
+    for (const auto& arg : {TYPE_INT_DESC, TYPE_VARCHAR_DESC, TypeDescriptor::create_array_type(TYPE_INT_DESC)}) {
         for (int mode : {0, 1, 2, 3, 4, 5}) {
             SCOPED_TRACE(::testing::Message() << arg.type << ":" << mode);
             auto source = ColumnHelper::create_column(arg, mode != 0 && mode != 2);

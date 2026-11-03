@@ -70,8 +70,8 @@ StatusOr<ColumnPtr> constructed_coverage_input(const std::vector<std::optional<s
     }
     ColumnPtr input = NullableColumn::create(std::move(wkt), std::move(nulls));
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", input->size());
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
-            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, coverage_type()));
+    std::unique_ptr<FunctionContext> ctx(
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, coverage_type()));
     return GeoFunctions::st_geom_from_text(ctx.get(), {input, crs});
 }
 std::string output_text(const ColumnPtr& column, size_t row) {

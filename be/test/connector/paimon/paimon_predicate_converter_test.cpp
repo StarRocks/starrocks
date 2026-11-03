@@ -135,7 +135,7 @@ std::shared_ptr<paimon::LeafPredicate> as_leaf_predicate(const std::shared_ptr<p
 } // namespace
 
 TEST(PaimonPredicateConverterTest, SkipsPredicateWithNonSlotRefLeftOperand) {
-    SlotDescriptor worldcode_id(1, "worldcode_id", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor worldcode_id(1, "worldcode_id", TYPE_VARCHAR_DESC);
     SlotDescriptor isolation(7, "isolation", TYPE_BOOLEAN_DESC);
     SlotDescriptor score(10, "_INDEX_SCORE", TYPE_FLOAT_DESC);
     PaimonPredicateConverter converter({&worldcode_id, &isolation, &score});

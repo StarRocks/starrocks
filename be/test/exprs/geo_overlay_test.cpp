@@ -63,7 +63,7 @@ ColumnPtr geometries(std::initializer_list<const char*> values, const TypeDescri
     ColumnPtr input = NullableColumn::create(text, nulls);
     auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(type.geo_type->crs, input->size());
     std::unique_ptr<FunctionContext> ctx(
-            FunctionContext::create_test_context({TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, type));
+            FunctionContext::create_test_context({TYPE_VARCHAR_DESC, TYPE_VARCHAR_DESC}, type));
     return GeoFunctions::st_geom_from_text(ctx.get(), {input, crs}).value();
 }
 

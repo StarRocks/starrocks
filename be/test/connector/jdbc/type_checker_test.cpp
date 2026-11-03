@@ -160,7 +160,7 @@ TEST_F(TypeCheckerTest, SupportStringType) {
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 
-    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TYPE_VARCHAR_DESC);
     status_or_type = type_checker_manager_.checkType("java.lang.String", &varchar_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -208,7 +208,7 @@ TEST_F(TypeCheckerTest, SupportBigIntegerType) {
     auto status_or_type = type_checker_manager_.checkType("java.math.BigInteger", &largeint_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
-    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TYPE_VARCHAR_DESC);
     status_or_type = type_checker_manager_.checkType("java.math.BigInteger", &varchar_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -304,7 +304,7 @@ TEST_F(TypeCheckerTest, SupportSqlTimestampType) {
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 
-    SlotDescriptor varchar_type_slot(0, "float_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_type_slot(0, "float_type_slot", TYPE_VARCHAR_DESC);
     status_or_type = type_checker_manager_.checkType("java.sql.Timestamp", &varchar_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -388,7 +388,7 @@ TEST_F(TypeCheckerTest, SupporBigDecimalType) {
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
 
-    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TYPE_VARCHAR_DESC);
     status_or_type = type_checker_manager_.checkType("java.math.BigDecimal", &varchar_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -407,7 +407,7 @@ TEST_F(TypeCheckerTest, NotSupportBigDecimalType) {
 
 // Define unit test for oracle.sql.TIMESTAMP, oracle.sql.TIMESTAMPLTZ, or oracle.sql.TIMESTAMPTZ
 TEST_F(TypeCheckerTest, SupporOracleTimestampType) {
-    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TYPE_VARCHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("oracle.sql.TIMESTAMP", &varchar_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -435,7 +435,7 @@ TEST_F(TypeCheckerTest, NotSupportOracleTimestampType) {
 
 // Define unit test for microsoft.sql.DateTimeOffset
 TEST_F(TypeCheckerTest, SupporSqlServerDateTimeOffsetType) {
-    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TYPE_VARCHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("microsoft.sql.DateTimeOffset", &varchar_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -490,7 +490,7 @@ TEST_F(TypeCheckerTest, NotSupportByteArrayType) {
 
 // Define unit test for default types
 TEST_F(TypeCheckerTest, SupporDefaultType) {
-    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_type_slot(0, "varchar_type_slot", TYPE_VARCHAR_DESC);
     auto status_or_type = type_checker_manager_.checkType("unknown java class", &varchar_type_slot);
     ASSERT_TRUE(status_or_type.ok());
     ASSERT_EQ(status_or_type.value(), LogicalType::TYPE_VARCHAR);
@@ -540,7 +540,7 @@ TEST_F(TypeCheckerManagerConfigTest, DefaultsToHardcodedConfig) {
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(result.value(), TYPE_INT);
 
-    SlotDescriptor varchar_slot(0, "test", TypeDescriptor(TYPE_VARCHAR));
+    SlotDescriptor varchar_slot(0, "test", TYPE_VARCHAR_DESC);
     result = manager.checkType("java.lang.String", &varchar_slot);
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(result.value(), TYPE_VARCHAR);

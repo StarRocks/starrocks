@@ -1582,7 +1582,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     v_lower1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_lower1->set_value("100");
     auto* v_lower2 = lower->add_values();
-    v_lower2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+    v_lower2->mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
     v_lower2->set_value("abc");
     range->set_lower_bound_included(true);
 
@@ -1591,7 +1591,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
     v_upper1->mutable_type()->CopyFrom(TYPE_INT_DESC.to_protobuf());
     v_upper1->set_value("200");
     auto* v_upper2 = upper->add_values();
-    v_upper2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+    v_upper2->mutable_type()->CopyFrom(TYPE_VARCHAR_DESC.to_protobuf());
     v_upper2->set_value("def");
     range->set_upper_bound_included(false);
 
@@ -1609,7 +1609,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column
         auto chunk = std::make_unique<Chunk>();
         auto col1 = ColumnTestHelper::build_column<int32_t>({v1});
         chunk->append_column(std::move(col1), (SlotId)0);
-        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+        auto col2 = ColumnHelper::create_column(TYPE_VARCHAR_DESC, false);
         col2->append_datum(Datum(Slice(v2)));
         chunk->append_column(std::move(col2), (SlotId)1);
 

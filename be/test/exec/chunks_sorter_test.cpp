@@ -499,9 +499,9 @@ public:
         _chunk_3 = std::make_shared<Chunk>(std::move(columns3), map);
 
         _expr_cust_key = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);                // refer to cust_key
-        _expr_nation = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 1);   // refer to nation
-        _expr_region = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 2);   // refer to region
-        _expr_mkt_sgmt = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 3); // refer to mkt_sgmt
+        _expr_nation = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 1);              // refer to nation
+        _expr_region = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 2);              // refer to region
+        _expr_mkt_sgmt = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 3);            // refer to mkt_sgmt
         _expr_constant = std::make_unique<ColumnRef>(TYPE_SMALLINT_DESC,
                                                      4); // refer to constant value
     }
@@ -713,7 +713,7 @@ TEST_F(ChunksSorterTest, sort_binary_column_with_large_offsets) {
 // into a fresh BinaryColumn with 32-bit offsets, and get_next hands its output on without downgrade(), so the output
 // must stay a sorted BinaryColumn.
 TEST_F(ChunksSorterTest, full_sort_binary_column_with_large_offsets) {
-    auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+    auto expr_varchar = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 0);
     std::vector<bool> is_asc{true};
     std::vector<bool> is_null_first{true};
     std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
@@ -750,7 +750,7 @@ TEST_F(ChunksSorterTest, full_sort_binary_column_with_large_offsets) {
 // new rows into it in _merge_sort_common. get_next hands the output on without downgrade(), so it must stay a sorted
 // BinaryColumn.
 TEST_F(ChunksSorterTest, topn_binary_column_with_large_offsets) {
-    auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+    auto expr_varchar = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 0);
     std::vector<bool> is_asc{true};
     std::vector<bool> is_null_first{true};
     std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
@@ -790,7 +790,7 @@ TEST_F(ChunksSorterTest, topn_binary_column_with_large_offsets) {
 // update_to_all_null for RANK (close interval, only NULLs are kept). Both run under the slice lock.
 TEST_F(ChunksSorterTest, topn_varchar_runtime_filter_overrun_by_nulls_first) {
     for (auto topn_type : {TTopNType::ROW_NUMBER, TTopNType::RANK}) {
-        auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+        auto expr_varchar = std::make_unique<ColumnRef>(TYPE_VARCHAR_DESC, 0);
         std::vector<bool> is_asc{true};
         std::vector<bool> is_null_first{true};
         std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};

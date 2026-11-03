@@ -2647,7 +2647,7 @@ TEST_F(AggregateTest, test_group_concatV2) {
         gc_func->convert_to_serialize_format(local_ctx.get(), columns, int_column->size(), res_struct_col);
         ASSERT_EQ(res_struct_col->debug_string(), "[NULL, NULL]");
 
-        auto res_col = ColumnHelper::create_column(TypeDescriptor(LogicalType::TYPE_VARCHAR), true);
+        auto res_col = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
         gc_func->finalize_to_column(local_ctx.get(), state->state(), res_col.get());
         ASSERT_EQ(res_col->debug_string(), "[NULL]");
     }
