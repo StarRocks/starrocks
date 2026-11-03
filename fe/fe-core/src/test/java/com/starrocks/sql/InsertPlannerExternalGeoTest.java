@@ -91,6 +91,11 @@ public class InsertPlannerExternalGeoTest extends PlanTestNoneDBBase {
         reject(sink, geo, geo);
         reject(sink, geo, NullType.NULL);
         reject(sink, VarcharType.VARCHAR, geo);
+    }
+
+    @ParameterizedTest
+    @MethodSource("geoTypes")
+    public void testOlapAllowsGeo(Type geo) {
         assertDoesNotThrow(() -> check(Table.TableType.OLAP, geo, geo));
     }
 

@@ -1335,6 +1335,8 @@ public class InsertPlanner {
 
     @VisibleForTesting
     static void checkExternalWriteTypes(Table table, List<Column> columns, List<ColumnRefOperator> outputColumns) {
+        Preconditions.checkState(columns.size() == outputColumns.size(),
+                "columns size %s must equal outputColumns size %s", columns.size(), outputColumns.size());
         if (!table.isIcebergTable() && !table.isHiveTable() && !table.isTableFunctionTable()) {
             return;
         }
