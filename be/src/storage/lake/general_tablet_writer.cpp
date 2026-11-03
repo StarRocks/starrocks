@@ -244,6 +244,7 @@ StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() c
                                                             _flush_pool, _bundle_file_context, _global_dicts);
     RETURN_IF_ERROR(writer->open());
     writer->set_auto_flush(auto_flush());
+    writer->set_flat_json_config(_flat_json_config);
     // Propagate the force-inline flag: spilled sorted schema changes merge through cloned writers
     // (LoadSpillPipelineMergeIterator). Without this, clones default to false and defer .vi building
     // even though the schema-change job stamped the shadow tablets' vibv as already built, so the
@@ -261,10 +262,16 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
+    // The table's flat_json.* settings come from whoever created this writer and knows them
+    // authoritatively (see TabletWriter::set_flat_json_config): a load carries them in its open
+    // request, compaction / schema change / spark load take them from the version-pinned metadata
+    // of their VersionedTablet. They are deliberately NOT read from the tablet metadata cache: a
+    // cache miss would silently hand the segment to the be.conf globals, which happened on every
+    // cold write (a restarted node, an evicted entry, and every first write under
+    // light_weight_tablet_creation). Without a config SegmentWriter follows the globals, which is
+    // exactly what a table that sets no flat_json.* property asks for.
+    if (_flat_json_config != nullptr) {
+        opts.flat_json_config = _flat_json_config;
     }
 
     opts.global_dicts = _global_dicts;
@@ -596,10 +603,10 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
     opts.is_compaction = _is_compaction;
     opts.vector_index_build_threshold = get_vector_index_build_threshold(_schema);
 
-    if (auto metadata = _tablet_mgr->get_latest_cached_tablet_metadata(_tablet_id);
-        metadata && metadata->has_flat_json_config()) {
-        opts.flat_json_config = std::make_shared<FlatJsonConfig>();
-        opts.flat_json_config->update(metadata->flat_json_config());
+    // See HorizontalGeneralTabletWriter::reset_segment_writer: the config comes from the writer's
+    // creator, never from the tablet metadata cache.
+    if (_flat_json_config != nullptr) {
+        opts.flat_json_config = _flat_json_config;
     }
 
     WritableFileOptions wopts;

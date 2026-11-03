@@ -9,5 +9,86 @@
     "reason": "Reviewed compatibility exception after a multi-release deprecation window.",
     "owner": "engprod"
   },
-  "waivers": []
+  "waivers": [
+    {
+      "path": "gensrc/thrift/AgentService.thrift",
+      "container_or_method": "TCreateTabletReq",
+      "field_number": 25,
+      "field_name": "flat_json_config",
+      "rule": "field_type_changed",
+      "base_signature": "25: optional TFlatJsonConfig flat_json_config",
+      "reason": "The field now names the same TFlatJsonConfig struct at its new home in Descriptors.thrift. Field number and wire format are unchanged.",
+      "owner": "starrocks-xupeng"
+    },
+    {
+      "path": "gensrc/thrift/AgentService.thrift",
+      "container_or_method": "TFlatJsonConfig",
+      "field_number": 1,
+      "field_name": "flat_json_enable",
+      "rule": "field_deleted",
+      "base_signature": "1: optional bool flat_json_enable",
+      "reason": "TFlatJsonConfig moved unchanged to Descriptors.thrift so DataSinks.thrift can reference it (AgentService.thrift would form an include cycle). Same field numbers, names and types, so the wire format is unchanged.",
+      "owner": "starrocks-xupeng"
+    },
+    {
+      "path": "gensrc/thrift/AgentService.thrift",
+      "container_or_method": "TFlatJsonConfig",
+      "field_number": 2,
+      "field_name": "flat_json_null_factor",
+      "rule": "field_deleted",
+      "base_signature": "2: optional double flat_json_null_factor",
+      "reason": "TFlatJsonConfig moved unchanged to Descriptors.thrift so DataSinks.thrift can reference it (AgentService.thrift would form an include cycle). Same field numbers, names and types, so the wire format is unchanged.",
+      "owner": "starrocks-xupeng"
+    },
+    {
+      "path": "gensrc/thrift/AgentService.thrift",
+      "container_or_method": "TFlatJsonConfig",
+      "field_number": 3,
+      "field_name": "flat_json_sparsity_factor",
+      "rule": "field_deleted",
+      "base_signature": "3: optional double flat_json_sparsity_factor",
+      "reason": "TFlatJsonConfig moved unchanged to Descriptors.thrift so DataSinks.thrift can reference it (AgentService.thrift would form an include cycle). Same field numbers, names and types, so the wire format is unchanged.",
+      "owner": "starrocks-xupeng"
+    },
+    {
+      "path": "gensrc/thrift/AgentService.thrift",
+      "container_or_method": "TFlatJsonConfig",
+      "field_number": 4,
+      "field_name": "flat_json_column_max",
+      "rule": "field_deleted",
+      "base_signature": "4: optional i64 flat_json_column_max",
+      "reason": "TFlatJsonConfig moved unchanged to Descriptors.thrift so DataSinks.thrift can reference it (AgentService.thrift would form an include cycle). Same field numbers, names and types, so the wire format is unchanged.",
+      "owner": "starrocks-xupeng"
+    },
+    {
+      "path": "gensrc/thrift/AgentService.thrift",
+      "container_or_method": "TFlatJsonConfig",
+      "field_number": 5,
+      "field_name": "version",
+      "rule": "field_deleted",
+      "base_signature": "5: optional i64 version",
+      "reason": "TFlatJsonConfig moved unchanged to Descriptors.thrift so DataSinks.thrift can reference it (AgentService.thrift would form an include cycle). Same field numbers, names and types, so the wire format is unchanged.",
+      "owner": "starrocks-xupeng"
+    },
+    {
+      "path": "gensrc/thrift/AgentService.thrift",
+      "container_or_method": "TTabletMetaInfo",
+      "field_number": 12,
+      "field_name": "flat_json_config",
+      "rule": "field_type_changed",
+      "base_signature": "12: optional TFlatJsonConfig flat_json_config",
+      "reason": "The field now names the same TFlatJsonConfig struct at its new home in Descriptors.thrift. Field number and wire format are unchanged.",
+      "owner": "starrocks-xupeng"
+    },
+    {
+      "path": "gensrc/thrift/FrontendService.thrift",
+      "container_or_method": "TCloudTabletMeta",
+      "field_number": 6,
+      "field_name": "flat_json_config",
+      "rule": "field_type_changed",
+      "base_signature": "6: optional AgentService.TFlatJsonConfig flat_json_config",
+      "reason": "The field now names the same TFlatJsonConfig struct at its new home in Descriptors.thrift. Field number and wire format are unchanged.",
+      "owner": "starrocks-xupeng"
+    }
+  ]
 }
