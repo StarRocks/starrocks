@@ -430,8 +430,7 @@ public class LowCardinalityStructTest extends PlanTestBase {
                 "  |  5 <-> [10: row, struct<`col1` int(11)>, true]\n" +
                 "  |  6 <-> DictDecode([9: VARCHAR_COL, INT, true], [upper[(<place-holder>); args: VARCHAR; result: " +
                 "VARCHAR; args nullable: true; result nullable: true]])\n" +
-                "  |  7 <-> row[([4: INTEGER_COL, INT, true]); args: INT; result: struct<`col1` int(11)>; args " +
-                "nullable: true; result nullable: true].col1[true]\n" +
+                "  |  7 <-> [10: row, struct<`col1` int(11)>, true].col1[true]\n" +
                 "  |  8 <-> row[(1); args: TINYINT; result: struct<`col1` tinyint(4)>; args nullable: false; " +
                 "result nullable: true].col1[true]"), plan);
     }
