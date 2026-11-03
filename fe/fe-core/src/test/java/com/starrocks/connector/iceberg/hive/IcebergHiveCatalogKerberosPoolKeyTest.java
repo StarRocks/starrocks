@@ -43,12 +43,32 @@ public class IcebergHiveCatalogKerberosPoolKeyTest {
     }
 
     @Test
-    public void userPoolCacheKeysKept() {
+    public void principalKeyIsAppendedToUserPoolCacheKeys() {
         Configuration conf = new Configuration(false);
         conf.set(HadoopExt.CATALOG_KERBEROS_PRINCIPAL, "user_a@EXAMPLE.COM");
         Map<String, String> props = new HashMap<>();
         props.put(CatalogProperties.CLIENT_POOL_CACHE_KEYS, "user_name");
         IcebergHiveCatalog.applyKerberosClientPoolKey(conf, props);
+        Assertions.assertEquals("user_name,conf:" + HadoopExt.CATALOG_KERBEROS_PRINCIPAL,
+                props.get(CatalogProperties.CLIENT_POOL_CACHE_KEYS));
+    }
+
+    @Test
+    public void principalKeyIsNotDuplicated() {
+        Configuration conf = new Configuration(false);
+        conf.set(HadoopExt.CATALOG_KERBEROS_PRINCIPAL, "user_a@EXAMPLE.COM");
+        Map<String, String> props = new HashMap<>();
+        String keys = "conf:" + HadoopExt.CATALOG_KERBEROS_PRINCIPAL + ", user_name";
+        props.put(CatalogProperties.CLIENT_POOL_CACHE_KEYS, keys);
+        IcebergHiveCatalog.applyKerberosClientPoolKey(conf, props);
+        Assertions.assertEquals(keys, props.get(CatalogProperties.CLIENT_POOL_CACHE_KEYS));
+    }
+
+    @Test
+    public void userPoolCacheKeysKeptWithoutPrincipal() {
+        Map<String, String> props = new HashMap<>();
+        props.put(CatalogProperties.CLIENT_POOL_CACHE_KEYS, "user_name");
+        IcebergHiveCatalog.applyKerberosClientPoolKey(new Configuration(false), props);
         Assertions.assertEquals("user_name", props.get(CatalogProperties.CLIENT_POOL_CACHE_KEYS));
     }
 }
