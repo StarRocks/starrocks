@@ -297,7 +297,8 @@ public:
     // A split planner must reject an incompatible source even when index pruning produces no child.
     void check_empty_query_schema_status(const std::shared_ptr<TabletMetadata>& meta,
                                          const std::vector<std::shared_ptr<Rowset>>& rowsets, bool invalid,
-                                         std::initializer_list<bool> split_modes = {false, true}) {
+                                         std::initializer_list<bool> split_modes = {false, true},
+                                         int64_t split_rows = 4) {
         TInternalScanRange internal;
         internal.__set_tablet_id(meta->id());
         internal.__set_version(std::to_string(meta->version()));
@@ -308,7 +309,7 @@ public:
         params.plan_node_id = 1;
         params.scan_range = &scan_range;
         params.scan_dop = 4;
-        params.splitted_scan_rows = 4;
+        params.splitted_scan_rows = split_rows;
         params.range = TabletReaderParams::RangeStartOperation::GE;
         params.end_range = TabletReaderParams::RangeEndOperation::LT;
         // Prune on the leading column, independently of short-key suffix truncation.
@@ -588,29 +589,8 @@ TEST_F(LakeGroupedRangeReaderTest, PhysicalRootsValidateArchivedSchemaBeforeEmpt
         ASSERT_NO_FATAL_FAILURE(check_empty_query_schema_status(
                 changed, Rowset::get_rowsets(_tablet_mgr.get(), changed), mismatch != 2));
         // The no-split fallback must validate the archive before pruning an empty query, too.
-        TabletReaderParams params;
-        params.grouped_range_task = task(21, 23);
-        params.splitted_scan_rows = 1024;
-        params.range = TabletReaderParams::RangeStartOperation::GE;
-        params.end_range = TabletReaderParams::RangeEndOperation::LT;
-        params.start_key.emplace_back(std::vector<std::string>{"0"});
-        params.end_key.emplace_back(std::vector<std::string>{"1"});
-        auto schema = ChunkHelper::convert_schema(TabletSchema::create(changed->schema()));
-        TabletReader root(_tablet_mgr.get(), changed, schema, true, true);
-        ASSERT_OK(root.prepare());
-        const auto status = root.open(params);
-        if (mismatch != 2) {
-            EXPECT_TRUE(status.is_invalid_argument()) << status;
-        } else {
-            ASSERT_OK(status);
-            auto chunk = ChunkHelper::new_chunk(schema, 16);
-            EXPECT_TRUE(root.get_next(chunk.get()).is_end_of_file());
-            EXPECT_EQ(0, chunk->num_rows());
-        }
-        std::vector<pipeline::ScanSplitContextPtr> children;
-        root.get_split_tasks(&children);
-        EXPECT_TRUE(children.empty());
-        root.close();
+        ASSERT_NO_FATAL_FAILURE(check_empty_query_schema_status(
+                changed, Rowset::get_rowsets(_tablet_mgr.get(), changed), mismatch != 2, {true}, /*split_rows=*/1024));
     }
 }
 
