@@ -5645,7 +5645,7 @@ TEST_F(GeoNonXYPayloadTest, H3FromGeo) {
     const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
     expect_rejects_non_xy(type, POINT, [&](const ColumnPtr& input) {
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+                FunctionContext::create_test_context({type, TYPE_INT_DESC}, TYPE_BIGINT_DESC));
         return GeoFunctions::h3_from_geo(context.get(), {input, resolution});
     });
 }
@@ -5662,7 +5662,7 @@ TEST_F(GeoNonXYPayloadTest, StBuffer) {
     for (WkbGeometryType kind : {POINT, LINESTRING, POLYGON}) {
         expect_rejects_non_xy(type, kind, [&](const ColumnPtr& input) {
             std::unique_ptr<FunctionContext> context(
-                    FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+                    FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
             auto distance = DoubleColumn::create();
             distance->append(1.0);
             return GeoFunctions::st_geometry_buffer(context.get(), {input, std::move(distance)});
@@ -5675,7 +5675,7 @@ TEST_F(GeoNonXYPayloadTest, StSimplifyPreserveTopology) {
     for (WkbGeometryType kind : {LINESTRING, POLYGON}) {
         expect_rejects_non_xy(type, kind, [&](const ColumnPtr& input) {
             std::unique_ptr<FunctionContext> context(
-                    FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+                    FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
             auto distance = DoubleColumn::create();
             distance->append(1.0);
             return GeoFunctions::st_geometry_simplify_preserve_topology(context.get(), {input, std::move(distance)});
@@ -5735,8 +5735,7 @@ TEST_F(GeoNonXYPayloadTest, UnknownLabelGeometryKernelsCompute) {
     expect_unknown_label_admitted(type, POINT, binary(GeoFunctions::st_geometry_distance, type, POINT, true));
     expect_unknown_label_admitted(type, POLYGON, binary(GeoFunctions::st_geometry_contains, type, POINT, true));
     expect_unknown_label_admitted(type, POLYGON, [&](const ColumnPtr& input) {
-        std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, TypeDescriptor(TYPE_DOUBLE)}, type));
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, TYPE_DOUBLE_DESC}, type));
         auto distance = DoubleColumn::create();
         distance->append(1.0);
         return GeoFunctions::st_geometry_buffer(context.get(), {input, std::move(distance)});
@@ -5752,7 +5751,7 @@ TEST_F(GeoNonXYPayloadTest, UnknownLabelGeographyFeedsH3) {
     const auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
     expect_unknown_label_admitted(type, POINT, [&](const ColumnPtr& input) {
         std::unique_ptr<FunctionContext> context(
-                FunctionContext::create_test_context({type, TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+                FunctionContext::create_test_context({type, TYPE_INT_DESC}, TYPE_BIGINT_DESC));
         return GeoFunctions::h3_from_geo(context.get(), {input, resolution});
     });
     expect_unknown_label_admitted(type, POLYGON, [&](const ColumnPtr& input) {
