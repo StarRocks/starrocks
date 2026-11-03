@@ -8,6 +8,13 @@ name: RELEASE PUBLISH
 # Backfill a single version (or one tagged after its notes merged) with workflow_dispatch.
 # Thin caller: the logic is ci-tool lib/release_publish.py.
 
+# A manual run is titled with its version (and "dry run"); a push run with its commit, which
+# names the release-notes PR.
+run-name: >-
+  ${{ github.event_name == 'workflow_dispatch'
+  && format('RELEASE PUBLISH {0}{1}', inputs.version, inputs.dry_run && ' (dry run)' || '')
+  || format('RELEASE PUBLISH: {0}', github.event.head_commit.message) }}
+
 on:
   push:
     branches: [main]
