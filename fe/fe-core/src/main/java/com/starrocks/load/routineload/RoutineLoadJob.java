@@ -52,7 +52,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.io.Writable;
@@ -910,6 +912,41 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
+    }
+
+    // Acquire a compute resource for this job's warehouse and return it WITHOUT mutating the
+    // shared computeResource field. An unavailable warehouse is rethrown as a checked
+    // LoadException so that every caller handles it as a regular job/DDL failure: the scheduler
+    // in particular only catches StarRocksException per job, and an escaping RuntimeException
+    // would abort the whole scheduler round and stall all other routine load jobs.
+    protected ComputeResource acquireComputeResource() throws LoadException {
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        final CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
+        try {
+            return warehouseManager.acquireComputeResource(acquireContext);
+        } catch (ErrorReportException e) {
+            throw new LoadException(e.getMessage(), e);
+        }
+    }
+
+    // Pick the compute resource that the scheduler's partition-list RPC is routed through, WITHOUT
+    // writing the shared computeResource field. The scheduler refreshes partitions in update()
+    // before prepare() acquires the field, so a job not yet prepared on this leader (a new job, or
+    // one restored from the image or journal) still holds its created or persisted resource,
+    // initially CN group 0 of default_warehouse. If that group has no alive CN, e.g. when every CN
+    // sits in other CN groups, the fetch fails and pauses the NEED_SCHEDULE job before prepare()
+    // ever runs, and every RESUME fails the same way. So keep `current` only while it belongs to
+    // this job's warehouse and still has an alive CN; otherwise acquire a local one.
+    protected ComputeResource resolveFetchComputeResource(ComputeResource current) throws LoadException {
+        if (!RunMode.isSharedDataMode()) {
+            return current;
+        }
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (current != null && current.getWarehouseId() == warehouseId
+                && warehouseManager.isResourceAvailable(current)) {
+            return current;
+        }
+        return acquireComputeResource();
     }
 
     private Coordinator.Factory getCoordinatorFactory() {
