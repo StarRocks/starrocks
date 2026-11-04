@@ -415,7 +415,7 @@ public class Pipe implements GsonPostProcessable {
             }
         }
         if (!taskIds.isEmpty()) {
-            taskManager.dropTasks(taskIds);
+            taskManager.dropTasks(taskIds, false);
         }
     }
 
@@ -528,9 +528,6 @@ public class Pipe implements GsonPostProcessable {
         }
     }
 
-<<<<<<< HEAD
-    public void suspend() {
-=======
     /**
      * Whether the attempt's task run is still registered as running although its future is done. The task run
      * scheduler moves a done run into the task run history on its next dispatch round, so wait for that before treating
@@ -560,8 +557,7 @@ public class Pipe implements GsonPostProcessable {
         }
     }
 
-    public void suspend(boolean persist) {
->>>>>>> e254e00 ([BugFix][RB-741] Drop the task of each pipe batch attempt once it ends (#81910))
+    public void suspend() {
         try (CloseableLock l = takeWriteLock()) {
             if (this.state == State.RUNNING) {
                 this.state = State.SUSPEND;
