@@ -153,7 +153,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：是
 - 描述：存算分离集群中开启 File Bundling 的表在导入发布（Publish）时，是否保留聚合节点可能未收到的 Tablet 发布结果。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会把结果保存在本节点的 Data Cache 中，不写入对象存储。之后该节点上的重试会直接读取这份结果，不再重新执行事务，因此慢分区每次重试时，已完成的 Tablet 不会被重做。这些缓存条目和其他 Data Cache 数据一样按需淘汰。仅在开启 Data Cache 时生效。所有 BE 和 CN 节点应设置相同的值。
-- 引入版本：v26.2
+- 引入版本：v4.2
 
 ### lake_pk_compaction_max_input_rowsets
 
