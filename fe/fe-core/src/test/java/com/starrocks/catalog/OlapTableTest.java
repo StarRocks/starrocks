@@ -103,31 +103,6 @@ public class OlapTableTest {
 
 
     @Test
-    public void testReplayIndexAnalysisIsBestEffort() throws Exception {
-        OlapTable table = definitionTable("definition_replay_analysis");
-        MaterializedIndexMeta meta = GsonUtils.GSON.fromJson(
-                GsonUtils.GSON.toJson(table.getIndexMetaByMetaId(100)), MaterializedIndexMeta.class);
-        String persisted = GsonUtils.GSON.toJson(meta);
-        ConnectContext previous = ConnectContext.get();
-        ConnectContext.remove();
-        try {
-            table.analyzeRollupIndexMetaBestEffort(meta);
-            table.analyzeRollupIndexMetaBestEffort(meta);
-            Assertions.assertNull(ConnectContext.get());
-            Assertions.assertEquals(persisted, GsonUtils.GSON.toJson(meta));
-            meta.getSchema().get(1).setDefineExpr(new SlotRef(null, "missing"));
-            meta.setSyncMvDefinition(SyncMaterializedViewDefinition.capture(meta.getSchema(), null));
-            String invalid = GsonUtils.GSON.toJson(meta);
-            Assertions.assertThrows(SemanticException.class, () -> table.analyzeRollupIndexMeta(meta));
-            Assertions.assertDoesNotThrow(() -> table.analyzeRollupIndexMetaBestEffort(meta));
-            Assertions.assertNull(ConnectContext.get());
-            Assertions.assertEquals(invalid, GsonUtils.GSON.toJson(meta));
-        } finally {
-            previous.setThreadLocalInfo();
-        }
-    }
-
-    @Test
     public void testShadowValueWideningPreservesDefinition() throws Exception {
         OlapTable table = definitionTable("definition_widen");
         MaterializedIndexMeta original = table.getIndexMetaByMetaId(100);
@@ -305,6 +280,17 @@ public class OlapTableTest {
         meta.setSyncMvDefinition(SyncMaterializedViewDefinition.capture(meta.getSchema(), null));
         OlapTable recovered = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table), OlapTable.class);
         Assertions.assertThrows(SemanticException.class, recovered::onReload);
+        String persisted = GsonUtils.GSON.toJson(recovered);
+        ConnectContext previous = ConnectContext.get();
+        ConnectContext.remove();
+        try {
+            recovered.analyzeRollupIndexMetasBestEffort();
+            recovered.analyzeRollupIndexMetasBestEffort();
+            Assertions.assertNull(ConnectContext.get());
+            Assertions.assertEquals(persisted, GsonUtils.GSON.toJson(recovered));
+        } finally {
+            previous.setThreadLocalInfo();
+        }
         // Legacy definitions retain the previous best-effort reload policy.
         meta.setSyncMvDefinition(null);
         Assertions.assertDoesNotThrow(table::onReload);

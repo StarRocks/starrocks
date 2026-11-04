@@ -32,8 +32,8 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.Utils;
-import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.proto.AggregatePublishVersionRequest;
@@ -42,12 +42,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
@@ -872,73 +873,28 @@ public class LakeRollupJobTest {
             "bitmap; id, bitmap_union(to_bitmap(x)) v; GROUP BY id",
             "hll; id, hll_union(hll_hash(x)) v; GROUP BY id",
             "slot; id, x;",
-            "pending; id, length(txt) v;"
+            "predicate; id, txt; WHERE txt || 'x' = 'ax'",
+            "pending; id, length(txt) v;",
+            "legacy; id, length(txt) v;"
     }, delimiter = ';')
     public void testJournalReplayAnalyzesSyncMv(String name, String projection, String groupBy) throws Exception {
         completeTasksAndPublishOnSend();
-        String tableName = "t_sync_replay_" + name;
-        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        starRocksAssert.withTable("CREATE TABLE " + tableName + "(id INT, txt VARCHAR(20), x BIGINT) " +
-                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 ");
-        OlapTable table = (OlapTable) starRocksAssert.getTable(DB, tableName);
-        LocalMetastore leader = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        MetadataMgr leaderMetadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        CreateTableInfo baseEntry = (CreateTableInfo) UtFrameUtils.PseudoJournalReplayer
-                .replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
-
-        MaterializedViewHandler handler = new MaterializedViewHandler();
-        CreateSyncMVStmt stmt = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(
-                "CREATE MATERIALIZED VIEW mv_" + name + " AS SELECT " + projection + " FROM " + tableName +
-                        (groupBy == null ? "" : " " + groupBy), connectContext);
-        handler.processCreateMaterializedView(stmt, leader.getDb(DB), table);
-        LakeRollupJob job = (LakeRollupJob) handler.getAlterJobsV2().values().iterator().next();
-        runToFinished(job);
-        table.setState(OlapTable.OlapTableState.NORMAL);
-        assertSyncMvInsertPlans(tableName);
-        table.getIndexMetaIdToMeta().values().forEach(table::analyzeRollupIndexMeta);
-        assertSyncMvInsertPlans(tableName);
-        LocalMetastore follower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        Database leaderDb = leader.getDb(DB);
-        follower.replayCreateDb(new Database(leaderDb.getId(), leaderDb.getFullName()));
-        MaterializedViewHandler followerHandler = new MaterializedViewHandler();
-        try {
-            GlobalStateMgr.getCurrentState().setLocalMetastore(follower);
-            GlobalStateMgr.getCurrentState().setMetadataMgr(new MetadataMgr(follower,
-                    GlobalStateMgr.getCurrentState().getTemporaryTableMgr(), GlobalStateMgr.getCurrentState().getConnectorMgr(),
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr()));
-            follower.replayCreateTable(baseEntry);
-            AlterJobV2 replayed;
-            do {
-                // A follower's replay thread has no client session.
-                ConnectContext.remove();
-                replayed = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
-                Assertions.assertEquals(job.getJobId(), replayed.getJobId());
-                followerHandler.replayAlterJobV2(replayed);
-                if (name.equals("pending")) {
-                    LakeRollupJob resumed = (LakeRollupJob) followerHandler.getAlterJobsV2().get(job.getJobId());
-                    resumed.runPendingJob();
-                    Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, resumed.getJobState());
+        List<OriginStatementInfo> parsed = new ArrayList<>();
+        if (name.equals("legacy")) {
+            new MockUp<MetaUtils>() {
+                @Mock
+                public Map<String, Expr> parseColumnNameToDefineExpr(OriginStatementInfo stmt) {
+                    parsed.add(stmt);
+                    throw new IllegalArgumentException("legacy definition");
                 }
-                Assertions.assertNull(ConnectContext.get());
-                if (name.equals("pending")) {
-                    break;
-                }
-            } while (!replayed.isDone());
-            connectContext.setThreadLocalInfo();
-            assertSyncMvInsertPlans(tableName);
-        } finally {
-            connectContext.setThreadLocalInfo();
-            GlobalStateMgr.getCurrentState().setLocalMetastore(leader);
-            GlobalStateMgr.getCurrentState().setMetadataMgr(leaderMetadata);
+            };
         }
-    }
-
-    private static void assertSyncMvInsertPlans(String tableName) {
-        Assertions.assertAll(
-                () -> Assertions.assertFalse(UtFrameUtils.getPlanThriftString(connectContext,
-                        "INSERT INTO " + tableName + " VALUES (1, 'abc', 1), (NULL, NULL, NULL)").isEmpty()),
-                () -> Assertions.assertFalse(UtFrameUtils.getPlanThriftString(connectContext,
-                        "INSERT INTO " + tableName + " SELECT id, txt, x FROM " + tableName).isEmpty()));
+        long sqlMode = connectContext.getSessionVariable().getSqlMode();
+        RollupJobV2Test.assertSyncMvReplay(starRocksAssert, name, projection, groupBy);
+        Assertions.assertEquals(sqlMode, connectContext.getSessionVariable().getSqlMode());
+        if (name.equals("legacy")) {
+            Assertions.assertEquals(2, parsed.size());
+        }
     }
 
     private static void runToFinished(AlterJobV2 job) throws Exception {

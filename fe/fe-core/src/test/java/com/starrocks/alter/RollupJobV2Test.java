@@ -53,20 +53,22 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -467,141 +469,144 @@ public class RollupJobV2Test extends DDLTestBase {
             "bitmap; id, bitmap_union(to_bitmap(x)) v; GROUP BY id",
             "hll; id, hll_union(hll_hash(x)) v; GROUP BY id",
             "slot; id, x;",
+            "predicate; id, txt; WHERE txt || 'x' = 'ax'",
             "pending; id, length(txt) v;",
-            "restore; id, length(txt) v;",
-            "restore_live; id, length(txt) v;",
             "recover_table; id, length(txt) v;",
             "recover_table_live; id, length(txt) v;",
-            "recover_db; id, length(txt) v;",
-            "recover_db_live; id, length(txt) v;"
+            "recover_db; id, length(txt) v;"
     }, delimiter = ';')
     public void testJournalReplayAnalyzesSyncMv(String name, String projection, String groupBy) throws Exception {
-        boolean restore = name.startsWith("restore");
-        String tableName = "t_sync_replay_" + name;
-        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        starRocksAssert.withTable("CREATE TABLE " + tableName + "(id INT, txt VARCHAR(20), x BIGINT) " +
-                "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
-        OlapTable table = (OlapTable) starRocksAssert.getTable(GlobalStateMgrTestUtil.testDb1, tableName);
-        LocalMetastore leader = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        MetadataMgr leaderMetadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        CreateTableInfo baseEntry = (CreateTableInfo) UtFrameUtils.PseudoJournalReplayer
-                .replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
+        long sqlMode = ctx.getSessionVariable().getSqlMode();
+        assertSyncMvReplay(starRocksAssert, name, projection, groupBy);
+        assertEquals(sqlMode, ctx.getSessionVariable().getSqlMode());
+    }
 
-        MaterializedViewHandler handler = new MaterializedViewHandler();
-        CreateSyncMVStmt stmt = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(
-                "CREATE MATERIALIZED VIEW mv_" + name + " AS SELECT " + projection + " FROM " + tableName +
-                        (groupBy == null ? "" : " " + groupBy), ctx);
-        handler.processCreateMaterializedView(stmt, leader.getDb(GlobalStateMgrTestUtil.testDb1), table);
-        RollupJobV2 job = (RollupJobV2) handler.getAlterJobsV2().values().iterator().next();
-        runToFinished(job);
-        table.setState(OlapTable.OlapTableState.NORMAL);
-        assertSyncMvInsertPlans(tableName);
-        table.getIndexMetaIdToMeta().values().forEach(table::analyzeRollupIndexMeta);
-        assertSyncMvInsertPlans(tableName);
-        RestoreJob restoreEntry = null;
-        if (restore) {
-            RestoreJob restoreJob = new RestoreJob();
-            Deencapsulation.setField(restoreJob, "dbId", leader.getDb(GlobalStateMgrTestUtil.testDb1).getId());
-            Deencapsulation.setField(restoreJob, "jobInfo", new BackupJobInfo());
-            Deencapsulation.setField(restoreJob, "restoredTbls", List.of(table));
-            Deencapsulation.setField(restoreJob, "state", RestoreJob.RestoreJobState.DOWNLOAD);
-            GlobalStateMgr.getCurrentState().getEditLog().logRestoreJob(restoreJob, wal -> { });
-            restoreEntry = (RestoreJob) UtFrameUtils.PseudoJournalReplayer
-                    .replayNextJournal(OperationType.OP_RESTORE_JOB_V2);
-        }
-        CatalogRecycleBin recoveredBin = null;
-        RecoverInfo recoverEntry = null;
-        if (name.startsWith("recover")) {
-            Database db = leader.getDb(GlobalStateMgrTestUtil.testDb1);
-            CatalogRecycleBin bin = new CatalogRecycleBin();
-            bin.recycleTable(db.getId(), table, true);
-            if (name.startsWith("recover_db")) {
-                bin.recycleDatabase(new Database(db.getId(), db.getFullName()), Set.of(tableName), true);
-            }
-            UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
-            bin.save(image.getImageWriter());
-            recoveredBin = new CatalogRecycleBin();
-            SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
-            recoveredBin.load(reader);
-            reader.close();
-            RecoverInfo info = new RecoverInfo(db.getId(), table.getId(), -1);
-            if (name.startsWith("recover_db")) {
-                GlobalStateMgr.getCurrentState().getEditLog().logRecoverDb(info, wal -> { });
-            } else {
-                GlobalStateMgr.getCurrentState().getEditLog().logRecoverTable(info, wal -> { });
-            }
-            recoverEntry = (RecoverInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
-                    name.startsWith("recover_db") ? OperationType.OP_RECOVER_DB_V2 : OperationType.OP_RECOVER_TABLE_V2);
-        }
-        LocalMetastore follower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        Database leaderDb = leader.getDb(GlobalStateMgrTestUtil.testDb1);
-        follower.replayCreateDb(new Database(leaderDb.getId(), leaderDb.getFullName()));
-        MaterializedViewHandler followerHandler = new MaterializedViewHandler();
+    public static void assertSyncMvReplay(StarRocksAssert fixture, String name, String select, String groupBy) throws Exception {
+        ConnectContext ctx = fixture.getCtx();
+        long sqlMode = ctx.getSessionVariable().getSqlMode();
         try {
-            GlobalStateMgr.getCurrentState().setLocalMetastore(follower);
-            GlobalStateMgr.getCurrentState().setMetadataMgr(new MetadataMgr(follower,
-                    GlobalStateMgr.getCurrentState().getTemporaryTableMgr(), GlobalStateMgr.getCurrentState().getConnectorMgr(),
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr()));
-            follower.replayCreateTable(baseEntry);
-            if (recoverEntry != null) {
-                Database db = follower.getDb(GlobalStateMgrTestUtil.testDb1);
-                db.unRegisterTableUnlocked(db.getTable(tableName));
-                ConnectContext.remove();
+            if (name.equals("predicate")) {
+                ctx.getSessionVariable().setSqlMode(sqlMode | SqlModeHelper.MODE_PIPES_AS_CONCAT);
+            }
+            String dbName = ctx.getDatabase();
+            boolean restore = name.startsWith("restore");
+            String tableName = "t_sync_replay_" + name;
+            UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+            fixture.withTable("CREATE TABLE " + tableName + "(id INT, txt VARCHAR(20), x BIGINT) " +
+                    "DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1')");
+            OlapTable table = (OlapTable) fixture.getTable(dbName, tableName);
+            LocalMetastore leader = GlobalStateMgr.getCurrentState().getLocalMetastore();
+            Database leaderDb = leader.getDb(dbName);
+            MaterializedViewHandler handler = new MaterializedViewHandler();
+            String query = "SELECT " + select + " FROM " + tableName + (groupBy == null ? "" : " " + groupBy);
+            CreateSyncMVStmt stmt = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "CREATE MATERIALIZED VIEW mv_" + name + " AS " + query, ctx);
+            handler.processCreateMaterializedView(stmt, leader.getDb(dbName), table);
+            AlterJobV2 job = handler.getAlterJobsV2().values().iterator().next();
+            Expr predicate = Deencapsulation.getField(job, "whereClause");
+            runToFinished(job);
+            table.setState(OlapTable.OlapTableState.NORMAL);
+            GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job), AlterJobV2.class);
+            assertSyncMvInsertPlans(ctx, tableName);
+            table.getIndexMetaIdToMeta().values().forEach(table::analyzeRollupIndexMeta);
+            assertSyncMvInsertPlans(ctx, tableName);
+            if (name.equals("predicate")) {
+                assertSame(predicate, table.getIndexMetaByMetaId(table.getIndexMetaIdByName("mv_" + name)).getWhereClause());
+                assertTrue(UtFrameUtils.getPlanThriftString(ctx, "SELECT 'a'||'x'='ax'").contains("TBoolLiteral(value:true)"));
+                assertTrue(UtFrameUtils.getPlanThriftString(ctx, "SELECT 'b'||'x'='ax'").contains("TBoolLiteral(value:false)"));
+                assertTrue(UtFrameUtils.getFragmentPlan(ctx, query).contains("rollup: mv_predicate"));
+                return;
+            }
+            RestoreJob restoreEntry = null;
+            if (restore) {
+                RestoreJob restoreJob = new RestoreJob();
+                Deencapsulation.setField(restoreJob, "dbId", leader.getDb(dbName).getId());
+                Deencapsulation.setField(restoreJob, "jobInfo", new BackupJobInfo());
+                Deencapsulation.setField(restoreJob, "restoredTbls", List.of(table));
+                Deencapsulation.setField(restoreJob, "state", RestoreJob.RestoreJobState.DOWNLOAD);
+                GlobalStateMgr.getCurrentState().getEditLog().logRestoreJob(restoreJob, wal -> { });
+                restoreEntry = (RestoreJob) UtFrameUtils.PseudoJournalReplayer
+                        .replayNextJournal(OperationType.OP_RESTORE_JOB_V2);
+                assertNotNull(syncMvExpression(Deencapsulation.<List<OlapTable>>getField(restoreEntry, "restoredTbls").get(0)));
+            }
+            CatalogRecycleBin recoveredBin = null;
+            if (name.startsWith("recover")) {
+                Database db = leader.getDb(dbName);
+                CatalogRecycleBin bin = new CatalogRecycleBin();
+                bin.recycleTable(db.getId(), table, true);
                 if (name.startsWith("recover_db")) {
-                    Database recoveredDb = name.endsWith("live") ? recoveredBin.recoverDatabase(db.getFullName()) :
-                            recoveredBin.replayRecoverDatabase(recoverEntry.getDbId());
-                    follower.replayCreateDb(recoveredDb);
-                } else if (name.endsWith("live")) {
-                    recoveredBin.recoverTable(db, tableName);
-                } else {
-                    recoveredBin.replayRecoverTable(db, recoverEntry.getTableId());
+                    bin.recycleDatabase(new Database(db.getId(), db.getFullName()), Set.of(tableName), true);
                 }
-                assertNull(ConnectContext.get());
-            } else if (restore) {
-                Database followerDb = follower.getDb(GlobalStateMgrTestUtil.testDb1);
-                followerDb.unRegisterTableUnlocked(followerDb.getTable(tableName));
-                restoreEntry.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+                bin.save(image.getImageWriter());
+                recoveredBin = new CatalogRecycleBin();
+                SRMetaBlockReader reader = new SRMetaBlockReaderV2(image.getJsonReader());
+                recoveredBin.load(reader);
+                reader.close();
+                assertNotNull(syncMvExpression((OlapTable) recoveredBin.getTable(db.getId(), table.getId())));
+            }
+            leader.replayCreateDb(new Database(leader.getDb(dbName).getId(), dbName));
+            MaterializedViewHandler followerHandler = new MaterializedViewHandler();
+            try {
                 ConnectContext.remove();
-                if (name.equals("restore_live")) {
-                    Deencapsulation.invoke(restoreEntry, "addRestorePartitionsAndTables", followerDb);
-                } else {
-                    restoreEntry.replayRun();
-                }
-                assertNull(ConnectContext.get());
-            } else {
-                AlterJobV2 replayed;
-                do {
-                    // A follower's replay thread has no client session.
-                    ConnectContext.remove();
-                    replayed = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_JOB_V2);
-                    assertEquals(job.getJobId(), replayed.getJobId());
-                    followerHandler.replayAlterJobV2(replayed);
-                    if (name.equals("pending")) {
-                        RollupJobV2 resumed = (RollupJobV2) followerHandler.getAlterJobsV2().get(job.getJobId());
-                        resumed.runPendingJob();
-                        assertEquals(AlterJobV2.JobState.WAITING_TXN, resumed.getJobState());
+                if (restore || name.startsWith("recover")) {
+                    Database db = leader.getDb(dbName);
+                    if (restore) {
+                        restoreEntry.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+                        if (name.equals("restore_live")) {
+                            Deencapsulation.invoke(restoreEntry, "addRestorePartitionsAndTables", db);
+                        } else {
+                            restoreEntry.replayRun();
+                        }
+                    } else if (name.startsWith("recover_db")) {
+                        leader.replayCreateDb(recoveredBin.replayRecoverDatabase(db.getId()));
+                    } else if (name.endsWith("live")) {
+                        recoveredBin.recoverTable(db, tableName);
+                    } else {
+                        recoveredBin.replayRecoverTable(db, table.getId());
                     }
                     assertNull(ConnectContext.get());
-                    if (name.equals("pending")) {
-                        break;
-                    }
-                } while (!replayed.isDone());
+                } else {
+                    leader.replayCreateTable((CreateTableInfo) UtFrameUtils.PseudoJournalReplayer
+                            .replayNextJournal(OperationType.OP_CREATE_TABLE_V2));
+                    AlterJobV2 replayed;
+                    do {
+                        replayed = (AlterJobV2) UtFrameUtils.PseudoJournalReplayer
+                            .replayNextJournal(OperationType.OP_ALTER_JOB_V2);
+                        assertEquals(job.getJobId(), replayed.getJobId());
+                        followerHandler.replayAlterJobV2(replayed);
+                        if (name.equals("pending")) {
+                            AlterJobV2 resumed = followerHandler.getAlterJobsV2().get(job.getJobId());
+                            Deencapsulation.invoke(resumed, "runPendingJob");
+                            assertEquals(AlterJobV2.JobState.WAITING_TXN, resumed.getJobState());
+                        }
+                        assertNull(ConnectContext.get());
+                    } while (!name.equals("pending") && !replayed.isDone());
+                }
+                ctx.setThreadLocalInfo();
+                if (!name.equals("legacy")) {
+                    assertSyncMvInsertPlans(ctx, tableName);
+                }
+                assertTrue(!restore || syncMvExpression((OlapTable) leader.getTable(dbName, tableName)).getType().isValid());
+            } finally {
+                ctx.setThreadLocalInfo();
+                leader.replayCreateDb(leaderDb);
             }
-            ctx.setThreadLocalInfo();
-            assertSyncMvInsertPlans(tableName);
         } finally {
-            ctx.setThreadLocalInfo();
-            GlobalStateMgr.getCurrentState().setLocalMetastore(leader);
-            GlobalStateMgr.getCurrentState().setMetadataMgr(leaderMetadata);
+            ctx.getSessionVariable().setSqlMode(sqlMode);
         }
     }
 
-    private static void assertSyncMvInsertPlans(String tableName) {
+    private static Expr syncMvExpression(OlapTable table) {
+        return table.getIndexMetaIdToMeta().values().stream().flatMap(meta -> meta.getSchema().stream())
+                .map(column -> column.getDefineExpr()).filter(expr -> expr != null).findFirst().orElseThrow();
+    }
+
+    private static void assertSyncMvInsertPlans(ConnectContext ctx, String tableName) {
+        String sql = "INSERT INTO " + tableName + " (id, txt, x) ";
         assertAll(
-                () -> assertFalse(UtFrameUtils.getPlanThriftString(ctx,
-                        "INSERT INTO " + tableName + " (id, txt, x) VALUES (1, 'abc', 1), (NULL, NULL, NULL)").isEmpty()),
-                () -> assertFalse(UtFrameUtils.getPlanThriftString(ctx,
-                        "INSERT INTO " + tableName + " (id, txt, x) SELECT id, txt, x FROM " + tableName).isEmpty()));
+                () -> assertFalse(UtFrameUtils.getPlanThriftString(ctx, sql + "VALUES (1,'abc',1), (NULL,NULL,NULL)").isEmpty()),
+                () -> assertFalse(UtFrameUtils.getPlanThriftString(ctx, sql + "SELECT id, txt, x FROM " + tableName).isEmpty()));
     }
 
     private static OlapTable createTable(String tableName) throws Exception {

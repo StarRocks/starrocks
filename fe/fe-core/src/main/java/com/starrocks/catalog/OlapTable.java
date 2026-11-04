@@ -3174,11 +3174,6 @@ public class OlapTable extends Table {
             return;
         }
         try {
-            // Lake jobs lose all transient expressions; native definitions are restored by the analyzer itself.
-            if (indexMeta.getSyncMvDefinition() == null && indexMeta.getDefineStmt() != null &&
-                    indexMeta.getSchema().stream().allMatch(column -> column.getDefineExpr() == null)) {
-                indexMeta.gsonPostProcess();
-            }
             analyzeRollupIndexMeta(indexMeta);
         } catch (Exception e) {
             LOG.warn("Analyze rollup index meta failed, index id: {}, table:{}",

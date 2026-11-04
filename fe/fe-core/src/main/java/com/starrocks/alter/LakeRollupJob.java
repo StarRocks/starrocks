@@ -44,6 +44,7 @@ import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.persist.OriginStatementInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
@@ -78,7 +79,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
-public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
+public class LakeRollupJob extends LakeTableSchemaChangeJobBase implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(LakeRollupJob.class);
 
     @SerializedName(value = "commitVersionMap")
@@ -141,9 +142,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         // appends directly to the field (double-add hazard). No AgentTaskQueue cleanup needed:
         // the demotion drain (abandonInFlightAgentTasks) already emptied the queue.
         rollupBatchTask = new AgentBatchTask();
-        // whereClause deliberately KEPT: this class has no gsonPostProcess restore, so a real
-        // reload silently loses the sync-MV filter (pre-existing reload bug); keep the
-        // strictly-better in-memory value.
+        // Keep the existing in-memory predicate; completed jobs do not need their definition restored.
     }
 
     public LakeRollupJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
@@ -570,6 +569,17 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
         info.add(timeoutMs / 1000);
         infos.add(info);
+    }
+
+    @Override
+    public void gsonPostProcess() {
+        if (origStmt != null && (jobState == JobState.PENDING || jobState == JobState.WAITING_TXN)) {
+            try {
+                whereClause = RollupJobV2.restoreDefineExpressions(origStmt, rollupSchema);
+            } catch (Exception e) {
+                LOG.warn("Restore lake rollup definition failed, job: {}, index: {}", jobId, rollupIndexMetaId, e);
+            }
+        }
     }
 
     @Override

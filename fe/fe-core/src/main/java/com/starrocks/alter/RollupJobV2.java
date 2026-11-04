@@ -1090,7 +1090,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         createReplicaLatch = null;
     }
 
-    private void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
+    static Expr restoreDefineExpressions(OriginStatementInfo origStmt, List<Column> rollupSchema) {
+        Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
         for (Map.Entry<String, Expr> entry : columnNameToDefineExpr.entrySet()) {
             for (Column column : rollupSchema) {
                 if (column.getName().equalsIgnoreCase(entry.getKey())) {
@@ -1099,6 +1100,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
             }
         }
+        return columnNameToDefineExpr.get(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME);
     }
 
     @Override
@@ -1116,11 +1118,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             return;
         }
 
-        Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(origStmt);
-        if (columnNameToDefineExpr.containsKey(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME)) {
-            whereClause = columnNameToDefineExpr.get(CreateSyncMVStmt.WHERE_PREDICATE_COLUMN_NAME);
-        }
-        setColumnsDefineExpr(columnNameToDefineExpr);
+        whereClause = restoreDefineExpressions(origStmt, rollupSchema);
     }
 
     @Override
