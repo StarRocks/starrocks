@@ -89,6 +89,11 @@ public final class ConnectorLocationWorkerRestrictor {
         return resolve(scanNodes, clusterInfo, null, null);
     }
 
+    public static Restriction resolve(List<ScanNode> scanNodes, SystemInfoService clusterInfo,
+                                      WorkerProvider workerProvider) {
+        return resolve(scanNodes, clusterInfo, null, workerProvider);
+    }
+
     /**
      * @param catalogMgr optional; when null, resolved lazily from {@link GlobalStateMgr} only if needed
      */
@@ -101,8 +106,8 @@ public final class ConnectorLocationWorkerRestrictor {
      * @param workerProvider optional captured provider; when non-null, L is intersected with workers
      *                       visible on it (excludes blacklisted / otherwise unschedulable nodes)
      */
-    static Restriction resolve(List<ScanNode> scanNodes, SystemInfoService clusterInfo, CatalogMgr catalogMgr,
-                               WorkerProvider workerProvider) {
+    public static Restriction resolve(List<ScanNode> scanNodes, SystemInfoService clusterInfo, CatalogMgr catalogMgr,
+                                      WorkerProvider workerProvider) {
         if (!Config.enable_connector_location_worker_restriction) {
             return Restriction.unrestricted();
         }
