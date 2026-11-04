@@ -667,6 +667,85 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testCommitInvalidatesTheOtherFesBeforeRefreshingThemInTheBackground() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_1).commit();
+
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenReturn(mockedNativeTableB);
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        List<String> otherFeCalls = new ArrayList<>();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void invalidateOthersFeTable(TableName table) {
+                otherFeCalls.add("invalidate " + table);
+            }
+
+            @Mock
+            public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                otherFeCalls.add("refresh " + table);
+                return CompletableFuture.completedFuture(null);
+            }
+        };
+        new MockUp<NodeMgr>() {
+            @Mock
+            public Frontend getMySelf() {
+                return new Frontend(FrontendNodeType.LEADER, "test-fe", "127.0.0.1", 9010);
+            }
+        };
+        new MockUp<Frontend>() {
+            @Mock
+            public String getFeVersion() {
+                return "test-version";
+            }
+        };
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+        metadata.truncateTable(new TruncateTableStmt(createTableRef(new TableName(CATALOG_NAME, dbName, tableName))),
+                connectContext);
+
+        TableName committed = new TableName(CATALOG_NAME, dbName, tableName);
+        Assertions.assertEquals(List.of("invalidate " + committed, "refresh " + committed), otherFeCalls);
+    }
+
+    @Test
+    public void testInvalidateCachedTableDropsTheTableWithoutLoadingIt() throws Exception {
+        String dbName = "iceberg_db";
+        String tableName = "iceberg_table";
+        AtomicInteger catalogGetTableCalls = new AtomicInteger();
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        Mockito.when(icebergCatalog.getTable(Mockito.any(), Mockito.eq(dbName), Mockito.eq(tableName)))
+                .thenAnswer(invocation -> {
+                    catalogGetTableCalls.incrementAndGet();
+                    return mockedNativeTableB;
+                });
+        Mockito.when(icebergCatalog.getDB(Mockito.any(), Mockito.eq(dbName)))
+                .thenReturn(new Database(1, dbName));
+        Mockito.when(icebergCatalog.getIcebergCatalogType()).thenReturn(IcebergCatalogType.HIVE_CATALOG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        metadata.getTable(connectContext, dbName, tableName);
+        metadata.invalidateCachedTable(dbName, tableName);
+        int loadsByTheInvalidation = catalogGetTableCalls.get() - 1;
+        metadata.getTable(connectContext, dbName, tableName);
+
+        Assertions.assertAll(
+                () -> Assertions.assertEquals(0, loadsByTheInvalidation),
+                () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog, Mockito.never()).invalidatePartitionCache(dbName, tableName),
+                () -> Assertions.assertEquals(2, catalogGetTableCalls.get(),
+                        "the next read must load the table again once its cached copy is dropped"));
+    }
+
+    @Test
     public void testTruncateTableInvalidatesCachesWhenCommitStateIsUnknown() throws Exception {
         String dbName = "iceberg_db";
         String tableName = "iceberg_table";

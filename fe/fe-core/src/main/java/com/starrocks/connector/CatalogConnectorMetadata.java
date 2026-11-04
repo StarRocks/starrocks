@@ -294,6 +294,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public void invalidateCachedTable(String dbName, String tableName) {
+        normal.invalidateCachedTable(dbName, tableName);
+    }
+
+    @Override
     public boolean dbExists(ConnectContext context, String dbName) {
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.dbExists(context, dbName);

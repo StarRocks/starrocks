@@ -914,6 +914,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
 
+### `iceberg_commit_invalidate_other_fe_timeout_ms`
+
+- Default: 3000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The maximum time a commit to an Iceberg table waits for the other FEs to invalidate their cached copy of the table, so that queries on any FE see the commit once the statement returns. An FE that does not respond in time is updated by the background refresh. During a rolling upgrade, an FE on an earlier version refreshes the table instead, so a commit can wait up to this long. Set it to 0 or less to disable the wait.
+- Introduced in: -
+
 ### `iceberg_remove_orphan_files_min_retention_seconds`
 
 - Default: 86400
