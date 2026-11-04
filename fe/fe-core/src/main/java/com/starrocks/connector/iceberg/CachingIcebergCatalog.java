@@ -296,6 +296,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 return tables.get(icebergTableName);
             }
         } catch (NoSuchTableException e) {
+            // Nothing cached for a table the catalog no longer has stays valid, e.g. one dropped on another FE
+            invalidateCache(icebergTableName);
             throw e;
         } catch (Exception e) {
             throw new StarRocksConnectorException(

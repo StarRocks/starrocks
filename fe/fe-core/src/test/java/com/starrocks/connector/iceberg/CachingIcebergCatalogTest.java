@@ -48,6 +48,7 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -701,6 +702,35 @@ public class CachingIcebergCatalogTest {
         catalog.refreshTable("db1", "t1", ctx, executor);
 
         Assertions.assertNull(cachedPartitions(catalog).getIfPresent(new IcebergTableName("db1", "t1", 22L)));
+    }
+
+    @Test
+    public void testLookupOfADroppedTableDropsWhatWasCachedForIt(@Mocked IcebergCatalog delegate,
+                                                                @Mocked PartitionSpec spec) {
+        Table table = tableAtSnapshot(11L, 1000L, "metadata-v1", spec);
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = table;
+                result = new NoSuchTableException("Table does not exist: db1.t1");
+            }
+        };
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        ConnectContext ctx = new ConnectContext();
+        IcebergTableName key = new IcebergTableName("db1", "t1");
+        Map<IcebergTableName, Set<String>> metaFiles = Deencapsulation.getField(catalog, "metaFileCacheMap");
+        Map<IcebergTableName, ?> droppedForPeerCommit = Deencapsulation.getField(catalog, "droppedForPeerCommit");
+
+        catalog.getTable(ctx, "db1", "t1");
+        metaFiles.put(key, Sets.newHashSet("/metadata/m1.avro"));
+        // Another FE dropped the table: its invalidation drops the cached table, so the next lookup misses
+        catalog.invalidateTableCacheAfterPeerCommit("db1", "t1");
+        Assertions.assertThrows(NoSuchTableException.class, () -> catalog.getTable(ctx, "db1", "t1"));
+
+        Assertions.assertAll(
+                () -> Assertions.assertFalse(metaFiles.containsKey(key)),
+                () -> Assertions.assertFalse(droppedForPeerCommit.containsKey(key)));
     }
 
     private static LoadingCache<IcebergTableName, Map<String, Partition>> cachedPartitions(
