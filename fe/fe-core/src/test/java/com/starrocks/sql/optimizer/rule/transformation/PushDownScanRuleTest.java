@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -25,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -66,5 +69,23 @@ public class PushDownScanRuleTest {
                 scanOperator.getPredicate().getChild(0).getOpType());
         assertEquals(OperatorType.CONSTANT,
                 scanOperator.getPredicate().getChild(1).getOpType());
+    }
+
+    @Test
+    public void transformIndexScan(@Mocked PaimonTable innerTable) {
+        PushDownPredicateScanRule rule = new PushDownPredicateScanRule();
+        ColumnRefOperator args = new ColumnRefOperator(1, IntegerType.INT, "args", true);
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ, args, ConstantOperator.createInt(1));
+        OptExpression filter = OptExpression.create(new LogicalFilterOperator(predicate),
+                OptExpression.create(new LogicalPaimonIndexScanOperator(
+                        new PaimonIndexTable(innerTable), Maps.newHashMap(), Maps.newHashMap(), -1, null)));
+
+        List<OptExpression> result = rule.transform(
+                filter, OptimizerFactory.mockContext(new ColumnRefFactory()));
+
+        Operator scanOperator = result.get(0).inputAt(0).getOp();
+        assertEquals(OperatorType.LOGICAL_PAIMON_INDEX_SCAN, scanOperator.getOpType());
+        assertEquals(predicate, scanOperator.getPredicate());
     }
 }

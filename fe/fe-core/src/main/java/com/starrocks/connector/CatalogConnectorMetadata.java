@@ -30,6 +30,11 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexResult;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -253,6 +258,23 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     public ConnectorMetadata delegateFor(Table table) {
         ConnectorMetadata metadata = metadataOfTable(table);
         return metadata == null ? normal : metadata;
+    }
+
+    @Override
+    public ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
+        return delegateFor(table).getIndexMetadata(table, versionRange);
+    }
+
+    @Override
+    public Optional<ConnectorIndexResult> evaluateIndex(
+            Table table, IndexCondition condition, TvrVersionRange versionRange) {
+        return delegateFor(table).evaluateIndex(table, condition, versionRange);
+    }
+
+    @Override
+    public List<ConnectorIndexShard> getIndexShards(
+            Table table, long snapshotId, Map<Integer, IndexType> requiredIndexes) {
+        return delegateFor(table).getIndexShards(table, snapshotId, requiredIndexes);
     }
 
     @Override

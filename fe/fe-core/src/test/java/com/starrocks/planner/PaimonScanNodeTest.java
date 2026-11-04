@@ -18,10 +18,17 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.index.ConnectorIndexResult;
+import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.paimon.PaimonGlobalIndexResult;
+import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -32,15 +39,18 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariable.PaimonReaderMode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
+import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
+import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataInputViewStreamWrapper;
@@ -55,6 +65,7 @@ import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.utils.Range;
 import org.apache.paimon.utils.InstantiationUtil;
+import org.apache.paimon.utils.RoaringNavigableMap64;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -65,6 +76,7 @@ import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
@@ -428,6 +440,350 @@ public class PaimonScanNodeTest {
             IndexedSplit nativeDecoded = IndexedSplit.deserialize(new DataInputViewStreamWrapper(
                     new ByteArrayInputStream(autoRange.getPaimon_split_info_binary())));
             Assertions.assertEquals(decoded.rowRanges(), nativeDecoded.rowRanges());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testIndexedSplitReaderUsesQueryBoundTable(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr) throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.setThreadLocalInfo();
+        try {
+            FileStoreTable catalogNative = createNativeTable();
+            TableSchema catalogSchema = catalogNative.schema();
+            org.apache.paimon.types.RowType catalogRowType = new org.apache.paimon.types.RowType(catalogSchema.fields());
+            org.mockito.Mockito.when(catalogNative.rowType()).thenReturn(catalogRowType);
+            PaimonTable catalogTable = new PaimonTable(null, "db", "indexed_table",
+                    List.of(new Column("id", IntegerType.INT)), catalogNative);
+            TableSchema boundSchema = new TableSchema(1L, catalogSchema.fields(), 0,
+                    List.of(), List.of(), Map.of("file.format", "json"), "");
+            FileStoreTable boundNative = org.mockito.Mockito.mock(FileStoreTable.class);
+            org.apache.paimon.types.RowType boundRowType = new org.apache.paimon.types.RowType(boundSchema.fields());
+            org.mockito.Mockito.when(boundNative.schema()).thenReturn(boundSchema);
+            org.mockito.Mockito.when(boundNative.rowType()).thenReturn(boundRowType);
+            IndexedSplit indexedSplit = new IndexedSplit(createDataSplit(), List.of(new Range(2L, 4L)), null);
+            Assertions.assertEquals(Reader.NATIVE, new PaimonReaderSelector(catalogNative, List.of("id"))
+                    .select(indexedSplit, PaimonReaderMode.AUTO).reader());
+            PaimonReaderSelector.Decision boundDecision = new PaimonReaderSelector(boundNative, List.of("id"))
+                    .select(indexedSplit, PaimonReaderMode.AUTO);
+            Assertions.assertEquals(Reader.JNI, boundDecision.reader());
+            Assertions.assertEquals(PaimonReaderSelector.Reason.FILE_FORMAT, boundDecision.reason());
+            PaimonSplitsInfo splits = new PaimonSplitsInfo(List.of(), List.of(indexedSplit), boundNative);
+            List<RemoteFileInfo> remoteFiles = List.of(RemoteFileInfo.builder()
+                    .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(splits))).build());
+            new Expectations() {{
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles(catalogTable, (GetRemoteFilesParams) any);
+                    result = remoteFiles;
+                }};
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(catalogTable);
+            SlotDescriptor slot = new SlotDescriptor(new SlotId(1), "id", IntegerType.INT, false);
+            slot.setColumn(new Column("id", IntegerType.INT));
+            desc.addSlot(slot);
+            PaimonScanNode scan = new PaimonScanNode(new PlanNodeId(0), desc, "PAIMON_SCAN");
+            scan.setupScanRangeLocations(desc, null, -1);
+
+            Assertions.assertNotSame(catalogTable, scan.getPaimonTable());
+            Assertions.assertSame(boundNative, scan.getPaimonTable().getNativeTable());
+            Assertions.assertSame(scan.getPaimonTable(), desc.getTable());
+            Assertions.assertSame(catalogNative, catalogTable.getNativeTable());
+            Assertions.assertEquals(Map.of(), catalogNative.schema().options());
+            THdfsScanRange range = scan.getScanRangeLocations(0).get(0).getScan_range().getHdfs_scan_range();
+            Assertions.assertTrue(range.isUse_paimon_jni_reader());
+            Assertions.assertFalse(range.isUse_paimon_native_reader());
+            Assertions.assertFalse(range.isSetPaimon_split_info_binary());
+            IndexedSplit decoded = InstantiationUtil.deserializeObject(
+                    Base64.getUrlDecoder().decode(range.getPaimon_split_info()), getClass().getClassLoader());
+            Assertions.assertEquals(indexedSplit.rowRanges(), decoded.rowRanges());
+            Assertions.assertEquals(indexedSplit.dataSplit().snapshotId(), decoded.dataSplit().snapshotId());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testGlobalIndexStageZeroDisablesSdkIndexPlanning(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
+            @Mocked ConnectorMetadata connectorMetadata) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonGlobalIndexScanStage(0);
+        ctx.setThreadLocalInfo();
+        try {
+            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(createDataSplit());
+            new Expectations() {
+                {
+                    table.getCatalogName();
+                    result = "paimon";
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                    result = new Delegate<List<RemoteFileInfo>>() {
+                        @SuppressWarnings("unused")
+                        List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
+                            captured.add(params);
+                            return remoteFiles;
+                        }
+                    };
+                }
+            };
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            scanNode.setupScanRangeLocations(desc, null, -1);
+
+            Assertions.assertEquals(1, captured.size());
+            Assertions.assertTrue(captured.get(0).isDisableGlobalIndex());
+            Assertions.assertNull(captured.get(0).getConnectorIndexResult());
+            Assertions.assertFalse(scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL)
+                    .contains("RECOGNIZED INDEX CONDITION:"));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testGlobalIndexStageTwoPassesDistributedResultToSplitPlanning(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
+            @Mocked ConnectorMetadata connectorMetadata) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonGlobalIndexScanStage(2);
+        ctx.setThreadLocalInfo();
+        try {
+            RoaringNavigableMap64 rows = new RoaringNavigableMap64();
+            rows.add(0L);
+            PaimonGlobalIndexResult indexResult = new PaimonGlobalIndexResult(
+                    "file:/tmp/table", "main", 1L, GlobalIndexResult.create(rows));
+            new Expectations() {
+                {
+                    metadataMgr.getOptionalMetadata(anyString);
+                    result = Optional.of(connectorMetadata);
+                    connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
+                    result = Optional.of(indexResult);
+                }
+            };
+
+            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            PaimonSplitsInfo appliedSplits = new PaimonSplitsInfo(List.of(), List.of(createDataSplit()), null, true);
+            List<RemoteFileInfo> remoteFiles = List.of(RemoteFileInfo.builder()
+                    .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(appliedSplits))).build());
+            new Expectations() {
+                {
+                    table.getCatalogName();
+                    result = "paimon";
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                    result = new Delegate<List<RemoteFileInfo>>() {
+                        @SuppressWarnings("unused")
+                        List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
+                            captured.add(params);
+                            return remoteFiles;
+                        }
+                    };
+                }
+            };
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
+            scanNode.setupScanRangeLocations(desc, null, -1, condition);
+
+            Assertions.assertEquals(1, captured.size());
+            Assertions.assertFalse(captured.get(0).isDisableGlobalIndex());
+            Assertions.assertSame(indexResult, captured.get(0).getConnectorIndexResult());
+            Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("RECOGNIZED INDEX CONDITION: true"), explain);
+            Assertions.assertTrue(explain.contains("DISTRIBUTED INDEX: applied"), explain);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testGlobalIndexStageTwoFallsBackWhenDistributedEvaluationFails(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
+            @Mocked ConnectorMetadata connectorMetadata) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonGlobalIndexScanStage(2);
+        ctx.setThreadLocalInfo();
+        try {
+            new Expectations() {
+                {
+                    metadataMgr.getOptionalMetadata(anyString);
+                    result = Optional.of(connectorMetadata);
+                    connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
+                    result = new StarRocksConnectorException("test distributed index failure");
+                }
+            };
+
+            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(createDataSplit());
+            new Expectations() {
+                {
+                    table.getCatalogName();
+                    result = "paimon";
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                    result = new Delegate<List<RemoteFileInfo>>() {
+                        @SuppressWarnings("unused")
+                        List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
+                            captured.add(params);
+                            return remoteFiles;
+                        }
+                    };
+                }
+            };
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
+            scanNode.setupScanRangeLocations(desc, null, -1, condition);
+
+            Assertions.assertEquals(1, captured.size());
+            Assertions.assertFalse(captured.get(0).isDisableGlobalIndex());
+            Assertions.assertNull(captured.get(0).getConnectorIndexResult());
+            Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("RECOGNIZED INDEX CONDITION: true"), explain);
+            Assertions.assertTrue(explain.contains("DISTRIBUTED INDEX: SDK fallback"), explain);
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testCancelledGlobalIndexDoesNotFallBackToSdk(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
+            @Mocked ConnectorMetadata connectorMetadata) {
+        for (boolean evaluationFails : List.of(false, true)) {
+            ConnectContext ctx = new ConnectContext();
+            ctx.setSessionVariable(new SessionVariable());
+            ctx.getSessionVariable().setPaimonGlobalIndexScanStage(2);
+            ctx.setThreadLocalInfo();
+            try {
+                new Expectations() {{
+                        table.getCatalogName();
+                        result = "paimon";
+                        GlobalStateMgr.getCurrentState();
+                        result = globalStateMgr;
+                        globalStateMgr.getMetadataMgr();
+                        result = metadataMgr;
+                        metadataMgr.getOptionalMetadata(anyString);
+                        result = Optional.of(connectorMetadata);
+                        connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
+                        result = new Delegate<Optional<ConnectorIndexResult>>() {
+                            @SuppressWarnings("unused")
+                            Optional<ConnectorIndexResult> evaluate(Table ignored, IndexCondition condition,
+                                                                    TvrVersionRange range) {
+                                ctx.setKilled();
+                                if (evaluationFails) {
+                                    throw new StarRocksConnectorException("cancelled index evaluation");
+                                }
+                                return Optional.empty();
+                            }
+                        };
+                        metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                        times = 0;
+                    }};
+                TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+                desc.setTable(table);
+                PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+                scanNode.setTvrVersionRange(TvrTableSnapshot.of(1L));
+                IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
+
+                Assertions.assertThrows(StarRocksConnectorException.class,
+                        () -> scanNode.setupScanRangeLocations(desc, null, -1, condition));
+            } finally {
+                ConnectContext.remove();
+            }
+        }
+    }
+
+    @Test
+    public void testGlobalIndexStageTwoFallsBackWhenIndexedSplitPlanningFails(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table,
+            @Mocked ConnectorMetadata connectorMetadata) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonGlobalIndexScanStage(2);
+        ctx.setThreadLocalInfo();
+        try {
+            RoaringNavigableMap64 rows = new RoaringNavigableMap64();
+            rows.add(0L);
+            PaimonGlobalIndexResult indexResult = new PaimonGlobalIndexResult(
+                    "file:/tmp/table", "main", 1L, GlobalIndexResult.create(rows));
+            new Expectations() {
+                {
+                    metadataMgr.getOptionalMetadata(anyString);
+                    result = Optional.of(connectorMetadata);
+                    connectorMetadata.evaluateIndex((Table) any, (IndexCondition) any, (TvrVersionRange) any);
+                    result = Optional.of(indexResult);
+                }
+            };
+
+            List<GetRemoteFilesParams> captured = new ArrayList<>();
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(createDataSplit());
+            new Expectations() {
+                {
+                    table.getCatalogName();
+                    result = "paimon";
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                    result = new Delegate<List<RemoteFileInfo>>() {
+                        @SuppressWarnings("unused")
+                        List<RemoteFileInfo> getRemoteFiles(Table ignored, GetRemoteFilesParams params) {
+                            captured.add(params);
+                            if (params.getConnectorIndexResult() != null) {
+                                throw new StarRocksConnectorException("test IndexedSplit planning failure");
+                            }
+                            return remoteFiles;
+                        }
+                    };
+                }
+            };
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.setTvrVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            IndexCondition condition = new IndexCondition(ConstantOperator.createBoolean(true), Map.of(1, 0));
+            scanNode.setupScanRangeLocations(desc, null, -1, condition);
+
+            Assertions.assertEquals(2, captured.size());
+            Assertions.assertSame(indexResult, captured.get(0).getConnectorIndexResult());
+            Assertions.assertNull(captured.get(1).getConnectorIndexResult());
+            Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("DISTRIBUTED INDEX: SDK fallback"), explain);
+            Assertions.assertFalse(explain.contains("DISTRIBUTED INDEX: applied"), explain);
         } finally {
             ConnectContext.remove();
         }

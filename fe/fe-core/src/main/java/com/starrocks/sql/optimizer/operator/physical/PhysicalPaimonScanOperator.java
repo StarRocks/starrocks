@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -22,12 +23,37 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 
+import java.util.Objects;
+
 public class PhysicalPaimonScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
+    private final IndexCondition indexCondition;
 
     public PhysicalPaimonScanOperator(LogicalPaimonScanOperator scan) {
         super(OperatorType.PHYSICAL_PAIMON_SCAN, scan);
         this.predicates = scan.getScanOperatorPredicates();
+        this.indexCondition = scan.getIndexCondition();
+    }
+
+    public IndexCondition getIndexCondition() {
+        return indexCondition;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalPaimonScanOperator that = (PhysicalPaimonScanOperator) o;
+        return Objects.equals(indexCondition, that.indexCondition);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), indexCondition);
     }
 
     @Override
@@ -53,6 +79,9 @@ public class PhysicalPaimonScanOperator extends PhysicalScanOperator {
     @Override
     public ColumnRefSet getUsedColumns() {
         ColumnRefSet refs = super.getUsedColumns();
+        if (indexCondition != null) {
+            refs.union(indexCondition.getUsedColumns());
+        }
         predicates.getNoEvalPartitionConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
         predicates.getPartitionConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
         predicates.getMinMaxConjuncts().forEach(d -> refs.union(d.getUsedColumns()));

@@ -19,6 +19,7 @@
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/hive/hive_chunk_sink.h"
+#include "connector/hive/paimon/paimon_global_index_scan_context.h"
 #include "connector/hive/scanner/hdfs_scanner.h"
 #include "connector_primitive/connector.h"
 
@@ -63,6 +64,8 @@ protected:
     const THdfsScanNode _hdfs_scan_node;
     int64_t _max_file_length = 0;
     mutable std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
+    const std::shared_ptr<PaimonGlobalIndexScanContext> _paimon_global_index_context =
+            std::make_shared<PaimonGlobalIndexScanContext>();
 };
 
 class HiveDataSource final : public DataSource {
