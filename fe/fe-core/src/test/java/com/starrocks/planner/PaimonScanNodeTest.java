@@ -28,6 +28,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.paimon.PaimonGlobalIndexResult;
+import com.starrocks.connector.paimon.PaimonReaderSelector;
 import com.starrocks.connector.paimon.PaimonReaderSelector.Reader;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -439,6 +440,69 @@ public class PaimonScanNodeTest {
             IndexedSplit nativeDecoded = IndexedSplit.deserialize(new DataInputViewStreamWrapper(
                     new ByteArrayInputStream(autoRange.getPaimon_split_info_binary())));
             Assertions.assertEquals(decoded.rowRanges(), nativeDecoded.rowRanges());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testIndexedSplitReaderUsesQueryBoundTable(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr) throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.setThreadLocalInfo();
+        try {
+            FileStoreTable catalogNative = createNativeTable();
+            TableSchema catalogSchema = catalogNative.schema();
+            org.apache.paimon.types.RowType catalogRowType = new org.apache.paimon.types.RowType(catalogSchema.fields());
+            org.mockito.Mockito.when(catalogNative.rowType()).thenReturn(catalogRowType);
+            PaimonTable catalogTable = new PaimonTable(null, "db", "indexed_table",
+                    List.of(new Column("id", IntegerType.INT)), catalogNative);
+            TableSchema boundSchema = new TableSchema(1L, catalogSchema.fields(), 0,
+                    List.of(), List.of(), Map.of("file.format", "json"), "");
+            FileStoreTable boundNative = org.mockito.Mockito.mock(FileStoreTable.class);
+            org.apache.paimon.types.RowType boundRowType = new org.apache.paimon.types.RowType(boundSchema.fields());
+            org.mockito.Mockito.when(boundNative.schema()).thenReturn(boundSchema);
+            org.mockito.Mockito.when(boundNative.rowType()).thenReturn(boundRowType);
+            IndexedSplit indexedSplit = new IndexedSplit(createDataSplit(), List.of(new Range(2L, 4L)), null);
+            Assertions.assertEquals(Reader.NATIVE, new PaimonReaderSelector(catalogNative, List.of("id"))
+                    .select(indexedSplit, PaimonReaderMode.AUTO).reader());
+            PaimonReaderSelector.Decision boundDecision = new PaimonReaderSelector(boundNative, List.of("id"))
+                    .select(indexedSplit, PaimonReaderMode.AUTO);
+            Assertions.assertEquals(Reader.JNI, boundDecision.reader());
+            Assertions.assertEquals(PaimonReaderSelector.Reason.FILE_FORMAT, boundDecision.reason());
+            PaimonSplitsInfo splits = new PaimonSplitsInfo(List.of(), List.of(indexedSplit), boundNative);
+            List<RemoteFileInfo> remoteFiles = List.of(RemoteFileInfo.builder()
+                    .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(splits))).build());
+            new Expectations() {{
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles(catalogTable, (GetRemoteFilesParams) any);
+                    result = remoteFiles;
+                }};
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(catalogTable);
+            SlotDescriptor slot = new SlotDescriptor(new SlotId(1), "id", IntegerType.INT, false);
+            slot.setColumn(new Column("id", IntegerType.INT));
+            desc.addSlot(slot);
+            PaimonScanNode scan = new PaimonScanNode(new PlanNodeId(0), desc, "PAIMON_SCAN");
+            scan.setupScanRangeLocations(desc, null, -1);
+
+            Assertions.assertNotSame(catalogTable, scan.getPaimonTable());
+            Assertions.assertSame(boundNative, scan.getPaimonTable().getNativeTable());
+            Assertions.assertSame(scan.getPaimonTable(), desc.getTable());
+            Assertions.assertSame(catalogNative, catalogTable.getNativeTable());
+            Assertions.assertEquals(Map.of(), catalogNative.schema().options());
+            THdfsScanRange range = scan.getScanRangeLocations(0).get(0).getScan_range().getHdfs_scan_range();
+            Assertions.assertTrue(range.isUse_paimon_jni_reader());
+            Assertions.assertFalse(range.isUse_paimon_native_reader());
+            Assertions.assertFalse(range.isSetPaimon_split_info_binary());
+            IndexedSplit decoded = InstantiationUtil.deserializeObject(
+                    Base64.getUrlDecoder().decode(range.getPaimon_split_info()), getClass().getClassLoader());
+            Assertions.assertEquals(indexedSplit.rowRanges(), decoded.rowRanges());
+            Assertions.assertEquals(indexedSplit.dataSplit().snapshotId(), decoded.dataSplit().snapshotId());
         } finally {
             ConnectContext.remove();
         }
