@@ -396,7 +396,7 @@ public class TypeManager {
         if (from.isNull()) {
             return true;
         } else if (from.isGeoType() || to.isGeoType()) {
-            return from.equals(to);
+            return canCastGeoType(from, to);
         } else if (from.isStringType() && to.isBitmapType()) {
             return true;
         } else if (from.isScalarType() && to.isScalarType()) {
@@ -785,6 +785,13 @@ public class TypeManager {
 
     // TODO(mofei) Why call implicit cast in the explicit cast context
     public static boolean canCastTo(ScalarType type, ScalarType targetType) {
+        if (type.isGeoType() || targetType.isGeoType()) {
+            return canCastGeoType(type, targetType);
+        }
         return PrimitiveType.isImplicitCast(type.getPrimitiveType(), targetType.getPrimitiveType());
+    }
+
+    private static boolean canCastGeoType(Type from, Type to) {
+        return from.isNull() || from.equals(to);
     }
 }

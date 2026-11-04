@@ -515,9 +515,8 @@ public class NativeGeoTypeTest {
                     metadata.logicalType(), metadata.coordinateSystem(), metadata.edgeAlgorithm(), "EPSG:4326", 4326));
 
             assertFalse(metadata.isSemanticallyCompatible(differentCrs.getGeoDescriptor()));
-            boolean sameKindCastAllowed = primitive == PrimitiveType.GEOGRAPHY;
-            assertEquals(sameKindCastAllowed, TypeManager.canCastTo(geo, differentCrs));
-            assertEquals(sameKindCastAllowed, TypeManager.canCastTo(differentCrs, geo));
+            assertFalse(TypeManager.canCastTo(geo, differentCrs));
+            assertFalse(TypeManager.canCastTo(differentCrs, geo));
             assertFalse(TypeManager.isImplicitlyCastable(geo, differentCrs, true));
             assertIncompatibleGeoPair(geo, differentCrs);
             assertThrows(IllegalArgumentException.class, () -> ScalarType.createGeoType(primitive,
@@ -534,6 +533,41 @@ public class NativeGeoTypeTest {
         assertFalse(TypeManager.canCastTo(geography, geometry));
         assertFalse(TypeManager.canCastTo(geometry, geography));
         assertIncompatibleGeoPair(geography, geometry);
+    }
+
+    @Test
+    public void testGeoCastOverloadsAgree() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            GeoTypeDescriptor metadata = descriptor(primitive);
+            ScalarType geo = ScalarType.createGeoType(primitive, metadata);
+            assertGeoCastOverloads(true, geo, ScalarType.createGeoType(primitive, new GeoTypeDescriptor(
+                    metadata.logicalType(), metadata.coordinateSystem(), metadata.edgeAlgorithm(),
+                    metadata.crs(), metadata.srid())));
+            assertGeoCastOverloads(true, NullType.NULL, geo);
+            assertGeoCastOverloads(false, geo, NullType.NULL);
+            PrimitiveType otherKind = primitive == PrimitiveType.GEOGRAPHY ? PrimitiveType.GEOMETRY : PrimitiveType.GEOGRAPHY;
+            for (ScalarType other : List.of(
+                    ScalarType.createGeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
+                            metadata.coordinateSystem(), metadata.edgeAlgorithm(), "EPSG:4326", 4326)),
+                    ScalarType.createGeoType(primitive, new GeoTypeDescriptor(metadata.logicalType(),
+                            metadata.coordinateSystem(), metadata.edgeAlgorithm(), metadata.crs(), null)),
+                    ScalarType.createGeoType(otherKind, descriptor(otherKind)), VarcharType.VARCHAR, VarbinaryType.VARBINARY)) {
+                assertGeoCastOverloads(false, geo, other);
+                assertGeoCastOverloads(false, other, geo);
+            }
+        }
+        ScalarType geography = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
+        GeoTypeDescriptor metadata = geography.getGeoDescriptor();
+        ScalarType differentEdge = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
+                metadata.logicalType(), metadata.coordinateSystem(), GeoTypeDescriptor.EdgeAlgorithm.KARNEY,
+                metadata.crs(), metadata.srid()));
+        assertGeoCastOverloads(false, geography, differentEdge);
+        assertGeoCastOverloads(false, differentEdge, geography);
+    }
+
+    private static void assertGeoCastOverloads(boolean expected, ScalarType from, ScalarType to) {
+        assertEquals(expected, TypeManager.canCastTo((Type) from, (Type) to));
+        assertEquals(expected, TypeManager.canCastTo(from, to));
     }
 
     @Test
