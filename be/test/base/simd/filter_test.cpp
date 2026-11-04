@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <random>
 #include <vector>
 
@@ -146,6 +147,290 @@ PARALLEL_TEST(SimdFilterTest, vectorized_path_matches_scalar) {
         for (int keep : {0, 50, 250, 500, 750, 950, 1000}) {
             check_against_reference<int32_t>(n, keep, 12345);
             check_against_reference<int64_t>(n, keep, 67890);
+        }
+    }
+}
+
+struct Elem3B {
+    uint8_t bytes[3];
+    bool operator==(const Elem3B& o) const { return std::memcmp(bytes, o.bytes, 3) == 0; }
+};
+static_assert(sizeof(Elem3B) == 3);
+
+struct Elem12B {
+    uint32_t a, b, c;
+    bool operator==(const Elem12B& o) const { return a == o.a && b == o.b && c == o.c; }
+};
+static_assert(sizeof(Elem12B) == 12);
+
+struct Elem16B {
+    uint64_t a, b;
+    bool operator==(const Elem16B& o) const { return a == o.a && b == o.b; }
+};
+static_assert(sizeof(Elem16B) == 16);
+
+struct Elem32B {
+    uint64_t a, b, c, d;
+    bool operator==(const Elem32B& o) const { return a == o.a && b == o.b && c == o.c && d == o.d; }
+};
+static_assert(sizeof(Elem32B) == 32);
+
+template <typename T, typename GenFn>
+static void check_element_width_patterns(GenFn gen_fn) {
+    const std::vector<size_t> sizes = {0, 1, 7, 16, 31, 32, 33, 64, 100};
+    for (size_t n : sizes) {
+        if (n == 0) {
+            std::vector<T> src;
+            std::vector<T> dst;
+            std::vector<uint8_t> sel;
+            size_t out = filter_range(dst.data(), src.data(), sel, 0, 0);
+            EXPECT_EQ(0, out);
+            continue;
+        }
+        std::vector<T> src(n);
+        for (size_t i = 0; i < n; ++i) {
+            src[i] = gen_fn(i);
+        }
+
+        for (int pattern = 0; pattern < 5; ++pattern) {
+            std::vector<uint8_t> selector(n, 0);
+            std::vector<T> expected;
+            for (size_t i = 0; i < n; ++i) {
+                bool keep = false;
+                switch (pattern) {
+                case 0:
+                    keep = false;
+                    break;
+                case 1:
+                    keep = true;
+                    break;
+                case 2:
+                    keep = (i % 2 == 0);
+                    break;
+                case 3:
+                    keep = (i % 7 == 0);
+                    break;
+                case 4:
+                    keep = (i % 7 != 0);
+                    break;
+                }
+                selector[i] = keep ? 1 : 0;
+                if (keep) {
+                    expected.push_back(src[i]);
+                }
+            }
+
+            // Separate buffer
+            std::vector<T> dst(n);
+            size_t out_sz = filter_range(dst.data(), src.data(), selector, 0, n);
+            ASSERT_EQ(expected.size(), out_sz);
+            for (size_t i = 0; i < out_sz; ++i) {
+                ASSERT_TRUE(expected[i] == dst[i]);
+            }
+
+            // In-place
+            std::vector<T> in_place = src;
+            size_t ip_sz = filter_range(in_place.data(), in_place.data(), selector, 0, n);
+            ASSERT_EQ(expected.size(), ip_sz);
+            for (size_t i = 0; i < ip_sz; ++i) {
+                ASSERT_TRUE(expected[i] == in_place[i]);
+            }
+        }
+    }
+}
+
+PARALLEL_TEST(SimdFilterTest, element_widths) {
+    // 1B
+    check_element_width_patterns<uint8_t>([](size_t i) -> uint8_t { return static_cast<uint8_t>(i * 17 + 3); });
+    // 2B
+    check_element_width_patterns<uint16_t>([](size_t i) -> uint16_t { return static_cast<uint16_t>(i * 1337 + 5); });
+    // 3B
+    check_element_width_patterns<Elem3B>([](size_t i) -> Elem3B {
+        return Elem3B{static_cast<uint8_t>(i), static_cast<uint8_t>(i * 3), static_cast<uint8_t>(i ^ 0x5a)};
+    });
+    // 4B
+    check_element_width_patterns<uint32_t>(
+            [](size_t i) -> uint32_t { return static_cast<uint32_t>(i * 2654435761u + 7); });
+    // 8B
+    check_element_width_patterns<uint64_t>(
+            [](size_t i) -> uint64_t { return static_cast<uint64_t>(i * 6364136223846793005ull + 11); });
+    // 12B
+    check_element_width_patterns<Elem12B>([](size_t i) -> Elem12B {
+        return Elem12B{static_cast<uint32_t>(i), static_cast<uint32_t>(i * 2 + 1), static_cast<uint32_t>(i * 5 + 9)};
+    });
+    // 16B
+    check_element_width_patterns<Elem16B>([](size_t i) -> Elem16B {
+        return Elem16B{static_cast<uint64_t>(i * 2654435761ull), static_cast<uint64_t>(i ^ 0xdeadbeefcafebabeull)};
+    });
+    // 32B
+    check_element_width_patterns<Elem32B>([](size_t i) -> Elem32B {
+        return Elem32B{static_cast<uint64_t>(i), static_cast<uint64_t>(i + 10), static_cast<uint64_t>(i + 20),
+                       static_cast<uint64_t>(i + 30)};
+    });
+}
+
+PARALLEL_TEST(SimdFilterTest, subrange_offsets) {
+    const std::vector<size_t> from_offsets = {0, 1, 15, 16, 31, 32};
+    const std::vector<size_t> lengths = {0, 1, 2, 7, 15, 31, 32, 45, 64};
+
+    auto run_for_type = [&](auto dummy) {
+        using T = decltype(dummy);
+        for (size_t from : from_offsets) {
+            for (size_t len : lengths) {
+                size_t to = from + len;
+                size_t total_n = to + 16;
+                std::vector<T> src(total_n);
+                std::vector<T> dst(total_n);
+                std::vector<uint8_t> selector(total_n);
+
+                constexpr T kCanary = static_cast<T>(0xFEEDBEEF);
+                for (size_t i = 0; i < total_n; ++i) {
+                    src[i] = static_cast<T>(10000 + i);
+                    dst[i] = kCanary;
+                    selector[i] = ((i * 3 + 1) % 5 < 3) ? 1 : 0;
+                }
+
+                std::vector<T> expected;
+                for (size_t i = from; i < to; ++i) {
+                    if (selector[i]) {
+                        expected.push_back(src[i]);
+                    }
+                }
+
+                // Test separate buffer
+                size_t new_end = filter_range(dst.data(), src.data(), selector, from, to);
+                ASSERT_EQ(from + expected.size(), new_end) << "from=" << from << " to=" << to;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(kCanary, dst[i]) << "dst[" << i << "] modified before from=" << from;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst[from + i]) << "mismatch at " << i << " from=" << from << " to=" << to;
+                }
+
+                // Test in-place
+                std::vector<T> in_place = src;
+                size_t ip_end = filter_range(in_place.data(), in_place.data(), selector, from, to);
+                ASSERT_EQ(from + expected.size(), ip_end) << "in-place from=" << from << " to=" << to;
+                for (size_t i = 0; i < from; ++i) {
+                    ASSERT_EQ(src[i], in_place[i]) << "in-place[" << i << "] modified before from=" << from;
+                }
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], in_place[from + i]);
+                }
+            }
+        }
+    };
+
+    run_for_type(uint32_t{0});
+    run_for_type(uint64_t{0});
+}
+
+PARALLEL_TEST(SimdFilterTest, floating_point_special_values) {
+    // 32-bit floats
+    {
+        const std::vector<uint32_t> float_bit_patterns = {
+                0x00000000u, // +0.0f
+                0x80000000u, // -0.0f
+                0x7F800000u, // +inf
+                0xFF800000u, // -inf
+                0x7FC00001u, // quiet NaN payload 1
+                0x7FC01234u, // quiet NaN payload 0x1234
+                0xFFC0ABCDu, // negative quiet NaN payload 0xABCD
+                0x7F800001u, // signaling NaN payload 1 (quiet bit 22 is 0)
+                0x7FA05678u, // signaling NaN payload 0x205678 (quiet bit 22 is 0)
+                0xFF800001u, // negative signaling NaN payload 1
+                0x3F800000u, // 1.0f
+                0xBF800000u, // -1.0f
+                0x00000001u, // subnormal
+        };
+
+        const size_t n = 104; // multiple of patterns, >= 32 to trigger vector loops
+        std::vector<float> src(n);
+        std::vector<uint8_t> selector(n);
+        std::vector<uint32_t> expected_bits;
+
+        for (size_t i = 0; i < n; ++i) {
+            uint32_t pattern = float_bit_patterns[i % float_bit_patterns.size()];
+            std::memcpy(&src[i], &pattern, sizeof(float));
+            selector[i] = ((i % 3 == 0) || (i % 7 == 0)) ? 1 : 0;
+            if (selector[i]) {
+                expected_bits.push_back(pattern);
+            }
+        }
+
+        // Separate buffer
+        std::vector<float> dst(n, 0.0f);
+        size_t out_sz = filter_range(dst.data(), src.data(), selector, 0, n);
+        ASSERT_EQ(expected_bits.size(), out_sz);
+        for (size_t i = 0; i < out_sz; ++i) {
+            uint32_t dst_bits;
+            std::memcpy(&dst_bits, &dst[i], sizeof(float));
+            ASSERT_EQ(expected_bits[i], dst_bits) << "Float bit mismatch at " << i << " expected 0x" << std::hex
+                                                  << expected_bits[i] << " got 0x" << dst_bits;
+        }
+
+        // In-place
+        std::vector<float> in_place = src;
+        size_t ip_sz = filter_range(in_place.data(), in_place.data(), selector, 0, n);
+        ASSERT_EQ(expected_bits.size(), ip_sz);
+        for (size_t i = 0; i < ip_sz; ++i) {
+            uint32_t ip_bits;
+            std::memcpy(&ip_bits, &in_place[i], sizeof(float));
+            ASSERT_EQ(expected_bits[i], ip_bits) << "In-place float bit mismatch at " << i;
+        }
+    }
+
+    // 64-bit doubles
+    {
+        const std::vector<uint64_t> double_bit_patterns = {
+                0x0000000000000000ull, // +0.0
+                0x8000000000000000ull, // -0.0
+                0x7FF0000000000000ull, // +inf
+                0xFFF0000000000000ull, // -inf
+                0x7FF8000000000001ull, // quiet NaN payload 1 (quiet bit 51 is 1)
+                0x7FF8000012345678ull, // quiet NaN payload 0x12345678
+                0xFFF80000AABBCCDDull, // negative quiet NaN payload 0xAABBCCDD
+                0x7FF0000000000001ull, // signaling NaN payload 1 (quiet bit 51 is 0)
+                0x7FF4000087654321ull, // signaling NaN payload 0x4000087654321 (quiet bit 51 is 0)
+                0xFFF0000000000001ull, // negative signaling NaN payload 1
+                0x3FF0000000000000ull, // 1.0
+                0xBFF0000000000000ull, // -1.0
+                0x0000000000000001ull, // subnormal
+        };
+
+        const size_t n = 104;
+        std::vector<double> src(n);
+        std::vector<uint8_t> selector(n);
+        std::vector<uint64_t> expected_bits;
+
+        for (size_t i = 0; i < n; ++i) {
+            uint64_t pattern = double_bit_patterns[i % double_bit_patterns.size()];
+            std::memcpy(&src[i], &pattern, sizeof(double));
+            selector[i] = ((i % 3 == 0) || (i % 5 == 0)) ? 1 : 0;
+            if (selector[i]) {
+                expected_bits.push_back(pattern);
+            }
+        }
+
+        // Separate buffer
+        std::vector<double> dst(n, 0.0);
+        size_t out_sz = filter_range(dst.data(), src.data(), selector, 0, n);
+        ASSERT_EQ(expected_bits.size(), out_sz);
+        for (size_t i = 0; i < out_sz; ++i) {
+            uint64_t dst_bits;
+            std::memcpy(&dst_bits, &dst[i], sizeof(double));
+            ASSERT_EQ(expected_bits[i], dst_bits) << "Double bit mismatch at " << i << " expected 0x" << std::hex
+                                                  << expected_bits[i] << " got 0x" << dst_bits;
+        }
+
+        // In-place
+        std::vector<double> in_place = src;
+        size_t ip_sz = filter_range(in_place.data(), in_place.data(), selector, 0, n);
+        ASSERT_EQ(expected_bits.size(), ip_sz);
+        for (size_t i = 0; i < ip_sz; ++i) {
+            uint64_t ip_bits;
+            std::memcpy(&ip_bits, &in_place[i], sizeof(double));
+            ASSERT_EQ(expected_bits[i], ip_bits) << "In-place double bit mismatch at " << i;
         }
     }
 }
