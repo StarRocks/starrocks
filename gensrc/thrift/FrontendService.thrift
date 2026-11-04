@@ -2544,35 +2544,6 @@ struct TFeMetricsResult {
     2: optional string json_metrics
 }
 
-<<<<<<< HEAD
-=======
-// Semantic metadata cache invalidation is intentionally independent of refreshTable: deleted or
-// unreadable Semantic objects do not have a loadable external Table to refresh.
-enum TSemanticMetadataInvalidationScope {
-    OBJECT = 0,
-    DATABASE = 1
-}
-
-struct TSemanticMetadataInvalidationRequest {
-    1: optional TSemanticMetadataInvalidationScope scope;
-    2: optional string catalog_name;
-    3: optional i64 catalog_id;
-    4: optional string database_name;
-    5: optional i64 collection_id;
-    // OBJECT scope only.
-    6: optional string object_name;
-    7: optional i64 entity_id;
-    8: optional i64 context_version;
-    // The contextbase whose semantic_views collection holds the object (OBJECT scope). Fields 2-5 name the retired
-    // Semantic catalog and its database, which no FE sends any more; a request without base_id is a no-op.
-    9: optional i64 base_id;
-    10: optional string base_name;
-}
-
-struct TSemanticMetadataInvalidationResponse {
-    1: optional Status.TStatus status;
-}
-
 // Asked by a backend whose scan node carries a TCloudConfiguration with refresh_after_ms set, once that time
 // has passed. refresh_token is the one that configuration carried; the coordinator answers with the scan node's
 // current configuration, renewing it first if it is due.
@@ -2587,7 +2558,6 @@ struct TRefreshScanCredentialsResponse {
     2: optional CloudConfiguration.TCloudConfiguration cloud_configuration;
 }
 
->>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2752,12 +2722,6 @@ service FrontendService {
     // when `enable_http_auth` is on. Returns OK status when the user/password pair is
     // valid for the given host, or an error status otherwise.
     TFeResult checkAuth(1: optional TAuthenticateParams request)
-<<<<<<< HEAD
-=======
-
-    TSemanticMetadataInvalidationResponse invalidateSemanticMetadata(
-        1: optional TSemanticMetadataInvalidationRequest request)
 
     TRefreshScanCredentialsResponse refreshScanCredentials(1: optional TRefreshScanCredentialsRequest request)
->>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
 }

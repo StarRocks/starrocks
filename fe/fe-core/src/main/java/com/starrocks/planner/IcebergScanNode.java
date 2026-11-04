@@ -41,11 +41,7 @@ import com.starrocks.connector.iceberg.IcebergVendedCredentials;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.credential.CloudConfiguration;
-<<<<<<< HEAD
-=======
 import com.starrocks.credential.CredentialRefreshPolicy;
-import com.starrocks.epack.connector.iceberg.IcebergDeletionVectorSupport;
->>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;

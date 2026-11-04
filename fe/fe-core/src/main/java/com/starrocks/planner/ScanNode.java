@@ -60,13 +60,9 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.TestOnly;
 
-<<<<<<< HEAD
-=======
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.time.Instant;
->>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HexFormat;
@@ -301,27 +297,6 @@ public abstract class ScanNode extends PlanNode {
         // default no-op: subclasses that maintain streaming scan state should override
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * Whether this scan holds credentials issued for the current query. Such a plan must not be phase-scheduled,
-     * logged or kept in query history.
-     */
-    public boolean carriesQueryScopedCredentials() {
-        return false;
-    }
-
-    public static boolean anyCarriesQueryScopedCredentials(List<ScanNode> scanNodes) {
-        return scanNodes != null && scanNodes.stream().anyMatch(ScanNode::carriesQueryScopedCredentials);
-    }
-
-    /**
-     * Admits this scan's credentials before dispatch, renewing them if needed; refuses only when no usable
-     * window is left. The window is not enforced on the backends yet.
-     */
-    public void admitScanCredentials(Instant requestedDeadline) {
-    }
-
     /**
      * Answers a backend whose credentials for this scan are due for refresh (their
      * {@code refresh_after_ms} has passed) while the query is still running.
@@ -354,7 +329,6 @@ public abstract class ScanNode extends PlanNode {
                 && MessageDigest.isEqual(own.getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8));
     }
 
->>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
     protected void setConnectorCatalogType(TPlanNode msg) {
         Table table = desc.getTable();
         if (table != null) {

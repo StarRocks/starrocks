@@ -16,11 +16,8 @@
 
 #include <filesystem>
 
-<<<<<<< HEAD
-=======
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
->>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
 #include "cache/disk_cache/block_cache.h"
 #ifdef WITH_STARCACHE
 #include "cache/datacache.h"

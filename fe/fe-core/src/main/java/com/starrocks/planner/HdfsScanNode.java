@@ -196,15 +196,6 @@ public class HdfsScanNode extends ScanNode {
 
         setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
-<<<<<<< HEAD
-=======
-        if (queryScopedCredentials != null) {
-            // cloudConfiguration(ctx) validates against the running query and throws once the credentials no longer
-            // apply; called per serialization because admission may have renewed them since planning.
-            tHdfsScanNode.setCloud_configuration(
-                    queryScopedCloudConfigurationToThrift(this, queryScopedCredentials, ConnectContext.get()));
-        }
->>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
         setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
@@ -229,38 +220,6 @@ public class HdfsScanNode extends ScanNode {
         tHdfsScanNode.setCan_use_min_max_opt(option.getCanUseMinMaxOpt());
         tHdfsScanNode.setUse_partition_column_value_only(option.getUsePartitionColumnValueOnly());
         tHdfsScanNode.setCan_use_count_opt(option.getCanUseCountOpt());
-    }
-
-    @Override
-    public TCloudConfiguration refreshScanCredentials(ConnectContext context) {
-        return refreshQueryScopedCredentials(this, queryScopedCredentials, context);
-    }
-
-    /**
-     * Per-query credentials as the backend gets them, with when a running scan should ask for renewed ones.
-     * refreshAfter is read first: a renewal landing in between then only makes the backend ask early.
-     */
-    static TCloudConfiguration queryScopedCloudConfigurationToThrift(ScanNode owner,
-                                                                     QueryScopedCredentials credentials,
-                                                                     ConnectContext context) {
-        Instant refreshAfter = credentials.refreshAfter();
-        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-        credentials.cloudConfiguration(context).toThrift(tCloudConfiguration);
-        if (refreshAfter != null) {
-            tCloudConfiguration.setRefresh_after_ms(refreshAfter.toEpochMilli());
-            tCloudConfiguration.setRefresh_token(owner.credentialRefreshToken());
-        }
-        return tCloudConfiguration;
-    }
-
-    /** The answer to a backend whose per-query credentials are due; null when they cannot be renewed. */
-    static TCloudConfiguration refreshQueryScopedCredentials(ScanNode owner, QueryScopedCredentials credentials,
-                                                             ConnectContext context) {
-        if (credentials == null || credentials.refreshAfter() == null) {
-            return null;
-        }
-        credentials.renewForRunningScan(context);
-        return queryScopedCloudConfigurationToThrift(owner, credentials, context);
     }
 
     public static void setCloudConfigurationToThrift(THdfsScanNode tHdfsScanNode, CloudConfiguration cc) {
