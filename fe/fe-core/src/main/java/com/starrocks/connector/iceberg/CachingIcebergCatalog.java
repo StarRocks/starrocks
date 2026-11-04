@@ -712,10 +712,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
 
     private int weighTableEntry(IcebergTableName key, Table table) {
-        long size = Estimator.estimate(key);
-        if (table != null) {
-            size += Estimator.estimate(table);
-        }
+        long size = Estimator.estimate(key) + weighPrivateTableState(table);
         if (size > Integer.MAX_VALUE) {
             LOG.warn("Table cache entry size for key {} is too large: {} bytes", key, size);
             return Integer.MAX_VALUE;
@@ -723,8 +720,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return (int) size;
     }
 
-<<<<<<< HEAD
-=======
     // Charge an entry only for the metadata it exclusively owns, which is what evicting it actually
     // frees. Walking the whole table instead reaches the TableOperations, and from there the objects
     // the catalog shares across all of its tables -- the Hadoop configuration, the metastore client
@@ -759,7 +754,6 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         return Estimator.shallow(table);
     }
 
->>>>>>> 3f861c1e69f... [BugFix][RB-225] Make the Iceberg and Delta Lake metadata cache memory estimates match the heap (#68355)
     // Each entry holds a whole table's partition map, which is unbounded in bytes (a table can have
     // millions of partitions). Sample the partition values so weighing stays cheap on large maps.
     private int weighPartitionEntry(IcebergTableName key, Map<String, Partition> partitions) {
