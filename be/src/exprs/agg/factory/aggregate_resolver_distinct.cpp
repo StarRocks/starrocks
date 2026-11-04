@@ -23,15 +23,20 @@ struct DistinctDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
         if constexpr (lt_is_aggregate<lt> || lt_is_binary<lt>) {
-            using DistinctState = DistinctAggregateState<lt, SumResultLT<lt>>;
             using DistinctState2 = DistinctAggregateStateV2<lt, SumResultLT<lt>>;
+<<<<<<< HEAD
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState>(
                     "multi_distinct_count", false, AggregateFactory::MakeCountDistinctAggregateFunction<lt>());
+=======
+>>>>>>> 616232c ([Refactor] Remove the V1 multi_distinct_count/multi_distinct_sum implementations (#82291))
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DistinctState2>(
                     "multi_distinct_count2", false, AggregateFactory::MakeCountDistinctAggregateFunctionV2<lt>());
 
+<<<<<<< HEAD
             resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState>(
                     "multi_distinct_sum", false, AggregateFactory::MakeSumDistinctAggregateFunction<lt>());
+=======
+>>>>>>> 616232c ([Refactor] Remove the V1 multi_distinct_count/multi_distinct_sum implementations (#82291))
             resolver->add_aggregate_mapping<lt, SumResultLT<lt>, DistinctState2>(
                     "multi_distinct_sum2", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<lt>());
 
