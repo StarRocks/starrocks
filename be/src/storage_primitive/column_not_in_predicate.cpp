@@ -417,6 +417,9 @@ ColumnPredicate* new_column_not_in_predicate(const TypeInfoPtr& type_info, Colum
     case TYPE_TIME:
     case TYPE_BINARY:
     case TYPE_MAX_VALUE:
+    case TYPE_GEOGRAPHY:
+    case TYPE_GEOMETRY:
+    case TYPE_FILE:
     case TYPE_VARBINARY:
     case TYPE_INT256:
         return nullptr;

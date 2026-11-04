@@ -120,6 +120,8 @@ CONF_Bool(parquet_page_index_enable, "true");
 
 CONF_mBool(parquet_reader_bloom_filter_enable, "true");
 
+// Deprecated and ignored: the exact time zone conversion of parquet timestamps is as fast now (one offset per
+// batch that does not cross an offset change), so the fixed-offset shortcut that could be wrong is gone.
 CONF_mBool(parquet_fast_timezone_conversion, "false");
 
 CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");

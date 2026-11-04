@@ -40,6 +40,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -59,6 +61,7 @@ public class ProfileAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
+        // enable_http_auth's OPERATE requirement predates, and is independent of, the profile access check below.
         requireOperateIfHttpAuthEnabled();
 
         String queryId = request.getSingleParameter("query_id");
@@ -67,7 +70,14 @@ public class ProfileAction extends RestBaseAction {
             sendResult(request, response, HttpResponseStatus.BAD_REQUEST);
             return;
         }
-        String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
+        ProfileManager.ProfileElement element = ProfileManager.getInstance().getProfileElement(queryId);
+        String queryProfileStr = null;
+        if (element != null) {
+            // Same rule as SHOW PROFILELIST and ANALYZE PROFILE: the owner may read their own profile, anyone
+            // else needs SYSTEM OPERATE.
+            Authorizer.checkQueryProfileAccess(ConnectContext.get(), element);
+            queryProfileStr = element.getProfileString();
+        }
         if (queryProfileStr != null) {
             response.getContent().append(queryProfileStr);
             sendResult(request, response);

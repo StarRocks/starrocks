@@ -16,10 +16,22 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.FunctionParams;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.MapType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructType;
+import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -82,6 +94,26 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+    public void testStructFieldIsSubjectToGroupBy() {
+        // A field of a struct-valued expression is constant within a group exactly when the struct is. The check
+        // used to reject every such field access, even when the struct was built from aggregates.
+        analyzeSuccess("select named_struct('a', sum(v1), 'b', max(v2)).a from t0");
+        analyzeSuccess("select v1, named_struct('a', sum(v2)).a from t0 group by v1");
+        analyzeSuccess("select any_value(vs).a from ttypes");
+        analyzeSuccess("select v1 from t0 group by v1 having named_struct('a', sum(v2)).a > 1");
+        analyzeSuccess("select v1 from t0 group by v1 order by named_struct('a', sum(v2)).a");
+        analyzeSuccess("select named_struct('a', v2).a from t0 group by named_struct('a', v2)");
+
+        // A bare column inside the struct still has to be grouped.
+        analyzeFail("select named_struct('a', v2).a from t0 group by v1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select named_struct('a', sum(v1), 'b', v2).a from t0",
+                "must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select v1 from t0 group by v1 having named_struct('a', v2).a > 1",
+                "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
     public void testCollectionSubscriptIsSubjectToGroupBy() {
         // The subscript of a collection element is an ordinary expression: a bare column there is no more
         // legal than anywhere else. It used to slip past this check and blow up later in the optimizer
@@ -99,6 +131,20 @@ public class AnalyzeAggregateTest {
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select map_agg(v1, v2)[v3] from t0 order by map_agg(v1, v2)[v3]",
                 "must be an aggregate expression or appear in GROUP BY clause");
+    }
+
+    @Test
+    public void testMapAggDecimalKeyKeepsPrecision() {
+        // map_agg declares its decimal keys as wildcards; the result must carry the input's precision and scale,
+        // not the wildcard's -1, which the BE cannot build a column for.
+        QueryRelation query = ((QueryStatement) analyzeSuccess(
+                "select map_agg(tj, tc), map_agg(4.4, tc) from tall")).getQueryRelation();
+        ScalarType columnKey = (ScalarType) ((MapType) query.getOutputExpression().get(0).getType()).getKeyType();
+        Assertions.assertEquals(9, columnKey.getScalarPrecision());
+        Assertions.assertEquals(3, columnKey.getScalarScale());
+        ScalarType literalKey = (ScalarType) ((MapType) query.getOutputExpression().get(1).getType()).getKeyType();
+        Assertions.assertEquals(2, literalKey.getScalarPrecision());
+        Assertions.assertEquals(1, literalKey.getScalarScale());
     }
 
     @Test
@@ -582,5 +628,78 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select grouping(v1), sum(v2) from t0 group by all");
         analyzeSuccess("select grouping(v1) from t0 group by all");
         analyzeSuccess("select *, sum(v1) from t0 group by all");
+    }
+
+    @Test
+    public void testDistinctOverPercentile() {
+        // count(distinct <PERCENTILE>) has no meaning and no rewrite (unlike count(distinct bitmap)
+        // / count(distinct hll), which the optimizer rewrites to bitmap_union_count / hll
+        // cardinality), so it used to reach the BE as a raw distinct aggregate and crash when the
+        // PercentileColumn was down_cast to a BinaryColumn. It must be rejected up front.
+        analyzeFail("select count(distinct percentile_hash(cast(1 as double)))",
+                "DISTINCT aggregation is not supported for PERCENTILE type");
+        analyzeFail("select count(distinct p1) from test_object",
+                "DISTINCT aggregation is not supported for PERCENTILE type");
+        // count(distinct bitmap) / count(distinct hll) stay supported -- only PERCENTILE is rejected.
+        analyzeSuccess("select count(distinct b1) from test_object");
+        analyzeSuccess("select count(distinct h1) from test_object");
+    }
+
+    @Test
+    public void testDistinctOverGeo() {
+        for (String constructor : List.of("ST_GeogFromText(%s)", "ST_GeomFromText(%s, 'EPSG:3857')")) {
+            String geoName = constructor.startsWith("ST_Geog") ? "GEOGRAPHY" : "GEOMETRY";
+            String error = "DISTINCT aggregation is not supported for " + geoName + " type";
+            String source = " from (select v1, v2, "
+                    + String.format(constructor, "if(v1 IS NULL, NULL, 'POINT (1 2)')") + " g from t0) t";
+            analyzeFail("select count(distinct v1, g)" + source, error);
+            analyzeFail("select count(distinct v1, g, v2)" + source, error);
+            analyzeFail("select 1" + source + " having count(distinct v1, g) > 0", error);
+            analyzeFail("select count(*)" + source + " order by count(distinct v1, g)", error);
+            analyzeFail("select count(distinct v1, g) over (partition by v2)" + source, error);
+            analyzeFail("select count(distinct g) over (partition by v2)" + source,
+                    "No matching function with signature: count(");
+            analyzeFail("select 1" + source + " having count(distinct g) > 0",
+                    "No matching function with signature: count(");
+            analyzeFail("select array_agg(distinct g)" + source, error);
+            for (String value : List.of("NULL", "'POINT EMPTY'", "'POINT (1 2)'")) {
+                analyzeFail("select count(distinct 1, " + String.format(constructor, value) + ")", error);
+            }
+            analyzeSuccess("select count(distinct ST_AsText(g)), count(distinct ST_AsBinary(g))" + source);
+        }
+        analyzeSuccess("select count(distinct v1, v2) from t0");
+        // Legacy one-argument ST_GeomFromText returns VARCHAR.
+        analyzeSuccess("select count(distinct ST_GeomFromText('POINT (1 2)'))");
+    }
+
+    @Test
+    public void testDistinctOverTypedNestedGeo() {
+        for (String geoSql : List.of("ST_GeogFromText('POINT (1 2)')",
+                "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')")) {
+            Type geo = ((QueryStatement) analyzeSuccess("select " + geoSql)).getQueryRelation()
+                    .getRelationFields().getFieldByIndex(0).getType();
+            String geoName = geo.getPrimitiveType().name();
+            for (Type type : List.of(geo, new ArrayType(geo), new MapType(VarcharType.VARCHAR, geo),
+                    new StructType(List.of(geo)), new ArrayType(new StructType(List.of(geo))))) {
+                SlotRef argument = new SlotRef(null, "g");
+                argument.setType(type);
+                FunctionCallExpr call = new FunctionCallExpr("count",
+                        new FunctionParams(true, List.of(new IntLiteral(1), argument)));
+                call.setFn(FunctionAnalyzer.getAnalyzedFunction(AnalyzeTestUtil.getConnectContext(), call,
+                        new Type[] {call.getChild(0).getType(), type}));
+                Assertions.assertNotNull(call.getFn());
+                // Call the owning guard directly: SQL analysis rejects nested geo earlier via 7.0a.
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> FunctionAnalyzer.analyze(call));
+                String expectedPrefix = "DISTINCT aggregation is not supported for ";
+                if (type.isGeoType()) {
+                    expectedPrefix += geoName + " type";
+                } else if (type.isArrayType() && ((ArrayType) type).getItemType().isGeoType()) {
+                    expectedPrefix += "ARRAY<" + geoName + "> type";
+                }
+                Assertions.assertTrue(error.getMessage().contains(expectedPrefix), error.getMessage());
+                Assertions.assertTrue(error.getMessage().contains(geoName), error.getMessage());
+            }
+        }
     }
 }

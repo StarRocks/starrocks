@@ -34,8 +34,11 @@ bool OlapPredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
 }
 
 bool OlapPredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
+    // field_index() reports a miss as size_t(-1), so an absent column reads as a huge index
+    // rather than a small one. Nothing can be pushed down for a column the tablet schema does
+    // not carry, and failing the one predicate beats aborting the process.
     const size_t index = _schema->field_index(slot_desc->col_name());
-    CHECK(index <= _schema->num_columns());
+    RETURN_IF(index >= _schema->num_columns(), false);
     const TabletColumn& column = _schema->column(index);
     return _schema->keys_type() == KeysType::PRIMARY_KEYS ||
            column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;

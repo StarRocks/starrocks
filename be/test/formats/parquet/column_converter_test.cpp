@@ -17,7 +17,11 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <limits>
+#include <random>
 
+#include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -32,6 +36,7 @@
 #include "fs/fs.h"
 #include "parquet_test_util/util.h"
 #include "runtime/descriptor_helper.h"
+#include "testutil/type_test_helper.h"
 #include "types/time_types.h"
 #include "types/timestamp_value.h"
 
@@ -150,12 +155,12 @@ TEST_F(ColumnConverterTest, TestByteArrayTest) {
         const std::string col_name = "string";
         // string to char
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_CHAR);
+            const TypeDescriptor col_type = TYPE_CHAR_DESC;
             check(file_path, col_type, col_name, "['string_smith']", expected_rows);
         }
         // string to varchar
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+            const TypeDescriptor col_type = TYPE_VARCHAR_DESC;
             check(file_path, col_type, col_name, "['string_smith']", expected_rows);
         }
     }
@@ -164,12 +169,12 @@ TEST_F(ColumnConverterTest, TestByteArrayTest) {
         const std::string col_name = "enum";
         // enum to char
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_CHAR);
+            const TypeDescriptor col_type = TYPE_CHAR_DESC;
             check(file_path, col_type, col_name, "['enum_smith']", expected_rows);
         }
         // enum to varchar
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+            const TypeDescriptor col_type = TYPE_VARCHAR_DESC;
             check(file_path, col_type, col_name, "['enum_smith']", expected_rows);
         }
     }
@@ -201,15 +206,15 @@ TEST_F(ColumnConverterTest, TestByteArrayTest) {
     {
         const std::string col_name = "json";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+            const TypeDescriptor col_type = TYPE_VARCHAR_DESC;
             check(file_path, col_type, col_name, R"(['{"name": "smith"}'])", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_CHAR);
+            const TypeDescriptor col_type = TYPE_CHAR_DESC;
             check(file_path, col_type, col_name, R"(['{"name": "smith"}'])", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_JSON);
+            const TypeDescriptor col_type = TYPE_JSON_DESC;
             check(file_path, col_type, col_name, R"(['{"name": "smith"}'])", expected_rows, true);
         }
     }
@@ -217,15 +222,15 @@ TEST_F(ColumnConverterTest, TestByteArrayTest) {
     {
         const std::string col_name = "bson";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+            const TypeDescriptor col_type = TYPE_VARCHAR_DESC;
             check(file_path, col_type, col_name, R"(['{"name": "smith"}'])", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_CHAR);
+            const TypeDescriptor col_type = TYPE_CHAR_DESC;
             check(file_path, col_type, col_name, R"(['{"name": "smith"}'])", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_JSON);
+            const TypeDescriptor col_type = TYPE_JSON_DESC;
             check(file_path, col_type, col_name, R"(['{"name": "smith"}'])", expected_rows, true);
         }
     }
@@ -238,103 +243,103 @@ TEST_F(ColumnConverterTest, Int32Test) {
     {
         const std::string col_name = "int8";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT);
+            const TypeDescriptor col_type = TYPE_TINYINT_DESC;
             check(file_path, col_type, col_name, "[-5]", expected_rows);
         }
     }
     {
         const std::string col_name = "int16";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT);
+            const TypeDescriptor col_type = TYPE_SMALLINT_DESC;
             check(file_path, col_type, col_name, "[-998]", expected_rows);
         }
     }
     {
         const std::string col_name = "int32";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+            const TypeDescriptor col_type = TYPE_INT_DESC;
             check(file_path, col_type, col_name, "[-99998]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+            const TypeDescriptor col_type = TYPE_BIGINT_DESC;
             check(file_path, col_type, col_name, "[-99998]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+            const TypeDescriptor col_type = TYPE_DOUBLE_DESC;
             check(file_path, col_type, col_name, "[-99998]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_millis";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+            const TypeDescriptor col_type = TYPE_TIME_DESC;
             check(file_path, col_type, col_name, "[3600]", expected_rows);
         }
     }
     {
         const std::string col_name = "uint8";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT);
+            const TypeDescriptor col_type = TYPE_TINYINT_DESC;
             check(file_path, col_type, col_name, "[5]", expected_rows);
         }
     }
     {
         const std::string col_name = "uint16";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT);
+            const TypeDescriptor col_type = TYPE_SMALLINT_DESC;
             check(file_path, col_type, col_name, "[6767]", expected_rows);
         }
     }
     {
         const std::string col_name = "uint32";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+            const TypeDescriptor col_type = TYPE_INT_DESC;
             check(file_path, col_type, col_name, "[67676767]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+            const TypeDescriptor col_type = TYPE_BIGINT_DESC;
             check(file_path, col_type, col_name, "[67676767]", expected_rows);
         }
     }
     {
         const std::string col_name = "date";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATE);
+            const TypeDescriptor col_type = TYPE_DATE_DESC;
             check(file_path, col_type, col_name, "[2023-04-25]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2023-04-25 00:00:00]", expected_rows);
         }
     }
     {
         const std::string col_name = "decimal32";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL, -1, 9, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL, 9, 2);
             check(file_path, col_type, col_name, "[77.58]", expected_rows, true);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, -1, 9, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, 9, 2);
             check(file_path, col_type, col_name, "[77.58]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, -1, 9, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 9, 2);
             check(file_path, col_type, col_name, "[77.58]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 9, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 9, 2);
             check(file_path, col_type, col_name, "[77.58]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 9, 1);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 9, 1);
             check(file_path, col_type, col_name, "[77.5]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 9, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 9, 2);
             check(file_path, col_type, col_name, "[77.58]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 9, 3);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 9, 3);
             check(file_path, col_type, col_name, "[77.580]", expected_rows);
         }
     }
@@ -347,80 +352,80 @@ TEST_F(ColumnConverterTest, Int64Test) {
     {
         const std::string col_name = "int64";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TINYINT);
+            const TypeDescriptor col_type = TYPE_TINYINT_DESC;
             check(file_path, col_type, col_name, "[78]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_SMALLINT);
+            const TypeDescriptor col_type = TYPE_SMALLINT_DESC;
             check(file_path, col_type, col_name, "[-25010]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+            const TypeDescriptor col_type = TYPE_INT_DESC;
             check(file_path, col_type, col_name, "[-7758258]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+            const TypeDescriptor col_type = TYPE_BIGINT_DESC;
             check(file_path, col_type, col_name, "[-7758258]", expected_rows);
         }
     }
     {
         const std::string col_name = "uint64";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+            const TypeDescriptor col_type = TYPE_BIGINT_DESC;
             check(file_path, col_type, col_name, "[7758258]", expected_rows);
         }
     }
     {
         const std::string col_name = "decimal64";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, -1);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2);
             check(file_path, col_type, col_name, "[77.58258]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, -1, 9, 5);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 9, 5);
             check(file_path, col_type, col_name, "[77.58258]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 18, 5);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 18, 5);
             check(file_path, col_type, col_name, "[77.58258]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 18, 5);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 18, 5);
             check(file_path, col_type, col_name, "[77.58258]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_micros";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+            const TypeDescriptor col_type = TYPE_TIME_DESC;
             check(file_path, col_type, col_name, "[3600]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_nanos";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+            const TypeDescriptor col_type = TYPE_TIME_DESC;
             check(file_path, col_type, col_name, "[3.6e+06]", expected_rows);
         }
     }
     {
         const std::string col_name = "timestamp_millis";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2023-04-25 20:20:10]", expected_rows);
         }
     }
     {
         const std::string col_name = "timestamp_micros";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2023-04-25 20:20:10]", expected_rows);
         }
     }
     {
         const std::string col_name = "timestamp_nanos";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2023-04-25 20:20:10]", expected_rows);
         }
     }
@@ -434,12 +439,12 @@ TEST_F(ColumnConverterTest, FLBATest) {
         const std::string col_name = "uuid";
         {
             // FIXED_LEN_BYTE_ARRAY (UUID logical type) -> VARCHAR: bytes formatted as xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+            const TypeDescriptor col_type = TYPE_VARCHAR_DESC;
             check(file_path, col_type, col_name, "['61626344-6546-4768-696a-6b4c6d6e4f70']", expected_rows);
         }
         {
             // FIXED_LEN_BYTE_ARRAY (UUID) -> VARBINARY: raw 16 bytes pass through without conversion
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARBINARY);
+            const TypeDescriptor col_type = TYPE_VARBINARY_DESC;
             check(file_path, col_type, col_name, "['abcDeFGhijkLmnOp']", expected_rows);
         }
     }
@@ -451,34 +456,34 @@ TEST_F(ColumnConverterTest, FLBATest) {
             check(file_path, col_type, col_name, "[680.96]", expected_rows, true);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, -1, 5, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMALV2, 5, 2);
             check(file_path, col_type, col_name, "[682.56]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, -1, 5, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL32, 5, 2);
             check(file_path, col_type, col_name, "[682.56]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, -1, 5, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL64, 5, 2);
             check(file_path, col_type, col_name, "[682.56]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 5, 1);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 5, 1);
             check(file_path, col_type, col_name, "[682.5]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 5, 2);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 5, 2);
             check(file_path, col_type, col_name, "[682.56]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 5, 3);
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 5, 3);
             check(file_path, col_type, col_name, "[682.560]", expected_rows);
         }
     }
     {
         const std::string col_name = "interval";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+            const TypeDescriptor col_type = TYPE_TIME_DESC;
             check(file_path, col_type, col_name, "[6809.6]", expected_rows, true);
         }
     }
@@ -496,7 +501,7 @@ TEST_F(ColumnConverterTest, FLBAUUIDTest) {
         const std::string col_name = "uuid";
         // UUID logical type -> VARCHAR: bytes formatted as xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR);
+            const TypeDescriptor col_type = TYPE_VARCHAR_DESC;
             check(file_path, col_type, col_name, "['b4f20d71-755e-572f-95c1-518871b9ca71']", expected_rows);
         }
     }
@@ -509,7 +514,7 @@ TEST_F(ColumnConverterTest, Int96Test) {
     {
         const std::string col_name = "timestamp_int96";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2023-04-29 00:40:22.618760]", expected_rows);
         }
     }
@@ -523,21 +528,21 @@ TEST_F(ColumnConverterTest, Int96TimeZoneTest) {
     {
         const std::string col_name = "time_with_new_york";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_with_shanghai";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_without_timezone";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2019-04-17 04:00:00]", expected_rows);
         }
     }
@@ -550,15 +555,15 @@ TEST_F(ColumnConverterTest, FloatTest) {
     {
         const std::string col_name = "float";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_FLOAT);
+            const TypeDescriptor col_type = TYPE_FLOAT_DESC;
             check(file_path, col_type, col_name, "[-5.55]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+            const TypeDescriptor col_type = TYPE_DOUBLE_DESC;
             check(file_path, col_type, col_name, "[-5.55]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+            const TypeDescriptor col_type = TYPE_INT_DESC;
             check(file_path, col_type, col_name, "[-5.55]", expected_rows, true);
         }
     }
@@ -571,11 +576,11 @@ TEST_F(ColumnConverterTest, DoubleTest) {
     {
         const std::string col_name = "double";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+            const TypeDescriptor col_type = TYPE_DOUBLE_DESC;
             check(file_path, col_type, col_name, "[-5.55556]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+            const TypeDescriptor col_type = TYPE_INT_DESC;
             check(file_path, col_type, col_name, "[-5.55556]", expected_rows, true);
         }
     }
@@ -588,11 +593,11 @@ TEST_F(ColumnConverterTest, BooleanTest) {
     {
         const std::string col_name = "boolean";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BOOLEAN);
+            const TypeDescriptor col_type = TYPE_BOOLEAN_DESC;
             check(file_path, col_type, col_name, "[1]", expected_rows);
         }
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+            const TypeDescriptor col_type = TYPE_INT_DESC;
             check(file_path, col_type, col_name, "[1]", expected_rows, true);
         }
     }
@@ -637,7 +642,7 @@ TEST_F(ColumnConverterTest, UnsignedInt32ZeroExtend) {
     };
 
     auto run_bigint = [&](const ParquetField& field) -> int64_t {
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+        const TypeDescriptor col_type = TYPE_BIGINT_DESC;
         std::unique_ptr<ColumnConverter> converter;
         Status st = ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter);
         EXPECT_TRUE(st.ok()) << st.message();
@@ -672,7 +677,7 @@ TEST_F(ColumnConverterTest, UnsignedInt32ZeroExtend) {
 
     // UINT_32 -> DOUBLE must also widen via the unsigned value.
     {
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+        const TypeDescriptor col_type = TYPE_DOUBLE_DESC;
         ParquetField field = make_field(/*use_logical_type=*/false, /*is_signed=*/false);
         std::unique_ptr<ColumnConverter> converter;
         Status st = ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter);
@@ -688,7 +693,7 @@ TEST_F(ColumnConverterTest, UnsignedInt32ZeroExtend) {
 
     // UINT_32 -> DECIMAL128(38,0) must zero-extend the unscaled value.
     {
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, -1, 38, 0);
+        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DECIMAL128, 38, 0);
         ParquetField field = make_field(/*use_logical_type=*/false, /*is_signed=*/false);
         field.precision = 38;
         std::unique_ptr<ColumnConverter> converter;
@@ -733,7 +738,7 @@ TEST_F(ColumnConverterTest, UnsignedInt32StatsRejectsLegacySignedOrder) {
     stats.__set_max(std::string("\x02\x00\x00\x00", 4));
     column_meta.__set_statistics(stats);
 
-    const TypeDescriptor bigint = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
+    const TypeDescriptor bigint = TYPE_BIGINT_DESC;
 
     auto eval = [&](bool is_signed) {
         ParquetField field;
@@ -760,14 +765,14 @@ TEST_F(ColumnConverterTest, Int64_2_Timestamp) {
     {
         const std::string col_name = "timestamp_millis";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2023-04-25 20:20:10]", expected_rows);
         }
     }
     {
         const std::string col_name = "timestamp_micros";
         {
-            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
             check(file_path, col_type, col_name, "[2023-04-25 20:20:10]", expected_rows);
         }
     }
@@ -784,12 +789,12 @@ TEST_F(ColumnConverterTest, Int64PreEpochTimestampSubSecond) {
 
     {
         const std::string col_name = "timestamp_millis";
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+        const TypeDescriptor col_type = TYPE_DATETIME_DESC;
         check(file_path, col_type, col_name, expected_value, expected_rows);
     }
     {
         const std::string col_name = "timestamp_micros";
-        const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+        const TypeDescriptor col_type = TYPE_DATETIME_DESC;
         check(file_path, col_type, col_name, expected_value, expected_rows);
     }
 }
@@ -817,7 +822,7 @@ TEST_F(ColumnConverterTest, Int96ReadAsTimestampNtz) {
         src_null->append(0);
         ColumnPtr src = NullableColumn::create(std::move(src_data), std::move(src_null));
 
-        TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME);
+        TypeDescriptor col_type = TYPE_DATETIME_DESC;
         col_type.datetime_is_ntz = datetime_is_ntz;
 
         std::unique_ptr<ColumnConverter> converter;
@@ -836,4 +841,270 @@ TEST_F(ColumnConverterTest, Int96ReadAsTimestampNtz) {
     // Default (Hive/Spark INT96): shifted into the local timezone (+8h for Asia/Shanghai).
     EXPECT_EQ(timestamp::add<TimeUnit::SECOND>(packed, 8 * 3600), read_back(false));
 }
+
+namespace {
+
+// Nullable source column; null rows hold extreme values, since the converters may compute them too.
+template <typename T>
+ColumnPtr make_nullable_source(const std::vector<T>& values, const std::vector<uint8_t>& nulls) {
+    auto data = FixedLengthColumn<T>::create();
+    auto null_column = NullColumn::create();
+    for (size_t i = 0; i < values.size(); i++) {
+        data->append(nulls[i] ? std::numeric_limits<T>::max() : values[i]);
+        null_column->append(nulls[i]);
+    }
+    return NullableColumn::create(std::move(data), std::move(null_column));
+}
+
+// The INT64 timestamp conversion the converter implements, with a runtime tick unit.
+Timestamp reference_int64_timestamp(int64_t ticks, int64_t second_mask, const cctz::time_zone* ctz) {
+    int64_t seconds = ticks / second_mask;
+    int64_t nanoseconds = (ticks % second_mask) * (NANOSECS_PER_SEC / second_mask);
+    if (nanoseconds < 0) {
+        seconds -= 1;
+        nanoseconds += NANOSECS_PER_SEC;
+    }
+    if (ctz != nullptr) {
+        seconds += timestamp::get_timezone_offset_by_epoch_seconds(seconds, *ctz);
+    }
+    return timestamp::of_epoch_second(seconds, nanoseconds);
+}
+
+} // namespace
+
+// Every non-null row of INT64 TIMESTAMP(MILLIS/MICROS/NANOS) matches the reference conversion, for a UTC
+// session (one offset per batch), zones with offset changes (per-row offsets) and a non-adjusted (NTZ) column,
+// including pre-epoch ticks with a sub-second part.
+TEST_F(ColumnConverterTest, Int64TimestampUnitsMatchReference) {
+    std::mt19937_64 rng(29);
+    std::vector<int64_t> seconds_values;
+    std::vector<uint8_t> nulls;
+    for (int i = 0; i < 4099; i++) {
+        // roughly 1900 .. 2100
+        seconds_values.push_back(static_cast<int64_t>(rng() % 6311390400ULL) - 2208988800LL);
+        nulls.push_back(i % 7 == 3);
+    }
+    struct Unit {
+        int64_t mask;
+        tparquet::TimeUnit unit;
+    };
+    std::vector<Unit> units(3);
+    units[0].mask = 1000;
+    units[0].unit.__set_MILLIS(tparquet::MilliSeconds());
+    units[1].mask = 1000000;
+    units[1].unit.__set_MICROS(tparquet::MicroSeconds());
+    units[2].mask = 1000000000;
+    units[2].unit.__set_NANOS(tparquet::NanoSeconds());
+
+    for (const auto& unit : units) {
+        std::vector<int64_t> ticks;
+        for (size_t i = 0; i < seconds_values.size(); i++) {
+            int64_t sub = static_cast<int64_t>(rng() % static_cast<uint64_t>(unit.mask));
+            ticks.push_back(seconds_values[i] * unit.mask + (i % 2 ? sub : -sub));
+        }
+        for (const auto& [timezone, adjusted] : std::vector<std::pair<std::string, bool>>{
+                     {"UTC", true}, {"Asia/Shanghai", true}, {"Europe/London", true}, {"UTC", false}}) {
+            SCOPED_TRACE(fmt::format("mask={} tz={} adjusted={}", unit.mask, timezone, adjusted));
+            ParquetField field;
+            field.physical_type = tparquet::Type::INT64;
+            field.schema_element.type = tparquet::Type::INT64;
+            tparquet::TimestampType ts;
+            ts.isAdjustedToUTC = adjusted;
+            ts.unit = unit.unit;
+            tparquet::LogicalType logical_type;
+            logical_type.__set_TIMESTAMP(ts);
+            field.schema_element.__set_logicalType(logical_type);
+
+            const TypeDescriptor col_type = TYPE_DATETIME_DESC;
+            std::unique_ptr<ColumnConverter> converter;
+            ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, timezone, &converter));
+            auto src = make_nullable_source(ticks, nulls);
+            auto dst = ColumnHelper::create_column(col_type, true);
+            ASSERT_OK(converter->convert(src.get(), dst.get()));
+
+            cctz::time_zone ctz;
+            ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(timezone, ctz));
+            auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+            const auto& dst_data = down_cast<TimestampColumn*>(dst_nullable->data_column_raw_ptr())->get_data();
+            for (size_t i = 0; i < ticks.size(); i++) {
+                ASSERT_EQ(nulls[i], dst_nullable->is_null(i)) << "row " << i;
+                if (!nulls[i]) {
+                    ASSERT_EQ(reference_int64_timestamp(ticks[i], unit.mask, adjusted ? &ctz : nullptr),
+                              dst_data[i].timestamp())
+                            << "row " << i << " ticks " << ticks[i];
+                }
+            }
+        }
+    }
+}
+
+// A DST zone shifts each batch by the offset at its values, whether the batch lies in one offset window (one
+// offset for all rows) or spans a transition, independent of the offset at query time.
+TEST_F(ColumnConverterTest, Int64TimestampDstBatches) {
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT64;
+    field.schema_element.type = tparquet::Type::INT64;
+    tparquet::TimestampType ts;
+    ts.isAdjustedToUTC = true;
+    ts.unit.__set_MICROS(tparquet::MicroSeconds());
+    tparquet::LogicalType logical_type;
+    logical_type.__set_TIMESTAMP(ts);
+    field.schema_element.__set_logicalType(logical_type);
+    const TypeDescriptor col_type = TYPE_DATETIME_DESC;
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, "Europe/London", &converter));
+
+    const int64_t summer = 1719835200;  // 2024-07-01 12:00:00 UTC
+    const int64_t winter = 1704110400;  // 2024-01-01 12:00:00 UTC
+    const int64_t bst_end = 1729990800; // 2024-10-27 01:00:00 UTC
+    std::vector<std::pair<std::vector<int64_t>, std::vector<std::string>>> batches = {
+            {{summer, summer + 60}, {"2024-07-01 13:00:00", "2024-07-01 13:01:00"}},
+            {{winter, winter + 60}, {"2024-01-01 12:00:00", "2024-01-01 12:01:00"}},
+            {{bst_end - 1800, bst_end + 600, summer, winter},
+             {"2024-10-27 01:30:00", "2024-10-27 01:10:00", "2024-07-01 13:00:00", "2024-01-01 12:00:00"}}};
+    for (const auto& [seconds, want] : batches) {
+        std::vector<int64_t> micros;
+        for (int64_t s : seconds) {
+            micros.push_back(s * 1000000);
+        }
+        auto src = make_nullable_source(micros, std::vector<uint8_t>(micros.size(), 0));
+        auto dst = ColumnHelper::create_column(col_type, true);
+        ASSERT_OK(converter->convert(src.get(), dst.get()));
+        for (size_t i = 0; i < want.size(); i++) {
+            EXPECT_EQ(want[i], dst->debug_item(i)) << seconds[i];
+        }
+    }
+}
+
+// Paired min/max statistics of a zone-adjusted INT64 timestamp convert to bounds that hold every value between them,
+// though local times are not monotonic across a backward shift (2024-10-27 00:30 UTC loads as 01:30 BST, 01:10 UTC
+// as 01:10 GMT).
+TEST_F(ColumnConverterTest, Int64TimestampMinMaxHoldValuesAcrossDst) {
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT64;
+    field.schema_element.type = tparquet::Type::INT64;
+    tparquet::TimestampType ts;
+    ts.isAdjustedToUTC = true;
+    ts.unit.__set_MICROS(tparquet::MicroSeconds());
+    tparquet::LogicalType logical_type;
+    logical_type.__set_TIMESTAMP(ts);
+    field.schema_element.__set_logicalType(logical_type);
+    const TypeDescriptor col_type = TYPE_DATETIME_DESC;
+
+    std::mt19937_64 rng(43);
+    for (const std::string zone : {"Europe/London", "Antarctica/Casey", "UTC"}) {
+        SCOPED_TRACE(zone);
+        std::unique_ptr<ColumnConverter> converter;
+        ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, zone, &converter));
+        std::vector<int64_t> lo = {1729989000LL * 1000000, 1520692200LL * 1000000};
+        std::vector<int64_t> hi = {1729991400LL * 1000000, 1520701200LL * 1000000};
+        for (int i = 0; i < 300; i++) {
+            int64_t a = (static_cast<int64_t>(rng() % 4000000000ULL) - 1000000000LL) * 1000000;
+            lo.push_back(a);
+            hi.push_back(a + static_cast<int64_t>(rng() % (86400ULL * 400 * 1000000)));
+        }
+        std::vector<uint8_t> nulls(lo.size(), 0);
+        nulls[5] = 1;
+        auto min_src = make_nullable_source(lo, nulls);
+        auto max_src = make_nullable_source(hi, nulls);
+        auto min_dst = ColumnHelper::create_column(col_type, true);
+        auto max_dst = ColumnHelper::create_column(col_type, true);
+        ASSERT_OK(converter->convert_min_max(min_src.get(), max_src.get(), min_dst.get(), max_dst.get()));
+        ASSERT_TRUE(min_dst->is_null(5));
+        for (size_t i = 0; i < lo.size(); i++) {
+            if (nulls[i]) {
+                continue;
+            }
+            std::vector<int64_t> values;
+            for (int64_t v = lo[i]; v <= hi[i]; v += std::max<int64_t>(1, (hi[i] - lo[i]) / 499)) {
+                values.push_back(v);
+            }
+            values.push_back(hi[i]);
+            auto src = make_nullable_source(values, std::vector<uint8_t>(values.size(), 0));
+            auto dst = ColumnHelper::create_column(col_type, true);
+            ASSERT_OK(converter->convert(src.get(), dst.get()));
+            const TimestampValue min_bound = min_dst->get(i).get_timestamp();
+            const TimestampValue max_bound = max_dst->get(i).get_timestamp();
+            for (size_t j = 0; j < values.size(); j++) {
+                const TimestampValue v = dst->get(j).get_timestamp();
+                ASSERT_LE(min_bound, v) << "pair " << i << " value " << values[j];
+                ASSERT_GE(max_bound, v) << "pair " << i << " value " << values[j];
+            }
+        }
+    }
+}
+
+// INT96 values are shifted by the offset in force at 00:00 UTC of their day, one offset per batch when all days
+// lie in one offset window, else one per row.
+TEST_F(ColumnConverterTest, Int96TimestampDstBatches) {
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT96;
+    const TypeDescriptor col_type = TYPE_DATETIME_DESC;
+    cctz::time_zone london;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("Europe/London", london));
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, "Europe/London", &converter));
+
+    std::mt19937_64 rng(31);
+    for (int64_t span_days : {1, 2000}) {
+        std::vector<int96_t> values;
+        std::vector<Timestamp> packed;
+        std::vector<uint8_t> nulls;
+        for (int i = 0; i < 1000; i++) {
+            Timestamp t = timestamp::from_datetime(2020, 6, 1, 0, 0, 0, 0);
+            t = timestamp::add<TimeUnit::SECOND>(t, static_cast<int64_t>(rng() % (span_days * 86400)));
+            packed.push_back(t);
+            int96_t raw;
+            raw.hi = static_cast<uint32_t>(t >> TIMESTAMP_BITS);
+            raw.lo = (t & ((static_cast<uint64_t>(1) << TIMESTAMP_BITS) - 1)) * 1000;
+            values.push_back(raw);
+            nulls.push_back(i % 9 == 4);
+        }
+        auto src = make_nullable_source(values, nulls);
+        auto dst = ColumnHelper::create_column(col_type, true);
+        ASSERT_OK(converter->convert(src.get(), dst.get()));
+        auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+        const auto& dst_data = down_cast<TimestampColumn*>(dst_nullable->data_column_raw_ptr())->get_data();
+        for (size_t i = 0; i < packed.size(); i++) {
+            ASSERT_EQ(nulls[i], dst_nullable->is_null(i)) << "row " << i;
+            if (!nulls[i]) {
+                int offset = timestamp::get_timezone_offset_by_timestamp(packed[i], london);
+                ASSERT_EQ(timestamp::add<TimeUnit::SECOND>(packed[i], offset), dst_data[i].timestamp()) << "row " << i;
+            }
+        }
+    }
+}
+
+// INT32 days read as DATETIME is midnight of that day, as TimestampValue::from_unix_second computes it,
+// including days before 1970.
+TEST_F(ColumnConverterTest, Int32DaysToDateTimeMatchesReference) {
+    std::mt19937 rng(31);
+    std::vector<int32_t> days;
+    std::vector<uint8_t> nulls;
+    for (int i = 0; i < 4099; i++) {
+        days.push_back(static_cast<int32_t>(rng() % 146000) - 73000);
+        nulls.push_back(i % 5 == 1);
+    }
+    ParquetField field;
+    field.physical_type = tparquet::Type::INT32;
+    field.schema_element.type = tparquet::Type::INT32;
+    const TypeDescriptor col_type = TYPE_DATETIME_DESC;
+    std::unique_ptr<ColumnConverter> converter;
+    ASSERT_OK(ColumnConverterFactory::create_converter(field, col_type, "UTC", &converter));
+    auto src = make_nullable_source(days, nulls);
+    auto dst = ColumnHelper::create_column(col_type, true);
+    ASSERT_OK(converter->convert(src.get(), dst.get()));
+
+    auto* dst_nullable = down_cast<NullableColumn*>(dst.get());
+    const auto& dst_data = down_cast<TimestampColumn*>(dst_nullable->data_column_raw_ptr())->get_data();
+    for (size_t i = 0; i < days.size(); i++) {
+        ASSERT_EQ(nulls[i], dst_nullable->is_null(i)) << "row " << i;
+        if (!nulls[i]) {
+            TimestampValue expected;
+            expected.from_unix_second(static_cast<int64_t>(days[i]) * 24 * 60 * 60, 0);
+            ASSERT_EQ(expected.timestamp(), dst_data[i].timestamp()) << "row " << i << " day " << days[i];
+        }
+    }
+}
+
 } // namespace starrocks::parquet

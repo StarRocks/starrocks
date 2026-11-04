@@ -346,6 +346,8 @@ private:
     uint8_t value_header() const {
         return _value.empty() ? 0 : (static_cast<uint8_t>(_value[0]) >> kValueHeaderBitShift);
     }
+    // Size of the first encoded value, excluding any trailing sibling values.
+    StatusOr<size_t> _encoded_size() const;
     Status validate_primitive_type(VariantType type, size_t size_required) const;
 
     template <typename PrimitiveType>

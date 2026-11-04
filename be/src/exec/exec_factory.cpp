@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "common/util/thrift_util.h"
 #include "connector_primitive/connector.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"
@@ -111,7 +112,7 @@ Status check_tuple_ids_in_descs(const DescriptorTbl& descs, const TPlanNode& pla
             ss << "DescriptorTbl: " << descs.debug_string();
             LOG(ERROR) << ss.str();
             ss.str("");
-            ss << "TPlanNode: " << apache::thrift::ThriftDebugString(plan_node);
+            ss << "TPlanNode: " << thrift_plan_debug_string(plan_node);
             LOG(ERROR) << ss.str();
             return Status::InternalError("Tuple ids are not in descs");
         }
@@ -339,6 +340,7 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         CREATE_NODE(ConnectorScanNode, pool, new_node, descs);
         return Status::OK();
     }
+    case TPlanNodeType::LAKE_GROUPED_SCAN_NODE:
     case TPlanNodeType::LAKE_SCAN_NODE: {
         TPlanNode new_node = tnode;
         new_node.connector_scan_node = make_connector_scan_node(tnode, connector::Connector::LAKE);

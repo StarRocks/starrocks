@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -52,7 +53,7 @@ import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.NamedArgument;
-import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -239,6 +240,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                 || properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_FPP)) {
             // do nothing, these 2 properties will be analyzed when creating alter job
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+            // do nothing, this property will be analyzed when creating alter job (compression dict)
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
             if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -316,10 +319,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 " must be bool type(false/true)");
             }
 
-            if (!table.isCloudNativeTable()) {
+            if (!table.isCloudNativeTableOrMaterializedView()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
-                                " only support cloud native table");
+                                " only support cloud native table or materialized view");
             }
 
             boolean fileBundling = properties.get(
@@ -338,7 +341,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }
 
-            if (!((LakeTable) olapTable).checkLakeRollupAllowFileBundling()) {
+            if (!LakeTableHelper.checkLakeRollupAllowFileBundling(olapTable)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
                                 " cannot be updated now because this table contains LakeRollup created in old version." +
@@ -373,14 +376,17 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzeEnableLoadProfile(properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
             PropertyAnalyzer.analyzeEnableStatisticCollectOnFirstLoad(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT)) {
+            PropertyAnalyzer.parseBooleanStrictly(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT,
+                    properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_AUTO_COLLECT));
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES)) {
             if (table instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS
-                        || olapTable.isCloudNativeTableOrMaterializedView()) {
+                        && !olapTable.isCloudNativeTableOrMaterializedView()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_BASE_COMPACTION_FORBIDDEN_TIME_RANGES +
-                                    " not support primary keys table or cloud native table");
+                                    " not support shared-nothing primary keys table");
                 }
             }
             PropertyAnalyzer.analyzeBaseCompactionForbiddenTimeRanges(properties);
@@ -1008,11 +1014,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Add field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Add field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = clause.getFieldDesc();
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, false);
         return null;
@@ -1025,11 +1032,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(columnName));
         }
 
-        if (!table.isOlapTable() && !table.isCloudNativeTable()) {
-            throw new SemanticException("Drop field only support olap table");
+        if (!table.isOlapTable() && !table.isCloudNativeTable() && !table.isIcebergTable()) {
+            throw new SemanticException("Drop field only support olap table and iceberg table");
         }
 
-        Column baseColumn = ((OlapTable) table).getBaseColumn(columnName);
+        Column baseColumn = table.isIcebergTable() ? table.getColumn(columnName)
+                : ((OlapTable) table).getBaseColumn(columnName);
         StructFieldDesc fieldDesc = new StructFieldDesc(clause.getFieldName(), clause.getNestedParentFieldNames(), null, null);
         StructFieldDescAnalyzer.analyze(fieldDesc, baseColumn, true);
         return null;
@@ -1474,6 +1482,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new SemanticException("Merge tablet only support cloud native tables");
+        }
+
+        // A merge of this shape cannot attribute the rows of a segment its sources share, and fails at
+        // publish for good rather than at submission. Say so here, where the user is looking.
+        if (TabletReshardUtils.tabletMergeUnsupported((OlapTable) table)) {
+            throw new SemanticException("Merge tablet is not supported on a range-distributed primary key table "
+                    + "whose ORDER BY differs from the primary key");
         }
 
         if (clause.getPartitionNames() != null && clause.getTabletGroupList() != null) {
@@ -1978,6 +1993,12 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             }
         }
         clause.setAnalyzedArgs(constantArgs);
+
+        // add_equality_delete_files registers every file under its location; a WHERE clause would be silently ignored
+        if (clause.getWhere() != null &&
+                icebergTableProcedure.getOperation() == IcebergTableOperation.ADD_EQUALITY_DELETE_FILES) {
+            throw new SemanticException("WHERE is not supported for %s", icebergTableProcedure.getProcedureName());
+        }
 
         if (clause.getWhere() != null && icebergTableProcedure.getOperation() == IcebergTableOperation.REWRITE_DATA_FILES) {
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();

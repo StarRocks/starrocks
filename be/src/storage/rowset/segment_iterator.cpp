@@ -51,7 +51,6 @@
 #include "gutil/stl_util.h"
 #include "runtime/chunk_helper.h"
 #include "segment_options.h"
-#include "storage/chunk_helper.h"
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/del_vector.h"
@@ -62,7 +61,7 @@
 #include "storage/index/vector/vector_index_reader.h"
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/lake/filenames.h"
-#include "storage/lake/update_manager.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/non_closing_chunk_iterator.h"
 #include "storage/rowset/bitmap_index_evaluator.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -127,75 +126,14 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
     return 0;
 }
 
-// |is_full_sort_key| selects the row re-encode codec: true for a full-key segment
-// (|short_key_schema| is then the segment's full, untruncated sort-key schema), false
-// for the legacy truncated short-key prefix.
-static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema,
-                   bool is_full_sort_key) {
+static int compare(const Slice& lhs_index_key, const Chunk& rhs_chunk, const Schema& short_key_schema) {
     DCHECK_GE(rhs_chunk.num_rows(), 1u);
 
     SeekTuple tuple(short_key_schema, rhs_chunk.get(0).datums());
-    std::string rhs_index_key;
-    if (is_full_sort_key) {
-        // |lhs_index_key| is a short-key-index boundary, written with the physical
-        // full_sort_key_encode overload (segment_writer), which NUL-truncates CHAR to its
-        // visible prefix. Re-encode the stored row with the same physical overload so CHAR
-        // bytes match the index exactly regardless of any NUL the page read carries.
-        // |short_key_schema| is already in sort-key order, so the physical column indexes
-        // are 0..num_fields-1.
-        std::vector<uint32_t> sort_key_idxes(short_key_schema.num_fields());
-        for (uint32_t i = 0; i < sort_key_idxes.size(); i++) {
-            sort_key_idxes[i] = i;
-        }
-        rhs_index_key = tuple.full_sort_key_encode(sort_key_idxes, 0);
-    } else {
-        rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
-    }
+    std::string rhs_index_key = tuple.short_key_encode(short_key_schema.num_fields(), 0);
     auto rhs = Slice(rhs_index_key);
 
     return lhs_index_key.compare(rhs);
-}
-
-// Returns true iff, for the first |n| columns, |query_schema|'s field logical types are
-// byte-compatible with |segment_schema|'s (same type at the same position, so the same
-// composite codec produces order-preserving, comparable bytes). A drifted sort-key type
-// cannot be safely bracketed by the segment's own full sort key index.
-// Note: this only compares LogicalType, not DECIMAL precision/scale, so a same-logical-type
-// scale drift would pass this check; that is acceptable because a sort-key type change forces
-// a full rewrite (uniform segments), and the non-bypass path encodes under the segment's own
-// field anyway.
-static bool full_sort_key_types_compatible(const Schema& query_schema, const Schema& segment_schema, size_t n) {
-    if (n > query_schema.num_fields() || n > segment_schema.num_fields()) {
-        return false;
-    }
-    for (size_t i = 0; i < n; i++) {
-        if (query_schema.field(i)->type()->type() != segment_schema.field(i)->type()->type()) {
-            return false;
-        }
-    }
-    return true;
-}
-
-// Builds the coarse short-key-index search key bytes for |key| against a full-key
-// |segment|, encoded with the segment's OWN sort-key schema (so the bytes match the
-// segment's index even if the query's schema drifted). Returns std::nullopt if the
-// query's sort-key column types are not byte-compatible with the segment's own schema;
-// the caller must then bypass the coarse prune (use the full candidate range and let
-// the typed fine search, if any, decide).
-static std::optional<std::string> encode_full_sort_key_search_key(Segment* segment, const SeekTuple& key, bool lower) {
-    Schema segment_schema = ChunkHelper::get_full_sort_key_schema(segment->tablet_schema_share_ptr());
-    const size_t n = std::min<size_t>(key.columns(), segment->num_sort_key_columns());
-    if (!full_sort_key_types_compatible(key.schema(), segment_schema, n)) {
-        return std::nullopt;
-    }
-    std::vector<Datum> values;
-    values.reserve(key.columns());
-    for (size_t i = 0; i < key.columns(); i++) {
-        values.push_back(key.get(i));
-    }
-    SeekTuple segment_key(std::move(segment_schema), std::move(values));
-    return segment_key.full_sort_key_encode(segment->num_sort_key_columns(),
-                                            lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
 }
 
 class SegmentIterator final : public ChunkIterator {
@@ -453,15 +391,18 @@ private:
     StatusOr<SparseRange<>> _get_prepared_pruned_row_ranges();
 
     Status _apply_tablet_range();
+    Status _apply_task_range();
     Status _apply_precomputed_scan_range();
-    StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
+    StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range,
+                                                                const SparseRange<>* candidates = nullptr);
 
     uint32_t segment_id() const { return _segment->id(); }
     uint32_t num_rows() const { return _segment->num_rows(); }
 
-    Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
+    Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid,
+                           const Range<>* window = nullptr);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                           rowid_t* rowid, bool is_full_sort_key);
+                           rowid_t* rowid);
     Status _seek_columns(const Schema& schema, rowid_t pos);
     Status _read_columns(const Schema& schema, Chunk* chunk, size_t nrows);
 
@@ -1034,6 +975,9 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    if (_opts.task_range.has_value() || options.task_range.has_value()) {
+        return Status::NotSupported("grouped range task does not support segment iterator reuse");
+    }
     _opts.pred_tree = options.pred_tree;
     _opts.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     _opts.runtime_filter_preds = options.runtime_filter_preds;
@@ -1065,6 +1009,11 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
 }
 
 Status SegmentIterator::_init_internal() {
+    if (_opts.task_range.has_value() &&
+        (_opts.read_state_cache.scan_range != nullptr || _opts.read_state_cache.seek_range_rowid_ranges != nullptr ||
+         _opts.read_state_cache.tablet_rowid_range != nullptr || !_opts.short_key_ranges.empty())) {
+        return Status::NotSupported("grouped range task does not support prepared or logical split segment readers");
+    }
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");
@@ -1122,6 +1071,7 @@ Status SegmentIterator::_init_scan_range_and_context() {
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_keys());
         RETURN_IF_ERROR(_apply_tablet_range());
+        RETURN_IF_ERROR(_apply_task_range());
         bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
         if (!apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
@@ -1162,14 +1112,20 @@ Status SegmentIterator::_init_scan_range_and_context() {
     _init_column_predicates();
     RETURN_IF_ERROR(_init_context());
 
-    // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
-    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
-        _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
-    }
-    _range_iter = _scan_range.new_iterator();
+    // Finalize: turn the filtered range into the form the read loop consumes. Not a function of its
+    // own, so the scope is explicit -- it covers the split/reverse, the range iterator construction and
+    // the sparse-to-io-range conversion, and nothing else runs after it in this function.
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->segment_init_finalize_ns);
+        // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
+        if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
+            _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
+        }
+        _range_iter = _scan_range.new_iterator();
 
-    for (auto column_index : _io_coalesce_column_index) {
-        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        for (auto column_index : _io_coalesce_column_index) {
+            RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        }
     }
     return Status::OK();
 }
@@ -1211,6 +1167,9 @@ Status SegmentIterator::_init_reused_scan() {
 }
 
 StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
+    if (_opts.task_range.has_value()) {
+        return Status::NotSupported("grouped range task does not support prepared scan ranges");
+    }
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");
     }
@@ -1948,6 +1907,10 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
 }
 
 void SegmentIterator::_init_column_access_paths() {
+    // Shares segment_init_prepare_ns with _check_low_cardinality_optimization: both are cheap
+    // schema-shaped setup that runs once before any filtering, and splitting them would add a second
+    // near-zero row to the profile for no diagnostic gain.
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_prepare_ns);
     if (_opts.column_access_paths == nullptr || _opts.column_access_paths->empty()) {
         return;
     }
@@ -2185,6 +2148,7 @@ struct ExprPredicateChecker {
 };
 
 void SegmentIterator::_init_column_predicates() {
+    SCOPED_RAW_TIMER(&_opts.stats->init_context_ns);
     PredicateAndNode useless_pred_root;
     PredicateAndNode used_pred_root;
     _opts.pred_tree.root().partition_copy([](const auto& node) { return node.visit(IndexOnlyPredicateChecker()); },
@@ -2399,6 +2363,10 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
 }
 
 Status SegmentIterator::_apply_tablet_range() {
+    // Overlaps ColumnIteratorInit on the uncached path: _seek_range_to_rowid_range below initializes
+    // column iterators, which carry their own SCOPED_RAW_TIMER. Same pre-existing nesting that
+    // ShortKeyFilter has; untangling both belongs to the de-overlap change, not here.
+    SCOPED_RAW_TIMER(&_opts.stats->tablet_range_filter_ns);
     if (!_opts.tablet_range.has_value() || _opts.tablet_range.value().all_range()) {
         return Status::OK();
     }
@@ -2430,8 +2398,10 @@ Status SegmentIterator::_apply_tablet_range() {
         rowid_range_opt = *_opts.read_state_cache.tablet_rowid_range;
     } else {
         // _lookup_ordinal() relies on short key index.
-        RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
-        ASSIGN_OR_RETURN(rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+        RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
+        const auto* candidates =
+                _opts.task_range.has_value() && _opts.rowid_range_option != nullptr ? &_scan_range : nullptr;
+        ASSIGN_OR_RETURN(rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value(), candidates));
     }
     if (rowid_range_opt.has_value()) {
         _scan_range &= SparseRange<>(rowid_range_opt.value());
@@ -2442,7 +2412,29 @@ Status SegmentIterator::_apply_tablet_range() {
     return Status::OK();
 }
 
+Status SegmentIterator::_apply_task_range() {
+    if (!_opts.task_range.has_value() || _opts.task_range->all_range() || _scan_range.empty()) {
+        return Status::OK();
+    }
+    // Attribute exact ownership seeking to the existing range-filter timer and page/IO counters.
+    // This is an independent AND, after the query-range union and physical tablet ownership.
+    SCOPED_RAW_TIMER(&_opts.stats->tablet_range_filter_ns);
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
+    const auto* candidates = _opts.rowid_range_option != nullptr ? &_scan_range : nullptr;
+    ASSIGN_OR_RETURN(auto rowid_range, _seek_range_to_rowid_range(*_opts.task_range, candidates));
+    if (rowid_range.has_value()) {
+        _scan_range &= SparseRange<>(*rowid_range);
+    } else {
+        _scan_range.clear();
+    }
+    return Status::OK();
+}
+
 Status SegmentIterator::_apply_precomputed_scan_range() {
+    // Kept separate from rowid_range_filter_ns rather than folded into it: this runs only on the lake
+    // prepared-split path while the rowid range runs on every scan, so summing them would hide which
+    // path a segment took.
+    SCOPED_RAW_TIMER(&_opts.stats->precomputed_range_filter_ns);
     if (_opts.read_state_cache.scan_range == nullptr) {
         return Status::OK();
     }
@@ -2473,9 +2465,11 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
     for (const SeekRange& range : _opts.ranges) {
-        ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range));
+        const auto* candidates =
+                _opts.task_range.has_value() && _opts.rowid_range_option != nullptr ? &_scan_range : nullptr;
+        ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range, candidates));
         if (rowid_range_opt.has_value()) {
             res.add(rowid_range_opt.value());
         }
@@ -2483,17 +2477,34 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
     return res;
 }
 
-StatusOr<std::optional<Range<>>> SegmentIterator::_seek_range_to_rowid_range(const SeekRange& range) {
+StatusOr<std::optional<Range<>>> SegmentIterator::_seek_range_to_rowid_range(const SeekRange& range,
+                                                                             const SparseRange<>* candidates) {
     rowid_t lower_rowid = 0;
     rowid_t upper_rowid = num_rows();
+    std::optional<Range<>> window;
+    if (candidates != nullptr) {
+        if (candidates->empty()) return std::nullopt;
+        // Keep sparse gaps in the final AND. Range intersections can retain non-sorted entries,
+        // so their first/last endpoints are not necessarily a conservative envelope.
+        lower_rowid = num_rows();
+        upper_rowid = 0;
+        for (size_t i = 0; i < candidates->size(); ++i) {
+            lower_rowid = std::min(lower_rowid, (*candidates)[i].begin());
+            upper_rowid = std::max(upper_rowid, (*candidates)[i].end());
+        }
+        if (lower_rowid >= upper_rowid) return std::nullopt;
+        window.emplace(lower_rowid, upper_rowid);
+    }
 
     if (!range.upper().empty()) {
         RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
-        RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
+        RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), upper_rowid, &upper_rowid,
+                                        window ? &*window : nullptr));
     }
-    if (!range.lower().empty() && upper_rowid > 0) {
+    if (!range.lower().empty() && upper_rowid > lower_rowid) {
         RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
-        RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
+        RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid,
+                                        window ? &*window : nullptr));
     }
 
     if (lower_rowid <= upper_rowid) {
@@ -2513,7 +2524,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -2525,7 +2536,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         } else if (!upper->short_key.empty()) {
             RETURN_IF_ERROR(_init_column_iterators<false>(*(upper->short_key_schema)));
             RETURN_IF_ERROR(_lookup_ordinal(upper->short_key, *(upper->short_key_schema), !upper->inclusive, num_rows(),
-                                            &upper_rowid, upper->use_full_sort_key));
+                                            &upper_rowid));
         }
 
         if (upper_rowid > 0) {
@@ -2536,7 +2547,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
             } else if (!lower->short_key.empty()) {
                 RETURN_IF_ERROR(_init_column_iterators<false>(*(lower->short_key_schema)));
                 RETURN_IF_ERROR(_lookup_ordinal(lower->short_key, *(lower->short_key_schema), lower->inclusive,
-                                                upper_rowid, &lower_rowid, lower->use_full_sort_key));
+                                                upper_rowid, &lower_rowid));
             }
         }
 
@@ -2669,57 +2680,44 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
 // if |lower| is false, return the first row in the range [0, end) that is greater than |key|,
 // or end if no such row is found.
 // |rowid| will be assigned to the id of found row or |end| if no such row is found.
-Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid) {
-    // Coarse prune via the short key index. For a full-key segment, encode the search
-    // key with the segment's OWN sort-key schema so the bytes match its index even if
-    // the query's schema drifted; if the query's sort-key types are not byte-compatible
-    // with the segment's, bypass the coarse prune entirely (start=0, keep the given
-    // |end|) rather than emit a mismatched bracket -- the typed binary search below
-    // (unchanged) still finds the exact answer over the full candidate range.
-    // Live read gate: this seek's producer and consumer are the same query with no time gap, so it is
-    // safe to read use_full_sort_key_index() directly (go-forward rollback: a newly-started query
-    // seeks off the legacy page whenever the read config is off or the full page is unusable). A true
-    // return guarantees the full decoder is published, so lower_bound_full/upper_bound_full are valid.
-    const bool use_full_sort_key = _segment->use_full_sort_key_index();
-    bool use_index = true;
+Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid,
+                                        const Range<>* window) {
+    const rowid_t requested_end = end;
     std::string index_key;
-    if (use_full_sort_key) {
-        auto encoded = encode_full_sort_key_search_key(_segment.get(), key, lower);
-        if (encoded.has_value()) {
-            index_key = std::move(encoded.value());
-        } else {
-            use_index = false;
+    index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
+                      : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
+
+    uint32_t start_block_id;
+    auto start_iter = _segment->lower_bound(index_key);
+    if (start_iter.valid()) {
+        // Because previous block may contain this key, so we should set rowid to
+        // last block's first row.
+        start_block_id = start_iter.ordinal();
+        if (start_block_id > 0) {
+            start_block_id--;
         }
     } else {
-        index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
-                          : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
+        // When we don't find a valid index item, which means all short key is
+        // smaller than input key, this means that this key may exist in the last
+        // row block. so we set the rowid to first row of last row block.
+        start_block_id = _segment->last_block();
     }
+    rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    rowid_t start = 0;
-    if (use_index) {
-        uint32_t start_block_id;
-        auto start_iter = use_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
-        if (start_iter.valid()) {
-            // Because previous block may contain this key, so we should set rowid to
-            // last block's first row.
-            start_block_id = start_iter.ordinal();
-            if (start_block_id > 0) {
-                start_block_id--;
-            }
-        } else {
-            // When we don't find a valid index item, which means all short key is
-            // smaller than input key, this means that this key may exist in the last
-            // row block. so we set the rowid to first row of last row block.
-            start_block_id = _segment->last_block();
+    auto end_iter = _segment->upper_bound(index_key);
+    if (end_iter.valid()) {
+        end = end_iter.ordinal() * _segment->num_rows_per_block();
+    }
+    if (window != nullptr) {
+        // A physical child need not seek boundary pages elsewhere in the shared segment.
+        // Legacy and pre-initialization range resolvers do not supply a window.
+        const rowid_t limit = std::min(requested_end, window->end());
+        if (window->begin() >= limit) {
+            *rowid = limit;
+            return Status::OK();
         }
-        // Both pages share one block geometry (num_rows_per_block/num_items), so the block count and
-        // rows-per-block always come from the legacy decoder regardless of which page was seeked.
-        start = start_block_id * _segment->num_rows_per_block();
-
-        auto end_iter = use_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
-        if (end_iter.valid()) {
-            end = end_iter.ordinal() * _segment->num_rows_per_block();
-        }
+        start = std::clamp(start, window->begin(), limit);
+        end = std::clamp(end, start, limit);
     }
 
     // binary search to find the exact key
@@ -2754,19 +2752,9 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
 }
 
 Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
-                                        rowid_t* rowid, bool is_full_sort_key) {
-    // |index_key| was already encoded upstream with the codec the logical-split producer pinned into
-    // ShortKeyOption::use_full_sort_key (short_key_encode vs. full_sort_key_encode); |is_full_sort_key|
-    // is that pin. It selects BOTH the short key decoder and the row re-encode below -- never a fresh
-    // read-config read -- so a mid-flight config flip cannot desync the producer from this consumer.
-    if (is_full_sort_key && !_segment->ensure_full_sort_key_index_usable()) {
-        // The producer only pins FULL after a usability request succeeded; if the full page is
-        // unexpectedly unusable now, never reinterpret full-key bytes with the legacy decoder.
-        return Status::InternalError("full sort key index page is not usable for a full-key pinned boundary");
-    }
-
+                                        rowid_t* rowid) {
     uint32_t start_block_id;
-    auto start_iter = is_full_sort_key ? _segment->lower_bound_full(index_key) : _segment->lower_bound(index_key);
+    auto start_iter = _segment->lower_bound(index_key);
     if (start_iter.valid()) {
         // Because previous block may contain this key, so we should set rowid to
         // last block's first row.
@@ -2780,10 +2768,9 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
         // row block. so we set the rowid to first row of last row block.
         start_block_id = _segment->last_block();
     }
-    // Both pages share one block geometry, so rows-per-block always comes from the legacy decoder.
     rowid_t start = start_block_id * _segment->num_rows_per_block();
 
-    auto end_iter = is_full_sort_key ? _segment->upper_bound_full(index_key) : _segment->upper_bound(index_key);
+    auto end_iter = _segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * _segment->num_rows_per_block();
     }
@@ -2796,7 +2783,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) > 0) {
+            if (compare(index_key, *chunk, short_key_schema) > 0) {
                 start = mid + 1;
             } else {
                 end = mid;
@@ -2808,7 +2795,7 @@ Status SegmentIterator::_lookup_ordinal(const Slice& index_key, const Schema& sh
             rowid_t mid = start + (end - start) / 2;
             RETURN_IF_ERROR(_seek_columns(short_key_schema, mid));
             RETURN_IF_ERROR(_read_columns(short_key_schema, chunk.get(), 1));
-            if (compare(index_key, *chunk, short_key_schema, is_full_sort_key) < 0) {
+            if (compare(index_key, *chunk, short_key_schema) < 0) {
                 end = mid;
             } else {
                 start = mid + 1;
@@ -3168,8 +3155,14 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         }
 
         // TODO: plan vector column in FE Planner
-        chunk->append_vector_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
-                                    _vector_index_ctx->vector_slot_id);
+        // The distance column reuses vector_column_id as its column id because the FE does not yet
+        // allocate a distinct one. The scan loop `do { _do_get_next(chunk); } while (chunk->num_rows()
+        // == 0)` re-invokes _do_get_next on the same chunk whenever a batch is fully filtered (e.g. the
+        // vector_range predicate dropped every row), and Chunk::reset() keeps the appended column in
+        // _cid_to_index. append_or_update_column tolerates that by updating the distance column in place
+        // instead of appending a duplicate.
+        chunk->append_or_update_column(std::move(distance_column), _make_field(_vector_index_ctx->vector_column_id),
+                                       _vector_index_ctx->vector_slot_id);
     } else if (_vector_index_ctx && _vector_index_ctx->use_brute_force) {
         // Brute-force fallback: compute distances from the raw vector column. It lives in `chunk` when
         // FE kept it (swapped in by _build_final_chunk), or in _dict_chunk when FE pruned it and
@@ -3533,8 +3526,10 @@ FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Colu
 }
 
 void SegmentIterator::_compute_brute_force_distances(const Column* vector_column, Chunk* chunk) {
-    chunk->append_vector_column(_brute_force_distance_column(vector_column),
-                                _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
+    // append_or_update_column tolerates the scan loop re-emitting the distance column onto a reused
+    // chunk (see the ANN path in _do_get_next).
+    chunk->append_or_update_column(_brute_force_distance_column(vector_column),
+                                   _make_field(_vector_index_ctx->vector_column_id), _vector_index_ctx->vector_slot_id);
 }
 
 // Exact distance rescan over a candidate bitmap. Reached only when the HNSW filtered search returned
@@ -4079,6 +4074,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_init_context() {
+    SCOPED_RAW_TIMER(&_opts.stats->init_context_ns);
     _late_materialization_ratio = config::late_materialization_ratio;
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
@@ -4261,6 +4257,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
 Status SegmentIterator::_rewrite_predicates() {
     RETURN_IF(_scan_range.empty(), Status::OK());
 
+    SCOPED_RAW_TIMER(&_opts.stats->rewrite_predicates_ns);
+
     {
         // in normal case it can always rewrite the predicate,
         // but for JSON extended column, it might be a JsonExtractColumnIterator, so we need to fallback to the orignal predicate
@@ -4341,6 +4339,8 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_check_low_cardinality_optimization() {
+    // Shared with _init_column_access_paths; see the note there.
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_prepare_ns);
     _predicate_need_rewrite.resize(1 + ChunkSchemaHelper::max_column_id(_schema), false);
     const size_t n = _opts.pred_tree.num_columns();
     for (size_t i = 0; i < n; i++) {
@@ -4487,7 +4487,7 @@ StatusOr<RowIdSparseRange> SegmentIterator::_sample_by_page() {
 Status SegmentIterator::_apply_data_sampling() {
     RETURN_IF(!_opts.sample_options.enable_sampling, Status::OK());
     RETURN_IF(_scan_range.empty(), Status::OK());
-    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
     RETURN_IF(sample_probability_percent(_opts.sample_options) <= 0,
               Status::InvalidArgument("probability_percent must > 0"));
 
@@ -4620,6 +4620,7 @@ Status SegmentIterator::_apply_bitmap_index() {
 }
 
 Status SegmentIterator::_apply_del_vector() {
+    SCOPED_RAW_TIMER(&_opts.stats->del_vector_apply_ns);
     RETURN_IF(_scan_range.empty(), Status::OK());
     if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
         Roaring row_bitmap = range2roaring(_scan_range);
@@ -4899,6 +4900,7 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_rowid_range() {
+    SCOPED_RAW_TIMER(&_opts.stats->rowid_range_filter_ns);
     DCHECK_EQ(0, _scan_range.span_size());
 
     _scan_range.add(Range<>(0, num_rows()));
@@ -5069,6 +5071,9 @@ StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<S
                                                          const Schema& iterator_schema, const Schema& output_schema,
                                                          const SegmentReadOptions& options,
                                                          ChunkIteratorPtr* reusable_slot) {
+    if (options.task_range.has_value()) {
+        return Status::NotSupported("grouped range task does not support segment iterator reuse");
+    }
     if (reusable_slot == nullptr) {
         return Status::InvalidArgument("reusable segment iterator slot is null");
     }
@@ -5116,27 +5121,16 @@ StatusOr<SparseRange<>> get_prepared_pruned_row_ranges(const std::shared_ptr<Seg
         iterator_schema = reorder_schema(schema, options.pred_tree);
     }
     SegmentIterator iter(segment, std::move(iterator_schema), options);
-    return iter.prepared_pruned_row_ranges();
+    auto ranges = iter.prepared_pruned_row_ranges();
+    // Closing adds what the index reads fetched through the column files to options.stats.
+    iter.close();
+    return ranges;
 }
 
 static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower) {
-    // Live read gate (physical split producer==consumer, no time gap): a true return guarantees the
-    // full decoder is published, so lower_bound_full is valid; read off => legacy page (rollback).
-    const bool use_full_sort_key = segment->use_full_sort_key_index();
-    std::string index_key;
-    if (use_full_sort_key) {
-        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
-        if (!encoded.has_value()) {
-            // Bypass: the query's sort-key types drifted from this segment's own
-            // schema and cannot be safely bracketed. Never emit a mismatched coarse
-            // bracket -- return the start of the full candidate range.
-            return 0;
-        }
-        index_key = std::move(encoded.value());
-    } else {
-        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-    }
-    auto start_iter = use_full_sort_key ? segment->lower_bound_full(index_key) : segment->lower_bound(index_key);
+    std::string index_key =
+            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    auto start_iter = segment->lower_bound(index_key);
     uint32_t start_block_id = 0;
     if (start_iter.valid()) {
         // Previous block may contain this key, so start from its first row.
@@ -5152,21 +5146,9 @@ static rowid_t lower_bound_block_aligned_rowid(Segment* segment, const SeekTuple
 }
 
 static rowid_t upper_bound_block_aligned_rowid(Segment* segment, const SeekTuple& key, bool lower, rowid_t end) {
-    // Live read gate (physical split producer==consumer, no time gap); read off => legacy page.
-    const bool use_full_sort_key = segment->use_full_sort_key_index();
-    std::string index_key;
-    if (use_full_sort_key) {
-        auto encoded = encode_full_sort_key_search_key(segment, key, lower);
-        if (!encoded.has_value()) {
-            // Bypass: never emit a mismatched coarse bracket -- return the full
-            // candidate range unmodified.
-            return end;
-        }
-        index_key = std::move(encoded.value());
-    } else {
-        index_key = key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
-    }
-    auto end_iter = use_full_sort_key ? segment->upper_bound_full(index_key) : segment->upper_bound(index_key);
+    std::string index_key =
+            key.short_key_encode(segment->num_short_keys(), lower ? KEY_MINIMAL_MARKER : KEY_MAXIMAL_MARKER);
+    auto end_iter = segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * segment->num_rows_per_block();
     }
@@ -5216,23 +5198,37 @@ static bool init_seek_range_iterator_schema(const SeekRange& range, Schema* iter
 
 template <typename ResolveFn>
 static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& segment, const Schema& iterator_schema,
-                                             const LakeIOOptions& lake_io_opts, ResolveFn&& resolve_fn)
+                                             const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats,
+                                             bool use_page_cache, const std::atomic<bool>* is_cancelled,
+                                             ResolveFn&& resolve_fn)
         -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
-    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
-
     OlapReaderStatistics local_stats;
+    if (stats == nullptr) {
+        stats = &local_stats;
+    }
+    if (is_cancelled != nullptr && is_cancelled->load(std::memory_order_acquire)) {
+        return Status::Cancelled("cancelled while resolving segment rowid ranges");
+    }
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts, stats));
+
     ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(segment->file_info().path));
     SegmentReadOptions read_options;
     read_options.lake_io_opts = lake_io_opts;
-    read_options.stats = &local_stats;
+    read_options.stats = stats;
     read_options.fs = std::move(file_system);
+    read_options.use_page_cache = use_page_cache;
+    read_options.is_cancelled = is_cancelled;
     SegmentIterator iterator(segment, iterator_schema, read_options);
-    return resolve_fn(iterator);
+    auto result = resolve_fn(iterator);
+    // Closing adds what the key column reads fetched through the column files to the stats.
+    iterator.close();
+    return result;
 }
 
 StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
         const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
-        const LakeIOOptions& lake_io_opts) {
+        const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats, bool use_page_cache,
+        const std::atomic<bool>* is_cancelled) {
     std::vector<std::optional<Range<rowid_t>>> rowid_ranges;
     rowid_ranges.reserve(ranges.size());
     if (ranges.empty()) {
@@ -5257,9 +5253,12 @@ StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowi
         return rowid_ranges;
     }
     return with_segment_seek_range_iterator(
-            segment, iterator_schema, lake_io_opts,
+            segment, iterator_schema, lake_io_opts, stats, use_page_cache, is_cancelled,
             [&](SegmentIterator& iterator) -> StatusOr<std::vector<std::optional<Range<rowid_t>>>> {
                 for (const auto& range : ranges) {
+                    if (is_cancelled != nullptr && is_cancelled->load(std::memory_order_acquire)) {
+                        return Status::Cancelled("cancelled while resolving segment rowid ranges");
+                    }
                     ASSIGN_OR_RETURN(auto rowid_range, iterator.resolve_range_to_rowid_range(range));
                     rowid_ranges.emplace_back(rowid_range);
                 }
@@ -5278,7 +5277,7 @@ StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const 
     if (!init_seek_range_iterator_schema(range, &iterator_schema)) {
         return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
     }
-    return with_segment_seek_range_iterator(segment, iterator_schema, lake_io_opts,
+    return with_segment_seek_range_iterator(segment, iterator_schema, lake_io_opts, nullptr, false, nullptr,
                                             [&](SegmentIterator& iterator) -> StatusOr<std::optional<Range<rowid_t>>> {
                                                 return iterator.resolve_range_to_rowid_range(range);
                                             });

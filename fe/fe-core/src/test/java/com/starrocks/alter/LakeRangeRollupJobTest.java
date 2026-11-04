@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.starrocks.alter.LakeOnlineRewriteJobBase.PendingPartitionPlan;
 import com.starrocks.alter.reshard.presplit.Estimates;
+import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
 import com.starrocks.catalog.Column;
@@ -25,29 +26,39 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SyncMaterializedViewDefinition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -110,6 +121,234 @@ public class LakeRangeRollupJobTest {
     @AfterEach
     public void after() throws Exception {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
+    }
+
+    private LakeRangeRollupJob createSyncJob(String query) throws Exception {
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        CreateSyncMVStmt stmt = (CreateSyncMVStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create materialized view mv_range as " + query, connectContext);
+        handler.processCreateMaterializedView(stmt, db, table);
+        LakeRangeRollupJob job = assertInstanceOf(LakeRangeRollupJob.class,
+                handler.getAlterJobsV2().values().iterator().next());
+        handler.clearJobs();
+        return job;
+    }
+
+    @Test
+    public void testSyncDefinitionsAndBaseRewriteInputSurviveJournal() throws Exception {
+        LakeRangeRollupJob job = createSyncJob("select k2 + 1 as derived, count(v1), bitmap_agg(v1), "
+                + "hll_union(hll_hash(v1)), avg_union(avg_state(v1)) as avg_value "
+                + "from t_rollup where k1 > 0 group by k2 + 1");
+        assertTrue(job.isSyncMaterializedView());
+        List<Column> original = job.getShadowSchema();
+        LakeRangeRollupJob copied = (LakeRangeRollupJob) job.copyForPersist();
+        assertNotSame(original.get(0), copied.getShadowSchema().get(0));
+        for (AlterJobV2.JobState state : List.of(AlterJobV2.JobState.PENDING, AlterJobV2.JobState.WAITING_TXN,
+                AlterJobV2.JobState.RUNNING, AlterJobV2.JobState.FINISHED_REWRITING, AlterJobV2.JobState.FINISHED)) {
+            copied.setJobState(state);
+            LakeRangeRollupJob restored = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(
+                    GsonUtils.GSON.toJson(copied), AlterJobV2.class);
+            assertTrue(restored.isSyncMaterializedView());
+            restored.beforeShadowBuild();
+            assertSame(restored.getShadowSchema().get(0),
+                    ((List<Column>) Deencapsulation.getField(restored, "rollupSortKeyColumns")).get(0));
+            for (int i = 0; i < original.size(); i++) {
+                Column column = restored.getShadowSchema().get(i);
+                assertEquals(original.get(i).getType(), column.getType());
+                assertEquals(original.get(i).getUniqueId(), column.getUniqueId());
+                assertEquals(original.get(i).getDefineExpr().getType(), column.getDefineExpr().getType());
+            }
+            assertEquals(List.of("`k1`", "`k2`", "`v1`"), restored.rewriteSelectColumnNames(table));
+            assertEquals(List.of("k1", "k2", "v1"), restored.rewriteTargetColumnNames(table));
+            restored.registerShadowIndexMeta(table);
+            MaterializedIndexMeta meta = table.getIndexMetaByMetaId(restored.getShadowIndexMetaId());
+            assertNotNull(meta.getSyncMvDefinition());
+            assertNotNull(meta.getWhereClause());
+            assertEquals(dbId, meta.getDbId());
+            assertTrue(meta.getViewDefineSql().contains("avg_union"));
+            assertTrue(meta.getOriginStmt().contains("create materialized view"));
+            assertEquals(restored.getShadowSortKeyUniqueIds(), meta.getSortKeyUniqueIds());
+            MaterializedIndexMeta image = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(meta), MaterializedIndexMeta.class);
+            table.analyzeRollupIndexMeta(image);
+            assertEquals(meta.getWhereClause().getType(), image.getWhereClause().getType());
+            table.deleteIndexInfo("mv_range");
+        }
+    }
+
+    @Test
+    public void testSyncComputedSamplingUsesStoredProjectionAndDifferentBaseKey() throws Exception {
+        LakeRangeRollupJob job = createSyncJob("select cast(k2 as bigint) + 1 as derived, sum(v1) "
+                + "from t_rollup group by cast(k2 as bigint) + 1");
+        job.beforeShadowBuild();
+        job.setSampler(request -> {
+            InternalPartitionScanContext scan = (InternalPartitionScanContext) request.getScanContext();
+            assertTrue(scan.sortKeyProjectionIsVerbatim());
+            try {
+                com.starrocks.sql.plan.ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext,
+                        "select " + scan.sortKeySourceColumnNames().get(0) + " from t_rollup").second;
+                assertEquals(IntegerType.BIGINT, plan.getOutputExprs().get(0).getType());
+            } catch (Exception e) {
+                throw new AssertionError(e);
+            }
+            assertTrue(scan.sortKeySourceColumnNames().get(0).toUpperCase().contains("CAST"));
+            assertTrue(scan.sortKeySourceColumnNames().get(0).contains("k2"));
+            assertFalse(scan.sortKeySourceColumnNames().get(0).contains("k1"));
+            return SampleSet.EMPTY;
+        });
+        List<Tuple> boundaries = Deencapsulation.invoke(job, "planBoundaries", DB_NAME, "t_rollup", "t_rollup",
+                table.getPhysicalPartitions().iterator().next().getId(), 1024L, 3);
+        assertTrue(boundaries.isEmpty(), "empty/equal/all-filtered historical sample retains full-range fallback");
+    }
+
+    @Test
+    public void testSyncSamplingNullAndEqualKeysKeepFullRange() throws Exception {
+        LakeRangeRollupJob job = createSyncJob("select k2 + 1 as derived, sum(v1) from t_rollup "
+                + "where k1 < 0 group by k2 + 1");
+        job.beforeShadowBuild();
+        com.starrocks.type.Type keyType = job.getShadowSchema().get(0).getType();
+        List<Tuple> diverse = new ArrayList<>();
+        for (int i = 0; i < 1000; i++) {
+            diverse.add(new Tuple(List.of(Variant.of(keyType, Integer.toString(i)))));
+        }
+        job.setSampler(stubSamplerReturning(diverse));
+        List<Tuple> split = Deencapsulation.invoke(job, "planBoundaries", DB_NAME, "t_rollup", "t_rollup",
+                table.getPhysicalPartitions().iterator().next().getId(), 1024L, 3);
+        assertEquals(2, split.size(), "computed MV keys with diversity must support K > 1");
+        for (Tuple value : List.of(new Tuple(List.of(new com.starrocks.catalog.NullVariant(keyType))),
+                new Tuple(List.of(Variant.of(keyType, "1"))))) {
+            job.setSampler(stubSamplerReturning(java.util.Collections.nCopies(100, value)));
+            List<Tuple> boundaries = Deencapsulation.invoke(job, "planBoundaries", DB_NAME, "t_rollup", "t_rollup",
+                    table.getPhysicalPartitions().iterator().next().getId(), 1024L, 3);
+            assertTrue(boundaries.isEmpty());
+        }
+    }
+
+    @Test
+    public void testSyncInvalidDefinitionCannotRegister() throws Exception {
+        LakeRangeRollupJob job = createSyncJob("select k2, count(v1) from t_rollup group by k2");
+        List<Column> invalidSchema = job.getShadowSchema().stream().map(Column::new)
+                .collect(java.util.stream.Collectors.toList());
+        invalidSchema.get(0).setDefineExpr(com.starrocks.sql.parser.SqlParser.parseSqlToExpr("unknown_source + 1", 0));
+        job.setSyncMaterializedView(new OriginStatement("create materialized view mv_range", 0), "select k2",
+                SyncMaterializedViewDefinition.capture(invalidSchema, null));
+        assertThrows(RuntimeException.class, () -> job.registerShadowIndexMeta(table));
+        assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
+        LakeRangeRollupJob replayed = roundTrip(job);
+        replayed.setJobState(AlterJobV2.JobState.WAITING_TXN);
+        assertThrows(RuntimeException.class, () -> replayed.replay(replayed));
+        assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
+        job.run();
+        assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
+        assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
+    }
+
+    @Test
+    public void testSyncMalformedAndIncompleteJournalDefinitionsFailRecovery() throws Exception {
+        LakeRangeRollupJob job = createSyncJob("select k2, count(v1) from t_rollup group by k2");
+        com.google.gson.JsonObject record = com.google.gson.JsonParser.parseString(
+                GsonUtils.GSON.toJson(job.copyForPersist())).getAsJsonObject();
+        com.google.gson.JsonObject expressions = record.getAsJsonObject("syncMvDefinition")
+                .getAsJsonObject("columnExprSql");
+        String countColumn = expressions.keySet().iterator().next();
+        expressions.addProperty(countColumn, "k2 +");
+        assertThrows(Exception.class, () -> GsonUtils.GSON.fromJson(record.toString(), AlterJobV2.class));
+        expressions.remove(countColumn);
+        assertThrows(Exception.class, () -> GsonUtils.GSON.fromJson(record.toString(), AlterJobV2.class));
+        assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
+    }
+
+    @Test
+    public void testSyncReplayPhasesAndActivationWatermarkPreserveSiblings() throws Exception {
+        long siblingId = injectNormalSiblingRollup("sibling");
+        MaterializedIndexMeta sibling = table.getIndexMetaByMetaId(siblingId);
+        LakeRangeRollupJob job = createSyncJob("select k2, count(v1) from t_rollup where k1 > 0 group by k2");
+        LakeRangeRollupJob pending = roundTrip(job);
+        pending.replay(pending);
+        assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
+        assertEquals(OlapTable.OlapTableState.ROLLUP, table.getState());
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        PendingPartitionPlan layout = newPendingPlan(partition);
+        job.beforeShadowBuild();
+        job.setSampler(stubSamplerReturning(List.of()));
+        job.planPartitionShadow(layout, table, DB_NAME);
+        job.stateOf(partition.getId()).shadowIndex = layout.shadowIndex;
+        job.stateOf(partition.getId()).tabletCount = layout.shadowTabletCount;
+        job.stateOf(partition.getId()).boundaries = layout.boundaries;
+        job.stateOf(partition.getId()).watershedVersion = partition.getVisibleVersion();
+        Deencapsulation.setField(job, "watershedTxnId", 100L);
+        for (AlterJobV2.JobState state : List.of(AlterJobV2.JobState.WAITING_TXN, AlterJobV2.JobState.RUNNING)) {
+            job.setJobState(state);
+            LakeRangeRollupJob restored = roundTrip(job);
+            restored.replay(restored);
+            assertNotNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()).getWhereClause());
+            assertTrue(partition.getLatestIndex(job.getShadowIndexMetaId()).visibleForTransaction(100));
+            assertFalse(partition.getLatestIndex(job.getShadowIndexMetaId()).visibleForTransaction(99));
+            assertEquals(0, table.getIndexMetaByMetaId(job.getShadowIndexMetaId()).getSyncMvRequiredTxnId());
+            assertSame(sibling, table.getIndexMetaByMetaId(siblingId));
+        }
+        job.setRewriteExecutor((context, insert) -> {
+            assertEquals(java.util.Map.of(partition.getId(), partition.getVisibleVersion()), context.getScanVersionOverride());
+            assertFalse(context.getSessionVariable().isEnableMaterializedViewRewrite());
+            assertFalse(context.getSessionVariable().isEnableSyncMaterializedViewRewrite());
+            assertEquals(job.getShadowIndexMetaId(), insert.getTargetWriteIndexId());
+            try {
+                com.starrocks.sql.plan.ExecPlan plan = com.starrocks.sql.StatementPlanner.plan(insert, context);
+                com.starrocks.thrift.TOlapTableSchemaParam schema = plan.getFragments().get(0).toThrift().getOutput_sink()
+                        .getOlap_table_sink().getSchema();
+                assertEquals(1, schema.getIndexesSize());
+                assertEquals(job.getShadowIndexMetaId(), schema.getIndexes().get(0).getId());
+                assertTrue(schema.getIndexes().get(0).isSetWhere_clause());
+                assertTrue(plan.getExplainString(com.starrocks.sql.ast.StatementBase.ExplainLevel.NORMAL)
+                        .contains("rollup: t_rollup"));
+            } catch (Exception e) {
+                throw new AssertionError(e);
+            }
+            context.getState().setError(com.starrocks.common.FeConstants.BACKEND_NODE_NOT_FOUND_ERROR);
+        });
+        job.runRunningJob();
+        assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        assertEquals(partition.getVisibleVersion(), partition.getMinRetainVersion());
+        job.stateOf(partition.getId()).commitVersion = partition.getVisibleVersion() + 1;
+        job.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
+        LakeRangeRollupJob reserved = roundTrip(job);
+        reserved.replay(reserved);
+        assertEquals(0, partition.getMinRetainVersion());
+        job.setJobState(AlterJobV2.JobState.FINISHED);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        LakeRangeRollupJob finished = roundTrip(job);
+        finished.replay(finished);
+        assertEquals(100, table.getIndexMetaByMetaId(job.getShadowIndexMetaId()).getSyncMvRequiredTxnId());
+        long visible = partition.getVisibleVersion();
+        finished.replay(finished);
+        assertEquals(visible, partition.getVisibleVersion());
+        assertEquals(100, table.getIndexMetaByMetaId(job.getShadowIndexMetaId()).getSyncMvRequiredTxnId());
+        assertSame(sibling, table.getIndexMetaByMetaId(siblingId));
+        assertNotNull(table.getIndexMetaByMetaId(baseIndexMetaId));
+        com.starrocks.lake.LakeTable image = GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(table),
+                com.starrocks.lake.LakeTable.class);
+        image.onReload();
+        assertEquals(100, image.getIndexMetaByMetaId(job.getShadowIndexMetaId()).getSyncMvRequiredTxnId());
+        assertNotNull(image.getIndexMetaByMetaId(job.getShadowIndexMetaId()).getWhereClause());
+        com.starrocks.common.Pair<String, com.starrocks.sql.plan.ExecPlan> direct = UtFrameUtils.getPlanAndFragment(
+                connectContext, "select * from mv_range [_SYNC_MV_]");
+        assertTrue(direct.second.getExplainString(com.starrocks.sql.ast.StatementBase.ExplainLevel.NORMAL)
+                .contains("rollup: mv_range"));
+        com.starrocks.common.Pair<String, com.starrocks.sql.plan.ExecPlan> rewritten = UtFrameUtils.getPlanAndFragment(
+                connectContext, "select k2, count(v1) from t_rollup where k1 > 0 group by k2");
+        assertTrue(rewritten.second.getExplainString(com.starrocks.sql.ast.StatementBase.ExplainLevel.NORMAL)
+                .contains("rollup: mv_range"));
+        List<List<Comparable>> infos = new ArrayList<>();
+        finished.getInfo(infos);
+        assertEquals("mv_range", infos.get(0).get(5));
+        assertEquals(100L, infos.get(0).get(7));
+        assertEquals("FINISHED", infos.get(0).get(8));
+        new com.starrocks.utframe.StarRocksAssert(connectContext).dropMaterializedView("mv_range");
+        assertNull(table.getIndexMetaByMetaId(job.getShadowIndexMetaId()));
+        assertSame(sibling, table.getIndexMetaByMetaId(siblingId));
+    }
+
+    private static LakeRangeRollupJob roundTrip(LakeRangeRollupJob job) {
+        return (LakeRangeRollupJob) GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job.copyForPersist()), AlterJobV2.class);
     }
 
     // ---- helpers ------------------------------------------------------------
@@ -260,6 +499,50 @@ public class LakeRangeRollupJobTest {
         assertEquals(AlterJobV2.JobType.ROLLUP, target.getType());
     }
 
+    @Test
+    public void testRunningRewriteCompletionCopyGsonReplaySkipsEvictedTxn() throws Exception {
+        List<Column> schema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob source = newConfiguredRollupJobWithReservedCommit(List.of(schema.get(1), schema.get(0)));
+        source.setJobState(AlterJobV2.JobState.RUNNING);
+        source.watershedTxnId = 555060L;
+        PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+        long id = partition.getId();
+        LakeOnlineRewriteJobBase.PartitionRewriteState state = source.stateOf(id);
+        state.shadowIndex = partition.getLatestIndex(source.getShadowIndexMetaId());
+        state.watershedVersion = 1L;
+        state.rewriteTxnId = 555061L;
+        state.sourceEmpty = true;
+        state.rewriteFinished = true;
+        LakeRangeRollupJob copied = (LakeRangeRollupJob) source.copyForPersist();
+        String json = GsonUtils.GSON.toJson(copied, AlterJobV2.class);
+        LakeRangeRollupJob replayed = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(json, AlterJobV2.class);
+        LakeRangeRollupJob target = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(json, AlterJobV2.class);
+        target.partitionStates.get(id).rewriteFinished = false;
+        target.partitionStates.get(id).sourceEmpty = null;
+        target.replay(replayed);
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long txnId) {
+                return null;
+            }
+        };
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAlterJob(AlterJobV2 entry, WALApplier applier) {
+                applier.apply(entry);
+            }
+        };
+        for (LakeRangeRollupJob restored : List.of(copied, target)) {
+            restored.setRewriteExecutor((context, stmt) -> {
+                throw new AssertionError("a persisted completed rollup must not execute again");
+            });
+            restored.runRunningJob();
+            assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, restored.getJobState());
+            assertEquals(555061L, restored.getRewriteTxnId(id).longValue());
+            assertEquals(Boolean.TRUE, restored.getSourceEmpty(id));
+        }
+    }
+
     // ---- getRollupIndexName test --------------------------------------------
 
     @Test
@@ -336,6 +619,54 @@ public class LakeRangeRollupJobTest {
     }
 
     // ---- planPartitionShadow test (Task 3 Step 1 / Step 2 / Step 4) -------------
+
+    @Test
+    public void testZeroTargetPreservesSingleTabletWithoutSampling() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            LakeRangeRollupJob job = newConfiguredRollupJob(
+                    List.of(table.getSchemaByIndexMetaId(baseIndexMetaId).get(0)));
+            job.setSampler(request -> {
+                throw new AssertionError("K=1 must bypass sampling");
+            });
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            PendingPartitionPlan plan = newPendingPlan(partition);
+
+            job.planPartitionShadow(plan, table, DB_NAME);
+
+            assertEquals(1, plan.shadowTabletCount);
+            assertTrue(plan.boundaries.isEmpty());
+            assertEquals(1, plan.shadowIndex.getTablets().size());
+            assertTrue(plan.shadowIndex.getTablets().get(0).getRange().getRange().isAll());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
+
+    @Test
+    public void testZeroTargetPreservesMultipleLatestIndexTablets() throws Exception {
+        long oldTargetSize = Config.tablet_reshard_target_size;
+        try {
+            Config.tablet_reshard_target_size = 0;
+            PhysicalPartition partition = table.getPhysicalPartitions().iterator().next();
+            MaterializedIndex baseIndex = partition.getLatestIndex(baseIndexMetaId);
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            baseIndex.addTablet(new LakeTablet(GlobalStateMgr.getCurrentState().getNextId()), null, false);
+            List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+            LakeRangeRollupJob job = newConfiguredRollupJob(List.of(baseSchema.get(1), baseSchema.get(0)));
+            job.setSampler(stubSamplerReturning(sampleOver(baseSchema.get(1), baseSchema.get(0))));
+            PendingPartitionPlan plan = newPendingPlan(partition);
+
+            job.planPartitionShadow(plan, table, DB_NAME);
+
+            assertEquals(3, plan.shadowTabletCount);
+            assertEquals(2, plan.boundaries.size());
+            assertEquals(3, plan.shadowIndex.getTablets().size());
+        } finally {
+            Config.tablet_reshard_target_size = oldTargetSize;
+        }
+    }
 
     @Test
     public void testPlanPartitionShadowBuildsKTabletShadowByRollupSortKey() throws Exception {
@@ -443,7 +774,8 @@ public class LakeRangeRollupJobTest {
     @Test
     public void testBuildShadowTabletCreateTasksThrowsWithoutComputeNode() throws Exception {
         // No alive compute node for the shadow tablet -> resolution throws, and the job aborts the alter.
-        new MockUp<WarehouseManager>() {
+        // Control the fixture's concrete warehouse manager.
+        new MockUp<WarehouseManager>(GlobalStateMgr.getCurrentState().getWarehouseMgr().getClass()) {
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tabletId) {
                 throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, tabletId);
@@ -721,5 +1053,37 @@ public class LakeRangeRollupJobTest {
             assertEquals(MaterializedIndex.IndexState.NORMAL, r1Idx.getState(), "sibling r1 must stay NORMAL");
         }
         assertNotNull(table.getIndexMetaByMetaId(baseIndexMetaId), "base meta must survive r2 cancel");
+    }
+
+    // ---- pruning the per-partition state of a done job ----------------------------------------
+
+    /**
+     * Each replay of a FINISHED entry, the first one and a repeated one, leaves the job kept by the handler without
+     * its partition states, while the flip itself runs once.
+     */
+    @Test
+    public void testReplayPrunesFinishedJob() {
+        List<Column> baseSchema = table.getSchemaByIndexMetaId(baseIndexMetaId);
+        LakeRangeRollupJob job = newConfiguredRollupJobWithReservedCommit(
+                List.of(baseSchema.get(1), baseSchema.get(0)));
+        job.setJobState(AlterJobV2.JobState.FINISHED);
+        job.setFinishedTimeMs(System.currentTimeMillis());
+        String text = GsonUtils.GSON.toJson(job.copyForPersist());
+        PhysicalPartition physicalPartition = table.getPhysicalPartitions().iterator().next();
+        long visibleBeforeFlip = physicalPartition.getVisibleVersion();
+        MaterializedViewHandler followerHandler = new MaterializedViewHandler();
+
+        for (int i = 0; i < 2; i++) {
+            // An independently deserialized copy of the entry each time, as a follower may replay it twice.
+            LakeRangeRollupJob entry = (LakeRangeRollupJob) GsonUtils.GSON.fromJson(text, AlterJobV2.class);
+            assertFalse(entry.partitionStates.isEmpty());
+            followerHandler.replayAlterJobV2(entry);
+
+            LakeRangeRollupJob retained = (LakeRangeRollupJob) followerHandler.getAlterJobsV2().get(job.getJobId());
+            assertEquals(AlterJobV2.JobState.FINISHED, retained.getJobState());
+            assertTrue(retained.partitionStates.isEmpty());
+            assertFalse(retained.flipNotYetApplied(table));
+            assertEquals(visibleBeforeFlip + 1, physicalPartition.getVisibleVersion());
+        }
     }
 }

@@ -47,6 +47,7 @@ struct RowsetSegmentStat {
     int64_t total_row_size = 0;
     int64_t total_data_size = 0;
     int64_t total_index_size = 0;
+    int64_t total_standalone_index_size = 0;
     int64_t num_segment = 0;
 };
 

@@ -1,0 +1,39 @@
+-- name: test_subfield_common_expr_reuse
+-- Several subfields of the same struct-valued expression share that expression as one common
+-- expression in the projection, instead of evaluating it once per subfield. The cases below cover
+-- the copy / no-copy decisions on the shared struct and check the values stay correct.
+create database db_${uuid0};
+use db_${uuid0};
+
+create table t1 (
+  id int null,
+  c1 struct<a int, b array<int>, c struct<x varchar(10), y int>> null,
+  j varchar(200) null
+) duplicate key(id)
+distributed by hash(id) buckets 3 properties("replication_num"="1");
+
+insert into t1 values
+  (1, row(10, [1, 2, 3], row('x1', 100)), '{"k1": "a1", "k2": 1, "k3": [1, 2]}'),
+  (2, row(20, [4, 5], row('x2', 200)), '{"k1": "a2", "k2": 2, "k3": [3]}'),
+  (3, row(30, null, null), '{"k1": "a3"}'),
+  (4, null, null);
+
+-- struct cast from JSON, several fields
+select id, s.k1, s.k2, s.k3 from (select id, cast(parse_json(j) as struct<k1 varchar(10), k2 int, k3 array<int>>) s from t1) x order by id;
+
+-- struct cast from VARIANT, several fields, inside an aggregate
+select count(s.k1), count(s.k2), count(s.k3), max(s.k1), sum(s.k2) from (select cast(cast(parse_json(j) as variant) as struct<k1 varchar(10), k2 int, k3 array<int>>) s from t1) x;
+
+-- the whole struct and its fields are both output, so the field must be copied
+select id, s, s.k1, upper(s.k1), s.k3[1] from (select id, cast(parse_json(j) as struct<k1 varchar(10), k2 int, k3 array<int>>) s from t1) x order by id;
+
+-- a struct column field reused by several expressions
+select id, c1.a, c1.a + 1, c1.a + 2 from t1 order by id;
+select id, c1.b, c1.b[1], array_length(c1.b) from t1 order by id;
+select id, c1.b[1], c1.b from t1 order by id;
+select id, c1.c, c1.c.x, c1.c.y, concat(c1.c.x, '-', c1.c.y) from t1 order by id;
+
+-- the same field of a constructed struct reused, with the struct itself also output
+select id, row(id, c1.a), row(id, c1.a).col1, row(id, c1.a).col2 * 2 from t1 order by id;
+
+drop database db_${uuid0};

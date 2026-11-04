@@ -19,6 +19,8 @@
 #include "base/types/int256.h"
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
+#include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
@@ -88,6 +90,12 @@ template <>
 inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_VARIANT> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_FILE> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_GEOGRAPHY> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_GEOMETRY> = false;
 
 template <LogicalType logical_type>
 constexpr bool isSliceLT = false;
@@ -100,6 +108,10 @@ inline constexpr bool isSliceLT<TYPE_VARCHAR> = true;
 
 template <>
 inline constexpr bool isSliceLT<TYPE_VARBINARY> = true;
+template <>
+inline constexpr bool isSliceLT<TYPE_GEOGRAPHY> = true;
+template <>
+inline constexpr bool isSliceLT<TYPE_GEOMETRY> = true;
 
 template <LogicalType logical_type>
 struct RunTimeTypeTraits {};
@@ -241,7 +253,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_CHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -249,7 +260,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARCHAR> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -313,7 +323,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_BINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -321,7 +330,6 @@ template <>
 struct RunTimeTypeTraits<TYPE_VARBINARY> {
     using CppType = Slice;
     using ColumnType = BinaryColumn;
-    using LargeColumnType = LargeBinaryColumn;
     using ImmContainerType = ColumnType::ImmContainer;
 };
 
@@ -331,6 +339,22 @@ struct RunTimeTypeTraits<TYPE_STRUCT> {
     using ColumnType = StructColumn;
     using ImmContainerType = ColumnType::Container;
 };
+
+template <>
+struct RunTimeTypeTraits<TYPE_FILE> {
+    using CppType = DatumStruct;
+    using ColumnType = FileColumn;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_GEOGRAPHY> {
+    using CppType = Slice;
+    using ColumnType = GeoColumn;
+    using ImmContainerType = ColumnType::ImmContainer;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_GEOMETRY> : RunTimeTypeTraits<TYPE_GEOGRAPHY> {};
 
 template <>
 struct RunTimeTypeTraits<TYPE_MAP> {
@@ -351,9 +375,6 @@ using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 
 template <LogicalType Type>
 using RunTimeColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
-
-template <LogicalType Type>
-using RunTimeLargeColumnType = typename RunTimeTypeTraits<Type>::LargeColumnType;
 
 template <LogicalType Type>
 using RunTimeImmContainerType = typename RunTimeTypeTraits<Type>::ImmContainerType;
@@ -532,6 +553,16 @@ struct RunTimeTypeLimits<TYPE_JSON> {
     static value_type min_value();
     static value_type max_value();
 };
+
+template <>
+struct RunTimeTypeLimits<TYPE_GEOGRAPHY> {
+    using value_type = RunTimeCppType<TYPE_GEOGRAPHY>;
+    static value_type min_value() { return GeoColumn::min_value(); }
+    static value_type max_value() { return GeoColumn::max_value(); }
+};
+
+template <>
+struct RunTimeTypeLimits<TYPE_GEOMETRY> : RunTimeTypeLimits<TYPE_GEOGRAPHY> {};
 
 template <>
 struct RunTimeTypeLimits<TYPE_VARIANT> {

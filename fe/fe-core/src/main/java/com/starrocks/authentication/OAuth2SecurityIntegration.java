@@ -14,7 +14,6 @@
 
 package com.starrocks.authentication;
 
-import com.google.re2j.Pattern;
 import com.starrocks.common.Config;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -23,20 +22,35 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-public class OAuth2SecurityIntegration extends SecurityIntegration {
+public class OAuth2SecurityIntegration extends JWTBaseSecurityIntegration {
     final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
             SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
             OAuth2AuthenticationProvider.OAUTH2_TOKEN_SERVER_URL,
             OAuth2AuthenticationProvider.OAUTH2_REDIRECT_URL,
             OAuth2AuthenticationProvider.OAUTH2_CLIENT_ID,
             OAuth2AuthenticationProvider.OAUTH2_CLIENT_SECRET,
-            OAuth2AuthenticationProvider.OAUTH2_JWKS_URL,
-            OAuth2AuthenticationProvider.OAUTH2_PRINCIPAL_FIELD));
-
-    private static final Pattern COMMA_SPLIT = Pattern.compile("\\s*,\\s*");
+            JWKS_URL,
+            PRINCIPAL_FIELD));
 
     public OAuth2SecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
+    }
+
+    /** The token properties fall back to the cluster-wide {@code oauth2_*} items. */
+    @Override
+    protected String configDefault(String key) {
+        switch (key) {
+            case JWKS_URL:
+                return Config.oauth2_jwks_url;
+            case PRINCIPAL_FIELD:
+                return Config.oauth2_principal_field;
+            case REQUIRED_ISSUER:
+                return Config.oauth2_required_issuer;
+            case REQUIRED_AUDIENCE:
+                return Config.oauth2_required_audience;
+            default:
+                return null;
+        }
     }
 
     @Override
@@ -51,18 +65,6 @@ public class OAuth2SecurityIntegration extends SecurityIntegration {
                 Config.oauth2_client_id);
         String clientSecret = propertyMap.getOrDefault(OAuth2AuthenticationProvider.OAUTH2_CLIENT_SECRET,
                 Config.oauth2_client_secret);
-        String jwksUrl = propertyMap.getOrDefault(OAuth2AuthenticationProvider.OAUTH2_JWKS_URL,
-                Config.oauth2_jwks_url);
-        String principalField = propertyMap.getOrDefault(OAuth2AuthenticationProvider.OAUTH2_PRINCIPAL_FIELD,
-                Config.oauth2_principal_field);
-        String commaSeparatedIssuer = propertyMap.getOrDefault(OAuth2AuthenticationProvider.OAUTH2_REQUIRED_ISSUER,
-                Config.oauth2_required_issuer);
-        String[] requiredIssuers = commaSeparatedIssuer == null ?
-                new String[0] : COMMA_SPLIT.split(commaSeparatedIssuer);
-        String commaSeperatedAudiences = propertyMap.getOrDefault(OAuth2AuthenticationProvider.OAUTH2_REQUIRED_AUDIENCE,
-                Config.oauth2_required_audience);
-        String[] requiredAudiences = commaSeperatedAudiences == null ?
-                new String[0] : COMMA_SPLIT.split(commaSeperatedAudiences.trim());
 
         Long connectWaitTimeout;
         if (propertyMap.containsKey(OAuth2AuthenticationProvider.OAUTH2_CONNECT_WAIT_TIMEOUT)) {
@@ -77,11 +79,12 @@ public class OAuth2SecurityIntegration extends SecurityIntegration {
                 oauthRedirectUrl,
                 clientId,
                 clientSecret,
-                jwksUrl,
-                principalField,
-                requiredIssuers,
-                requiredAudiences,
-                connectWaitTimeout));
+                getJwksUrl(),
+                getPrincipalField(),
+                getRequiredIssuer(),
+                getRequiredAudience(),
+                connectWaitTimeout),
+                getGroupSource(), getGroupClaim(), name);
     }
 
     @Override
@@ -93,6 +96,7 @@ public class OAuth2SecurityIntegration extends SecurityIntegration {
         });
 
         validateIntegerProp(propertyMap, OAuth2AuthenticationProvider.OAUTH2_CONNECT_WAIT_TIMEOUT, 0, Integer.MAX_VALUE);
+        super.checkProperty();
     }
 
     private void validateIntegerProp(Map<String, String> propertyMap, String key, int min, int max)

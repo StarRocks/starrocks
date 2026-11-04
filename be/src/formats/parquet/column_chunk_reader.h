@@ -52,7 +52,8 @@ struct ColumnReaderOptions;
 class ColumnChunkReader {
 public:
     ColumnChunkReader(level_t max_def_level, level_t max_rep_level, int32_t type_length,
-                      const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts);
+                      const tparquet::ColumnChunk* column_chunk, const ColumnReaderOptions& opts,
+                      int16_t column_ordinal = 0);
     ~ColumnChunkReader();
 
     Status init(int chunk_size);
@@ -76,17 +77,17 @@ public:
 
     uint32_t num_values() const { return _num_values; }
 
+    // True when the column chunk or current data page statistics say it has no nulls; decode_values then
+    // ignores the null flags it is given.
+    bool current_page_no_null() const { return _current_row_group_no_null || _current_page_no_null; }
+
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
 
     Status decode_values(size_t n, const NullInfos& null_infos, ColumnContentType content_type, Column* dst,
                          const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        // A `null_count` statistic is only a hint. Old parquet-mr writers are known to under-report
-        // it, and a page that claims no NULLs stores one physical value per non-NULL row only, so
-        // decoding one value per row walks off the end of the page. `null_infos` is derived from the
-        // definition levels the caller has just decoded, so cross-checking is authoritative and free.
-        if ((_current_row_group_no_null || _current_page_no_null) && null_infos.num_nulls == 0) {
+        if (current_page_no_null()) {
             return _cur_decoder->next_batch(n, content_type, dst, filter);
         }
         return _cur_decoder->next_batch_with_nulls(n, null_infos, content_type, dst, filter);
@@ -144,6 +145,7 @@ private:
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;
+    int16_t _column_ordinal = 0; // index of this column in the row group (for PME AAD)
     std::unique_ptr<PageReader> _page_reader;
     io::SeekableInputStream* _stream;
 

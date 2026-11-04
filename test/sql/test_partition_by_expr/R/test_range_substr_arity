@@ -1,0 +1,21 @@
+-- name: test_range_substr_arity
+CREATE DATABASE IF NOT EXISTS test_range_substr_arity_db;
+-- result:
+-- !result
+USE test_range_substr_arity_db;
+-- result:
+-- !result
+CREATE TABLE ddl3 (k VARCHAR(10) NOT NULL)
+DUPLICATE KEY(k)
+PARTITION BY RANGE(substr(k)) ()
+DISTRIBUTED BY HASH(k);
+-- result:
+E: (1064, "Getting syntax error from line 3, column 19 to line 3, column 27. Detail message: Unsupported expr 'substr()' in PARTITION BY clause.")
+-- !result
+CREATE TABLE ddl4 (k VARCHAR(10) NOT NULL)
+DUPLICATE KEY(k)
+PARTITION BY RANGE(substr(k, 1)) ()
+DISTRIBUTED BY HASH(k);
+-- result:
+E: (1064, 'Expr[substr(k, 1)] type[VARCHAR] cannot be a range partition key.')
+-- !result

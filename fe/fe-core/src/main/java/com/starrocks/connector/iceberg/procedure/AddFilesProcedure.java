@@ -176,13 +176,7 @@ public class AddFilesProcedure extends IcebergTableProcedure {
                                       String location, boolean recursive, String fileFormat) throws IOException {
         LOGGER.info("Adding files from location: {}", location);
 
-        // Get the file system for the location
-        URI locationUri = new Path(location).toUri();
-        FileSystem fileSystem = FileSystem.get(locationUri,
-                context.hdfsEnvironment().getConfiguration());
-
-        // Discover data files in the location
-        List<DataFile> dataFiles = discoverDataFiles(context, table, fileSystem, location, recursive, fileFormat);
+        List<DataFile> dataFiles = discoverFilesFromLocation(context, table, location, recursive, fileFormat);
 
         if (dataFiles.isEmpty()) {
             LOGGER.warn("No data files found at location: {}", location);
@@ -198,6 +192,14 @@ public class AddFilesProcedure extends IcebergTableProcedure {
         // Commit the transaction
         appendFiles.commit();
         LOGGER.info("Successfully added {} files to table", dataFiles.size());
+    }
+
+    // Also used by add_equality_delete_files, which turns each discovered file into an equality delete file.
+    List<DataFile> discoverFilesFromLocation(IcebergTableProcedureContext context, Table table, String location,
+                                             boolean recursive, String fileFormat) throws IOException {
+        URI locationUri = new Path(location).toUri();
+        FileSystem fileSystem = FileSystem.get(locationUri, context.hdfsEnvironment().getConfiguration());
+        return discoverDataFiles(context, table, fileSystem, location, recursive, fileFormat);
     }
 
     private List<DataFile> discoverDataFiles(IcebergTableProcedureContext context, Table table, FileSystem fileSystem,

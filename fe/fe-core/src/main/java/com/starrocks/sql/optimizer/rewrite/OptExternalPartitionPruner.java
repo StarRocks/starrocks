@@ -37,6 +37,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -63,7 +64,6 @@ import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.data.BinaryRow;
-import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.Split;
 
 import java.util.ArrayList;
@@ -549,10 +549,8 @@ public class OptExternalPartitionPruner {
             //check scan partition num
             Set<BinaryRow> selectedPartitions = new HashSet<>();
             for (Split split : splits) {
-                if (split instanceof DataSplit) {
-                    DataSplit dataSplit = (DataSplit) split;
-                    selectedPartitions.add(dataSplit.partition());
-                }
+                PaimonSplitUtils.getDataSplit(split)
+                        .ifPresent(dataSplit -> selectedPartitions.add(dataSplit.partition()));
             }
             int scanLakePartitionNumLimit = context.getSessionVariable().getScanLakePartitionNumLimit();
             if (scanLakePartitionNumLimit > 0 && selectedPartitions.size() > scanLakePartitionNumLimit) {

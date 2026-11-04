@@ -27,9 +27,9 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.alter.reshard.SplitTabletJob;
 import com.starrocks.alter.reshard.TabletReshardJob;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
-import com.starrocks.alter.reshard.TabletReshardJobMgrTest;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
@@ -92,6 +92,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -1061,10 +1062,9 @@ public class StarMgrMetaSyncerTest {
         long reshardTableId = 6L;
         long orphanGroupId = shardGroupId + 100; // not part of the FE-known shard group set
 
-        TabletReshardJobMgrTest.TestNormalTabletReshardJob reshardJob =
-                new TabletReshardJobMgrTest.TestNormalTabletReshardJob(1, TabletReshardJob.JobType.SPLIT_TABLET);
-        reshardJob.setTableId(reshardTableId);
-        reshardJob.markFinished(1000L);
+        SplitTabletJob reshardJob = new SplitTabletJob(1L, 66L, reshardTableId, Map.of());
+        Deencapsulation.setField(reshardJob, "jobState", TabletReshardJob.JobState.FINISHED);
+        Deencapsulation.setField(reshardJob, "finishedTimeMs", 1000L);
         tabletReshardJobMgr.getTabletReshardJobs().put(reshardJob.getJobId(), reshardJob);
 
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
@@ -1359,6 +1359,92 @@ public class StarMgrMetaSyncerTest {
         Assertions.assertEquals(4, shards.size());
 
         table.setId(oldTblId);
+    }
+
+    @Test
+    public void testSyncTableMetaProtectsSharedShardGroupInSnapshot() throws Exception {
+        long dbId = 100L;
+        long tableId = 1000L;
+        long parentId = 100L;
+        long oldPhysicalId = 101L;
+        long newPhysicalId = 102L;
+        long sharedGroupId = 200L;
+
+        Database db = new Database(dbId, "db");
+        OlapTable table = new LakeTable(tableId, "table", new ArrayList<>(), KeysType.AGG_KEYS,
+                new PartitionInfo(PartitionType.RANGE), new HashDistributionInfo());
+
+        MaterializedIndex oldIndex = new MaterializedIndex(300L,
+                MaterializedIndex.IndexState.NORMAL, sharedGroupId);
+        oldIndex.addTablet(new LakeTablet(111L), null, false);
+        MaterializedIndex newIndex = new MaterializedIndex(300L,
+                MaterializedIndex.IndexState.NORMAL, sharedGroupId);
+        newIndex.addTablet(new LakeTablet(222L), null, false);
+
+        PhysicalPartition oldPhysical = new PhysicalPartition(oldPhysicalId, parentId, oldIndex);
+        PhysicalPartition newPhysical = new PhysicalPartition(newPhysicalId, parentId, newIndex);
+        final boolean[] protectByIndex = {false};
+        Set<Long> deletedShards = new HashSet<>();
+        List<Partition> metastorePartitions = new ArrayList<>();
+
+        new Expectations(localMetastore) {{
+                localMetastore.getTable(dbId, tableId);
+                minTimes = 0;
+                result = table;
+
+                localMetastore.getAllPartitionsIncludeRecycleBin((OlapTable) any);
+                minTimes = 0;
+                result = metastorePartitions;
+            }};
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<Long> listShard(long groupId) {
+                return Lists.newArrayList(111L, 222L, 333L);
+            }
+
+            @Mock
+            public void deleteShards(Set<Long> shardIds) {
+                deletedShards.addAll(shardIds);
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public boolean isMaterializedIndexInClusterSnapshotInfo(
+                    long ignoredDbId, long ignoredTableId, long ignoredPartId,
+                    long physicalPartId, long ignoredIndexId) {
+                return protectByIndex[0] && physicalPartId == oldPhysicalId;
+            }
+
+            @Mock
+            public boolean isShardGroupIdInClusterSnapshotInfo(
+                    long ignoredDbId, long ignoredTableId, long ignoredPartId,
+                    long physicalPartId, long ignoredShardGroupId) {
+                return !protectByIndex[0] && physicalPartId == oldPhysicalId;
+            }
+        };
+
+        for (boolean protectByIndexValue : new boolean[] {true, false}) {
+            protectByIndex[0] = protectByIndexValue;
+            for (List<PhysicalPartition> physicalPartitionOrder :
+                    Lists.newArrayList(Lists.newArrayList(oldPhysical, newPhysical),
+                            Lists.newArrayList(newPhysical, oldPhysical))) {
+                metastorePartitions.clear();
+                metastorePartitions.add(new Partition(parentId, "p", new HashDistributionInfo()) {
+                    @Override
+                    public Collection<PhysicalPartition> getSubPartitions() {
+                        return physicalPartitionOrder;
+                    }
+                });
+                deletedShards.clear();
+
+                boolean changed = starMgrMetaSyncer.syncTableMetaInternal(db, table, false);
+
+                Assertions.assertFalse(changed);
+                Assertions.assertTrue(deletedShards.isEmpty());
+            }
+        }
     }
 
     @Test

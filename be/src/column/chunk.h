@@ -102,12 +102,6 @@ public:
     // Remove all records and reset the delete state.
     void reset();
 
-    Status upgrade_if_overflow();
-
-    Status downgrade();
-
-    bool has_large_column() const;
-
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }
     bool has_columns() const { return !_columns.empty(); }
@@ -146,7 +140,10 @@ public:
     void update_column(ColumnPtr& column, SlotId slot_id);
     void append_column(const ColumnPtr& column, ColumnId column_id, [[maybe_unused]] bool is_column_id);
 
-    void append_vector_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
+    // Appends `column` under `field`/`slot_id`, or -- if a column with the same field id is already
+    // present (a reused chunk that survived reset()) -- updates that column in place. Used for the
+    // synthetic ANN distance column, which the scan loop can re-emit onto the same chunk.
+    void append_or_update_column(ColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
     void update_column_by_index(ColumnPtr&& column, size_t idx);
     void append_or_update_column(ColumnPtr&& column, SlotId slot_id);
 
@@ -511,11 +508,7 @@ public:
     // NOTE: After build, the MutableChunk will be in an invalid state and should not be used anymore.
     Chunk to_chunk();
 
-    Status upgrade_if_overflow();
-    Status downgrade();
     void reset();
-
-    bool has_large_column() const;
 
     bool has_rows() const { return num_rows() > 0; }
     bool is_empty() const { return num_rows() == 0; }
@@ -540,7 +533,7 @@ public:
 
     // schema must exist and will be updated.
     void append_column(MutableColumnPtr&& column, const FieldPtr& field);
-    void append_vector_column(MutableColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
+    void append_or_update_column(MutableColumnPtr&& column, const FieldPtr& field, SlotId slot_id);
     void append_column(MutableColumnPtr&& column, SlotId slot_id);
     void insert_column(size_t idx, MutableColumnPtr&& column, const FieldPtr& field);
     void update_column(MutableColumnPtr&& column, SlotId slot_id);

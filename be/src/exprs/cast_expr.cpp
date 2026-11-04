@@ -202,15 +202,14 @@ Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* po
         Expr* key_cast_expr = nullptr;
         auto& key_desc = cast_to.children[0];
         if (key_desc.type != TYPE_VARCHAR) {
-            TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, TYPE_VARCHAR_DESC, key_desc, allow_throw_exception);
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from json to map, map key type: " << key_desc
                            << ", status: " << result.status();
                 return nullptr;
             }
             key_cast_expr = result.value();
-            Expr* cast_input = create_slot_ref(varchar_type).release();
+            Expr* cast_input = create_slot_ref(TYPE_VARCHAR_DESC).release();
             key_cast_expr->add_child(cast_input);
             pool->add(key_cast_expr);
             pool->add(cast_input);
@@ -276,8 +275,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
         Expr* key_cast_expr = nullptr;
         auto& key_desc = expected_type.children[0];
         if (key_desc.type != TYPE_VARCHAR) {
-            const TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
-            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            auto result = create_cast_expr(pool, TYPE_VARCHAR_DESC, key_desc, allow_throw_exception);
             if (!result.ok()) {
                 LOG(ERROR) << "Fail to create cast expr from variant to map, map key type: " << key_desc
                            << ", status: " << result.status();
@@ -285,7 +283,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
             }
 
             key_cast_expr = result.value();
-            Expr* cast_input = create_slot_ref(varchar_type).release();
+            Expr* cast_input = create_slot_ref(TYPE_VARCHAR_DESC).release();
             key_cast_expr->add_child(cast_input);
             pool->add(key_cast_expr);
             pool->add(cast_input);
@@ -312,18 +310,6 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
     case TYPE_STRUCT: {
         TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
 
-        // Validate that every struct field name is a parseable variant path before constructing
-        // CastVariantToStruct, whose ctor would otherwise throw an uncaught std::runtime_error
-        // that propagates out of create_expr_tree and aborts the BE at fragment prepare.
-        // Returning nullptr surfaces a clean Status::NotSupported instead.
-        for (const auto& field_name : expected_type.field_names) {
-            std::string path_string = "$." + field_name;
-            if (!VariantPathParser::parse(Slice(path_string)).ok()) {
-                LOG(WARNING) << "Cannot cast variant to struct: field name is not a valid variant path: " << field_name;
-                return nullptr;
-            }
-        }
-
         std::vector<Expr*> field_casts(expected_type.children.size());
         for (int i = 0; i < expected_type.children.size(); ++i) {
             TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
@@ -340,7 +326,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
             pool->add(cast_input.release());
         }
 
-        return new CastVariantToStruct(node, std::move(field_casts));
+        return new CastVariantToStruct(node, std::move(field_casts), allow_throw_exception);
     }
     default:
         LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)

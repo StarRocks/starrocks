@@ -85,6 +85,22 @@ public class LakeTablet extends Tablet {
     // thread (Utils.processTablets); must be volatile so the publish thread observes the update.
     private volatile long rebuildPindexVersion = 0L;
 
+    /**
+     * Whether this tablet holds a shared data file, as the BE reports it in
+     * TabletStatPB.has_shared_files -- a rowset segment, a rowset del file, a persistent-index
+     * sstable, or either sidecar kind, but not a shared delvec.
+     *
+     * <p>True until a peer reports otherwise, and true again the moment one reports shared files.
+     * That default is the policy, not an approximation: a tablet nobody has reported on is never
+     * admitted to a merge, because missing evidence must fail closed -- a merge job's transaction is
+     * already committed by publish time and cannot be abandoned. So true covers both "reported to
+     * hold shared files" and "not reported on yet", which are the same answer to every caller.
+     *
+     * <p>Not persisted and not journal-replicated: it describes what THIS FE managed to collect, so an
+     * FE restart or leader change returns every tablet to the safe default.
+     */
+    private volatile boolean hasSharedFiles = true;
+
     public LakeTablet() {
         super();
     }
@@ -166,6 +182,26 @@ public class LakeTablet extends Tablet {
     public synchronized void setRowCount(long rowCount) {
         this.rowCount = rowCount;
         this.rowCountVersion = 0L;
+    }
+
+    public void setHasSharedFiles(boolean hasSharedFiles) {
+        this.hasSharedFiles = hasSharedFiles;
+    }
+
+    /**
+     * Adapter for a caller holding the boxed field straight out of a stat RPC or txn log, so the rule
+     * for an absent one lives here rather than at each call site. A null field means the peer never
+     * reported it -- an old BE, or a message built without it. That silence cannot clear the flag: the
+     * tablet may have changed underneath it, since an old BE still serves publishes that can install a
+     * shared file, so a missing report fails closed the same as a report of shared files.
+     */
+    public void observeSharedFiles(Boolean hasSharedFiles) {
+        setHasSharedFiles(!Boolean.FALSE.equals(hasSharedFiles));
+    }
+
+    /** True unless the most recent report said this tablet holds no shared data file. */
+    public boolean hasSharedFiles() {
+        return hasSharedFiles;
     }
 
     @Override

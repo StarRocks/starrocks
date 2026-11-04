@@ -124,6 +124,18 @@ public abstract class BulkLoadJob extends LoadJob {
             // with `SET enable_tablet_pre_split = false` still honors that intent after FE failover.
             sessionVariables.put(SessionVariable.ENABLE_TABLET_PRE_SPLIT,
                     Boolean.toString(var.isEnableTabletPreSplit()));
+            // Same reason, for multi-node tablet write, and one more: a Broker Load is planned long
+            // after this statement returns, so the submitting session may have SET these to
+            // something else -- or be gone -- by then. LoadPlanner reads them back from here and
+            // hands them to the sink, so the load plans the session that was actually asked. The
+            // mode especially: it defaults to `auto`, so losing an explicit `off` is the opposite of
+            // the instruction, not merely an optimisation lost.
+            sessionVariables.put(SessionVariable.LAKE_MULTI_NODE_TABLET_WRITE_MODE,
+                    var.getLakeMultiNodeTabletWriteMode());
+            sessionVariables.put(SessionVariable.LAKE_MULTI_NODE_WRITE_MAX_NODES,
+                    Integer.toString(var.getLakeMultiNodeWriteMaxNodes()));
+            sessionVariables.put(SessionVariable.LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE,
+                    Long.toString(var.getLakeMultiNodeWriteBytesPerNode()));
             sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
             sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {

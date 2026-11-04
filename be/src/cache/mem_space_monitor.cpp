@@ -25,12 +25,24 @@
 
 namespace starrocks {
 
+MemSpaceMonitor::~MemSpaceMonitor() {
+    stop();
+}
+
 void MemSpaceMonitor::start() {
+    if (!_stopped.load(std::memory_order_acquire)) {
+        // Already running. Never move-assign over a joinable thread.
+        return;
+    }
+    _stopped.store(false, std::memory_order_release);
     _adjust_datacache_thread = std::thread([this] { _adjust_datacache_callback(); });
     Thread::set_thread_name(_adjust_datacache_thread, "adj_mem_cache");
 }
 
 void MemSpaceMonitor::stop() {
+    if (_stopped.load(std::memory_order_acquire)) {
+        return;
+    }
     _stopped.store(true, std::memory_order_release);
     if (_adjust_datacache_thread.joinable()) {
         _adjust_datacache_thread.join();

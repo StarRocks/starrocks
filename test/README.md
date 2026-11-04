@@ -301,6 +301,31 @@ RES LINE2
 SQL2;
 ```
 
+`[UNORDERED]` is the opposite tag, and says the row order of a multi-row result is not part of
+what the case asserts. It matches the current default, so adding it changes nothing about how a
+case runs today; what it does is let a case say so, instead of leaving it to be inferred from the
+absence of `[ORDER]`. Prefer writing one of the two whenever a statement can answer with more
+than one row -- a plain statement with no tag cannot be told apart from one nobody thought about.
+
+`[UNORDERED]` also makes recording (`-r`) reproducible: its rows are written to the R file sorted,
+so re-recording a statement whose row order is not fixed no longer produces a diff that says
+nothing. Rows of untagged statements are recorded in the order the server returned them, as
+before. Checking is unaffected either way -- an unordered result is compared as a multiset, so a
+sorted R file and an unsorted answer still match.
+
+```sql
+-- name: ${case name}
+[UNORDERED]select * from t;
+-- result: 
+RES LINE1
+RES LINE2
+-- !result
+```
+
+Neither tag reaches a `function:` line. A function's result is compared as one string, so its row
+order is always part of the assertion and the order has to come from the query itself -- with a
+tiebreak, if the sort key can repeat.
+
 
 ### 5. REGULAR CHECKS FOR SQL RESULTS
 Some SQL execution results have variables (such as ID).In addition to using SKIP CHECK and UNCHECK, the framework supports regular checks.  
@@ -535,5 +560,5 @@ SET_VAR {
 
 * In **record mode** (`-r`), the framework executes the block with the first variable combination and records the results. Subsequent combinations are also executed to verify they succeed.
 * In **validate mode** (`-v`), the framework executes the block once per combination and checks every run against the same expected results from the R file.
-* The `[UC]` (uncheck), `[ORDER]`, and `[REGEX]` flags are supported on individual statements inside the block.
+* The `[UC]` (uncheck), `[ORDER]`, `[UNORDERED]`, and `[REGEX]` flags are supported on individual statements inside the block.
 * `SET_VAR` blocks must NOT be nested inside `LOOP` blocks.

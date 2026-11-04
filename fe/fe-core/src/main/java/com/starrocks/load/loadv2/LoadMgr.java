@@ -71,6 +71,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.WarehouseLoadInfoBuilder;
@@ -421,8 +422,11 @@ public class LoadMgr implements MemoryTrackable {
         return (currentTimeMs - job.getFinishTimestamp()) / 1000 > Config.label_keep_max_second;
     }
 
-    public void cancelResidualJob() {
-        // cancel residual insert job
+    /**
+     * Ends the INSERT jobs whose statements will not record their final state, for example because the FE running a
+     * statement stopped being the leader in the middle of it. Each such job ends the way its transaction did.
+     */
+    public void endResidualInsertJobs() {
         readLock();
         List<LoadJob> insertJobs;
         try {
@@ -433,19 +437,56 @@ public class LoadMgr implements MemoryTrackable {
             readUnlock();
         }
 
-        insertJobs.forEach(job -> {
-            TransactionState state = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLabelTransactionState(
-                    job.getDbId(), job.getLabel());
-            if (state == null || state.getTransactionStatus() == TransactionStatus.UNKNOWN) {
-                try {
-                    recordFinishedOrCancelledLoadJob(
-                            job.getId(), EtlJobType.INSERT, "Cancelled since transaction status unknown", "");
-                    LOG.warn("abort job: {}-{} since transaction status unknown", job.getLabel(), job.getId());
-                } catch (StarRocksException e) {
-                    LOG.warn("failed to abort job: {}", job.getLabel(), e);
-                }
+        GlobalTransactionMgr txnMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        for (LoadJob job : insertJobs) {
+            InsertLoadJob insertJob = (InsertLoadJob) job;
+            // A label is reusable once its transaction is aborted, so look the transaction up by id.
+            TransactionState txnState = txnMgr.getTransactionState(job.getDbId(), job.getTransactionId());
+            TransactionStatus txnStatus;
+            if (txnState != null) {
+                txnStatus = txnState.getTransactionStatus();
+            } else if (insertJob.isTxnCommitted()
+                    && GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(job.getDbId()) != null) {
+                // The transaction manager drops a transaction some time after it finishes, and a committed
+                // transaction is aborted only if its database is dropped.
+                txnStatus = TransactionStatus.VISIBLE;
+            } else {
+                // An INSERT transaction is persisted only once it commits, so the transaction of a job created on an
+                // FE that stopped being the leader before the commit is lost. The jobs of a dropped database are
+                // removed when the database is erased.
+                txnStatus = TransactionStatus.UNKNOWN;
             }
-        });
+
+            String failMsg;
+            switch (txnStatus) {
+                case VISIBLE:
+                    failMsg = "";
+                    break;
+                case ABORTED:
+                    failMsg = "Cancelled since transaction aborted: " + txnState.getReason();
+                    break;
+                case UNKNOWN:
+                    failMsg = "Cancelled since transaction status unknown";
+                    break;
+                default:
+                    continue;
+            }
+            // The statement that runs a job on this FE records the final state itself, with the load statistics and
+            // the tracking URL, possibly after the jobs were listed. A transaction is dropped long after it is
+            // aborted, so a statement that has not recorded the final state when its transaction is gone never will.
+            if ((txnStatus != TransactionStatus.UNKNOWN && insertJob.hasRunningStatement()) || job.isCompleted()) {
+                continue;
+            }
+
+            try {
+                recordFinishedOrCancelledLoadJob(job.getId(), EtlJobType.INSERT, failMsg, "");
+                LOG.warn("end residual insert job: {}-{}, transaction {} {}, {}", job.getLabel(), job.getId(),
+                        job.getTransactionId(), txnState == null ? "not found" : "is " + txnStatus,
+                        failMsg.isEmpty() ? "finished" : failMsg);
+            } catch (StarRocksException e) {
+                LOG.warn("failed to end residual insert job: {}", job.getLabel(), e);
+            }
+        }
     }
 
     public void removeOldLoadJob() {

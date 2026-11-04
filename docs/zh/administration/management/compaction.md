@@ -287,6 +287,15 @@ WHERE name = "compact_threads";
 >
 > 在生产环境中，建议将 `max_cumulative_compaction_num_singleton_deltas` 设置为 `100`，以加速 Compaction 任务并减少资源消耗。
 
+##### lake_pk_compaction_max_rowsets_per_level
+
+- 默认值：20
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群下，主键表的某个大小层中待合并的 Rowset 达到该数量时，即使该层得分不是最高，也会被合并。Size-tiered Compaction 策略每轮只合并得分最高的一层。持续导入时，最新写入的小 Rowset 所在层每轮得分都最高，由较大 Rowset（之前 Compaction 的产物和中等批次的导入）组成的层会一直增长，导致查询需要读取的 Segment 增多，并在 Compaction 刚完成时表现为 Compaction Score 的尖峰。当某个未被选中的层中待合并的 Rowset 达到该数量，且这些 Rowset 能与已选中的 Rowset 在同一次 Compaction 任务中合并时，该层会并入该次 Compaction 任务。设置为 `0` 表示关闭该行为。
+- 引入版本：-
+
 ### 手动触发 Compaction 任务
 
 ```SQL
@@ -326,7 +335,9 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 
 ### 慢查询
 
-如果是 Compaction 不及时导致的慢查询，在 SQL Profile 中，查看在单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则表明是由于 Compaction 不及时导致查询慢。
+要排查存算分离集群中 Compaction 不及时导致的慢查询，可以在 SQL Profile 中查看单个 Fragment 内 `PhySegmentsCount` 除以 `TabletCount` 的值。如果是一个很大的值，比如几十以上，则可能是 Compaction 不及时导致查询慢。
+
+`PhySegmentsCount` 仅在存算分离扫描中提供。对于存算一体集群，或不包含 `PhySegmentsCount` 的旧版本 Profile，改用单个 Fragment 内 `SegmentsReadCount` 除以 `TabletCount` 的值。在存算分离和存算一体扫描中，Tablet 内并行扫描都可能导致多个 split reader 在 `SegmentsReadCount` 中重复统计同一个 segment。因此，存在 `PhySegmentsCount` 时应优先使用它；在任一架构的并行扫描中使用回退计数器时，不能仅凭较高的比值判定存在 Compaction 问题。
 
 ### 集群最大 Compaction Score 很高
 

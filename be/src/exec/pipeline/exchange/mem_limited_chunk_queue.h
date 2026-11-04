@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <mutex>
 #include <queue>
 
@@ -157,6 +158,8 @@ public:
 
     void enter_release_memory_mode();
 
+    bool has_pending_io_tasks() const { return _pending_io_tasks.load() != 0; }
+
 private:
     void _update_progress(Iterator* iter = nullptr);
 
@@ -226,6 +229,7 @@ private:
     Status _status;
 
     std::atomic_bool _has_flush_io_task = false;
+    std::atomic<size_t> _pending_io_tasks = 0;
     phmap::flat_hash_set<Block*> _loaded_blocks;
 
     RuntimeProfile::HighWaterMarkCounter* _peak_memory_bytes_counter = nullptr;

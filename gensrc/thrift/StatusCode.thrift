@@ -118,6 +118,11 @@ enum TStatusCode {
     GLOBAL_DICT_NOT_MATCH = 62,
     LEADER_TRANSFERRED = 63,
     TABLE_NOT_EXIST = 64,
-    QUERY_NOT_EXIST = 65
+    QUERY_NOT_EXIST = 65,
+
+    // A lake tablet metadata object for the version carried in a scan range does not exist.
+    // Distinct from the generic NOT_FOUND so FE can classify it as retryable-after-replan: the
+    // scan version is a stale snapshot of the partition's visible version, not a missing tablet.
+    LAKE_META_VERSION_NOT_FOUND = 66
 }
 

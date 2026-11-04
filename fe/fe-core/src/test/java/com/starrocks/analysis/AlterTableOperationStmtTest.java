@@ -322,6 +322,15 @@ public class AlterTableOperationStmtTest {
     }
 
     @Test
+    public void testAddEqualityDeleteFilesRejectsWhere() {
+        String sql = "ALTER TABLE iceberg_catalog.iceberg_db.test_table EXECUTE add_equality_delete_files(" +
+                "location = 's3://bucket/deletes', file_format = 'parquet', equality_columns = 'k1')";
+        AnalyzeTestUtil.analyzeSuccess(sql);
+        AnalyzeTestUtil.analyzeFail(sql + " WHERE partition_date > '2024-01-01'",
+                "WHERE is not supported for add_equality_delete_files");
+    }
+
+    @Test
     public void testInvalidProcedureName() {
         String sql = "ALTER TABLE iceberg_catalog.iceberg_db.test_table EXECUTE invalid_procedure()";
         AnalyzeTestUtil.analyzeFail(sql);
@@ -373,7 +382,7 @@ public class AlterTableOperationStmtTest {
 
         RewriteDataFilesProcedure rewriteProc = RewriteDataFilesProcedure.getInstance();
         Assertions.assertEquals("rewrite_data_files", rewriteProc.getProcedureName());
-        Assertions.assertEquals(4, rewriteProc.getArguments().size());
+        Assertions.assertEquals(6, rewriteProc.getArguments().size());
 
         RollbackToSnapshotProcedure rollbackProc = RollbackToSnapshotProcedure.getInstance();
         Assertions.assertEquals("rollback_to_snapshot", rollbackProc.getProcedureName());

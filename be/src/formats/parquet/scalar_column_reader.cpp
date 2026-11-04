@@ -14,6 +14,7 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "base/coding.h"
 #include "base/simd/gather.h"
 #include "base/simd/simd.h"
 #include "cache/scan/shared_buffered_input_stream.h"
@@ -214,8 +215,9 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                                                            const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                            const uint64_t rg_num_rows) const {
     bool filtered = false;
-    if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr) {
-        // statistics is not existed, don't filter
+    if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr ||
+        has_geo_annotation(get_column_parquet_field()->schema_element)) {
+        // Missing statistics or undefined GEO sort order cannot filter this row group.
         return filtered;
     }
 
@@ -223,13 +225,8 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
     bool is_all_null = false;
 
     if (get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
-        if (StatisticsHelper::has_correct_null_count(_opts.file_meta_data)) {
-            has_null = get_chunk_metadata()->meta_data.statistics.null_count > 0;
-            is_all_null = get_chunk_metadata()->meta_data.statistics.null_count == rg_num_rows;
-        }
-        // Otherwise keep the conservative has_null = true / is_all_null = false: an
-        // under-reported `null_count` would otherwise prune away the very rows `IS NULL` asks
-        // for, and unlike a decode failure that loss is silent. min/max pruning still applies.
+        has_null = get_chunk_metadata()->meta_data.statistics.null_count > 0;
+        is_all_null = get_chunk_metadata()->meta_data.statistics.null_count == rg_num_rows;
     } else {
         return filtered;
     }
@@ -251,11 +248,9 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                 StatisticsHelper::get_min_max_value(_opts.file_meta_data, col_type, &get_chunk_metadata()->meta_data,
                                                     get_column_parquet_field(), min_values, max_values);
         if (st.ok()) {
-            st = StatisticsHelper::decode_value_into_column(min_column, min_values, null_pages, col_type,
-                                                            get_column_parquet_field(), _opts.timezone);
-            RETURN_IF(!st.ok(), filtered);
-            st = StatisticsHelper::decode_value_into_column(max_column, max_values, null_pages, col_type,
-                                                            get_column_parquet_field(), _opts.timezone);
+            st = StatisticsHelper::decode_min_max_into_columns(min_column, max_column, min_values, max_values,
+                                                               null_pages, col_type, get_column_parquet_field(),
+                                                               _opts.timezone);
             RETURN_IF(!st.ok(), filtered);
 
             zone_map_detail = ZoneMapDetail{min_column->get(0), max_column->get(0), has_null};
@@ -276,7 +271,15 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
                                                             CompoundNodeType pred_relation,
                                                             const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                             const uint64_t rg_num_rows) {
+    // On a Parquet Modular Encryption file the ColumnIndex and OffsetIndex are encrypted as their own
+    // modules (kColumnIndex / kOffsetIndex). Both are decrypted below, under the module AAD for this row
+    // group and column, before the thrift parser sees them, so encrypted scans prune pages like
+    // plaintext ones.
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
+    // ColumnIndex min/max is undefined for GEO too; do not read or prune from it.
+    if (get_column_parquet_field() != nullptr && has_geo_annotation(get_column_parquet_field()->schema_element)) {
+        return false;
+    }
     if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||
         !chunk_meta->__isset.meta_data) {
         // no page index, dont filter
@@ -288,8 +291,20 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     uint32_t column_index_length = chunk_meta->column_index_length;
 
     std::vector<uint8_t> page_index_data;
-    page_index_data.reserve(column_index_length);
+    page_index_data.resize(column_index_length);
     RETURN_IF_ERROR(_opts.file->read_at_fully(column_index_offset, page_index_data.data(), column_index_length));
+
+    // PME encrypts the column index as its own module, so decrypt before parsing on an encrypted
+    // file. The plaintext replaces the buffer so the deserialization below is shared.
+    if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+        std::string plaintext;
+        RETURN_IF_ERROR(decrypt_metadata_module(*_opts.file_meta_data, _opts.parquet_encryption_info,
+                                                kPmeModuleColumnIndex, _opts.row_group_ordinal,
+                                                static_cast<int16_t>(get_column_parquet_field()->physical_column_index),
+                                                page_index_data.data(), column_index_length, &plaintext));
+        page_index_data.assign(plaintext.begin(), plaintext.end());
+        column_index_length = static_cast<uint32_t>(page_index_data.size());
+    }
 
     tparquet::ColumnIndex column_index;
     RETURN_IF_ERROR(deserialize_thrift_msg(page_index_data.data(), &column_index_length, TProtocolType::COMPACT,
@@ -302,17 +317,9 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
 
     MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
     MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
-    // deal with min_values
-    auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, null_pages, col_type,
-                                                         get_column_parquet_field(), _opts.timezone);
-    if (!st.ok()) {
-        // swallow error status
-        LOG(INFO) << "Error when decode min/max statistics, type " << col_type.debug_string();
-        return false;
-    }
-    // deal with max_values
-    st = StatisticsHelper::decode_value_into_column(max_column, column_index.max_values, null_pages, col_type,
-                                                    get_column_parquet_field(), _opts.timezone);
+    auto st = StatisticsHelper::decode_min_max_into_columns(min_column, max_column, column_index.min_values,
+                                                            column_index.max_values, null_pages, col_type,
+                                                            get_column_parquet_field(), _opts.timezone);
     if (!st.ok()) {
         // swallow error status
         LOG(INFO) << "Error when decode min/max statistics, type " << col_type.debug_string();
@@ -323,17 +330,14 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     DCHECK_EQ(page_num, max_column->size());
 
     // fill ZoneMapDetail
-    const bool null_counts_trusted = StatisticsHelper::has_correct_null_count(_opts.file_meta_data);
     std::vector<ZoneMapDetail> zone_map_details{};
     for (size_t i = 0; i < page_num; i++) {
         if (null_pages[i]) {
             // all null
             zone_map_details.emplace_back(Datum{}, Datum{}, true);
         } else {
-            // null_counts is optional in parquet - if unavailable, conservatively assume nulls
-            // exist. Same when the writer is one whose statistics we do not trust.
-            bool has_null =
-                    !null_counts_trusted || i >= column_index.null_counts.size() || column_index.null_counts[i] > 0;
+            // null_counts is optional in parquet - if unavailable, conservatively assume nulls exist
+            bool has_null = i >= column_index.null_counts.size() || column_index.null_counts[i] > 0;
             zone_map_details.emplace_back(min_column->get(i), max_column->get(i), has_null);
         }
     }
@@ -364,7 +368,31 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     return true;
 }
 
+Status RawColumnReader::_init_encrypted_column_bloom_filter(int offset, BloomFilter& bloom_filter) const {
+    // The work lives in metadata.cpp as a free function so it can be tested without a column reader:
+    // StarRocks' writer emits no bloom filters, so this path is only reachable on a file another
+    // engine wrote and a writer round trip cannot reach it at all.
+    return read_encrypted_bloom_filter(_opts.file, offset, *_opts.file_meta_data, _opts.parquet_encryption_info,
+                                       _opts.row_group_ordinal,
+                                       static_cast<int16_t>(get_column_parquet_field()->physical_column_index),
+                                       _bloom_filter_has_null_byte(), &bloom_filter);
+}
+
+// Whether to tell the bloom filter this column may contain nulls, so that `col IS NULL` is not
+// filtered away. Shared by the plaintext and encrypted paths.
+char RawColumnReader::_bloom_filter_has_null_byte() const {
+    if (get_chunk_metadata()->meta_data.__isset.statistics &&
+        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
+        return get_chunk_metadata()->meta_data.statistics.null_count > 0 ? 1 : 0;
+    }
+    // Default to "has null" so a nullable column is not wrongly pruned.
+    return get_column_parquet_field()->is_nullable ? 1 : 0;
+}
+
 Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomFilter& bloom_filter) const {
+    if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+        return _init_encrypted_column_bloom_filter(offset, bloom_filter);
+    }
     std::vector<char> bloom_filter_data;
     tparquet::BloomFilterHeader header;
     uint32_t header_len = SBBF_HEADER_SIZE_ESTIMATE;
@@ -384,19 +412,7 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
         RETURN_IF_ERROR(
                 _opts.file->read_at_fully(offset + header_len, bloom_filter_data.data() + header_len, header.numBytes));
     }
-    if (get_chunk_metadata()->meta_data.__isset.statistics &&
-        get_chunk_metadata()->meta_data.statistics.__isset.null_count &&
-        StatisticsHelper::has_correct_null_count(_opts.file_meta_data)) {
-        if (get_chunk_metadata()->meta_data.statistics.null_count > 0) {
-            bloom_filter_data.back() = 1;
-        } else {
-            bloom_filter_data.back() = 0;
-        }
-    } else if (get_column_parquet_field()->is_nullable) {
-        bloom_filter_data.back() = 1; //set has null as default, to avoid `column is null` to filter the group.
-    } else {
-        bloom_filter_data.back() = 0;
-    }
+    bloom_filter_data.back() = _bloom_filter_has_null_byte();
 
     return bloom_filter.init(bloom_filter_data.data() + header_len, header.numBytes + 1, Hasher::HashStrategy::XXHASH64,
                              0);

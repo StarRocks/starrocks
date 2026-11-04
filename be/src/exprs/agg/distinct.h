@@ -47,60 +47,6 @@ static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
 struct DistinctAggregateState {};
 
-template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
-    using T = RunTimeCppType<LT>;
-    using SumType = RunTimeCppType<SumLT>;
-    using MyHashSet = HashSetWithAggStateAllocator<T>;
-
-    void update([[maybe_unused]] MemPool* mem_pool, T key) { set.insert(key); }
-
-    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
-
-    void prefetch(T key) { set.prefetch(key); }
-
-    int64_t distinct_count() const { return set.size(); }
-
-    size_t serialize_size() const {
-        size_t size = set.dump_bound();
-        DCHECK(size >= MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA);
-        return size;
-    }
-
-    void serialize(uint8_t* dst) const {
-        phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
-        [[maybe_unused]] auto err = set.dump(output);
-        DCHECK(output.length() == set.dump_bound());
-    }
-
-    void deserialize_and_merge(const uint8_t* src, size_t len) {
-        phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
-        auto old_size = set.size();
-        if (old_size == 0) {
-            [[maybe_unused]] auto err = set.load(input);
-        } else {
-            MyHashSet set_src;
-            [[maybe_unused]] auto err = set_src.load(input);
-            set.merge(set_src);
-        }
-    }
-
-    SumType sum_distinct() const {
-        SumType sum{};
-        // Sum distinct doesn't support timestamp and date type
-        if constexpr (IsDateTime<SumType>) {
-            return sum;
-        }
-
-        for (auto& key : set) {
-            sum += key;
-        }
-        return sum;
-    }
-
-    MyHashSet set;
-};
-
 struct AdaptiveSliceHashSet {
     using KeyType = typename SliceHashSet::key_type;
 
@@ -112,8 +58,12 @@ struct AdaptiveSliceHashSet {
         distinct_size = 0;
     }
 
+    // Safe to call after every emplace: a duplicate key leaves distinct_size alone, and once the
+    // switch has happened `set` is null. Must NOT be called from inside a lazy_emplace() callback
+    // though -- it releases `set`, destroying the hash set while its own member function still runs.
     void try_convert_to_two_level(MemPool* mem_pool) {
-        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold()) {
+        if (set != nullptr && distinct_size % 65536 == 0 &&
+            mem_pool->total_allocated_bytes() >= agg::two_level_memory_threshold()) {
             two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
             two_level_set->reserve(set->capacity());
             two_level_set->insert(set->begin(), set->end());
@@ -134,8 +84,8 @@ struct AdaptiveSliceHashSet {
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
                 distinct_size++;
-                try_convert_to_two_level(mem_pool);
             });
+            try_convert_to_two_level(mem_pool);
         } else {
 #if defined(__clang__) && (__clang_major__ >= 16)
             two_level_set->lazy_emplace(key, [&](const auto& ctor) {
@@ -164,8 +114,8 @@ struct AdaptiveSliceHashSet {
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
                 distinct_size++;
-                try_convert_to_two_level(mem_pool);
             });
+            try_convert_to_two_level(mem_pool);
         } else {
 #if defined(__clang__) && (__clang_major__ >= 16)
             two_level_set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
@@ -408,6 +358,9 @@ class TDistinctAggregateFunction final
 public:
     using ColumnType = RunTimeColumnType<LT>;
 
+    // multi_distinct_count returns 0 (never NULL); multi_distinct_sum can be NULL, so restrict this to COUNT.
+    bool is_result_non_nullable() const override { return DistinctType == AggDistinctType::COUNT; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         auto value = GetContainer<LT>::get_data(columns[0], row_num);
         this->data(state).update(ctx->mem_pool(), value);
@@ -559,10 +512,6 @@ public:
         }
     }
 };
-
-template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-using DistinctAggregateFunction =
-        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 using DistinctAggregateFunctionV2 =

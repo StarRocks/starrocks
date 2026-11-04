@@ -1,4 +1,4 @@
--- name: test_timetravel_snapshot_schema @sequential @no_arrow_flight_sql
+-- name: test_timetravel_snapshot_schema @sequential @no_arrow_flight_sql @slow
 create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}", "enable_iceberg_metadata_cache"="false");
 -- result:
 -- !result

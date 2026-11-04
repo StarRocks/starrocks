@@ -11,11 +11,33 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+  # get_next_release_tag.sh (version-label steps) reads /tags and /branches with
+  # GITHUB_TOKEN; with an explicit permissions block, unlisted scopes default to
+  # none, so grant contents:read or those queries are denied.
+  contents: read
 env:
   PR_NUMBER: ${{ github.event.number }}
 
 jobs:
+  # The backport versions come from the branch map (ci-tool conf/sync_branch_map.json:
+  # `versions --repo sr`, the StarRocks branches paired with CelerData), so a
+  # new or retired release branch needs no workflow edit. The static list is the fallback when
+  # the map cannot be read.
+  backport-versions:
+    runs-on: [ self-hosted, quick ]
+    if: github.event.pull_request.merged == true && github.base_ref == 'main' && github.repository == 'StarRocks/starrocks'
+    outputs:
+      versions: ${{ steps.map.outputs.versions || '["4.2", "4.1", "4.0"]' }}
+    steps:
+      - name: read the backport versions
+        id: map
+        continue-on-error: true
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull -q || true)
+          echo "versions=$(python3 lib/sync_branch_map.py versions --repo sr)" >> "$GITHUB_OUTPUT"
+
   backport:
+    needs: backport-versions
     runs-on: ubuntu-latest
     if: >
       github.event.pull_request.merged == true &&
@@ -27,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        version: ["4.1", "4.0", "3.5", "3.4", "3.3"]
+        version: ${{ fromJSON(needs.backport-versions.outputs.versions) }}
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -43,6 +65,28 @@ jobs:
         if: contains(github.event.pull_request.labels.*.name, matrix.version)
         with:
           labels: ${{ matrix.version }}
+
+  # The newest release branch is easy to miss: a PR opened before it was cut has no box for it,
+  # and the boxes workflow (backport-boxes.yml) only fixes PRs that are edited or pushed, or
+  # recent ones. When a merged main PR's labels lack the newest version but its body ticks the
+  # previous one only, or ticks the newest without its label, it is backported to the newest
+  # too and the assignees are told. A box the author unticked is respected; reverse-sync PRs
+  # are skipped. Labeled versions stay with the `backport` job above.
+  # Logic: ci-tool lib/backport_boxes.py --merged.
+  backport-newest:
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.event.pull_request.merged == true &&
+      github.base_ref == 'main' &&
+      github.repository == 'StarRocks/starrocks'
+    steps:
+      - name: backport to the newest branch when only the previous one is ticked
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          python3 ci-tool/lib/backport_boxes.py --repo "${{ github.repository }}" --pr "${PR_NUMBER}" --merged --labels-json "${LABELS}"
 
   # Backport fan-out engine — DRY-RUN shadow. Runs alongside the static `backport`
   # job above and only PRINTS the computed target set (never posts @Mergifyio), for
@@ -223,7 +267,9 @@ jobs:
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
           contains(github.event.pull_request.title, '(backport #')
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo `gh label create`, no cascade; the sibling "add merge label"
+          # step already uses GITHUB_TOKEN. Off the shared PAT.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LABEL="${GITHUB_BASE_REF##*-}-merged"
           gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
@@ -244,7 +290,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -275,7 +324,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -299,8 +351,14 @@ jobs:
     if: >
       always() && !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
     env:
+      # get_pr_issue.py authenticates with the runner PAT (GITHUB_ACCESS_TOKEN) and falls back
+      # to GH_TOKEN when that PAT is missing or rejected. This job's permissions block already
+      # grants issues: write + pull-requests: write, which covers the issue body/label edits.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
       MAIN_VERSION_LABEL: ${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
+      # true = print the issue updates without writing them; unset = write.
+      ISSUE_DRY_RUN: ${{ vars.ISSUE_DRY_RUN }}
 
     steps:
       - name: Update Issue Body & Label(main)

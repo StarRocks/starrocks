@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <string_view>
 #include <utility>
 
 #include "common/status.h"
@@ -34,6 +35,9 @@ public:
     virtual Status advance() noexcept = 0;
     // left_bytes_string returns bytes not parsed in std:string.
     virtual std::string left_bytes_string(size_t sz) noexcept = 0;
+    // truncated_tail returns the incomplete document that the parser dropped from the end of the input without
+    // reporting it as a row or an error. It is only meaningful after get_current/advance has returned EOF.
+    virtual std::string_view truncated_tail() const noexcept { return {}; }
 
 protected:
     simdjson::ondemand::parser* const _parser;
@@ -51,7 +55,10 @@ public:
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
     std::string left_bytes_string(size_t sz) noexcept override;
+    // truncated_bytes returns simdjson's raw count, which is only valid after the last batch is parsed.
     size_t truncated_bytes() const noexcept;
+    // simdjson iterate_many stops before an incomplete last document and reports a plain EOF.
+    std::string_view truncated_tail() const noexcept override;
 
 private:
     Status _get_current_impl(simdjson::ondemand::object* row);
@@ -88,8 +95,11 @@ private:
     simdjson::ondemand::object _curr;
     // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
-    // _last_begin_offset represent begin offet of last success object in _doc_stream
+    // _last_begin_offset represent begin offet of last success object in _data
     size_t _last_begin_offset = 0;
+    // _doc_stream_offset is the offset of _doc_stream in _data. _doc_stream reports offsets from its own start, which
+    // moves to the last success object when the batch size grows.
+    size_t _doc_stream_offset = 0;
     // _batch_size using in batch mode parsing
     size_t _batch_size = simdjson::dom::DEFAULT_BATCH_SIZE;
     // _first_object_parsed is true if there is at least one object is parsed successfully

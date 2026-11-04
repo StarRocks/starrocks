@@ -59,6 +59,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
         LakeTableSchemaChangeJob schemaChangeJob =
                 new LakeTableSchemaChangeJob(jobId, dbId, tableId, table.getName(), timeoutMs);
         schemaChangeJob.setBloomFilterInfo(bloomFilterColumnsChanged, bloomFilterColumns, bloomFilterFpp);
+        schemaChangeJob.setZstdCompressionInfo(zstdCompressionColumnsChanged, zstdCompressionColumns,
+                zstdCompressionPageSizes);
         schemaChangeJob.setAlterIndexInfo(hasIndexChanged, indexes);
         schemaChangeJob.setStartTime(startTime);
         schemaChangeJob.setComputeResource(computeResource);
@@ -134,6 +136,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             } // end for physicalPartition
             schemaChangeJob.addIndexSchema(shadowIndexMetaId, originIndexMetaId, newIndexName, newShortKeyColumnCount,
                     entry.getValue());
+            if (indexSortKeyIdxes.containsKey(originIndexMetaId)) {
+                schemaChangeJob.setIndexSortKey(shadowIndexMetaId, indexSortKeyIdxes.get(originIndexMetaId),
+                        indexSortKeyUniqueIds.get(originIndexMetaId));
+            }
         } // end for index
         return schemaChangeJob;
     }

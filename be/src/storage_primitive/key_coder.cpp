@@ -25,8 +25,7 @@ KeyCoder::KeyCoder(TraitsType traits)
           _encode_ascending(traits.encode_ascending),
           _decode_ascending(traits.decode_ascending),
           _full_encode_ascending_datum(traits.full_encode_ascending_datum),
-          _encode_ascending_datum(traits.encode_ascending_datum),
-          _full_encode_size(TraitsType::kFullEncodeSize) {}
+          _encode_ascending_datum(traits.encode_ascending_datum) {}
 
 // Helper class used to get KeyCoder
 class KeyCoderResolver {

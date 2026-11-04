@@ -22,17 +22,21 @@
 #include "base/string/slice.h"
 #include "butil/time.h"
 #include "column/array_column.h"
+#include "column/column_viewer.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
+#include "column/variant_path_parser.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
+#include "testutil/column_test_helper.h"
 #include "types/date_value.h"
 #include "types/datetime_value.h"
 #include "types/datum.h"
@@ -675,6 +679,178 @@ TEST_F(VectorizedCastExprTest, intCastString) {
         // error cast
         ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
+}
+
+TEST_F(VectorizedCastExprTest, bigintCastCharTruncate) {
+    expr_node.child_type = TPrimitiveType::BIGINT;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(10);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 4, (int64_t)1775580223839LL);
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("1775580223"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastCharTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(5);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastVarcharNoTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    expr_node.type.types[0].scalar_type.__set_len(5);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello world"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastWildcardCharNoTruncate) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(-1); // wildcard CHAR: no truncation
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string s = "hello world";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 4, Slice(s));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(4, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        ASSERT_EQ(std::string("hello world"), v->get_slice(j));
+    }
+}
+
+TEST_F(VectorizedCastExprTest, charTruncateHandlesInvalidUtf8WithoutOverrun) {
+    // Truncating invalid UTF-8 / raw VARBINARY bytes to CHAR(N) must not read past the slice end.
+    // 0xE4 advertises a 3-byte UTF-8 char, but only 2 bytes are present.
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.__set_cast_char_truncate(true);
+    expr_node.type.types[0].scalar_type.__set_len(1);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::string bytes = "\xE4\xB8";
+    expr_node.type = gen_type_desc(expr_node.child_type);
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 2, Slice(bytes));
+    expr->_children.push_back(&col1);
+
+    ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(ptr->is_binary());
+    auto v = BinaryColumn::static_pointer_cast(ptr);
+    ASSERT_EQ(2, v->size());
+    for (int j = 0; j < v->size(); ++j) {
+        // Clamped to the slice end: never longer than the available bytes.
+        ASSERT_LE(v->get_slice(j).size, bytes.size());
+    }
+}
+
+TEST_F(VectorizedCastExprTest, implicitCharCastPreservesOversizedValues) {
+    // Missing flags from older FEs and explicit false both keep values for sink validation.
+    for (bool set_flag : {false, true}) {
+        expr_node.child_type = TPrimitiveType::BIGINT;
+        expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+        expr_node.type.types[0].scalar_type.__set_len(10);
+        if (set_flag) {
+            expr_node.__set_cast_char_truncate(false);
+        }
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+        TExprNode child_node = expr_node;
+        child_node.type = gen_type_desc(TPrimitiveType::BIGINT);
+        MockVectorizedExpr<TYPE_BIGINT> child(child_node, 4, 1775580223839LL);
+        expr->_children.push_back(&child);
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        auto* strings = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(result.get());
+        ASSERT_EQ(4, strings->size());
+        for (size_t row = 0; row < strings->size(); ++row) {
+            ASSERT_EQ(std::string("1775580223839"), strings->get_slice(row));
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, explicitCharCastPreservesUnicodeNullsAndConstants) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::CHAR);
+    expr_node.type.types[0].scalar_type.__set_len(2);
+    expr_node.__set_cast_char_truncate(true);
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    ColumnBuilder<TYPE_VARCHAR> builder(3);
+    builder.append(Slice("中😀文"));
+    builder.append_null();
+    builder.append(Slice("hi"));
+    TExprNode child_node = expr_node;
+    child_node.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    MockExpr child(child_node, builder.build(false));
+    expr->_children.push_back(&child);
+    ColumnPtr result = expr->evaluate(nullptr, nullptr);
+    ColumnViewer<TYPE_VARCHAR> viewer(result);
+    ASSERT_EQ(3, viewer.size());
+    ASSERT_EQ(std::string("中😀"), viewer.value(0).to_string());
+    ASSERT_TRUE(viewer.is_null(1));
+    ASSERT_EQ(std::string("hi"), viewer.value(2).to_string());
+
+    ColumnBuilder<TYPE_VARCHAR> const_builder(1);
+    const_builder.append(Slice("中😀文"));
+    MockExpr constant(child_node, const_builder.build(true));
+    expr->_children[0] = &constant;
+    ObjectPool pool;
+    Expr* cloned = Expr::copy(&pool, expr.get());
+    result = cloned->evaluate(nullptr, nullptr);
+    ASSERT_TRUE(result->is_constant());
+    ColumnViewer<TYPE_VARCHAR> const_viewer(result);
+    ASSERT_EQ(std::string("中😀"), const_viewer.value(0).to_string());
+
+    MockExpr nulls(child_node, ColumnHelper::create_const_null_column(3));
+    expr->_children[0] = &nulls;
+    ASSERT_TRUE(expr->evaluate(nullptr, nullptr)->only_null());
 }
 
 TEST_F(VectorizedCastExprTest, booleanCastString) {
@@ -2605,7 +2781,8 @@ static ColumnPtr cast_to_variant(const TypeDescriptor& from_type, const ColumnPt
     return expr->evaluate(nullptr, nullptr);
 }
 
-static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPtr& column) {
+static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPtr& column,
+                                   bool allow_throw_exception = false) {
     TExprNode cast_expr;
     cast_expr.opcode = TExprOpcode::CAST;
     cast_expr.node_type = TExprNodeType::CAST_EXPR;
@@ -2617,7 +2794,7 @@ static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPt
     cast_expr.__set_child_type_desc(TypeDescriptor(TYPE_VARIANT).to_thrift());
 
     ObjectPool pool;
-    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr, allow_throw_exception));
     TExprNode child_node;
     child_node.node_type = TExprNodeType::SLOT_REF;
     child_node.type = gen_type_desc(TPrimitiveType::VARIANT);
@@ -2627,6 +2804,16 @@ static ColumnPtr cast_from_variant(const TTypeDesc& to_type_desc, const ColumnPt
     MockExpr child(child_node, column);
     expr->_children.push_back(&child);
     return expr->evaluate(nullptr, nullptr);
+}
+
+// Runs a throwing VARIANT cast and returns the error it raised, or "" when it did not raise one.
+static std::string cast_from_variant_error(const TTypeDesc& to_type_desc, const ColumnPtr& column) {
+    try {
+        cast_from_variant(to_type_desc, column, true);
+    } catch (const std::exception& e) {
+        return e.what();
+    }
+    return "";
 }
 
 static ColumnPtr make_const_variant_column_from_json(const std::string& json_text, size_t size) {
@@ -2669,14 +2856,13 @@ static ColumnPtr make_root_typed_only_variant_bigint_column(const std::vector<in
         null->append(is_null[i]);
     }
 
-    return cast_to_variant(TypeDescriptor(TYPE_BIGINT), NullableColumn::create(std::move(data), std::move(null)));
+    return cast_to_variant(TYPE_BIGINT_DESC, NullableColumn::create(std::move(data), std::move(null)));
 }
 
 static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<DatumArray>& values,
                                                            const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor array_type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_INT));
-    auto array_col = ColumnHelper::create_column(array_type, true);
+    auto array_col = ColumnHelper::create_column(TYPE_ARRAY_INT_DESC, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
             array_col->append_nulls(1);
@@ -2685,7 +2871,7 @@ static ColumnPtr make_root_typed_only_variant_array_column(const std::vector<Dat
         }
     }
 
-    return cast_to_variant(array_type, array_col);
+    return cast_to_variant(TYPE_ARRAY_INT_DESC, array_col);
 }
 
 static ColumnPtr make_base_shredded_root_bigint_variant_column(const std::vector<int64_t>& values,
@@ -2698,13 +2884,13 @@ static ColumnPtr make_base_shredded_root_bigint_variant_column(const std::vector
         null->append(is_null[i]);
     }
 
-    return cast_to_variant(TypeDescriptor(TYPE_BIGINT), NullableColumn::create(std::move(data), std::move(null)));
+    return cast_to_variant(TYPE_BIGINT_DESC, NullableColumn::create(std::move(data), std::move(null)));
 }
 
 static ColumnPtr make_root_typed_only_variant_map_column(const std::vector<DatumMap>& values,
                                                          const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor map_type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT));
+    TypeDescriptor map_type = TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_INT_DESC);
     auto map_col = ColumnHelper::create_column(map_type, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -2719,8 +2905,7 @@ static ColumnPtr make_root_typed_only_variant_map_column(const std::vector<Datum
 static ColumnPtr make_root_typed_only_variant_struct_column(const std::vector<DatumStruct>& values,
                                                             const std::vector<uint8_t>& is_null) {
     CHECK_EQ(values.size(), is_null.size());
-    TypeDescriptor struct_type =
-            TypeDescriptor::create_struct_type({"x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
     auto struct_col = ColumnHelper::create_column(struct_type, true);
     for (size_t i = 0; i < values.size(); ++i) {
         if (is_null[i] != 0) {
@@ -2742,7 +2927,8 @@ static ColumnPtr make_base_shredded_root_typed_variant_column(const VariantRowVa
 
 static void assert_const_or_expanded_result(const ColumnPtr& result, size_t input_size,
                                             const std::string& expected_debug) {
-    ASSERT_TRUE(result->size() == 1 || result->size() == input_size);
+    // A constant input must still cover every input row: the caller reads the result at the chunk's row count.
+    ASSERT_EQ(input_size, result->size());
     const size_t rows = result->size();
     for (size_t i = 0; i < rows; ++i) {
         ASSERT_FALSE(result->is_null(i));
@@ -2772,16 +2958,54 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
               cast_json_to_map(TYPE_INT, TYPE_INT, R"({"1":1, "k2":2, "3":"v3", "k4":"v4"})"));
 }
 
+// A constant JSON input is viewed as its single row; the map result must still span every input row,
+// or an aggregate such as count() reads past the end of its null column.
+TEST_F(VectorizedCastExprTest, const_json_to_map_keeps_row_count) {
+    constexpr size_t kInputSize = 3;
+    for (const auto& [text, expected] :
+         std::vector<std::pair<std::string, std::string>>{{R"({"1":2})", "{1:2}"}, {R"(1)", "NULL"}}) {
+        TExprNode cast_expr;
+        cast_expr.opcode = TExprOpcode::CAST;
+        cast_expr.node_type = TExprNodeType::CAST_EXPR;
+        cast_expr.num_children = 1;
+        cast_expr.__isset.opcode = true;
+        cast_expr.__isset.child_type = true;
+        cast_expr.child_type = to_thrift(TYPE_JSON);
+        cast_expr.type = gen_map_type_desc(to_thrift(TYPE_INT), to_thrift(TYPE_INT));
+
+        ObjectPool pool;
+        std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+        auto json = JsonValue::parse(text);
+        ASSERT_TRUE(json.ok());
+        auto json_column = JsonColumn::create();
+        json_column->append(&json.value());
+        MockExpr child(TypeDescriptor(TYPE_JSON), ConstColumn::create(std::move(json_column), kInputSize));
+        expr->_children.push_back(&child);
+
+        ColumnPtr result = expr->evaluate(nullptr, nullptr);
+        ASSERT_EQ(kInputSize, result->size());
+        for (size_t i = 0; i < kInputSize; ++i) {
+            std::string debug = result->debug_item(i);
+            constexpr std::string_view kConstPrefix = "CONST: ";
+            if (debug.rfind(kConstPrefix.data(), 0) == 0) {
+                debug.erase(0, kConstPrefix.size());
+            }
+            EXPECT_EQ(expected, debug);
+        }
+    }
+}
+
 // Test that struct-to-struct cast correctly reorders fields by name when field order differs
 TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
     // Create source struct type: STRUCT<price INT, product_id VARCHAR>
-    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"price", "product_id"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor from_type =
+            TypeDescriptor::create_struct_type({"price", "product_id"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
 
     // Create target struct type: STRUCT<product_id VARCHAR, price INT>
     // Note: same field names but different order
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"product_id", "price"}, {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor to_type =
+            TypeDescriptor::create_struct_type({"product_id", "price"}, {TYPE_VARCHAR_DESC, TYPE_INT_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -2805,13 +3029,11 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
 // Test struct-to-struct cast with matching field order (no reordering needed)
 TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
     // Create source struct type: STRUCT<a INT, b VARCHAR>
-    TypeDescriptor from_type =
-            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_INT_DESC, TYPE_VARCHAR_DESC});
 
     // Create target struct type: STRUCT<a BIGINT, b VARCHAR>
     // Same field order, just different types
-    TypeDescriptor to_type =
-            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"a", "b"}, {TYPE_BIGINT_DESC, TYPE_VARCHAR_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -2833,12 +3055,12 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
 // Test struct-to-struct cast with three fields in different order
 TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
     // Create source struct type: STRUCT<x INT, y INT, z INT>
-    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"x", "y", "z"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor from_type =
+            TypeDescriptor::create_struct_type({"x", "y", "z"}, {TYPE_INT_DESC, TYPE_INT_DESC, TYPE_INT_DESC});
 
     // Create target struct type: STRUCT<z INT, x INT, y INT>
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"z", "x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor to_type =
+            TypeDescriptor::create_struct_type({"z", "x", "y"}, {TYPE_INT_DESC, TYPE_INT_DESC, TYPE_INT_DESC});
 
     ObjectPool pool;
     auto expr_result =
@@ -2865,10 +3087,8 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
 TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
     // Source: STRUCT<key INT, value INT>  Target: STRUCT<key1 INT, value1 INT>
     // Names don't overlap, so positional mapping should be used: key→key1 (idx 0), value→value1 (idx 1).
-    TypeDescriptor from_type =
-            TypeDescriptor::create_struct_type({"key", "value"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"key1", "value1"},
-                                                                {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor from_type = TypeDescriptor::create_struct_type({"key", "value"}, {TYPE_INT_DESC, TYPE_INT_DESC});
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"key1", "value1"}, {TYPE_INT_DESC, TYPE_INT_DESC});
 
     ObjectPool pool;
     auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);
@@ -2888,11 +3108,9 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
 
 // Verifies primitive scalar values encode to variant JSON payloads correctly.
 TEST_F(VectorizedCastExprTest, int_cast_to_variant) {
-    auto column = Int32Column::create();
-    column->append(123);
-    column->append(-7);
+    auto column = ColumnTestHelper::build_column<int32_t>({123, -7});
 
-    ColumnPtr result = cast_to_variant(TypeDescriptor(TYPE_INT), column);
+    ColumnPtr result = cast_to_variant(TYPE_INT_DESC, column);
     auto json0 = variant_json_at(result, 0);
     auto json1 = variant_json_at(result, 1);
     ASSERT_TRUE(json0.ok());
@@ -2975,6 +3193,41 @@ TEST_F(VectorizedCastExprTest, const_array_with_variant_children_cast_to_variant
     EXPECT_EQ(R"([{"a":1}])", json.value());
 }
 
+TEST_F(VectorizedCastExprTest, variant_string_cast_constants_and_nullable_rows) {
+    auto constant = make_const_variant_column_from_json(R"("35")", 3);
+    auto constant_result = cast_from_variant(gen_type_desc(TPrimitiveType::INT), constant);
+    ASSERT_EQ(3, constant_result->size());
+    for (size_t i = 0; i < constant_result->size(); ++i) {
+        ASSERT_FALSE(constant_result->is_null(i));
+        EXPECT_EQ(35, constant_result->get(i).get_int32());
+    }
+
+    auto strings = BinaryColumn::create();
+    for (const auto* value : {"35", "bad", "128", "", "0"}) {
+        strings->append(value);
+    }
+    auto nulls = NullColumn::create(5, 0);
+    nulls->get_data()[3] = 1;
+    auto variants = cast_to_variant(TYPE_VARCHAR_DESC, NullableColumn::create(std::move(strings), std::move(nulls)));
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::TINYINT), variants);
+    ASSERT_EQ("[35, NULL, NULL, NULL, 0]", result->debug_string());
+}
+
+TEST_F(VectorizedCastExprTest, variant_string_cast_in_array) {
+    auto variants = make_const_variant_column_from_json(R"(["35","-2","bad",null])", 2);
+    auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), variants);
+    ASSERT_EQ(2, result->size());
+    for (size_t row = 0; row < result->size(); ++row) {
+        ASSERT_FALSE(result->is_null(row));
+        auto values = result->get(row).get_array();
+        ASSERT_EQ(4, values.size());
+        EXPECT_EQ(35, values[0].get_int32());
+        EXPECT_EQ(-2, values[1].get_int32());
+        EXPECT_TRUE(values[2].is_null());
+        EXPECT_TRUE(values[3].is_null());
+    }
+}
+
 // Verifies const variant input can cast to complex types with stable semantics.
 TEST_F(VectorizedCastExprTest, const_variant_cast_to_complex_types) {
     constexpr size_t kInputSize = 3;
@@ -2998,15 +3251,343 @@ TEST_F(VectorizedCastExprTest, const_variant_cast_to_complex_types) {
     }
 }
 
+TEST_F(VectorizedCastExprTest, variant_array_cast_has_linear_payload_size) {
+    for (uint32_t count : {1, 16, 256}) {
+        std::string payload;
+        std::vector<uint32_t> offsets;
+        for (uint32_t i = 0; i < count; ++i) {
+            payload.append("\x0c\x07", 2);
+            offsets.emplace_back(payload.size());
+        }
+        std::string array;
+        VariantEncoder::append_array_container(&array, offsets, payload);
+        auto input = VariantColumn::create();
+        input->append(VariantRowValue(VariantMetadata::kEmptyMetadata, array));
+        auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::VARIANT), input);
+        ASSERT_NE(nullptr, result);
+        const auto* arrays = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(result.get()));
+        const auto* elements =
+                down_cast<const VariantColumn*>(ColumnHelper::get_data_column(arrays->elements_column().get()));
+        ASSERT_EQ(count, elements->size());
+        size_t value_bytes = 0;
+        for (size_t i = 0; i < count; ++i) {
+            VariantRowRef element;
+            ASSERT_TRUE(elements->try_get_row_ref(i, &element));
+            EXPECT_EQ(2, element.get_value().raw().size());
+            EXPECT_EQ(7, element.get_value().get_int8().value());
+            value_bytes += element.get_value().raw().size();
+        }
+        EXPECT_EQ(payload.size(), value_bytes);
+    }
+}
+
+// Regression test: casting a VARIANT to a STRUCT whose field name is not a "simple key"
+// (anything outside [a-zA-Z0-9_]) must not abort the BE. CastVariantToStruct used to format
+// each field name into a "$.<name>" path string and re-parse it; the variant path parser
+// rejects such names, so the constructor threw "Failed to parse variant path: $.$currency"
+// and crashed the backend (before #75355; afterwards a factory precheck rejected the cast as
+// NotSupported instead).
+// Repro SQL:
+//   SELECT CAST(CAST(PARSE_JSON('{"$currency": "USD"}') AS VARIANT) AS STRUCT<`$currency` STRING>);
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_with_special_char_field_name) {
+    constexpr size_t kInputSize = 3;
+    {
+        // Field name starting with '$' (the exact case from the bug report).
+        auto const_variant = make_const_variant_column_from_json(R"({"$currency":"USD"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"$currency"}), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{$currency:'USD'}");
+    }
+    {
+        // Field name containing '.' is likewise not a simple key; it must be treated as a
+        // single top-level object key rather than a nested "a -> b" path.
+        auto const_variant = make_const_variant_column_from_json(R"({"a.b":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a.b"}), const_variant);
+        assert_const_or_expanded_result(result, kInputSize, "{a.b:'v'}");
+    }
+}
+
+// Further non-simple struct field names: space, brackets, quote, multibyte. With the old
+// "$.<name>" + reparse approach, space/quote failed to parse (aborting the BE before #75355,
+// NotSupported after it) and brackets silently mis-resolved as an array index.
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_more_special_field_names) {
+    constexpr size_t kInputSize = 2;
+    {
+        auto cv = make_const_variant_column_from_json(R"({"a b":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a b"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{a b:'v'}");
+    }
+    {
+        auto cv = make_const_variant_column_from_json(R"({"a[0]":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a[0]"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{a[0]:'v'}");
+    }
+    {
+        auto cv = make_const_variant_column_from_json(R"({"a'b":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"a'b"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{a'b:'v'}");
+    }
+    {
+        auto cv = make_const_variant_column_from_json(R"({"名前":"v"})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::VARCHAR}, {"名前"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{名前:'v'}");
+    }
+}
+
+// Parity with the JSON->struct edge cases: a field absent from the variant object, and a
+// field whose value is JSON null, both yield NULL (no error).
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_missing_and_null_fields) {
+    constexpr size_t kInputSize = 2;
+    {
+        // 'missing' is not present in the object.
+        auto cv = make_const_variant_column_from_json(R"({"x":1})", kInputSize);
+        auto result = cast_from_variant(
+                gen_struct_type_desc({TPrimitiveType::INT, TPrimitiveType::INT}, {"x", "missing"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{x:1,missing:NULL}");
+    }
+    {
+        // 'x' is present but its value is JSON null.
+        auto cv = make_const_variant_column_from_json(R"({"x":null})", kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT}, {"x"}), cv);
+        assert_const_or_expanded_result(result, kInputSize, "{x:NULL}");
+    }
+}
+
+// A variant whose root is not an object (array or scalar) cast to a struct yields a NULL row.
+TEST_F(VectorizedCastExprTest, variant_cast_non_object_to_struct_returns_null) {
+    constexpr size_t kInputSize = 3;
+    for (const std::string& json : {std::string(R"([1,2])"), std::string("5")}) {
+        auto cv = make_const_variant_column_from_json(json, kInputSize);
+        auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT}, {"x"}), cv);
+        ASSERT_TRUE(result->size() == 1 || result->size() == kInputSize);
+        for (size_t i = 0; i < result->size(); ++i) {
+            EXPECT_TRUE(result->is_null(i)) << "json: " << json << " row " << i;
+        }
+    }
+}
+
+// A non-constant, non-nullable variant column mixing object and non-object rows. CAST(... AS VARIANT)
+// returns such a column whenever a chunk has no NULL, so the NULL rows produced by the cast itself
+// must still be marked NULL on the result, aligned with the object rows around them.
+TEST_F(VectorizedCastExprTest, variant_cast_mixed_rows_non_nullable_input_to_struct) {
+    auto variant_column = VariantColumn::create();
+    for (const std::string& json :
+         {std::string(R"({"x":1})"), std::string(R"([1,2])"), std::string(R"({"x":3})"), std::string("5")}) {
+        variant_column->append(make_variant_row_from_json(json));
+    }
+    ColumnPtr input = std::move(variant_column);
+    ASSERT_FALSE(input->is_nullable());
+    ASSERT_FALSE(input->is_constant());
+
+    auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT}, {"x"}), input);
+    ASSERT_EQ(4, result->size());
+    ASSERT_TRUE(result->is_nullable());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_EQ("{x:1}", result->debug_item(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_EQ("{x:3}", result->debug_item(2));
+    EXPECT_TRUE(result->is_null(3));
+}
+
+// Every struct field must come out exactly as the generic VARIANT -> field type cast of the same value: scalar
+// fields are cast in a single pass straight from the object, the others still go through the generic cast. Each
+// field sees a well-formed value, a value it cannot be cast from, a JSON null and a missing key; the third row is
+// not an object and the fourth is a SQL NULL.
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_fields_match_generic_cast) {
+    struct Field {
+        std::string name;
+        TypeDescriptor type;
+        std::vector<std::string> values; // JSON per object row; "" leaves the key out
+    };
+    const std::vector<Field> fields = {
+            {"b", TYPE_BOOLEAN_DESC, {"true", R"("x")", "null", ""}},
+            {"ti", TYPE_TINYINT_DESC, {"7", "300", "null", ""}},
+            {"si", TYPE_SMALLINT_DESC, {"-7", R"("bad")", "null", ""}},
+            {"i", TYPE_INT_DESC, {R"("35")", R"("bad")", "null", ""}},
+            {"bi", TYPE_BIGINT_DESC, {"9007199254740993", "1.5", "null", ""}},
+            {"li", TypeDescriptor(TYPE_LARGEINT), {"12345678901234567890", "[1]", "null", ""}},
+            {"f", TYPE_FLOAT_DESC, {"1.25", R"({"a":1})", "null", ""}},
+            {"d", TYPE_DOUBLE_DESC, {"2.5e10", "true", "null", ""}},
+            {"s", TYPE_VARCHAR_DESC, {R"("abc")", R"({"k":[1,2]})", "null", ""}},
+            {"dt", TYPE_DATE_DESC, {R"("2024-02-29")", R"("2024-13-01")", "null", ""}},
+            {"ts", TYPE_DATETIME_DESC, {R"("2024-02-29 01:02:03")", "5", "null", ""}},
+            {"tm", TYPE_TIME_DESC, {R"("01:02:03")", R"("x")", "null", ""}},
+            {"dec", TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2), {"3.14159", R"("x")", "null", ""}},
+            {"c", TypeDescriptor::create_char_type(5), {R"("abcdefg")", "1", "null", ""}},
+            {"j", TypeDescriptor::create_json_type(), {R"({"a":[1,2]})", "1", "null", ""}},
+            {"arr", TypeDescriptor::create_array_type(TYPE_INT_DESC), {"[1,2]", R"("x")", "null", ""}},
+            {"v", TypeDescriptor::create_variant_type(), {R"({"n":1})", "2", "null", ""}},
+    };
+    constexpr size_t kObjectRows = 4;
+
+    std::vector<std::string> names;
+    std::vector<TypeDescriptor> types;
+    std::vector<std::string> objects(kObjectRows, "{");
+    for (const auto& field : fields) {
+        names.push_back(field.name);
+        types.push_back(field.type);
+        for (size_t row = 0; row < kObjectRows; ++row) {
+            if (field.values[row].empty()) continue;
+            if (objects[row].size() > 1) objects[row] += ",";
+            objects[row] += "\"" + field.name + "\":" + field.values[row];
+        }
+    }
+    auto data = VariantColumn::create();
+    auto nulls = NullColumn::create();
+    for (const auto& object : objects) {
+        data->append(make_variant_row_from_json(object + "}"));
+        nulls->append(0);
+    }
+    data->append(make_variant_row_from_json("[1,2]"));
+    nulls->append(0);
+    data->append(make_variant_row_from_json("{}"));
+    nulls->append(1);
+    ColumnPtr input = NullableColumn::create(std::move(data), std::move(nulls));
+
+    auto result = cast_from_variant(TypeDescriptor::create_struct_type(names, types).to_thrift(), input);
+    ASSERT_EQ(kObjectRows + 2, result->size());
+    for (size_t row = 0; row < kObjectRows; ++row) {
+        ASSERT_FALSE(result->is_null(row)) << row;
+    }
+    ASSERT_TRUE(result->is_null(kObjectRows));
+    ASSERT_TRUE(result->is_null(kObjectRows + 1));
+    const auto* structs = down_cast<const StructColumn*>(ColumnHelper::get_data_column(result.get()));
+    const auto struct_fields = structs->fields();
+
+    const auto* objects_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(input.get()));
+    for (size_t f = 0; f < fields.size(); ++f) {
+        const auto& field = fields[f];
+        // Reference: the value as the object holds it (a bare top-level JSON scalar would encode differently),
+        // run through the generic VARIANT -> field type cast; a missing key is a SQL NULL input.
+        const VariantPath path(std::vector<VariantSegment>{VariantSegment::make_object(field.name)});
+        auto values = VariantColumn::create();
+        auto value_nulls = NullColumn::create();
+        for (size_t row = 0; row < kObjectRows; ++row) {
+            VariantRowRef object;
+            ASSERT_TRUE(objects_column->try_get_row_ref(row, &object));
+            auto value = VariantPath::seek_view(object, path);
+            ASSERT_EQ(field.values[row].empty(), !value.ok()) << field.name << " row " << row;
+            values->append(value.ok() ? value.value().to_owned() : VariantRowValue::from_null());
+            value_nulls->append(value.ok() ? 0 : 1);
+        }
+        ColumnPtr expected = cast_from_variant(field.type.to_thrift(),
+                                               NullableColumn::create(std::move(values), std::move(value_nulls)));
+        const ColumnPtr& actual = struct_fields[f];
+        ASSERT_TRUE(actual->is_nullable()) << field.name;
+        for (size_t row = 0; row < kObjectRows; ++row) {
+            EXPECT_EQ(expected->debug_item(row), actual->debug_item(row)) << field.name << " row " << row;
+        }
+    }
+}
+
+// Shredded rows with a typed value cannot be viewed in place and are materialized; rows without one are viewed in
+// place. A batch mixing both must read every field right, and only the struct's fields of a materialized row are
+// kept (the large unselected key is dropped with the row).
+TEST_F(VectorizedCastExprTest, variant_cast_shredded_rows_to_struct) {
+    const std::string big(64 * 1024, 'x');
+    const std::vector<std::string> remains = {
+            R"({"b":"r0","big":")" + big + R"("})",
+            R"({"b":"r1","big":")" + big + R"("})",
+            R"({"b":"r2"})",
+            R"([1,2])",
+    };
+    auto metadata = BinaryColumn::create();
+    auto remain = BinaryColumn::create();
+    for (const auto& json : remains) {
+        VariantRowValue row = make_variant_row_from_json(json);
+        auto row_metadata = row.get_metadata().raw();
+        auto row_value = row.get_value().raw();
+        metadata->append(Slice(row_metadata.data(), row_metadata.size()));
+        remain->append(Slice(row_value.data(), row_value.size()));
+    }
+    auto typed_a = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    typed_a->append_datum(Datum(int64_t(10)));
+    typed_a->append_nulls(1);
+    typed_a->append_datum(Datum(int64_t(30)));
+    typed_a->append_nulls(1);
+    MutableColumns typed;
+    typed.emplace_back(std::move(typed_a));
+    auto variants = VariantColumn::create();
+    variants->set_shredded_columns({"a"}, {TYPE_BIGINT_DESC}, std::move(typed), std::move(metadata), std::move(remain));
+
+    // The shape this test is about: rows 0 and 2 must be materialized, row 1 is viewed in place.
+    VariantRowRef ref;
+    ASSERT_FALSE(variants->try_get_row_ref(0, &ref));
+    ASSERT_TRUE(variants->try_get_row_ref(1, &ref));
+    ASSERT_FALSE(variants->try_get_row_ref(2, &ref));
+
+    ColumnPtr input = std::move(variants);
+    // BIGINT/VARCHAR fields take the direct cast, DECIMAL fields the generic one.
+    TypeDescriptor decimal = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2);
+    for (const auto& [a_type, b_type, expected] :
+         std::vector<std::tuple<TypeDescriptor, TypeDescriptor, std::vector<std::string>>>{
+                 {TYPE_BIGINT_DESC,
+                  TYPE_VARCHAR_DESC,
+                  {"{a:10,b:'r0',missing:NULL}", "{a:NULL,b:'r1',missing:NULL}", "{a:30,b:'r2',missing:NULL}"}},
+                 {decimal,
+                  decimal,
+                  {"{a:10.00,b:NULL,missing:NULL}", "{a:NULL,b:NULL,missing:NULL}", "{a:30.00,b:NULL,missing:NULL}"}},
+         }) {
+        auto result = cast_from_variant(
+                TypeDescriptor::create_struct_type({"a", "b", "missing"}, {a_type, b_type, TYPE_INT_DESC}).to_thrift(),
+                input);
+        ASSERT_EQ(4, result->size());
+        for (size_t row = 0; row < 3; ++row) {
+            EXPECT_EQ(expected[row], result->debug_item(row)) << a_type.debug_string() << " row " << row;
+        }
+        EXPECT_TRUE(result->is_null(3));
+    }
+}
+
+// In throw mode a field value that cannot be cast fails the struct cast with the generic cast's error.
+TEST_F(VectorizedCastExprTest, variant_cast_to_struct_throw_mode_matches_generic_cast) {
+    for (const auto& [type, value] : std::vector<std::pair<TypeDescriptor, std::string>>{
+                 {TYPE_INT_DESC, R"("bad")"},
+                 {TYPE_DATE_DESC, R"("2024-13-01")"},
+                 {TYPE_DOUBLE_DESC, "[1]"},
+         }) {
+        auto object = VariantColumn::create();
+        object->append(make_variant_row_from_json(R"({"ok":1,"x":)" + value + "}"));
+        VariantRowRef object_ref;
+        ASSERT_TRUE(object->try_get_row_ref(0, &object_ref));
+        auto field = VariantPath::seek_view(object_ref,
+                                            VariantPath(std::vector<VariantSegment>{VariantSegment::make_object("x")}));
+        ASSERT_TRUE(field.ok());
+        auto bare = VariantColumn::create();
+        bare->append(field.value().to_owned());
+
+        std::string expected = cast_from_variant_error(type.to_thrift(), std::move(bare));
+        ASSERT_NE("", expected) << type.debug_string();
+        std::string actual = cast_from_variant_error(
+                TypeDescriptor::create_struct_type({"ok", "x"}, {TYPE_INT_DESC, type}).to_thrift(), std::move(object));
+        EXPECT_EQ(expected, actual) << type.debug_string();
+    }
+    // Missing keys and JSON nulls are NULL fields, not errors.
+    auto object = VariantColumn::create();
+    object->append(make_variant_row_from_json(R"({"x":null})"));
+    auto result = cast_from_variant(
+            TypeDescriptor::create_struct_type({"x", "y"}, {TYPE_INT_DESC, TYPE_DATE_DESC}).to_thrift(),
+            std::move(object), true);
+    EXPECT_EQ("{x:NULL,y:NULL}", result->debug_item(0));
+}
+
+// Recursion: a nested struct field with a non-simple ('$') field name must work at every
+// level. Each nested CastVariantToStruct builds its own single-key path independently.
+TEST_F(VectorizedCastExprTest, variant_cast_to_nested_struct_with_special_field_name) {
+    constexpr size_t kInputSize = 2;
+    auto cv = make_const_variant_column_from_json(R"({"inner":{"$x":5}})", kInputSize);
+    TypeDescriptor inner = TypeDescriptor::create_struct_type({"$x"}, {TYPE_INT_DESC});
+    TypeDescriptor outer = TypeDescriptor::create_struct_type({"inner"}, {inner});
+    auto result = cast_from_variant(outer.to_thrift(), cv);
+    assert_const_or_expanded_result(result, kInputSize, "{inner:{$x:5}}");
+}
+
 // Verifies root typed-only scalar variant uses fast path for same-type cast and preserves null behavior.
 TEST_F(VectorizedCastExprTest, root_typed_only_scalar_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_bigint_column({7, 0, -3}, {0, 1, 0});
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
-        ASSERT_EQ(3, result->size());
-        ASSERT_EQ(7, result->get(0).get_int64());
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_EQ(-3, result->get(2).get_int64());
+        ASSERT_EQ("[7, NULL, -3]", result->debug_string());
     }
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
@@ -3030,9 +3611,7 @@ TEST_F(VectorizedCastExprTest, root_typed_only_array_cast_from_variant) {
     auto variant_col = make_root_typed_only_variant_array_column(
             {DatumArray{Datum((int32_t)1), Datum((int32_t)2)}, DatumArray{}}, {0, 1});
     auto result = cast_from_variant(gen_array_type_desc(TPrimitiveType::INT), variant_col);
-    ASSERT_EQ(2, result->size());
-    ASSERT_EQ("[1,2]", result->debug_item(0));
-    ASSERT_TRUE(result->is_null(1));
+    ASSERT_EQ("[[1,2], NULL]", result->debug_string());
 }
 
 // Verifies base_shredded root scalar keeps cast semantics equivalent to typed-only on same/different target types.
@@ -3040,10 +3619,7 @@ TEST_F(VectorizedCastExprTest, base_shredded_root_scalar_cast_from_variant) {
     auto variant_col = make_base_shredded_root_bigint_variant_column({7, 0, -3}, {0, 1, 0});
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
-        ASSERT_EQ(3, result->size());
-        ASSERT_EQ(7, result->get(0).get_int64());
-        ASSERT_TRUE(result->is_null(1));
-        ASSERT_EQ(-3, result->get(2).get_int64());
+        ASSERT_EQ("[7, NULL, -3]", result->debug_string());
     }
     {
         auto result = cast_from_variant(gen_type_desc(TPrimitiveType::DOUBLE), variant_col);
@@ -3090,6 +3666,46 @@ TEST_F(VectorizedCastExprTest, base_shredded_typed_variant_overlay_cast_mismatch
     auto result = cast_from_variant(gen_type_desc(TPrimitiveType::BIGINT), variant_col);
     ASSERT_EQ(1, result->size());
     ASSERT_TRUE(result->is_null(0));
+}
+
+// A row that exists only in typed shredded columns has no stored row ref: the cast rebuilds it into a
+// local buffer. The value must be read while that buffer is alive. The string is longer than the SSO
+// limit so a dangling read lands on freed heap memory (caught by ASAN).
+static ColumnPtr make_object_typed_only_variant_column(const std::vector<std::string>& values) {
+    auto typed = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+    for (const auto& v : values) {
+        typed->append_datum(Datum(Slice(v)));
+    }
+    MutableColumns typed_columns;
+    typed_columns.emplace_back(std::move(typed));
+    auto variant = VariantColumn::create();
+    variant->set_shredded_columns({"a"}, {TYPE_VARCHAR_DESC}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
+TEST_F(VectorizedCastExprTest, variant_cast_to_string_from_rebuilt_shredded_row) {
+    const std::string long_value(64, 'x');
+    auto variant_col = make_object_typed_only_variant_column({long_value, "short"});
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::VARCHAR), variant_col);
+    ASSERT_EQ(2, result->size());
+    ASSERT_FALSE(result->is_null(0));
+    EXPECT_EQ(R"({"a":")" + long_value + R"("})", result->get(0).get_slice().to_string());
+    EXPECT_EQ(R"({"a":"short"})", result->get(1).get_slice().to_string());
+}
+
+TEST_F(VectorizedCastExprTest, variant_cast_to_json_from_rebuilt_shredded_row) {
+    const std::string long_value(64, 'y');
+    auto variant_col = make_object_typed_only_variant_column({long_value});
+    auto result = cast_from_variant(gen_type_desc(TPrimitiveType::JSON), variant_col);
+    ASSERT_EQ(1, result->size());
+    ASSERT_FALSE(result->is_null(0));
+    const JsonValue* json = result->get(0).get_json();
+    ASSERT_NE(nullptr, json);
+    auto field = json->get_obj("a");
+    ASSERT_TRUE(field.ok());
+    auto str = field->get_string();
+    ASSERT_TRUE(str.ok());
+    EXPECT_EQ(long_value, str->to_string());
 }
 
 } // namespace starrocks

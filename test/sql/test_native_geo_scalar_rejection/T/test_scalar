@@ -1,0 +1,52 @@
+-- name: test_scalar_geo_geography
+function: assert_query_error_contains("select g = g from (select ST_GeogFromText('POINT (1 2)') g) t", "does not support binary predicate")
+function: assert_query_error_contains("select g <=> g from (select ST_GeogFromText('POINT (1 2)') g) t", "does not support binary predicate")
+function: assert_query_error_contains("select g < g from (select ST_GeogFromText('POINT (1 2)') g) t", "does not support binary predicate")
+function: assert_query_error_contains("select g between g and g from (select ST_GeogFromText('POINT (1 2)') g) t", "between predicate type GEOGRAPHY with type INVALID_TYPE is invalid")
+function: assert_query_error_contains("select g in (g) from (select ST_GeogFromText('POINT (1 2)') g) t", "of in predict are not compatible")
+function: assert_query_error_contains("select case g when g then 1 else 0 end from (select ST_GeogFromText('POINT (1 2)') g) t", "Invalid when type cast GEOGRAPHY to INVALID_TYPE")
+function: assert_query_error_contains("select ST_AsText(case when true then g else g end) from (select ST_GeogFromText('POINT (1 2)') g) t", "Invalid then type cast GEOGRAPHY to INVALID_TYPE")
+function: assert_query_error_contains("select g from (select ST_GeogFromText('POINT (1 2)') g) t union distinct select NULL", "GEOGRAPHY not support set operation")
+function: assert_query_error_contains("select g from (select ST_GeogFromText('POINT (1 2)') g) t intersect select NULL", "GEOGRAPHY not support set operation")
+function: assert_query_error_contains("select g from (select ST_GeogFromText('POINT (1 2)') g) t except select NULL", "GEOGRAPHY not support set operation")
+function: assert_query_error_contains("select 1 from (select ST_GeogFromText('POINT (1 2)') g) t where g in (select ST_GeogFromText('POINT (1 2)'))", "of in predict are not compatible")
+function: assert_query_error_contains("select g from (select ST_GeogFromText('POINT (1 2)') g) t into outfile 'file:///tmp/scalar_geo_${uuid0}_' format as CSV", "Type GEOGRAPHY is not supported for CSV outfile")
+function: assert_query_error_contains("select g from (select ST_GeogFromText('POINT (1 2)') g) t into outfile 'file:///tmp/scalar_geo_${uuid0}_' format as PARQUET", "Type GEOGRAPHY is not supported for PARQUET outfile")
+SELECT hex(g) FROM (SELECT ST_AsBinary(ST_GeogFromText('POINT (1 2)')) g) t;
+SELECT CASE WHEN true THEN ST_AsText(g) END, hex(ST_AsBinary(g)), g IS NULL from (select ST_GeogFromText('POINT (1 2)') g) t;
+SELECT ST_AsText(g) FROM (SELECT ST_GeogFromText('POINT (1 2)') g UNION ALL SELECT NULL) u;
+INSERT INTO blackhole() SELECT ST_GeogFromText('POINT (1 2)');
+-- name: test_scalar_geo_geometry
+function: assert_query_error_contains("select g = g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "does not support binary predicate")
+function: assert_query_error_contains("select g <=> g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "does not support binary predicate")
+function: assert_query_error_contains("select g < g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "does not support binary predicate")
+function: assert_query_error_contains("select g between g and g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "between predicate type GEOMETRY with type INVALID_TYPE is invalid")
+function: assert_query_error_contains("select g in (g) from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "of in predict are not compatible")
+function: assert_query_error_contains("select case g when g then 1 else 0 end from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "Invalid when type cast GEOMETRY to INVALID_TYPE")
+function: assert_query_error_contains("select ST_AsText(case when true then g else g end) from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "Invalid then type cast GEOMETRY to INVALID_TYPE")
+function: assert_query_error_contains("select g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t union distinct select NULL", "GEOMETRY not support set operation")
+function: assert_query_error_contains("select g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t intersect select NULL", "GEOMETRY not support set operation")
+function: assert_query_error_contains("select g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t except select NULL", "GEOMETRY not support set operation")
+function: assert_query_error_contains("select 1 from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t where g in (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857'))", "of in predict are not compatible")
+function: assert_query_error_contains("select g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t into outfile 'file:///tmp/scalar_geo_${uuid0}_' format as CSV", "Type GEOMETRY is not supported for CSV outfile")
+function: assert_query_error_contains("select g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t into outfile 'file:///tmp/scalar_geo_${uuid0}_' format as PARQUET", "Type GEOMETRY is not supported for PARQUET outfile")
+function: assert_query_error_contains("select g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "use ST_AsText or ST_AsBinary")
+SELECT CASE WHEN true THEN ST_AsText(g) END, hex(ST_AsBinary(g)), g IS NULL from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t;
+SELECT ST_AsText(g) FROM (SELECT ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g UNION ALL SELECT NULL) u;
+INSERT INTO blackhole() SELECT ST_GeomFromText('POINT (1 2)', 'EPSG:3857');
+CREATE TABLE scalar_geo_explain_${uuid0} (wkt VARCHAR(64)) DUPLICATE KEY(wkt) DISTRIBUTED BY HASH(wkt) BUCKETS 1 PROPERTIES("replication_num"="1");
+INSERT INTO scalar_geo_explain_${uuid0} VALUES ('POINT (1 2)'), ('POINT EMPTY'), (NULL);
+function: assert_explain_contains("select ST_GeomFromText('POINT (1 2)', 'EPSG:3857')", "RESULT SINK")
+function: assert_explain_contains("select g from (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) t", "RESULT SINK")
+function: assert_explain_contains("with c as (select ST_GeomFromText('POINT (1 2)', 'EPSG:3857') g) select g from c", "RESULT SINK")
+function: assert_explain_contains("select ST_GeomFromText(wkt, 'EPSG:3857') from scalar_geo_explain_${uuid0}", "RESULT SINK")
+function: assert_explain_contains("select g from (select ST_GeomFromText(wkt, 'EPSG:3857') g from scalar_geo_explain_${uuid0}) t", "RESULT SINK")
+function: assert_explain_contains("with c as (select ST_GeomFromText(wkt, 'EPSG:3857') g from scalar_geo_explain_${uuid0}) select g from c", "RESULT SINK")
+function: assert_query_error_contains("explain analyze select ST_GeomFromText('POINT (1 2)', 'EPSG:3857')", "use ST_AsText or ST_AsBinary")
+function: assert_query_error_contains("explain analyze select g from (select ST_GeomFromText(wkt, 'EPSG:3857') g from scalar_geo_explain_${uuid0}) t", "use ST_AsText or ST_AsBinary")
+function: assert_query_error_contains("select g from (select ST_GeomFromText(wkt, 'EPSG:3857') g from scalar_geo_explain_${uuid0}) t", "use ST_AsText or ST_AsBinary")
+DROP TABLE scalar_geo_explain_${uuid0};
+-- name: test_scalar_geo_controls
+SELECT array_length(H3_GridDisk(H3_FromGeo(ST_GeogFromText('POINT (0 0)'), 3), 0));
+SELECT ST_AsText(ST_CoverageSimplify(ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'), 0.0) OVER ());
+SELECT ST_AsText(ST_GeomFromText('POINT (1 2)'));

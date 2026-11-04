@@ -54,9 +54,9 @@ private:
 
 TEST(ExprTest, CopyDeepCopiesChildren) {
     ObjectPool pool;
-    auto* root = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
-    auto* child = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
-    auto* grandchild = pool.add(new SimpleExpr(TypeDescriptor(TYPE_INT)));
+    auto* root = pool.add(new SimpleExpr(TYPE_INT_DESC));
+    auto* child = pool.add(new SimpleExpr(TYPE_INT_DESC));
+    auto* grandchild = pool.add(new SimpleExpr(TYPE_INT_DESC));
     child->add_child(grandchild);
     root->add_child(child);
 
@@ -73,16 +73,31 @@ TEST(ExprTest, CopyDeepCopiesChildren) {
 }
 
 TEST(ExprTest, TypeWithoutCastSkipsCastOpcode) {
-    SimpleExpr child(TypeDescriptor(TYPE_INT), TExprNodeType::INT_LITERAL, TExprOpcode::INVALID_OPCODE);
-    SimpleExpr cast(TypeDescriptor(TYPE_INT), TExprNodeType::CAST_EXPR, TExprOpcode::CAST);
+    SimpleExpr child(TYPE_INT_DESC, TExprNodeType::INT_LITERAL, TExprOpcode::INVALID_OPCODE);
+    SimpleExpr cast(TYPE_INT_DESC, TExprNodeType::CAST_EXPR, TExprOpcode::CAST);
     cast.add_child(&child);
 
     EXPECT_EQ(TExprNodeType::INT_LITERAL, Expr::type_without_cast(&cast));
     EXPECT_EQ(&child, Expr::expr_without_cast(&cast));
 }
 
+TEST(ExprTest, GeoTypesDoNotRequireLiteralNode) {
+    for (auto type : {TYPE_GEOGRAPHY, TYPE_GEOMETRY}) {
+        SimpleExpr expr{TypeDescriptor(type)};
+        EXPECT_EQ(type, expr.type().type);
+        EXPECT_FALSE(expr.is_slotref());
+    }
+}
+
+TEST(ExprTest, FileTypeDoesNotRequireLiteralNode) {
+    SimpleExpr expr{TypeDescriptor(TYPE_FILE)};
+    EXPECT_EQ(TYPE_FILE, expr.type().type);
+    EXPECT_FALSE(expr.is_slotref());
+    EXPECT_FALSE(expr.is_cast_expr());
+}
+
 TEST(ExprTest, EvaluateConstCachesResult) {
-    SimpleExpr expr{TypeDescriptor(TYPE_INT)};
+    SimpleExpr expr{TYPE_INT_DESC};
     RuntimeState state;
     ExprContext context(&expr);
     ASSERT_TRUE(context.prepare(&state).ok());

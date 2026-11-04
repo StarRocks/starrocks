@@ -25,4 +25,27 @@ struct CacheOptions {
     bool skip_meta_cache = false;
 };
 
+// Which of the two remote layouts a VERSION-1 tablet metadata read should try FIRST. An ordering
+// preference, not an assertion about what storage holds: either order resolves the metadata, because
+// whichever is tried first falls back to the other. Guessing wrong costs one extra read.
+//
+// Kept out of CacheOptions on purpose: this says nothing about what to cache.
+enum class InitialMetadataOrder {
+    // The tablet's own key first, the partition-shared object as fallback. Correct for every
+    // partition, so the default -- and the only order an unhinted caller may use. See the ordering
+    // invariant on TabletManager::get_tablet_metadata().
+    kPerTabletFirst,
+
+    // The partition-shared object first. Reserved for a caller holding FE's
+    // prefer_shared_initial_metadata hint, which FE sends only for a partition it has confirmed holds
+    // a single index. Worth the reversal because a partition created with
+    // TCreateTabletReq::enable_tablet_creation_optimization never writes a per-tablet version-1 key
+    // at all, so kPerTabletFirst is a guaranteed NotFound for every one of its tablets.
+    //
+    // Never infer this from process-local state. On a partition that also holds a rollup or
+    // schema-change shadow index, the shared object belongs to the OTHER index, and because it
+    // exists the read succeeds and returns the wrong schema with nothing to signal it.
+    kSharedFirst,
+};
+
 } // namespace starrocks::lake

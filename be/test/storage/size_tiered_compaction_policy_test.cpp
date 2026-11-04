@@ -27,6 +27,7 @@
 #include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exec/exec_env.h"
 #include "fs/fs_util.h"
@@ -295,6 +296,7 @@ public:
         _saved_min_base_deltas = config::min_base_compaction_num_singleton_deltas;
         _saved_base_compaction_interval = config::base_compaction_interval_seconds_since_last_operation;
         _saved_size_tiered_min_level_size = config::size_tiered_min_level_size;
+        _saved_binary_plain_delta_offset = config::enable_binary_plain_delta_offset;
 
         config::tablet_max_versions = 1000;
         config::min_cumulative_compaction_num_singleton_deltas = 2;
@@ -303,6 +305,12 @@ public:
         config::min_base_compaction_num_singleton_deltas = 10;
         config::base_compaction_interval_seconds_since_last_operation = 86400;
         config::size_tiered_min_level_size = 10240;
+        // Cases below assert how the policy tiers rowsets, which is driven by their absolute
+        // on-disk size against size_tiered_min_level_size and max_segment_file_size. The
+        // high-cardinality varchar column these fixtures write is exactly what
+        // enable_binary_plain_delta_offset shrinks, so pin the write-side encoding rather than
+        // let its default move a fixture across one of those thresholds.
+        config::enable_binary_plain_delta_offset = false;
         Compaction::init(config::max_compaction_concurrency);
 
         _default_storage_root_path = config::storage_root_path;
@@ -348,6 +356,7 @@ public:
         config::min_base_compaction_num_singleton_deltas = _saved_min_base_deltas;
         config::base_compaction_interval_seconds_since_last_operation = _saved_base_compaction_interval;
         config::size_tiered_min_level_size = _saved_size_tiered_min_level_size;
+        config::enable_binary_plain_delta_offset = _saved_binary_plain_delta_offset;
     }
 
 protected:
@@ -359,6 +368,7 @@ protected:
     int64_t _saved_min_base_deltas = 0;
     int64_t _saved_base_compaction_interval = 0;
     int64_t _saved_size_tiered_min_level_size = 0;
+    bool _saved_binary_plain_delta_offset = false;
 
     StorageEngine* _engine = nullptr;
     std::shared_ptr<TabletSchema> _tablet_schema;

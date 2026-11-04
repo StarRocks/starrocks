@@ -557,7 +557,20 @@ public class ExprExplainVisitor implements AstVisitorExtendInterface<String, Voi
     @Override
     public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
         String message = "DICTIONARY_GET(";
-        int size = (node.getChildren().size() == 3) ? node.getChildren().size() - 1 : node.getChildren().size();
+        // children = [dictionary name, key..., optional null_if_not_exist literal], and
+        // nullIfNotExist is kept as a field of its own. So the flag would be printed twice if
+        // the optional child were included here, and a key would be dropped if it were mistaken
+        // for that child.
+        //
+        // ExpressionAnalyzer sets keySize from the dictionary metadata, which is exactly where
+        // the keys end — the children count is not, because a call with N keys and no explicit
+        // flag has the same shape as one with N-1 keys and a flag. Unanalyzed expressions carry
+        // no keySize (0) and no reliable flag either, so they keep the previous behaviour rather
+        // than guessing differently.
+        int keySize = node.getKeySize();
+        int size = keySize > 0
+                ? Math.min(keySize + 1, node.getChildren().size())
+                : (node.getChildren().size() == 3 ? node.getChildren().size() - 1 : node.getChildren().size());
         message += node.getChildren().stream().limit(size)
                 .map(this::visit)
                 .collect(Collectors.joining(", "));

@@ -19,7 +19,16 @@ array_difference(input)
 
 ## Return value
 
-`input` パラメータで指定した配列と同じデータ型と長さの配列を返します。
+入力配列と同じ長さの配列を返します。戻り値の要素型は、入力の要素型に応じて次のように決まります。
+
+| 入力要素型 | 戻り値要素型 |
+| --- | --- |
+| `BOOLEAN`、`TINYINT`、`SMALLINT`、`INT`、または `BIGINT` | `BIGINT` |
+| `LARGEINT` | `LARGEINT` |
+| `FLOAT` または `DOUBLE` | `DOUBLE` |
+| `DECIMAL(P, S)`（`P <= 38`） | `DECIMAL(min(P + 1, 38), S)` |
+
+`ARRAY<DECIMAL256>`（`P > 38`）は現在サポートされていません。
 
 ## Examples
 

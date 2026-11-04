@@ -34,9 +34,13 @@ public class ScoreSelector implements Selector {
                 .filter(p -> p.getCompactionScore() != null)
                 .filter(p -> !excludeTableOrPartition.contains(p.getPartition().getTableId()))
                 .filter(p -> !excludeTableOrPartition.contains(p.getPartition().getPartitionId()))
-                // When manual compaction is triggered, we just skip min score and time check
-                .filter(p -> (p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
-                        || (p.getNextCompactionTime() <= now && p.getCompactionScore().getMax() >= minScore)))
+                // A priority request (manual or UNSHARE) skips the score checks but still honors the retry
+                // deadline: the trigger clears it so a new request runs at once, while a request the scheduler had
+                // to defer (e.g. the table is under alter) waits it out instead of being retried every cycle.
+                // An automatic request needs a positive score of at least the min score.
+                .filter(p -> p.getNextCompactionTime() <= now)
+                .filter(p -> p.getPriority() != PartitionStatistics.CompactionPriority.DEFAULT
+                        || (p.getCompactionScore().getMax() > 0 && p.getCompactionScore().getMax() >= minScore))
                 .map(p -> {
                     return p.getSnapshot(); })
                 .collect(Collectors.toList());

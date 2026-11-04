@@ -19,6 +19,7 @@
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
 #include <gflags/gflags.h>
+#include <gmock/gmock.h>
 #include <grpcpp/grpcpp.h>
 #include <gtest/gtest.h>
 #include <manager.grpc.pb.h>
@@ -31,10 +32,15 @@
 #include <limits>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/container/lru_cache.h"
+#include "base/testutil/assert.h"
 #include "base/testutil/scoped_updater.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_metrics_fwd.h"
 #include "common/config_staros_worker_fwd.h"
@@ -50,6 +56,7 @@ DECLARE_int64(fslib_s3_min_upload_part_size);
 DECLARE_int64(fslib_gs_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_max_single_part_size);
 DECLARE_int64(fslib_azure_storage_min_upload_part_size);
+DECLARE_bool(fslib_s3_multipart_equal_part_size);
 
 namespace starrocks {
 
@@ -407,6 +414,614 @@ TEST_F(StarOSWorkerTest, test_fs_cache_concurrent) {
 
 // Verify that a cache hit in retrieve_shard_info() does not trigger the fallback path
 // and therefore does not increment the fallback counters.
+// A worker whose starmgr fallback is observable, so a test can require that it never happens.
+class RemoteCountingStarOSWorker : public StarOSWorker {
+public:
+    MOCK_METHOD((absl::StatusOr<staros::starlet::ShardInfo>), _fetch_shard_info_from_remote,
+                (staros::starlet::ShardId id));
+};
+
+static StarOSWorker::ShardInfo make_s3_shard_info(StarOSWorker::ShardId id, const std::string& full_path,
+                                                  int64_t fs_version) {
+    StarOSWorker::ShardInfo info;
+    info.id = id;
+    info.hash_code = 0;
+    auto* fs_info = info.path_info.mutable_fs_info();
+    fs_info->set_fs_type(staros::FileStoreType::S3);
+    fs_info->set_version(fs_version);
+    auto* s3_fs_info = fs_info->mutable_s3_fs_info();
+    s3_fs_info->set_bucket("test_bucket");
+    s3_fs_info->set_endpoint("test_endpoint");
+    s3_fs_info->set_region("us-east-1");
+    auto* simple_credential = s3_fs_info->mutable_credential()->mutable_simple_credential();
+    simple_credential->set_access_key("test_ak");
+    simple_credential->set_access_key_secret("test_sk");
+    info.path_info.set_full_path(full_path);
+    info.cache_info.set_enable_cache(false);
+    info.properties.emplace("indexId", "42");
+    return info;
+}
+
+// The load coordinator writes a combined txn log under the directory of a tablet it does not own. With
+// the shard info the owner handed over, that resolves without a starmgr RPC.
+TEST_F(StarOSWorkerTest, borrowed_shard_info_resolves_without_starmgr) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    StarOSWorker owner;
+    auto info = make_s3_shard_info(1001, "s3://test_bucket/db/tbl/p1", 1);
+    ASSERT_TRUE(owner.add_shard(info).ok());
+    EXPECT_TRUE(absl::IsNotFound(owner.export_shard_info(1002).status()));
+    auto exported = owner.export_shard_info(1001);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+
+    RemoteCountingStarOSWorker borrower;
+    EXPECT_CALL(borrower, _fetch_shard_info_from_remote(::testing::_)).Times(0);
+    ASSERT_TRUE(borrower.borrow_shard_info(*exported).ok());
+    EXPECT_TRUE(borrower.has_borrowed_shard_info(1001));
+    // Borrowing does not make the shard owned, so no ownership check changes its answer.
+    EXPECT_TRUE(absl::IsNotFound(borrower.get_shard_info(1001).status()));
+
+    auto* metrics = StarOSWorkerMetrics::instance();
+    const int64_t borrowed_before = metrics->lake_tablet_location_handoff_hits_total.value();
+    const int64_t fallback_before = metrics->staros_shard_info_fallback_total.value();
+
+    auto retrieved = borrower.retrieve_shard_info(1001);
+    ASSERT_TRUE(retrieved.ok()) << retrieved.status();
+    EXPECT_EQ(info.path_info.full_path(), retrieved->path_info.full_path());
+    EXPECT_EQ("42", retrieved->properties.at("indexId"));
+
+    auto first = borrower.get_shard_filesystem(1001, {});
+    ASSERT_TRUE(first.ok()) << first.status();
+    // The next load writes through the same filesystem instead of building another one.
+    auto second = borrower.get_shard_filesystem(1001, {});
+    ASSERT_TRUE(second.ok()) << second.status();
+    EXPECT_EQ(first->get(), second->get());
+
+    EXPECT_EQ(borrowed_before + 3, metrics->lake_tablet_location_handoff_hits_total.value());
+    EXPECT_EQ(fallback_before, metrics->staros_shard_info_fallback_total.value());
+}
+
+TEST_F(StarOSWorkerTest, borrowed_shard_info_never_shadows_an_owned_shard) {
+    StarOSWorker owner;
+    auto info = make_s3_shard_info(2001, "s3://test_bucket/db/tbl/p2", 1);
+    ASSERT_TRUE(owner.add_shard(info).ok());
+    auto exported = owner.export_shard_info(2001);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+
+    // A worker that owns the shard ignores a handed-over copy.
+    StarOSWorker also_owner;
+    ASSERT_TRUE(also_owner.add_shard(info).ok());
+    ASSERT_TRUE(also_owner.borrow_shard_info(*exported).ok());
+    EXPECT_FALSE(also_owner.has_borrowed_shard_info(2001));
+
+    // And a borrowed copy goes away once the shard is assigned here.
+    StarOSWorker borrower;
+    ASSERT_TRUE(borrower.borrow_shard_info(*exported).ok());
+    EXPECT_TRUE(borrower.has_borrowed_shard_info(2001));
+    ASSERT_TRUE(borrower.add_shard(info).ok());
+    EXPECT_FALSE(borrower.has_borrowed_shard_info(2001));
+}
+
+// An owner that has not seen a storage update yet must not roll back the copy of one that has.
+TEST_F(StarOSWorkerTest, borrowed_shard_info_keeps_the_newer_storage_version) {
+    StarOSWorker stale_owner;
+    ASSERT_TRUE(stale_owner.add_shard(make_s3_shard_info(3001, "s3://test_bucket/v1", 1)).ok());
+    StarOSWorker fresh_owner;
+    ASSERT_TRUE(fresh_owner.add_shard(make_s3_shard_info(3001, "s3://test_bucket/v2", 2)).ok());
+    auto stale = stale_owner.export_shard_info(3001);
+    auto fresh = fresh_owner.export_shard_info(3001);
+    ASSERT_TRUE(stale.ok() && fresh.ok());
+
+    StarOSWorker borrower;
+    ASSERT_TRUE(borrower.borrow_shard_info(*fresh).ok());
+    ASSERT_TRUE(borrower.borrow_shard_info(*stale).ok());
+    auto retrieved = borrower.retrieve_shard_info(3001);
+    ASSERT_TRUE(retrieved.ok()) << retrieved.status();
+    EXPECT_EQ("s3://test_bucket/v2", retrieved->path_info.full_path());
+}
+
+// A credential rotation reaches a borrower only with the next handoff, which must then stop the
+// filesystem built from the old credentials from being reused.
+TEST_F(StarOSWorkerTest, borrowed_shard_info_rebuilds_the_filesystem_on_a_storage_update) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    StarOSWorker old_owner;
+    auto old_info = make_s3_shard_info(6001, "s3://test_bucket/db/tbl/p6", 1);
+    ASSERT_TRUE(old_owner.add_shard(old_info).ok());
+    StarOSWorker new_owner;
+    auto new_info = make_s3_shard_info(6001, "s3://test_bucket/db/tbl/p6", 2);
+    new_info.path_info.mutable_fs_info()
+            ->mutable_s3_fs_info()
+            ->mutable_credential()
+            ->mutable_simple_credential()
+            ->set_access_key("rotated_ak");
+    ASSERT_TRUE(new_owner.add_shard(new_info).ok());
+    auto old_exported = old_owner.export_shard_info(6001);
+    auto new_exported = new_owner.export_shard_info(6001);
+    ASSERT_TRUE(old_exported.ok() && new_exported.ok());
+
+    RemoteCountingStarOSWorker borrower;
+    EXPECT_CALL(borrower, _fetch_shard_info_from_remote(::testing::_)).Times(0);
+    ASSERT_TRUE(borrower.borrow_shard_info(*old_exported).ok());
+    auto before = borrower.get_shard_filesystem(6001, {});
+    ASSERT_TRUE(before.ok()) << before.status();
+    ASSERT_TRUE(borrower.borrow_shard_info(*new_exported).ok());
+    auto after = borrower.get_shard_filesystem(6001, {});
+    ASSERT_TRUE(after.ok()) << after.status();
+    EXPECT_NE(before->get(), after->get());
+}
+
+// If no filesystem can be built from a handed-over shard info, the lookup falls back to starmgr, which
+// is what it did before the handoff existed, instead of failing the write.
+TEST_F(StarOSWorkerTest, borrowed_shard_info_falls_back_when_no_filesystem_can_be_built) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    StarOSWorker owner;
+    StarOSWorker::ShardInfo unusable;
+    unusable.id = 7001;
+    unusable.hash_code = 0;
+    unusable.path_info.set_full_path("s3://test_bucket/db/tbl/p7"); // fs type left INVALID
+    ASSERT_TRUE(owner.add_shard(unusable).ok());
+    auto exported = owner.export_shard_info(7001);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+
+    RemoteCountingStarOSWorker borrower;
+    ASSERT_TRUE(borrower.borrow_shard_info(*exported).ok());
+    ASSERT_TRUE(borrower.has_borrowed_shard_info(7001));
+    EXPECT_CALL(borrower, _fetch_shard_info_from_remote(7001))
+            .WillOnce(::testing::Return(make_s3_shard_info(7001, "s3://test_bucket/db/tbl/p7", 1)));
+    auto handle = borrower.get_shard_filesystem(7001, {});
+    ASSERT_TRUE(handle.ok()) << handle.status();
+}
+
+TEST_F(StarOSWorkerTest, expired_borrowed_shard_info_falls_back_to_starmgr) {
+    auto info = make_s3_shard_info(4001, "s3://test_bucket/db/tbl/p4", 1);
+    RemoteCountingStarOSWorker borrower;
+    {
+        std::lock_guard l(borrower._borrowed_mtx);
+        borrower.insert_borrowed_shard_info_locked(
+                4001, new StarOSWorker::BorrowedShardInfo{info, nullptr, MonotonicSeconds() - 1, false});
+    }
+    EXPECT_FALSE(borrower.has_borrowed_shard_info(4001));
+    EXPECT_CALL(borrower, _fetch_shard_info_from_remote(4001)).WillOnce(::testing::Return(info));
+    auto retrieved = borrower.retrieve_shard_info(4001);
+    ASSERT_TRUE(retrieved.ok()) << retrieved.status();
+}
+
+// A TTL of 0 is a kill switch: it stops using what was borrowed before too, not only new borrowing.
+TEST_F(StarOSWorkerTest, borrowed_shard_info_unused_while_the_ttl_is_zero) {
+    StarOSWorker owner;
+    auto info = make_s3_shard_info(5001, "s3://test_bucket/db/tbl/p5", 1);
+    ASSERT_TRUE(owner.add_shard(info).ok());
+    auto exported = owner.export_shard_info(5001);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+
+    RemoteCountingStarOSWorker borrower;
+    ASSERT_TRUE(borrower.borrow_shard_info(*exported).ok());
+    ASSERT_TRUE(borrower.has_borrowed_shard_info(5001));
+    {
+        SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
+        EXPECT_FALSE(borrower.has_borrowed_shard_info(5001));
+        EXPECT_CALL(borrower, _fetch_shard_info_from_remote(5001)).WillOnce(::testing::Return(info));
+        ASSERT_TRUE(borrower.retrieve_shard_info(5001).ok());
+
+        // Nothing handed over while 0 is kept.
+        StarOSWorker other_borrower;
+        ASSERT_TRUE(other_borrower.borrow_shard_info(*exported).ok());
+        SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+        EXPECT_FALSE(other_borrower.has_borrowed_shard_info(5001));
+    }
+    EXPECT_TRUE(borrower.has_borrowed_shard_info(5001));
+}
+
+// lake_tablet_location_handoff_entries is the number of borrowed shard infos held: a handoff adds one, a refresh
+// replaces it, and an assignment to this worker, the LRU's eviction or the worker going away drops it.
+TEST_F(StarOSWorkerTest, borrowed_shard_count_tracks_the_held_entries) {
+    auto& count = StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries;
+    const int64_t base = count.value();
+    StarOSWorker owner;
+    std::vector<std::string> exported;
+    for (int64_t id : {8001, 8002}) {
+        ASSERT_TRUE(owner.add_shard(make_s3_shard_info(id, "s3://test_bucket/db/tbl/p8", 1)).ok());
+        auto info = owner.export_shard_info(id);
+        ASSERT_TRUE(info.ok()) << info.status();
+        exported.push_back(std::move(info).value());
+    }
+    {
+        StarOSWorker borrower;
+        ASSERT_TRUE(borrower.borrow_shard_info(exported[0]).ok());
+        ASSERT_TRUE(borrower.borrow_shard_info(exported[1]).ok());
+        EXPECT_EQ(base + 2, count.value());
+        // A refresh replaces the entry.
+        ASSERT_TRUE(borrower.borrow_shard_info(exported[1]).ok());
+        EXPECT_EQ(base + 2, count.value());
+        // Assigned to this worker: no longer borrowed.
+        ASSERT_TRUE(borrower.add_shard(make_s3_shard_info(8001, "s3://test_bucket/db/tbl/p8", 1)).ok());
+        EXPECT_EQ(base + 1, count.value());
+        EXPECT_FALSE(borrower.has_borrowed_shard_info(8001));
+        EXPECT_TRUE(borrower.has_borrowed_shard_info(8002));
+    }
+    EXPECT_EQ(base, count.value());
+}
+
+// The borrowed shard infos live in a capacity-bounded LRU: what does not fit is evicted, with no sweep
+// and no load needed to make room.
+TEST_F(StarOSWorkerTest, borrowed_shard_infos_are_bounded_by_the_cache_capacity) {
+    auto& count = StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries;
+    const int64_t base = count.value();
+    StarOSWorker owner;
+    ASSERT_TRUE(owner.add_shard(make_s3_shard_info(8101, "s3://test_bucket/db/tbl/p81", 1)).ok());
+    auto exported = owner.export_shard_info(8101);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+
+    StarOSWorker borrower;
+    borrower._borrowed_cache.reset(new_lru_cache(1)); // smaller than any entry
+    ASSERT_TRUE(borrower.borrow_shard_info(*exported).ok());
+    EXPECT_FALSE(borrower.has_borrowed_shard_info(8101));
+    EXPECT_EQ(base, count.value());
+}
+
+TEST_F(StarOSWorkerTest, borrowed_shard_info_dynamic_fields_trigger_capacity_eviction) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    auto& count = StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries;
+    const int64_t base = count.value();
+    // Use two keys in the same LRU shard so their combined charge exceeds its capacity.
+    auto cache_shard = [](StarOSWorker::ShardId id) {
+        const auto key = std::to_string(id);
+        return CacheKey(key).hash(key.data(), key.size(), 0) >> (32 - kNumShardBits);
+    };
+    const StarOSWorker::ShardId first_id = 8201;
+    auto second_id = first_id + 1;
+    while (cache_shard(first_id) != cache_shard(second_id)) {
+        ++second_id;
+    }
+    for (bool large_properties : {true, false}) {
+        SCOPED_TRACE(large_properties ? "properties" : "replicas");
+        {
+            StarOSWorker owner;
+            auto info = make_s3_shard_info(first_id, "s3://test_bucket/db/tbl/p82", 1);
+            if (large_properties) {
+                // Exercise both property keys and values.
+                info.properties.emplace(std::string(150 * 1024, 'k'), std::string(150 * 1024, 'v'));
+            } else {
+                // Even scalar-only protobuf replicas occupy memory in the retained vector.
+                info.replicas.resize(256 * 1024 / sizeof(staros::ReplicaInfoLite));
+                for (size_t i = 0; i < info.replicas.size(); ++i) {
+                    info.replicas[i].set_worker_id(i + 1);
+                }
+            }
+            ASSERT_TRUE(owner.add_shard(info).ok());
+            auto first = owner.export_shard_info(first_id);
+            ASSERT_TRUE(first.ok()) << first.status();
+            ASSERT_TRUE(owner.add_shard(make_s3_shard_info(second_id, "s3://test_bucket/db/tbl/p82", 1)).ok());
+            auto small = owner.export_shard_info(second_id);
+            ASSERT_TRUE(small.ok()) << small.status();
+            info.id = second_id;
+            ASSERT_TRUE(owner.add_shard(info).ok());
+            auto second = owner.export_shard_info(second_id);
+            ASSERT_TRUE(second.ok()) << second.status();
+
+            RemoteCountingStarOSWorker borrower;
+            EXPECT_CALL(borrower, _fetch_shard_info_from_remote(::testing::_)).Times(0);
+            ASSERT_TRUE(borrower.borrow_shard_info(*first).ok());
+            ASSERT_TRUE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_EQ(base + 1, count.value());
+            ASSERT_TRUE(borrower.borrow_shard_info(*small).ok());
+            EXPECT_EQ(base + 2, count.value());
+            // Refreshing the large entry must not evict the small neighbor: both still fit.
+            ASSERT_TRUE(borrower.borrow_shard_info(*first).ok());
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(second_id));
+            EXPECT_EQ(base + 2, count.value());
+            // Building a filesystem replaces the value and must retain its dynamic-field charge.
+            ASSERT_TRUE(borrower.get_shard_filesystem(first_id, {}).ok());
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(second_id));
+            EXPECT_EQ(base + 2, count.value());
+            EXPECT_GE(borrower._borrowed_cache->get_memory_usage(), 256 * 1024);
+            // Growing the small neighbor into another large value does require eviction.
+            ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
+            EXPECT_FALSE(borrower.has_borrowed_shard_info(first_id));
+            EXPECT_TRUE(borrower.has_borrowed_shard_info(second_id));
+            EXPECT_EQ(base + 1, count.value());
+            // Refreshing a large value still counts as one held entry.
+            ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
+            EXPECT_EQ(base + 1, count.value());
+            // A reader can retain the old large value while a smaller replacement is inserted.
+            // Releasing that reader must subtract the old saved charge, not the new value's size.
+            const auto old_charge = borrower._borrowed_cache->get_memory_usage();
+            size_t replacement_charge = 0;
+            {
+                const auto key = std::to_string(second_id);
+                auto* handle = borrower._borrowed_cache->lookup(CacheKey(key));
+                ASSERT_NE(nullptr, handle);
+                DeferOp release([&] { borrower._borrowed_cache->release(handle); });
+                ASSERT_TRUE(borrower.borrow_shard_info(*small).ok());
+                const auto total_charge = borrower._borrowed_cache->get_memory_usage();
+                ASSERT_GT(total_charge, old_charge);
+                replacement_charge = total_charge - old_charge;
+                EXPECT_EQ(base + 2, count.value());
+            }
+            EXPECT_EQ(replacement_charge, borrower._borrowed_cache->get_memory_usage());
+            EXPECT_EQ(base + 1, count.value());
+            borrower._borrowed_cache->erase(CacheKey(std::to_string(second_id)));
+            EXPECT_EQ(0, borrower._borrowed_cache->get_memory_usage());
+            EXPECT_EQ(base, count.value());
+            // Leave a large value for the worker destructor to reclaim as well.
+            ASSERT_TRUE(borrower.borrow_shard_info(*second).ok());
+            EXPECT_EQ(base + 1, count.value());
+        }
+        EXPECT_EQ(base, count.value());
+    }
+}
+
+TEST_F(StarOSWorkerTest, oversized_borrowed_shard_info_dynamic_fields_are_not_retained) {
+    auto& count = StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries;
+    const int64_t base = count.value();
+    for (bool large_properties : {true, false}) {
+        SCOPED_TRACE(large_properties ? "properties" : "replicas");
+        StarOSWorker owner;
+        auto info = make_s3_shard_info(8301, "s3://test_bucket/db/tbl/p83", 1);
+        ASSERT_TRUE(owner.add_shard(info).ok());
+        auto small = owner.export_shard_info(info.id);
+        ASSERT_TRUE(small.ok()) << small.status();
+        if (large_properties) {
+            info.properties.emplace("large", std::string(1024 * 1024, 'v'));
+        } else {
+            info.replicas.resize(1024 * 1024 / sizeof(staros::ReplicaInfoLite));
+        }
+        ASSERT_TRUE(owner.add_shard(info).ok());
+        auto large = owner.export_shard_info(info.id);
+        ASSERT_TRUE(large.ok()) << large.status();
+
+        StarOSWorker borrower;
+        ASSERT_TRUE(borrower.borrow_shard_info(*small).ok());
+        EXPECT_EQ(base + 1, count.value());
+        // A 1 MiB value exceeds the 16 MiB cache's per-shard capacity, including on refresh.
+        ASSERT_TRUE(borrower.borrow_shard_info(*large).ok());
+        EXPECT_FALSE(borrower.has_borrowed_shard_info(info.id));
+        EXPECT_EQ(0, borrower._borrowed_cache->get_memory_usage());
+        EXPECT_EQ(base, count.value());
+        ASSERT_TRUE(borrower.borrow_shard_info(*large).ok());
+        EXPECT_FALSE(borrower.has_borrowed_shard_info(info.id));
+        EXPECT_EQ(base, count.value());
+    }
+}
+
+// The shard gets assigned to this worker while a handoff of it is between its ownership check and its
+// insertion. The handoff must not leave a borrowed copy of a shard this worker owns behind.
+TEST_F(StarOSWorkerTest, borrow_shard_info_racing_add_shard_keeps_no_copy_of_an_owned_shard) {
+    StarOSWorker owner;
+    auto info = make_s3_shard_info(9001, "s3://test_bucket/db/tbl/p9", 1);
+    ASSERT_TRUE(owner.add_shard(info).ok());
+    auto exported = owner.export_shard_info(9001);
+    ASSERT_TRUE(exported.ok()) << exported.status();
+
+    const int64_t base = StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries.value();
+    StarOSWorker worker;
+    std::thread assign;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&] {
+        SyncPoint::GetInstance()->ClearCallBack("StarOSWorker::borrow_shard_info:ownership_checked");
+        SyncPoint::GetInstance()->DisableProcessing();
+        if (assign.joinable()) {
+            assign.join();
+        }
+    });
+    SyncPoint::GetInstance()->SetCallBack("StarOSWorker::borrow_shard_info:ownership_checked", [&](void*) {
+        // StarMgr assigns the shard right after the check found it not owned. Wait until the
+        // assignment is visible, so it lands between the check and the insertion.
+        assign = std::thread([&] { ASSERT_TRUE(worker.add_shard(info).ok()); });
+        while (!worker.get_shard_info(9001).ok()) {
+            std::this_thread::yield();
+        }
+    });
+    ASSERT_TRUE(worker.borrow_shard_info(*exported).ok());
+    assign.join();
+
+    ASSERT_TRUE(worker.get_shard_info(9001).ok());
+    EXPECT_FALSE(worker.has_borrowed_shard_info(9001));
+    EXPECT_EQ(base, StarOSWorkerMetrics::instance()->lake_tablet_location_handoff_entries.value());
+}
+
+TEST_F(StarOSWorkerTest, borrow_shard_info_rejects_malformed_input) {
+    StarOSWorker worker;
+    EXPECT_TRUE(absl::IsInvalidArgument(worker.borrow_shard_info("\xff\xff\xff")));
+}
+
+// A node that touches a tablet it does not own asks starmgr once, then answers from what it kept: a
+// lookup of the shard info and every file opened under the tablet, through one filesystem.
+TEST_F(StarOSWorkerTest, fetched_shard_info_is_kept_for_the_next_lookup) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+    auto* metrics = StarOSWorkerMetrics::instance();
+    const int64_t hits_before = metrics->staros_shard_info_fallback_cache_hits_total.value();
+    const int64_t handoff_hits_before = metrics->lake_tablet_location_handoff_hits_total.value();
+    const int64_t entries_before = metrics->staros_shard_info_fallback_cache_entries.value();
+    const int64_t handoff_entries_before = metrics->lake_tablet_location_handoff_entries.value();
+    {
+        auto info = make_s3_shard_info(10001, "s3://test_bucket/db/tbl/p10", 1);
+        RemoteCountingStarOSWorker worker;
+        EXPECT_CALL(worker, _fetch_shard_info_from_remote(10001)).WillOnce(::testing::Return(info));
+
+        auto first = worker.retrieve_shard_info(10001);
+        ASSERT_TRUE(first.ok()) << first.status();
+        EXPECT_TRUE(worker.has_borrowed_shard_info(10001));
+        // Kept apart from the owned shards, like a handed-over one.
+        EXPECT_TRUE(absl::IsNotFound(worker.get_shard_info(10001).status()));
+        auto second = worker.retrieve_shard_info(10001);
+        ASSERT_TRUE(second.ok()) << second.status();
+        EXPECT_EQ("42", second->properties.at("indexId"));
+
+        auto fs1 = worker.get_shard_filesystem(10001, {});
+        ASSERT_TRUE(fs1.ok()) << fs1.status();
+        auto fs2 = worker.get_shard_filesystem(10001, {});
+        ASSERT_TRUE(fs2.ok()) << fs2.status();
+        EXPECT_EQ(fs1->get(), fs2->get());
+
+        EXPECT_EQ(hits_before + 3, metrics->staros_shard_info_fallback_cache_hits_total.value());
+        EXPECT_EQ(handoff_hits_before, metrics->lake_tablet_location_handoff_hits_total.value());
+        EXPECT_EQ(entries_before + 1, metrics->staros_shard_info_fallback_cache_entries.value());
+        EXPECT_EQ(handoff_entries_before, metrics->lake_tablet_location_handoff_entries.value());
+    }
+    EXPECT_EQ(entries_before, metrics->staros_shard_info_fallback_cache_entries.value());
+}
+
+// The filesystem built for the first file under a tablet the node does not own is kept with the shard
+// info, so the next file reuses both.
+TEST_F(StarOSWorkerTest, fetched_filesystem_is_reused) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+    RemoteCountingStarOSWorker worker;
+    EXPECT_CALL(worker, _fetch_shard_info_from_remote(10101))
+            .WillOnce(::testing::Return(make_s3_shard_info(10101, "s3://test_bucket/db/tbl/p101", 1)));
+    auto first = worker.get_shard_filesystem(10101, {});
+    ASSERT_TRUE(first.ok()) << first.status();
+    auto second = worker.get_shard_filesystem(10101, {});
+    ASSERT_TRUE(second.ok()) << second.status();
+    EXPECT_EQ(first->get(), second->get());
+    ASSERT_TRUE(worker.retrieve_shard_info(10101).ok());
+}
+
+// The entry lives for lake_shard_info_fallback_cache_ttl_sec as set when it is kept.
+TEST_F(StarOSWorkerTest, fetched_shard_info_expires_after_the_configured_ttl) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 7);
+    RemoteCountingStarOSWorker worker;
+    EXPECT_CALL(worker, _fetch_shard_info_from_remote(10201))
+            .WillOnce(::testing::Return(make_s3_shard_info(10201, "s3://test_bucket/db/tbl/p102", 1)));
+    const int64_t now = MonotonicSeconds();
+    ASSERT_TRUE(worker.retrieve_shard_info(10201).ok());
+    auto* handle = worker._borrowed_cache->lookup(CacheKey(std::to_string(10201)));
+    ASSERT_NE(nullptr, handle);
+    DeferOp release([&] { worker._borrowed_cache->release(handle); });
+    const auto* value = static_cast<const StarOSWorker::BorrowedShardInfo*>(worker._borrowed_cache->value(handle));
+    EXPECT_TRUE(value->fetched);
+    EXPECT_GE(value->expire_at_sec, now + 7);
+    EXPECT_LE(value->expire_at_sec, MonotonicSeconds() + 7);
+}
+
+// 0 keeps nothing, and stops using what was kept before: every lookup asks starmgr, as it always did.
+TEST_F(StarOSWorkerTest, fetched_shard_info_unused_while_the_ttl_is_zero) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+    auto info = make_s3_shard_info(10301, "s3://test_bucket/db/tbl/p103", 1);
+    RemoteCountingStarOSWorker worker;
+    EXPECT_CALL(worker, _fetch_shard_info_from_remote(10301)).Times(3).WillRepeatedly(::testing::Return(info));
+    ASSERT_TRUE(worker.retrieve_shard_info(10301).ok());
+    ASSERT_TRUE(worker.has_borrowed_shard_info(10301));
+    {
+        SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 0);
+        EXPECT_FALSE(worker.has_borrowed_shard_info(10301));
+        ASSERT_TRUE(worker.retrieve_shard_info(10301).ok());
+        ASSERT_TRUE(worker.retrieve_shard_info(10301).ok());
+
+        RemoteCountingStarOSWorker other;
+        EXPECT_CALL(other, _fetch_shard_info_from_remote(10301)).WillOnce(::testing::Return(info));
+        ASSERT_TRUE(other.retrieve_shard_info(10301).ok());
+        SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+        EXPECT_FALSE(other.has_borrowed_shard_info(10301));
+    }
+    // The entry kept before is still there and usable again.
+    EXPECT_TRUE(worker.has_borrowed_shard_info(10301));
+}
+
+// A fetched copy never stands in for an owned shard: none is kept for a shard the RPC itself got
+// assigned here, and one kept before goes away once the shard is assigned here.
+TEST_F(StarOSWorkerTest, fetched_shard_info_never_shadows_an_owned_shard) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+    auto& entries = StarOSWorkerMetrics::instance()->staros_shard_info_fallback_cache_entries;
+    const int64_t base = entries.value();
+    auto info = make_s3_shard_info(10501, "s3://test_bucket/db/tbl/p105", 1);
+    {
+        RemoteCountingStarOSWorker worker;
+        EXPECT_CALL(worker, _fetch_shard_info_from_remote(10501)).WillOnce(::testing::Return(info));
+        ASSERT_TRUE(worker.retrieve_shard_info(10501).ok());
+        EXPECT_EQ(base + 1, entries.value());
+        ASSERT_TRUE(worker.add_shard(info).ok());
+        EXPECT_FALSE(worker.has_borrowed_shard_info(10501));
+        EXPECT_EQ(base, entries.value());
+    }
+    {
+        RemoteCountingStarOSWorker worker;
+        EXPECT_CALL(worker, _fetch_shard_info_from_remote(10502)).WillOnce([&](staros::starlet::ShardId id) {
+            auto assigned = make_s3_shard_info(id, "s3://test_bucket/db/tbl/p105", 1);
+            EXPECT_TRUE(worker.add_shard(assigned).ok());
+            return absl::StatusOr<staros::starlet::ShardInfo>(assigned);
+        });
+        ASSERT_TRUE(worker.retrieve_shard_info(10502).ok());
+        EXPECT_FALSE(worker.has_borrowed_shard_info(10502));
+        EXPECT_EQ(base, entries.value());
+    }
+}
+
+// The filesystem cache can replace or expire the entry of a kept filesystem's key (its own TTL, LRU
+// eviction, an owner's invalidation). The next lookup must then keep the filesystem it rebuilds, and
+// releasing the old key must not erase the new entry; otherwise every later lookup builds another one.
+TEST_F(StarOSWorkerTest, kept_filesystem_survives_a_replaced_fs_cache_entry) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+    // A released key erases its entry through the global worker.
+    auto origin = get_staros_worker();
+    auto worker = std::make_shared<RemoteCountingStarOSWorker>();
+    set_staros_worker_for_test(worker);
+    DeferOp restore([&] { set_staros_worker_for_test(origin); });
+    EXPECT_CALL(*worker, _fetch_shard_info_from_remote(10801))
+            .WillOnce(::testing::Return(make_s3_shard_info(10801, "s3://test_bucket/db/tbl/p108", 1)));
+    auto first = worker->get_shard_filesystem(10801, {});
+    ASSERT_TRUE(first.ok()) << first.status();
+
+    std::shared_ptr<std::string> kept_key;
+    {
+        auto* handle = worker->_borrowed_cache->lookup(CacheKey(std::to_string(10801)));
+        ASSERT_NE(nullptr, handle);
+        DeferOp release([&] { worker->_borrowed_cache->release(handle); });
+        kept_key = static_cast<const StarOSWorker::BorrowedShardInfo*>(worker->_borrowed_cache->value(handle))
+                           ->fs_cache_key;
+    }
+    ASSERT_TRUE(worker->is_live_fs_cache_key(kept_key));
+    // Another key takes the entry over and then goes away, as when the cache expires or evicts it.
+    auto other_key = worker->insert_fs_cache(*kept_key, *first);
+    ASSERT_NE(nullptr, other_key);
+    EXPECT_FALSE(worker->is_live_fs_cache_key(kept_key));
+    other_key.reset();
+    kept_key.reset();
+
+    auto rebuilt = worker->get_shard_filesystem(10801, {});
+    ASSERT_TRUE(rebuilt.ok()) << rebuilt.status();
+    auto reused = worker->get_shard_filesystem(10801, {});
+    ASSERT_TRUE(reused.ok()) << reused.status();
+    EXPECT_EQ(rebuilt->get(), reused->get());
+}
+
+TEST_F(StarOSWorkerTest, failed_fetch_is_not_kept) {
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+    RemoteCountingStarOSWorker worker;
+    EXPECT_CALL(worker, _fetch_shard_info_from_remote(10601))
+            .Times(2)
+            .WillRepeatedly(::testing::Return(absl::UnavailableError("starmgr unavailable")));
+    EXPECT_FALSE(worker.retrieve_shard_info(10601).ok());
+    EXPECT_FALSE(worker.has_borrowed_shard_info(10601));
+    EXPECT_FALSE(worker.get_shard_filesystem(10601, {}).ok());
+}
+
+// Only a filesystem built with the default configuration is kept and handed out again. One asked for
+// with extra configuration, as `new_fs_starlet`'s raw-path mode does, still reuses the kept shard info
+// but gets a filesystem built with that configuration, and never leaks it to a default lookup.
+TEST_F(StarOSWorkerTest, fetched_filesystem_with_extra_configuration_is_not_kept) {
+    staros::starlet::fslib::register_builtin_filesystems();
+    SCOPED_UPDATE(int64_t, config::lake_shard_info_cache_ttl_sec, 60);
+    RemoteCountingStarOSWorker worker;
+    EXPECT_CALL(worker, _fetch_shard_info_from_remote(10701))
+            .WillOnce(::testing::Return(make_s3_shard_info(10701, "s3://test_bucket/db/tbl/p107", 1)));
+    StarOSWorker::Configuration raw_path;
+    raw_path[staros::starlet::fslib::kS3UseRawPathWithScheme] = "true";
+    auto raw = worker.get_shard_filesystem(10701, raw_path);
+    ASSERT_TRUE(raw.ok()) << raw.status();
+    EXPECT_TRUE(worker.has_borrowed_shard_info(10701));
+    auto plain = worker.get_shard_filesystem(10701, {});
+    ASSERT_TRUE(plain.ok()) << plain.status();
+    EXPECT_NE(raw->get(), plain->get());
+    auto raw_again = worker.get_shard_filesystem(10701, raw_path);
+    ASSERT_TRUE(raw_again.ok()) << raw_again.status();
+    EXPECT_NE(plain->get(), raw_again->get());
+}
+
 TEST_F(StarOSWorkerTest, test_fallback_metric_not_incremented_on_cache_hit) {
     auto* metrics = StarOSWorkerMetrics::instance();
     int64_t before_total = metrics->staros_shard_info_fallback_total.value();
@@ -462,7 +1077,7 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     });
 
     auto worker = std::make_shared<StarOSWorker>();
-    auto starlet = std::make_unique<staros::starlet::Starlet>(worker);
+    auto starlet = std::make_shared<staros::starlet::Starlet>(worker);
     auto* starlet_ptr = starlet.get();
     (void)swap_starlet_for_test(std::move(starlet));
     staros::starlet::StarletConfig config;
@@ -571,6 +1186,75 @@ TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup
     EXPECT_EQ(9L << 20, FLAGS_fslib_gs_max_single_part_size);
     EXPECT_EQ(10L << 20, FLAGS_fslib_azure_storage_max_single_part_size);
     EXPECT_EQ(11L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
+}
+
+// s3_multipart_equal_part_size is shared with the BE S3 filesystem, so it has no `starlet_` prefix,
+// but it reaches starlet through the same startup hook as the thresholds above.
+TEST_F(StarOSWorkerTest, s3_multipart_equal_part_size_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+
+    auto configs = config::list_configs();
+    auto it = std::find_if(configs.begin(), configs.end(),
+                           [](const config::ConfigInfo& info) { return info.name == "s3_multipart_equal_part_size"; });
+    ASSERT_NE(configs.end(), it);
+    gflags::CommandLineFlagInfo flag_info;
+    ASSERT_TRUE(gflags::GetCommandLineFlagInfo("fslib_s3_multipart_equal_part_size", &flag_info));
+    EXPECT_EQ(flag_info.default_value, it->defval);
+
+    // Start from the opposite value each time, so both directions are really assigned.
+    for (bool value : {true, false}) {
+        SCOPED_UPDATE(bool, config::s3_multipart_equal_part_size, value);
+        FLAGS_fslib_s3_multipart_equal_part_size = !value;
+        apply_starlet_upload_threshold_configs();
+        EXPECT_EQ(value, FLAGS_fslib_s3_multipart_equal_part_size);
+    }
+}
+
+// `shutdown_staros_worker()` releases the starlet runtime while an in-flight load may still be
+// walking a StarOS-backed path. Every call that reaches starlet after that must report a status
+// instead of dereferencing the released runtime. See issue #78883.
+TEST_F(StarOSWorkerTest, starlet_calls_fail_after_runtime_release) {
+    auto orig_starlet = swap_starlet_for_test(nullptr);
+    DeferOp restore_starlet([&orig_starlet] { (void)swap_starlet_for_test(std::move(orig_starlet)); });
+    ASSERT_EQ(nullptr, get_starlet());
+
+    StarOSWorker worker;
+
+    // A cache miss falls back to the remote fetch, which waits for starlet readiness. With no
+    // starlet there is nothing to wait for, so the call must give up right away rather than burn
+    // the full 5s readiness timeout.
+    MonotonicStopWatch watch;
+    watch.start();
+    EXPECT_FALSE(worker.retrieve_shard_info(987654321).ok());
+    EXPECT_LT(watch.elapsed_time(), 3L * 1000 * 1000 * 1000);
+}
+
+// `shutdown_staros_worker()` drops the process-wide starlet reference while an in-flight operation
+// may still be using it. The reference that operation already holds must keep the runtime alive: a
+// raw pointer would dangle across the blocking starmgr RPC behind `get_shard_info()`, and the
+// use-after-free lands in the same `Starlet::_mutex` that a point-in-time null check cannot
+// protect. See issue #78883.
+TEST_F(StarOSWorkerTest, retained_starlet_outlives_shutdown_release) {
+    auto worker = std::make_shared<StarOSWorker>();
+    auto orig_starlet = swap_starlet_for_test(std::make_shared<staros::starlet::Starlet>(worker));
+    DeferOp restore_starlet([&orig_starlet] { (void)swap_starlet_for_test(std::move(orig_starlet)); });
+
+    // An in-flight operation resolves the runtime before shutdown retires it.
+    auto held = get_starlet();
+    ASSERT_NE(nullptr, held);
+
+    {
+        // Stands in for shutdown: stop the runtime and drop the process-wide reference. `held` is
+        // the only remaining owner, so the object must survive this scope.
+        auto retired = swap_starlet_for_test(nullptr);
+        ASSERT_EQ(held.get(), retired.get());
+        retired->stop();
+    }
+    ASSERT_EQ(nullptr, get_starlet());
+
+    // Touches Starlet::_mutex, the member a use-after-free would have corrupted. Under ASAN this
+    // is what fails if the retained reference stops keeping the runtime alive.
+    EXPECT_FALSE(held->is_ready());
 }
 
 } // namespace starrocks

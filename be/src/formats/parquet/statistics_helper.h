@@ -31,6 +31,15 @@ public:
                                            const std::vector<bool>& null_pages, const TypeDescriptor& type,
                                            const ParquetField* field, const std::string& timezone);
 
+    // Decodes paired min/max values (min_values[i] and max_values[i] bound the same values) so that every value
+    // between them stays between the decoded bounds, also for a conversion that does not keep the order (see
+    // ColumnConverter::convert_min_max).
+    static Status decode_min_max_into_columns(const MutableColumnPtr& min_column, const MutableColumnPtr& max_column,
+                                              const std::vector<std::string>& min_values,
+                                              const std::vector<std::string>& max_values,
+                                              const std::vector<bool>& null_pages, const TypeDescriptor& type,
+                                              const ParquetField* field, const std::string& timezone);
+
     // get min/max value from row group stats
     static Status get_min_max_value(const FileMetaData* file_meta_data, const TypeDescriptor& type,
                                     const tparquet::ColumnMetaData* column_meta, const ParquetField* field,
@@ -38,13 +47,6 @@ public:
 
     static bool has_correct_min_max_stats(const FileMetaData* file_metadata,
                                           const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order);
-
-    // `null_count` is a summary the writer accumulates alongside the definition levels, not
-    // something derived from them, so a writer can get it wrong while the levels stay right. We
-    // already refuse min/max from writers known to compute statistics incorrectly; ask the same
-    // question about `null_count`, which used to bypass that judgement entirely and reach zone
-    // map, page index and bloom filter pruning unchecked.
-    static bool has_correct_null_count(const FileMetaData* file_metadata);
 };
 
 } // namespace starrocks::parquet

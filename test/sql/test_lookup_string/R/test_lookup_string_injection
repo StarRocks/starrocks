@@ -1,0 +1,32 @@
+-- name: test_lookup_string_injection
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t_dict(k string, v string) primary key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');
+-- result:
+-- !result
+insert into t_dict values ('k1', 'real-value-1'), ('O''Brien', 'v_ob');
+-- result:
+-- !result
+select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+-- result:
+real-value-1
+-- !result
+select lookup_string('db_${uuid0}.t_dict', 'O''Brien', 'v');
+-- result:
+v_ob
+-- !result
+select lookup_string('db_${uuid0}.t_dict', 'zzz'' union select ''INJECTED'' as x -- ', 'v');
+-- result:
+None
+-- !result
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k1', 'no_such_col')", "Unknown column 'no_such_col'")
+-- result:
+None
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

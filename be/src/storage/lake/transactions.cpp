@@ -14,10 +14,17 @@
 
 #include "storage/lake/transactions.h"
 
+#include <bvar/bvar.h>
+
+#include <thread>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
@@ -25,6 +32,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -32,7 +40,6 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "storage/storage_env.h"
 
@@ -48,7 +55,18 @@ ParallelSet<int64_t> tablet_txns;
 // the situation happens in create rollup.
 const int64_t EMPTY_TXNLOG_TXNID = -1;
 
+// Tablet publishes of a retry answered by metadata already in storage instead of a full re-apply. A retry
+// round that converges shows this rising while the publish latency falls.
+bvar::Adder<int64_t> g_publish_skipped_durable_new_version("lake_publish_version_skipped_durable");
+// Tablet publishes of a retry answered by the tablet's partial_meta (see lake_enable_publish_partial_meta).
+bvar::Adder<int64_t> g_publish_skipped_by_partial_meta("lake_publish_skipped_by_partial_meta");
+
 } // namespace
+
+// Makes each tablet publish that applies its txns last 15 s longer, past a 10 s lake_publish_version_timeout_ms plus
+// the 3 s after which the result is kept as its partial_meta, while a retry that reads the kept result stays fast.
+// Lets a test make a node's tablets finish after the aggregator stopped waiting for them.
+DEFINE_FAIL_POINT(lake_publish_tablet_delay_past_timeout);
 
 namespace starrocks::lake {
 
@@ -71,7 +89,7 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
         if (!txn_slog_or.status().is_not_found()) {
             LOG(WARNING) << "Fail to get txn slog " << slog_path << ": " << txn_slog_or.status();
 
-            tablet_mgr->metacache()->erase(slog_path);
+            tablet_mgr->metacache()->erase(MetacacheKey::txn_log(slog_path));
             files_to_delete->emplace_back(std::move(slog_path));
         }
         return;
@@ -81,7 +99,7 @@ static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t table
         (void)StorageEnv::GetInstance()->lake_replication_txn_manager()->clear_snapshots(txn_slog);
     });
 
-    tablet_mgr->metacache()->erase(slog_path);
+    tablet_mgr->metacache()->erase(MetacacheKey::txn_log(slog_path));
     files_to_delete->emplace_back(std::move(slog_path));
 }
 
@@ -89,9 +107,9 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
                              const std::span<const TxnInfoPB>& txns) {
     int64_t version = base_version;
 
-    auto index_version = tablet_mgr->update_mgr()->get_primary_index_data_version(tablet_id);
+    auto index_version = tablet_mgr->primary_key_mgr()->get_primary_index_data_version(tablet_id);
     if (index_version > new_version) {
-        tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+        tablet_mgr->primary_key_mgr()->unload_and_remove_primary_index(tablet_id);
         return version;
     }
     if (index_version > version) {
@@ -110,7 +128,7 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
         if (res.ok()) {
             version = index_version;
         } else {
-            tablet_mgr->update_mgr()->unload_and_remove_primary_index(tablet_id);
+            tablet_mgr->primary_key_mgr()->unload_and_remove_primary_index(tablet_id);
         }
     }
 
@@ -154,6 +172,13 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
                     return txn_log.status();
                 }
             }
+            // A statement writes txn logs only for the tablets it loads, so a load id without a log is expected.
+            // A tablet without any log is not: FE commits a partition only after all of its tablets finished
+            // loading. Report it like a missing single txn log rather than let the caller apply no statement.
+            if (txn_logs.empty()) {
+                return Status::NotFound(fmt::format("no txn log of tablet {} for any of the {} load ids of txn {}",
+                                                    tablet_id, txn_info.load_ids_size(), txn_info.txn_id()));
+            }
             continue;
         } else if (!txn_info.combined_txn_log()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
@@ -162,7 +187,7 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
             continue;
         } else {
             auto cache_key = tablet_mgr->txn_log_location(tablet_id, txn_info.txn_id());
-            auto ptr = tablet_mgr->metacache()->lookup_txn_log(cache_key);
+            auto ptr = tablet_mgr->metacache()->lookup_txn_log(MetacacheKey::txn_log(cache_key));
             if (ptr) {
                 txn_logs.push_back(ptr);
                 continue;
@@ -171,8 +196,17 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
             ASSIGN_OR_RETURN(auto combined_log, tablet_mgr->get_combined_txn_log(log_path, true));
             for (const auto& log : combined_log->txn_logs()) {
                 if (log.tablet_id() == tablet_id) {
+                    if (!txn_logs.empty()) {
+                        // A combined log holds at most one entry per tablet. Under multi-node write several
+                        // nodes each produce a partial log for the same tablet and the sender folds them
+                        // into one before writing this file (see merge_multi_node_write_txn_log); a second
+                        // entry means the fold missed a node, so applying just the first would silently
+                        // drop that node's rows. Fail the publish instead.
+                        return Status::Corruption(
+                                fmt::format("combined txn log of txn {} contains more than one txn log for tablet {}",
+                                            txn_info.txn_id(), tablet_id));
+                    }
                     txn_logs.push_back(std::make_shared<TxnLogPB>(log));
-                    break;
                 }
             }
             if (txn_logs.empty()) {
@@ -264,17 +298,112 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
     return schema_change_log;
 }
 
-StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
-                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata, int64_t fe_built_version) {
+// Returns the metadata of |new_version| when an earlier attempt already published it on this node, or nullptr
+// when this request has to apply its txns.
+//
+// The metacache answers first. Its entry is evictable, and so is the primary index data version consulted by
+// cal_new_base_version(); once they are gone, a retry of a publish that already finished here would replay every
+// txn log and, for a primary key table, reload the index, only to rebuild a version that is already written. So a
+// retry (FE sets is_retry_publish when an earlier attempt was sent and did not finish) also asks storage -- the
+// datacache or object storage -- at the cost of one read. A first attempt, where new_version cannot exist yet, does
+// not.
+static StatusOr<TabletMetadataPtr> lookup_published_new_version(TabletManager* tablet_mgr,
+                                                                const PublishTabletInfo& tablet_info,
+                                                                int64_t base_version, int64_t new_version,
+                                                                std::span<const TxnInfoPB> txns,
+                                                                bool skip_write_tablet_metadata,
+                                                                int64_t fe_built_version, bool is_retry_publish) {
+    auto tablet_id = tablet_info.get_tablet_id_in_metadata();
+    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
+    // If any txn in this batch is marked as no-op publish (admin escape hatch),
+    // a stale "V meta with txn data" left from a previous publish attempt could
+    // leak through the metacache. Actively erase the new_version entry for this
+    // tablet so that:
+    //   (a) the caller falls into the normal publish path which recomputes the
+    //       metadata from base_version and writes the no-op result;
+    //   (b) any concurrent reader (defensive: FE should not direct reads at a
+    //       not-yet-visible version, but mutex-free callers can race) gets a
+    //       clean cache miss rather than the stale entry;
+    //   (c) if this no-op publish itself fails, the cache is left in a clean
+    //       "no V entry" state instead of carrying poisoned data into the next
+    //       retry.
+    if (std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.no_op_publish(); })) {
+        tablet_mgr->metacache()->erase(MetacacheKey::tablet_metadata(new_metadata_path));
+        return nullptr;
+    }
+    if (auto cached_new_metadata =
+                tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(new_metadata_path));
+        cached_new_metadata != nullptr) {
+        // The retries may be caused by some tablets failing to publish in a partition
+        // set the following log as debug log to prevent excessive logging
+        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_info=" << tablet_info
+                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
+        return cached_new_metadata;
+    }
+    // Metadata at new_version attests that the VERSION was written, not that THIS request's instructions were
+    // carried out. A requested primary index rebuild reaches the apply path only through new_txn_log_applier() and
+    // is encoded in neither new_version nor its gtid, so it never takes the shortcut. |fe_built_version| is honoured
+    // by inspecting the stored metadata: if a vector index build finished after the first attempt, the stored
+    // watermark is older and the apply has to persist the newer one.
+    if (!is_retry_publish ||
+        std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.rebuild_pindex(); })) {
+        return nullptr;
+    }
+    // Under file bundling the version's bundle is written only after every tablet of the partition succeeded,
+    // so a tablet that finished in an earlier attempt on this node finds its result in its partial_meta, kept in
+    // this node's local disk cache. Checked before the stored version below because it is a local read.
+    if (skip_write_tablet_metadata && config::lake_enable_publish_partial_meta) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("check_partial_meta_latency_us");
+        auto partial_metadata = tablet_mgr->get_partial_tablet_metadata(tablet_id, new_version, txns.back().gtid());
+        if (partial_metadata.ok() && (*partial_metadata)->version() == new_version &&
+            (*partial_metadata)->vector_index_built_version() >= fe_built_version) {
+            g_publish_skipped_by_partial_meta << 1;
+            VLOG(1) << "Skipped publish version because the tablet's partial_meta has it. tablet_info=" << tablet_info
+                    << " base_version=" << base_version << " new_version=" << new_version;
+            // Like the result of an apply under file bundling: cached for the aggregator's next attempt.
+            RETURN_IF_ERROR(tablet_mgr->cache_tablet_metadata(*partial_metadata));
+            tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
+            return std::move(partial_metadata).value();
+        }
+    }
+    StatusOr<TabletMetadataPtr> durable_new_metadata;
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("check_durable_new_version_latency_us");
+        // skip_meta_cache for the same reason as in cal_new_base_version(): a metacache hit proves only that some
+        // attempt cached the metadata, not that it was written. Not filled into the metacache here: a version
+        // rejected below must not be there, or the next retry would take it from the cache if the re-apply fails.
+        durable_new_metadata = tablet_mgr->get_tablet_metadata(
+                tablet_id, new_version,
+                CacheOptions{.fill_meta_cache = false, .fill_data_cache = false, .skip_meta_cache = true},
+                txns.back().gtid());
+    }
+    if (!durable_new_metadata.ok() || (*durable_new_metadata)->vector_index_built_version() < fe_built_version) {
+        return nullptr;
+    }
+    tablet_mgr->metacache()->cache_tablet_metadata(MetacacheKey::tablet_metadata(new_metadata_path),
+                                                   *durable_new_metadata);
+    g_publish_skipped_durable_new_version << 1;
+    // Debug level like the metacache shortcut above: a retry of a large partition skips every tablet it already
+    // published, so INFO would log one line per tablet while the cluster recovers.
+    VLOG(1) << "Skipped publish version because target metadata is already written. tablet_info=" << tablet_info
+            << " base_version=" << base_version << " new_version=" << new_version;
+    return std::move(durable_new_metadata).value();
+}
+
+static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                                      int64_t base_version, int64_t new_version,
+                                                      std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
+                                                      int64_t fe_built_version, InitialMetadataOrder base_version_order,
+                                                      bool is_retry_publish) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
         // means there is no txnlog and need to increase version number,
         // just return tablet metadata of base_version.
         DCHECK_EQ(new_version, base_version + 1);
-        ASSIGN_OR_RETURN(auto metadata,
-                         tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version));
+        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(
+                                                tablet_info.get_tablet_id_in_metadata(), base_version, CacheOptions{},
+                                                /*expected_gtid=*/0, /*fs=*/nullptr, base_version_order));
 
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
@@ -309,32 +438,11 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     VLOG(2) << "publish version tablet_info: " << tablet_info << ", txns: " << txns
             << ", base_version: " << base_version << ", new_version: " << new_version;
 
-    // If any txn in this batch is marked as no-op publish (admin escape hatch),
-    // a stale "V meta with txn data" left from a previous publish attempt could
-    // leak through the metacache. Actively erase the new_version entry for this
-    // tablet so that:
-    //   (a) the lookup below returns null and we fall into the normal publish
-    //       path which recomputes the metadata from base_version and writes the
-    //       no-op result;
-    //   (b) any concurrent reader (defensive: FE should not direct reads at a
-    //       not-yet-visible version, but mutex-free callers can race) gets a
-    //       clean cache miss rather than the stale entry;
-    //   (c) if this no-op publish itself fails, the cache is left in a clean
-    //       "no V entry" state instead of carrying poisoned data into the next
-    //       retry.
-    bool has_no_op_publish_in_batch =
-            std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.no_op_publish(); });
-    auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_info.get_tablet_id_in_metadata(), new_version);
-    if (has_no_op_publish_in_batch) {
-        tablet_mgr->metacache()->erase(new_metadata_path);
-    }
-    auto cached_new_metadata = tablet_mgr->metacache()->lookup_tablet_metadata(new_metadata_path);
-    if (cached_new_metadata != nullptr && !has_no_op_publish_in_batch) {
-        // The retries may be caused by some tablets failing to publish in a partition
-        // set the following log as debug log to prevent excessive logging
-        VLOG(1) << "Skipped publish version because target metadata found in cache. tablet_info=" << tablet_info
-                << " base_version=" << base_version << " new_version=" << new_version << " txns=" << txns;
-        return std::move(cached_new_metadata);
+    ASSIGN_OR_RETURN(auto published,
+                     lookup_published_new_version(tablet_mgr, tablet_info, base_version, new_version, txns,
+                                                  skip_write_tablet_metadata, fe_built_version, is_retry_publish));
+    if (published != nullptr) {
+        return published;
     }
 
     auto new_version_metadata_or_error = [=](const Status& error) -> StatusOr<TabletMetadataPtr> {
@@ -370,7 +478,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     // keep it from hiding inside the overall publish cost.
     auto base_metadata_or = [&] {
         TRACE_COUNTER_SCOPE_LATENCY_US("get_base_metadata_latency_us");
-        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version,
+                                               CacheOptions{.fill_meta_cache = false, .fill_data_cache = false},
+                                               /*expected_gtid=*/0, /*fs=*/nullptr, base_version_order);
     }();
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
@@ -578,7 +688,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                             // because tablet meta may not be written successfully, and may need to reapply the txn log.
                             files_to_delete.emplace_back(tablet_log_path);
                         }
-                        tablet_mgr->metacache()->erase(tablet_log_path);
+                        tablet_mgr->metacache()->erase(MetacacheKey::txn_log(tablet_log_path));
                     }
                 }
                 continue;
@@ -604,7 +714,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                     files_to_delete.emplace_back(tablet_log_path);
                 }
 
-                tablet_mgr->metacache()->erase(tablet_log_path);
+                tablet_mgr->metacache()->erase(MetacacheKey::txn_log(tablet_log_path));
             }
 
             // Clear remote snapshot and slog for replication txn
@@ -646,7 +756,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                         files_to_delete.emplace_back(vlog_path);
                     }
 
-                    tablet_mgr->metacache()->erase(vlog_path);
+                    tablet_mgr->metacache()->erase(MetacacheKey::txn_log(vlog_path));
                 }
             }
         }
@@ -672,7 +782,29 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
 
     delete_files_async(std::move(files_to_delete));
 
+    FAIL_POINT_TRIGGER_EXECUTE(lake_publish_tablet_delay_past_timeout,
+                               { std::this_thread::sleep_for(std::chrono::seconds(15)); });
     return new_metadata;
+}
+
+StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
+                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
+                                            InitialMetadataOrder base_version_order, bool is_retry_publish) {
+    auto res = do_publish_version(tablet_mgr, tablet_info, base_version, new_version, txns, skip_write_tablet_metadata,
+                                  fe_built_version, base_version_order, is_retry_publish);
+    // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
+    // applier has already dropped this tablet's index from the cache; shrink the indexes other tablets keep so
+    // that the retry has memory to load into. Any other publish only checks the urgent level: the background
+    // evict thread does the regular trimming to primary_key_index_memory_high_percent, and this is the backstop
+    // for when the cache grows past the urgent level before that thread runs. Like that thread, it is part of
+    // the automatic eviction that enable_auto_evict_update_cache turns off.
+    if (res.status().is_mem_limit_exceeded()) {
+        tablet_mgr->primary_key_mgr()->evict_cache(config::primary_key_index_memory_middle_percent);
+    } else if (config::enable_auto_evict_update_cache) {
+        tablet_mgr->primary_key_mgr()->evict_cache(config::primary_key_index_memory_urgent_percent);
+    }
+    return res;
 }
 
 Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txn_infos,
@@ -692,8 +824,15 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             auto txn_id = txn_infos[i].txn_id();
             auto log_version = log_versions[i];
             auto expected_count = txn_infos[i].load_ids_size();
-            ASSIGN_OR_RETURN(auto txn_logs_vector, load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]));
-            auto& txn_logs = txn_logs_vector[0];
+            auto txn_logs_or = load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]);
+            // NotFound means no per-load_id file is left, the fully consumed case of the shortfall below.
+            if (!txn_logs_or.ok() && !txn_logs_or.status().is_not_found()) {
+                return txn_logs_or.status();
+            }
+            TxnLogVector txn_logs;
+            if (txn_logs_or.ok()) {
+                txn_logs = std::move(txn_logs_or.value()[0]);
+            }
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
                 // load_txn_log silently skips per-load_id files that are NotFound, so any
@@ -711,7 +850,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     for (const auto& load_id : txn_infos[i].load_ids()) {
                         auto stale_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
                         files_to_delete.emplace_back(stale_path);
-                        tablet_mgr->metacache()->erase(stale_path);
+                        tablet_mgr->metacache()->erase(MetacacheKey::txn_log(stale_path));
                     }
                     continue;
                 }
@@ -780,7 +919,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             for (const auto& load_id : txn_infos[i].load_ids()) {
                 auto txn_log_path = tablet_mgr->txn_log_location(tablet_id, txn_id, load_id);
                 files_to_delete.emplace_back(txn_log_path);
-                tablet_mgr->metacache()->erase(txn_log_path);
+                tablet_mgr->metacache()->erase(MetacacheKey::txn_log(txn_log_path));
             }
         } else if (!txn_infos[i].combined_txn_log()) {
             auto txn_id = txn_infos[i].txn_id();
@@ -803,7 +942,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                 return st;
             } else {
                 files_to_delete.emplace_back(txn_log_path);
-                tablet_mgr->metacache()->erase(txn_log_path);
+                tablet_mgr->metacache()->erase(MetacacheKey::txn_log(txn_log_path));
             }
         } else {
             ASSIGN_OR_RETURN(auto txn_logs, load_txn_log(tablet_mgr, {tablet_id}, txn_infos[i]));
@@ -835,6 +974,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_meta : txn_log.op_write().dels_meta()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
+        // pre-built persistent index sstables, one per segment (empty name = segment had no sstable)
+        for (const auto& sst : txn_log.op_write().ssts()) {
+            if (!sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+            }
+        }
         // pre-built tombstone sstables (empty name = del file had no sstable)
         for (const auto& del_sst : txn_log.op_write().del_ssts()) {
             if (!del_sst.name().empty()) {
@@ -859,6 +1004,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
             }
         }
+        // pre-built persistent index sstables of the new segments
+        for (const auto& sst : txn_log.op_compaction().ssts()) {
+            if (!sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+            }
+        }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
         for (const auto& rowset : txn_log.op_schema_change().rowsets()) {
@@ -876,6 +1027,11 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             for (const auto& del_meta : op_write.dels_meta()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
             }
+            for (const auto& sst : op_write.ssts()) {
+                if (!sst.name().empty()) {
+                    files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, sst.name()));
+                }
+            }
             for (const auto& del_sst : op_write.del_ssts()) {
                 if (!del_sst.name().empty()) {
                     files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
@@ -888,11 +1044,13 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
     // Multi-statement transactions cache the .log under the 4-segment key; use the
     // same path here so the cache entry actually drops.
     if (txn_log.has_load_id()) {
-        tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id(), txn_log.load_id()));
+        tablet_mgr->metacache()->erase(
+                MetacacheKey::txn_log(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id(), txn_log.load_id())));
     } else {
-        tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id()));
+        tablet_mgr->metacache()->erase(
+                MetacacheKey::txn_log(tablet_mgr->txn_log_location(tablet_id, txn_log.txn_id())));
     }
-    tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
+    tablet_mgr->primary_key_mgr()->try_remove_cache(tablet_id, txn_log.txn_id());
 }
 
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const TxnInfoPB> txns) {

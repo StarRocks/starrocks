@@ -83,8 +83,6 @@ GROUP_SLOW_TEST_F(ParquetCLIReaderTest, ReadAllParquetFiles) {
         unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/column_converter/byte_array.parquet");
         // Invalid argument: Duplicate field name: col1
         unsupported_paths_init.emplace("./be/test/exec/test_data/parquet_data/schema4.parquet");
-        //  Invalid argument: Map keys must be primitive type.
-        unsupported_paths_init.emplace("./be/test/formats/parquet/test_data/map_key_is_struct.parquet");
         // Not supported: parquet column reader: not supported convert from parquet `BYTE_ARRAY` to `DECIMAL128`
         unsupported_paths_init.emplace(
                 "./be/test/formats/parquet/test_data/data_with_page_index_and_bloom_filter.parquet");

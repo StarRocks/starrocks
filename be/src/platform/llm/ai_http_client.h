@@ -51,6 +51,8 @@ struct AIHttpRequest {
     // budget. Zero disables this budget; the live Query deadline remains
     // mandatory through |lifecycle|.
     int64_t request_deadline_ns = 0;
+    // Per HTTP attempt cap. Zero adds no cap; it never resets the logical budget.
+    int64_t attempt_timeout_ms = 0;
     int64_t connect_timeout_ms = 0;
     size_t max_response_bytes = 0;
     // Optional immutable DNS snapshot. Credential-bearing production callers
@@ -148,10 +150,6 @@ struct AIHttpClientOptions {
 // non-sensitive errors. Callers may validate immutable endpoint configuration
 // before constructing request state without copying a weaker parser.
 Status validate_ai_http_url(const std::string& url);
-
-// Applies the same complete URL policy while requiring HTTPS. Credential-bearing
-// callers use this boundary so secrets can never be attached to cleartext HTTP.
-Status validate_ai_https_url(const std::string& url);
 
 class AIHttpClient {
 public:

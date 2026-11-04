@@ -82,6 +82,9 @@ public:
     std::string name() const override { return "physical_split_morsel_queue"; }
     Type type() const override { return PHYSICAL_SPLIT; }
 
+    // An independent AND on the query's key-range union, applied before producing children.
+    void set_candidate_rowid_ranges(RowidRangeOptionPtr ranges) { _candidate_rowid_ranges = std::move(ranges); }
+
 private:
     bool _is_last_split_of_current_morsel();
 
@@ -118,6 +121,7 @@ private:
     SparseRangeIterator<> _segment_range_iter;
     // The number of unprocessed rows of the current segment.
     size_t _num_segment_rest_rows = 0;
+    RowidRangeOptionPtr _candidate_rowid_ranges;
 
     MemPool _mempool;
 };
@@ -149,8 +153,6 @@ private:
 
     ShortKeyOptionPtr _create_range_lower() const;
     ShortKeyOptionPtr _create_range_upper() const;
-    // Stamp the per-tablet pinned short-key-index encoding (full vs. legacy) onto a boundary option.
-    void _pin_encoding(ShortKeyOption* option) const;
     bool _valid_range(const ShortKeyOptionPtr& lower, const ShortKeyOptionPtr& upper) const;
 
     ShortKeyIndexGroupIterator _lower_bound_ordinal(const SeekTuple& key, bool lower) const;
@@ -168,16 +170,6 @@ private:
 
     bool _has_init_any_tablet = false;
     bool _is_first_split_of_tablet = true;
-
-    // Whether the current tablet's short key index stores the full, untruncated sort key.
-    // When true, boundaries are encoded with SeekTuple::full_sort_key_encode and _short_key_schema
-    // is the full sort-key schema; when false, the legacy truncated short-key codec/schema is used.
-    bool _use_full_sort_key = false;
-    // Set when the current tablet mixes short-key-index encodings across its segments and therefore
-    // cannot be logically split (a single set of raw index boundaries would be byte-incompatible with
-    // some segments). While set, try_get emits exactly ONE ordinary ScanMorsel for the tablet and
-    // then advances past it.
-    bool _tablet_unsplit = false;
 
     // Used to allocate memory for _tablet_seek_ranges.
     MemPool _mempool;

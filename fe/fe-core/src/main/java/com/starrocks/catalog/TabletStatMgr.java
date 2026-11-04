@@ -111,6 +111,12 @@ public class TabletStatMgr extends FrontendDaemon {
         }
 
         // for testing statistic behavior
+        // Also suppresses the periodic shared-file observations, not just size/row stats. The publish
+        // path (LakeTableTxnLogApplier) still applies an observation on every qualifying publish
+        // regardless of this switch, so a range table that keeps taking writes can still have its
+        // tablets proven clean. Only a tablet that receives no qualifying publish observation after an
+        // FE restart (the state is not persisted) stays unproven and blocks the merge groups it would
+        // belong to.
         if (!Config.enable_sync_tablet_stats) {
             return;
         }
@@ -366,10 +372,28 @@ public class TabletStatMgr extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
+            // Cross-publish can still add shared files to an occupied partition's existing tablets.
+            // Capture eligibility with the original tablet generation under this snapshot's READ lock.
+            // Other alter states retain the original conservative behavior.
+            boolean canObserveSharedFiles = table.getState() == OlapTable.OlapTableState.NORMAL
+                    || (table.getState() == OlapTable.OlapTableState.TABLET_RESHARD
+                    && !GlobalStateMgr.getCurrentState().getTabletReshardJobMgr()
+                            .isPhysicalPartitionReshardingLocked(table, partitionId));
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
-            List<Tablet> tablets = new ArrayList<>(partition.getLatestBaseIndex().getTablets());
-            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
+            List<Tablet> tablets = new ArrayList<>();
+            if (table.isRangeDistribution()) {
+                // Merge candidate selection considers every visible materialized index, so every one
+                // of them needs a shared-file observation. A base-index reading says nothing about a
+                // rollup's tablets: their shared state is independent.
+                for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    tablets.addAll(index.getTablets());
+                }
+            } else {
+                tablets.addAll(partition.getLatestBaseIndex().getTablets());
+            }
+            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets,
+                    canObserveSharedFiles);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
@@ -378,9 +402,33 @@ public class TabletStatMgr extends FrontendDaemon {
     @Nullable
     private CollectTabletStatJob createCollectTabletStatJob(@NotNull Database db, @NotNull OlapTable table,
                                                             @NotNull PhysicalPartition partition) {
+        // NOTE: the table-state read lives INSIDE createPartitionSnapshot's read lock (see above).
+        // OlapTable.state is not volatile (OlapTable.java:204), so reading it here -- before that lock
+        // -- would be a TOCTOU: a reshard can take the write lock, flip the state, install the children
+        // and release it between the read and the snapshot.
         PartitionSnapshot snapshot = createPartitionSnapshot(db, table, partition);
         long visibleVersionTime = snapshot.visibleVersionTime;
-        snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
+        boolean needsSharedFileState = table.isRangeDistribution();
+        // Skip a tablet only when BOTH its size statistics and (for a range table) its shared-file
+        // state are current. dataSizeUpdateTime alone is not enough: it is persisted in the image and
+        // is refreshed by the publish path, so an idle tablet whose shared-file state is unknown
+        // would otherwise never be collected again and could never become a merge candidate.
+        // Non-range tables keep the original condition: they can never be merge candidates, and
+        // making them wait for a shared-file observation would cost one redundant collection round
+        // for every tablet in the cluster after each restart or leader change.
+        snapshot.tablets.removeIf(t -> {
+            LakeTablet lakeTablet = (LakeTablet) t;
+            if (lakeTablet.getDataSizeUpdateTime() < visibleVersionTime) {
+                return false;
+            }
+            // For a range table, stop collecting only once the tablet is PROVEN clean. A tablet
+            // observed to hold shared files, paired with a fresh dataSizeUpdateTime, would otherwise
+            // skip forever -- and holding shared files is exactly the state we are waiting for
+            // compaction to clear. (Concretely: a new BE reports shared files present, then an OLD BE
+            // publishes the compaction that clears them without the field -- size becomes current, the
+            // tablet stays marked dirty, and it is never re-collected even after that BE is upgraded.)
+            return !needsSharedFileState || !lakeTablet.hasSharedFiles();
+        });
         if (snapshot.tablets.isEmpty()) {
             LOG.debug("Skipped tablet stat collection of partition {}", snapshot.debugName());
             return null;
@@ -406,15 +454,19 @@ public class TabletStatMgr extends FrontendDaemon {
         private final long visibleVersion;
         private final long visibleVersionTime;
         private final List<Tablet> tablets;
+        // Whether this partition could accept shared-file proof at snapshot time. Gates only the
+        // observation applied in CollectTabletStatJob.waitResponse, not the collection itself.
+        private final boolean canObserveSharedFiles;
 
         PartitionSnapshot(String dbName, String tableName, long partitionId, long visibleVersion,
-                          long visibleVersionTime, List<Tablet> tablets) {
+                          long visibleVersionTime, List<Tablet> tablets, boolean canObserveSharedFiles) {
             this.dbName = dbName;
             this.tableName = tableName;
             this.partitionId = partitionId;
             this.visibleVersion = visibleVersion;
             this.visibleVersionTime = visibleVersionTime;
             this.tablets = Objects.requireNonNull(tablets);
+            this.canObserveSharedFiles = canObserveSharedFiles;
         }
 
         private String debugName() {
@@ -431,6 +483,7 @@ public class TabletStatMgr extends FrontendDaemon {
         private long collectStatTime = 0;
         private List<Future<TabletStatResponse>> responseList;
         private final ComputeResource computeResource;
+        private final boolean canObserveSharedFiles;
 
         CollectTabletStatJob(PartitionSnapshot snapshot, ComputeResource computeResource) {
             this.dbName = Objects.requireNonNull(snapshot.dbName, "dbName is null");
@@ -442,6 +495,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 this.tablets.put(tablet.getId(), tablet);
             }
             this.computeResource = computeResource;
+            this.canObserveSharedFiles = snapshot.canObserveSharedFiles;
         }
 
         void execute() {
@@ -515,6 +569,13 @@ public class TabletStatMgr extends FrontendDaemon {
                             // so the requested version is exactly what the numbers describe.
                             tablet.setRowCount(stat.numRows, version);
                             tablet.setDataSizeUpdateTime(collectStatTime);
+                            // Use the original generation's eligibility: an occupied target's next
+                            // cross-publish could invalidate a clean report before merge consumes it.
+                            // See LakeTablet#observeSharedFiles(Boolean): an absent field cannot
+                            // sustain a previous proof, so it clears it the same as a dirty report.
+                            if (canObserveSharedFiles) {
+                                tablet.observeSharedFiles(stat.hasSharedFiles);
+                            }
                         }
                     }
                 } catch (InterruptedException e) {

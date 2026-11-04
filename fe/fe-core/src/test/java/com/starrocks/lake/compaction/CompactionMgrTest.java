@@ -220,6 +220,60 @@ public class CompactionMgrTest {
     }
 
     @Test
+    public void testRepeatedUnshareTriggerKeepsRetryDeadline() {
+        String oldSelector = Config.lake_compaction_selector;
+        Config.lake_compaction_selector = "ScoreSelector";
+        try {
+            CompactionMgr compactionManager = new CompactionMgr();
+            PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+            compactionManager.triggerUnshareCompaction(partition);
+            Assertions.assertEquals(1, compactionManager.choosePartitionsToCompact(new HashSet<>()).size());
+
+            // The scheduler defers the pending UNSHARE (e.g. its request could not be sent). SplitTabletJob keeps
+            // re-triggering it on every reshard tick, which must not erase the retry deadline.
+            compactionManager.enableCompactionAfter(partition, 60_000);
+            compactionManager.triggerUnshareCompaction(partition);
+            Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
+                    compactionManager.getStatistics(partition).getPriority());
+            Assertions.assertTrue(compactionManager.choosePartitionsToCompact(new HashSet<>()).isEmpty());
+
+            // Once the request is dropped back to DEFAULT, the next trigger is a new request and runs at once.
+            compactionManager.resetPriority(partition);
+            compactionManager.triggerUnshareCompaction(partition);
+            Assertions.assertEquals(1, compactionManager.choosePartitionsToCompact(new HashSet<>()).size());
+        } finally {
+            Config.lake_compaction_selector = oldSelector;
+        }
+    }
+
+    @Test
+    public void testTriggerClearsRetryDeadline() {
+        String oldSelector = Config.lake_compaction_selector;
+        Config.lake_compaction_selector = "ScoreSelector";
+        try {
+            CompactionMgr compactionManager = new CompactionMgr();
+            PartitionIdentifier manual = new PartitionIdentifier(1, 2, 3);
+            PartitionIdentifier unshare = new PartitionIdentifier(1, 2, 4);
+            for (PartitionIdentifier partition : List.of(manual, unshare)) {
+                compactionManager.handleLoadingFinished(partition, 1, System.currentTimeMillis(),
+                        Quantiles.compute(Lists.newArrayList(1d)));
+                compactionManager.enableCompactionAfter(partition, 60_000);
+            }
+
+            // A new manual or UNSHARE request runs on the next cycle even while the partition is cooling down.
+            compactionManager.triggerManualCompaction(manual);
+            compactionManager.triggerUnshareCompaction(unshare);
+            Set<PartitionIdentifier> chosen = new HashSet<>();
+            for (PartitionStatisticsSnapshot snapshot : compactionManager.choosePartitionsToCompact(new HashSet<>())) {
+                chosen.add(snapshot.getPartition());
+            }
+            Assertions.assertEquals(Set.of(manual, unshare), chosen);
+        } finally {
+            Config.lake_compaction_selector = oldSelector;
+        }
+    }
+
+    @Test
     public void testExistCompaction() {
         long txnId = 11111;
         CompactionMgr compactionManager = new CompactionMgr();

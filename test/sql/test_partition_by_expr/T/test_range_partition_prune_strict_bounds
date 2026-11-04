@@ -1,0 +1,42 @@
+-- name: test_range_partition_prune_strict_bounds
+-- Guards the bounds the rewrite must NOT loosen. A range predicate maps onto a partition expression
+-- by keeping its comparison operator, and loosening one that did not need it costs more than the
+-- pruning it buys: OptOlapPartitionPruner.prunePartitionPredicates reads a bound that meets the last
+-- selected partition's range end as implying the predicate and drops the predicate entirely, so rows
+-- the predicate rejects come back in the result.
+set time_zone = 'Asia/Shanghai';
+CREATE TABLE t_guard_ms (
+        dt bigint NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(dt, id)
+PARTITION BY RANGE(from_unixtime_ms(dt))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_guard_ms values (1609430400000,1),(1609689600000,4),(1609689600500,5),(1609776000000,6);
+-- ">" keeps its strict bound even though from_unixtime_ms() plateaus. The partition holding f(c)
+-- spans [lo, hi) with f(c) < hi, so it meets (f(c), +inf) and survives a strict lower bound anyway --
+-- widening buys nothing and would drop the predicate, letting 1609689600000 back into the result.
+select dt, id from t_guard_ms where dt > 1609689600500 order by id;
+function: assert_explain_contains('select dt from t_guard_ms where dt > 1609689600500', 'PREDICATES: 1: dt > 1609689600500')
+select dt, id from t_guard_ms where not (dt > 1609689600500) order by id;
+-- "<=" and equality are already sound and must not move either
+select dt, id from t_guard_ms where dt <= 1609689600500 order by id;
+select dt, id from t_guard_ms where dt = 1609689600000;
+
+-- str2date() keeps its strict bound too, so ordinary data still prunes as tightly as it did.
+CREATE TABLE t_guard_s2d (
+        b varchar(32) NOT NULL,
+        id int NULL
+)
+DUPLICATE KEY(b, id)
+PARTITION BY RANGE(str2date(b, '%Y%m%d'))
+(START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY))
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+insert into t_guard_s2d values ('20210101',1),('20210104',4),('20210105',5);
+select b, id from t_guard_s2d where b < '20210104' order by id;
+function: assert_explain_contains("select b from t_guard_s2d where b < '20210104'", "partitions=1/9")
+select b, id from t_guard_s2d where b >= '20210104' order by id;
+select b, id from t_guard_s2d where b = '20210104';

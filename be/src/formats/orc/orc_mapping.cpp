@@ -15,6 +15,7 @@
 #include "formats/orc/orc_mapping.h"
 
 #include "common/statusor.h"
+#include "gutil/strings/numbers.h"
 
 namespace starrocks {
 
@@ -36,8 +37,9 @@ void OrcMapping::clear() {
 }
 
 void OrcMapping::add_mapping(size_t original_pos_in_table_definition, const OrcMappingPtr& child_mapping,
-                             const orc::Type* orc_type) {
-    _mapping.emplace(original_pos_in_table_definition, OrcMappingOrcType{child_mapping, orc_type});
+                             const orc::Type* orc_type, std::optional<std::string> initial_default) {
+    _mapping.emplace(original_pos_in_table_definition,
+                     OrcMappingOrcType{child_mapping, orc_type, std::move(initial_default)});
 }
 
 Status OrcMapping::set_lazy_load_column_id(const uint64_t slot_pos, std::list<uint64_t>* column_id_list) {
@@ -49,33 +51,66 @@ Status OrcMapping::set_include_column_id(const uint64_t slot_pos, const TypeDesc
                                          std::list<uint64_t>* column_id_list) {
     if (desc.is_complex_type()) {
         // For complex types, we only select leaf column id
-        RETURN_IF_ERROR(
-                set_include_column_id_by_type(get_orc_type_child_mapping(slot_pos).orc_mapping, desc, column_id_list));
+        RETURN_IF_ERROR(set_include_column_id_by_type(get_orc_type_child_mapping(slot_pos).orc_mapping,
+                                                      get_orc_type_child_mapping(slot_pos).orc_type, desc,
+                                                      column_id_list));
     } else {
         column_id_list->push_back(get_orc_type_child_mapping(slot_pos).orc_type->getColumnId());
     }
     return Status::OK();
 }
 
-Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
-                                                 std::list<uint64_t>* column_id_list) {
+// The column read only for a struct's nulls when no used subfield is in the file: a fixed-width primitive child if
+// there is one (ORC selects the parents of a selected column), else the struct itself with all its children.
+static uint64_t struct_level_source_column_id(const orc::Type* struct_type) {
+    for (uint64_t i = 0; i < struct_type->getSubtypeCount(); ++i) {
+        switch (struct_type->getSubtype(i)->getKind()) {
+        case orc::BOOLEAN:
+        case orc::BYTE:
+        case orc::SHORT:
+        case orc::INT:
+        case orc::LONG:
+        case orc::FLOAT:
+        case orc::DOUBLE:
+        case orc::DATE:
+            return struct_type->getSubtype(i)->getColumnId();
+        default:
+            break;
+        }
+    }
+    return struct_type->getColumnId();
+}
+
+Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, const orc::Type* orc_type,
+                                                 const TypeDescriptor& desc, std::list<uint64_t>* column_id_list) {
     DCHECK(mapping != nullptr);
     DCHECK(desc.is_complex_type());
     if (desc.is_struct_type()) {
+        size_t included = column_id_list->size();
         for (size_t i = 0; i < desc.children.size(); i++) {
             const TypeDescriptor& child_type = desc.children[i];
-            if (child_type.is_complex_type()) {
-                RETURN_IF_ERROR(set_include_column_id_by_type(mapping->get_orc_type_child_mapping(i).orc_mapping,
-                                                              child_type, column_id_list));
-            } else {
-                column_id_list->push_back(mapping->get_orc_type_child_mapping(i).orc_type->getColumnId());
+            const OrcMappingOrcType& child = mapping->get_orc_type_child_mapping(i);
+            if (child.orc_type == nullptr) {
+                // missing from the file, read as its default
+                continue;
             }
+            if (child_type.is_complex_type()) {
+                RETURN_IF_ERROR(
+                        set_include_column_id_by_type(child.orc_mapping, child.orc_type, child_type, column_id_list));
+            } else {
+                column_id_list->push_back(child.orc_type->getColumnId());
+            }
+        }
+        if (column_id_list->size() == included) {
+            // Every used subfield is missing from the file: read a stored one for the struct's nulls.
+            column_id_list->push_back(struct_level_source_column_id(orc_type));
         }
     } else if (desc.is_array_type()) {
         const TypeDescriptor& child_type = desc.children[0];
         if (child_type.is_complex_type()) {
             RETURN_IF_ERROR(set_include_column_id_by_type(mapping->get_orc_type_child_mapping(0).orc_mapping,
-                                                          child_type, column_id_list));
+                                                          mapping->get_orc_type_child_mapping(0).orc_type, child_type,
+                                                          column_id_list));
         } else {
             column_id_list->push_back(mapping->get_orc_type_child_mapping(0).orc_type->getColumnId());
         }
@@ -89,6 +124,7 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
             // Only value will be complex type
             if (child_value_type.is_complex_type()) {
                 RETURN_IF_ERROR(set_include_column_id_by_type(mapping->get_orc_type_child_mapping(1).orc_mapping,
+                                                              mapping->get_orc_type_child_mapping(1).orc_type,
                                                               child_value_type, column_id_list));
             } else {
                 column_id_list->push_back(mapping->get_orc_type_child_mapping(1).orc_type->getColumnId());
@@ -98,6 +134,49 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
         return Status::InternalError("Unreachable");
     }
     return Status::OK();
+}
+
+static constexpr const char* ICEBERG_ID_ATTRIBUTE = "iceberg.id";
+
+static std::optional<int32_t> iceberg_field_id(const orc::Type* orc_type) {
+    int32_t id;
+    if (orc_type->hasAttributeKey(ICEBERG_ID_ATTRIBUTE) &&
+        safe_strto32(orc_type->getAttributeValue(ICEBERG_ID_ATTRIBUTE), &id)) {
+        return id;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::vector<std::string>> OrcMappingFactory::iceberg_column_names(const orc::Type& root_orc_type,
+                                                                                const TIcebergSchema& schema) {
+    std::unordered_map<int32_t, const std::string*> id_2_name;
+    for (const auto& field : schema.fields) {
+        id_2_name.emplace(field.field_id, &field.name);
+    }
+    bool has_ids = false;
+    std::vector<std::string> names(root_orc_type.getSubtypeCount());
+    for (size_t i = 0; i < root_orc_type.getSubtypeCount(); i++) {
+        auto id = iceberg_field_id(root_orc_type.getSubtype(i));
+        if (!id.has_value()) continue;
+        has_ids = true;
+        if (auto it = id_2_name.find(*id); it != id_2_name.end()) {
+            names[i] = *it->second;
+        }
+    }
+    if (!has_ids) {
+        return std::nullopt;
+    }
+    return names;
+}
+
+static const TIcebergSchemaField* find_lake_field(const std::vector<TIcebergSchemaField>& fields,
+                                                  const std::string& name, bool case_sensitive) {
+    for (const auto& field : fields) {
+        if (Utils::format_name(field.name, case_sensitive) == name) {
+            return &field;
+        }
+    }
+    return nullptr;
 }
 
 StatusOr<std::unique_ptr<OrcMapping>> OrcMappingFactory::build_mapping(
@@ -195,7 +274,7 @@ Status OrcMappingFactory::_init_orc_mapping_with_orc_column_names(std::unique_pt
         if (slot_desc->type().is_complex_type()) {
             need_add_child_mapping = std::make_shared<OrcMapping>();
             const TypeDescriptor& origin_type = slot_desc->type();
-            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, orc_sub_type, options));
+            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, orc_sub_type, options, nullptr));
         }
 
         mapping->add_mapping(i, need_add_child_mapping, orc_sub_type);
@@ -248,7 +327,11 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
         if (slot_descs[pos_in_slot_descriptor]->type().is_complex_type()) {
             need_add_child_mapping = std::make_shared<OrcMapping>();
             const TypeDescriptor& origin_type = slot_descs[pos_in_slot_descriptor]->type();
-            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, orc_sub_type, options));
+            const TIcebergSchemaField* lake_field =
+                    options.iceberg_schema == nullptr
+                            ? nullptr
+                            : find_lake_field(options.iceberg_schema->fields, find_column_name, options.case_sensitive);
+            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_type, orc_sub_type, options, lake_field));
         }
 
         mapping->add_mapping(pos_in_slot_descriptor, need_add_child_mapping, orc_sub_type);
@@ -259,18 +342,46 @@ Status OrcMappingFactory::_init_orc_mapping_with_hive_column_names(std::unique_p
 // origin_type is TypeDescriptor in table definition
 // orc_type is orc's type
 Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
-                                             const orc::Type* orc_type, const OrcMappingOptions& options) {
+                                             const orc::Type* orc_type, const OrcMappingOptions& options,
+                                             const TIcebergSchemaField* lake_field) {
     DCHECK(origin_type.is_complex_type());
+    auto lake_child = [lake_field](size_t i) -> const TIcebergSchemaField* {
+        return lake_field != nullptr && i < lake_field->children.size() ? &lake_field->children[i] : nullptr;
+    };
     if (origin_type.type == LogicalType::TYPE_STRUCT) {
+        // Keyed by field id when lake_field is set, otherwise by formatted field name.
         std::unordered_map<std::string, size_t> tmp_orc_fieldname_2_pos;
         for (size_t i = 0; i < orc_type->getSubtypeCount(); i++) {
+            if (lake_field != nullptr) {
+                auto id = iceberg_field_id(orc_type->getSubtype(i));
+                if (id.has_value()) {
+                    tmp_orc_fieldname_2_pos[std::to_string(*id)] = i;
+                }
+                continue;
+            }
             std::string field_name = Utils::format_name(orc_type->getFieldName(i), options.case_sensitive);
             tmp_orc_fieldname_2_pos[field_name] = i;
         }
 
         for (size_t index = 0; index < origin_type.children.size(); index++) {
             std::string field_name = Utils::format_name(origin_type.field_names[index], options.case_sensitive);
-            auto it = tmp_orc_fieldname_2_pos.find(field_name);
+            const TIcebergSchemaField* child_lake_field = nullptr;
+            std::string key = field_name;
+            if (lake_field != nullptr) {
+                child_lake_field = find_lake_field(lake_field->children, field_name, options.case_sensitive);
+                key = child_lake_field == nullptr ? "" : std::to_string(child_lake_field->field_id);
+            }
+            auto it = tmp_orc_fieldname_2_pos.find(key);
+            if (it == tmp_orc_fieldname_2_pos.end() && lake_field != nullptr) {
+                // An Iceberg subfield added after the file was written: read its initial-default, or NULL.
+                std::optional<std::string> initial_default;
+                if (child_lake_field != nullptr && child_lake_field->__isset.initial_default &&
+                    !origin_type.children[index].is_complex_type()) {
+                    initial_default = child_lake_field->initial_default;
+                }
+                mapping->add_mapping(index, nullptr, nullptr, std::move(initial_default));
+                continue;
+            }
             if (it == tmp_orc_fieldname_2_pos.end()) {
                 auto s = strings::Substitute(
                         "OrcChunkReader::_set_child_mapping not found struct subfield $0, file = $1", field_name,
@@ -285,7 +396,8 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
 
             if (origin_child_type.is_complex_type()) {
                 need_add_child_mapping = std::make_shared<OrcMapping>();
-                RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options));
+                RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options,
+                                                   child_lake_field));
             }
             mapping->add_mapping(index, need_add_child_mapping, orc_child_type);
         }
@@ -299,7 +411,8 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
 
         if (origin_child_type.is_complex_type()) {
             need_add_child_mapping = std::make_shared<OrcMapping>();
-            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options));
+            RETURN_IF_ERROR(_set_child_mapping(need_add_child_mapping, origin_child_type, orc_child_type, options,
+                                               lake_child(0)));
         }
 
         mapping->add_mapping(0, need_add_child_mapping, orc_child_type);
@@ -327,8 +440,8 @@ Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const
         if (origin_child_type.is_complex_type()) {
             need_add_value_child_mapping = std::make_shared<OrcMapping>();
             const orc::Type* orc_child_type = orc_type->getSubtype(1);
-            RETURN_IF_ERROR(
-                    _set_child_mapping(need_add_value_child_mapping, origin_child_type, orc_child_type, options));
+            RETURN_IF_ERROR(_set_child_mapping(need_add_value_child_mapping, origin_child_type, orc_child_type, options,
+                                               lake_child(1)));
         }
         mapping->add_mapping(1, need_add_value_child_mapping, orc_type->getSubtype(1));
     } else {

@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.KeysType;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -58,6 +60,10 @@ public class SchemaInfo {
     private final Set<ColumnId> bloomFilterColumnNames;
     @SerializedName("bfColumnFpp")
     private final double bloomFilterFpp; // false positive probability
+    @SerializedName("zstdCompressionColumns")
+    private final Set<ColumnId> zstdCompressionColumnNames;
+    @SerializedName("zstdCompressionPageSizes")
+    private final Map<ColumnId, Integer> zstdCompressionPageSizes; // columns using a compression dictionary (a ZSTD dictionary)
     @SerializedName("compressionType")
     private final TCompressionType compressionType;
     @SerializedName("compressionLevel")
@@ -77,6 +83,8 @@ public class SchemaInfo {
         this.indexes = builder.indexes;
         this.bloomFilterColumnNames = builder.bloomFilterColumnNames;
         this.bloomFilterFpp = builder.bloomFilterFpp;
+        this.zstdCompressionColumnNames = builder.zstdCompressionColumnNames;
+        this.zstdCompressionPageSizes = builder.zstdCompressionPageSizes;
         this.schemaHash = builder.schemaHash;
         this.compressionType = builder.compressionType;
         this.compressionLevel = builder.compressionLevel;
@@ -127,6 +135,14 @@ public class SchemaInfo {
         return bloomFilterFpp;
     }
 
+    public Set<ColumnId> getZstdCompressionColumnNames() {
+        return zstdCompressionColumnNames;
+    }
+
+    public Map<ColumnId, Integer> getZstdCompressionPageSizes() {
+        return zstdCompressionPageSizes;
+    }
+
     public TCompressionType getCompressionType() {
         return compressionType;
     }
@@ -150,6 +166,15 @@ public class SchemaInfo {
             // is bloom filter column
             if (bloomFilterColumnNames != null && bloomFilterColumnNames.contains(column.getColumnId())) {
                 tColumn.setIs_bloom_filter_column(true);
+            }
+            // use column-level compression dictionary (a ZSTD dictionary)
+            if (zstdCompressionColumnNames != null && zstdCompressionColumnNames.contains(column.getColumnId())) {
+                tColumn.setUse_zstd_compression(true);
+                Integer pageSize = zstdCompressionPageSizes == null
+                        ? null : zstdCompressionPageSizes.get(column.getColumnId());
+                if (pageSize != null && pageSize > 0) {
+                    tColumn.setZstd_compression_page_size(pageSize);
+                }
             }
             tColumns.add(tColumn);
         }
@@ -193,6 +218,7 @@ public class SchemaInfo {
                 Objects.equals(sortKeyUniqueIds, that.sortKeyUniqueIds) &&
                 Objects.equals(indexes, that.indexes) &&
                 Objects.equals(bloomFilterColumnNames, that.bloomFilterColumnNames) &&
+                Objects.equals(zstdCompressionColumnNames, that.zstdCompressionColumnNames) &&
                 compressionType == that.compressionType &&
                 primaryKeyEncodingType == that.primaryKeyEncodingType;
     }
@@ -200,8 +226,8 @@ public class SchemaInfo {
     @Override
     public int hashCode() {
         return Objects.hash(id, shortKeyColumnCount, keysType, storageType, version, schemaHash, columns, sortKeyIndexes,
-                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, compressionType, compressionLevel,
-                primaryKeyEncodingType);
+                sortKeyUniqueIds, indexes, bloomFilterColumnNames, bloomFilterFpp, zstdCompressionColumnNames, compressionType,
+                compressionLevel, primaryKeyEncodingType);
     }
 
     public static Builder newBuilder() {
@@ -221,6 +247,7 @@ public class SchemaInfo {
         private List<Index> indexes;
         private Set<ColumnId> bloomFilterColumnNames;
         private double bloomFilterFpp; // false positive probability
+        private Set<ColumnId> zstdCompressionColumnNames; // compression dict
         private TCompressionType compressionType;
         private int compressionLevel = -1;
         private TPrimaryKeyEncodingType primaryKeyEncodingType;
@@ -302,6 +329,32 @@ public class SchemaInfo {
             return this;
         }
 
+        private Map<ColumnId, Integer> zstdCompressionPageSizes;
+
+        // The column set and the per-column page sizes are set together on purpose.
+        // They are two halves of one property, and a caller that supplies only the
+        // names produces a schema the BE reads as "use the default page size" while
+        // SHOW CREATE TABLE still reports the size the user asked for.
+        public Builder setZstdCompressionColumns(Collection<ColumnId> zstdCompressionColumnNames,
+                                                 Map<ColumnId, Integer> zstdCompressionPageSizes) {
+            // Copied, like the name set below: the caller hands over OlapTable's live map, and
+            // rebuildFullSchema() prunes that map IN PLACE when a column is dropped. A SchemaInfo
+            // that is kept -- the historical schema a fast schema evolution snapshots for the
+            // transactions still writing the old schema -- would otherwise lose the page size it
+            // was taken to remember, and those writes would fall back to the default.
+            this.zstdCompressionPageSizes =
+                    zstdCompressionPageSizes == null ? null : Maps.newHashMap(zstdCompressionPageSizes);
+            return setZstdCompressionColumnNames(zstdCompressionColumnNames);
+        }
+
+        private Builder setZstdCompressionColumnNames(Collection<ColumnId> zstdCompressionColumnNames) {
+            Preconditions.checkState(this.zstdCompressionColumnNames == null);
+            if (zstdCompressionColumnNames != null) {
+                this.zstdCompressionColumnNames = new HashSet<>(zstdCompressionColumnNames);
+            }
+            return this;
+        }
+
         public Builder setSchemaHash(int schemaHash) {
             this.schemaHash = schemaHash;
             return this;
@@ -348,6 +401,8 @@ public class SchemaInfo {
                 .setIndexes(indexes)
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
+                .setZstdCompressionColumns(table.getZstdCompressionColumnIds(),
+                        table.getZstdCompressionPageSizes())
                 .setCompressionType(table.getCompressionType())
                 .setCompressionLevel(table.getCompressionLevel())
                 .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())

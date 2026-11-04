@@ -23,18 +23,18 @@ import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.alter.reshard.presplit.BoundaryPlanner;
 import com.starrocks.alter.reshard.presplit.BoundaryPlannerResult;
 import com.starrocks.alter.reshard.presplit.DefaultPreSplitPipeline;
-import com.starrocks.alter.reshard.presplit.Estimates;
 import com.starrocks.alter.reshard.presplit.InternalPartitionScanContext;
 import com.starrocks.alter.reshard.presplit.ReservoirSampler;
 import com.starrocks.alter.reshard.presplit.SampleRequest;
 import com.starrocks.alter.reshard.presplit.SampleSet;
 import com.starrocks.alter.reshard.presplit.Sampler;
-import com.starrocks.alter.reshard.presplit.TabletPreSplitCoordinator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SyncMaterializedViewDefinition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -47,13 +47,19 @@ import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.persist.OriginStatementInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -73,7 +79,7 @@ import javax.validation.constraints.NotNull;
  * (promotes the shadow index to NORMAL without dropping the base), and the abstract hooks for
  * shadow-layout planning, index-meta registration, and catalog flip (implemented in Tasks 3-4).
  */
-public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
+public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(LakeRangeRollupJob.class);
 
     // The rollup column subset and key configuration applied when the shadow is registered and flipped.
@@ -89,6 +95,13 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     private List<Column> rollupSortKeyColumns;
     @SerializedName(value = "shadowShortKeyColumnCount")
     private short shadowShortKeyColumnCount;
+
+    @SerializedName("syncMvOriginStatement")
+    private OriginStatementInfo syncMvOriginStatement;
+    @SerializedName("viewDefineSql")
+    private String viewDefineSql;
+    @SerializedName("syncMvDefinition")
+    private SyncMaterializedViewDefinition syncMvDefinition;
 
     // Sampling seam. Production samples a partition's base by the rollup sort key; tests inject a stub.
     // Not serialized.
@@ -108,7 +121,14 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     // fields and deep-copies this job's own collections. The transient sampler is intentionally NOT copied.
     protected LakeRangeRollupJob(LakeRangeRollupJob other) {
         super(other);
-        this.rollupSchema = other.rollupSchema == null ? null : new ArrayList<>(other.rollupSchema);
+        this.rollupSchema = other.rollupSchema == null ? null
+                : other.rollupSchema.stream().map(column -> {
+                    Column copy = new Column(column);
+                    if (column.getDefineExpr() != null) {
+                        copy.setDefineExpr(column.getDefineExpr().clone());
+                    }
+                    return copy;
+                }).collect(Collectors.toList());
         this.rollupKeysType = other.rollupKeysType;
         this.rollupSortKeyIdxes = other.rollupSortKeyIdxes == null ? null : new ArrayList<>(other.rollupSortKeyIdxes);
         this.rollupSortKeyUniqueIds =
@@ -116,6 +136,70 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
         this.rollupSortKeyColumns =
                 other.rollupSortKeyColumns == null ? null : new ArrayList<>(other.rollupSortKeyColumns);
         this.shadowShortKeyColumnCount = other.shadowShortKeyColumnCount;
+        this.syncMvOriginStatement = other.syncMvOriginStatement;
+        this.viewDefineSql = other.viewDefineSql;
+        this.syncMvDefinition = other.syncMvDefinition;
+        resolveSortKeyColumns();
+    }
+
+    public void setSyncMaterializedView(OriginStatement statement, String viewDefineSql,
+                                        SyncMaterializedViewDefinition definition) {
+        this.syncMvOriginStatement = statement == null ? null
+                : new OriginStatementInfo(statement.getOrigStmt(), statement.getIdx());
+        this.viewDefineSql = viewDefineSql;
+        this.syncMvDefinition = Preconditions.checkNotNull(definition);
+    }
+
+    public boolean isSyncMaterializedView() {
+        return syncMvDefinition != null;
+    }
+
+    private void resolveSortKeyColumns() {
+        if (rollupSchema != null && rollupSortKeyIdxes != null) {
+            rollupSortKeyColumns = rollupSortKeyIdxes.stream().map(rollupSchema::get).collect(Collectors.toList());
+        }
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        try {
+            if (isSyncMaterializedView()) {
+                syncMvDefinition.restore(rollupSchema);
+            }
+            resolveSortKeyColumns();
+        } catch (RuntimeException e) {
+            throw new IOException("Cannot restore range rollup job " + jobId, e);
+        }
+    }
+
+    private MaterializedIndexMeta restoredSyncIndexMeta(OlapTable table) {
+        MaterializedIndexMeta meta = new MaterializedIndexMeta(shadowIndexMetaId, rollupSchema, 0, 0,
+                shadowShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, syncMvOriginStatement,
+                rollupSortKeyIdxes, rollupSortKeyUniqueIds);
+        meta.setSyncMvDefinition(syncMvDefinition);
+        meta.setDbId(dbId);
+        meta.setViewDefineSql(viewDefineSql);
+        table.analyzeRollupIndexMeta(meta);
+        resolveSortKeyColumns();
+        return meta;
+    }
+
+    @Override
+    protected void beforeShadowBuild() throws AlterCancelException {
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTable();
+            if (table == null) {
+                throw new AlterCancelException("table " + tableId + " does not exist");
+            }
+            for (com.starrocks.catalog.Partition partition : table.getPartitions()) {
+                validateRewritePartitionShape(partition);
+            }
+            if (isSyncMaterializedView()) {
+                restoredSyncIndexMeta(table);
+            }
+        } catch (RuntimeException e) {
+            throw new AlterCancelException("Cannot restore range rollup job " + jobId + ": " + e.getMessage());
+        }
     }
 
     public void setRollupSchema(List<Column> rollupSchema) {
@@ -200,7 +284,7 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
      */
     @Override
     protected List<String> rewriteSelectColumnNames(@NotNull OlapTable table) {
-        return rollupSchema.stream()
+        return (isSyncMaterializedView() ? table.getBaseSchema() : rollupSchema).stream()
                 .filter(column -> !column.isGeneratedColumn())
                 .map(column -> ParseUtil.backquote(column.getName()))
                 .collect(Collectors.toList());
@@ -212,7 +296,7 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
      */
     @Override
     protected List<String> rewriteTargetColumnNames(@NotNull OlapTable table) {
-        return rollupSchema.stream()
+        return (isSyncMaterializedView() ? table.getBaseSchema() : rollupSchema).stream()
                 .filter(column -> !column.isGeneratedColumn())
                 .map(Column::getName)
                 .collect(Collectors.toList());
@@ -248,19 +332,22 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     }
 
     /**
-     * Plan one partition's K-tablet shadow layout for the rollup index, lock-free: choose {@code K}
-     * from the base data size and the active compute-node count, sample by the rollup sort key, plan
-     * the boundaries, and build the shadow {@link MaterializedIndex} via the StarOS createShards RPC.
+     * Plan one partition's K-tablet shadow layout for the rollup index, lock-free: use the shared
+     * tablet-count policy, which preserves the latest base-index {@code K} when the target is zero and
+     * otherwise derives {@code K} adaptively from base data size and active compute-node count. When
+     * {@code K > 1}, sample by the rollup sort key and plan the boundaries; {@code K == 1} skips sampling.
+     * Build the shadow {@link MaterializedIndex} via the StarOS createShards RPC.
      * NO db lock is held here.
      */
     @Override
     protected void planPartitionShadow(PendingPartitionPlan plan, OlapTable table, String dbName)
             throws AlterCancelException {
         int activeComputeNodeCount = TabletReshardUtils.computeNodeCount(computeResource);
-        Estimates estimates = new Estimates(plan.partitionDataSize, 0L);
-        int requestedTabletCount = TabletPreSplitCoordinator.selectTabletCount(estimates, activeComputeNodeCount);
-        List<Tuple> boundaries = planBoundaries(dbName, plan.tableName, plan.partitionName,
-                plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
+        int requestedTabletCount = selectRequestedTabletCount(plan, activeComputeNodeCount);
+        List<Tuple> boundaries = requestedTabletCount == 1
+                ? List.of()
+                : planBoundaries(dbName, plan.tableName, plan.partitionName,
+                        plan.physicalPartitionId, plan.partitionDataSize, requestedTabletCount);
         // K may collapse to 1 (sampling failure / no-distinction): a single full-range tablet.
         int shadowTabletCount = boundaries.size() + 1;
         List<TabletRange> ranges = buildTabletRanges(boundaries);
@@ -310,7 +397,8 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
     private SampleSet sampleByRollupSortKey(String dbName, String tableName, String partitionName,
                                              long partitionDataSize) throws StarRocksException {
         List<String> sortKeySourceColumnNames =
-                rollupSortKeyColumns.stream().map(Column::getName).collect(Collectors.toList());
+                rollupSortKeyColumns.stream().map(column -> isSyncMaterializedView()
+                        ? syncMvDefinition.projectionSql(column) : column.getName()).collect(Collectors.toList());
         // The sample sub-query addresses the logical partition by name; physical partitions are not
         // directly addressable in SQL. Boundaries only need to be representative, so sampling the
         // parent partition is sufficient.
@@ -321,7 +409,7 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
                 sortKeySourceColumnNames,
                 List.of(),
                 partitionDataSize,
-                computeResource);
+                computeResource, isSyncMaterializedView());
         SampleRequest request = new SampleRequest(
                 scanContext, rollupSortKeyColumns, Config.tablet_pre_split_sample_byte_limit, jobId);
         return getSampler().sample(request);
@@ -381,9 +469,18 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
      */
     @Override
     protected void registerShadowIndexMeta(@NotNull OlapTable table) {
+        MaterializedIndexMeta candidate = isSyncMaterializedView() ? restoredSyncIndexMeta(table) : null;
         table.setIndexMeta(shadowIndexMetaId, shadowIndexName, rollupSchema, 0, 0, shadowShortKeyColumnCount,
                 TStorageType.COLUMN, rollupKeysType, null, rollupSortKeyIdxes, rollupSortKeyUniqueIds);
-        Preconditions.checkNotNull(table.getIndexMetaByMetaId(shadowIndexMetaId));
+        MaterializedIndexMeta meta = Preconditions.checkNotNull(table.getIndexMetaByMetaId(shadowIndexMetaId));
+        if (candidate != null) {
+            meta.setDefineStmt(syncMvOriginStatement);
+            meta.setDbId(dbId);
+            meta.setViewDefineSql(viewDefineSql);
+            meta.setSyncMvDefinition(syncMvDefinition);
+            meta.setWhereClause(candidate.getWhereClause());
+            table.rebuildFullSchema();
+        }
     }
 
     /**
@@ -394,6 +491,10 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
      */
     @Override
     protected void visualiseShadowIndex(@NotNull OlapTable table) {
+        if (isSyncMaterializedView()) {
+            Preconditions.checkState(watershedTxnId > 0, "synchronous MV watershed is not set");
+            table.getIndexMetaByMetaId(shadowIndexMetaId).setSyncMvRequiredTxnId(watershedTxnId);
+        }
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
 
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
@@ -480,6 +581,10 @@ public class LakeRangeRollupJob extends LakeOnlineRewriteJobBase {
             this.rollupSortKeyUniqueIds = other.rollupSortKeyUniqueIds;
             this.rollupSortKeyColumns = other.rollupSortKeyColumns;
             this.shadowShortKeyColumnCount = other.shadowShortKeyColumnCount;
+            this.syncMvOriginStatement = other.syncMvOriginStatement;
+            this.viewDefineSql = other.viewDefineSql;
+            this.syncMvDefinition = other.syncMvDefinition;
+            resolveSortKeyColumns();
         }
         super.replay(replayedJob);
     }

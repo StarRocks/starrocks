@@ -108,7 +108,7 @@ public class AlterJobV2CopyForPersistTest {
                 "indexChange",
                 "startTime",
                 "watershedTxnId",
-                "watershedGtid");
+                "commitGtid");
         assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeTableSchemaChangeJob,
                 "physicalPartitionIndexTabletMap",
                 "physicalPartitionIndexMap",
@@ -180,7 +180,7 @@ public class AlterJobV2CopyForPersistTest {
                 "viewDefineSql",
                 "isColocateMVIndex",
                 "watershedTxnId",
-                "watershedGtid");
+                "commitGtid");
         assertCollectionsIndependent(AlterJobV2CopyForPersistTest::newLakeRollupJob,
                 "commitVersionMap",
                 "physicalPartitionIdToBaseRollupTabletIdMap",
@@ -267,6 +267,39 @@ public class AlterJobV2CopyForPersistTest {
                 "commitVersionMap");
     }
 
+    /**
+     * The index / bloom-filter fast-path jobs build their persisted copy with copyBaseFields() rather
+     * than a chained copy constructor, so a field added on LakeTableIndexFastPathJobBase is easy to
+     * miss. A null historySchema in the FINISHED journal entry would make replay() install null and
+     * leave a recovered FE unable to resolve the schema the flip retired.
+     */
+    @Test
+    public void testLakeTableIndexFastPathJobsCopyHistorySchema() throws Exception {
+        LakeTableAddIndexJob addJob = new LakeTableAddIndexJob();
+        setField(addJob, "historySchema", buildHistorySchema());
+        assertFieldsEqual(addJob, addJob.copyForPersist(), "historySchema");
+
+        LakeTableDropIndexJob dropJob = new LakeTableDropIndexJob();
+        setField(dropJob, "historySchema", buildHistorySchema());
+        assertFieldsEqual(dropJob, dropJob.copyForPersist(), "historySchema");
+    }
+
+    /**
+     * The index fast-path jobs copy the fields of their base class one by one into the persisted copy. A commit
+     * gtid missing from the FINISHED_REWRITING journal entry would make a new leader publish the commit
+     * versions under gtid 0.
+     */
+    @Test
+    public void testLakeTableIndexFastPathJobsCopyCommitGtid() throws Exception {
+        LakeTableAddIndexJob addJob = new LakeTableAddIndexJob();
+        setField(addJob, "commitGtid", 77L);
+        assertFieldsEqual(addJob, addJob.copyForPersist(), "commitGtid");
+
+        LakeTableDropIndexJob dropJob = new LakeTableDropIndexJob();
+        setField(dropJob, "commitGtid", 77L);
+        assertFieldsEqual(dropJob, dropJob.copyForPersist(), "commitGtid");
+    }
+
     @Test
     public void testLakeTableAlterMetaJobCopyForPersist() throws Exception {
         LakeTableAlterMetaJob job = newLakeTableAlterMetaJob();
@@ -294,7 +327,7 @@ public class AlterJobV2CopyForPersistTest {
     private static LakeTableSchemaChangeJob newLakeTableSchemaChangeJob() {
         LakeTableSchemaChangeJob job = new LakeTableSchemaChangeJob();
         populateSchemaChangeJobFields(job, false, true);
-        setField(job, "watershedGtid", 77L);
+        setField(job, "commitGtid", 77L);
         return job;
     }
 
@@ -307,7 +340,7 @@ public class AlterJobV2CopyForPersistTest {
     private static LakeRollupJob newLakeRollupJob() {
         LakeRollupJob job = new LakeRollupJob();
         populateRollupJobFields(job, true);
-        setField(job, "watershedGtid", 77L);
+        setField(job, "commitGtid", 77L);
         return job;
     }
 

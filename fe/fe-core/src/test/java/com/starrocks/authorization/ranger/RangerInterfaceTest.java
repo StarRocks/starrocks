@@ -20,6 +20,8 @@ import com.starrocks.authorization.ColumnPrivilege;
 import com.starrocks.authorization.NativeAccessController;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.hive.RangerHiveAccessController;
+import com.starrocks.authorization.ranger.hive.RangerHiveCatalogProperties;
+import com.starrocks.authorization.ranger.hive.RangerHiveResource;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksAccessController;
 import com.starrocks.authorization.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.catalog.Column;
@@ -29,11 +31,13 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.View;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -330,7 +334,7 @@ public class RangerInterfaceTest {
 
     @Test
     public void testHiveConvertToAccessTypeCreate() {
-        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service");
+        RangerHiveAccessController controller = new RangerHiveAccessController("hive-service", null);
         Assertions.assertEquals("select", controller.convertToAccessType(PrivilegeType.SELECT));
         Assertions.assertEquals("update", controller.convertToAccessType(PrivilegeType.INSERT));
         Assertions.assertEquals("create", controller.convertToAccessType(PrivilegeType.CREATE_TABLE));
@@ -901,5 +905,173 @@ public class RangerInterfaceTest {
                         + "must NOT silently insert a null key. Got: " + scanColumns);
         Assertions.assertFalse(scanColumns.containsKey(null),
                 "scanColumns must NOT contain a null key (silent drop guard). Got: " + scanColumns);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Ranger hive service type: catalog prefix on the `database` resource (POST-1852)
+    // ---------------------------------------------------------------------------------------------
+
+    /**
+     * Captures the resource each of the 7 hive check methods hands to the Ranger plugin, so the
+     * assertions see exactly what Ranger would see, without mocking the plugin.
+     */
+    private static class RecordingHiveController extends RangerHiveAccessController {
+        final List<RangerAccessResourceImpl> resources = new ArrayList<>();
+
+        RecordingHiveController(Boolean catalogPrefixEnabled) {
+            super("hive-service", catalogPrefixEnabled);
+        }
+
+        @Override
+        protected void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, Set<String> groups,
+                                     PrivilegeType privilegeType) {
+            resources.add(resource);
+        }
+
+        @Override
+        public Expr getColumnMaskingExpression(RangerAccessResourceImpl resource, Column column, ConnectContext context) {
+            resources.add(resource);
+            return null;
+        }
+
+        @Override
+        protected Expr getRowAccessExpression(RangerAccessResourceImpl resource, ConnectContext context) {
+            resources.add(resource);
+            return null;
+        }
+    }
+
+    /** Drives all 7 override methods once and returns the captured resources, in call order. */
+    private static List<RangerAccessResourceImpl> runAllHiveChecks(RecordingHiveController controller) throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
+        TableName tableName = new TableName("egdp_prod", "user", "t");
+
+        controller.checkDbAction(ctx, "egdp_prod", "user", PrivilegeType.CREATE_TABLE);
+        controller.checkAnyActionOnDb(ctx, "egdp_prod", "user");
+        controller.checkTableAction(ctx, tableName, PrivilegeType.SELECT);
+        controller.checkAnyActionOnTable(ctx, tableName);
+        controller.checkColumnAction(ctx, tableName, "c1", PrivilegeType.SELECT);
+        controller.getColumnMaskingPolicy(ctx, tableName, Lists.newArrayList(new Column("c1", IntegerType.INT)));
+        controller.getRowAccessPolicy(ctx, tableName);
+
+        Assertions.assertEquals(7, controller.resources.size(), "every override must reach the plugin exactly once");
+        return controller.resources;
+    }
+
+    private static void assertDatabaseSentToRanger(Boolean catalogPrefixEnabled, boolean globalDefault,
+                                                   String separator, String expectedDatabase) throws Exception {
+        boolean oldEnabled = Config.ranger_hive_catalog_prefix_enabled;
+        String oldSeparator = Config.ranger_hive_catalog_prefix_separator;
+        try {
+            Config.ranger_hive_catalog_prefix_enabled = globalDefault;
+            Config.ranger_hive_catalog_prefix_separator = separator;
+            List<RangerAccessResourceImpl> resources =
+                    runAllHiveChecks(new RecordingHiveController(catalogPrefixEnabled));
+            for (RangerAccessResourceImpl resource : resources) {
+                Assertions.assertEquals(expectedDatabase, resource.getValue("database"), resource.toString());
+            }
+            // table / column keys must not be touched by the prefix logic
+            Assertions.assertEquals("t", resources.get(2).getValue("table"));
+            Assertions.assertEquals("t", resources.get(3).getValue("table"));
+            Assertions.assertEquals("t", resources.get(4).getValue("table"));
+            Assertions.assertEquals("c1", resources.get(4).getValue("column"));
+            Assertions.assertEquals("c1", resources.get(5).getValue("column"));
+            Assertions.assertEquals("t", resources.get(6).getValue("table"));
+        } finally {
+            Config.ranger_hive_catalog_prefix_enabled = oldEnabled;
+            Config.ranger_hive_catalog_prefix_separator = oldSeparator;
+        }
+    }
+
+    @Test
+    public void testHiveDatabaseIsBareSchemaWhenPrefixUnsetAndGlobalOff() throws Exception {
+        assertDatabaseSentToRanger(null, false, "_", "user");
+    }
+
+    @Test
+    public void testHiveDatabaseGetsCatalogPrefixWhenEnabledOnCatalog() throws Exception {
+        assertDatabaseSentToRanger(true, false, "_", "egdp_prod_user");
+    }
+
+    @Test
+    public void testHiveCatalogFalseOverridesGlobalTrue() throws Exception {
+        assertDatabaseSentToRanger(false, true, "_", "user");
+    }
+
+    @Test
+    public void testHiveDatabaseFollowsGlobalWhenCatalogUnset() throws Exception {
+        assertDatabaseSentToRanger(null, true, "_", "egdp_prod_user");
+    }
+
+    @Test
+    public void testHiveDatabaseUsesConfiguredSeparator() throws Exception {
+        assertDatabaseSentToRanger(true, false, "__", "egdp_prod__user");
+    }
+
+    @Test
+    public void testHiveGlobalConfigChangeAppliesToExistingController() throws Exception {
+        boolean oldEnabled = Config.ranger_hive_catalog_prefix_enabled;
+        try {
+            Config.ranger_hive_catalog_prefix_enabled = false;
+            RecordingHiveController controller = new RecordingHiveController(null);
+            Assertions.assertEquals("user", runAllHiveChecks(controller).get(0).getValue("database"));
+
+            // no rebuild: the same instance must pick the new global value up on the next check
+            Config.ranger_hive_catalog_prefix_enabled = true;
+            controller.resources.clear();
+            Assertions.assertEquals("egdp_prod_user", runAllHiveChecks(controller).get(0).getValue("database"));
+        } finally {
+            Config.ranger_hive_catalog_prefix_enabled = oldEnabled;
+        }
+    }
+
+    @Test
+    public void testParseCatalogPrefixEnabled() {
+        Map<String, String> props = new HashMap<>();
+        Assertions.assertNull(RangerHiveCatalogProperties.parseCatalogPrefixEnabled(props));
+
+        props.put(RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED, "true");
+        Assertions.assertEquals(Boolean.TRUE, RangerHiveCatalogProperties.parseCatalogPrefixEnabled(props));
+        props.put(RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED, "TRUE");
+        Assertions.assertEquals(Boolean.TRUE, RangerHiveCatalogProperties.parseCatalogPrefixEnabled(props));
+        props.put(RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED, "false");
+        Assertions.assertEquals(Boolean.FALSE, RangerHiveCatalogProperties.parseCatalogPrefixEnabled(props));
+        props.put(RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED, "False");
+        Assertions.assertEquals(Boolean.FALSE, RangerHiveCatalogProperties.parseCatalogPrefixEnabled(props));
+
+        // an authorization switch must never be silently coerced (Boolean.parseBoolean("yes") == false)
+        props.put(RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED, "yes");
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> RangerHiveCatalogProperties.parseCatalogPrefixEnabled(props));
+        Assertions.assertTrue(e.getMessage().contains(RangerHiveCatalogProperties.CATALOG_PREFIX_ENABLED), e.getMessage());
+    }
+
+    @Test
+    public void testResolveDatabaseWithCatalogPrefix() {
+        boolean oldEnabled = Config.ranger_hive_catalog_prefix_enabled;
+        String oldSeparator = Config.ranger_hive_catalog_prefix_separator;
+        try {
+            Config.ranger_hive_catalog_prefix_enabled = false;
+            Config.ranger_hive_catalog_prefix_separator = "_";
+            Assertions.assertEquals("user", RangerHiveCatalogProperties.resolveDatabase(null, "egdp_prod", "user"));
+            Assertions.assertEquals("egdp_prod_user", RangerHiveCatalogProperties.resolveDatabase(true, "egdp_prod", "user"));
+            Config.ranger_hive_catalog_prefix_enabled = true;
+            Assertions.assertEquals("egdp_prod_user", RangerHiveCatalogProperties.resolveDatabase(null, "egdp_prod", "user"));
+            Assertions.assertEquals("user", RangerHiveCatalogProperties.resolveDatabase(false, "egdp_prod", "user"));
+            Config.ranger_hive_catalog_prefix_separator = "__";
+            Assertions.assertEquals("egdp_prod__user", RangerHiveCatalogProperties.resolveDatabase(null, "egdp_prod", "user"));
+        } finally {
+            Config.ranger_hive_catalog_prefix_enabled = oldEnabled;
+            Config.ranger_hive_catalog_prefix_separator = oldSeparator;
+        }
+    }
+
+    @Test
+    public void testHiveResourceRejectsObjectTypesOutsideHiveServiceDef() {
+        // `catalog` is not in any hierarchy of the Ranger hive service def; sending it would make the
+        // policy engine deny everything, so the builder must refuse instead of emitting "unknown".
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> RangerHiveResource.builder().setCatalog("egdp_prod"));
     }
 }

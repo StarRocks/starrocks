@@ -317,7 +317,17 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
         _params.vector_search_option->k = vector_options.vector_limit_k;
         for (const std::string& str : vector_options.query_vector) {
-            _params.vector_search_option->query_vector.push_back(std::stof(str));
+            // std::stof throws std::out_of_range / std::invalid_argument on a value that overflows
+            // float or is not a number, and the throw is uncaught here, so a query vector element the
+            // planner produced from a wrong-typed or out-of-range literal (e.g. 1e308, which exceeds
+            // FLT_MAX) aborts the BE. Parse without throwing and reject the query cleanly instead.
+            StringParser::ParseResult parse_result;
+            float value = StringParser::string_to_float<float>(str.data(), str.size(), &parse_result);
+            if (parse_result != StringParser::PARSE_SUCCESS) {
+                return Status::InvalidArgument(
+                        fmt::format("invalid query vector element for vector search: '{}'", str));
+            }
+            _params.vector_search_option->query_vector.push_back(value);
         }
         if (_runtime_state->query_options().__isset.ann_params) {
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
@@ -353,6 +363,13 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
 
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
+
+    // The FE marks a column unused when only pushed-down conjuncts read it, but normalizing a conjunct can
+    // fold it away without a column predicate (`c NOT IN (.., NULL)` under OR never holds, so the OR drops it).
+    // Such a column is neither filtered on nor output, and the segment iterator's late-materialization layout
+    // has no place for it, so output it instead.
+    const auto& pushdown_cids = _params.pred_tree.column_ids();
+    std::erase_if(_unused_output_column_ids, [&](uint32_t cid) { return !pushdown_cids.contains(cid); });
 
     for (auto& id : _non_pushdown_pred_tree.column_ids()) {
         _unused_output_column_ids.erase(id);
@@ -1028,8 +1045,7 @@ void OlapChunkSource::_update_counter() {
                                         : static_cast<double>(_params.sample_options.probability_percent);
         _runtime_profile->add_info_string("SampleMethod", to_string(_params.sample_options.sample_method));
         _runtime_profile->add_info_string("SamplePercent", std::to_string(sample_percent) + "%");
-        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name),
-                       _reader->stats().sample_population_size);
+        COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleTime", parent_name), _reader->stats().sample_time_ns);
         COUNTER_UPDATE(ADD_CHILD_TIMER(_runtime_profile, "SampleBuildHistogramTime", parent_name),
                        _reader->stats().sample_build_histogram_time_ns);
         COUNTER_UPDATE(ADD_CHILD_COUNTER(_runtime_profile, "SampleSize", TUnit::UNIT, parent_name),

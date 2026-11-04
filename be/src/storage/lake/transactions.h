@@ -17,6 +17,7 @@
 #include <span>
 
 #include "common/statusor.h"
+#include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
 
 namespace starrocks {
@@ -52,9 +53,17 @@ class PublishTabletInfo;
 //
 // Return:
 // - StatusOr containing the new published TabletMetadataPtr on success.
-StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
-                                            int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata, int64_t fe_built_version = 0);
+// |base_version_order| carries FE's prefer_shared_initial_metadata hint into the base-version reads:
+// kSharedFirst tells them to try the partition-shared version-1 object before the per-tablet key that
+// a bundled partition never writes. A preference only -- either order resolves the metadata. Has no
+// effect unless |base_version| is 1. See InitialMetadataOrder.
+// |is_retry_publish| carries PublishVersionRequest::is_retry_publish: on a metacache miss, read
+// |new_version| from storage (the tablet's partial_meta first under file bundling) before applying anything
+// and return it if it is already written.
+StatusOr<TabletMetadataPtr> publish_version(
+        TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info, int64_t base_version, int64_t new_version,
+        std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata, int64_t fe_built_version = 0,
+        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst, bool is_retry_publish = false);
 
 // Publish a batch new versions of transaction logs.
 //

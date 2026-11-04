@@ -15,7 +15,10 @@
 #include "storage/lake/schema_change.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
+#include <functional>
+#include <numeric>
 #include <thread>
 
 #include "base/testutil/assert.h"
@@ -26,21 +29,30 @@
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
+#include "column/json_column.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/metacache.h"
+#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard.h"
 #include "storage/lake/test_util.h"
-#include "storage/lake/update_manager.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/metadata_util.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/segment.h"
+#include "testutil/column_test_helper.h"
+#include "types/json_value.h"
 
 namespace starrocks::lake {
 
@@ -71,8 +83,9 @@ public:
     SchemaChangeTest(const std::string& test_dir) {
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -113,7 +126,7 @@ protected:
 
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 
     std::shared_ptr<TabletMetadata> _base_tablet_metadata;
@@ -289,7 +302,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change_2";
+    inline static const std::string kTestGroupPath = "test_lake_direct_schema_change_2_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -701,7 +714,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change";
+    inline static const std::string kTestGroupPath = "test_lake_direct_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -969,7 +982,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sorted_schema_change";
+    inline static const std::string kTestGroupPath = "test_lake_sorted_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1228,7 +1241,8 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_multi_segment_sorted_schema_change";
+    inline static const std::string kTestGroupPath =
+            "test_lake_multi_segment_sorted_schema_change_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1458,7 +1472,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_1";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_1_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1696,7 +1710,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_2";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_2_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -1932,7 +1946,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_sortkey_reorder_3";
+    inline static const std::string kTestGroupPath = "test_lake_sortkey_reorder_3_" + std::to_string(getpid());
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -2064,8 +2078,9 @@ public:
     SchemaChangeBaseTabletReadSchemaTest() {
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(_test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -2287,10 +2302,10 @@ protected:
 
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<FixedLocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 
-    constexpr static const char* const _test_dir = "test_lake_base_tablet_read_schema";
+    inline static const std::string _test_dir = "test_lake_base_tablet_read_schema_" + std::to_string(getpid());
     int64_t _partition_id = 100;
 };
 
@@ -2321,16 +2336,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_fallback_to_tablet_metadata_sc
     auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
-    auto c0 = Int32Column::create();
-    auto c1 = BinaryColumn::create();
-    auto c2 = Int32Column::create();
-    auto c3 = Int32Column::create();
-    auto c4 = Int32Column::create();
-    c0->append_datum(Datum(1));
-    c1->append_datum(Datum("test"));
-    c2->append_datum(Datum(100));
-    c3->append_datum(Datum(200));
-    c4->append_datum(Datum(300));
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"test"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({100});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({200});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({300});
 
     VChunk chunk0({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
     uint32_t indexes[1] = {0};
@@ -2831,16 +2841,11 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
     auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
     auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
 
-    auto col_c0 = Int32Column::create();
-    auto col_c1 = BinaryColumn::create();
-    auto col_c2 = Int32Column::create();
-    auto col_c3 = Int32Column::create();
-    auto col_c4 = Int32Column::create();
-    col_c0->append_datum(Datum(1));
-    col_c1->append_datum(Datum(Slice("row0")));
-    col_c2->append_datum(Datum(100));
-    col_c3->append_datum(Datum(1000));
-    col_c4->append_datum(Datum(10));
+    auto col_c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto col_c1 = ColumnTestHelper::build_column<Slice>({"row0"});
+    auto col_c2 = ColumnTestHelper::build_column<int32_t>({100});
+    auto col_c3 = ColumnTestHelper::build_column<int32_t>({1000});
+    auto col_c4 = ColumnTestHelper::build_column<int32_t>({10});
     VChunk chunk0({std::move(col_c0), std::move(col_c1), std::move(col_c2), std::move(col_c3), std::move(col_c4)},
                   base_schema);
     uint32_t indexes[1] = {0};
@@ -2864,7 +2869,8 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
     // Drop the BE schema cache so the only way DeltaWriter could resolve the new schema is
     // an FE RPC. With the fix, the schema is preset and the lookup is skipped, so the hook
     // above must observe zero invocations.
-    _tablet_manager->update_metacache_limit(0);
+    _tablet_manager->metacache()->update_tablet_metadata_capacity(0);
+    _tablet_manager->metacache()->update_segment_metadata_capacity(0);
     _tablet_manager->prune_metacache();
 
     auto new_tablet_id = new_metadata->id();
@@ -2893,6 +2899,311 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
             << "SortedSchemaChange must not call the FE schema RPC when DeltaWriter is given a preset schema";
 }
 
+// A schema-change txn log may legitimately carry a rowset that references nothing: the range
+// distribution online rewrite anchors an empty op_write as op_schema_change for a zero-row shadow
+// tablet. Publishing it must succeed and must not leave that rowset in the metadata -- tablet merge
+// rejects a rowset with no segments, no del files and no delete predicate.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, empty_op_schema_change_rowset_is_not_recorded) {
+    auto metadata = create_base_tablet_metadata();
+    auto tablet_id = metadata->id();
+    metadata->clear_rowsets();
+    metadata->set_next_rowset_id(1);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+
+    int64_t txn_id = next_id();
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto* op_schema_change = txn_log->mutable_op_schema_change();
+    op_schema_change->set_alter_version(1);
+    auto* rowset = op_schema_change->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(0);
+    ASSERT_OK(_tablet_manager->put_txn_log(std::move(txn_log)));
+
+    ASSERT_OK(publish_version_for_schema_change(tablet_id, 2, txn_id));
+
+    ASSIGN_OR_ABORT(auto published, _tablet_manager->get_tablet_metadata(tablet_id, 2));
+    EXPECT_EQ(0, published->rowsets_size());
+    EXPECT_EQ(1, published->next_rowset_id());
+}
+
+// The primary-key applier appends op_schema_change rowsets with the same loop, and the producer that
+// emits a rowset referencing nothing is key-type agnostic.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, empty_op_schema_change_rowset_is_not_recorded_pk) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    auto tablet_id = metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+
+    int64_t txn_id = next_id();
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto* op_schema_change = txn_log->mutable_op_schema_change();
+    op_schema_change->set_alter_version(1);
+    auto* rowset = op_schema_change->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(0);
+    ASSERT_OK(_tablet_manager->put_txn_log(std::move(txn_log)));
+
+    ASSERT_OK(publish_version_for_schema_change(tablet_id, 2, txn_id));
+
+    ASSIGN_OR_ABORT(auto published, _tablet_manager->get_tablet_metadata(tablet_id, 2));
+    EXPECT_EQ(0, published->rowsets_size());
+    EXPECT_EQ(1, published->next_rowset_id());
+}
+
+// A delete-predicate rowset holds no data and its effect is already applied to the rewritten rows
+// by the conversion read, so the conversion must not emit a rowset for it at all.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, delete_predicate_rowset_is_not_converted) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+
+    auto new_metadata = std::make_shared<TabletMetadata>();
+    new_metadata->set_id(next_id());
+    new_metadata->set_version(1);
+    new_metadata->set_next_rowset_id(1);
+    auto* new_schema = new_metadata->mutable_schema();
+    new_schema->CopyFrom(base_metadata->schema());
+    new_schema->set_id(next_id());
+    auto* c5 = new_schema->add_column();
+    c5->set_unique_id(6);
+    c5->set_name("c5");
+    c5->set_type("INT");
+    c5->set_is_key(false);
+    c5->set_is_nullable(false);
+    c5->set_aggregation("NONE");
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*new_metadata));
+
+    int64_t version = 1;
+    auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
+    auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+
+    // Two data rows: c2 = 100 survives, c2 = 200 is deleted below.
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"keep", "drop"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({100, 200});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({1, 2});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({1, 2});
+
+    VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
+    uint32_t indexes[2] = {0, 1};
+
+    int64_t write_txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_manager.get())
+                                               .set_tablet_id(base_tablet_id)
+                                               .set_txn_id(write_txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(base_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk, indexes, sizeof(indexes) / sizeof(indexes[0])));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, write_txn_id).status());
+    version++;
+
+    // DELETE FROM t WHERE c2 = 200 -- a rowset with a predicate and nothing else.
+    DeletePredicatePB delete_predicate;
+    delete_predicate.set_version(-1);
+    auto* binary_predicate = delete_predicate.add_binary_predicates();
+    binary_predicate->set_column_name("c2");
+    binary_predicate->set_op("=");
+    binary_predicate->set_value("200");
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(base_tablet_id));
+    int64_t delete_txn_id = next_id();
+    ASSERT_OK(tablet.delete_data(delete_txn_id, delete_predicate, nullptr));
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, delete_txn_id).status());
+    version++;
+
+    ASSIGN_OR_ABORT(auto base_after_delete, _tablet_manager->get_tablet_metadata(base_tablet_id, version));
+    ASSERT_EQ(2, base_after_delete->rowsets_size());
+    ASSERT_TRUE(base_after_delete->rowsets(1).has_delete_predicate());
+
+    auto new_tablet_id = new_metadata->id();
+    int64_t alter_txn_id = next_id();
+    TAlterTabletReqV2 request;
+    request.base_tablet_id = base_tablet_id;
+    request.new_tablet_id = new_tablet_id;
+    request.alter_version = version;
+    request.txn_id = alter_txn_id;
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    // The conversion emits one rowset for the data and none for the predicate.
+    ASSIGN_OR_ABORT(auto alter_log, _tablet_manager->get_txn_log(new_tablet_id, alter_txn_id));
+    ASSERT_TRUE(alter_log->has_op_schema_change());
+    ASSERT_EQ(1, alter_log->op_schema_change().rowsets_size());
+    const auto& converted = alter_log->op_schema_change().rowsets(0);
+    EXPECT_GT(converted.segment_metas_size(), 0);
+    EXPECT_FALSE(converted.has_delete_predicate());
+
+    // The delete is still applied, and it is the c2 = 200 row that is gone.
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
+    ASSIGN_OR_ABORT(auto shadow, _tablet_manager->get_tablet_metadata(new_tablet_id, version + 1));
+    ASSERT_EQ(1, shadow->rowsets_size());
+
+    auto new_tablet_schema = TabletSchema::create(shadow->schema());
+    auto new_vschema = std::make_shared<VSchema>(ChunkHelper::convert_schema(new_tablet_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_manager.get(), shadow, *new_vschema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams()));
+    auto read_chunk = ChunkFactory::new_chunk(*new_vschema, 128);
+    ASSERT_OK(reader->get_next(read_chunk.get()));
+    ASSERT_EQ(1, read_chunk->num_rows());
+    EXPECT_EQ(100, read_chunk->get(0)[2].get_int32());
+    // ChunkIterator requires an empty output chunk; SegmentIterator DCHECKs it.
+    read_chunk->reset();
+    EXPECT_TRUE(reader->get_next(read_chunk.get()).is_end_of_file());
+}
+
+// The conversion can empty an ordinary rowset outright, when a later delete predicate removes every
+// row it holds. That leaves a rowset referencing nothing, which must not be recorded either.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, fully_deleted_rowset_contributes_no_rowset) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+
+    auto new_metadata = std::make_shared<TabletMetadata>();
+    new_metadata->set_id(next_id());
+    new_metadata->set_version(1);
+    new_metadata->set_next_rowset_id(1);
+    auto* new_schema = new_metadata->mutable_schema();
+    new_schema->CopyFrom(base_metadata->schema());
+    new_schema->set_id(next_id());
+    auto* c5 = new_schema->add_column();
+    c5->set_unique_id(6);
+    c5->set_name("c5");
+    c5->set_type("INT");
+    c5->set_is_key(false);
+    c5->set_is_nullable(false);
+    c5->set_aggregation("NONE");
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*new_metadata));
+
+    int64_t version = 1;
+    auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
+    auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+
+    // A single row, which the delete below removes entirely.
+    auto c0 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c1 = ColumnTestHelper::build_column<Slice>({"gone"});
+    auto c2 = ColumnTestHelper::build_column<int32_t>({42});
+    auto c3 = ColumnTestHelper::build_column<int32_t>({1});
+    auto c4 = ColumnTestHelper::build_column<int32_t>({1});
+
+    VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
+    uint32_t indexes[1] = {0};
+
+    int64_t write_txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_manager.get())
+                                               .set_tablet_id(base_tablet_id)
+                                               .set_txn_id(write_txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(base_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk, indexes, sizeof(indexes) / sizeof(indexes[0])));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, write_txn_id).status());
+    version++;
+
+    DeletePredicatePB delete_predicate;
+    delete_predicate.set_version(-1);
+    auto* binary_predicate = delete_predicate.add_binary_predicates();
+    binary_predicate->set_column_name("c2");
+    binary_predicate->set_op("=");
+    binary_predicate->set_value("42");
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(base_tablet_id));
+    int64_t delete_txn_id = next_id();
+    ASSERT_OK(tablet.delete_data(delete_txn_id, delete_predicate, nullptr));
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, delete_txn_id).status());
+    version++;
+
+    auto new_tablet_id = new_metadata->id();
+    int64_t alter_txn_id = next_id();
+    TAlterTabletReqV2 request;
+    request.base_tablet_id = base_tablet_id;
+    request.new_tablet_id = new_tablet_id;
+    request.alter_version = version;
+    request.txn_id = alter_txn_id;
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
+
+    ASSIGN_OR_ABORT(auto shadow, _tablet_manager->get_tablet_metadata(new_tablet_id, version + 1));
+    EXPECT_EQ(0, shadow->rowsets_size());
+    EXPECT_EQ(1, shadow->next_rowset_id());
+
+    auto new_tablet_schema = TabletSchema::create(shadow->schema());
+    auto new_vschema = std::make_shared<VSchema>(ChunkHelper::convert_schema(new_tablet_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_manager.get(), shadow, *new_vschema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams()));
+    auto read_chunk = ChunkFactory::new_chunk(*new_vschema, 128);
+    EXPECT_TRUE(reader->get_next(read_chunk.get()).is_end_of_file());
+}
+
+// The appliers derive next_rowset_id from the LAST appended rowset in the txn log, not from the
+// last rowset in the log itself. A hollow rowset trailing a retained one is dropped rather than
+// appended, so it must not be the one next_rowset_id is derived from.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, hollow_trailing_rowset_does_not_move_next_rowset_id) {
+    auto metadata = create_base_tablet_metadata();
+    auto tablet_id = metadata->id();
+    metadata->clear_rowsets();
+    metadata->set_next_rowset_id(1);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+
+    int64_t txn_id = next_id();
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto* op_schema_change = txn_log->mutable_op_schema_change();
+    op_schema_change->set_alter_version(1);
+
+    // Retained rowset: one segment.
+    auto* retained = op_schema_change->add_rowsets();
+    retained->set_id(1);
+    retained->set_overlapped(false);
+    retained->set_num_rows(1);
+    retained->set_data_size(100);
+    auto* segment = retained->add_segment_metas();
+    segment->set_filename("seg.dat");
+    segment->set_num_rows(1);
+    segment->set_segment_idx(0);
+
+    // Hollow rowset trailing the retained one: no segments, no del files, no predicate, zero stats.
+    auto* hollow = op_schema_change->add_rowsets();
+    hollow->set_id(2);
+    hollow->set_overlapped(false);
+    hollow->set_num_rows(0);
+    hollow->set_data_size(0);
+
+    ASSERT_OK(_tablet_manager->put_txn_log(std::move(txn_log)));
+
+    ASSERT_OK(publish_version_for_schema_change(tablet_id, 2, txn_id));
+
+    ASSIGN_OR_ABORT(auto published, _tablet_manager->get_tablet_metadata(tablet_id, 2));
+    ASSERT_EQ(1, published->rowsets_size());
+    EXPECT_EQ(1, published->rowsets(0).id());
+    EXPECT_EQ(1, published->rowsets(0).segment_metas_size());
+    // next_rowset_id comes from the retained rowset alone: id(1) + get_rowset_id_step (1, for a
+    // single un-indexed segment) = 2. The dropped hollow rowset (id 2) must not be the source of
+    // this value, even though it is last in the log.
+    EXPECT_EQ(2, published->next_rowset_id());
+}
+
 // --- do_process_add_index_only validation -------------------------------
 //
 // The ADD INDEX fast path validates incoming TAlterTabletReqV2 before
@@ -2908,8 +3219,9 @@ public:
     SchemaChangeAddIndexOnlyTest() {
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(_test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -2921,10 +3233,10 @@ protected:
 
     void TearDown() override { ASSERT_OK(fs::remove_all(_test_dir)); }
 
-    std::string _test_dir = "./test_add_index_only_validation";
+    std::string _test_dir = "./test_add_index_only_validation_" + std::to_string(getpid());
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 };
 
@@ -3039,8 +3351,9 @@ public:
     DropIndexOnlyValidationTest() {
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _location_provider = std::make_unique<FixedLocationProvider>(_test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
     }
 
 protected:
@@ -3052,10 +3365,10 @@ protected:
 
     void TearDown() override { ASSERT_OK(fs::remove_all(_test_dir)); }
 
-    std::string _test_dir = "./test_drop_index_only_validation";
+    std::string _test_dir = "./test_drop_index_only_validation_" + std::to_string(getpid());
     std::unique_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<LocationProvider> _location_provider;
-    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 };
 
@@ -3170,6 +3483,199 @@ TEST_F(DropIndexOnlyValidationTest, alter_version_propagates_to_op_drop_version)
     ASSERT_EQ(1, log->op_drop_index().dropped_size());
     EXPECT_EQ(101, log->op_drop_index().dropped(0).index_id());
     EXPECT_EQ(2, log->op_drop_index().dropped(0).col_unique_id());
+}
+
+// A lake schema change rewrites the table's existing JSON columns with the table's flat_json.*
+// settings, read from the BASE tablet's metadata. The shadow tablet's own metadata may carry none: FE
+// created schema-change shadow tablets without flat_json_config, so reading the new tablet (or the
+// metadata cache) would rewrite a flat_json.enable=false table with the be.conf globals.
+class SchemaChangeFlatJsonConfigTest : public testing::Test {
+public:
+    SchemaChangeFlatJsonConfigTest() {
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _location_provider = std::make_unique<FixedLocationProvider>(kTestDirectory);
+        _primary_key_manager = std::make_unique<PrimaryKeyManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _primary_key_manager.get(), 1024 * 1024,
+                                                          1024 * 1024);
+    }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_lake_schema_change_flat_json_config";
+    constexpr static int kNumRows = 256;
+
+    void SetUp() override {
+        (void)fs::remove_all(kTestDirectory);
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestDirectory, lake::kTxnLogDirectoryName)));
+    }
+
+    void TearDown() override { (void)fs::remove_all(kTestDirectory); }
+
+    static void add_column(TabletSchemaPB* schema, int64_t unique_id, const std::string& name, const std::string& type,
+                           bool is_key) {
+        auto* column = schema->add_column();
+        column->set_unique_id(unique_id);
+        column->set_name(name);
+        column->set_type(type);
+        column->set_is_key(is_key);
+        column->set_is_nullable(false);
+        if (!is_key) {
+            column->set_aggregation("NONE");
+        }
+    }
+
+    // Base tablet: c0 INT key, c1 INT key, c2 INT value, j JSON value; created with
+    // flat_json.enable=false. New tablet: built by `make_new_schema`, without any flat_json_config.
+    // Loads rows whose JSON values the flattener does extract, runs the schema change, and returns
+    // whether each segment of the new tablet wrote the JSON column flat.
+    std::vector<bool> run_schema_change(
+            const std::function<void(TabletSchemaPB*, int64_t, int64_t, int64_t, int64_t)>& make_new_schema) {
+        const int64_t c0_id = next_id();
+        const int64_t c1_id = next_id();
+        const int64_t c2_id = next_id();
+        const int64_t j_id = next_id();
+
+        TabletMetadata base_metadata;
+        base_metadata.set_id(next_id());
+        base_metadata.set_version(1);
+        auto* base_schema = base_metadata.mutable_schema();
+        base_schema->set_id(next_id());
+        base_schema->set_num_short_key_columns(1);
+        base_schema->set_keys_type(DUP_KEYS);
+        base_schema->set_num_rows_per_row_block(65535);
+        add_column(base_schema, c0_id, "c0", "INT", true);
+        add_column(base_schema, c1_id, "c1", "INT", true);
+        add_column(base_schema, c2_id, "c2", "INT", false);
+        add_column(base_schema, j_id, "j", "JSON", false);
+        auto* flat_json_config = base_metadata.mutable_flat_json_config();
+        flat_json_config->set_flat_json_enable(false);
+        flat_json_config->set_flat_json_null_factor(config::json_flat_null_factor);
+        flat_json_config->set_flat_json_sparsity_factor(config::json_flat_sparsity_factor);
+        flat_json_config->set_flat_json_max_column_max(config::json_flat_column_max);
+        CHECK_OK(_tablet_manager->put_tablet_metadata(base_metadata));
+
+        TabletMetadata new_metadata;
+        new_metadata.set_id(next_id());
+        new_metadata.set_version(1);
+        auto* new_schema = new_metadata.mutable_schema();
+        new_schema->set_id(next_id());
+        new_schema->set_num_short_key_columns(1);
+        new_schema->set_keys_type(DUP_KEYS);
+        new_schema->set_num_rows_per_row_block(65535);
+        make_new_schema(new_schema, c0_id, c1_id, c2_id, j_id);
+        CHECK_OK(_tablet_manager->put_tablet_metadata(new_metadata));
+
+        auto base_tablet_schema = TabletSchema::create(base_metadata.schema());
+        auto base_chunk_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        auto j = JsonColumn::create();
+        for (int i = 0; i < kNumRows; i++) {
+            c0->append(i % 7);
+            c1->append(i);
+            c2->append(i * 3);
+            auto json = JsonValue::parse(strings::Substitute(R"({"a": $0, "b": $1})", i, i * 3));
+            CHECK(json.ok());
+            j->append(&json.value());
+        }
+        VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(j)}, base_chunk_schema);
+        std::vector<uint32_t> indexes(kNumRows);
+        std::iota(indexes.begin(), indexes.end(), 0);
+
+        const int64_t base_tablet_id = base_metadata.id();
+        const int64_t load_txn_id = next_id();
+        auto delta_writer = DeltaWriterBuilder()
+                                    .set_tablet_manager(_tablet_manager.get())
+                                    .set_tablet_id(base_tablet_id)
+                                    .set_txn_id(load_txn_id)
+                                    .set_partition_id(_partition_id)
+                                    .set_mem_tracker(_mem_tracker.get())
+                                    .set_schema_id(base_tablet_schema->id())
+                                    .build()
+                                    .value();
+        CHECK_OK(delta_writer->open());
+        CHECK_OK(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        CHECK_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        CHECK_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, 2, load_txn_id).status());
+
+        // Nothing of either tablet is cached, as on a CN that did not serve their loads.
+        _tablet_manager->prune_metacache();
+
+        const int64_t new_tablet_id = new_metadata.id();
+        const int64_t alter_txn_id = next_id();
+        TAlterTabletReqV2 request;
+        request.base_tablet_id = base_tablet_id;
+        request.new_tablet_id = new_tablet_id;
+        request.alter_version = 2;
+        request.txn_id = alter_txn_id;
+        SchemaChangeHandler handler(_tablet_manager.get());
+        CHECK_OK(handler.process_alter_tablet(request));
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(alter_txn_id);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(time(nullptr));
+        CHECK_OK(publish_version(_tablet_manager.get(), lake::PublishTabletInfo(new_tablet_id), 1, 2,
+                                 std::span<const TxnInfoPB>(&txn_info, 1), false)
+                         .status());
+
+        auto metadata = _tablet_manager->get_tablet_metadata(new_tablet_id, 2).value();
+        auto new_tablet_schema = TabletSchema::create(metadata->schema());
+        auto fs = FileSystemFactory::CreateSharedFromString(kTestDirectory).value();
+        std::vector<bool> flat;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (const auto& seg_meta : rowset.segment_metas()) {
+                auto path = _tablet_manager->segment_location(new_tablet_id, seg_meta.filename());
+                auto segment = Segment::open(fs, FileInfo{path}, 0, new_tablet_schema).value();
+                const ColumnReader* reader = segment->column_with_uid(j_id);
+                CHECK(reader != nullptr);
+                flat.push_back(reader->is_flat_json());
+            }
+        }
+        return flat;
+    }
+
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<FixedLocationProvider> _location_provider;
+    std::unique_ptr<PrimaryKeyManager> _primary_key_manager;
+    std::unique_ptr<TabletManager> _tablet_manager;
+    int64_t _partition_id = next_id();
+};
+
+// Reordering the keys sorts the data: SortedSchemaChange, which writes through a DeltaWriter.
+TEST_F(SchemaChangeFlatJsonConfigTest, sorted_schema_change_keeps_base_flat_json_config) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    auto flat =
+            run_schema_change([](TabletSchemaPB* schema, int64_t c0_id, int64_t c1_id, int64_t c2_id, int64_t j_id) {
+                add_column(schema, c1_id, "c1", "INT", true);
+                add_column(schema, c0_id, "c0", "INT", true);
+                add_column(schema, c2_id, "c2", "INT", false);
+                add_column(schema, j_id, "j", "JSON", false);
+            });
+    ASSERT_FALSE(flat.empty());
+    for (bool is_flat : flat) {
+        EXPECT_FALSE(is_flat) << "the rewrite ignored the table's flat_json.enable=false";
+    }
+}
+
+// Widening a value column converts it in place: DirectSchemaChange, which writes through a
+// VersionedTablet writer of the new tablet.
+TEST_F(SchemaChangeFlatJsonConfigTest, direct_schema_change_keeps_base_flat_json_config) {
+    ASSERT_TRUE(config::enable_json_flat) << "test assumes the be.conf default";
+    auto flat =
+            run_schema_change([](TabletSchemaPB* schema, int64_t c0_id, int64_t c1_id, int64_t c2_id, int64_t j_id) {
+                add_column(schema, c0_id, "c0", "INT", true);
+                add_column(schema, c1_id, "c1", "INT", true);
+                add_column(schema, c2_id, "c2", "BIGINT", false);
+                add_column(schema, j_id, "j", "JSON", false);
+            });
+    ASSERT_FALSE(flat.empty());
+    for (bool is_flat : flat) {
+        EXPECT_FALSE(is_flat) << "the rewrite ignored the table's flat_json.enable=false";
+    }
 }
 
 } // namespace starrocks::lake

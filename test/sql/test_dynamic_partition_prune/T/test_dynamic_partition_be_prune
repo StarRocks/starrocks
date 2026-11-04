@@ -544,3 +544,111 @@ SELECT COUNT(*) FROM t_null_combined WHERE dt IS NOT NULL AND category = 1;
 
 drop table t_null_combined force;
 drop database test_dyn_prune_${uuid0} force;
+
+-- name: test_range_partition_prune_multi_column
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+CREATE TABLE t_range_multi (
+    id1 INT NOT NULL,
+    id2 INT NOT NULL,
+    name VARCHAR(25) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1, id2) (
+    PARTITION p0 VALUES [("0", "0"), ("10", "10")),
+    PARTITION p1 VALUES [("10", "10"), ("20", "20")),
+    PARTITION p2 VALUES [("20", "20"), ("30", "30"))
+)
+DISTRIBUTED BY HASH(name) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_multi VALUES (11, 0, 'a'), (11, 1, 'b'), (5, 9, 'c'), (25, 3, 'd'), (10, 10, 'e'), (19, 25, 'f'), (3, 3, 'g');
+
+-- p1 = [(10,10), (20,20)) holds (11,0), (11,1) and (19,25): id2 is unbounded inside a multi-column range
+SELECT name FROM t_range_multi WHERE id2 <= 8 ORDER BY name;
+SELECT name FROM t_range_multi WHERE id2 = 25 ORDER BY name;
+SELECT count(*) FROM t_range_multi WHERE id2 > 8;
+SELECT name FROM t_range_multi WHERE id1 <= 8 ORDER BY name;
+SELECT name FROM t_range_multi WHERE id1 = 11 AND id2 <= 8 ORDER BY name;
+SELECT count(*) FROM t_range_multi;
+
+drop table t_range_multi force;
+drop database test_dyn_prune_${uuid0} force;
+
+-- name: test_range_partition_prune_multi_column_pinned_prefix
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+-- a leading column pinned to one value makes the trailing column's bound exact
+CREATE TABLE t_range_multi_fixed (
+    id1 INT NOT NULL,
+    id2 INT NOT NULL,
+    name VARCHAR(25) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1, id2) (
+    PARTITION p0 VALUES [("5", "0"), ("5", "10")),
+    PARTITION p1 VALUES [("5", "10"), ("5", "20")),
+    PARTITION p2 VALUES [("6", "0"), ("7", "0"))
+)
+DISTRIBUTED BY HASH(name) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_multi_fixed VALUES (5, 3, 'a'), (5, 15, 'b'), (6, 15, 'c'), (6, 3, 'd');
+
+SELECT name FROM t_range_multi_fixed WHERE id2 <= 8 ORDER BY name;
+SELECT name FROM t_range_multi_fixed WHERE id2 > 8 ORDER BY name;
+SELECT name FROM t_range_multi_fixed WHERE id1 = 5 AND id2 > 8 ORDER BY name;
+
+drop table t_range_multi_fixed force;
+drop database test_dyn_prune_${uuid0} force;
+
+-- name: test_range_partition_prune_multi_column_null_partition @native
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+-- the NULL partition's lower bound is the type minimum standing in for NULL; (NULL, 100) lands in
+-- p0 = [(MIN, MIN), (-128, 10)) although id2 = 100 is outside its id2 endpoints
+CREATE TABLE t_range_multi_null (
+    id1 TINYINT NULL,
+    id2 TINYINT NOT NULL,
+    v INT
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1, id2) (
+    PARTITION p0 VALUES LESS THAN ("-128", "10"),
+    PARTITION p1 VALUES LESS THAN ("50", "0")
+)
+DISTRIBUTED BY HASH(v) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_multi_null VALUES (NULL, 100, 1), (-100, 5, 2), (20, 3, 3);
+
+SELECT v FROM t_range_multi_null WHERE id2 = 100;
+SELECT v FROM t_range_multi_null WHERE id2 <= 5 ORDER BY v;
+SELECT count(*) FROM t_range_multi_null;
+
+drop table t_range_multi_null force;
+drop database test_dyn_prune_${uuid0} force;
+
+-- name: test_range_partition_prune_open_upper_bound
+create database test_dyn_prune_${uuid0};
+use test_dyn_prune_${uuid0};
+-- an open upper bound is not a bound: [(-100), MAXVALUE) must not be read as [-100, 0]
+CREATE TABLE t_range_maxvalue (
+    id1 INT NOT NULL,
+    name VARCHAR(25) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(id1)
+PARTITION BY RANGE(id1) (
+    PARTITION p0 VALUES [("-200"), ("-100")),
+    PARTITION p1 VALUES [("-100"), (MAXVALUE))
+)
+DISTRIBUTED BY HASH(name) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+INSERT INTO t_range_maxvalue VALUES (-150, 'a'), (-50, 'b'), (50, 'c');
+
+SELECT name FROM t_range_maxvalue WHERE id1 > 0 ORDER BY name;
+SELECT name FROM t_range_maxvalue WHERE id1 > -60 ORDER BY name;
+
+drop table t_range_maxvalue force;
+drop database test_dyn_prune_${uuid0} force;

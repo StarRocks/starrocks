@@ -870,7 +870,10 @@ PRIMARY KEY (tenant_id, created_time, id);
 In addition to the colocation group, you must also specify the colocated columns in the `colocate_with` property in the format `<colocation_group>:<colocated_column>[,<colocated_column>]`:
 - The colocated columns must be a prefix of the sort columns.
 - Tables in the same colocation group must have the same type, number, and order of colocated columns.
+- The type of a colocated column cannot be changed after the table is created, including increasing the length of a VARCHAR column.
+- You can change the sort key online after the table is created (`ALTER TABLE ... ORDER BY`, adding or dropping a key column, or widening an integer sort-key column), as long as the new sort key still starts with the colocated columns, in the same order and with the same types. A change that drops, reorders, or changes the type of a colocated column is rejected. The table stays in its colocation group and keeps using Colocate Join.
 - Default colocated columns are the sort columns.
+- If `colocate_with` specifies only the colocation group and a sort key change makes the sort key longer than the colocated columns, StarRocks rewrites the property to the explicit form `<colocation_group>:<colocated_column>[,<colocated_column>]`, which `SHOW CREATE TABLE` returns from then on.
 :::
 
 ```SQL
@@ -915,6 +918,8 @@ The following operations are not supported on tables with Range-based Distributi
 | `ALTER TABLE ... ADD ROLLUP ...` without an `ORDER BY` clause | A plain synchronous rollup assumes 1-to-1 base/rollup tablet pairing with the same row order, which range distribution semantic does not provide. Use `ALTER TABLE ... ADD ROLLUP ... ORDER BY (...)` instead: on range tables in shared-data clusters, this statement builds an independent-sort-key rollup, and you can add multiple rollups (one per `ALTER TABLE` statement). |
 | `CREATE MATERIALIZED VIEW ... AS ...` (synchronous form, no `REFRESH` and no `DISTRIBUTED BY` clause) | A synchronous materialized view is internally a plain synchronous rollup and shares the same limitation. |
 | `ALTER TABLE ... OPTIMIZE` | OPTIMIZE redistributes / rebuckets a partition, which is incompatible with range tablet boundaries. |
+| `CREATE TABLE ... ROLLUP (...)` on a table with `colocate_with` | The rollup's tablets are cut on the base table's sort key while its rows are placed by the rollup's own sort key, so a Colocate Join that reads the rollup could return wrong results. `ALTER TABLE ... ADD ROLLUP` is not supported on such a table either. |
+| `ALTER TABLE ... MERGE TABLETS` on a Primary Key table whose `ORDER BY` differs from its primary key (automatic size-based merge is skipped for the same shape) | Such a table routes rows by a range in primary-key space while its segments are laid out in sort-key order, so a merge cannot decide which source tablet still owns a given row of a segment those sources share. SPLIT is unaffected, and a Primary Key table whose `ORDER BY` is its primary key can still be merged. |
 
 For rollup-like aggregation use cases, use an **asynchronous materialized view** with an explicit `REFRESH` clause or a `DISTRIBUTED BY` clause, for example:
 
@@ -1000,7 +1005,7 @@ Buckets reflect how data files are actually organized in StarRocks.
 
 - Manually set the number of buckets
 
-  Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
+  Since v2.4.0, StarRocks supports using multiple threads to scan a tablet in parallel during a query, thereby reducing the dependency of scanning performance on the tablet count. We recommend that each tablet contain about 10 GB of raw data. For shared-data clusters of v4.1 or later, which support large-capacity tablets, we recommend that each tablet contain 10 GB to 50 GB of data, and no more than 100 GB. If you intend to manually set the number of buckets, you can estimate the amount of data in each partition of a table and then decide the number of tablets.
 
   To enable parallel scanning on tablets, make sure the `enable_tablet_internal_parallel` parameter is set to `TRUE` globally for the entire system (`SET GLOBAL enable_tablet_internal_parallel = true;`).
 

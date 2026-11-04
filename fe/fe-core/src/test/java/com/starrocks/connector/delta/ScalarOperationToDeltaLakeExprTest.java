@@ -17,6 +17,7 @@ package com.starrocks.connector.delta;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -173,6 +174,27 @@ public class ScalarOperationToDeltaLakeExprTest {
         convertExpr = converter.convert(operators, context);
         expectedExpr = new Predicate("IS_NOT_NULL", cDeltaIntCol);
         Assertions.assertEquals(convertExpr.toString(), expectedExpr.toString());
+    }
+
+    @Test
+    public void testTruncatingCharCastIsNotPushedDown() {
+        ScalarOperationToDeltaLakeExpr converter = new ScalarOperationToDeltaLakeExpr();
+        ScalarOperationToDeltaLakeExpr.DeltaLakeContext context =
+                new ScalarOperationToDeltaLakeExpr.DeltaLakeContext(schema, new HashSet<>());
+        ConstantOperator value = ConstantOperator.createVarchar("hello");
+        ScalarOperator equality = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(new CharType(5), cVarcharCol), value);
+        Assertions.assertEquals(AlwaysTrue.ALWAYS_TRUE, converter.convert(List.of(equality), context));
+
+        ScalarOperator safeEquality = new BinaryPredicateOperator(BinaryType.EQ, cIntCol,
+                ConstantOperator.createInt(5));
+        Predicate expected = new Predicate("=", cDeltaIntCol, Literal.ofInt(5));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(equality, safeEquality), context).toString());
+
+        ScalarOperator implicitEquality = new BinaryPredicateOperator(BinaryType.EQ,
+                new CastOperator(new CharType(5), cVarcharCol, true), value);
+        expected = new Predicate("=", cDeltaVarcharCol, Literal.ofString("hello"));
+        Assertions.assertEquals(expected.toString(), converter.convert(List.of(implicitEquality), context).toString());
     }
 
     @Test

@@ -27,6 +27,7 @@
 #include "base/statusor.h"
 #include "base/uid_util.h"
 #include "platform/llm/ai_admission_controller.h"
+#include "platform/llm/ai_execution_statistics.h"
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_provider.h"
 #include "platform/llm/ai_runtime.h"
@@ -53,15 +54,17 @@ public:
     AITaskSuccess(AITaskSuccess&& other) noexcept;
     AITaskSuccess& operator=(AITaskSuccess&& other) noexcept;
 
-    static StatusOr<AITaskSuccess> create(std::string content, AIMemoryContext memory);
+    static StatusOr<AITaskSuccess> create(AIProviderValue result, AIMemoryContext memory);
 
-    std::string_view content() const noexcept { return _content; }
+    const AIProviderValue& result() const noexcept { return _result; }
+    std::string_view content() const { return std::get<std::string>(_result); }
+    const std::vector<float>& embedding() const { return std::get<std::vector<float>>(_result); }
 
 private:
-    AITaskSuccess(std::string content, AIMemoryContext memory, size_t reserved_bytes) noexcept;
+    AITaskSuccess(AIProviderValue result, AIMemoryContext memory, size_t reserved_bytes) noexcept;
     void _release() noexcept;
 
-    std::string _content;
+    AIProviderValue _result;
     AIMemoryContext _memory;
     size_t _reserved_bytes = 0;
 };
@@ -82,7 +85,10 @@ using AITaskResult = std::variant<AITaskSuccess, AISanitizedRowFailure, AILifecy
 // Callbacks may run on the admission scheduler, a completion worker, or the native HTTP I/O rejection path. They must
 // be O(1) and non-blocking, and may only publish terminal task state or wake an observer; downstream expression work
 // must be scheduled by that observer, never inline here.
-using AITaskCallback = std::function<void(AITaskResult)>;
+// Statistics are an immutable terminal snapshot and are valid only during the
+// callback. Consumers retaining the snapshot must copy it. In-flight tasks do
+// not publish partial statistics through this query-local interface.
+using AITaskCallback = std::function<void(AITaskResult, const AIExecutionStatistics&)>;
 
 struct AIDispatchRequest {
     AIWorkGroupKey workgroup_key;
@@ -90,6 +96,7 @@ struct AIDispatchRequest {
     uint64_t task_id = 0;
     AIChatRequest chat_request;
     int64_t request_deadline_ns = 0;
+    int64_t attempt_timeout_ms = 0;
     int64_t connect_timeout_ms = 0;
     size_t max_response_bytes = 0;
     std::shared_ptr<const ResolvedHttpEndpoint> resolved_endpoint;

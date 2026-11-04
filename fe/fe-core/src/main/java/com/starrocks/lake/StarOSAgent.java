@@ -47,6 +47,7 @@ import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
+import com.staros.util.Constant;
 import com.staros.util.LockCloseable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
@@ -621,6 +622,48 @@ public class StarOSAgent {
         }
     }
 
+    @FunctionalInterface
+    private interface CreateShardCall {
+        List<ShardInfo> call(List<CreateShardInfo> createShardInfos) throws StarClientException;
+    }
+
+    /**
+     * Send {@code createShardInfos} through {@code call}, replaying the identical request once if it fails
+     * without a StarMgr status.
+     *
+     * <p>StarClient reports every gRPC-level failure, such as DEADLINE_EXCEEDED, as {@link StatusCode#GRPC},
+     * and such a failure leaves the outcome unknown: StarMgr may have committed the shards and then outlasted
+     * the client deadline, for example while waiting best-effort for their placement. The replay is sent only
+     * when every entry carries a caller-assigned shard id. StarMgr answers ids it already holds with the
+     * existing shards, so such a replay is safe and normally returns promptly; an entry without an id would
+     * get a fresh one and create a second shard. A StarMgr status is a definite answer and is not retried,
+     * and neither is a call whose thread has been interrupted. An unresponsive StarMgr fails both attempts,
+     * so the worst-case wait is two write deadlines.
+     */
+    private List<ShardInfo> createShardRetryOnTransportError(List<CreateShardInfo> createShardInfos,
+                                                             CreateShardCall call) throws StarClientException {
+        try {
+            return call.call(createShardInfos);
+        } catch (StarClientException firstError) {
+            boolean everyShardIdAssigned = createShardInfos.stream()
+                    .allMatch(createShardInfo -> createShardInfo.getShardId() != Constant.DEFAULT_ID);
+            if (firstError.getCode() != StatusCode.GRPC || Thread.currentThread().isInterrupted()
+                    || !everyShardIdAssigned) {
+                throw firstError;
+            }
+            List<ShardInfo> shardInfos;
+            try {
+                shardInfos = call.call(createShardInfos);
+            } catch (StarClientException retryError) {
+                throw new StarClientException(retryError.getCode(), "the outcome of the first attempt is unknown ("
+                        + firstError.getMessage() + ") and replaying it failed: " + retryError.getMessage());
+            }
+            LOG.warn("Creating {} shards failed without a StarMgr status; replaying the request with the same shard"
+                    + " ids succeeded. first attempt: {}", createShardInfos.size(), firstError.getMessage());
+            return shardInfos;
+        }
+    }
+
     // ATTN
     // (https://github.com/StarRocks/starrocks/pull/60073)
     // The partitionId in pathInfo of LakeRollup may be different in different version.
@@ -630,12 +673,35 @@ public class StarOSAgent {
                                    ComputeResource computeResource)
         throws DdlException {
         return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
-                computeResource);
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    /**
+     * Create shards that join {@code metaGroupId} at creation. Joining at creation has the same
+     * effect as the later {@code updateMetaGroup} join for these shards: each is appended to the
+     * meta group's anonymous group of its bucket position, so the very first placement already
+     * honors the colocation constraint and no shard migration is needed after the data is loaded.
+     */
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId,
+                                   @Nullable List<Long> matchShardIds, @NotNull Map<String, String> properties,
+                                   long metaGroupId, ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, List.of(groupId), matchShardIds, properties,
+                metaGroupId, computeResource);
     }
 
     public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                    List<Long> groupIds, @Nullable List<Long> matchShardIds,
                                    @NotNull Map<String, String> properties,
+                                   ComputeResource computeResource)
+        throws DdlException {
+        return createShards(numShards, pathInfo, cacheInfo, groupIds, matchShardIds, properties,
+                Constant.DEFAULT_ID /* metaGroupId */, computeResource);
+    }
+
+    public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
+                                   List<Long> groupIds, @Nullable List<Long> matchShardIds,
+                                   @NotNull Map<String, String> properties, long metaGroupId,
                                    ComputeResource computeResource)
         throws DdlException {
         Preconditions.checkArgument(groupIds != null && !groupIds.isEmpty(),
@@ -670,7 +736,8 @@ public class StarOSAgent {
                 }
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos, metaGroupId));
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());
@@ -736,7 +803,8 @@ public class StarOSAgent {
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }
-            List<ShardInfo> shardInfos = client.createShard(serviceId, createShardInfoList);
+            List<ShardInfo> shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
             LOG.debug("Create per-new-shard split shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -796,7 +864,8 @@ public class StarOSAgent {
                 builder.setShardId(newShardId);
                 createShardInfoList.add(builder.build());
             }
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos.size() == createShardInfoList.size());
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -825,7 +894,8 @@ public class StarOSAgent {
 
             builder.setShardId(vTabletId);
             createShardInfoList.add(builder.build());
-            shardInfos = client.createShard(serviceId, createShardInfoList);
+            shardInfos = createShardRetryOnTransportError(createShardInfoList,
+                    createShardInfos -> client.createShard(serviceId, createShardInfos));
             Preconditions.checkState(shardInfos != null && shardInfos.size() == 1);
             LOG.debug("Create virtual shards success. shard infos: {}", shardInfos);
         } catch (Exception e) {
@@ -983,19 +1053,39 @@ public class StarOSAgent {
         }
     }
 
+    /**
+     * Resolves the nodes of {@code shardIds} with one getShardInfo call per batch of at most
+     * {@link Config#star_client_get_shard_info_batch_size} shards. StarMgr builds the reply of one call under its
+     * ShardManager lock, so a whole-table list would block StarMgr writes and the follower's journal replay for
+     * seconds; the lock is released between batches.
+     *
+     * <p>If the first batch fails, throws as a single call would. If a later batch fails, stops there and returns
+     * the shards resolved so far: the callers look up a shard missing from the result on its own. Later batches are
+     * not tried, because a failed call may already have waited for the read timeout.
+     */
     public Map<Long, List<Long>> getAllNodeIdsByShards(List<Long> shardIds, long workerGroupId)
             throws StarRocksException {
-        try {
-            List<ShardInfo> shardInfos = getShardInfo(shardIds, workerGroupId);
-            Map<Long, List<Long>> result = new HashMap<>();
+        int batchSize = Math.max(1, Config.star_client_get_shard_info_batch_size);
+        Map<Long, List<Long>> result = new HashMap<>();
+        for (int start = 0; start < shardIds.size(); start += batchSize) {
+            List<Long> batch = shardIds.subList(start, Math.min(start + batchSize, shardIds.size()));
+            List<ShardInfo> shardInfos;
+            try {
+                shardInfos = getShardInfo(batch, workerGroupId);
+            } catch (StarClientException e) {
+                if (start == 0) {
+                    throw new StarRocksException(e);
+                }
+                LOG.warn("Failed to get shard info of {} out of {} shards, return the {} shards resolved so far. "
+                        + "error: {}", shardIds.size() - start, shardIds.size(), result.size(), e.getMessage());
+                break;
+            }
             for (ShardInfo shardInfo : shardInfos) {
                 List<Long> nodeIds = getAllNodeIdsByShard(shardInfo);
                 result.put(shardInfo.getShardId(), nodeIds);
             }
-            return result;
-        } catch (StarClientException e) {
-            throw new StarRocksException(e);
         }
+        return result;
     }
 
     private List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {

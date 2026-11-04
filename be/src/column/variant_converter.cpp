@@ -14,6 +14,8 @@
 
 #include "column/variant_converter.h"
 
+#include <limits>
+
 #include "types/variant.h"
 
 namespace starrocks {
@@ -121,8 +123,18 @@ Status VariantRowConverter::cast_to_string(const VariantRowRef& variant, const c
     }
 }
 
+// A TIMESTAMP_TZ instant shown in `zone`; offset_cache, when given, is bound to `zone`.
+static void instant_to_timestamp(TimestampValue* tsv, int64_t seconds, int64_t microseconds,
+                                 const cctz::time_zone& zone, TzOffsetCache* offset_cache) {
+    if (offset_cache != nullptr) {
+        tsv->from_unixtime_with_offset(seconds, microseconds, offset_cache->offset_in_bound_zone(seconds));
+    } else {
+        tsv->from_unixtime(seconds, microseconds, zone);
+    }
+}
+
 Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::time_zone& zone,
-                                         ColumnBuilder<TYPE_DATE>& result) {
+                                         ColumnBuilder<TYPE_DATE>& result, TzOffsetCache* offset_cache) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -137,10 +149,19 @@ Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::t
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
         auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(seconds, microseconds, zone);
+        instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
         int year, month, day;
         timestamp::to_date(tsv.timestamp(), &year, &month, &day);
         result.append(DateValue::create(year, month, day));
+        return Status::OK();
+    }
+    case VariantType::STRING: {
+        ASSIGN_OR_RETURN(const auto text, variant.get_string());
+        DateValue value;
+        if (!value.from_string(text.data(), text.size())) {
+            return Status::VariantError("Failed to parse variant string as DATE");
+        }
+        result.append(value);
         return Status::OK();
     }
     default:
@@ -149,7 +170,7 @@ Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::t
 }
 
 Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::time_zone& zone,
-                                         ColumnBuilder<TYPE_TIME>& result) {
+                                         ColumnBuilder<TYPE_TIME>& result, TzOffsetCache* offset_cache) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -164,11 +185,43 @@ Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::t
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
         auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(seconds, microseconds, zone);
+        instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
         int hour, minute, second, microsecond;
         tsv.to_time(&hour, &minute, &second, &microsecond);
         int64_t total_micros = (static_cast<int64_t>(hour) * 3600 + minute * 60 + second) * USECS_PER_SEC + microsecond;
         result.append(static_cast<double>(total_micros) / USECS_PER_SEC);
+        return Status::OK();
+    }
+    case VariantType::STRING: {
+        ASSIGN_OR_RETURN(const auto text, variant.get_string());
+        const auto first_colon = text.find(':');
+        if (first_colon == std::string_view::npos) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const auto second_colon = text.find(':', first_colon + 1);
+        if (second_colon == std::string_view::npos || text.find(':', second_colon + 1) != std::string_view::npos) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+
+        // Keep VARCHAR's unsigned HH:MM:SS grammar and signed-int hour domain,
+        // but accumulate total seconds in int64_t without narrowing or overflow.
+        StringParser::ParseResult parsed;
+        const auto hour = StringParser::string_to_unsigned_int<uint32_t>(text.data(), first_colon, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS || hour > std::numeric_limits<int32_t>::max()) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const auto minute = StringParser::string_to_unsigned_int<uint32_t>(text.data() + first_colon + 1,
+                                                                           second_colon - first_colon - 1, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS || minute >= 60) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const auto second = StringParser::string_to_unsigned_int<uint32_t>(text.data() + second_colon + 1,
+                                                                           text.size() - second_colon - 1, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS || second >= 60) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const int64_t seconds = static_cast<int64_t>(hour) * SECS_PER_HOUR + minute * SECS_PER_MINUTE + second;
+        result.append(static_cast<double>(seconds));
         return Status::OK();
     }
     default:
@@ -177,7 +230,7 @@ Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::t
 }
 
 Status VariantRowConverter::cast_to_datetime(const VariantRowRef& row, const cctz::time_zone& zone,
-                                             ColumnBuilder<TYPE_DATETIME>& result) {
+                                             ColumnBuilder<TYPE_DATETIME>& result, TzOffsetCache* offset_cache) {
     const VariantValue& variant = row.get_value();
     switch (const VariantType type = variant.type()) {
     case VariantType::NULL_TYPE:
@@ -195,8 +248,17 @@ Status VariantRowConverter::cast_to_datetime(const VariantRowRef& row, const cct
         ASSIGN_OR_RETURN(int64_t micros, variant.get_timestamp_micros());
         auto [seconds, microseconds] = split_micros_to_seconds(micros);
         TimestampValue tsv{};
-        tsv.from_unixtime(seconds, microseconds, zone);
+        instant_to_timestamp(&tsv, seconds, microseconds, zone, offset_cache);
         result.append(tsv);
+        return Status::OK();
+    }
+    case VariantType::STRING: {
+        ASSIGN_OR_RETURN(const auto text, variant.get_string());
+        TimestampValue value;
+        if (!value.from_string(text.data(), text.size())) {
+            return Status::VariantError("Failed to parse variant string as DATETIME");
+        }
+        result.append(value);
         return Status::OK();
     }
     default:

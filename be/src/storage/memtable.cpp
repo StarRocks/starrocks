@@ -31,7 +31,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
-#include "storage/full_sort_key_codec.h"
 #include "storage/memtable_sink.h"
 #include "storage/non_retryable_load_errors.h"
 #include "storage/row_store_encoder.h"
@@ -76,23 +75,25 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
     }
 }
 
-Status MemTable::_check_sort_key_sizes() {
-    if (_result_chunk == nullptr || _result_chunk->num_rows() == 0) {
-        return Status::OK();
-    }
-    // _result_chunk is in _vectorized_schema order and holds exactly the rows insert() admitted, so
-    // sort key positions address it directly -- unlike the caller's input chunk, which is resolved by
-    // slot id and may carry extra schema-change shadow columns.
-    RETURN_IF_ERROR(check_sort_key_size(*_vectorized_schema, _vectorized_schema->sort_key_idxes(), *_result_chunk, 0,
-                                        _result_chunk->num_rows()));
-    if (!_extra_sort_key_idxes.empty()) {
-        RETURN_IF_ERROR(check_sort_key_size(*_vectorized_schema, _extra_sort_key_idxes, *_result_chunk, 0,
-                                            _result_chunk->num_rows()));
-    }
-    return Status::OK();
-}
-
 Status MemTable::prepare(PrimaryKeyEncodingType pk_encoding_type) {
+    if (_slot_descs != nullptr) {
+        // insert() fills memtable column i from the load's slot i, so the load must bring one slot per column
+        // of the write schema, the row-store column aside (insert() encodes that one itself). The FE plans the
+        // slots and the write schema together. Should they still disagree -- one of them read before a schema
+        // change and the other after -- a column without a slot would stay empty while the others fill up, and
+        // sorting the memtable would read rows that column does not have. Fail the load instead.
+        size_t num_slot_fields = _vectorized_schema->num_fields();
+        if (_keys_type == KeysType::PRIMARY_KEYS && num_slot_fields > 0 &&
+            _vectorized_schema->field(num_slot_fields - 1)->name() == Schema::FULL_ROW_COLUMN) {
+            num_slot_fields--;
+        }
+        if (_slot_descs->size() != num_slot_fields) {
+            return Status::InternalError(fmt::format(
+                    "memtable of tablet {}: the load carries {} columns but its write schema has {}, so the load was "
+                    "planned against another version of the table schema. Retry the load",
+                    _tablet_id, _slot_descs->size(), num_slot_fields));
+        }
+    }
     if (_keys_type != KeysType::DUP_KEYS) {
         // The ChunkAggregator used by MemTable may be used to aggregate into a large Chunk,
         // which is not suitable for obtaining Chunk from ColumnPool,
@@ -260,10 +261,11 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
                 _tablet_id, st.message()));
     }
 
+    // `chunk` is shared by every tablet the load writes to; only `size` of its rows are in this memtable.
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
         _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
-        _total_rows += chunk.num_rows();
+        _total_rows += size;
     }
 
     // if memtable is full, push it to the flush executor,
@@ -336,13 +338,6 @@ Status MemTable::finalize() {
                 _aggregator_bytes_usage = 0;
                 return Status::Cancelled(kPrimaryKeySizeExceedError);
             }
-            // Bound the sort key for every admitted row, not just the rows that become index entries,
-            // so a later re-blocking during compaction or a post-commit rewrite cannot promote an
-            // over-limit value into a full sort key index entry. Deliberately placed before
-            // _split_upserts_deletes: DELETE rows are checked here exactly as the primary key check
-            // above checks them, so the verdict cannot depend on whether the op-aware spill path
-            // retained the __op column.
-            RETURN_IF_ERROR(_check_sort_key_sizes());
             if (_has_op_slot && !_sink->keep_op_column()) {
                 // TODO(cbl): mem_tracker
                 ChunkPtr upserts;
@@ -386,10 +381,6 @@ Status MemTable::finalize() {
             _aggregator_bytes_usage = 0;
         } else {
             RETURN_IF_ERROR(_sort(true));
-            // _sort(is_final=true) populates _result_chunk for DUP_KEYS. DUP_KEYS has no __op column
-            // (_has_op_slot is gated on PRIMARY_KEYS), so there is no upsert/delete split to order
-            // this against.
-            RETURN_IF_ERROR(_check_sort_key_sizes());
         }
     }
     // Release the input chunk after finalize to free memory earlier.

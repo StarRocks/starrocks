@@ -9,7 +9,7 @@ SHOW PROFILELIST lists the query profile records cached in your StarRocks cluste
 
 This feature is supported from v3.1 onwards.
 
-No privilege is required to perform this operation.
+By default, no privilege is required to perform this operation. If the FE configuration item `authorization_enable_query_profile_access_check` is set to `true`, a user can list only the profiles of the queries they ran, and listing the profiles of queries run by other users requires the SYSTEM-level OPERATE privilege. You can follow the instructions in [GRANT](../../account-management/GRANT.md) to grant this privilege.
 
 ## Syntax
 
@@ -26,6 +26,7 @@ SHOW PROFILELIST [LIMIT n]
 | **Return** | **Description**                                              |
 | ---------- | ------------------------------------------------------------ |
 | QueryId    | The ID of the query.                                         |
+| CustomQueryId | The client-assigned custom query ID of the query, if `custom_query_id` was set for the session. Empty otherwise. |
 | StartTime  | The start time of the query.                                 |
 | Time       | The latency of the query.                                    |
 | State      | The status of the query, including:`Error`: The query encounters an error.`Finished`: The query is finished.`Running`: The query is running. |

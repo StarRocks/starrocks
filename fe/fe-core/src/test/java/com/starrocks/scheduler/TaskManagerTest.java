@@ -171,6 +171,77 @@ public class TaskManagerTest {
         assertEquals(Constants.TaskRunState.SUCCESS, state);
     }
 
+    private static Task makeTask(TaskManager taskManager, String name, long id) {
+        Task task = new Task(name);
+        task.setId(id);
+        taskManager.replayCreateTask(task);
+        return task;
+    }
+
+    private static TaskRun makeRun(TaskManager taskManager, Task task, String queryId) {
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(queryId, System.currentTimeMillis());
+        return taskRun;
+    }
+
+    private static void addToHistory(TaskManager taskManager, Task task, String queryId) {
+        TaskRunStatus finished = new TaskRunStatus();
+        finished.setTaskId(task.getId());
+        finished.setTaskName(task.getName());
+        finished.setQueryId(queryId);
+        finished.setState(Constants.TaskRunState.SUCCESS);
+        taskManager.getTaskRunHistory().addHistory(finished);
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusDedupsARunFoundInTwoSources() {
+        // A run migrating from the running map into the history while getMatchedTaskRunStatus walks the
+        // sources is found in both: the running map still holds the RUNNING record, the history already
+        // holds the finished one.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_dedup", 1000L);
+
+        TaskRun runningTaskRun = makeRun(taskManager, task, "query_dedup");
+        runningTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
+        taskManager.getTaskRunScheduler().addRunningTaskRun(runningTaskRun);
+        addToHistory(taskManager, task, "query_dedup");
+
+        List<TaskRunStatus> taskRuns = taskManager.getMatchedTaskRunStatus(new TGetTasksParams());
+        assertEquals(1, taskRuns.size());
+        // The history is the source it migrated into, so it carries the final state.
+        assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusKeepsDistinctRunsOfTheSameTask() {
+        // One task id owns many runs, so only an equal query id may collapse two records.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_distinct", 1001L);
+
+        taskManager.getTaskRunScheduler().addPendingTaskRun(makeRun(taskManager, task, "query_pending"));
+        taskManager.getTaskRunScheduler().addRunningTaskRun(makeRun(taskManager, task, "query_running"));
+        addToHistory(taskManager, task, "query_history_1");
+        addToHistory(taskManager, task, "query_history_2");
+
+        assertEquals(4, taskManager.getMatchedTaskRunStatus(new TGetTasksParams()).size());
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusCollapsesRunsWithoutQueryId() {
+        // Only a record restored from persisted state can lack a query id, and nothing then tells two
+        // of them apart -- as the in-memory history, itself keyed by query id, already treats them. The
+        // two records below carry the two shapes of "no query id", which must not count as two runs.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_without_query_id", 1002L);
+        taskManager.getTaskRunScheduler().addPendingTaskRun(makeRun(taskManager, task, null));
+
+        // A second task, because the running map holds at most one run per task id.
+        Task otherTask = makeTask(taskManager, "other_task_without_query_id", 1003L);
+        taskManager.getTaskRunScheduler().addRunningTaskRun(makeRun(taskManager, otherTask, ""));
+
+        assertEquals(1, taskManager.getMatchedTaskRunStatus(new TGetTasksParams()).size());
+    }
+
     @Test
     public void testTaskRunPriority() {
         Queue<TaskRun> queue = Queues.newPriorityBlockingQueue();
@@ -1580,6 +1651,30 @@ public class TaskManagerTest {
     }
 
     @Test
+    public void testStartAfterStopPicksUpCurrentDispatchInterval() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        try {
+            Config.task_runs_dispatch_interval_ms = 1000;
+            mgr.start();
+            mgr.stop(5000L);
+            Config.task_runs_dispatch_interval_ms = 2500;
+            // Scheduler is shut down while this FE is not leader, so this is a no-op.
+            mgr.rescheduleDispatchIfIntervalChanged();
+            mgr.start();
+            Assertions.assertEquals(2500, mgr.scheduledDispatchIntervalMs);
+            java.util.concurrent.ScheduledFuture<?> started = mgr.dispatchFuture;
+            Assertions.assertNotNull(started);
+            Assertions.assertFalse(started.isCancelled());
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertSame(started, mgr.dispatchFuture);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+            mgr.stop();
+        }
+    }
+
+    @Test
     public void testStopIsNoOpWhenNotStarted() {
         // stop() guards with isStart.compareAndSet(true, false); a TaskManager that never
         // started must not throw when stop is called.
@@ -1615,5 +1710,133 @@ public class TaskManagerTest {
         Assertions.assertTrue(stuckSched.isShutdown(), "scheduler must be shutdown by stop");
         // worker is still running but stop() returned within budget; cleanup
         stuckSched.shutdownNow();
+    }
+
+    @Test
+    public void testDispatchIntervalConfigDefaultAndMutable() throws Exception {
+        java.lang.reflect.Field field = Config.class.getField("task_runs_dispatch_interval_ms");
+        com.starrocks.common.ConfigBase.ConfField confField =
+                field.getAnnotation(com.starrocks.common.ConfigBase.ConfField.class);
+        Assertions.assertNotNull(confField);
+        Assertions.assertTrue(confField.mutable(),
+                "task_runs_dispatch_interval_ms must be mutable for ADMIN SET FRONTEND CONFIG");
+        Assertions.assertEquals(1000, Config.task_runs_dispatch_interval_ms);
+    }
+
+    @Test
+    public void testDispatchIntervalReadsLiveConfigAndClampsNonPositive() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        try {
+            Config.task_runs_dispatch_interval_ms = 750;
+            Assertions.assertEquals(750, TaskManager.getTaskRunsDispatchIntervalMs());
+            Config.task_runs_dispatch_interval_ms = 0;
+            Assertions.assertEquals(1, TaskManager.getTaskRunsDispatchIntervalMs());
+            Config.task_runs_dispatch_interval_ms = -3;
+            Assertions.assertEquals(1000, TaskManager.getTaskRunsDispatchIntervalMs());
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+        }
+    }
+
+    @Test
+    public void testRescheduleDispatchCancelsOldFutureAndStartsNewFixedRate() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        mgr.dispatchScheduler.shutdownNow();
+        java.util.concurrent.atomic.AtomicInteger scheduleCount = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicLong lastPeriodMs = new java.util.concurrent.atomic.AtomicLong(-1);
+        java.util.concurrent.atomic.AtomicLong lastInitialDelayMs = new java.util.concurrent.atomic.AtomicLong(-1);
+        mgr.dispatchScheduler = new java.util.concurrent.ScheduledThreadPoolExecutor(1) {
+            @Override
+            public java.util.concurrent.ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay,
+                                                                              long period, TimeUnit unit) {
+                scheduleCount.incrementAndGet();
+                lastInitialDelayMs.set(unit.toMillis(initialDelay));
+                lastPeriodMs.set(unit.toMillis(period));
+                return super.scheduleAtFixedRate(() -> {
+                }, 1, 1, TimeUnit.HOURS);
+            }
+        };
+        java.util.concurrent.ScheduledThreadPoolExecutor dummy =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        java.util.concurrent.ScheduledFuture<?> oldFuture =
+                dummy.scheduleAtFixedRate(() -> {
+                }, 1, 1, TimeUnit.HOURS);
+        mgr.dispatchFuture = oldFuture;
+        mgr.scheduledDispatchIntervalMs = 1000;
+        try {
+            Config.task_runs_dispatch_interval_ms = 1000;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertEquals(0, scheduleCount.get(), "unchanged interval must keep the existing future");
+            Assertions.assertFalse(oldFuture.isCancelled());
+
+            Config.task_runs_dispatch_interval_ms = 2500;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertTrue(oldFuture.isCancelled(), "old scheduleAtFixedRate must be cancelled");
+            Assertions.assertEquals(1, scheduleCount.get());
+            Assertions.assertEquals(2500L, lastPeriodMs.get());
+            Assertions.assertEquals(2500L, lastInitialDelayMs.get());
+            Assertions.assertEquals(2500, mgr.scheduledDispatchIntervalMs);
+            Assertions.assertNotSame(oldFuture, mgr.dispatchFuture);
+
+            java.util.concurrent.ScheduledFuture<?> longerFuture = mgr.dispatchFuture;
+            Config.task_runs_dispatch_interval_ms = 500;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertTrue(longerFuture.isCancelled(),
+                    "decreasing the interval must cancel the longer-period future");
+            Assertions.assertEquals(2, scheduleCount.get());
+            Assertions.assertEquals(500L, lastPeriodMs.get());
+            Assertions.assertEquals(500L, lastInitialDelayMs.get(),
+                    "the next run waits the new interval; a decrease does not wake the current period");
+            Assertions.assertEquals(500, mgr.scheduledDispatchIntervalMs);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+            mgr.dispatchScheduler.shutdownNow();
+            dummy.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testRescheduleDispatchDoesNotStartSecondFutureBeforeHandleIsPublished() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        mgr.dispatchScheduler.shutdownNow();
+        java.util.concurrent.atomic.AtomicInteger scheduleCount = new java.util.concurrent.atomic.AtomicInteger();
+        mgr.dispatchScheduler = new java.util.concurrent.ScheduledThreadPoolExecutor(1) {
+            @Override
+            public java.util.concurrent.ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay,
+                                                                              long period, TimeUnit unit) {
+                scheduleCount.incrementAndGet();
+                return super.scheduleAtFixedRate(() -> {
+                }, 1, 1, TimeUnit.HOURS);
+            }
+        };
+        mgr.dispatchFuture = null;
+        mgr.scheduledDispatchIntervalMs = 1000;
+        try {
+            Config.task_runs_dispatch_interval_ms = 2500;
+            mgr.rescheduleDispatchIfIntervalChanged();
+            Assertions.assertEquals(0, scheduleCount.get(),
+                    "must not start a second scheduleAtFixedRate before the first future is published");
+            Assertions.assertNull(mgr.dispatchFuture);
+            Assertions.assertEquals(1000, mgr.scheduledDispatchIntervalMs);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+            mgr.dispatchScheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testRescheduleDispatchIsNoOpAfterShutdown() {
+        int original = Config.task_runs_dispatch_interval_ms;
+        TaskManager mgr = new TaskManager();
+        mgr.scheduledDispatchIntervalMs = 1000;
+        try {
+            Config.task_runs_dispatch_interval_ms = 2000;
+            mgr.dispatchScheduler.shutdownNow();
+            Assertions.assertDoesNotThrow(mgr::rescheduleDispatchIfIntervalChanged);
+        } finally {
+            Config.task_runs_dispatch_interval_ms = original;
+        }
     }
 }

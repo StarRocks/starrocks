@@ -16,6 +16,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -35,6 +36,7 @@ import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -104,6 +106,41 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             HiveView view = (HiveView) table;
             metastore.refreshView(dbName, view.getName());
         }
+    }
+
+    /**
+     * Drops everything cached about this table, without any remote I/O: the metastore entries (table, partition
+     * names, partitions, statistics) and the file lists of its partitions. A file list is keyed by the location a
+     * scan asked for, which is not always under the table location and not always spelled the same way, so the
+     * keys are found three ways: by the table location prefix, by the table the key was loaded for, and by the
+     * locations of the partitions still cached -- in both slash forms. The partitions are read before they are
+     * invalidated.
+     */
+    public void invalidateTableForRead(Table table) {
+        String dbName = table.getCatalogDBName();
+        String tblName = table.getCatalogTableName();
+        if (remoteFileIO.isPresent()) {
+            String tableLocation = table.getTableLocation();
+            Set<RemotePathKey> keys = new HashSet<>();
+            if (!Strings.isNullOrEmpty(tableLocation)) {
+                keys.addAll(remoteFileIO.get().getPresentPathKeyInCache(tableLocation, isRecursive));
+                keys.addAll(remoteFileIO.get().getPresentPathKeysOfTable(tableLocation));
+            }
+            if (metastore instanceof CachingHiveMetastore cachingMetastore) {
+                for (Partition partition : cachingMetastore.getCachedPartitionsOfTable(dbName, tblName).values()) {
+                    String path = partition.getFullPath();
+                    if (Strings.isNullOrEmpty(path)) {
+                        continue;
+                    }
+                    String withoutSlash = path.endsWith("/") && path.length() > 1 ?
+                            path.substring(0, path.length() - 1) : path;
+                    keys.add(RemotePathKey.of(withoutSlash, isRecursive));
+                    keys.add(RemotePathKey.of(withoutSlash + "/", isRecursive));
+                }
+            }
+            keys.forEach(key -> remoteFileIO.get().invalidatePartition(key));
+        }
+        metastore.invalidateTable(dbName, tblName);
     }
 
     public void refreshTableBackground(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
@@ -263,9 +300,31 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             if (onlyCachedPartitions) {
                 presentPathKey = remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(), isRecursive);
             } else {
-                presentPathKey = existPaths.stream()
-                        .map(path -> RemotePathKey.of(path, isRecursive))
-                        .collect(Collectors.toList());
+                // A scan keys the cache by the raw partition location, which usually lacks the trailing slash
+                // that existPaths carries. Refresh every cached key of an existing path, in either spelling and
+                // wherever it lies -- a partition can be located outside the table directory -- so the entry a
+                // scan reads is the one updated; key an uncached path by its location without the trailing slash.
+                Set<String> existPathSet = new HashSet<>(existPaths);
+                List<RemotePathKey> spellings = Lists.newArrayList();
+                for (String path : existPaths) {
+                    spellings.add(RemotePathKey.of(path, isRecursive));
+                    if (path.length() > 1) {
+                        spellings.add(RemotePathKey.of(path.substring(0, path.length() - 1), isRecursive));
+                    }
+                }
+                Set<RemotePathKey> cachedKeys = new HashSet<>(remoteFileIO.get().getPresentRemoteFiles(spellings).keySet());
+                cachedKeys.addAll(remoteFileIO.get().getPresentPathKeyInCache(table.getTableLocation(), isRecursive));
+                presentPathKey = cachedKeys.stream()
+                        .filter(pathKey -> existPathSet.contains(withTrailingSlash(pathKey.getPath())))
+                        .collect(Collectors.toCollection(Lists::newArrayList));
+                Set<String> cachedPaths = presentPathKey.stream()
+                        .map(pathKey -> withTrailingSlash(pathKey.getPath()))
+                        .collect(Collectors.toSet());
+                existPaths.stream()
+                        .filter(path -> !cachedPaths.contains(path))
+                        .map(path -> RemotePathKey.of(path.length() > 1 ? path.substring(0, path.length() - 1) : path,
+                                isRecursive))
+                        .forEach(presentPathKey::add);
             }
             List<RemotePathKey> updateKeys = Lists.newArrayList();
             List<RemotePathKey> invalidateKeys = Lists.newArrayList();
@@ -279,6 +338,10 @@ public class HiveCacheUpdateProcessor implements CacheUpdateProcessor {
             });
             refreshRemoteFilesImpl(table, updateKeys, invalidateKeys, executor);
         }
+    }
+
+    private static String withTrailingSlash(String path) {
+        return path.endsWith("/") ? path : path + "/";
     }
 
     private void refreshRemoteFilesImpl(Table table, List<RemotePathKey> updateKeys,
