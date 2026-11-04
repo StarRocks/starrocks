@@ -122,6 +122,23 @@ public class PaimonTableSchemaConverterTest {
     }
 
     @Test
+    public void testQuotedKeyAndPartitionNamesPreserveWhitespace() {
+        Schema schema = PaimonTableSchemaConverter.toSchema(parse(
+                "create table p.db.t (id int, ` id ` int, seq int) engine=paimon " +
+                        "primary key (` id `, seq) partition by (` id `)"));
+        Assertions.assertEquals(List.of(" id ", "seq"), schema.primaryKeys());
+        Assertions.assertEquals(List.of(" id "), schema.partitionKeys());
+        Assertions.assertTrue(schema.fields().get(0).type().isNullable());
+        Assertions.assertFalse(schema.fields().get(1).type().isNullable());
+
+        Schema propertySchema = PaimonTableSchemaConverter.toSchema(parse(
+                "create table p.db.t (id int, ` id ` int) engine=paimon properties ('primary-key'=' id ')"));
+        Assertions.assertEquals(List.of("id"), propertySchema.primaryKeys());
+        Assertions.assertFalse(propertySchema.fields().get(0).type().isNullable());
+        Assertions.assertTrue(propertySchema.fields().get(1).type().isNullable());
+    }
+
+    @Test
     public void testPrimaryKeyDdlAcceptsNativeDynamicBucketModes() {
         for (String bucket : List.of("-1", "-2", "2")) {
             Schema schema = PaimonTableSchemaConverter.toSchema(parse(

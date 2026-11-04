@@ -793,6 +793,12 @@ Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "
 - Non-NULL column defaults are not supported.
 - `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `INSERT`, `UPDATE`, or `DELETE` are not supported.
 
+#### Metadata cache limitation
+
+If another engine drops a table whose metadata is cached in StarRocks, `CREATE TABLE` may still report that the table exists. `CREATE TABLE IF NOT EXISTS` may return successfully without recreating the missing table. Wait for the cached metadata to expire before retrying creation.
+
+`REFRESH EXTERNAL TABLE` is not a reliable workaround after an external drop: if the table's schema files have been removed, the refresh statement can fail while resolving the old table metadata, before invalidating the cache.
+
 ### DROP TABLE
 
 #### Syntax

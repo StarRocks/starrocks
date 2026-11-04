@@ -150,7 +150,8 @@ public final class PaimonTableSchemaConverter {
             return resolveColumns(stmt, keys.getKeysColumnNames());
         }
         String property = options.get(CoreOptions.PRIMARY_KEY.key());
-        return property == null ? List.of() : resolveColumns(stmt, Arrays.asList(property.split(",", -1)));
+        return property == null ? List.of()
+                : resolveColumns(stmt, Arrays.stream(property.split(",", -1)).map(String::trim).toList());
     }
 
     private static List<String> partitionKeys(CreateTableStmt stmt) {
@@ -171,7 +172,7 @@ public final class PaimonTableSchemaConverter {
         for (ColumnDef column : stmt.getColumnDefs()) {
             columns.put(column.getName().toLowerCase(Locale.ROOT), column.getName());
         }
-        return names.stream().map(name -> columns.getOrDefault(name.trim().toLowerCase(Locale.ROOT), name.trim()))
+        return names.stream().map(name -> columns.getOrDefault(name.toLowerCase(Locale.ROOT), name))
                 .collect(Collectors.toList());
     }
 

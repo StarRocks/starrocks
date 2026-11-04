@@ -133,6 +133,35 @@ public class PaimonCreateTableAnalyzerTest {
     }
 
     @Test
+    public void testQuotedKeyAndPartitionNamesPreserveWhitespace(@TempDir Path warehouse) throws Exception {
+        Options options = Options.fromMap(Map.of("warehouse", warehouse.toUri().toString()));
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options))) {
+            catalog.createDatabase("db", false);
+            for (String columns : List.of("id int, ` id ` int, seq int", "` id ` int, seq int")) {
+                CreateTableStmt stmt = analyze("create table paimon_ddl.db.t (" + columns + ") " +
+                        "primary key (` id `, seq) partition by (` id `)");
+                Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+                Assertions.assertEquals(List.of(" id ", "seq"), schema.primaryKeys());
+                Assertions.assertEquals(List.of(" id "), schema.partitionKeys());
+                catalog.createTable(Identifier.create("db", "t"), schema, false);
+                try (Catalog fresh = CatalogFactory.createCatalog(CatalogContext.create(options))) {
+                    Table table = fresh.getTable(Identifier.create("db", "t"));
+                    Assertions.assertEquals(List.of(" id ", "seq"), table.primaryKeys());
+                    Assertions.assertEquals(List.of(" id "), table.partitionKeys());
+                    for (org.apache.paimon.types.DataField field : table.rowType().getFields()) {
+                        Assertions.assertEquals(field.name().equals("id"), field.type().isNullable());
+                    }
+                }
+                catalog.dropTable(Identifier.create("db", "t"), false);
+            }
+        }
+        assertInvalid("(id int) primary key (` id `)", "does not exist");
+        assertInvalid("(id int) partition by (` id `)", "does not exist");
+        assertInvalid("(id int, ` id ` int) primary key (` id `) properties ('primary-key'=' id ')",
+                "same columns");
+    }
+
+    @Test
     public void testPrimaryKeyDefaultNullRemainsRejected() {
         for (String keys : List.of("primary key(id)", "properties ('primary-key'='id')")) {
             SemanticException error = Assertions.assertThrows(SemanticException.class,

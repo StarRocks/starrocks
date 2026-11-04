@@ -213,7 +213,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
         Identifier identifier = new Identifier(stmt.getDbName(), stmt.getTableName());
         try {
-            // Atomic SDK creation handles a competing creator after MetadataMgr's existence precheck.
+            // Handle duplicates reported by the SDK; filesystem creation races may still raise RuntimeException.
             paimonNativeCatalog.createTable(identifier, schema, false);
         } catch (Catalog.TableAlreadyExistException e) {
             if (stmt.isSetIfNotExists()) {

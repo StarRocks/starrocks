@@ -793,6 +793,12 @@ PROPERTIES (
 - 不支持非 NULL 的列默认值。
 - 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `INSERT`、`UPDATE`、`DELETE` 写入数据。
 
+#### 元数据缓存限制
+
+如果其他引擎删除了 StarRocks 已缓存元数据的表，`CREATE TABLE` 仍可能报表已存在，`CREATE TABLE IF NOT EXISTS` 则可能成功返回但没有重新创建表。请等待缓存元数据过期后，再重试建表。
+
+外部删表后，`REFRESH EXTERNAL TABLE` 不能保证恢复：如果表的 schema 文件已被删除，刷新语句可能在解析旧表元数据时失败，尚未执行到缓存失效操作。
+
 ### DROP TABLE
 
 #### 语法

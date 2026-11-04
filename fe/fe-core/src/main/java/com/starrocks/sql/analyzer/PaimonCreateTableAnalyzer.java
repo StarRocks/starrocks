@@ -72,7 +72,7 @@ final class PaimonCreateTableAnalyzer {
         List<String> sqlKeys = keysDesc == null ? List.of()
                 : resolveColumns(stmt, keysDesc.getKeysColumnNames(), "primary key");
         List<String> propertyKeys = property == null ? List.of()
-                : resolveColumns(stmt, Arrays.asList(property.split(",", -1)), "primary key");
+                : resolveColumns(stmt, Arrays.stream(property.split(",", -1)).map(String::trim).toList(), "primary key");
         if (keysDesc != null && property != null && !sqlKeys.equals(propertyKeys)) {
             throw new SemanticException("Paimon PRIMARY KEY and primary-key property must specify the same columns in order");
         }
@@ -147,7 +147,7 @@ final class PaimonCreateTableAnalyzer {
         List<String> resolved = new ArrayList<>();
         Set<String> seen = new HashSet<>();
         for (String name : names) {
-            String canonical = columns.get(name.trim().toLowerCase(Locale.ROOT));
+            String canonical = columns.get(name.toLowerCase(Locale.ROOT));
             if (canonical == null) {
                 throw new SemanticException("Paimon %s column[%s] does not exist", kind, name);
             }
