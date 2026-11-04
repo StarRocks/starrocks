@@ -829,19 +829,26 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_keeps_outer_expr_in_lambda_in
         lambda_func->add_child(make_slot_ref(100000, TPrimitiveType::INT));
 
         // [1, 2], [], [5]
-        auto array = ColumnTestHelper::build_array_column<int32_t>(TYPE_ARRAY_INT_DESC, false, {{1, 2}, {}, {5}});
-        ArrayMapExpr array_map_expr(TYPE_ARRAY_INT_DESC);
+        auto array = ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, false);
+        array->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)2)});
+        array->append_datum(DatumArray{});
+        array->append_datum(DatumArray{Datum((int32_t)5)});
+        ArrayMapExpr array_map_expr(TYPE_INT_ARRAY_DESC);
         array_map_expr.clear_children();
         array_map_expr.add_child(lambda_func);
-        array_map_expr.add_child(new_fake_const_expr(std::move(array), TYPE_ARRAY_INT_DESC));
+        array_map_expr.add_child(new_fake_const_expr(std::move(array), TYPE_INT_ARRAY_DESC));
 
+        auto str_column = BinaryColumn::create();
+        str_column->append(Slice("abc"));
+        str_column->append(Slice("de"));
+        str_column->append(Slice("f"));
         auto chunk = std::make_shared<Chunk>();
-        chunk->append_column(ColumnTestHelper::build_column<Slice>({"abc", "de", "f"}), 2);
+        chunk->append_column(std::move(str_column), 2);
 
         ExprContext expr_ctx(&array_map_expr);
         std::vector<ExprContext*> expr_ctxs = {&expr_ctx};
-        ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &state));
-        ASSERT_OK(ExprExecutor::open(expr_ctxs, &state));
+        ASSERT_OK(Expr::prepare(expr_ctxs, &state));
+        ASSERT_OK(Expr::open(expr_ctxs, &state));
 
         // the extracted expression is replaced by a reference to its precomputed column
         ASSERT_EQ(allow_throw, add_expr->get_child(1) == length_expr) << "allow_throw=" << allow_throw;
@@ -853,7 +860,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_keeps_outer_expr_in_lambda_in
         ASSERT_EQ(0, result->get(1).get_array().size());
         ASSERT_EQ(6, result->get(2).get_array()[0].get_int32());
 
-        ExprExecutor::close(expr_ctxs, &state);
+        Expr::close(expr_ctxs, &state);
     }
 }
 
