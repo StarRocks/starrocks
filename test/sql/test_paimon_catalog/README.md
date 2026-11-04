@@ -86,8 +86,11 @@ filesystem warehouse; the configured OSS credentials need write/delete permissio
 Set `paimon_ddl_warehouse_root` under `[replace]` in a private config to use a personal
 OSS prefix instead of the default CI prefix. The case UUID is appended to that root.
 The cases do not use or change the persistent fixtures. A second Catalog reads the
-native `$schemas` system tables to verify persisted types, primary keys, partitions
-and inferred NOT NULL constraints. Existing DESC nullability conversion is not used
+native `$schemas` system tables to verify persisted column comments, scalar and nested
+types, primary keys, partitions and inferred NOT NULL constraints. Key cases cover
+property-based composite keys, whitespace/case normalization, matching and conflicting
+SQL/property declarations, and missing/duplicate key references. Rejected partition
+expressions and invalid/unsupported options must leave no native table behind. Existing DESC nullability conversion is not used
 as evidence of native nullability.
 
 For local execution, add `paimon_ddl_local_warehouse_root` under `[replace]` in a
@@ -142,7 +145,7 @@ rows to verify results as well as the reader path.
 
 | Cases | Coverage |
 | --- | --- |
-| `catalog_ddl` | Database/table lifecycle, IF [NOT] EXISTS, non-cascading FORCE, persisted append schemas, SQL/property primary keys, implicit/explicit nullability and rejected defaults |
+| `catalog_ddl` | Database/table lifecycle, IF [NOT] EXISTS, non-cascading FORCE, persisted comments and scalar/nested types, SQL/property composite keys and declaration consistency, implicit/explicit nullability, rejected defaults/partitions/options and failure cleanup |
 | `filesystem_catalog`, `reader_modes` | Scalar, NULL, VARIANT, BLOB and reader routing/profile |
 | `scalar_predicates` | Projection order, NULL logic, decimals, date/time, Unicode, compound predicates, aggregates and LIMIT |
 | `primary_key_merge`, `primary_key_sequence` | Update/delete, reinsert, repeated updates, NULL replacement across Parquet/ORC/Avro, and predicates on obsolete values |
