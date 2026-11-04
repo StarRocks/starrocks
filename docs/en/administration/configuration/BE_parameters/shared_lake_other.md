@@ -151,7 +151,7 @@ This topic introduces the following types of BE configurations:
 
 ### lake_enable_publish_partial_meta
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes

@@ -151,7 +151,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_enable_publish_partial_meta
 
-- デフォルト: false
+- デフォルト: true
 - タイプ: Boolean
 - 単位: -
 - 変更可能: はい
