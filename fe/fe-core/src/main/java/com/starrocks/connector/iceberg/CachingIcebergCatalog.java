@@ -569,7 +569,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public void invalidateTableCacheAfterPeerCommit(String dbName, String tableName) {
         IcebergTableName key = new IcebergTableName(dbName, tableName);
-        Table dropped = tables.asMap().remove(key);
+        Table dropped = tables.getIfPresent(key);
+        tables.invalidate(key);
         Snapshot snapshot = dropped == null ? null : dropped.currentSnapshot();
         if (snapshot != null) {
             droppedForPeerCommit.put(key, new DroppedSnapshot(snapshot.snapshotId(), snapshot.timestampMillis()));

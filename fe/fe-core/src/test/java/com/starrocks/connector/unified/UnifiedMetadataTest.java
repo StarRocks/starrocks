@@ -29,6 +29,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
@@ -60,6 +61,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.wildfly.common.Assert;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
@@ -257,14 +259,18 @@ public class UnifiedMetadataTest {
 
     @Test
     public void testInvalidateCachedTableReachesTheIcebergConnector() {
-        new Expectations() {
-            {
-                icebergMetadata.invalidateCachedTable("test_db", "test_tbl");
-                times = 1;
+        List<String> invalidated = new ArrayList<>();
+        ConnectorMetadata iceberg = new ConnectorMetadata() {
+            @Override
+            public void invalidateCachedTable(String dbName, String tableName) {
+                invalidated.add(dbName + "." + tableName);
             }
         };
 
-        unifiedMetadata.invalidateCachedTable("test_db", "test_tbl");
+        new UnifiedMetadata(ImmutableMap.of(HIVE, hiveMetadata, ICEBERG, iceberg))
+                .invalidateCachedTable("test_db", "test_tbl");
+
+        assertEquals(List.of("test_db.test_tbl"), invalidated);
     }
 
     @Test

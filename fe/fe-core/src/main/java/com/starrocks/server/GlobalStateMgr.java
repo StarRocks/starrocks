@@ -3575,15 +3575,8 @@ public class GlobalStateMgr {
         try {
             String selfHost = getNodeMgr().getSelfNode().first;
             for (Frontend fe : getNodeMgr().getFrontends(null)) {
-                if (fe.getHost().equals(selfHost) || !fe.isAlive()) {
-                    continue;
-                }
-                TNetworkAddress thriftAddress = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
-                try {
-                    pending.put(fe.getHost(), invalidateOtherFeRpcExecutor.submit(
-                            () -> invalidateOtherFeTableRpc(thriftAddress, tableName, timeoutMs)));
-                } catch (RejectedExecutionException e) {
-                    LOG.warn("Invalidate {} on fe {} was not enqueued: {}", tableName, fe.getHost(), e.getMessage());
+                if (!fe.getHost().equals(selfHost) && fe.isAlive()) {
+                    enqueueOtherFeInvalidate(pending, fe, tableName, timeoutMs);
                 }
             }
             for (Map.Entry<String, Future<TStatus>> entry : pending.entrySet()) {
@@ -3595,6 +3588,17 @@ public class GlobalStateMgr {
             LOG.warn("Failed to invalidate {} on other fes", tableName, e);
         } finally {
             pending.values().forEach(future -> future.cancel(false));
+        }
+    }
+
+    private void enqueueOtherFeInvalidate(Map<String, Future<TStatus>> pending, Frontend fe, TableName tableName,
+                                          int timeoutMs) {
+        TNetworkAddress thriftAddress = new TNetworkAddress(fe.getHost(), fe.getRpcPort());
+        try {
+            pending.put(fe.getHost(), invalidateOtherFeRpcExecutor.submit(
+                    () -> invalidateOtherFeTableRpc(thriftAddress, tableName, timeoutMs)));
+        } catch (RejectedExecutionException e) {
+            LOG.warn("Invalidate {} on fe {} was not enqueued: {}", tableName, fe.getHost(), e.getMessage());
         }
     }
 

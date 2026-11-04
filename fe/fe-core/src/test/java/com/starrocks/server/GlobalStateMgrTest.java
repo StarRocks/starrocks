@@ -1063,12 +1063,12 @@ public class GlobalStateMgrTest {
         Set<String> attempted = ConcurrentHashMap.newKeySet();
         new MockUp<ThriftRPCRequestExecutor>() {
             @Mock
-            public <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT call(
-                    com.starrocks.rpc.ThriftConnectionPool<SERVER_CLIENT> genericPool,
+            public <R, C extends org.apache.thrift.TServiceClient> R call(
+                    com.starrocks.rpc.ThriftConnectionPool<C> genericPool,
                     TNetworkAddress address,
                     int timeoutMs,
                     int tryTimes,
-                    ThriftRPCRequestExecutor.MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+                    ThriftRPCRequestExecutor.MethodCallable<C, R> callable) throws TException {
                 attempted.add(address.getHostname());
                 throw new TException("connection refused");
             }
@@ -1108,12 +1108,12 @@ public class GlobalStateMgrTest {
         new MockUp<ThriftRPCRequestExecutor>() {
             @Mock
             @SuppressWarnings("unchecked")
-            public <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT call(
-                    com.starrocks.rpc.ThriftConnectionPool<SERVER_CLIENT> genericPool,
+            public <R, C extends org.apache.thrift.TServiceClient> R call(
+                    com.starrocks.rpc.ThriftConnectionPool<C> genericPool,
                     TNetworkAddress address,
                     int timeoutMs,
                     int tryTimes,
-                    ThriftRPCRequestExecutor.MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+                    ThriftRPCRequestExecutor.MethodCallable<C, R> callable) throws TException {
                 FrontendService.Client client = Mockito.mock(FrontendService.Client.class);
                 Mockito.when(client.refreshTable(Mockito.any())).thenAnswer(invocation -> {
                     requests.put(address.getHostname(), invocation.getArgument(0));
@@ -1122,7 +1122,7 @@ public class GlobalStateMgrTest {
                     }
                     return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
                 });
-                return callable.apply((SERVER_CLIENT) client);
+                return callable.apply((C) client);
             }
         };
     }

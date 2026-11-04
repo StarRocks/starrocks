@@ -717,7 +717,7 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
-    public void testFinishSinkInvalidatesTheOtherFesOutsideTheCommitQueue() throws Exception {
+    public void testFinishSinkInvalidatesTheOtherFesOutsideTheCommitQueue() {
         IcebergCommitQueueManager manager = new IcebergCommitQueueManager(
                 new IcebergCommitQueueManager.Config(true, 30, 100));
         try {

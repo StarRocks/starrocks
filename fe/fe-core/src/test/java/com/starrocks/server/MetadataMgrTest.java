@@ -49,6 +49,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -412,23 +413,26 @@ public class MetadataMgrTest {
     }
 
     @Test
-    public void testInvalidateCachedTableReachesTheCatalogMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+    public void testInvalidateCachedTableReachesTheCatalogMetadata() {
+        List<String> invalidated = new ArrayList<>();
+        ConnectorMetadata catalogMetadata = new ConnectorMetadata() {
+            @Override
+            public void invalidateCachedTable(String dbName, String tableName) {
+                invalidated.add(dbName + "." + tableName);
+            }
+        };
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         new MockUp<MetadataMgr>() {
             @Mock
             public Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
-                return "iceberg_catalog".equals(catalogName) ? Optional.of(connectorMetadata) : Optional.empty();
-            }
-        };
-        new Expectations() {
-            {
-                connectorMetadata.invalidateCachedTable("iceberg_db", "iceberg_table");
-                times = 1;
+                return "iceberg_catalog".equals(catalogName) ? Optional.of(catalogMetadata) : Optional.empty();
             }
         };
 
         metadataMgr.invalidateCachedTable("iceberg_catalog", "iceberg_db", "iceberg_table");
         metadataMgr.invalidateCachedTable("catalog_not_exist", "iceberg_db", "iceberg_table");
+
+        Assertions.assertEquals(List.of("iceberg_db.iceberg_table"), invalidated);
     }
 
     @Test

@@ -655,18 +655,14 @@ public class CachingIcebergCatalogTest {
                                                                     @Mocked PartitionSpec spec) {
         Table beforeCommit = tableAtSnapshot(11L, 1000L, "metadata-v1", spec);
         Table afterCommit = tableAtSnapshot(22L, 2000L, "metadata-v2", spec);
-        AtomicInteger loads = new AtomicInteger();
         new Expectations() {
             {
                 delegate.getTable((ConnectContext) any, "db1", "t1");
-                result = new Delegate<Table>() {
-                    Table get(ConnectContext c, String db, String tbl) {
-                        return loads.getAndIncrement() == 0 ? beforeCommit : afterCommit;
-                    }
-                };
-                delegate.getPartitions((IcebergTable) any, 22L, null);
+                result = beforeCommit;
+                result = afterCommit;
+                delegate.getPartitions((IcebergTable) any, anyLong, null);
                 result = new HashMap<String, Partition>();
-                times = 1;
+                minTimes = 0;
             }
         };
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -679,6 +675,8 @@ public class CachingIcebergCatalogTest {
         // The refresh that follows a commit reads the table first, so it finds the committed snapshot cached
         Assertions.assertSame(afterCommit, catalog.getTable(ctx, "db1", "t1"));
         catalog.refreshTable("db1", "t1", ctx, executor);
+
+        Assertions.assertNotNull(cachedPartitions(catalog).getIfPresent(new IcebergTableName("db1", "t1", 22L)));
     }
 
     @Test
@@ -690,7 +688,8 @@ public class CachingIcebergCatalogTest {
                 delegate.getTable((ConnectContext) any, "db1", "t1");
                 result = current;
                 delegate.getPartitions((IcebergTable) any, anyLong, null);
-                times = 0;
+                result = new HashMap<String, Partition>();
+                minTimes = 0;
             }
         };
         ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -700,6 +699,13 @@ public class CachingIcebergCatalogTest {
 
         catalog.getTable(ctx, "db1", "t1");
         catalog.refreshTable("db1", "t1", ctx, executor);
+
+        Assertions.assertNull(cachedPartitions(catalog).getIfPresent(new IcebergTableName("db1", "t1", 22L)));
+    }
+
+    private static LoadingCache<IcebergTableName, Map<String, Partition>> cachedPartitions(
+            CachingIcebergCatalog catalog) {
+        return Deencapsulation.getField(catalog, "partitionCache");
     }
 
     private static Table tableAtSnapshot(long snapshotId, long timestampMillis, String location, PartitionSpec spec) {
