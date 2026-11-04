@@ -72,6 +72,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
     private final int partitionTTLNumber;
     private final PeriodDuration partitionTTL;
     private final int autoRefreshPartitionsLimit;
+    // When true, shape-change replacement components are left untouched: the current refresh cannot
+    // rebuild their history (IVM applies only base-table deltas), so keeping the old partitions is
+    // safer than replacing materialized history with empty partitions.
+    private boolean retainExistingLayout = false;
     private final PartitionInfo partitionInfo;
     private final List<Column> partitionColumns;
     private final Map<Table, List<Expr>> refBaseTablePartitionExprs;
@@ -87,6 +91,10 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         this.partitionColumns = mv.getPartitionInfo().getPartitionColumns(mv.getIdToColumn());
         this.refBaseTablePartitionExprs = mv.getRefBaseTablePartitionExprs();
         this.rangeToInclude = rangeToInclude;
+    }
+
+    public void setRetainExistingLayout(boolean retainExistingLayout) {
+        this.retainExistingLayout = retainExistingLayout;
     }
 
     /**
@@ -117,13 +125,15 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         }
         Map<String, PCell> deletes = diffRange(dstRangeMap, srcRangeMap);
         PCellSortedSet replacementAdds = PCellSortedSet.of();
-        if (applyAtomicReplacement && !deletes.isEmpty()) {
+        if ((retainExistingLayout || applyAtomicReplacement) && !deletes.isEmpty()) {
             // Replacement relationships: a source range not matching an existing MV partition is a
             // potential addition, an MV range not matching a source range is a deletion.
             Map<String, PCell> rawAdds = diffRange(srcRangeMap, dstRangeMap);
             if (!rawAdds.isEmpty()) {
                 List<ReplacementComponent> components = collectReplacementComponents(rawAdds, deletes);
-                if (rangeToInclude != null) {
+                if (retainExistingLayout) {
+                    keepExistingLayoutForReplacements(components, adds, deletes);
+                } else if (rangeToInclude != null) {
                     replacementAdds = applyComponentsFullyInRange(components, adds, deletes);
                 } else if (autoRefreshPartitionsLimit > 0) {
                     Set<String> refreshWindow = computeRefreshWindow(rawAdds, dstRangeMap, deletes);
@@ -165,6 +175,26 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             }
         }
         return replacementAdds;
+    }
+
+    /**
+     * IVM applies only base-table deltas and cannot rebuild the history of a partition that a shape
+     * change would replace. Keep the existing MV partitions untouched for every replacement
+     * component (both its additions and deletions); pure additions/deletions still apply. A later
+     * PCT (or hybrid PCT fallback) refresh recomputes the diff and materializes the replacements.
+     */
+    private void keepExistingLayoutForReplacements(List<ReplacementComponent> components,
+                                                   Map<String, PCell> adds,
+                                                   Map<String, PCell> deletes) {
+        for (ReplacementComponent component : components) {
+            if (!component.isReplacement()) {
+                continue;
+            }
+            LOG.info("Materialized view {} keeps partitions {} instead of replacing them with {} "
+                            + "because this refresh cannot rebuild their history",
+                    mv.getName(), component.deleteNames, component.addNames);
+            component.removeFrom(adds, deletes);
+        }
     }
 
     /**
@@ -602,6 +632,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             for (Table refBaseTable : refBaseTablePartitionColumns.keySet()) {
                 Preconditions.checkArgument(refBaseTablePartitionMap.containsKey(refBaseTable));
                 RangePartitionDiffer differ = new RangePartitionDiffer(mv, queryRewriteParams, rangeToInclude);
+                differ.setRetainExistingLayout(retainExistingLayout);
                 PCellSortedSet basePartitionMap = refBaseTableCells.get(refBaseTable);
                 PartitionDiff diff = PartitionUtil.getPartitionDiff(mvPartitionExpr, basePartitionMap,
                         mvPartitionCells, differ);
@@ -619,6 +650,9 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         //                = \bigcap_{baseTables} P_{MV}\setminus P_{baseTable}
         RangePartitionDiffer differ = queryRewriteParams.isQueryRewrite() ? null
                 : new RangePartitionDiffer(mv, queryRewriteParams, rangeToInclude);
+        if (differ != null) {
+            differ.setRetainExistingLayout(retainExistingLayout);
+        }
         PartitionDiff rangePartitionDiff = PartitionUtil.getPartitionDiff(mvPartitionExpr, mergedRBTPartitionKeyMap,
                 mvPartitionCells, differ);
         if (rangePartitionDiff == null) {

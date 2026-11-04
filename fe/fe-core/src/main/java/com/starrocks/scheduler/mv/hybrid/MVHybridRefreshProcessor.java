@@ -53,6 +53,15 @@ public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
 
     @Override
     public ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) throws Exception {
+        // A previous attempt in this task run may have already applied a shape-change replacement
+        // (e.g. a PCT fallback that failed after partition sync). IVM cannot materialize those
+        // partitions, so keep using PCT until they are materialized.
+        if (!mvContext.getReplacementAddPartitions().isEmpty()) {
+            logger.info("Materialized view {} has pending replacement partitions {}, use PCT refresh "
+                            + "to materialize them", mv.getName(),
+                    mvContext.getReplacementAddPartitions().getPartitionNames());
+            return switchToPCTRefresh(taskRunContext);
+        }
         if (isIVMRefreshEnabled(mvRefreshParams)) {
             // if ivm refresh is enabled, try ivm first
             return switchToIVMRefresh(taskRunContext);

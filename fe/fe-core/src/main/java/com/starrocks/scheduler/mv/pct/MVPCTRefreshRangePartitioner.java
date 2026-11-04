@@ -71,6 +71,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     final Logger logger;
 
     private final RangePartitionDiffer differ;
+    private boolean retainExistingLayout = false;
+
     public MVPCTRefreshRangePartitioner(MvTaskRunContext mvContext,
                                         TaskRunContext context,
                                         Database db,
@@ -109,6 +111,11 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
     }
 
     @Override
+    public void setRetainExistingLayout(boolean retain) {
+        this.retainExistingLayout = retain;
+    }
+
+    @Override
     public boolean syncAddOrDropPartitions() throws AnalysisException {
         String start = context == null ? null : context.getProperties().get(TaskRun.PARTITION_START);
         String end = context == null ? null : context.getProperties().get(TaskRun.PARTITION_END);
@@ -117,6 +124,12 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Column partitionColumn = partitionColumnOpt.get();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
+        differ.setRetainExistingLayout(retainExistingLayout);
+        if (retainExistingLayout) {
+            logger.info("Materialized view {} retains the existing partition layout when the base table "
+                    + "partition shape changes because this refresh cannot rebuild partition history",
+                    mv.getName());
+        }
         PartitionDiffResult result = differ.computePartitionDiff(rangeToInclude);
         if (result == null) {
             logger.warn("compute range partition diff failed: mv: {}", mv.getName());

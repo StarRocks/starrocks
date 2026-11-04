@@ -289,6 +289,17 @@ public abstract class MVRefreshProcessor {
     }
 
     /**
+     * Whether this refresh must keep the existing MV partition layout when the base-table partition
+     * shape changes. IVM only applies base-table deltas, so it cannot rebuild the history of a
+     * partition that a shape change would replace; leaving the old partitions untouched avoids
+     * turning materialized history into empty partitions. A later PCT (or hybrid PCT fallback)
+     * refresh recomputes the diff and materializes the replacements.
+     */
+    public boolean shouldRetainExistingPartitionLayout() {
+        return false;
+    }
+
+    /**
      * Get the retry times for the mv refresh processor.
      *
      * @param connectContext the current connect context

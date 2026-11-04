@@ -511,4 +511,51 @@ public class RangePartitionDifferTest extends MVTestBase {
         Assertions.assertEquals(Collections.singleton("p20210601_20210701"),
                 diff.getReplacementAdds().getPartitionNames());
     }
+
+    /**
+     * IVM cannot rebuild the history of a replacement partition, so it must keep the existing
+     * layout instead of dropping the old partitions for empty ones.
+     */
+    @Test
+    public void testRetainExistingLayoutSkipsReplacements() throws Exception {
+        RangePartitionDiffer differ = differ(null);
+        differ.setRetainExistingLayout(true);
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
+
+        Assertions.assertTrue(diff.getAdds().isEmpty(), "adds: " + diff.getAdds());
+        Assertions.assertTrue(diff.getDeletes().isEmpty(), "deletes: " + diff.getDeletes());
+        Assertions.assertTrue(diff.getReplacementAdds().isEmpty(),
+                "replacementAdds: " + diff.getReplacementAdds());
+    }
+
+    /**
+     * Retaining the layout only suppresses replacement components: genuine additions/deletions
+     * (no overlapping counterpart) still apply.
+     */
+    @Test
+    public void testRetainExistingLayoutKeepsPureChanges() throws Exception {
+        PCellSortedSet src = cells(Map.of(
+                "p20210501_20210601", range("2021-05-01", "2021-06-01"),
+                "p20210701_20210801", range("2021-07-01", "2021-08-01")));
+        PCellSortedSet dst = cells(Map.of(
+                "p20210501_20210502", range("2021-05-01", "2021-05-02"),
+                "p20210502_20210503", range("2021-05-02", "2021-05-03"),
+                "p20210601_20210602", range("2021-06-01", "2021-06-02")));
+
+        RangePartitionDiffer differ = differ(null);
+        differ.setRetainExistingLayout(true);
+        PartitionDiff diff = differ.diff(src, dst, true);
+
+        // pure addition outside the replacement component is still created
+        Assertions.assertEquals(Collections.singleton("p20210701_20210801"),
+                diff.getAdds().getPartitionNames());
+        // pure deletion outside the replacement component is still dropped
+        Assertions.assertEquals(Collections.singleton("p20210601_20210602"),
+                diff.getDeletes().getPartitionNames());
+        // the May day partitions are kept, and no coarse replacement is recorded
+        Assertions.assertFalse(diff.getDeletes().containsName("p20210501_20210502"));
+        Assertions.assertFalse(diff.getDeletes().containsName("p20210502_20210503"));
+        Assertions.assertTrue(diff.getReplacementAdds().isEmpty(),
+                "replacementAdds: " + diff.getReplacementAdds());
+    }
 }
