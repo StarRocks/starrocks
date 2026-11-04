@@ -115,10 +115,11 @@ public enum SkipReason {
      */
     PARTITION_NOT_ELIGIBLE_POST_CREATE,
     /**
-     * Target is a materialized view that the derived tier cannot key: not an incremental MV, more than
-     * one visible index, a sort key that is not the single hidden row-id column, or a row-id kind no
-     * boundary source serves yet. Replaces an older unconditional materialized-view skip that recorded
-     * nothing at all.
+     * Target is a materialized view written by anything other than its own refresh, or an incremental
+     * MV the derived tier cannot key: more than one visible index, a sort key that is not the single
+     * hidden row-id column, or a row-id kind no boundary source serves yet. A view without a row id
+     * (a PCT view) refreshed by the system is sampled instead. Replaces an older unconditional
+     * materialized-view skip that recorded nothing at all.
      */
     MATERIALIZED_VIEW_TARGET,
     /**
