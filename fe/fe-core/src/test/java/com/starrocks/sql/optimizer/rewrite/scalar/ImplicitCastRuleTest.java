@@ -22,7 +22,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -32,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
@@ -39,26 +42,159 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.DecimalType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Month;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class ImplicitCastRuleTest {
+
+    @ParameterizedTest
+    @ValueSource(ints = {0, 1, 2})
+    public void testNullOnlyGeoArrayLiteralCast(int size) {
+        for (Type leaf : List.of(geography(), geometry())) {
+            Type sourceType = new ArrayType(NullType.NULL);
+            Type target = new ArrayType(leaf);
+            List<ScalarOperator> elements = new ArrayList<>();
+            for (int i = 0; i < size; ++i) {
+                elements.add(ConstantOperator.createNull(NullType.NULL));
+            }
+            ArrayOperator literal = new ArrayOperator(sourceType, false, elements);
+            assertGeoCast(target, literal);
+            CallOperator call = new CallOperator("ifnull", target, Lists.newArrayList(literal));
+            new ImplicitCastRule().apply(call, null);
+            assertCastOperator(target, literal, call.getChild(0));
+            assertEquals(sourceType, literal.getType());
+            assertEquals(size, literal.getChildren().size());
+        }
+    }
+
+    @Test
+    public void testGeoCastsFromSourcesWithoutGeo() {
+        for (Type leaf : List.of(geography(), geometry())) {
+            Type nullArray = new ArrayType(NullType.NULL);
+            Type geoArray = new ArrayType(leaf);
+            assertGeoCast(geoArray, new CallOperator("array_map", nullArray, List.of()));
+
+            Type geoMap = new MapType(IntegerType.INT, leaf);
+            assertGeoCast(geoMap, new MapOperator(new MapType(NullType.NULL, NullType.NULL), List.of()));
+            assertGeoCast(geoMap, new MapOperator(new MapType(IntegerType.INT, NullType.NULL),
+                    List.of(ConstantOperator.createInt(1), ConstantOperator.createNull(NullType.NULL))));
+            assertGeoCast(geoMap, new MapOperator(new MapType(IntegerType.TINYINT, NullType.NULL),
+                    List.of(ConstantOperator.createTinyInt((byte) 1), ConstantOperator.createNull(NullType.NULL))));
+
+            Type nullStruct = new StructType(List.of(NullType.NULL));
+            Type geoStruct = new StructType(List.of(leaf));
+            assertGeoCast(geoStruct, new CallOperator("row", nullStruct,
+                    List.of(ConstantOperator.createNull(NullType.NULL))));
+            assertGeoCast(new ArrayType(geoStruct), new ArrayOperator(new ArrayType(nullStruct), false,
+                    List.of(new ColumnRefOperator(1, nullStruct, "v", true))));
+
+            for (Type target : List.of(geoArray, geoMap, geoStruct)) {
+                ScalarOperator source = ConstantOperator.createNull(NullType.NULL);
+                ScalarOperator cast = ImplicitCastRule.makeImplicitCast(target, source);
+                assertCastOperator(target, source, cast);
+                ScalarOperator folded = new FoldConstantsRule().apply(cast, null);
+                assertTrue(folded.isConstantNull());
+                assertSame(target, folded.getType());
+            }
+        }
+    }
+
+    @Test
+    public void testNestedGeoCastRequiresExactType() {
+        for (Type leaf : List.of(geography(), geometry())) {
+            Type map = new MapType(IntegerType.INT, leaf);
+            Type widerMap = new MapType(IntegerType.BIGINT, leaf);
+            assertGeoCastRejected(map, widerMap);
+            assertGeoCastRejected(new StructType(List.of(IntegerType.INT, leaf)),
+                    new StructType(List.of(IntegerType.BIGINT, leaf)));
+            assertGeoCastRejected(new ArrayType(map), new ArrayType(widerMap));
+
+            for (Type target : List.of(new ArrayType(leaf), map, new StructType(List.of(leaf)))) {
+                ScalarOperator value = new ColumnRefOperator(1, target, "v", true);
+                assertTrue(TypeManager.canCastTo(target, target));
+                assertSame(value, ImplicitCastRule.makeImplicitCast(target, value));
+            }
+        }
+
+        Type geo = geography();
+        Type otherEdge = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
+                GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                GeoTypeDescriptor.EdgeAlgorithm.KARNEY, "OGC:CRS84", 4326));
+        Type noSrid = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
+                GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", null));
+        for (Type incompatible : List.of(otherEdge, noSrid, geometry())) {
+            assertGeoCastRejected(new ArrayType(geo), new ArrayType(incompatible));
+        }
+        assertGeoCastRejected(new ArrayType(geometry()), new ArrayType(
+                ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:4326"))));
+    }
+
+    @Test
+    public void testBooleanLeavesCannotCastToGeo() {
+        for (Type leaf : List.of(geography(), geometry())) {
+            assertFalse(TypeManager.canCastTo(new ArrayType(BooleanType.BOOLEAN), new ArrayType(leaf)));
+            assertFalse(TypeManager.canCastTo(new MapType(IntegerType.INT, BooleanType.BOOLEAN),
+                    new MapType(IntegerType.INT, leaf)));
+            assertFalse(TypeManager.canCastTo(new StructType(List.of(BooleanType.BOOLEAN)),
+                    new StructType(List.of(leaf))));
+        }
+    }
+
+    private static Type geography() {
+        return ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, new GeoTypeDescriptor(
+                GeoTypeDescriptor.LogicalType.GEOGRAPHY, GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326));
+    }
+
+    private static Type geometry() {
+        return ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry("EPSG:3857"));
+    }
+
+    private static void assertGeoCast(Type target, ScalarOperator source) {
+        assertTrue(TypeManager.canCastTo(source.getType(), target));
+        assertCastOperator(target, source, ImplicitCastRule.makeImplicitCast(target, source));
+    }
+
+    private static void assertCastOperator(Type target, ScalarOperator source, ScalarOperator result) {
+        assertTrue(result instanceof CastOperator);
+        assertSame(source, result.getChild(0));
+        assertSame(target, result.getType());
+    }
+
+    private static void assertGeoCastRejected(Type source, Type target) {
+        assertFalse(TypeManager.canCastTo(source, target));
+        ScalarOperator value = new ColumnRefOperator(1, source, "v", true);
+        SemanticException error = assertThrows(SemanticException.class,
+                () -> ImplicitCastRule.makeImplicitCast(target, value));
+        assertTrue(error.getMessage().contains("Implicit cast from " + source + " to " + target
+                + " is not supported for geo types"));
+    }
 
     @Test
     public void testCall() {

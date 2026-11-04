@@ -397,6 +397,8 @@ public class TypeManager {
             return true;
         } else if (from.isGeoType() || to.isGeoType()) {
             return canCastGeoType(from, to);
+        } else if (from.hasNestedGeoType() && to.hasNestedGeoType()) {
+            return from.equals(to);
         } else if (from.isStringType() && to.isBitmapType()) {
             return true;
         } else if (from.isScalarType() && to.isScalarType()) {
