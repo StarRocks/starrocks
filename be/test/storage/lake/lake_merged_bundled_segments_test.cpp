@@ -43,6 +43,7 @@
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/tablet_reshard.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/update_manager.h"
 #include "storage/tablet_schema.h"
