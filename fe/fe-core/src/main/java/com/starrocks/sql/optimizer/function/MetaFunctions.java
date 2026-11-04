@@ -280,24 +280,29 @@ public class MetaFunctions {
         List<BaseTableInfo> baseTableInfos = mvState.baseTableInfos();
         MaterializedView.AsyncRefreshContext refreshContext = mvState.refreshContext();
 
-        Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
-        Map<Long, String> tableIdToTableNameMap = Maps.newHashMap();
-        Map<String, String> tablePartitionInfos = Maps.newHashMap();
+        List<BaseTableRefreshInfo> refreshInfos = Lists.newArrayList();
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            BaseTableRefreshInfo refreshInfo = collectBaseTableRefreshInfo(mv, baseTableInfos, refreshContext,
-                    baseTableInfo);
+            refreshInfos.add(collectBaseTableRefreshInfo(mv, baseTableInfos, refreshContext, baseTableInfo));
+        }
+        List<String> tableKeys = reportKeysOf(refreshInfos);
+        Map<String, Set<String>> tableToUpdatePartitions = Maps.newHashMap();
+        Map<Long, String> tableIdToTableKey = Maps.newHashMap();
+        Map<String, String> tablePartitionInfos = Maps.newHashMap();
+        for (int i = 0; i < refreshInfos.size(); i++) {
+            BaseTableRefreshInfo refreshInfo = refreshInfos.get(i);
             Table baseTable = refreshInfo.table();
+            String tableKey = tableKeys.get(i);
             if (CollectionUtils.isNotEmpty(refreshInfo.toUpdatePartitions())) {
-                tableToUpdatePartitions.put(baseTable.getName(), refreshInfo.toUpdatePartitions());
+                tableToUpdatePartitions.put(tableKey, refreshInfo.toUpdatePartitions());
             }
-            tableIdToTableNameMap.put(baseTable.getId(), baseTable.getName());
-            tablePartitionInfos.put(baseTable.getName(), refreshInfo.partitionInfo());
+            tableIdToTableKey.put(baseTable.getId(), tableKey);
+            tablePartitionInfos.put(tableKey, refreshInfo.partitionInfo());
         }
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapVisibleVersionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
         Map<String, Map<String, MaterializedView.BasePartitionInfo>> baseOlapTableVisibleVersionMap =
                 olapVisibleVersionMap.entrySet().stream()
-                        .map(entry -> Pair.of(tableIdToTableNameMap.get(entry.getKey()), entry.getValue()))
+                        .map(entry -> Pair.of(tableIdToTableKey.get(entry.getKey()), entry.getValue()))
                         .collect(Collectors.toMap(x -> x.getLeft(), x -> x.getRight()));
 
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> externalVisibleVersionMap =
@@ -342,7 +347,40 @@ public class MetaFunctions {
     /**
      * Everything {@link #inspectMVRefreshInfo(Database, MaterializedView)} needs about one base table.
      */
-    private record BaseTableRefreshInfo(Table table, Set<String> toUpdatePartitions, String partitionInfo) {
+    private record BaseTableRefreshInfo(Table table, String name, String fullName, String identity,
+                                        Set<String> toUpdatePartitions, String partitionInfo) {
+    }
+
+    /**
+     * Keys the base tables of the report by name, as reports always have. Tables whose keys would collide (same name
+     * in different databases, or a name that spells another table's full name) are keyed by full name instead, and
+     * by full name and the table's persisted identity if that still collides.
+     */
+    private static List<String> reportKeysOf(List<BaseTableRefreshInfo> refreshInfos) {
+        int[] levels = new int[refreshInfos.size()];
+        while (true) {
+            List<String> keys = Lists.newArrayList();
+            for (int i = 0; i < refreshInfos.size(); i++) {
+                BaseTableRefreshInfo info = refreshInfos.get(i);
+                keys.add(switch (levels[i]) {
+                    case 0 -> info.name();
+                    case 1 -> info.fullName();
+                    default -> info.fullName() + "#" + info.identity();
+                });
+            }
+            Map<String, Long> keyCounts = keys.stream()
+                    .collect(Collectors.groupingBy(key -> key, Collectors.counting()));
+            boolean escalated = false;
+            for (int i = 0; i < levels.length; i++) {
+                if (keyCounts.get(keys.get(i)) > 1 && levels[i] < 2) {
+                    levels[i]++;
+                    escalated = true;
+                }
+            }
+            if (!escalated) {
+                return keys;
+            }
+        }
     }
 
     /** What {@link #inspectMVRefreshInfo(Database, MaterializedView)} reads from the MV, copied at one moment. */
@@ -401,7 +439,12 @@ public class MetaFunctions {
         Table baseTable = MvUtils.getTableChecked(baseTableInfo);
         Set<String> toUpdatePartitions =
                 ConnectorPartitionTraits.build(mv, baseTable).getUpdatedPartitionNames(baseTableInfos, refreshContext);
-        return new BaseTableRefreshInfo(baseTable, toUpdatePartitions, getTablePartitionInfo(baseTable));
+        // A connector table's Table.getId() is per FE and resets on restart, so the key uses the persisted identity.
+        String identity = baseTableInfo.isInternalCatalog()
+                ? String.valueOf(baseTableInfo.getTableId()) : baseTableInfo.getTableIdentifier();
+        // Snapshot the names: the report keys are computed after this table's lock is released, when a rename can land.
+        return new BaseTableRefreshInfo(baseTable, baseTable.getName(), baseTableInfo.getReadableString(), identity,
+                toUpdatePartitions, getTablePartitionInfo(baseTable));
     }
 
     private static String getTablePartitionInfo(Table table) {
