@@ -2523,6 +2523,14 @@ public class Config extends ConfigBase {
     public static int period_of_auto_resume_min = 5;
 
     /**
+     * For how long a Kafka routine load task keeps being retried, instead of pausing the job, after the broker
+     * first reports "Offset out of range" while the offset is still between the partition's beginning and
+     * latest offsets, as can happen during a partition leader change. 0 pauses the job at the first one.
+     */
+    @ConfField(mutable = true)
+    public static long routine_load_offset_out_of_range_retry_timeout_second = 600;
+
+    /**
      * The max number of files store in SmallFileMgr
      */
     @ConfField(mutable = true)

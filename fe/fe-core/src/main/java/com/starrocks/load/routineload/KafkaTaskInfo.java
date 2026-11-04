@@ -75,6 +75,10 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     // offset is the latest existing message offset + 1
     private Map<Integer, Long> latestPartOffset;
 
+    // When this task, or a task it was renewed from, first aborted with "Offset out of range"; 0 if none did.
+    // While it is set, readyToExecute() checks the offsets against the broker before the task runs.
+    private long offsetOutOfRangeStartTimeMs = 0;
+
     public KafkaTaskInfo(UUID id, RoutineLoadJob job, long taskScheduleIntervalMs, long timeToExecuteMs,
                          Map<Integer, Long> partitionIdToOffset, long taskTimeoutMs) {
         super(id, job, taskScheduleIntervalMs, timeToExecuteMs, taskTimeoutMs);
@@ -91,6 +95,14 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         super(UUIDUtil.genUUID(), kafkaTaskInfo.getJob(), kafkaTaskInfo.getTaskScheduleIntervalMs(), timeToExecuteMs,
                 kafkaTaskInfo.getBeId(), tastTimeoutMs);
         this.partitionIdToOffset = partitionIdToOffset;
+    }
+
+    public long getOffsetOutOfRangeStartTimeMs() {
+        return offsetOutOfRangeStartTimeMs;
+    }
+
+    public void setOffsetOutOfRangeStartTimeMs(long offsetOutOfRangeStartTimeMs) {
+        this.offsetOutOfRangeStartTimeMs = offsetOutOfRangeStartTimeMs;
     }
 
     public List<Integer> getPartitions() {
@@ -114,11 +126,27 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
 
     @Override
     public boolean readyToExecute() throws StarRocksException {
-        if (checkReadyToExecuteFast()) {
+        if (offsetOutOfRangeStartTimeMs == 0 && checkReadyToExecuteFast()) {
             return true;
         }
 
         KafkaRoutineLoadJob kafkaRoutineLoadJob = (KafkaRoutineLoadJob) job;
+        if (offsetOutOfRangeStartTimeMs > 0) {
+            Map<Integer, Long> beginningOffsets = KafkaUtil.getBeginningOffsets(kafkaRoutineLoadJob.getBrokerList(),
+                    kafkaRoutineLoadJob.getTopic(),
+                    ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
+                    new ArrayList<>(partitionIdToOffset.keySet()), getComputeResource());
+            for (Map.Entry<Integer, Long> entry : partitionIdToOffset.entrySet()) {
+                Long beginningOffset = beginningOffsets.get(entry.getKey());
+                if (beginningOffset != null && entry.getValue() < beginningOffset) {
+                    throw new RoutineLoadPauseException(String.format(
+                            "Offset out of range: consume offset: %d is smaller than the beginning offset: %d " +
+                                    "in kafka partition: %d. You can modify 'kafka_offsets' property through " +
+                                    "ALTER ROUTINE LOAD and RESUME the job",
+                            entry.getValue(), beginningOffset, entry.getKey()));
+                }
+            }
+        }
         Map<Integer, Long> latestOffsets = KafkaUtil.getLatestOffsets(kafkaRoutineLoadJob.getBrokerList(),
                 kafkaRoutineLoadJob.getTopic(),
                 ImmutableMap.copyOf(kafkaRoutineLoadJob.getConvertedCustomProperties()),
