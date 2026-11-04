@@ -137,16 +137,25 @@ void RssidFileInfoContainer::add_rssid_to_file(const TabletMetadata& metadata) {
     }
 }
 
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
 void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
                                                const std::map<int, FileInfo>& replace_segments) {
     DCHECK(segment_idx < meta.segment_metas_size());
     uint32_t local_segment_id = get_segment_idx(meta, static_cast<int32_t>(segment_idx));
     if (replace_segments.count(segment_idx) > 0) {
+=======
+void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_pos,
+                                               const std::map<int, SegmentFileInfo>& replace_segments,
+                                               uint32_t segment_idx_base) {
+    DCHECK(segment_pos < meta.segment_metas_size());
+    uint32_t local_segment_id = segment_idx_base + get_segment_idx(meta, static_cast<int32_t>(segment_pos));
+    if (replace_segments.count(segment_pos) > 0) {
+>>>>>>> f2f1e66 ([BugFix] Fix row-mode partial updates and bundle offsets in a lake multi-statement transaction's merged rowset (#79402)):be/src/storage/lake/primary_key_manager.cpp
         // partial update
-        _rssid_to_file_info[rowset_id + local_segment_id] = replace_segments.at(segment_idx);
+        _rssid_to_file_info[rowset_id + local_segment_id] = replace_segments.at(segment_pos);
         _rssid_to_rowid[rowset_id + local_segment_id] = rowset_id;
     } else {
-        const auto& segment_meta = meta.segment_metas(segment_idx);
+        const auto& segment_meta = meta.segment_metas(segment_pos);
         FileInfo segment_info{.path = segment_meta.filename()};
         if (segment_meta.has_bundle_file_offset()) {
             segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
@@ -162,7 +171,18 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
     }
 }
 
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
+=======
+void RssidFileInfoContainer::add_pending_rowset(const MetaFileBuilder& builder, uint32_t rowset_id) {
+    const auto& pending_rowset = builder.pending_rowset();
+    for (int pos = 0; pos < pending_rowset.segment_metas_size(); pos++) {
+        add_rssid_to_file(pending_rowset, rowset_id, pos, builder.pending_replace_segments());
+    }
+}
+
+StatusOr<IndexEntry*> PrimaryKeyManager::prepare_primary_index(
+>>>>>>> f2f1e66 ([BugFix] Fix row-mode partial updates and bundle offsets in a lake multi-statement transaction's merged rowset (#79402)):be/src/storage/lake/primary_key_manager.cpp
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
@@ -368,9 +388,24 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     const int64_t io_count_remote_before = state.stats().io_count_remote;
 
     std::vector<FileMetaPB> orphan_files;
+<<<<<<< HEAD:be/src/storage/lake/update_manager.cpp
     std::map<int, FileInfo> replace_segments;
+=======
+    std::map<int, SegmentFileInfo> replace_segments;
+    // Global segment id offset assigned by builder when batch applying multiple op_write in a single publish.
+    const uint32_t assigned_global_segments = batch_apply ? builder->assigned_segment_idx() : 0;
+>>>>>>> f2f1e66 ([BugFix] Fix row-mode partial updates and bundle offsets in a lake multi-statement transaction's merged rowset (#79402)):be/src/storage/lake/primary_key_manager.cpp
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);
+    if (batch_apply) {
+        // The op_writes applied earlier in this batch (the earlier statements of a multi-statement
+        // transaction) are not in |metadata| yet: MetaFileBuilder holds them as one pending rowset until
+        // set_final_rowset(), while the primary index already points at their rows. Register their
+        // segments under the rssids that rowset will get, with the rewritten file wherever a row-mode
+        // partial update replaced one, so that a partial update, condition update or auto-increment fill
+        // below reads the values an earlier statement wrote instead of failing to find the rssid.
+        rssid_fileinfo_container.add_pending_rowset(*builder, rowset_id);
+    }
     // Init update state.
     RowsetUpdateStateParams params{
             .op_write = op_write,
@@ -384,8 +419,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Init delvec state.
     // Map from rssid (rowset id + segment offset) to the list of deleted rowids collected during this publish.
     PrimaryIndex::DeletesMap new_deletes;
-    // Global segment id offset assigned by builder when batch applying multiple op_write in a single publish.
-    uint32_t assigned_global_segments = batch_apply ? builder->assigned_segment_idx() : 0;
     // Number of segments in the incoming rowset of this op_write.
     uint32_t local_segments = op_write.rowset().segment_metas_size();
     std::vector<uint32_t> rowset_segment_ids;
@@ -504,8 +537,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 replace_segments.merge(per_seg_replace[idx]);
                 orphan_files.insert(orphan_files.end(), std::make_move_iterator(per_seg_orphans[idx].begin()),
                                     std::make_move_iterator(per_seg_orphans[idx].end()));
+                // Under the same rssid _do_update() gives this segment's rows (see rowset_segment_ids).
                 rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), i,
-                                                           replace_segments);
+                                                           replace_segments, assigned_global_segments);
             }
             _update_state_cache.update_object_size(state_entry, state.memory_usage());
         }
@@ -521,8 +555,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                    false /*no need lock*/));
                 _update_state_cache.update_object_size(state_entry, state.memory_usage());
                 RETURN_IF_ERROR(state.rewrite_segment(local_id, txn_id, params, &replace_segments, &orphan_files));
+                // Under the same rssid _do_update() gives this segment's rows (global_segment_id): in a
+                // batch that is past the earlier statements' segments, which are registered above.
                 rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), local_id,
-                                                           replace_segments);
+                                                           replace_segments, assigned_global_segments);
             }
 
             // PK index update + condition merge.
