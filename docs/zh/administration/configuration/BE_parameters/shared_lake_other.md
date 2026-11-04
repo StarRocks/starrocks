@@ -146,6 +146,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在写入存算分离集群的 Tablet 元数据和事务日志文件时附加 Adler-32 校验和，以便在读取时检测这些文件是否损坏。无论该配置项如何设置，读取端在文件包含校验和时都会自动识别并校验；该配置项仅控制写入格式。仅当集群仍可能降级到不支持该校验和格式的版本时，才将该配置项设置为 `false`。在滚动升级或降级期间，旧版本的 BE 或 CN 使用旧的读取逻辑，无法解析新格式写入的文件。
 - 引入版本：v4.2
 
+### lake_fullvacuum_meta_mtime_margin_seconds
+
+- 默认值：600
+- 类型：Int64
+- 单位：秒
+- 是否动态：是
+- 描述：控制存算分离集群中 Full Vacuum 如何判断合并（Bundle）Tablet 元数据文件是否过期。开启 `file_bundling` 的表在版本 Publish 时写入合并 Tablet 元数据文件，此时其中的所有事务均已提交。如果对象存储列举结果中该文件的最后修改时间早于 Full Vacuum 的过期截止时间，且相差超过该配置项的值，Full Vacuum 会直接判定该文件过期，无需下载该文件。否则，Full Vacuum 会下载该文件并检查其中记录的提交时间。该余量用于容忍 FE 节点与对象存储之间的时钟偏差。将该配置项设置为负数表示始终下载文件进行检查。
+- 引入版本：-
+
 ### lake_pk_compaction_max_input_rowsets
 
 - 默认值：500

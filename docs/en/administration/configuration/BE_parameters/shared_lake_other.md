@@ -149,6 +149,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to write tablet metadata and transaction log files of a shared-data cluster with an Adler-32 checksum, so that corruption of these files can be detected when they are read. Regardless of this item, readers always detect and verify the checksum automatically when it is present; this item only controls the write format. Set it to `false` only while the cluster may still be downgraded to a version that predates the checksummed format. During a rolling upgrade or a downgrade, an earlier BE or CN uses the legacy reader and cannot parse files written in the new format.
 - Introduced in: v4.2
 
+### lake_fullvacuum_meta_mtime_margin_seconds
+
+- Default: 600
+- Type: Int64
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Controls how Full Vacuum decides whether a bundled tablet metadata file has expired on a shared-data cluster. Bundled tablet metadata files are written for tables with `file_bundling` enabled, when a version is published and after all of its transactions have committed. If the last modification time of such a file, as reported by the object storage listing, is earlier than the expiration cutoff of Full Vacuum by more than this value, Full Vacuum treats the file as expired without downloading it. Otherwise, Full Vacuum downloads the file and checks the commit times it records. The margin tolerates clock skew between FE nodes and the object storage. Set this item to a negative value to always download the files.
+- Introduced in: -
+
 ### lake_pk_compaction_max_input_rowsets
 
 - Default: 500
