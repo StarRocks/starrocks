@@ -157,6 +157,51 @@ public class FoldConstantsRuleTest {
     }
 
     @Test
+    public void applyCastToDecimalPastPrecision() {
+        Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        Type decimal5 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 2);
+        // A DECIMAL holds as many digits as its precision: an explicit cast of a value with more is NULL, as in
+        // the BE, though the type's storage (DECIMAL32) holds more
+        assertEquals(ConstantOperator.createNull(decimal3),
+                rule.apply(new CastOperator(decimal3, ConstantOperator.createVarchar("99999")), null));
+        assertEquals(ConstantOperator.createNull(decimal5),
+                rule.apply(new CastOperator(decimal5, ConstantOperator.createInt(100003)), null));
+        // 999.995 rounds to 1000.00
+        assertEquals(ConstantOperator.createNull(decimal5),
+                rule.apply(new CastOperator(decimal5, ConstantOperator.createVarchar("999.995")), null));
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("999.99"), decimal5),
+                rule.apply(new CastOperator(decimal5, ConstantOperator.createVarchar("999.994")), null));
+        // An implicit cast keeps the value, for the sink to check
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("99999"), decimal3),
+                rule.apply(new CastOperator(decimal3, ConstantOperator.createVarchar("99999"), true), null));
+        // The BE rounds the binary value of a DOUBLE, 9.99499..., to 9.99, so the FE, which rounds 9.995 to 10.00,
+        // leaves that cast to the BE
+        Type decimal32 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 2);
+        CastOperator doubleCast = new CastOperator(decimal32, ConstantOperator.createDouble(9.995));
+        assertEquals(doubleCast, rule.apply(doubleCast, null));
+        // As in the BE, a cast between fully compatible types is not checked: the planner takes it for one that
+        // gives no NULL
+        Type decimal53 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 5, 3);
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("999.99"), decimal53),
+                rule.apply(new CastOperator(decimal53,
+                        ConstantOperator.createDecimal(new BigDecimal("999.99"), decimal5)), null));
+    }
+
+    @Test
+    public void applyCastToDecimalArrayPastPrecision() {
+        Type decimal3 = TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0);
+        ArrayOperator input = new ArrayOperator(new ArrayType(IntegerType.INT), false,
+                Lists.newArrayList(ConstantOperator.createInt(9999), ConstantOperator.createInt(999)));
+        // An explicit cast checks each element against the precision, as the BE does
+        ScalarOperator explicit = rule.apply(new CastOperator(new ArrayType(decimal3), input), null);
+        assertEquals(ConstantOperator.createNull(decimal3), explicit.getChild(0));
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("999"), decimal3), explicit.getChild(1));
+        // An implicit cast keeps the values, for the sink to check
+        ScalarOperator implicit = rule.apply(new CastOperator(new ArrayType(decimal3), input, true), null);
+        assertEquals(ConstantOperator.createDecimal(new BigDecimal("9999"), decimal3), implicit.getChild(0));
+    }
+
+    @Test
     public void applyCast() {
         CastOperator cast1 = new CastOperator(BooleanType.BOOLEAN, ConstantOperator.createNull(NullType.NULL));
         assertEquals(OB_NULL, rule.apply(cast1, null));

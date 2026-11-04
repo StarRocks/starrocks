@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.DecimalLiteral;
 import com.starrocks.sql.common.ErrorType;
@@ -677,12 +678,30 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return Optional.of(ConstantOperator.createNull(desc));
         }
         Optional<ConstantOperator> result = castTo(desc);
+        // A DECIMAL holds as many digits as its precision: castTo checks only the range of the type's storage
+        // (checkLiteralOverflowInBinaryStyle), where the BE casts a value with more to NULL. As in the BE, a cast
+        // between fully compatible types is not checked, since the planner takes it for one that gives no NULL.
+        if (desc.isDecimalV3() && CastOperator.checksDecimalPrecision(getType(), desc, false)
+                && result.isPresent() && !result.get().isNull()
+                && !DecimalLiteral.checkLiteralOverflowInDecimalStyle(result.get().getDecimal(), (ScalarType) desc)) {
+            // castTo rounds a FLOAT or DOUBLE by its decimal string, where the BE rounds its binary value, so it can
+            // round up past the precision where the BE doesn't (9.995 is 9.99499...), and with ERROR_IF_OVERFLOW the
+            // BE raises an error instead of giving NULL: leave such casts to the BE
+            return getType().isFloatingPointType() || isErrorIfOverflow() ? Optional.empty()
+                    : Optional.of(ConstantOperator.createNull(desc));
+        }
         if (!desc.isChar() || ((ScalarType) desc).getLength() < 0) {
             return result;
         }
         int maxChars = ((ScalarType) desc).getLength();
         return result.map(value -> value.isNull() ? value :
                 ConstantOperator.createChar(truncateToCodePoints(value.getVarchar(), maxChars), desc));
+    }
+
+    private static boolean isErrorIfOverflow() {
+        ConnectContext ctx = ConnectContext.get();
+        return ctx != null && SqlModeHelper.check(ctx.getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ERROR_IF_OVERFLOW);
     }
 
     // Truncate to the first maxChars Unicode code points (MySQL CHAR(N) semantics). ASCII fast paths first.

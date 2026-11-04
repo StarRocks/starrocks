@@ -23,6 +23,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -34,8 +35,10 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -48,6 +51,22 @@ public class QueryConverterTest {
     static IdGenerator<SlotId> idGenerator = SlotId.createGenerator();
 
     QueryConverter queryConverter = new QueryConverter();
+
+    @Test
+    public void testDecimalPrecisionCastStaysLocal() {
+        // A cast to DECIMAL(3, 0) turns 9999 into NULL, which a pushed-down `k` IS NULL would miss
+        SlotRef kSlotRef = mockSlotRef("k", IntegerType.BIGINT);
+        CastExpr explicit = new CastExpr(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0), kSlotRef);
+        explicit.setImplicit(false);
+        QueryConverter converter = new QueryConverter();
+        IsNullPredicate isNull = new IsNullPredicate(explicit, false);
+        Assertions.assertEquals("{\"match_all\":{}}", converter.convert(List.of(isNull)).toString());
+        Assertions.assertEquals(List.of(isNull), converter.localConjuncts());
+
+        CastExpr implicit = new CastExpr(TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL32, 3, 0), kSlotRef);
+        Assertions.assertEquals("{\"bool\":{\"must_not\":{\"exists\":{\"field\":\"k\"}}}}",
+                queryConverter.convert(new IsNullPredicate(implicit, false)).toString());
+    }
 
     @Test
     public void testTranslateIsNullPredicate() {

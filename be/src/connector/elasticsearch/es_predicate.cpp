@@ -62,12 +62,26 @@ namespace starrocks {
 
 using namespace std;
 
-#define RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(expr)                                          \
-    do {                                                                                   \
-        const Expr* expr_without_cast = Expr::expr_without_cast(expr);                     \
-        if (expr_without_cast->node_type() != TExprNodeType::SLOT_REF) {                   \
-            return Status::InternalError("build disjuncts failed: child is not slot ref"); \
-        }                                                                                  \
+// A cast that turns a DECIMAL past its precision into NULL is not the column it casts, so a predicate on it is not
+// pushed down
+static bool has_decimal_precision_cast(const Expr* expr) {
+    for (; expr->op() == TExprOpcode::CAST; expr = expr->get_child(0)) {
+        if (expr->checks_decimal_precision()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+#define RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(expr)                                                           \
+    do {                                                                                                    \
+        const Expr* expr_without_cast = Expr::expr_without_cast(expr);                                      \
+        if (expr_without_cast->node_type() != TExprNodeType::SLOT_REF) {                                    \
+            return Status::InternalError("build disjuncts failed: child is not slot ref");                  \
+        }                                                                                                   \
+        if (has_decimal_precision_cast(expr)) {                                                             \
+            return Status::InternalError("build disjuncts failed: cast checks the precision of a decimal"); \
+        }                                                                                                   \
     } while (false)
 
 template <typename T, typename... Ts>
@@ -405,6 +419,9 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         const Expr* expr = Expr::expr_without_cast(pred->get_child(0));
         if (expr->node_type() != TExprNodeType::SLOT_REF) {
             return Status::InternalError("build disjuncts failed: node type is not slot ref");
+        }
+        if (has_decimal_precision_cast(pred->get_child(0))) {
+            return Status::InternalError("build disjuncts failed: cast checks the precision of a decimal");
         }
 
         const SlotDescriptor* slot_desc = get_slot_desc(static_cast<const ColumnRef*>(expr)->slot_id());
