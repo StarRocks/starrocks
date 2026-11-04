@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-<<<<<<< HEAD
-#include "base/simd/simd.h"
-=======
 #include <cctz/time_zone.h>
 #include <fmt/format.h>
 
 #include <optional>
 #include <vector>
 
->>>>>>> b264e7d50ba... [Enhancement][RB-913] Cast VARIANT struct fields and get_variant_* results without copying the variant metadata (#68358)
+#include "base/simd/simd.h"
 #include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
