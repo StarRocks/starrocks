@@ -30,6 +30,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -151,6 +152,27 @@ public class PaimonCreateTableAnalyzerTest {
     }
 
     @Test
+    public void testNativeSchemaValidationIsDeferredUntilExecution(@TempDir Path warehouse) throws Exception {
+        Options options = Options.fromMap(Map.of("warehouse", warehouse.toUri().toString()));
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options))) {
+            catalog.createDatabase("db", false);
+            PaimonMetadata metadata = new PaimonMetadata("paimon_ddl", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            for (Map.Entry<String, String> invalid : Map.of(
+                    "(id largeint)", "Unsupported Paimon column type",
+                    "(id int) properties ('bucket'='0')", "bucket",
+                    "(id int) properties ('path'='hidden')", "path").entrySet()) {
+                CreateTableStmt stmt = analyze("create table paimon_ddl.db.t " + invalid.getKey());
+                SemanticException error = Assertions.assertThrows(SemanticException.class,
+                        () -> metadata.createTable(context, stmt));
+                Assertions.assertTrue(error.getMessage().contains(invalid.getValue()), error.getMessage());
+                Assertions.assertThrows(Catalog.TableNotExistException.class,
+                        () -> catalog.getTable(Identifier.create("db", "t")));
+            }
+        }
+    }
+
+    @Test
     public void testDatabaseIfExistsAndTableDdlDispatch(@TempDir Path warehouse) throws Exception {
         Options options = Options.fromMap(Map.of("warehouse", warehouse.toUri().toString(), "cache-enabled", "true"));
         try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options))) {
@@ -245,16 +267,38 @@ public class PaimonCreateTableAnalyzerTest {
     }
 
     @Test
-    public void testUnsupportedClausesAreRejectedBeforeRewrites() {
+    public void testUnsupportedClausesAreRejectedDuringAnalysis() {
         assertInvalid("(id int, dt date) partition by days(dt)", "partition expressions");
-        assertInvalid("(id int) distributed by hash(id) buckets 2", "DISTRIBUTED BY");
+        assertInvalid("(id int) distributed by hash(id) buckets 2", "distribution desc");
+        assertInvalid("(id int) order by(id)", "ORDER BY");
+        assertInvalid("(id int) rollup (r(id))", "ROLLUP");
+        assertInvalid("(id int) broker properties ('broker.name'='unused')", "PROPERTIES");
         assertInvalid("(id int default '1')", "DEFAULT NULL");
         assertInvalid("(id int, g int as (id + 1))", "generated");
         assertInvalid("(id bigint auto_increment)", "AUTO_INCREMENT");
         assertInvalid("(id int, v int sum)", "aggregate");
         assertInvalid("(id int null) primary key (id)", "nullable");
         assertInvalid("(id int) duplicate key (id)", "PRIMARY KEY");
-        assertInvalid("(id int) properties ('path'='hidden')", "path");
+        assertInvalid("(id int) unique key (id)", "PRIMARY KEY");
+        assertInvalid("(id int) primary key (missing)", "does not exist");
+        assertInvalid("(id int) primary key (id,id)", "Duplicate");
+        assertInvalid("(id int, other int) primary key (id) properties ('primary-key'='other')", "same columns");
+        assertInvalid("(id int, dt date) partition by (dt, DT)", "Duplicate");
+        assertInvalid("(id int) partition by (missing)", "does not exist");
+        assertInvalid("(id int) partition by range(id) (partition p1 values less than ('10'))", "PARTITION BY");
+    }
+
+    @Test
+    public void testRejectedPrimaryKeyPreservesParsedColumns() {
+        CreateTableStmt stmt = (CreateTableStmt) SqlParser.parse(
+                "create table paimon_ddl.db.t (id bigint, dt date null) primary key(id, dt)", 0L).get(0);
+        List<Boolean> nullable = stmt.getColumnDefs().stream().map(ColumnDef::isAllowNull).toList();
+        List<Boolean> keyFlags = stmt.getColumnDefs().stream().map(ColumnDef::isKey).toList();
+
+        Assertions.assertThrows(SemanticException.class, () -> CreateTableAnalyzer.analyze(stmt, context));
+
+        Assertions.assertEquals(nullable, stmt.getColumnDefs().stream().map(ColumnDef::isAllowNull).toList());
+        Assertions.assertEquals(keyFlags, stmt.getColumnDefs().stream().map(ColumnDef::isKey).toList());
     }
 
     private void executeDdl(String sql) throws Exception {

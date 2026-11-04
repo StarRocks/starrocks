@@ -34,7 +34,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.elasticsearch.EsUtil;
-import com.starrocks.connector.paimon.PaimonTableSchemaConverter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -129,12 +128,7 @@ public class CreateTableAnalyzer {
         analyzeCharsetName(statement);
 
         com.starrocks.catalog.TableName tableNameObj = com.starrocks.catalog.TableName.fromTableRef(tableRef);
-        if (statement.getEngineName().equalsIgnoreCase("paimon")) {
-            // Paimon partition columns and primary keys must not use OLAP generated-column/key rewrites.
-            PaimonTableSchemaConverter.analyze(statement);
-        } else {
-            analyzeMultiExprsPartition(statement, tableNameObj);
-        }
+        analyzeMultiExprsPartition(statement, tableNameObj);
         preCheckColumnRef(statement);
         analyzeKeysDesc(statement);
         analyzePartitionDesc(statement);
@@ -149,8 +143,6 @@ public class CreateTableAnalyzer {
         analyzeIndexDefs(statement);
         if (statement.isOlapEngine()) {
             validateComplexTypeDefaultValues(statement);
-        } else if (statement.getEngineName().equalsIgnoreCase("paimon")) {
-            PaimonTableSchemaConverter.toSchema(statement);
         }
     }
 
@@ -207,6 +199,10 @@ public class CreateTableAnalyzer {
             throw new SemanticException("temporary table only support olap engine");
         }
 
+        if (engineName.equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeProperties(stmt);
+        }
+
         stmt.setEngineName(engineName.toLowerCase());
     }
 
@@ -252,6 +248,7 @@ public class CreateTableAnalyzer {
 
     private static void analyzeColumnRef(CreateTableStmt statement, String catalogName) {
         String engineName = statement.getEngineName();
+        boolean isPaimon = engineName.equalsIgnoreCase(Table.TableType.PAIMON.name());
         KeysDesc keysDesc = statement.getKeysDesc();
         List<ColumnDef> columnDefs = statement.getColumnDefs();
 
@@ -262,6 +259,9 @@ public class CreateTableAnalyzer {
 
         List<Column> columns = new ArrayList<>();
         for (ColumnDef columnDef : columnDefs) {
+            if (isPaimon) {
+                PaimonCreateTableAnalyzer.analyzeColumnDef(columnDef);
+            }
             try {
                 String name = columnDef.getName();
                 boolean isAllowNull = columnDef.isAllowNull();
@@ -291,7 +291,7 @@ public class CreateTableAnalyzer {
             }
 
             if (!statement.isOlapEngine() && !engineName.equalsIgnoreCase(Table.TableType.HIVE.name())
-                    && !engineName.equalsIgnoreCase("paimon")) {
+                    && !isPaimon) {
                 columnDef.setIsKey(true);
             }
 
@@ -326,8 +326,8 @@ public class CreateTableAnalyzer {
 
     private static void analyzeKeysDesc(CreateTableStmt stmt) {
         KeysDesc keysDesc = stmt.getKeysDesc();
-        if (stmt.getEngineName().equalsIgnoreCase("paimon")) {
-            // Paimon primary keys need not be a prefix of the schema and do not imply REPLACE aggregation.
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeKeysDesc(stmt);
             return;
         }
         if (!stmt.isOlapEngine()) {
@@ -465,6 +465,9 @@ public class CreateTableAnalyzer {
 
     // analyzeSortKeys must be called after analyzeDistributionDesc
     private static void analyzeSortKeys(CreateTableStmt stmt) {
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeSortKeys(stmt);
+        }
         if (!stmt.isOlapEngine() || stmt.getOrderByElements() == null) {
             return;
         }
@@ -640,6 +643,11 @@ public class CreateTableAnalyzer {
         if (multiDescList == null || multiDescList.isEmpty()) {
             return;
         }
+        // Leave unsupported Paimon expressions intact for analyzePartitionDesc instead of generating columns.
+        if (stmt.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())
+                && multiDescList.stream().anyMatch(node -> !(node instanceof Identifier))) {
+            return;
+        }
         List<ColumnDef> columnDefs = stmt.getColumnDefs();
         List<String> partitionColumnList = Lists.newArrayList();
         List<PartitionDesc> partitionDescList = Lists.newArrayList();
@@ -700,9 +708,6 @@ public class CreateTableAnalyzer {
 
     public static void analyzePartitionDesc(CreateTableStmt stmt) {
         String engineName = stmt.getEngineName();
-        if (engineName.equalsIgnoreCase("paimon")) {
-            return;
-        }
         PartitionDesc partitionDesc = stmt.getPartitionDesc();
         if (stmt.isOlapEngine()) {
             if (partitionDesc != null) {
@@ -739,7 +744,9 @@ public class CreateTableAnalyzer {
                 }
             }
         } else {
-            if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
+            if (engineName.equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+                PaimonCreateTableAnalyzer.analyzePartitionDesc(stmt);
+            } else if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
             } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
                     || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
@@ -970,6 +977,9 @@ public class CreateTableAnalyzer {
     }
 
     public static void analyzeIndexDefs(CreateTableStmt statement) {
+        if (statement.getEngineName().equalsIgnoreCase(Table.TableType.PAIMON.name())) {
+            PaimonCreateTableAnalyzer.analyzeRollup(statement);
+        }
         List<IndexDef> indexDefs = statement.getIndexDefs();
 
         List<Column> columns = statement.getColumns();

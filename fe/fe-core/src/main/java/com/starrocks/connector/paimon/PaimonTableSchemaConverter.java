@@ -21,11 +21,8 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.KeysDesc;
-import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.ScalarType;
@@ -46,7 +43,6 @@ import org.apache.paimon.types.RowType;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -60,48 +56,8 @@ public final class PaimonTableSchemaConverter {
     private PaimonTableSchemaConverter() {
     }
 
-    /** Validate Paimon clauses before the generic analyzer can apply native-table rewrites. */
-    public static void analyze(CreateTableStmt stmt) {
-        if (stmt.getDistributionDesc() != null) {
-            throw new SemanticException("Paimon tables do not support DISTRIBUTED BY; use bucket and bucket-key options");
-        }
-        if (stmt.getOrderByElements() != null && !stmt.getOrderByElements().isEmpty()) {
-            throw new SemanticException("Paimon tables do not support ORDER BY in CREATE TABLE");
-        }
-        if (!stmt.getRollupAlterClauseList().isEmpty()) {
-            throw new SemanticException("Paimon tables do not support ROLLUP");
-        }
-        if (stmt.getExtProperties() != null && !stmt.getExtProperties().isEmpty()) {
-            throw new SemanticException("Paimon table options must be specified in PROPERTIES");
-        }
-        List<String> primaryKeys = primaryKeys(stmt, tableOptions(stmt.getProperties()));
-        for (ColumnDef column : stmt.getColumnDefs()) {
-            if (column.isAutoIncrement()) {
-                throw new SemanticException("Paimon does not support AUTO_INCREMENT columns: %s", column.getName());
-            }
-            if (column.isGeneratedColumn()) {
-                throw new SemanticException("Paimon does not support generated columns: %s", column.getName());
-            }
-            if (column.getAggregateType() != null || column.getAggStateDesc() != null) {
-                throw new SemanticException("Paimon does not support aggregate column definitions: %s", column.getName());
-            }
-            ColumnDef.DefaultValueDef defaultValue = column.getDefaultValueDef();
-            if (defaultValue != null && defaultValue.isSet && !(defaultValue.expr instanceof NullLiteral)) {
-                throw new SemanticException("Paimon only supports DEFAULT NULL: %s", column.getName());
-            }
-            if (primaryKeys.contains(column.getName())) {
-                if (column.isAllowNull() && !column.isAllowNullImplicit()) {
-                    throw new SemanticException("Paimon primary key column[%s] cannot be nullable", column.getName());
-                }
-                if (defaultValue != null && defaultValue.isSet) {
-                    throw new SemanticException("Invalid default value for '%s'", column.getName());
-                }
-            }
-        }
-    }
-
+    /** Build the native schema after SQL clause analysis and before mutating the catalog. */
     public static Schema toSchema(CreateTableStmt stmt) {
-        analyze(stmt);
         Map<String, String> options = tableOptions(stmt.getProperties());
         List<String> primaryKeys = primaryKeys(stmt, options);
         options.remove(CoreOptions.PRIMARY_KEY.key());
@@ -190,17 +146,11 @@ public final class PaimonTableSchemaConverter {
 
     private static List<String> primaryKeys(CreateTableStmt stmt, Map<String, String> options) {
         KeysDesc keys = stmt.getKeysDesc();
-        if (keys != null && keys.getKeysType() != KeysType.PRIMARY_KEYS) {
-            throw new SemanticException("Paimon only supports PRIMARY KEY, not %s", keys.getKeysType());
+        if (keys != null) {
+            return resolveColumns(stmt, keys.getKeysColumnNames());
         }
-        List<String> sqlKeys = keys == null ? List.of() : resolveColumns(stmt, keys.getKeysColumnNames(), "primary key");
         String property = options.get(CoreOptions.PRIMARY_KEY.key());
-        List<String> propertyKeys = property == null ? List.of()
-                : resolveColumns(stmt, Arrays.asList(property.split(",", -1)), "primary key");
-        if (keys != null && property != null && !sqlKeys.equals(propertyKeys)) {
-            throw new SemanticException("Paimon PRIMARY KEY and primary-key property must specify the same columns in order");
-        }
-        return keys == null ? propertyKeys : sqlKeys;
+        return property == null ? List.of() : resolveColumns(stmt, Arrays.asList(property.split(",", -1)));
     }
 
     private static List<String> partitionKeys(CreateTableStmt stmt) {
@@ -208,48 +158,21 @@ public final class PaimonTableSchemaConverter {
         if (partition == null) {
             return List.of();
         }
-        if (!(partition instanceof ListPartitionDesc)) {
-            throw new SemanticException("Paimon only supports PARTITION BY (column, ...) without partition definitions");
-        }
         ListPartitionDesc list = (ListPartitionDesc) partition;
-        if (!list.getPartitionDescs().isEmpty() || (list.getPartitionExprs() != null && !list.getPartitionExprs().isEmpty())) {
-            throw new SemanticException("Paimon only supports ordinary partition columns, " +
-                    "not expressions or partition definitions");
-        }
         List<String> names = list.getPartitionColNames();
         if (list.getMultiDescList() != null && !list.getMultiDescList().isEmpty()) {
-            names = new ArrayList<>();
-            for (ParseNode node : list.getMultiDescList()) {
-                if (!(node instanceof Identifier)) {
-                    throw new SemanticException("Paimon only supports ordinary partition columns, not partition expressions");
-                }
-                names.add(((Identifier) node).getValue());
-            }
+            names = list.getMultiDescList().stream().map(node -> ((Identifier) node).getValue()).collect(Collectors.toList());
         }
-        return resolveColumns(stmt, names, "partition");
+        return resolveColumns(stmt, names);
     }
 
-    private static List<String> resolveColumns(CreateTableStmt stmt, List<String> names, String kind) {
-        if (names == null || names.isEmpty()) {
-            throw new SemanticException("Paimon %s columns must not be empty", kind);
-        }
+    private static List<String> resolveColumns(CreateTableStmt stmt, List<String> names) {
         Map<String, String> columns = new HashMap<>();
         for (ColumnDef column : stmt.getColumnDefs()) {
             columns.put(column.getName().toLowerCase(Locale.ROOT), column.getName());
         }
-        List<String> resolved = new ArrayList<>();
-        Set<String> seen = new HashSet<>();
-        for (String name : names) {
-            String canonical = columns.get(name.trim().toLowerCase(Locale.ROOT));
-            if (canonical == null) {
-                throw new SemanticException("Paimon %s column[%s] does not exist", kind, name);
-            }
-            if (!seen.add(canonical)) {
-                throw new SemanticException("Duplicate Paimon %s column: %s", kind, name);
-            }
-            resolved.add(canonical);
-        }
-        return resolved;
+        return names.stream().map(name -> columns.getOrDefault(name.trim().toLowerCase(Locale.ROOT), name.trim()))
+                .collect(Collectors.toList());
     }
 
     private static Map<String, String> tableOptions(Map<String, String> properties) {

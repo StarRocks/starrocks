@@ -142,7 +142,7 @@ public class PaimonTableSchemaConverterTest {
     }
 
     @Test
-    public void testPrimaryKeyAnalysisAndConversionPreserveParsedColumns() {
+    public void testPrimaryKeyConversionPreservesParsedColumns() {
         for (String keys : List.of("primary key(Id, dt)", "properties ('primary-key'=' ID, dt ')")) {
             CreateTableStmt stmt = parse("create table p.db.t (payload varchar(20), Id bigint, " +
                     "dt date not null, required int not null) engine=paimon " + keys);
@@ -150,9 +150,6 @@ public class PaimonTableSchemaConverterTest {
             List<Boolean> nullable = definitions.stream().map(ColumnDef::isAllowNull).toList();
             List<Boolean> keyFlags = definitions.stream().map(ColumnDef::isKey).toList();
 
-            PaimonTableSchemaConverter.analyze(stmt);
-            Assertions.assertEquals(nullable, definitions.stream().map(ColumnDef::isAllowNull).toList());
-            Assertions.assertEquals(keyFlags, definitions.stream().map(ColumnDef::isKey).toList());
             Schema first = PaimonTableSchemaConverter.toSchema(stmt);
             Schema second = PaimonTableSchemaConverter.toSchema(stmt);
 
@@ -183,36 +180,6 @@ public class PaimonTableSchemaConverterTest {
         Assertions.assertSame(columns, stmt.getColumns());
         Assertions.assertTrue(columns.get(0).isAllowNull());
         Assertions.assertFalse(columns.get(0).isKey());
-    }
-
-    @Test
-    public void testRejectedPrimaryKeyPreservesParsedColumns() {
-        CreateTableStmt stmt = parse("create table p.db.t (id bigint, dt date null) " +
-                "engine=paimon primary key(id, dt)");
-        List<Boolean> nullable = stmt.getColumnDefs().stream().map(ColumnDef::isAllowNull).toList();
-        List<Boolean> keyFlags = stmt.getColumnDefs().stream().map(ColumnDef::isKey).toList();
-
-        Assertions.assertThrows(SemanticException.class, () -> PaimonTableSchemaConverter.analyze(stmt));
-
-        Assertions.assertEquals(nullable, stmt.getColumnDefs().stream().map(ColumnDef::isAllowNull).toList());
-        Assertions.assertEquals(keyFlags, stmt.getColumnDefs().stream().map(ColumnDef::isKey).toList());
-    }
-
-    @Test
-    public void testUnsupportedDdlCannotBeSilentlyIgnored() {
-        assertInvalid("(id bigint auto_increment)", "", "AUTO_INCREMENT");
-        assertInvalid("(id int default '7')", "", "DEFAULT NULL");
-        assertInvalid("(id int, computed int as (id + 1))", "", "generated");
-        assertInvalid("(id int, v int sum)", "", "aggregate");
-        assertInvalid("(id int)", "distributed by hash(id) buckets 2", "DISTRIBUTED BY");
-        assertInvalid("(id int)", "unique key (id)", "PRIMARY KEY");
-        assertInvalid("(id int null)", "primary key (id)", "nullable");
-        assertInvalid("(id int)", "primary key (missing)", "does not exist");
-        assertInvalid("(id int)", "primary key (id,id)", "Duplicate");
-        assertInvalid("(id int, other int)", "primary key (id) properties ('primary-key'='other')", "same columns");
-        assertInvalid("(id int, dt date)", "partition by (dt, DT)", "Duplicate");
-        assertInvalid("(id int, dt date)", "partition by days(dt)", "partition expressions");
-        assertInvalid("(id int)", "partition by range(id) (partition p1 values less than ('10'))", "PARTITION BY");
     }
 
     @Test
