@@ -20,6 +20,7 @@
 #include <typeindex>
 
 #include "base/hash/hash_util.hpp"
+#include "base/hash/xxh3.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
@@ -46,26 +47,38 @@ concept HashFunctionConcept = requires(HashFunction h, const void* data, int32_t
 
 // Hash function type tags
 struct FNVHash {
-    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+    ALWAYS_INLINE static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
         return HashUtil::fnv_hash(data, bytes, seed);
     }
 };
 
 struct CRC32Hash {
-    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+    ALWAYS_INLINE static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
         return HashUtil::zlib_crc_hash(data, bytes, seed);
     }
 };
 
 struct MurmurHash3Hash {
-    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+    ALWAYS_INLINE static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
         return HashUtil::murmur_hash3_32(data, bytes, seed);
     }
 };
 
 struct XXHash3 {
-    [[always_inline]] static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
-        return HashUtil::xx_hash3_64(data, bytes, seed);
+    ALWAYS_INLINE static uint32_t hash(const void* data, int32_t bytes, uint32_t seed) {
+        if (bytes >= 4 && bytes <= 8) {
+            return static_cast<uint32_t>(XXH3_len_4to8_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes),
+                                                           XXH3_kSecret, seed));
+        }
+        if (bytes >= 9 && bytes <= 16) {
+            return static_cast<uint32_t>(XXH3_len_9to16_64b(static_cast<const xxh_u8*>(data),
+                                                            static_cast<size_t>(bytes), XXH3_kSecret, seed));
+        }
+        if (bytes >= 1 && bytes <= 3) {
+            return static_cast<uint32_t>(XXH3_len_1to3_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes),
+                                                           XXH3_kSecret, seed));
+        }
+        return static_cast<uint32_t>(HashUtil::xx_hash3_64(data, bytes, seed));
     }
 };
 
