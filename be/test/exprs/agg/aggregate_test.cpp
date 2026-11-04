@@ -916,8 +916,8 @@ TEST_F(AggregateTest, test_window_funnel) {
 }
 
 TEST_F(AggregateTest, test_window_funnel_repeated_steps) {
-    auto check = [](int64_t window, int32_t mode, uint8_t steps,
-                    const std::vector<std::pair<int64_t, uint8_t>>& events, int32_t expected) {
+    auto check = [](int64_t window, int32_t mode, uint8_t steps, const std::vector<std::pair<int64_t, uint8_t>>& events,
+                    int32_t expected) {
         WindowFunnelState<TYPE_BIGINT> state;
         state.window_size = window;
         state.mode = mode;
@@ -929,9 +929,9 @@ TEST_F(AggregateTest, test_window_funnel_repeated_steps) {
         // Finalizing again must retain the strict timestamp flag.
         EXPECT_EQ(expected, state.get_event_level());
     };
-    check(1000, INCREASE, 2, {{0, 1}, {0, 2}, {100, 1}, {100, 2}}, 2); // A -> A
+    check(1000, INCREASE, 2, {{0, 1}, {0, 2}, {100, 1}, {100, 2}}, 2);             // A -> A
     check(1000, INCREASE, 3, {{0, 1}, {100, 2}, {100, 3}, {200, 2}, {200, 3}}, 3); // A -> B -> B
-    check(1000, INCREASE, 3, {{0, 1}, {0, 3}, {100, 2}, {200, 1}, {200, 3}}, 3); // A -> B -> A
+    check(1000, INCREASE, 3, {{0, 1}, {0, 3}, {100, 2}, {200, 1}, {200, 3}}, 3);   // A -> B -> A
     check(1000, INCREASE, 3, {{0, 1}, {0, 2}, {0, 3}, {100, 1}, {100, 2}, {100, 3}}, 2);
     check(1000, INCREASE, 2, {{0, 1}, {0, 2}, {0, 1}, {0, 2}}, 1);
     // Unordered inputs and a later first event must still find the longest prefix.
@@ -998,7 +998,7 @@ TEST_F(AggregateTest, test_window_funnel_same_day) {
 TEST_F(AggregateTest, test_window_funnel_same_day_datetime_paths) {
     for (bool crossing_midnight : {false, true}) {
         std::vector<TypeDescriptor> args = {TYPE_BIGINT_DESC, TYPE_DATETIME_DESC, TYPE_INT_DESC,
-                                           TypeDescriptor::from_logical_type(TYPE_ARRAY)};
+                                            TypeDescriptor::from_logical_type(TYPE_ARRAY)};
         std::unique_ptr<FunctionContext> local_ctx(
                 FunctionContext::create_test_context(std::move(args), TYPE_INT_DESC));
         auto window = ColumnHelper::create_const_column<TYPE_BIGINT>(-1, 2);
@@ -1007,7 +1007,7 @@ TEST_F(AggregateTest, test_window_funnel_same_day_datetime_paths) {
         auto times = TimestampColumn::create();
         times->append(TimestampValue::create(2026, 11, 4, 23, 59, 58));
         times->append(crossing_midnight ? TimestampValue::create(2026, 11, 5, 0, 0, 0)
-                                       : TimestampValue::create(2026, 11, 4, 23, 59, 59));
+                                        : TimestampValue::create(2026, 11, 4, 23, 59, 59));
         auto values = BooleanColumn::create();
         for (bool value : {true, false, false, true}) {
             values->append(value);
@@ -1047,7 +1047,7 @@ TEST_F(AggregateTest, test_window_funnel_same_day_init_once) {
     WindowFunnelState<TYPE_BIGINT> state;
     state.init_once(local_ctx.get());
     local_ctx->set_constant_columns({ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1), nullptr,
-                                    ColumnHelper::create_const_column<TYPE_INT>(0, 1), nullptr});
+                                     ColumnHelper::create_const_column<TYPE_INT>(0, 1), nullptr});
     state.init_once(local_ctx.get());
     EXPECT_EQ(-1, state.window_size);
     EXPECT_EQ(INCREASE, state.mode);
@@ -1061,10 +1061,10 @@ TEST_F(AggregateTest, test_window_funnel_same_day_init_once) {
 
 TEST_F(AggregateTest, test_window_funnel_aggregation_paths) {
     auto check = [](int64_t window_size, int32_t mode_value, const std::vector<int64_t>& times,
-                       const std::vector<std::vector<int8_t>>& predicates, int32_t expected) {
+                    const std::vector<std::vector<int8_t>>& predicates, int32_t expected) {
         for (bool nullable : {false, true}) {
             std::vector<TypeDescriptor> args = {TYPE_BIGINT_DESC, TYPE_BIGINT_DESC, TYPE_INT_DESC,
-                                               TypeDescriptor::from_logical_type(TYPE_ARRAY)};
+                                                TypeDescriptor::from_logical_type(TYPE_ARRAY)};
             std::unique_ptr<FunctionContext> local_ctx(
                     FunctionContext::create_test_context(std::move(args), TYPE_INT_DESC));
             auto window = ColumnHelper::create_const_column<TYPE_BIGINT>(window_size, times.size());

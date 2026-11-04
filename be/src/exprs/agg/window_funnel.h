@@ -417,9 +417,7 @@ struct WindowFunnelState {
             // DATETIME is stored as Unix seconds here. Integer inputs use Unix milliseconds
             // in same-day mode; nonnegative windows retain their existing input units.
             constexpr int64_t units_per_day = LT == TYPE_DATETIME ? 86400 : 86400000;
-            auto day = [](TimestampType value) {
-                return value / units_per_day - (value % units_per_day < 0);
-            };
+            auto day = [](TimestampType value) { return value / units_per_day - (value % units_per_day < 0); };
             return day(timestamp) == day(start);
         }
     }
