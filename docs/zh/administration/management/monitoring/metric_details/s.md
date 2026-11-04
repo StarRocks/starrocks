@@ -725,7 +725,6 @@ description: "Alphabetical s"
 | --- | --- |
 | `materialized_view_target` | 推导层不支持该物化视图，例如它不是增量物化视图，或排序键不是隐藏的 row-id 列。 |
 | `row_id_span_too_small` | 预估输出太小，无法均匀切分 row-id 范围。 |
-| `row_id_space_not_pristine` | 自增计数器已经发放过 id，无法安全地推导切分点。 |
 | `estimate_unavailable` | 没有可用的输出大小估计，无法确定 tablet 数量。从没有表统计信息的 External Catalog 表执行 INSERT 时也会记录该值。 |
 | `multiple_temporary_partitions` | 刷新会写入多个替换分区，切分后大多数 tablet 会是空的。开启该功能也不会改变这一点。 |
 | `derivation_failed` | 推导切分点失败，或推导出的切分点未通过校验。 |

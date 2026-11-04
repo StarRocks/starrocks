@@ -127,12 +127,6 @@ public enum SkipReason {
      * so the split would be unbalanced rather than helpful.
      */
     ROW_ID_SPAN_TOO_SMALL,
-    /**
-     * Derived tier: the target's auto-increment counter has already handed out ids, so compute nodes may
-     * hold cached id intervals this planner cannot account for. Only a pristine id space lets the
-     * boundaries be derived; anything else falls back to no pre-split.
-     */
-    ROW_ID_SPACE_NOT_PRISTINE,
     /** Derived tier: no usable output-size estimate, so the tablet count cannot be chosen. */
     ESTIMATE_UNAVAILABLE,
     /**
