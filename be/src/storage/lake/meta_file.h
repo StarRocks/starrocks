@@ -140,9 +140,7 @@ public:
     // it, keyed by segment position in that rowset. set_final_rowset() materializes the two as one
     // rowset whose id is the tablet's next_rowset_id().
     const RowsetMetadataPB& pending_rowset() const { return _pending_rowset_data.rowset_pb; }
-    const std::map<int, FileInfo>& pending_replace_segments() const {
-        return _pending_rowset_data.replace_segments;
-    }
+    const std::map<int, FileInfo>& pending_replace_segments() const { return _pending_rowset_data.replace_segments; }
 
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
