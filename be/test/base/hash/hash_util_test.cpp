@@ -144,6 +144,40 @@ TEST(HashUtilTest, ZlibCrcHash) {
     EXPECT_EQ(HashUtil::zlib_crc_hash(data.data(), static_cast<int32_t>(data.size()), seed), expected);
 }
 
+TEST(HashUtilTest, ZlibCrcHashNullptrZeroAndNegativeLength) {
+    EXPECT_EQ(HashUtil::zlib_crc_hash(nullptr, 0, 0u), 0u);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(nullptr, 0, 0x12345678u), 0u);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(nullptr, 16, 0x12345678u), 0u);
+
+    std::vector<uint8_t> exact(4, 0xab);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(exact.data(), 0, 0x12345678u), 0x12345678u);
+    EXPECT_EQ(HashUtil::zlib_crc_hash(exact.data(), -5, 0x12345678u), 0x12345678u);
+}
+
+TEST(HashUtilTest, ZlibCrcHashParityAcrossLengthsAndAlignments) {
+    const auto buf = make_pattern(1024 + 16);
+    std::vector<int32_t> lens;
+    for (int32_t l = 0; l <= 130; ++l) lens.push_back(l);
+    lens.push_back(255);
+    lens.push_back(1024);
+
+    for (uint32_t seed : {0u, 1u, 0x811C9DC5u, 0xdeadbeefu, 0xffffffffu}) {
+        for (int32_t offset = 0; offset <= 7; ++offset) {
+            const uint8_t* p = buf.data() + offset;
+            for (int32_t len : lens) {
+                const uint32_t expected = static_cast<uint32_t>(::crc32(seed, reinterpret_cast<const Bytef*>(p), len));
+                EXPECT_EQ(HashUtil::zlib_crc_hash(p, len, seed), expected)
+                        << "len=" << len << " offset=" << offset << " seed=" << seed;
+                if (len > 0) {
+                    std::vector<uint8_t> exact(p, p + len);
+                    EXPECT_EQ(HashUtil::zlib_crc_hash(exact.data(), len, seed), expected)
+                            << "exact len=" << len << " offset=" << offset << " seed=" << seed;
+                }
+            }
+        }
+    }
+}
+
 TEST(HashUtilTest, FnvHash) {
     const std::string_view data = "hello";
     EXPECT_EQ(HashUtil::fnv_hash(data.data(), static_cast<int32_t>(data.size()), 0u), 0x1840de38u);
