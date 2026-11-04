@@ -568,10 +568,6 @@ public:
 };
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-using DistinctAggregateFunction =
-        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T>;
-
-template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 using DistinctAggregateFunctionV2 =
         TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T>;
 

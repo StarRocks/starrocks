@@ -806,6 +806,20 @@ TEST_F(AggregateTest, test_sum_distinct) {
                                                       DecimalV2Value(21));
 }
 
+// multi_distinct_count/sum have no V1 implementation any more: every func_version resolves to the V2 one.
+TEST_F(AggregateTest, test_multi_distinct_resolves_to_v2_for_every_func_version) {
+    ASSERT_NE(nullptr, get_aggregate_function("multi_distinct_count2", TYPE_INT, TYPE_BIGINT, false));
+    ASSERT_NE(nullptr, get_aggregate_function("multi_distinct_sum2", TYPE_INT, TYPE_BIGINT, false));
+    for (int func_version : {0, 1, 7, 8}) {
+        EXPECT_EQ(get_aggregate_function("multi_distinct_count2", TYPE_INT, TYPE_BIGINT, false),
+                  get_aggregate_function("multi_distinct_count", TYPE_INT, TYPE_BIGINT, false,
+                                         TFunctionBinaryType::BUILTIN, func_version));
+        EXPECT_EQ(get_aggregate_function("multi_distinct_sum2", TYPE_INT, TYPE_BIGINT, false),
+                  get_aggregate_function("multi_distinct_sum", TYPE_INT, TYPE_BIGINT, false,
+                                         TFunctionBinaryType::BUILTIN, func_version));
+    }
+}
+
 TEST_F(AggregateTest, test_decimal_multi_distinct_sum) {
     int64_t mem_usage;
     {
