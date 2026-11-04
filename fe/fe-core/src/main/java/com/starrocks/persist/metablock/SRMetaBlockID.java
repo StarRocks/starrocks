@@ -110,9 +110,8 @@ public class SRMetaBlockID {
     // AIProviderMgr image block (SQL-managed embedding / rerank providers).
     public static final SRMetaBlockID AI_PROVIDER_MGR = new SRMetaBlockID(38);
 
-    // Placeholder for the enterprise ContextMgr image block. Community does not load it.
-    // The constant only keeps 39 from being assigned to another block.
-    public static final SRMetaBlockID CONTEXT_MGR = new SRMetaBlockID(39);
+    // Placeholder.
+    public static final SRMetaBlockID PLACEHOLDER = new SRMetaBlockID(39);
 
     public static final SRMetaBlockID GTID_GENERATOR = new SRMetaBlockID(40);
 
