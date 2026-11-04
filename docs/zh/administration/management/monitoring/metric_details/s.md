@@ -723,7 +723,7 @@ description: "Alphabetical s"
 
 | `reason` | 含义 |
 | --- | --- |
-| `materialized_view_target` | 推导层不支持该物化视图，例如它不是增量物化视图，或排序键不是隐藏的 row-id 列。 |
+| `materialized_view_target` | 目标是增量物化视图，但推导层无法为其确定键：它有多个可见索引，排序键并非仅由隐藏的 row-id 列构成，或者没有可用的边界来源支持其 row-id 类型。如果写入物化视图的不是该视图自身的刷新任务，也会记录该值。 |
 | `row_id_span_too_small` | 预估输出太小，无法均匀切分 row-id 范围。 |
 | `estimate_unavailable` | 没有可用的输出大小估计，无法确定 tablet 数量。从没有表统计信息的 External Catalog 表执行 INSERT 时也会记录该值。 |
 | `multiple_temporary_partitions` | 刷新会写入多个替换分区，切分后大多数 tablet 会是空的。开启该功能也不会改变这一点。 |
