@@ -211,6 +211,19 @@ public class PaimonTableSchemaConverterTest {
     }
 
     @Test
+    public void testCanonicalOptionNamesArePreserved() {
+        CreateTableStmt stmt = parse("create table p.db.t (id int) engine=paimon " +
+                "properties ('VARIANT.INFERSHREDDINGSCHEMA'='false', 'variant.shreddingSchema'='ROW<a INT>')");
+        Map<String, String> original = Map.copyOf(stmt.getProperties());
+        Schema schema = PaimonTableSchemaConverter.toSchema(stmt);
+        Assertions.assertEquals("false", schema.options().get("variant.inferShreddingSchema"));
+        Assertions.assertEquals("ROW<a INT>", schema.options().get("variant.shreddingSchema"));
+        Assertions.assertEquals(original, stmt.getProperties());
+        stmt.getProperties().put("variant.inferShreddingSchema", "true");
+        Assertions.assertThrows(SemanticException.class, () -> PaimonTableSchemaConverter.toSchema(stmt));
+    }
+
+    @Test
     public void testUnsupportedScalarAndNestedTypesFail() {
         Assertions.assertThrows(SemanticException.class, () -> schemaFromColumns(
                 List.of(new Column("id", IntegerType.LARGEINT))));

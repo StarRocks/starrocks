@@ -178,7 +178,8 @@ public final class PaimonTableSchemaConverter {
     private static Map<String, String> tableOptions(Map<String, String> properties) {
         Map<String, String> options = new LinkedHashMap<>();
         Map<String, ConfigOption<?>> knownOptions = CoreOptions.getOptions().stream()
-                .collect(Collectors.toMap(ConfigOption::key, option -> option, (first, second) -> first));
+                .collect(Collectors.toMap(option -> option.key().toLowerCase(Locale.ROOT),
+                        option -> option, (first, second) -> first));
         if (properties == null) {
             return options;
         }
@@ -187,17 +188,20 @@ public final class PaimonTableSchemaConverter {
             if (isForbiddenOption(key)) {
                 throw new SemanticException("Paimon table property '%s' is a catalog, location or schema override", key);
             }
-            if (!knownOptions.containsKey(key)) {
+            ConfigOption<?> option = knownOptions.get(key);
+            if (option == null) {
                 throw new SemanticException("Unknown Paimon table property: %s", key);
             }
-            if (entry.getValue() == null || options.putIfAbsent(key, entry.getValue()) != null) {
+            String canonicalKey = option.key();
+            if (entry.getValue() == null || options.putIfAbsent(canonicalKey, entry.getValue()) != null) {
                 throw new SemanticException("Invalid or duplicate Paimon table property: %s", key);
             }
         }
         Options typed = Options.fromMap(options);
         for (String key : options.keySet()) {
+            ConfigOption<?> option = knownOptions.get(key.toLowerCase(Locale.ROOT));
             try {
-                typed.get(knownOptions.get(key));
+                typed.get(option);
             } catch (RuntimeException e) {
                 // Do not include raw option values in errors (credentials may be supplied by mistake).
                 throw new SemanticException("Invalid value for Paimon table property: %s", key);
