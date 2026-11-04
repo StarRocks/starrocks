@@ -9,36 +9,5 @@
     "reason": "Reviewed compatibility exception after a multi-release deprecation window.",
     "owner": "engprod"
   },
-  "waivers": [
-    {
-      "path": "gensrc/proto/types.proto",
-      "container_or_method": "GeoColumnDescPB",
-      "field_number": 2,
-      "field_name": "storage",
-      "rule": "field_deleted",
-      "base_signature": "optional GeoStorageDescPB storage = 2",
-      "reason": "Native GEO is unreleased; after #82192 no BE or FE code reads or writes the GEO storage descriptor, and each row's WKB carries its own encoding and dimension. Remove this waiver once the comparison base no longer has the field.",
-      "owner": "trueeyu"
-    },
-    {
-      "path": "gensrc/proto/types.proto",
-      "container_or_method": "GeoStorageDescPB",
-      "field_number": 1,
-      "field_name": "encoding",
-      "rule": "field_deleted",
-      "base_signature": "optional GeoEncodingPB encoding = 1",
-      "reason": "Native GEO is unreleased; after #82192 no BE or FE code reads or writes the GEO storage descriptor, and each row's WKB carries its own encoding and dimension. Remove this waiver once the comparison base no longer has the field.",
-      "owner": "trueeyu"
-    },
-    {
-      "path": "gensrc/proto/types.proto",
-      "container_or_method": "GeoStorageDescPB",
-      "field_number": 2,
-      "field_name": "dimension",
-      "rule": "field_deleted",
-      "base_signature": "optional GeoDimensionPB dimension = 2",
-      "reason": "Native GEO is unreleased; after #82192 no BE or FE code reads or writes the GEO storage descriptor, and each row's WKB carries its own encoding and dimension. Remove this waiver once the comparison base no longer has the field.",
-      "owner": "trueeyu"
-    }
-  ]
+  "waivers": []
 }
