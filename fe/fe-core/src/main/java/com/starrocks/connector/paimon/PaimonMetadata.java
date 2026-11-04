@@ -705,7 +705,11 @@ public class PaimonMetadata implements ConnectorMetadata {
                     CoreOptions.GlobalIndexSearchMode.FULL.toString());
         }
 
-        org.apache.paimon.table.Table paimonNativeTable = versionedPaimonTable.copy(options);
+        // Pin the data snapshot without replacing the resolved read schema. A schema-only change
+        // may be newer than that snapshot; rewinding its schema would disagree with analyzed slots
+        // and could incorrectly authorize raw-file reads without the required type conversion.
+        org.apache.paimon.table.Table paimonNativeTable = versionedPaimonTable instanceof FileStoreTable fileStoreTable
+                ? fileStoreTable.copyWithoutTimeTravel(options) : versionedPaimonTable.copy(options);
 
         GetRemoteFilesParams copyParams = params.copy();
 
