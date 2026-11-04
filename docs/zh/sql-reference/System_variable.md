@@ -1431,7 +1431,7 @@ SET paimon_global_index_scan_stage = 2;
 
 分布式计算还要求参与字段在 Schema 历史中的键编码始终兼容。字段发生改变键编码的类型变更或缺失 Schema 历史时，即使已重建索引，也使用 SDK 规划；仅改名或调整可空性不影响资格。BE 打开索引时如果发现 Schema 已变化，也会回退到 SDK，但回退不保证 SDK 支持该类型演进。阶段 `0` 在统计信息规划时同样关闭 SDK 索引计算，阶段 `2` 将索引计算推迟至执行计划构建。取消外层查询会取消其内部索引查询，不再启动回退工作。
 
-分布式计算仅适用于 main 分支上的 data-evolution 表，且所有参与索引必须完整覆盖查询绑定的快照。主键表、增量扫描、覆盖不完整的快照、不支持的谓词、计算或结果应用失败时，使用 SDK Split 规划。SDK 规划仍可能返回 `IndexedSplit` 并使用 Paimon native reader，因此回退不会消除这些读取路径对 `paimon-cpp` 的依赖。EXPLAIN 区分已识别的索引条件和分布式结果已应用、SDK 回退、未尝试分布式计算等状态。
+分布式计算仅适用于 main 分支上的 data-evolution 表，且所有参与索引必须完整覆盖查询绑定的快照。主键表、增量扫描、覆盖不完整的快照、不支持的谓词、计算或结果应用失败时，使用 SDK Split 规划。阶段 `2` 的分布式 BTree 计算需要 `paimon-cpp`。`IndexedSplit` 的数据扫描（包括 SDK 规划返回的对象）根据 `paimon_reader_mode` 以及 Schema、文件格式和 Split 的兼容性选择 Paimon native 或 JNI Reader。显式 `NATIVE` 模式遇到不支持的 Split 会报错，而不会回退到 JNI。`IndexedSplit` 包装 `FallbackDataSplit` 时，两种 Reader 均不支持，查询会被拒绝。EXPLAIN 区分已识别的索引条件和分布式结果已应用、SDK 回退、未尝试分布式计算等状态。
 
 近似向量表达式的 `ORDER BY ... LIMIT` 保留普通扫描和 TopN 计算。同一查询中符合条件的标量 `WHERE` 谓词仍可独立使用标量索引；本变量不启用 ANN 规划或执行。
 
