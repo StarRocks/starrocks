@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
@@ -26,6 +27,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.KeysType;
@@ -168,10 +170,50 @@ public class AnalyzerUtilsTempPartitionOnMergedTest {
                 table, values("2026-02-10"), true, "txn1"));
     }
 
+    /** Control: a temporary partition with the covering partition's name and bounds replaces it at commit. */
+    @Test
+    public void commitAcceptsTempPartitionReplacingTheCoveringPartition() throws Exception {
+        OlapTable table = mergedTable();
+        addTempPartition(table, MERGED_PARTITION_ID + 2, "txn1_p202601", dateRange("2026-01-01", "2026-02-01"));
+        Assertions.assertDoesNotThrow(() -> table.checkReplaceMatchPartitions(List.of("txn1_p202601")));
+    }
+
+    /**
+     * A table that dynamic overwrite broke before this fix holds a daily partition inside the merged month, both
+     * starting on 2026-01-01, so the range index keeps one entry for the two. The lookup checks that entry's own
+     * range and never pairs one partition's name with the other's bounds: 2026-01-05 follows the expression. The
+     * commit then refuses to promote the temporary partition next to the month instead of adding one more overlap.
+     */
+    @Test
+    public void commitRefusesTempPartitionOverlappingAnotherPartition() throws Exception {
+        OlapTable table = mergedTable();
+        ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) table.getPartitionInfo();
+        long dayPartitionId = MERGED_PARTITION_ID + 1;
+        partitionInfo.setRange(dayPartitionId, false, dateRange("2026-01-01", "2026-01-02"));
+        table.addPartition(new Partition(dayPartitionId, "p20260101", table.getDefaultDistributionInfo()));
+
+        PartitionKeyDesc keyDesc = onlyKeyDesc(AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                table, values("2026-01-05"), true, "txn1"));
+        Assertions.assertEquals("2026-01-05", keyDesc.getLowerValues().get(0).getStringValue());
+        Assertions.assertEquals("2026-01-06", keyDesc.getUpperValues().get(0).getStringValue());
+
+        addTempPartition(table, MERGED_PARTITION_ID + 2, "txn1_p20260105", dateRange("2026-01-05", "2026-01-06"));
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> table.checkReplaceMatchPartitions(List.of("txn1_p20260105")));
+        Assertions.assertTrue(e.getMessage().contains("temporary partition txn1_p20260105 "), e.getMessage());
+        Assertions.assertTrue(e.getMessage().contains("overlaps partition p202601 "), e.getMessage());
+    }
+
     private static Range<PartitionKey> dateRange(String lower, String upper) throws Exception {
         List<Column> columns = Lists.newArrayList(new Column("dt", DateType.DATE));
         return Range.closedOpen(
                 PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(lower)), columns),
                 PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(upper)), columns));
+    }
+
+    private static void addTempPartition(OlapTable table, long partitionId, String name, Range<PartitionKey> range) {
+        DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
+        ((ExpressionRangePartitionInfo) table.getPartitionInfo()).setRange(partitionId, true, range);
+        table.addTempPartition(new Partition(partitionId, name, distributionInfo));
     }
 }
