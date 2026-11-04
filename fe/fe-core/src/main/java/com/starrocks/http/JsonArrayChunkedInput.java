@@ -31,11 +31,11 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * A JSON array written one element at a time, as the channel asks for it, so the whole array is never held in
- * memory. Each chunk carries whole elements until it reaches about {@code chunkSize} bytes (one element larger than
- * that goes out alone), and {@link io.netty.handler.stream.ChunkedWriteHandler} reads the next chunk only once the
- * channel can take it: a response costs about one chunk of heap however many elements it carries, and is produced
- * as fast as the client reads it. The bytes are those {@code gson.toJson(elements)} would give.
+ * A JSON array written one element at a time, a chunk per read, so the whole array is never held in memory. Each
+ * chunk carries whole elements until it reaches about {@code chunkSize} bytes (one element larger than that goes out
+ * alone); read through {@link io.netty.handler.codec.http.HttpChunkedInput}, it becomes the body of a response with
+ * chunked transfer encoding (see {@code BaseAction.writeChunkedResponse}). The bytes are those
+ * {@code gson.toJson(elements)} would give.
  */
 public class JsonArrayChunkedInput<T> implements ChunkedInput<ByteBuf> {
     public static final int DEFAULT_CHUNK_SIZE = 64 * 1024;

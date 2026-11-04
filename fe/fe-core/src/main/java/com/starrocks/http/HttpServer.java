@@ -123,7 +123,6 @@ import io.netty.channel.nio.NioEventLoop;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
@@ -329,10 +328,7 @@ public class HttpServer {
 
         @Override
         protected Result beginEncode(HttpResponse headers, String acceptEncoding) throws Exception {
-            // A streamed body is written by ChunkedWriteHandler, below this handler, and never passes through it,
-            // so only a response built in full can be compressed; the flag also stays set for every later request
-            // on a connection that asked for /metrics once.
-            if (!compressResponse || !(headers instanceof FullHttpResponse)) {
+            if (!compressResponse) {
                 return null;
             }
             return super.beginEncode(headers, acceptEncoding);

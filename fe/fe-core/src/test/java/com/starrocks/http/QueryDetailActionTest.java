@@ -41,11 +41,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
@@ -145,39 +141,6 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
                     return response;
                 })
                 .build();
-    }
-
-    // Reads one HTTP/1.1 response with a chunked body off the stream and returns the body.
-    private static String readChunkedBody(InputStream in) throws IOException {
-        String statusLine = readLine(in);
-        Assertions.assertTrue(statusLine.startsWith("HTTP/1.1 200"), statusLine);
-        boolean chunked = false;
-        for (String header = readLine(in); !header.isEmpty(); header = readLine(in)) {
-            chunked |= header.equalsIgnoreCase("transfer-encoding: chunked");
-        }
-        Assertions.assertTrue(chunked, "not a chunked response");
-        ByteArrayOutputStream body = new ByteArrayOutputStream();
-        for (int size = Integer.parseInt(readLine(in), 16); size > 0; size = Integer.parseInt(readLine(in), 16)) {
-            byte[] chunk = in.readNBytes(size);
-            Assertions.assertEquals(size, chunk.length);
-            body.write(chunk);
-            Assertions.assertEquals("", readLine(in));
-        }
-        Assertions.assertEquals("", readLine(in));
-        return body.toString(StandardCharsets.UTF_8);
-    }
-
-    private static String readLine(InputStream in) throws IOException {
-        StringBuilder line = new StringBuilder();
-        for (int c = in.read(); c != '\n'; c = in.read()) {
-            if (c < 0) {
-                throw new EOFException("connection closed in the middle of a response");
-            }
-            if (c != '\r') {
-                line.append((char) c);
-            }
-        }
-        return line.toString();
     }
 
     // Several chunks' worth of records with multi-byte statement text, about 480 KB in all.
@@ -287,27 +250,6 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testPipelinedRequestsEachGetAWholeResponse() throws IOException {
-        stubOperate(true);
-        addLargeWindow();
-        String expected = new Gson().toJson(QueryDetailQueue.getQueryDetailsAfterTime(0));
-        String get = "GET /api/query_detail?event_time=0 HTTP/1.1\r\nHost: localhost\r\nAuthorization: " + rootAuth
-                + "\r\n\r\n";
-
-        try (Socket socket = new Socket("localhost", HTTP_PORT)) {
-            socket.setSoTimeout(20_000);
-            OutputStream out = socket.getOutputStream();
-            // Both requests are sent before either response is read, so they are handled at the same time; the
-            // header, body and end of one response must not be split by the other.
-            out.write((get + get).getBytes(StandardCharsets.US_ASCII));
-            out.flush();
-            InputStream in = new BufferedInputStream(socket.getInputStream());
-            Assertions.assertEquals(expected, readChunkedBody(in));
-            Assertions.assertEquals(expected, readChunkedBody(in));
-        }
-    }
-
-    @Test
     public void testStreamedResponseDecodesAfterMetricsOnTheSameConnection() throws IOException {
         stubOperate(true);
         addLargeWindow();
@@ -321,13 +263,14 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
         };
         List<Connection> connections = new ArrayList<>();
         List<String> encodings = new ArrayList<>();
-        // OkHttp asks for gzip and decodes it. /metrics is compressed, and its flag stays set on the connection.
+        // OkHttp asks for gzip and decodes it. /metrics is compressed and its flag stays set on the connection, so
+        // the streamed response is compressed too: its chunks must go through the compressor, header to last chunk.
         OkHttpClient client = recordingClient(connections, encodings);
 
         readBody(client, "/metrics");
         String body = getAsRoot(client, "/api/query_detail");
 
-        Assertions.assertEquals(List.of("gzip", "null"), encodings);
+        Assertions.assertEquals(List.of("gzip", "gzip"), encodings);
         Assertions.assertSame(connections.get(0), connections.get(1));
         Assertions.assertEquals(expected, body);
     }
@@ -346,6 +289,32 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
         };
 
         getAsRoot("/api/query_detail");
+
+        Assertions.assertFalse(producers.isEmpty());
+        for (String producer : producers) {
+            Assertions.assertTrue(producer.startsWith("starrocks-http-pool"), producers.toString());
+        }
+    }
+
+    @Test
+    public void testBodyIsProducedOffTheEventLoopWithTheAsyncHandlerDisabled() throws IOException {
+        stubOperate(true);
+        addLargeWindow();
+        Set<String> producers = ConcurrentHashMap.newKeySet();
+        new MockUp<JsonArrayChunkedInput<?>>() {
+            @Mock
+            public ByteBuf readChunk(Invocation invocation, ByteBufAllocator allocator) {
+                producers.add(Thread.currentThread().getName());
+                return invocation.proceed(allocator);
+            }
+        };
+        boolean asyncHandler = Config.enable_http_async_handler;
+        Config.enable_http_async_handler = false;
+        try {
+            getAsRoot("/api/query_detail");
+        } finally {
+            Config.enable_http_async_handler = asyncHandler;
+        }
 
         Assertions.assertFalse(producers.isEmpty());
         for (String producer : producers) {

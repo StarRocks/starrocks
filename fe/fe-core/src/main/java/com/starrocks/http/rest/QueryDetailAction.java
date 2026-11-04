@@ -62,6 +62,13 @@ public class QueryDetailAction extends RestBaseAction {
     }
 
     @Override
+    public boolean supportAsyncHandler() {
+        // The response is streamed from the handler thread, which must not be a netty event loop, whatever
+        // enable_http_async_handler says; ExecuteSqlAction streams its results the same way.
+        return true;
+    }
+
+    @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
         requireOperateIfHttpAuthEnabled();
 
