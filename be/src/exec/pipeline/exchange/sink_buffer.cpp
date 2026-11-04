@@ -118,7 +118,6 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
     if (!request.attachment.empty()) {
         _bytes_enqueued += request.attachment.size();
         _request_enqueued++;
-        update_peak(_peak_request_bytes, static_cast<int64_t>(request.attachment.size()));
     }
     {
         // set stats every _sent_audit_stats_frequency, so FE can get approximate stats even missing eos chunks.
@@ -522,6 +521,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->addSuccessHandler(success_function);
 
         update_peak(_peak_in_flight_rpc, ++_total_in_flight_rpc);
+        update_peak(_peak_request_bytes, static_cast<int64_t>(request.attachment.size()));
         ++context.num_in_flight_rpcs;
 
         // Attachment will be released by process_mem_tracker in closure->Run() in bthread, when receiving the response,
