@@ -20,21 +20,8 @@
 #include <functional>
 #include <memory>
 
-<<<<<<< HEAD
 #include "column/column_helper.h"
 #include "common/config.h"
-=======
-#include "base/concurrency/countdown_latch.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/time/monotime.h"
-#include "base/utility/defer_op.h"
-#include "column/column_helper.h"
-#include "column/raw_data_visitor.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/config_starlet_fwd.h"
-#include "common/thread/threadpool.h"
->>>>>>> 4960025 ([BugFix][RB-980] Stop cloud native PK index compaction tasks before freeing the state they report into (#82297))
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
@@ -51,6 +38,10 @@
 #include "test_util.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/countdown_latch.h"
+#include "util/defer_op.h"
+#include "util/monotime.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
