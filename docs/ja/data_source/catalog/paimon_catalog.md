@@ -702,14 +702,62 @@ DROP Catalog paimon_catalog_fs;
 
 ## Paimon データベースとテーブルの作成・削除
 
-次の例では、既存の Paimon catalog に空の append-only テーブルを作成します。
+これらの操作は Paimon のネイティブオブジェクトを作成または削除します。例では、warehouse とストレージ認証情報を設定済みの `paimon_catalog_fs` catalog を使用します。
+
+### CREATE DATABASE
+
+#### 構文
+
+```SQL
+CREATE DATABASE [IF NOT EXISTS] <catalog_name>.<database_name>;
+```
+
+#### パラメータ
+
+- `catalog_name`: 既存の Paimon catalog の名前。
+- `database_name`: 作成するデータベースの名前。
+- `IF NOT EXISTS`: データベースが既に存在する場合にエラーを返しません。
+
+データベースの `PROPERTIES` はサポートされていません。データベースは catalog のストレージ設定を使用します。
+
+#### 例
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS paimon_catalog_fs.ddl_demo;
+```
 
+### CREATE TABLE
+
+#### 構文
+
+```SQL
+CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
+    <column_name> <column_type> [NULL | NOT NULL] [DEFAULT NULL] [COMMENT '<column_comment>']
+    [, ...]
+)
+[ENGINE = paimon]
+[PRIMARY KEY (<column_name> [, ...])]
+[COMMENT '<table_comment>']
+[PARTITION BY (<column_name> [, ...])]
+[PROPERTIES ("<key>" = "<value>" [, ...])];
+```
+
+#### パラメータ
+
+- **テーブル名とエンジン**: 既存の Paimon catalog 内のデータベースと新しいテーブル名を指定します。作成先が Paimon catalog の場合、`ENGINE = paimon` は省略できます。`IF NOT EXISTS` を指定すると、テーブルが既に存在する場合にエラーを返しません。
+- **列定義**: 対応する型は BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度 38 以下の DECIMAL、ARRAY、MAP、STRUCT、VARIANT です。DATETIME は Paimon TIMESTAMP(6) に変換されます。VARIANT の既存の読み取り制限は引き続き適用されます。デフォルト値は `DEFAULT NULL` のみ対応し、主キー列にはデフォルト値を指定できません。列とテーブルのコメントは `COMMENT` で指定します。
+- **主キー**: `PRIMARY KEY (column, ...)` または `primary-key` テーブルプロパティで定義します。主キー列を先頭に配置する必要はありません。NULL 許容性を省略すると Paimon schema では非 NULL になります。明示的な `NULL` 宣言は使用できません。両方の形式を指定する場合、解決後の列名と順序を一致させてください。
+- **パーティション**: 通常のパーティション列は `PARTITION BY (column, ...)` で指定します。パーティション式と明示的なパーティション定義はサポートされていません。
+- **テーブルプロパティ**: `bucket` や `file.format` などの Paimon オプションを `PROPERTIES` で指定します。テーブルは catalog の warehouse とストレージ認証情報を使用します。catalog、保存場所、認証情報、schema を上書きするプロパティは使用できません。未知のオプションは拒否されます。書き込みに関する設定エラーの一部は、実際の書き込み時に検出される場合があります。`fields.<column>.aggregate-function` などの動的な列オプションは現在サポートされていません。
+
+#### 例
+
+空の append-only パーティションテーブルを作成します。
+
+```SQL
 CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.append_demo (
     id BIGINT NOT NULL,
-    payload VARCHAR(100),
+    payload VARCHAR(100) COMMENT 'Payload',
     dt DATE
 )
 ENGINE = paimon
@@ -720,24 +768,65 @@ PROPERTIES (
 );
 ```
 
-作成先が Paimon catalog の場合、`ENGINE = paimon` は省略できます。テーブルは catalog で設定した warehouse とストレージ認証情報を使用します。データベースプロパティ、および catalog、保存場所、認証情報、スキーマを上書きするテーブルプロパティは使用できません。
+主キーパーティションテーブルを作成します。
 
-テーブル定義には次のルールが適用されます。
+```SQL
+CREATE TABLE IF NOT EXISTS paimon_catalog_fs.ddl_demo.pk_demo (
+    payload VARCHAR(100),
+    id BIGINT,
+    dt DATE
+)
+PRIMARY KEY (id, dt)
+PARTITION BY (dt)
+PROPERTIES (
+    "bucket" = "2",
+    "bucket-key" = "id",
+    "file.format" = "parquet"
+);
+```
 
-- 主キーテーブルは `PRIMARY KEY (column, ...)` または `primary-key` テーブルプロパティで定義します。主キー列を先頭に配置する必要はありませんが、明示的に NULL 許容にはできません。両方の形式を指定する場合は、列名と順序を一致させてください。
-- 通常のパーティション列は `PARTITION BY (column, ...)` で指定します。パーティション式と明示的なパーティション定義はサポートされていません。
-- Paimon テーブルオプションは `PROPERTIES` で指定します。未知のオプションや無効な値は拒否されます。DISTRIBUTED BY、ORDER BY、ROLLUP、生成列、集約列、AUTO_INCREMENT はサポートされていません。
-- 列のデフォルト値は `DEFAULT NULL` のみサポートされます。
-- 対応する列型は BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度 38 以下の DECIMAL、ARRAY、MAP、STRUCT、VARIANT です。DATETIME は Paimon TIMESTAMP(6) に変換されます。VARIANT の既存の読み取り制限は引き続き適用されます。
+`PRIMARY KEY (id, dt)` 句を省略し、`PROPERTIES` に `"primary-key" = "id,dt"` を追加することもできます。
 
-データベースを削除する前に、テーブルを削除してください。
+#### 制限事項
+
+- `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、集約列、`AUTO_INCREMENT` はサポートされていません。
+- NULL 以外の列デフォルト値はサポートされていません。
+- `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `INSERT`、`UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
+
+### DROP TABLE
+
+#### 構文
+
+```SQL
+DROP TABLE [IF EXISTS] <catalog_name>.<database_name>.<table_name>;
+```
+
+`IF EXISTS` を指定すると、テーブルが存在しない場合にエラーを返しません。この操作は StarRocks 内の参照だけでなく、Paimon のネイティブテーブルを削除します。
+
+#### 例
 
 ```SQL
 DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.append_demo;
-DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+DROP TABLE IF EXISTS paimon_catalog_fs.ddl_demo.pk_demo;
 ```
 
-これらのステートメントは Paimon のネイティブオブジェクトを操作します。空でないデータベースは削除できません。`FORCE` を指定しても、カスケード削除は行われません。
+### DROP DATABASE
+
+#### 構文
+
+```SQL
+DROP DATABASE [IF EXISTS] <catalog_name>.<database_name> [FORCE];
+```
+
+`IF EXISTS` を指定すると、データベースが存在しない場合にエラーを返しません。空でないデータベースは削除できません。`FORCE` を指定してもカスケード削除は行われません。
+
+#### 例
+
+データベース内のテーブルを削除してから、データベースを削除します。
+
+```SQL
+DROP DATABASE IF EXISTS paimon_catalog_fs.ddl_demo;
+```
 
 ## Paimon テーブルのスキーマを表示
 
