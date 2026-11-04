@@ -22,6 +22,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "fs/fs.h"
+#include "storage/lake/metacache_key.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -225,7 +226,7 @@ private:
     // from segment id to delvec, used for fill cache in finalize stage.
     std::unordered_map<uint32_t, DelVectorPtr> _segmentid_to_delvec;
     // from cache key to segment id
-    std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
+    std::unordered_map<MetacacheKey, uint32_t, MetacacheKey::Hash> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
     // Set by reset_delvecs_for_recover(): delvecs of the base version are discarded, see find_delvec().

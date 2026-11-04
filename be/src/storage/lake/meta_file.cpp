@@ -196,15 +196,6 @@ StatusOr<std::string> read_and_verify_del_file(RandomAccessFile* rf, const Delfi
     return do_read_and_verify_del_file(rf, del_meta, tablet_id);
 }
 
-static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page) {
-    DelvecCacheKeyPB cache_key_pb;
-    cache_key_pb.set_id(tablet_id);
-    cache_key_pb.mutable_delvec_page()->CopyFrom(page);
-    // Do not include crc32c_gen_version in cache key
-    cache_key_pb.mutable_delvec_page()->clear_crc32c_gen_version();
-    return cache_key_pb.SerializeAsString();
-}
-
 // Collect rssids that belong to this rowset.
 // Rowset without segments still occupies one rssid (rowset.id()) for delete-file operation.
 static void collect_rowset_rssids(const RowsetMetadataPB& rowset_meta, std::unordered_set<uint32_t>* rssids) {
@@ -1323,7 +1314,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
             each_delvec.second.set_crc32c(iter->second.crc32c());
             each_delvec.second.set_crc32c_gen_version(version);
             // record from cache key to segment id, so we can fill up cache later
-            _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = iter->first;
+            _cache_key_to_segment_id[MetacacheKey::delvec(_tablet_meta->id(), each_delvec.second)] = iter->first;
             _delvecs.erase(iter);
         }
     }
@@ -1334,7 +1325,7 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
         each_delvec.second.set_crc32c_gen_version(version);
         (*_tablet_meta->mutable_delvec_meta()->mutable_delvecs())[each_delvec.first] = each_delvec.second;
         // record from cache key to segment id, so we can fill up cache later
-        _cache_key_to_segment_id[delvec_cache_key(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
+        _cache_key_to_segment_id[MetacacheKey::delvec(_tablet_meta->id(), each_delvec.second)] = each_delvec.first;
     }
 
     // 3. write to delvec file
@@ -1463,7 +1454,7 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
     std::string buf;
     raw::stl_string_resize_uninitialized(&buf, delvec_page.size());
     // find in cache
-    std::string cache_key = delvec_cache_key(metadata.id(), delvec_page);
+    auto cache_key = MetacacheKey::delvec(metadata.id(), delvec_page);
     auto cached_delvec = tablet_mgr->metacache()->lookup_delvec(cache_key);
     if (cached_delvec != nullptr) {
         delvec->copy_from(*cached_delvec);

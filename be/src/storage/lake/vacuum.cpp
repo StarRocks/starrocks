@@ -752,10 +752,10 @@ void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, const std::
     auto cache = tablet_mgr->metacache();
     DCHECK(cache != nullptr);
     for (const auto& path : metafiles) {
-        cache->erase(path);
+        cache->erase(MetacacheKey::tablet_metadata(path));
         auto [tablet_id, version] = parse_tablet_metadata_filename(basename(path));
         if (tablet_id != 0) {
-            cache->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+            cache->erase(MetacacheKey::tablet_metadata(tablet_mgr->tablet_metadata_location(tablet_id, version)));
         }
     }
 }
@@ -849,7 +849,8 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(meta_dir, tablet_metadata_filename(0, v))));
             // A bundle contains one metadata object per tablet, cached under the tablet's own path.
             for (const auto& tablet_info : tablet_infos) {
-                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
+                tablet_mgr->metacache()->erase(MetacacheKey::tablet_metadata(
+                        tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v)));
             }
         }
         RETURN_IF_ERROR(metafile_deleter.finish());
@@ -1251,7 +1252,8 @@ static Status commit_metadata_range(TabletManager* tablet_mgr, std::string_view 
             // cached under its own per-tablet path (tablet_metadata_location), so the delete callback's
             // metacache erase (keyed by the bundle path) is a no-op for them. Evict them here.
             for (auto& tablet_info : tablet_infos) {
-                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v));
+                tablet_mgr->metacache()->erase(MetacacheKey::tablet_metadata(
+                        tablet_mgr->tablet_metadata_location(tablet_info.tablet_id(), v)));
             }
         }
     } else {
@@ -1861,7 +1863,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     DeferOp evict_dropped_metadata([&] {
         for (auto tablet_id : tablet_ids) {
             for (const auto& [version, state] : bundle_version_states) {
-                tablet_mgr->metacache()->erase(tablet_mgr->tablet_metadata_location(tablet_id, version));
+                tablet_mgr->metacache()->erase(
+                        MetacacheKey::tablet_metadata(tablet_mgr->tablet_metadata_location(tablet_id, version)));
             }
             tablet_mgr->erase_latest_cached_tablet_metadata(tablet_id);
         }
@@ -1894,8 +1897,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         // a reshard replaced is no longer in that bundle, and without a cached copy the read there returns
         // NotFound, which ends the walk before it collects anything: skip the read and the shard lookup it costs.
         if (own_versions.count(max_version) == 0 && tablets_in_newest_bundle.count(tablet_id) == 0 &&
-            tablet_mgr->metacache()->lookup_tablet_metadata(
-                    tablet_mgr->tablet_metadata_location(tablet_id, max_version)) == nullptr) {
+            tablet_mgr->metacache()->lookup_tablet_metadata(MetacacheKey::tablet_metadata(
+                    tablet_mgr->tablet_metadata_location(tablet_id, max_version))) == nullptr) {
             continue;
         }
 
@@ -2019,8 +2022,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             }
             // delete txnlog
             auto [tablet_id, txn_id] = parse_txn_log_filename(log_name);
-            tablet_mgr->metacache()->erase(
-                    join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name));
+            tablet_mgr->metacache()->erase(MetacacheKey::txn_log(
+                    join_path(tablet_mgr->location_provider()->txn_log_root_location(tablet_id), log_name)));
             RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
         }
     }
@@ -2045,7 +2048,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // delete files under txnlog
             for (const auto& log : combine_log_ptr->txn_logs()) {
                 if (std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
-                    tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id()));
+                    tablet_mgr->metacache()->erase(
+                            MetacacheKey::txn_log(tablet_mgr->txn_log_location(log.tablet_id(), log.txn_id())));
                     if (!is_range_distribution) {
                         RETURN_IF_ERROR(
                                 delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
@@ -2054,8 +2058,8 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             }
             // delete txnlog
             if (!contains_alive_tablets) {
-                ASSIGN_OR_RETURN(auto cache_key,
-                                 tablet_mgr->location_provider()->real_location(join_path(log_dir, log_name)));
+                ASSIGN_OR_RETURN(auto cache_key, MetacacheKey::combined_txn_log(*tablet_mgr->location_provider(),
+                                                                                join_path(log_dir, log_name)));
                 tablet_mgr->metacache()->erase(cache_key);
                 RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
             }
@@ -2113,16 +2117,17 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
         for (auto txn_id : request.txn_ids()) {
             auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
             files_to_delete.emplace_back(log_path);
-            tablet_mgr->metacache()->erase(log_path);
+            tablet_mgr->metacache()->erase(MetacacheKey::txn_log(log_path));
         }
         for (auto&& info : request.txn_infos()) {
             // Writers also cache the individual tablet log when the persisted file is combined.
-            tablet_mgr->metacache()->erase(tablet_mgr->txn_log_location(tablet_id, info.txn_id()));
+            tablet_mgr->metacache()->erase(
+                    MetacacheKey::txn_log(tablet_mgr->txn_log_location(tablet_id, info.txn_id())));
             auto log_path = info.combined_txn_log() ? tablet_mgr->combined_txn_log_location(tablet_id, info.txn_id())
                                                     : tablet_mgr->txn_log_location(tablet_id, info.txn_id());
             files_to_delete.emplace_back(log_path);
             if (info.combined_txn_log()) {
-                auto cache_key = tablet_mgr->location_provider()->real_location(log_path);
+                auto cache_key = MetacacheKey::combined_txn_log(*tablet_mgr->location_provider(), log_path);
                 if (cache_key.ok()) {
                     tablet_mgr->metacache()->erase(*cache_key);
                 } else {

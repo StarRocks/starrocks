@@ -4541,7 +4541,7 @@ TEST_F(LakeTabletReshardTest, publish_resharding_tablet_shared_first_skips_per_t
     shared->set_id(old_tablet_id);
     shared->set_version(1);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
-    _tablet_manager->metacache()->erase(shared_location);
+    _tablet_manager->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     std::vector<std::string> read_paths;
     SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path",
@@ -4719,7 +4719,8 @@ TEST_F(LakeTabletReshardTest, test_identical_retry_cache_complete_returns_withou
     request.mutable_identical_tablet_info()->set_new_tablet_id(target);
     auto cached_source = cache_reshard_metadata(source, source, kVersion, kGtid);
     auto cached_target = cache_reshard_metadata(target, target, kVersion, kGtid);
-    _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(source, 1));
+    _tablet_manager->metacache()->erase(
+            starrocks::lake::MetacacheKey::TEST_from_string(_tablet_manager->tablet_metadata_location(source, 1)));
 
     int metadata_reads = 0;
     auto* sync = SyncPoint::GetInstance();
@@ -4755,7 +4756,9 @@ TEST_F(LakeTabletReshardTest, test_reshard_retry_cache_rejects_wrong_id_version_
         malformed->set_version(malformed_field == 1 ? kVersion + 1 : kVersion);
         malformed->set_gtid(malformed_field == 2 ? kGtid + 1 : kGtid);
         _tablet_manager->metacache()->cache_tablet_metadata(
-                _tablet_manager->tablet_metadata_location(children[0], kVersion), malformed);
+                starrocks::lake::MetacacheKey::tablet_metadata(
+                        _tablet_manager->tablet_metadata_location(children[0], kVersion)),
+                malformed);
 
         int flushes = 0;
         auto* sync = SyncPoint::GetInstance();
@@ -4852,8 +4855,9 @@ TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_requires_absent_e
     auto cached_source = cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid, &identical_range);
     auto cached_child = cache_reshard_metadata(children[0], children[0], kVersion, kGtid, &identical_range);
     for (size_t i = 1; i < children.size(); ++i) {
-        ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
-                                   _tablet_manager->tablet_metadata_location(children[i], kVersion)));
+        ASSERT_EQ(nullptr,
+                  _tablet_manager->metacache()->lookup_tablet_metadata(starrocks::lake::MetacacheKey::tablet_metadata(
+                          _tablet_manager->tablet_metadata_location(children[i], kVersion))));
     }
 
     int planner_calls = 0;
