@@ -144,10 +144,10 @@ PROPERTIES
 
 When a query scans such a catalog and the FE configuration [`enable_connector_location_worker_restriction`](../../configuration/FE_parameters/user_query_loading.md#enable_connector_location_worker_restriction) is enabled (default: `true`):
 
-- **L**: Alive backends whose labels match the external catalog's `labels.location`.
+- **L**: Schedulable backends whose labels match the external catalog's `labels.location` (alive and available to the query worker provider, so blacklisted nodes are excluded).
 - **N**: Backends required by fixed-location non-connector scans in the same query (OlapScan replicas, MetaScan, BE-local SchemaScan, Kudu, etc.).
 - Allowed workers for the query are **L ∪ N**. Connector scans prefer **L**.
-- If no alive backend matches the catalog label (**L** is empty), scheduling falls back to unrestricted workers.
+- If no schedulable backend matches the catalog label (**L** is empty), scheduling falls back to unrestricted workers.
 - Shared-data mode is unaffected. Set `enable_connector_location_worker_restriction` to `false` to disable this behavior without removing the catalog property.
 
 :::note

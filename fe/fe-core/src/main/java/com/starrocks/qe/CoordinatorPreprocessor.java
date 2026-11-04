@@ -251,7 +251,8 @@ public class CoordinatorPreprocessor {
         }
         ConnectorLocationWorkerRestrictor.Restriction restriction =
                 ConnectorLocationWorkerRestrictor.resolve(jobSpec.getScanNodes(),
-                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                        null, provider);
         return LocationRestrictedWorkerProvider.maybeWrap(provider, restriction);
     }
 

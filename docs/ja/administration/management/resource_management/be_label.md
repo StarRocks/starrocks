@@ -144,10 +144,10 @@ PROPERTIES
 
 このような Catalog をスキャンするクエリで、FE 設定 [`enable_connector_location_worker_restriction`](../../configuration/FE_parameters/user_query_loading.md#enable_connector_location_worker_restriction) が有効（デフォルト：`true`）の場合：
 
-- **L**: 外部 Catalog の `labels.location` に一致し、かつ稼働中のバックエンド。
+- **L**: 外部 Catalog の `labels.location` に一致し、かつスケジューリング可能なバックエンド（稼働中かつクエリの WorkerProvider から利用可能。ブラックリストのノードは除外されます）。
 - **N**: 同一クエリ内の固定配置の非コネクタスキャンが必要とするバックエンド（OlapScan レプリカ、MetaScan、BE ローカル SchemaScan、Kudu など）。
 - クエリで許可される Worker は **L ∪ N** です。コネクタスキャンは **L** を優先します。
-- Catalog ラベルに一致する稼働中のバックエンドがない場合（**L** が空）、制限なしの Worker スケジューリングにフォールバックします。
+- Catalog ラベルに一致するスケジューリング可能なバックエンドがない場合（**L** が空）、制限なしの Worker スケジューリングにフォールバックします。
 - 共有データモードには影響しません。Catalog プロパティを削除せずにこの動作を無効にするには、`enable_connector_location_worker_restriction` を `false` に設定します。
 
 :::note

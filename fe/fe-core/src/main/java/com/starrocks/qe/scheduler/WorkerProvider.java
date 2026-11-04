@@ -80,6 +80,18 @@ public interface WorkerProvider {
         return java.util.Collections.emptyList();
     }
 
+    /**
+     * Workers used for connector scan-range assignment (HDFS and bucket-aware paths).
+     * Prefers {@link #getPreferredConnectorWorkers()} when non-empty.
+     */
+    default Collection<ComputeNode> getWorkersForConnectorScan() {
+        Collection<ComputeNode> preferred = getPreferredConnectorWorkers();
+        if (preferred != null && !preferred.isEmpty()) {
+            return preferred;
+        }
+        return getAllWorkers();
+    }
+
     ComputeNode getWorkerById(long workerId);
 
     boolean isDataNodeAvailable(long dataNodeId);

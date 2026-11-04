@@ -295,6 +295,90 @@ class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
+    void testResolveFallbackWhenLabelMatchedButNotSchedulableOnProvider(
+            @Mocked IcebergScanNode icebergScanNode,
+            @Mocked TupleDescriptor tupleDescriptor,
+            @Mocked IcebergTable icebergTable,
+            @Mocked CatalogMgr catalogMgr,
+            @Mocked SystemInfoService clusterInfo,
+            @Mocked WorkerProvider workerProvider) {
+        Map<String, String> config = new HashMap<>();
+        config.put("type", "iceberg");
+        config.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, "rack:r1");
+        Catalog catalog = new Catalog(1, "ice_cat", config, "");
+
+        new Expectations() {
+            {
+                icebergScanNode.isConnectorScanNode();
+                result = true;
+                icebergScanNode.getDesc();
+                result = tupleDescriptor;
+                tupleDescriptor.getTable();
+                result = icebergTable;
+                icebergTable.getCatalogName();
+                result = "ice_cat";
+                CatalogMgr.isExternalCatalog("ice_cat");
+                result = true;
+                catalogMgr.getCatalogByName("ice_cat");
+                result = catalog;
+                clusterInfo.getLocationMatchedBackendIds((Multimap<String, String>) any);
+                result = Lists.newArrayList(1L);
+                // Label-matched but excluded from captured provider (e.g. blacklisted).
+                workerProvider.getWorkerById(1L);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
+                Lists.newArrayList(icebergScanNode), clusterInfo, catalogMgr, workerProvider);
+        Assertions.assertFalse(restriction.isRestricted());
+    }
+
+    @Test
+    void testResolveRestrictedWhenProviderHasLabelMatched(
+            @Mocked IcebergScanNode icebergScanNode,
+            @Mocked TupleDescriptor tupleDescriptor,
+            @Mocked IcebergTable icebergTable,
+            @Mocked CatalogMgr catalogMgr,
+            @Mocked SystemInfoService clusterInfo,
+            @Mocked WorkerProvider workerProvider) {
+        Map<String, String> config = new HashMap<>();
+        config.put("type", "iceberg");
+        config.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, "rack:r1");
+        Catalog catalog = new Catalog(1, "ice_cat", config, "");
+        ComputeNode schedulable = new ComputeNode(1L, "host1", 9050);
+        schedulable.setAlive(true);
+
+        new Expectations() {
+            {
+                icebergScanNode.isConnectorScanNode();
+                result = true;
+                icebergScanNode.getDesc();
+                result = tupleDescriptor;
+                tupleDescriptor.getTable();
+                result = icebergTable;
+                icebergTable.getCatalogName();
+                result = "ice_cat";
+                CatalogMgr.isExternalCatalog("ice_cat");
+                result = true;
+                catalogMgr.getCatalogByName("ice_cat");
+                result = catalog;
+                clusterInfo.getLocationMatchedBackendIds((Multimap<String, String>) any);
+                result = Lists.newArrayList(1L);
+                workerProvider.getWorkerById(1L);
+                result = schedulable;
+                minTimes = 0;
+            }
+        };
+
+        ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
+                Lists.newArrayList(icebergScanNode), clusterInfo, catalogMgr, workerProvider);
+        Assertions.assertTrue(restriction.isRestricted());
+        Assertions.assertEquals(Set.of(1L), restriction.getPreferredConnectorWorkerIds());
+    }
+
+    @Test
     void testResolveRestrictedWithNativeUnion(
             @Mocked IcebergScanNode icebergScanNode,
             @Mocked TupleDescriptor tupleDescriptor,

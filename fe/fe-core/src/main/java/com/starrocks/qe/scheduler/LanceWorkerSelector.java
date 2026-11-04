@@ -42,10 +42,7 @@ public final class LanceWorkerSelector {
     }
 
     public static ComputeNode selectWorker(WorkerProvider provider) throws StarRocksException {
-        Collection<ComputeNode> preferred = provider.getPreferredConnectorWorkers();
-        Collection<ComputeNode> pool = (preferred != null && !preferred.isEmpty())
-                ? preferred : provider.getAllWorkers();
-        return selectWorker(pool, provider.getComputeResource());
+        return selectWorker(provider.getWorkersForConnectorScan(), provider.getComputeResource());
     }
 
     /**

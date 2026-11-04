@@ -39,7 +39,8 @@ import java.util.Set;
 /**
  * Best-effort worker restriction for queries that touch external catalogs with {@code labels.location}.
  * <ul>
- *   <li>L = alive backends matching the connector catalog location labels</li>
+ *   <li>L = label-matched backends that are schedulable on the captured {@link WorkerProvider}
+ *       (alive and not excluded by blacklist / provider filtering)</li>
  *   <li>N = backends required by fixed-location non-connector scans (OlapScan replicas,
  *       MetaScan, BE-local SchemaScan, Kudu, etc.)</li>
  *   <li>If no connector location is set, or L is empty, scheduling stays unrestricted</li>
@@ -85,13 +86,23 @@ public final class ConnectorLocationWorkerRestrictor {
     }
 
     public static Restriction resolve(List<ScanNode> scanNodes, SystemInfoService clusterInfo) {
-        return resolve(scanNodes, clusterInfo, null);
+        return resolve(scanNodes, clusterInfo, null, null);
     }
 
     /**
      * @param catalogMgr optional; when null, resolved lazily from {@link GlobalStateMgr} only if needed
      */
     static Restriction resolve(List<ScanNode> scanNodes, SystemInfoService clusterInfo, CatalogMgr catalogMgr) {
+        return resolve(scanNodes, clusterInfo, catalogMgr, null);
+    }
+
+    /**
+     * @param catalogMgr     optional; when null, resolved lazily from {@link GlobalStateMgr} only if needed
+     * @param workerProvider optional captured provider; when non-null, L is intersected with workers
+     *                       visible on it (excludes blacklisted / otherwise unschedulable nodes)
+     */
+    static Restriction resolve(List<ScanNode> scanNodes, SystemInfoService clusterInfo, CatalogMgr catalogMgr,
+                               WorkerProvider workerProvider) {
         if (!Config.enable_connector_location_worker_restriction) {
             return Restriction.unrestricted();
         }
@@ -105,16 +116,20 @@ public final class ConnectorLocationWorkerRestrictor {
         }
 
         Set<Long> labelled = Sets.newHashSet(clusterInfo.getLocationMatchedBackendIds(location));
-        // Keep only backends that are currently available in the provider sense (alive).
         Set<Long> preferred = Sets.newHashSet();
         for (Long id : labelled) {
-            if (clusterInfo.getBackend(id) != null && clusterInfo.getBackend(id).isAlive()) {
+            if (workerProvider != null) {
+                // Provider view is authoritative for scheduling (alive + not blacklisted).
+                if (workerProvider.getWorkerById(id) != null) {
+                    preferred.add(id);
+                }
+            } else if (clusterInfo.getBackend(id) != null && clusterInfo.getBackend(id).isAlive()) {
                 preferred.add(id);
             }
         }
 
         if (preferred.isEmpty()) {
-            LOG.warn("Connector catalog labels.location={} matched no alive backends; " +
+            LOG.warn("Connector catalog labels.location={} matched no schedulable backends; " +
                     "falling back to unrestricted worker scheduling", location);
             return Restriction.unrestricted();
         }

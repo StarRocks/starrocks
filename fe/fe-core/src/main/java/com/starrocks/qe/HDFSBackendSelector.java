@@ -292,15 +292,10 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     /**
-     * Workers used for connector scan-range assignment. Prefers label-matched backends when
-     * {@link WorkerProvider#getPreferredConnectorWorkers()} is non-empty (Iceberg/catalog location pinning).
+     * Workers used for connector scan-range assignment (label-matched when restricted).
      */
     private Collection<ComputeNode> connectorWorkers() {
-        Collection<ComputeNode> preferred = workerProvider.getPreferredConnectorWorkers();
-        if (preferred != null && !preferred.isEmpty()) {
-            return preferred;
-        }
-        return workerProvider.getAllWorkers();
+        return workerProvider.getWorkersForConnectorScan();
     }
 
     @Override
