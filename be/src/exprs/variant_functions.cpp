@@ -105,6 +105,104 @@ Status VariantFunctions::variant_segments_close(FunctionContext* context, Functi
     return Status::OK();
 }
 
+<<<<<<< HEAD
+=======
+// Bulk fast-path: const path + exact typed-type match, no suffix.
+// Copies the typed column data in bulk (SIMD for fixed-length, bulk for strings)
+// and merges null masks from the outer variant column and the typed column.
+template <LogicalType ResultType>
+static ColumnPtr _build_typed_bulk_result(const Column* typed_col, const Column* variant_col, size_t num_rows) {
+    // Unwrap nullable typed column
+    const Column* typed_data = typed_col;
+    const uint8_t* typed_null_data = nullptr;
+    if (typed_col->is_nullable()) {
+        const auto* tn = down_cast<const NullableColumn*>(typed_col);
+        typed_data = tn->data_column().get();
+        typed_null_data = tn->null_column()->get_data().data();
+    }
+
+    // Bulk-copy data column (SIMD memcpy for fixed-length, bulk string copy for varchar)
+    auto result_data = RunTimeColumnType<ResultType>::create();
+    result_data->append(*typed_data, 0, num_rows);
+
+    // Build merged null mask: variant_null | typed_null
+    auto result_null = NullColumn::create(num_rows, 0);
+    uint8_t* rn = result_null->get_data().data();
+
+    if (variant_col->is_nullable()) {
+        const uint8_t* vn = down_cast<const NullableColumn*>(variant_col)->null_column()->get_data().data();
+        for (size_t i = 0; i < num_rows; ++i) rn[i] = vn[i];
+    }
+    if (typed_null_data != nullptr) {
+        for (size_t i = 0; i < num_rows; ++i) rn[i] |= typed_null_data[i];
+    }
+
+    bool has_null = SIMD::contain_nonzero(result_null->get_data());
+    auto col = NullableColumn::create(std::move(result_data), std::move(result_null));
+    col->set_has_null(has_null);
+    return col;
+}
+
+// Row-level typed cast helper: encode each typed datum to VariantRowValue and
+// reuse VariantRowConverter for query cast semantics.
+template <LogicalType ResultType>
+static ColumnPtr _build_typed_cast_result(FunctionContext* context, const Column* typed_col,
+                                          const TypeDescriptor& typed_type_desc, const Column* variant_col,
+                                          size_t num_rows) {
+    if constexpr (ResultType == TYPE_BIGINT || ResultType == TYPE_DOUBLE) {
+        TypeDescriptor result_type_desc = TypeDescriptor::from_logical_type(ResultType);
+        cctz::time_zone zone =
+                (context->state() == nullptr) ? cctz::local_time_zone() : context->state()->timezone_obj();
+        auto casted = VariantColumnMerger::cast_typed_column(*typed_col, typed_type_desc, result_type_desc, zone);
+        if (casted.ok()) {
+            return _build_typed_bulk_result<ResultType>(casted.value().get(), variant_col, num_rows);
+        }
+    }
+
+    const RuntimeState* state = context->state();
+    cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
+
+    ColumnBuilder<ResultType> result(num_rows);
+
+    std::vector<uint8_t> null_mask(num_rows, 0);
+    if (variant_col->is_nullable()) {
+        const uint8_t* vn = down_cast<const NullableColumn*>(variant_col)->null_column()->get_data().data();
+        for (size_t i = 0; i < num_rows; ++i) null_mask[i] = vn[i];
+    }
+    if (typed_col->is_nullable()) {
+        const uint8_t* tn = down_cast<const NullableColumn*>(typed_col)->null_column()->get_data().data();
+        for (size_t i = 0; i < num_rows; ++i) null_mask[i] |= tn[i];
+    }
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (null_mask[i]) {
+            result.append_null();
+            continue;
+        }
+        const size_t typed_row = typed_col->is_constant() ? 0 : i;
+        auto encode_result = VariantColumn::encode_typed_row_as_variant(typed_col, typed_row, typed_type_desc);
+        if (!encode_result.ok()) {
+            result.append_null();
+            continue;
+        }
+        auto encoded = std::move(encode_result).value();
+        if (encoded.state == VariantColumn::EncodedVariantState::kNull) {
+            result.append_null();
+            continue;
+        }
+        Status cast_status =
+                VariantRowConverter::cast_to<ResultType, true>(encoded.value.as_ref(), zone, result, &offset_cache);
+        if (!cast_status.ok()) {
+            result.append_null();
+        }
+    }
+
+    return result.build(false);
+}
+
+>>>>>>> a4b68c1 ([Enhancement][RB-913] Cast VARIANT struct fields and get_variant_* results without copying the variant metadata (#82344))
 template <LogicalType ResultType>
 StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
@@ -118,7 +216,19 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
     auto json_path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
     ColumnBuilder<ResultType> result(num_rows);
+<<<<<<< HEAD
     VariantPath stored_path;
+=======
+    VariantPath row_path;
+    VariantPathReader row_reader;
+    const RuntimeState* state = context->state();
+    const cctz::time_zone zone = (state == nullptr) ? cctz::local_time_zone() : state->timezone_obj();
+    TzOffsetCache offset_cache;
+    offset_cache.bind(zone);
+    // Backing storage for a field view when the row has to be materialised; reused across rows.
+    VariantRowValue row_buffer;
+
+>>>>>>> a4b68c1 ([Enhancement][RB-913] Cast VARIANT struct fields and get_variant_* results without copying the variant metadata (#82344))
     for (size_t row = 0; row < num_rows; ++row) {
         if (variant_viewer.is_null(row) || json_path_viewer.is_null(row)) {
             result.append_null();
@@ -156,6 +266,31 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
                 result.append_null();
             }
         }
+<<<<<<< HEAD
+=======
+
+        const size_t variant_row = columns[0]->is_constant() ? 0 : row;
+
+        if constexpr (ResultType == TYPE_VARIANT) {
+            VariantReadResult read = cur_reader->read_row(variant_row);
+            if (read.state != VariantReadState::kValue) {
+                result.append_null();
+                continue;
+            }
+            result.append(std::move(read.value));
+        } else {
+            // A scalar result is cast straight from a view of the field; no owned copy of the row's metadata.
+            VariantRowRef field;
+            if (cur_reader->read_row_view(variant_row, &field, &row_buffer) != VariantReadState::kValue) {
+                result.append_null();
+                continue;
+            }
+            Status casted = VariantRowConverter::cast_to<ResultType, true>(field, zone, result, &offset_cache);
+            if (!casted.ok()) {
+                result.append_null();
+            }
+        }
+>>>>>>> a4b68c1 ([Enhancement][RB-913] Cast VARIANT struct fields and get_variant_* results without copying the variant metadata (#82344))
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
