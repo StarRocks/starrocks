@@ -14,7 +14,8 @@
 
 package com.starrocks.connector.index;
 
-import com.starrocks.catalog.Table;
+import com.starrocks.catalog.PaimonTable;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
@@ -25,7 +26,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class ConnectorIndexModelTest {
@@ -49,8 +49,8 @@ public class ConnectorIndexModelTest {
         Assertions.assertTrue(empty.isEmpty());
 
         ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
-                ConnectorIndexDescriptor.IndexType.RANGE, "btree", 7, "id",
-                Map.of(), Set.of(ConnectorIndexDescriptor.Operation.EQUAL), ConnectorIndexDescriptor.Coverage.FULL);
+                ConnectorIndexDescriptor.IndexType.RANGE, 7, "id",
+                Set.of(ConnectorIndexDescriptor.Operation.EQUAL), ConnectorIndexDescriptor.Coverage.FULL);
         ConnectorIndexMetadata metadata = ConnectorIndexMetadata.of(
                 42L, ConnectorIndexMetadata.TableType.DATA_EVOLUTION, List.of(descriptor));
         Assertions.assertFalse(metadata.isEmpty());
@@ -61,7 +61,7 @@ public class ConnectorIndexModelTest {
     }
 
     @Test
-    public void testVirtualIndexTableDelegatesConnectorIdentity(@Mocked Table innerTable) {
+    public void testVirtualIndexTableDelegatesConnectorIdentity(@Mocked PaimonTable innerTable) {
         TTableDescriptor descriptor = new TTableDescriptor();
         new Expectations() {
             {
@@ -76,7 +76,7 @@ public class ConnectorIndexModelTest {
             }
         };
 
-        IndexTable table = new IndexTable(innerTable);
+        PaimonIndexTable table = new PaimonIndexTable(innerTable);
         Assertions.assertSame(innerTable, table.getInnerTable());
         Assertions.assertTrue(table.isSupported());
         Assertions.assertEquals("orders$global_index", table.getName());
@@ -85,15 +85,15 @@ public class ConnectorIndexModelTest {
         Assertions.assertSame(table.getBaseSchema(), table.getFullSchema());
         Assertions.assertEquals(VarbinaryType.VARBINARY,
                 table.getBaseSchema().get(0).getType());
-        Assertions.assertEquals(IndexTable.INDEX_RESULT_COLUMN_NAME, table.getBaseSchema().get(0).getName());
+        Assertions.assertEquals(PaimonIndexTable.INDEX_RESULT_COLUMN_NAME, table.getBaseSchema().get(0).getName());
         Assertions.assertEquals(VarcharType.VARCHAR, table.getBaseSchema().get(1).getType());
-        Assertions.assertEquals(IndexTable.ARGS_COLUMN_NAME, table.getBaseSchema().get(1).getName());
+        Assertions.assertEquals(PaimonIndexTable.ARGS_COLUMN_NAME, table.getBaseSchema().get(1).getName());
         Assertions.assertEquals(2, table.getIdToColumn().size());
 
         Assertions.assertSame(descriptor, table.toThrift(Collections.emptyList()));
         Assertions.assertEquals(101L, descriptor.getId());
         Assertions.assertEquals(2, descriptor.getNumCols());
         Assertions.assertEquals("orders$global_index", descriptor.getTableName());
-        Assertions.assertThrows(NullPointerException.class, () -> new IndexTable(null));
+        Assertions.assertThrows(NullPointerException.class, () -> new PaimonIndexTable(null));
     }
 }

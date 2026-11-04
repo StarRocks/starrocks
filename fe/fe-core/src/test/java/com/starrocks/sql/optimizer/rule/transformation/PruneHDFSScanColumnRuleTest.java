@@ -21,15 +21,15 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.common.tvr.TvrTableSnapshot;
-import com.starrocks.connector.index.IndexTable;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -75,10 +75,10 @@ public class PruneHDFSScanColumnRuleTest {
 
     @Test
     public void copyIndexScanPredicates(@Mocked PaimonTable table) {
-        LogicalIndexScanOperator scan = new LogicalIndexScanOperator(
-                new IndexTable(table), Map.of(), Map.of(), -1, null);
+        LogicalPaimonIndexScanOperator scan = new LogicalPaimonIndexScanOperator(
+                new PaimonIndexTable(table), Map.of(), Map.of(), -1, null);
         scan.getScanOperatorPredicates().getNonPartitionConjuncts().add(ConstantOperator.createBoolean(true));
-        LogicalIndexScanOperator copied = new LogicalIndexScanOperator.Builder().withOperator(scan).build();
+        LogicalPaimonIndexScanOperator copied = new LogicalPaimonIndexScanOperator.Builder().withOperator(scan).build();
         Assertions.assertNotSame(scan.getScanOperatorPredicates(), copied.getScanOperatorPredicates());
         Assertions.assertEquals(scan.getScanOperatorPredicates().getNonPartitionConjuncts(),
                 copied.getScanOperatorPredicates().getNonPartitionConjuncts());

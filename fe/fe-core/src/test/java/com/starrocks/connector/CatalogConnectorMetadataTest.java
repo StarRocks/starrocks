@@ -28,10 +28,10 @@ import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.IndexTable;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
@@ -197,6 +197,7 @@ public class CatalogConnectorMetadataTest {
     @Test
     void testIndexExecutionDelegationAndVirtualTable(@Mocked ConnectorMetadata connectorMetadata) {
         PaimonTable table = new PaimonTable();
+        PaimonIndexTable virtual = new PaimonIndexTable(table);
         TvrTableSnapshot version = TvrTableSnapshot.of(7L);
         IndexCondition condition = new IndexCondition(null);
         ConnectorIndexResult candidate = () -> 7L;
@@ -208,18 +209,18 @@ public class CatalogConnectorMetadataTest {
                 connectorMetadata.getIndexShards(table, 7L, Map.of(0, IndexType.RANGE));
                 result = shards;
                 times = 1;
-                connectorMetadata.getTable((ConnectContext) any, "db", "orders");
-                result = table;
-                connectorMetadata.tableExists((ConnectContext) any, "db", "orders");
+                connectorMetadata.getTable((ConnectContext) any, "db", "orders$global_index");
+                result = virtual;
+                connectorMetadata.tableExists((ConnectContext) any, "db", "orders$global_index");
                 result = true;
-                connectorMetadata.getTableVersionRange("db", table, Optional.empty(), Optional.empty());
+                connectorMetadata.getTableVersionRange("db", virtual, Optional.empty(), Optional.empty());
                 result = version;
             }};
         CatalogConnectorMetadata metadata = new CatalogConnectorMetadata(
                 connectorMetadata, informationSchemaMetadata, metaMetadata);
         assertSame(candidate, metadata.evaluateIndex(table, condition, version).orElseThrow());
         assertEquals(shards, metadata.getIndexShards(table, 7L, Map.of(0, IndexType.RANGE)));
-        IndexTable virtual = (IndexTable) metadata.getTable(null, "db", "orders$global_index");
+        assertSame(virtual, metadata.getTable(null, "db", "orders$global_index"));
         assertSame(table, virtual.getInnerTable());
         assertTrue(metadata.tableExists(null, "db", "orders$global_index"));
         assertSame(version, metadata.getTableVersionRange("db", virtual, Optional.empty(), Optional.empty()));

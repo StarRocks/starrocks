@@ -24,9 +24,11 @@ import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
 import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -107,13 +109,30 @@ public class ApplyConnectorIndexRuleTest {
         }
     }
 
+    @Test
+    public void testRecognizedConditionUsesSelectedPrinterFormat() {
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, idColumn, ConstantOperator.createInt(7));
+        LogicalPaimonScanOperator scan = new LogicalPaimonScanOperator.Builder()
+                .withOperator(createScan(predicate))
+                .setIndexCondition(new IndexCondition(predicate)).build();
+        for (OptExpression expression : List.of(OptExpression.create(scan),
+                OptExpression.create(new PhysicalPaimonScanOperator(scan)))) {
+            for (boolean printColumnRef : List.of(false, true)) {
+                String expected = printColumnRef ? predicate.toString() : predicate.debugString();
+                String plan = LogicalPlanPrinter.print(expression, false, printColumnRef);
+                Assertions.assertTrue(plan.contains("recognized index[predicate=" + expected + "]"), plan);
+                Assertions.assertFalse(plan.contains("applied"), plan);
+            }
+        }
+    }
+
     private ConnectorIndexMetadata metadata(List<ConnectorIndexDescriptor> descriptors) {
         return ConnectorIndexMetadata.of(42, TableType.DATA_EVOLUTION, descriptors);
     }
 
     private ConnectorIndexDescriptor scalarDescriptor() {
-        return new ConnectorIndexDescriptor(IndexType.BITMAP, "test", idColumn.getId(),
-                idColumn.getName(), Map.of(), Set.of(Operation.EQUAL), Coverage.FULL);
+        return new ConnectorIndexDescriptor(IndexType.BITMAP, idColumn.getId(),
+                idColumn.getName(), Set.of(Operation.EQUAL), Coverage.FULL);
     }
 
     private LogicalPaimonScanOperator createScan(ScalarOperator predicate) {

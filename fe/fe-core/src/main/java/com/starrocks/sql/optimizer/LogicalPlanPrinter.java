@@ -239,7 +239,8 @@ public class LogicalPlanPrinter {
             if (scanOperator instanceof LogicalPaimonScanOperator) {
                 LogicalPaimonScanOperator paimonScan = (LogicalPaimonScanOperator) scanOperator;
                 if (paimonScan.getIndexCondition() != null) {
-                    suffix = " index[" + paimonScan.getIndexCondition() + "]";
+                    suffix = " recognized index[predicate="
+                            + scalarOperatorStringFunction.apply(paimonScan.getIndexCondition().getPredicate()) + "]";
                 }
             }
             if (!isPrintColumnRef) {
@@ -523,7 +524,8 @@ public class LogicalPlanPrinter {
         @Override
         public OperatorStr visitPhysicalPaimonScan(OptExpression optExpression, Integer step) {
             PhysicalPaimonScanOperator scan = optExpression.getOp().cast();
-            String suffix = scan.getIndexCondition() == null ? "" : " index[" + scan.getIndexCondition() + "]";
+            String suffix = scan.getIndexCondition() == null ? "" : " recognized index[predicate="
+                    + scalarOperatorStringFunction.apply(scan.getIndexCondition().getPredicate()) + "]";
             return visitScanCommon(optExpression, step, "PAIMON SCAN", suffix);
         }
 
@@ -533,8 +535,8 @@ public class LogicalPlanPrinter {
         }
 
         @Override
-        public OperatorStr visitPhysicalIndexScan(OptExpression optExpression, Integer step) {
-            return visitScanCommon(optExpression, step, "CONNECTOR INDEX SCAN");
+        public OperatorStr visitPhysicalPaimonIndexScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "PAIMON INDEX SCAN");
         }
 
         @Override

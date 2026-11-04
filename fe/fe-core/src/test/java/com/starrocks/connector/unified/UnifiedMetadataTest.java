@@ -30,6 +30,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.MetaPreparationItem;
@@ -47,7 +48,9 @@ import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.kudu.KuduMetadata;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
@@ -131,6 +134,68 @@ public class UnifiedMetadataTest {
         );
         this.getRemoteFilesParams = GetRemoteFilesParams.newBuilder().setPartitionKeys(ImmutableList.of())
                 .setTableVersionRange(TvrTableSnapshot.empty()).build();
+    }
+
+    @Test
+    public void testVirtualPaimonTableTakesPrecedenceThroughCatalogWrapper() {
+        PaimonTable baseTable = new PaimonTable();
+        PaimonIndexTable virtual = new PaimonIndexTable(baseTable);
+        HiveTable metastoreTable = HiveTable.builder().setTableName("orders").setFullSchema(List.of())
+                .setProperties(Map.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE)).build();
+        HiveTable sameNamedTable = HiveTable.builder().setTableName("orders$global_index")
+                .setFullSchema(virtual.getFullSchema()).setProperties(Map.of()).build();
+        TvrTableSnapshot version = TvrTableSnapshot.of(7L);
+        new Expectations() {{
+                // A metastore object with the reserved name must never supply internal index results.
+                hiveMetadata.tableExists((ConnectContext) any, "db", "orders$global_index");
+                result = true;
+                minTimes = 0;
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders$global_index");
+                result = sameNamedTable;
+                minTimes = 0;
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = metastoreTable;
+                paimonMetadata.getTable(connectContext, "db", "orders$global_index");
+                result = virtual;
+                paimonMetadata.tableExists(connectContext, "db", "orders$global_index");
+                result = true;
+                paimonMetadata.getTableVersionRange("db", virtual, Optional.empty(), Optional.empty());
+                result = version;
+            }};
+        CatalogConnectorMetadata wrapper = new CatalogConnectorMetadata(unifiedMetadata,
+                new InformationSchemaMetadata("unified"), null);
+        assertSame(virtual, wrapper.getTable(connectContext, "db", "orders$global_index"));
+        assertTrue(wrapper.tableExists(connectContext, "db", "orders$global_index"));
+        assertSame(version, wrapper.getTableVersionRange("db", virtual, Optional.empty(), Optional.empty()));
+    }
+
+    @Test
+    public void testRealSameNamedHiveTableIsNotReplacedWithoutPaimonBase(@Mocked HiveTable table) {
+        new Expectations() {{
+                hiveMetadata.tableExists((ConnectContext) any, "db", "orders$global_index");
+                result = true;
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders$global_index");
+                result = table;
+                table.getProperties();
+                result = Map.of();
+            }};
+        assertSame(table, unifiedMetadata.getTable(connectContext, "db", "orders$global_index"));
+        assertTrue(unifiedMetadata.tableExists(connectContext, "db", "orders$global_index"));
+    }
+
+    @Test
+    public void testVirtualPaimonTableReportsMissingConnector(@Mocked HiveTable table) {
+        new Expectations() {{
+                hiveMetadata.getTable((ConnectContext) any, "db", "orders");
+                result = table;
+                table.getProperties();
+                result = Map.of(PAIMON_STORAGE_HANDLER_KEY, PAIMON_STORAGE_HANDLER_VALUE);
+            }};
+        UnifiedMetadata withoutPaimon = new UnifiedMetadata(Map.of(HIVE, hiveMetadata));
+        assertThrows(StarRocksConnectorException.class,
+                () -> withoutPaimon.getTable(connectContext, "db", "orders$global_index"));
+        assertThrows(StarRocksConnectorException.class,
+                () -> withoutPaimon.tableExists(connectContext, "db", "orders$global_index"));
     }
 
     @Test

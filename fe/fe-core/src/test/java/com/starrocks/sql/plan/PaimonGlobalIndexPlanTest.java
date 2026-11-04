@@ -31,11 +31,11 @@ import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexMetadata.TableType;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.IndexTable;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.TableMetaMetadata;
 import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
 import com.starrocks.connector.paimon.PaimonGlobalIndexService;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.planner.PaimonIndexScanNode;
 import com.starrocks.planner.SlotDescriptor;
@@ -45,6 +45,7 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -113,13 +114,13 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                     : versionRange.end().orElse(ConnectorIndexMetadata.UNKNOWN_SNAPSHOT_ID);
             if ("vector_table".equals(table.getName())) {
                 ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
-                        IndexType.RANGE, "btree", 0, "pk", Map.of(),
+                        IndexType.RANGE, 0, "pk",
                         Set.of(Operation.EQUAL), Coverage.UNKNOWN);
                 return ConnectorIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
                         List.of(descriptor), Map.of("pk", 0, "embedding", 1), Set.of());
             }
             ConnectorIndexDescriptor descriptor = new ConnectorIndexDescriptor(
-                    IndexType.BITMAP, "bitmap", 0, "pk", Map.of(),
+                    IndexType.BITMAP, 0, "pk",
                     Set.of(Operation.EQUAL), Coverage.UNKNOWN);
             return ConnectorIndexMetadata.of(snapshotId, TableType.DATA_EVOLUTION,
                     List.of(descriptor));
@@ -271,6 +272,8 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
         verify(indexedMetadata, atLeastOnce()).getIndexMetadata(
                 any(Table.class), any(TvrVersionRange.class));
         Assertions.assertTrue(indexMetadataLoads.get() > 0);
+        String explain = getFragmentPlan("SELECT pk FROM unpartitioned_table WHERE pk = '1'");
+        assertContains(explain, "RECOGNIZED INDEX CONDITION:", "DISTRIBUTED INDEX: not attempted");
     }
 
     @Test
@@ -349,7 +352,7 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                     Assertions.assertEquals(1, plan.getScanNodes().size());
                     PaimonIndexScanNode scan = (PaimonIndexScanNode) plan.getScanNodes().get(0);
                     SlotDescriptor resultSlot = scan.getDesc().getSlots().stream()
-                            .filter(slot -> IndexTable.INDEX_RESULT_COLUMN_NAME.equals(slot.getColumn().getName()))
+                            .filter(slot -> PaimonIndexTable.INDEX_RESULT_COLUMN_NAME.equals(slot.getColumn().getName()))
                             .findFirst().orElseThrow();
                     Assertions.assertTrue(resultSlot.isMaterialized());
                     Assertions.assertTrue(resultSlot.toThrift().isIsMaterialized());
@@ -540,14 +543,20 @@ public class PaimonGlobalIndexPlanTest extends ConnectorPlanTestBase {
                 for (Map.Entry<String, String> score : APPROXIMATE_SCORE_ORDERS.entrySet()) {
                     String sql = "SELECT pk, " + score.getKey() + "([1.0, 2.0], embedding) AS score "
                             + "FROM vector_table WHERE pk = 1 ORDER BY score " + score.getValue() + " LIMIT 10";
-                    String plan = getLogicalFragmentPlan(sql);
-                    assertContains(plan, "PAIMON SCAN", "TOP-N", "index[predicate=");
+                    ExecPlan execPlan = getExecPlan(sql);
+                    String plan = LogicalPlanPrinter.print(execPlan.getPhysicalPlan());
+                    assertContains(plan, "PAIMON SCAN", "TOP-N", "recognized index[predicate=");
                     int start = plan.indexOf("index[");
                     String indexRequest = plan.substring(start, plan.indexOf(']', start) + 1);
-                    assertContains(indexRequest, "pk = 1");
+                    Assertions.assertEquals("index[predicate=col = 1]", indexRequest);
+                    String namedPlan = LogicalPlanPrinter.print(execPlan.getPhysicalPlan(), false, true);
+                    int namedStart = namedPlan.indexOf("index[");
+                    String namedRequest = namedPlan.substring(namedStart, namedPlan.indexOf(']', namedStart) + 1);
+                    assertContains(namedRequest, "pk = 1");
                     Assertions.assertFalse(indexRequest.contains("approx_"), indexRequest);
+                    Assertions.assertFalse(namedRequest.contains("approx_"), namedRequest);
                     Assertions.assertFalse(plan.contains("_INDEX_SCORE"), plan);
-                    assertContains(getFragmentPlan(sql), score.getKey(), "PREDICATES:", "TOP-N");
+                    assertContains(execPlan.getExplainString(TExplainLevel.NORMAL), score.getKey(), "PREDICATES:", "TOP-N");
                 }
             }
             verify(indexedMetadata, atLeastOnce()).getIndexMetadata(

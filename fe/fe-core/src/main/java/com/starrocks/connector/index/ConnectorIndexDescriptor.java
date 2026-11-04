@@ -14,10 +14,8 @@
 
 package com.starrocks.connector.index;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -52,22 +50,17 @@ public final class ConnectorIndexDescriptor {
     }
 
     private final IndexType type;
-    private final String provider;
     private final int fieldId;
     private final String columnName;
-    private final Map<String, String> options;
     private final Set<Operation> supportedOperations;
     private final Coverage coverage;
 
-    public ConnectorIndexDescriptor(IndexType type, String provider, int fieldId, String columnName,
-                                    Map<String, String> options,
+    public ConnectorIndexDescriptor(IndexType type, int fieldId, String columnName,
                                     Set<Operation> supportedOperations,
                                     Coverage coverage) {
         this.type = Objects.requireNonNull(type, "type is null");
-        this.provider = Objects.requireNonNull(provider, "provider is null");
         this.fieldId = fieldId;
         this.columnName = Objects.requireNonNull(columnName, "columnName is null");
-        this.options = ImmutableMap.copyOf(Objects.requireNonNull(options, "options is null"));
         this.supportedOperations = ImmutableSet.copyOf(
                 Objects.requireNonNull(supportedOperations, "supportedOperations is null"));
         this.coverage = Objects.requireNonNull(coverage, "coverage is null");
@@ -77,20 +70,12 @@ public final class ConnectorIndexDescriptor {
         return type;
     }
 
-    public String getProvider() {
-        return provider;
-    }
-
     public int getFieldId() {
         return fieldId;
     }
 
     public String getColumnName() {
         return columnName;
-    }
-
-    public Map<String, String> getOptions() {
-        return options;
     }
 
     public Set<Operation> getSupportedOperations() {
@@ -107,8 +92,7 @@ public final class ConnectorIndexDescriptor {
         if (columnName.equals(currentColumnName)) {
             return this;
         }
-        return new ConnectorIndexDescriptor(type, provider, fieldId, currentColumnName,
-                options, supportedOperations, coverage);
+        return new ConnectorIndexDescriptor(type, fieldId, currentColumnName, supportedOperations, coverage);
     }
 
     public boolean supports(Operation operation) {
@@ -125,19 +109,18 @@ public final class ConnectorIndexDescriptor {
         }
         ConnectorIndexDescriptor that = (ConnectorIndexDescriptor) o;
         return fieldId == that.fieldId
-                && type == that.type && Objects.equals(provider, that.provider)
-                && Objects.equals(columnName, that.columnName) && Objects.equals(options, that.options)
+                && type == that.type && Objects.equals(columnName, that.columnName)
                 && Objects.equals(supportedOperations, that.supportedOperations) && coverage == that.coverage;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(type, provider, fieldId, columnName, options, supportedOperations, coverage);
+        return Objects.hash(type, fieldId, columnName, supportedOperations, coverage);
     }
 
     @Override
     public String toString() {
-        return "type=" + type + ", provider=" + provider + ", fieldId=" + fieldId
+        return "type=" + type + ", fieldId=" + fieldId
                 + ", column=" + columnName + ", coverage=" + coverage;
     }
 }

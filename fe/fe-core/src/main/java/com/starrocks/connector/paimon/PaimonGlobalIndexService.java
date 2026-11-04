@@ -18,7 +18,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.starrocks.catalog.PaimonTable;
-import com.starrocks.connector.index.IndexTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SimpleExecutor;
@@ -100,12 +99,12 @@ public final class PaimonGlobalIndexService {
 
     String buildSql(String requestTransport) {
         return String.format("select to_base64(`%s`) from `%s`.`%s`.`%s%s` where `%s`='%s'",
-                IndexTable.INDEX_RESULT_COLUMN_NAME,
+                PaimonIndexTable.INDEX_RESULT_COLUMN_NAME,
                 quoteIdentifier(table.getCatalogName()),
                 quoteIdentifier(table.getCatalogDBName()),
                 quoteIdentifier(table.getCatalogTableName()),
-                IndexTable.INDEX_TABLE_SUFFIX,
-                IndexTable.ARGS_COLUMN_NAME,
+                PaimonIndexTable.INDEX_TABLE_SUFFIX,
+                PaimonIndexTable.ARGS_COLUMN_NAME,
                 requestTransport);
     }
 

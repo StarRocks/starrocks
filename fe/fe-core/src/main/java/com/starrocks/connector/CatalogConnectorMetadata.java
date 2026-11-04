@@ -35,7 +35,6 @@ import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.IndexTable;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -152,13 +151,6 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
-        if (!isInfoSchemaDb(dbName) && tblName.endsWith(IndexTable.INDEX_TABLE_SUFFIX)) {
-            String baseName = tblName.substring(0, tblName.length() - IndexTable.INDEX_TABLE_SUFFIX.length());
-            Table baseTable = normal.getTable(context, dbName, baseName);
-            if (baseTable != null && baseTable.isPaimonTable()) {
-                return new IndexTable(baseTable);
-            }
-        }
         ConnectorMetadata metadata = metadataOfTable(tblName);
         if (metadata == null) {
             metadata = metadataOfDb(dbName);
@@ -217,9 +209,6 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                 Optional<ConnectorTableVersion> startVersion,
                                                 Optional<ConnectorTableVersion> endVersion) {
-        if (table instanceof IndexTable) {
-            table = ((IndexTable) table).getInnerTable();
-        }
         ConnectorMetadata metadata = metadataOfTable(table);
         if (metadata == null) {
             metadata = metadataOfDb(dbName);
@@ -240,15 +229,6 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
-        if (!isInfoSchemaDb(dbName) && tblName.endsWith(IndexTable.INDEX_TABLE_SUFFIX)) {
-            String baseName = tblName.substring(0, tblName.length() - IndexTable.INDEX_TABLE_SUFFIX.length());
-            if (normal.tableExists(context, dbName, baseName)) {
-                Table baseTable = normal.getTable(context, dbName, baseName);
-                if (baseTable != null && baseTable.isPaimonTable()) {
-                    return true;
-                }
-            }
-        }
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.tableExists(context, dbName, tblName);
     }

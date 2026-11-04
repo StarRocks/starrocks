@@ -196,7 +196,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
@@ -208,6 +207,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalMetaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMysqlScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
@@ -1885,10 +1885,10 @@ public class PlanFragmentBuilder {
         }
 
         @Override
-        public PlanFragment visitPhysicalIndexScan(OptExpression optExpression, ExecPlan context) {
-            PhysicalIndexScanOperator node = (PhysicalIndexScanOperator) optExpression.getOp();
-            com.starrocks.connector.index.IndexTable indexTable =
-                    (com.starrocks.connector.index.IndexTable) node.getTable();
+        public PlanFragment visitPhysicalPaimonIndexScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalPaimonIndexScanOperator node = (PhysicalPaimonIndexScanOperator) optExpression.getOp();
+            com.starrocks.connector.paimon.PaimonIndexTable indexTable =
+                    (com.starrocks.connector.paimon.PaimonIndexTable) node.getTable();
 
             context.getDescTbl().addReferencedTable(indexTable);
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();

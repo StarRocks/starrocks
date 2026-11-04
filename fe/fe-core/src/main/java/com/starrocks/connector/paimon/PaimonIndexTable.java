@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.index;
+package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -26,8 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/** A read-only virtual table used to distribute connector index evaluation to BEs. */
-public final class IndexTable extends Table {
+/** A read-only virtual table used to distribute Paimon index evaluation to BEs. */
+public final class PaimonIndexTable extends Table {
     public static final String INDEX_TABLE_SUFFIX = "$global_index";
     public static final String INDEX_RESULT_COLUMN_NAME = "index_result";
     public static final String ARGS_COLUMN_NAME = "args";
@@ -37,16 +38,25 @@ public final class IndexTable extends Table {
     private static final Column ARGS_COLUMN = new Column(ARGS_COLUMN_NAME, VarcharType.VARCHAR, true);
     private static final List<Column> SCHEMA = List.of(INDEX_RESULT_COLUMN, ARGS_COLUMN);
 
-    private final Table innerTable;
+    private final PaimonTable innerTable;
 
-    public IndexTable(Table innerTable) {
+    public PaimonIndexTable(PaimonTable innerTable) {
         super(TableType.INDEX);
         this.innerTable = Objects.requireNonNull(innerTable, "inner table is null");
         setId(innerTable.getId());
     }
 
-    public Table getInnerTable() {
+    public PaimonTable getInnerTable() {
         return innerTable;
+    }
+
+    public static String baseTableName(String tableName) {
+        return tableName.endsWith(INDEX_TABLE_SUFFIX)
+                ? tableName.substring(0, tableName.length() - INDEX_TABLE_SUFFIX.length()) : tableName;
+    }
+
+    public static Table metadataTable(Table table) {
+        return table instanceof PaimonIndexTable ? ((PaimonIndexTable) table).getInnerTable() : table;
     }
 
     @Override

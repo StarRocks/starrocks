@@ -17,21 +17,21 @@ package com.starrocks.sql.optimizer.rule.implementation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIndexScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIndexScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalPaimonIndexScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class IndexScanImplementationRule extends ImplementationRule {
-    public IndexScanImplementationRule() {
-        super(RuleType.IMP_INDEX_LSCAN_TO_PSCAN, Pattern.create(OperatorType.LOGICAL_INDEX_SCAN));
+public class PaimonIndexScanImplementationRule extends ImplementationRule {
+    public PaimonIndexScanImplementationRule() {
+        super(RuleType.IMP_PAIMON_INDEX_LSCAN_TO_PSCAN, Pattern.create(OperatorType.LOGICAL_PAIMON_INDEX_SCAN));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalIndexScanOperator scan = (LogicalIndexScanOperator) input.getOp();
-        return List.of(OptExpression.create(new PhysicalIndexScanOperator(scan)));
+        LogicalPaimonIndexScanOperator scan = (LogicalPaimonIndexScanOperator) input.getOp();
+        return List.of(OptExpression.create(new PhysicalPaimonIndexScanOperator(scan)));
     }
 }

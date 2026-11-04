@@ -18,21 +18,21 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIndexScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonIndexScanOperator;
 
-/** Physical scan over a virtual connector index table. */
-public class PhysicalIndexScanOperator extends PhysicalScanOperator {
-    public PhysicalIndexScanOperator(LogicalIndexScanOperator scan) {
-        super(OperatorType.PHYSICAL_INDEX_SCAN, scan);
+/** Physical scan over a virtual Paimon index table. */
+public class PhysicalPaimonIndexScanOperator extends PhysicalScanOperator {
+    public PhysicalPaimonIndexScanOperator(LogicalPaimonIndexScanOperator scan) {
+        super(OperatorType.PHYSICAL_PAIMON_INDEX_SCAN, scan);
     }
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitPhysicalIndexScan(this, context);
+        return visitor.visitPhysicalPaimonIndexScan(this, context);
     }
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression expression, C context) {
-        return visitor.visitPhysicalIndexScan(expression, context);
+        return visitor.visitPhysicalPaimonIndexScan(expression, context);
     }
 }

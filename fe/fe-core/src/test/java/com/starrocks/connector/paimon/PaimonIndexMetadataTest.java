@@ -139,8 +139,6 @@ public class PaimonIndexMetadataTest {
                 result = "bitmap";
                 tableSchema.idToFieldMap();
                 result = Map.of(7, scalarField);
-                tableSchema.options();
-                result = Map.of(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true");
                 tableSchema.primaryKeys();
                 result = List.of("id");
             }

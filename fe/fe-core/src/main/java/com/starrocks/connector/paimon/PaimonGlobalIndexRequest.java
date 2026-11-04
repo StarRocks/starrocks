@@ -21,7 +21,6 @@ import com.google.gson.JsonObject;
 import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
 import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorSerializer;
 import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.types.DataField;
 
@@ -74,7 +73,7 @@ public final class PaimonGlobalIndexRequest {
         request.tablePath = tablePath;
         request.branch = branch;
         request.predicate = GSON.toJsonTree(
-                ScalarOperatorSerializer.toJson(condition.getPredicate())).getAsJsonObject();
+                PaimonIndexPredicateSerializer.toJson(condition.getPredicate())).getAsJsonObject();
         request.indexes = new LinkedHashMap<>();
         for (ColumnRefOperator column : condition.getPredicate().getColumnRefs()) {
             Integer fieldId = condition.getFieldIds().get(column.getId());

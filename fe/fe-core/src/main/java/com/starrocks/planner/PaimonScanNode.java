@@ -86,6 +86,8 @@ public class PaimonScanNode extends ScanNode {
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
     private CloudConfiguration cloudConfiguration = null;
+    private IndexCondition recognizedIndexCondition;
+    private String distributedIndexStatus = "not attempted";
 
     public PaimonScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -141,6 +143,8 @@ public class PaimonScanNode extends ScanNode {
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit,
                                         @Nullable IndexCondition indexCondition) {
+        recognizedIndexCondition = indexCondition;
+        distributedIndexStatus = "not attempted";
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
         int globalIndexScanStage = ConnectContext.get().getSessionVariable().getPaimonGlobalIndexScanStage();
@@ -155,6 +159,7 @@ public class PaimonScanNode extends ScanNode {
         long snapshotId = tvrVersionRange == null ? -1L : tvrVersionRange.end().orElse(-1L);
         if (globalIndexScanStage == 2 && indexCondition != null
                 && !indexCondition.getFieldIds().isEmpty() && snapshotId >= 0) {
+            distributedIndexStatus = "SDK fallback";
             try {
                 Optional<ConnectorMetadata> metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
                         .getOptionalMetadata(paimonTable.getCatalogName());
@@ -186,10 +191,14 @@ public class PaimonScanNode extends ScanNode {
                     + "falling back to a normal scan", snapshotId, e);
             GetRemoteFilesParams fallbackParams = params.copy();
             fallbackParams.setConnectorIndexResult(null);
+            distributedIndexStatus = "SDK fallback";
             fileInfos = getRemoteFiles(fallbackParams);
         }
 
         PaimonSplitsInfo splitsInfo = getSplitsInfo(fileInfos);
+        if (splitsInfo.isDistributedIndexApplied()) {
+            distributedIndexStatus = "applied";
+        }
         if (splitsInfo.getNativeTable() != null) {
             // Serialize the same branch/schema/options that produced these splits.
             // Never mutate the catalog table: aliases may read main and a branch
@@ -450,6 +459,11 @@ public class PaimonScanNode extends ScanNode {
         StringBuilder output = new StringBuilder();
 
         output.append(prefix).append("TABLE: ").append(paimonTable.getName()).append("\n");
+        if (recognizedIndexCondition != null) {
+            output.append(prefix).append("RECOGNIZED INDEX CONDITION: ")
+                    .append(recognizedIndexCondition.getPredicate()).append("\n");
+            output.append(prefix).append("DISTRIBUTED INDEX: ").append(distributedIndexStatus).append("\n");
+        }
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");

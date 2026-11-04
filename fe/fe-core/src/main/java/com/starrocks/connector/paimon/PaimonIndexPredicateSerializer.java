@@ -12,9 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.operator.scalar;
+package com.starrocks.connector.paimon;
 
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -22,13 +31,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Versioned, compact serialization for scalar predicates evaluated by connector index providers.
+ * Compact Paimon Global Index protocol serialization for supported scalar predicates.
  *
  * <p>This is deliberately narrower than general expression serialization. An unsupported literal
  * or expression makes distributed evaluation fall back to SDK planning. BE validates the payload
  * again before touching an index. Compact keys keep each shard's request small.
  */
-public final class ScalarOperatorSerializer {
+public final class PaimonIndexPredicateSerializer {
     public static final String ARGUMENTS = "a";
     public static final String BINARY_TYPE = "b";
     public static final String CHILDREN = "c";
@@ -40,7 +49,7 @@ public final class ScalarOperatorSerializer {
     public static final String TYPE = "t";
     public static final String VALUE = "v";
 
-    private ScalarOperatorSerializer() {
+    private PaimonIndexPredicateSerializer() {
     }
 
     public static Map<String, Object> toJson(ScalarOperator operator) {
