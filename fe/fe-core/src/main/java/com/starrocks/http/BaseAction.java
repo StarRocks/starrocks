@@ -326,6 +326,11 @@ public abstract class BaseAction implements IAction {
         } catch (Exception e) {
             LOG.warn("failed to send the response body of {}, closing the connection", uri, e);
         } finally {
+            try {
+                chunks.close();
+            } catch (Exception e) {
+                LOG.warn("failed to close the response body of {}", uri, e);
+            }
             if (!keepOpen) {
                 ctx.channel().close();
             }

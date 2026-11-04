@@ -420,10 +420,11 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testFailureWhileStreamingCutsTheResponse() {
+    public void testFailureWhileStreamingCutsTheResponse() throws InterruptedException {
         stubOperate(true);
         addLargeWindow();
         AtomicInteger chunks = new AtomicInteger();
+        AtomicInteger closes = new AtomicInteger();
         new MockUp<JsonArrayChunkedInput<?>>() {
             @Mock
             public ByteBuf readChunk(Invocation invocation, ByteBufAllocator allocator) {
@@ -432,12 +433,46 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
                 }
                 return invocation.proceed(allocator);
             }
+
+            @Mock
+            public void close(Invocation invocation) {
+                closes.incrementAndGet();
+                invocation.proceed();
+            }
         };
 
         // The status line is already out, so the connection is closed: the client must not get a body that
         // looks complete.
         Assertions.assertThrows(IOException.class, () -> readBody(networkClient, "/api/query_detail"));
         Assertions.assertEquals(2, chunks.get());
+        awaitCount(closes, 1);
+    }
+
+    @Test
+    public void testBodyIsClosedOnceSent() throws IOException, InterruptedException {
+        stubOperate(true);
+        addLargeWindow();
+        AtomicInteger closes = new AtomicInteger();
+        new MockUp<JsonArrayChunkedInput<?>>() {
+            @Mock
+            public void close(Invocation invocation) {
+                closes.incrementAndGet();
+                invocation.proceed();
+            }
+        };
+
+        getAsRoot("/api/query_detail");
+
+        awaitCount(closes, 1);
+    }
+
+    // The body is closed on the handler thread once the last chunk is out, which can be after the client has read it.
+    private static void awaitCount(AtomicInteger count, int expected) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (count.get() < expected && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+        Assertions.assertEquals(expected, count.get());
     }
 
     @Test
