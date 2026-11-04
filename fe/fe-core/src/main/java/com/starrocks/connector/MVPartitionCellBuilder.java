@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -302,12 +303,25 @@ public class MVPartitionCellBuilder {
 
     // ========== Internal: helpers ==========
 
-    private static PartitionKey nextPartitionKey(PartitionKey currentPartitionKey,
-                                                 PartitionUtil.DateTimeInterval dateTimeInterval,
-                                                 PrimitiveType partitionColumnPrimitiveType)
+    @VisibleForTesting
+    static PartitionKey nextPartitionKey(PartitionKey currentPartitionKey,
+                                         PartitionUtil.DateTimeInterval dateTimeInterval,
+                                         PrimitiveType partitionColumnPrimitiveType)
             throws AnalysisException {
-        LiteralExpr literalExpr = PartitionUtil.addOffsetForLiteral(
-                currentPartitionKey.getKeys().get(0), 1, dateTimeInterval);
+        LiteralExpr lowerBound = currentPartitionKey.getKeys().get(0);
+        LiteralExpr literalExpr;
+        if (dateTimeInterval == PartitionUtil.DateTimeInterval.NONE
+                && partitionColumnPrimitiveType == PrimitiveType.DATETIME && lowerBound instanceof DateLiteral) {
+            // An identity partition on a DATETIME column (Iceberg's, which has no granularity) holds one
+            // instant, so its range ends just past it. Stretched to a day, as for a DATE, two values on the
+            // same day overlapped and every refresh of a view partitioned on the column failed. One second,
+            // not one microsecond: a view partition bound keeps whole seconds, and a microsecond later
+            // would read back equal to the lower bound.
+            literalExpr = new DateLiteral(((DateLiteral) lowerBound).toLocalDateTime().plusSeconds(1),
+                    lowerBound.getType());
+        } else {
+            literalExpr = PartitionUtil.addOffsetForLiteral(lowerBound, 1, dateTimeInterval);
+        }
         PartitionKey nextPartitionKey = new PartitionKey();
         nextPartitionKey.pushColumn(literalExpr, partitionColumnPrimitiveType);
         return nextPartitionKey;
