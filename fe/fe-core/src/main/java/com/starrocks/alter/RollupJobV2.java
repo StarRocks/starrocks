@@ -485,6 +485,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         indexMeta.setViewDefineSql(viewDefineSql);
         indexMeta.setColocateMVIndex(isColocateMVIndex);
         indexMeta.setWhereClause(whereClause);
+        tbl.analyzeRollupIndexMetaBestEffort(indexMeta);
         tbl.rebuildFullSchema();
     }
 

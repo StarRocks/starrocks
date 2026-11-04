@@ -709,6 +709,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         indexMeta.setViewDefineSql(viewDefineSql);
         indexMeta.setColocateMVIndex(isColocateMVIndex);
         indexMeta.setWhereClause(whereClause);
+        tbl.analyzeRollupIndexMetaBestEffort(indexMeta);
         tbl.rebuildFullSchema();
     }
 
