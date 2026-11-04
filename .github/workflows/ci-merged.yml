@@ -20,14 +20,14 @@ env:
 
 jobs:
   # The backport versions come from the branch map (ci-tool conf/sync_branch_map.json:
-  # `versions --repo sr`, the StarRocks branches paired with CelerData plus `sr_only`), so a
+  # `versions --repo sr`, the StarRocks branches paired with CelerData), so a
   # new or retired release branch needs no workflow edit. The static list is the fallback when
   # the map cannot be read.
   backport-versions:
     runs-on: [ self-hosted, quick ]
     if: github.event.pull_request.merged == true && github.base_ref == 'main' && github.repository == 'StarRocks/starrocks'
     outputs:
-      versions: ${{ steps.map.outputs.versions || '["4.2", "4.1", "4.0", "3.5"]' }}
+      versions: ${{ steps.map.outputs.versions || '["4.2", "4.1", "4.0"]' }}
     steps:
       - name: read the backport versions
         id: map
