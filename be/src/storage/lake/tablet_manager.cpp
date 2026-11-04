@@ -160,14 +160,16 @@ std::string TabletManager::tablet_metadata_root_location(int64_t tablet_id) cons
 }
 
 void TabletManager::cache_bundled_metadata_partition_marker(int64_t tablet_id) {
-    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
+    auto cache_key =
+            MetacacheKey::bundled_metadata_marker(*_location_provider, tablet_metadata_root_location(tablet_id));
     if (cache_key.ok()) {
         _metacache->cache_bundled_metadata_marker(*cache_key);
     }
 }
 
 bool TabletManager::lookup_cached_bundled_metadata_partition_marker(int64_t tablet_id) {
-    auto cache_key = _location_provider->real_location(tablet_metadata_root_location(tablet_id));
+    auto cache_key =
+            MetacacheKey::bundled_metadata_marker(*_location_provider, tablet_metadata_root_location(tablet_id));
     return cache_key.ok() && _metacache->lookup_bundled_metadata_marker(*cache_key);
 }
 
@@ -223,16 +225,16 @@ std::string TabletManager::sst_location(int64_t tablet_id, std::string_view sst_
     return _location_provider->sst_location(tablet_id, sst_name);
 }
 
-std::string TabletManager::global_schema_cache_key(int64_t schema_id) {
-    return fmt::format("GS{}", schema_id);
+MetacacheKey TabletManager::global_schema_cache_key(int64_t schema_id) {
+    return MetacacheKey::global_schema(schema_id);
 }
 
-std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
-    return fmt::format("TS{}", tablet_id);
+MetacacheKey TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
+    return MetacacheKey::tablet_schema(tablet_id);
 }
 
-std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
-    return fmt::format("TL{}", tablet_id);
+MetacacheKey TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
+    return MetacacheKey::latest_tablet_metadata(tablet_id);
 }
 
 Status TabletManager::drop_local_cache(const std::string& path) {
@@ -240,9 +242,9 @@ Status TabletManager::drop_local_cache(const std::string& path) {
     return fs->drop_local_cache(path);
 }
 
-void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, const Segment* segment) {
+void TabletManager::update_segment_cache_size(const FileInfo& file, size_t mem_cost, const Segment* segment) {
     TEST_SYNC_POINT_CALLBACK("lake::TabletManager::update_segment_cache_size", nullptr);
-    _metacache->update_segment_cache_size(key, mem_cost, segment);
+    _metacache->update_segment_cache_size(MetacacheKey::segment(file), mem_cost, segment);
 }
 
 void TabletManager::prune_metacache() {
@@ -555,7 +557,7 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, con
     TRACE_COUNTER_INCREMENT("meta_put_sync_ns", static_cast<int64_t>(io_delta.sync_time_ns));
     TRACE_COUNTER_INCREMENT("meta_put_write_bytes", static_cast<int64_t>(io_delta.write_bytes));
 
-    _metacache->cache_tablet_metadata(metadata_location, metadata);
+    _metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(metadata_location), metadata);
     bool skip_cache_latest_metadata = false;
     TEST_SYNC_POINT_CALLBACK("TabletManager::skip_cache_latest_metadata", &skip_cache_latest_metadata);
     if (skip_cache_latest_metadata) {
@@ -575,10 +577,11 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
 
 Status TabletManager::cache_tablet_metadata(const TabletMetadataPtr& metadata) {
     auto metadata_location = tablet_metadata_location(metadata->id(), metadata->version());
-    if (auto ptr = _metacache->lookup_tablet_metadata(metadata_location); ptr != nullptr) {
+    if (auto ptr = _metacache->lookup_tablet_metadata(MetacacheKey::tablet_metadata(metadata_location));
+        ptr != nullptr) {
         return Status::OK();
     }
-    _metacache->cache_tablet_metadata(metadata_location, metadata);
+    _metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(metadata_location), metadata);
     _metacache->cache_tablet_metadata(tablet_latest_metadata_cache_key(metadata->id()), metadata);
     return Status::OK();
 }
@@ -693,7 +696,8 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
 
     BundleTabletMetadataPB bundle_meta;
     ASSIGN_OR_RETURN(auto partition_location,
-                     _location_provider->real_location(tablet_metadata_root_location(anchor_tablet_id)));
+                     MetacacheKey::bundled_metadata_marker(*_location_provider,
+                                                           tablet_metadata_root_location(anchor_tablet_id)));
     std::unordered_map<int64_t, TabletSchemaPB> unique_schemas;
     for (auto& [tablet_id, meta] : tablet_metas) {
         (*bundle_meta.mutable_tablet_to_schema())[tablet_id] = meta.schema().id();
@@ -859,10 +863,7 @@ StatusOr<TabletMetadataPtr> TabletManager::load_shared_initial_metadata(const st
     // in-flight read: sibling tablets have different virtual roots (staros://<shard>/meta) that map to
     // one physical partition.
     const std::string virtual_path = join_path(prefix_name(sibling_path), tablet_initial_metadata_filename());
-    std::string cache_key = virtual_path;
-    if (auto real_path = _location_provider->real_location(virtual_path); real_path.ok()) {
-        cache_key = std::move(real_path).value();
-    }
+    auto cache_key = MetacacheKey::shared_initial_metadata(*_location_provider, virtual_path);
 
     TabletMetadataPtr shared;
     if (!cache_opts.skip_meta_cache) {
@@ -886,8 +887,8 @@ StatusOr<TabletMetadataPtr> TabletManager::load_shared_initial_metadata(const st
             _metacache->cache_tablet_metadata(cache_key, loaded);
             return loaded;
         };
-        ASSIGN_OR_RETURN(shared, _shared_initial_metadata_group.Do(fmt::format("{}#{}", cache_key, expected_gtid),
-                                                                   load_and_cache));
+        ASSIGN_OR_RETURN(shared, _shared_initial_metadata_group.Do(
+                                         fmt::format("{}#{}", cache_key.view(), expected_gtid), load_and_cache));
     }
 
     // The shared object carries the id of whichever tablet FE picked to create it, so it must be
@@ -977,7 +978,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata_impl(const string
                                                                     const std::shared_ptr<FileSystem>& fs,
                                                                     InitialMetadataOrder initial_order) {
     if (!cache_opts.skip_meta_cache) {
-        if (auto ptr = _metacache->lookup_tablet_metadata(path); ptr != nullptr) {
+        if (auto ptr = _metacache->lookup_tablet_metadata(MetacacheKey::tablet_metadata(path)); ptr != nullptr) {
             TRACE("got cached tablet metadata");
             return ptr;
         }
@@ -1079,7 +1080,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata_impl(const string
     }
 
     if (cache_opts.fill_meta_cache) {
-        _metacache->cache_tablet_metadata(path, metadata_or.value());
+        _metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(path), metadata_or.value());
     }
     TRACE("end read tablet metadata");
     return metadata_or.value();
@@ -1267,7 +1268,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_impl(int64
                                                                            const std::shared_ptr<FileSystem>& fs) {
     auto tablet_path = tablet_metadata_location(tablet_id, version);
     if (!cache_opts.skip_meta_cache) {
-        if (auto ptr = _metacache->lookup_tablet_metadata(tablet_path); ptr != nullptr) {
+        if (auto ptr = _metacache->lookup_tablet_metadata(MetacacheKey::tablet_metadata(tablet_path)); ptr != nullptr) {
             return ptr;
         }
     }
@@ -1354,7 +1355,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_impl(int64
     }
 
     if (cache_opts.fill_meta_cache) {
-        _metacache->cache_tablet_metadata(tablet_path, metadata);
+        _metacache->cache_tablet_metadata(MetacacheKey::tablet_metadata(tablet_path), metadata);
     }
 
     return metadata;
@@ -1362,7 +1363,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata_impl(int64
 
 Status TabletManager::delete_tablet_metadata(int64_t tablet_id, int64_t version) {
     auto location = tablet_metadata_location(tablet_id, version);
-    _metacache->erase(location);
+    _metacache->erase(MetacacheKey::tablet_metadata(location));
     if (version <= kInitialVersion) {
         return ignore_not_found(fs::delete_file(location));
     }
@@ -1422,13 +1423,13 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_slog(const std::string& path, bool fi
 }
 
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
-    if (auto ptr = _metacache->lookup_txn_log(path); ptr != nullptr) {
+    if (auto ptr = _metacache->lookup_txn_log(MetacacheKey::txn_log(path)); ptr != nullptr) {
         TRACE("got cached txn log");
         return ptr;
     }
     ASSIGN_OR_RETURN(auto ptr, load_txn_log(path, fill_cache));
     if (fill_cache) {
-        _metacache->cache_txn_log(path, ptr);
+        _metacache->cache_txn_log(MetacacheKey::txn_log(path), ptr);
     }
     TRACE("end load txn log");
     return ptr;
@@ -1452,12 +1453,12 @@ StatusOr<CombinedTxnLogPtr> TabletManager::load_combined_txn_log(const std::stri
 }
 
 StatusOr<CombinedTxnLogPtr> TabletManager::get_combined_txn_log(const std::string& path, bool fill_cache) {
-    ASSIGN_OR_RETURN(auto cache_key, _location_provider->real_location(path));
+    ASSIGN_OR_RETURN(auto cache_key, MetacacheKey::combined_txn_log(*_location_provider, path));
     if (auto ptr = _metacache->lookup_combined_txn_log(cache_key); ptr != nullptr) {
         TRACE("got cached combined txn log");
         return ptr;
     }
-    return _combined_txn_log_group.Do(cache_key, [&]() -> StatusOr<CombinedTxnLogPtr> {
+    return _combined_txn_log_group.Do(std::string(cache_key.view()), [&]() -> StatusOr<CombinedTxnLogPtr> {
         ASSIGN_OR_RETURN(auto log, load_combined_txn_log(path, fill_cache));
         if (fill_cache) {
             _metacache->cache_combined_txn_log(cache_key, log);
@@ -1501,7 +1502,7 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path)
 
     RETURN_IF_ERROR(save_lake_protobuf(path, *serializable_log));
 
-    _metacache->cache_txn_log(path, log);
+    _metacache->cache_txn_log(MetacacheKey::txn_log(path), log);
 
     VLOG(2) << "put log path " << path << " log " << log->DebugString();
 
@@ -1753,7 +1754,8 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_id(int64_t tablet_
     }
     // else: Cache miss, read the schema file
     auto schema_file_path = join_path(tablet_root_location(tablet_id), schema_filename(schema_id));
-    auto schema_or = _schema_group.Do(global_cache_key, [&]() { return load_and_parse_schema_file(schema_file_path); });
+    auto schema_or = _schema_group.Do(std::string(global_cache_key.view()),
+                                      [&]() { return load_and_parse_schema_file(schema_file_path); });
     //                                ^^^^^^^^^^^^^^^^ Do not use "schema_file_path" as the key for singleflight, as
     // our path is a virtual path rather than a real path (when the same file is accessed by different tablets, the
     // "schema_file_path" here is different), so using "schema_file_path" cannot achieve optimal effect.
@@ -2018,7 +2020,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     // first-loaded slice be returned for every other offset, silently replacing later slices'
     // data with the first one. FileInfo::cache_key() folds bundle_file_offset into the key
     // for bundled slices and falls back to path for non-bundled segments.
-    const std::string cache_key = segment_info.cache_key();
+    const auto cache_key = MetacacheKey::segment(segment_info);
     auto segment = metacache()->lookup_segment(cache_key);
     if (segment == nullptr) {
         std::shared_ptr<FileSystem> fs;

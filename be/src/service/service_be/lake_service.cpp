@@ -2330,7 +2330,7 @@ Status LakeServiceImpl::_cleanup_before_repair(const ::starrocks::RepairTabletMe
         RETURN_IF(!st.ok() && !st.is_not_found(), st);
 
         // drop meta cache
-        _tablet_mgr->metacache()->erase(tablet_metadata_location);
+        _tablet_mgr->metacache()->erase(lake::MetacacheKey::tablet_metadata(tablet_metadata_location));
 
         // clear primary key index
         if (metadata_pb.schema().keys_type() == PRIMARY_KEYS) {

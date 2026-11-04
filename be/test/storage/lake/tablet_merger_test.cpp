@@ -7169,7 +7169,8 @@ TEST_F(LakeTabletMergerTest, test_merge_retry_cache_complete_returns_without_rec
     }
     // A recomputed merge would have to read the sources back.
     for (auto id : {source0, source1}) {
-        _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(id, 1));
+        _tablet_manager->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_manager->tablet_metadata_location(id, 1)));
     }
 
     int metadata_reads = 0;

@@ -4220,8 +4220,10 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     // the precious LRU metacache with stat-collection workloads.
     auto cache_key_v1 = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
     auto cache_key_v3 = _tablet_mgr->tablet_metadata_location(_tablet_id, 3);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v1) == nullptr);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v3) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key_v1)) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key_v3)) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
@@ -4503,7 +4505,8 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_does_not_pollute_metacache) {
 
     // Metadata must NOT be in the metacache after a stat request
     auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr)
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key)) == nullptr)
             << "get_tablet_stats should not fill the metacache (fill_cache=false)";
 }
 
@@ -5076,7 +5079,8 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         auto combined_log = CombinedTxnLogPB();
         combined_log.add_txn_logs()->CopyFrom(*txn_log);
 
-        _tablet_mgr->metacache()->cache_txn_log(_tablet_mgr->txn_log_location(_tablet_id, txn_id), txn_log);
+        _tablet_mgr->metacache()->cache_txn_log(
+                starrocks::lake::MetacacheKey::txn_log(_tablet_mgr->txn_log_location(_tablet_id, txn_id)), txn_log);
 
         ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_log));
 
@@ -5087,13 +5091,16 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         auto path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
         ASSERT_OK(FileSystem::Default()->path_exists(path));
 
-        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
+        _tablet_mgr->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
         // publish again without txn log cache
         do_test(txn_id, TStatusCode::OK);
 
         // publish again without txn log cache and combined txn log cache
-        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
-        _tablet_mgr->metacache()->erase(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id));
+        _tablet_mgr->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
+        _tablet_mgr->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(
+                _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
         do_test(txn_id, TStatusCode::OK);
     }
 }
@@ -6970,7 +6977,7 @@ TEST_F(LakeServiceTest, test_publish_version_prefer_shared_initial_metadata) {
     const auto shared_location = _tablet_mgr->tablet_initial_metadata_location(tablet_a);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(shared, shared_location));
     // put_tablet_metadata() caches what it wrote; a cold CN has nothing.
-    _tablet_mgr->metacache()->erase(shared_location);
+    _tablet_mgr->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     for (auto tablet_id : {tablet_a, tablet_b}) {
         TxnLog log;
