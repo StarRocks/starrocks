@@ -211,12 +211,10 @@ TEST_F(LakeTabletManagerTest, partial_meta_in_local_disk_cache) {
     metadata->set_gtid(77);
     metadata->add_rowsets()->set_id(5);
 
-    EXPECT_FALSE(_tablet_manager->can_keep_partial_tablet_metadata());
     EXPECT_TRUE(_tablet_manager->put_partial_tablet_metadata(metadata).is_not_supported());
     EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_not_found());
 
     lake::ScopedLocalDiskCache local_disk_cache(_test_dir + "/partial_meta_cache");
-    EXPECT_TRUE(_tablet_manager->can_keep_partial_tablet_metadata());
     EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_not_found());
     ASSERT_OK(_tablet_manager->put_partial_tablet_metadata(metadata));
     ASSIGN_OR_ABORT(auto read, _tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77));
@@ -256,8 +254,8 @@ TEST_F(LakeTabletManagerTest, partial_meta_rejects_payload_of_another_write) {
     entry.raw_buf().append(second_payload);
     DiskCacheWriteOptions options;
     options.overwrite = true;
-    ASSERT_OK(DataCache::GetInstance()->local_disk_cache()->write(fmt::format("lake_partial_meta/{}/{}", tablet_id, 3),
-                                                                  entry, &options));
+    ASSERT_OK(DataCache::GetInstance()->local_disk_cache()->write(fmt::format("lpm/{}/{}", tablet_id, 3), entry,
+                                                                  &options));
     EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_corruption());
 
     // A consistent entry for the same version reads back.

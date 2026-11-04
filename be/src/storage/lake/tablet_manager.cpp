@@ -584,16 +584,13 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
 static constexpr size_t kPartialMetaHeaderSize = sizeof(uint64_t) + sizeof(uint32_t);
 
 static std::string partial_tablet_metadata_cache_key(int64_t tablet_id, int64_t version) {
-    return fmt::format("lake_partial_meta/{}/{}", tablet_id, version);
+    // Short on purpose: the key is kept in the cache's index for every entry.
+    return fmt::format("lpm/{}/{}", tablet_id, version);
 }
 
 static LocalDiskCacheEngine* partial_tablet_metadata_cache() {
     auto* cache = DataCache::GetInstance()->local_disk_cache();
     return cache != nullptr && cache->is_initialized() ? cache : nullptr;
-}
-
-bool TabletManager::can_keep_partial_tablet_metadata() const {
-    return partial_tablet_metadata_cache() != nullptr;
 }
 
 Status TabletManager::put_partial_tablet_metadata(const TabletMetadataPtr& metadata) {

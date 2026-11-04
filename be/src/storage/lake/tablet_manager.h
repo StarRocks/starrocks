@@ -399,9 +399,6 @@ public:
     // Reads what put_partial_tablet_metadata() kept on this node. NotFound when there is none.
     StatusOr<TabletMetadataPtr> get_partial_tablet_metadata(int64_t tablet_id, int64_t version, int64_t expected_gtid);
 
-    // Whether this node can keep partial_meta at all, that is, whether its local disk cache is enabled.
-    bool can_keep_partial_tablet_metadata() const;
-
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id) const;
