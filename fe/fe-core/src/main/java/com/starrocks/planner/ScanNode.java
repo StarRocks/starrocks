@@ -45,11 +45,13 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.datacache.DataCacheOptions;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TConnectorScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -58,18 +60,29 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.jetbrains.annotations.TestOnly;
 
+<<<<<<< HEAD
+=======
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.time.Instant;
+>>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 /**
  * Representation of the common elements of all scan nodes.
  */
 public abstract class ScanNode extends PlanNode {
+    private static final SecureRandom TOKEN_RANDOM = new SecureRandom();
+    private final AtomicReference<String> credentialRefreshToken = new AtomicReference<>();
     protected TupleDescriptor desc;
     protected Map<String, PartitionColumnFilter> columnFilters;
     protected String sortColumn = null;
@@ -288,6 +301,60 @@ public abstract class ScanNode extends PlanNode {
         // default no-op: subclasses that maintain streaming scan state should override
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether this scan holds credentials issued for the current query. Such a plan must not be phase-scheduled,
+     * logged or kept in query history.
+     */
+    public boolean carriesQueryScopedCredentials() {
+        return false;
+    }
+
+    public static boolean anyCarriesQueryScopedCredentials(List<ScanNode> scanNodes) {
+        return scanNodes != null && scanNodes.stream().anyMatch(ScanNode::carriesQueryScopedCredentials);
+    }
+
+    /**
+     * Admits this scan's credentials before dispatch, renewing them if needed; refuses only when no usable
+     * window is left. The window is not enforced on the backends yet.
+     */
+    public void admitScanCredentials(Instant requestedDeadline) {
+    }
+
+    /**
+     * Answers a backend whose credentials for this scan are due for refresh (their
+     * {@code refresh_after_ms} has passed) while the query is still running.
+     *
+     * @return the configuration the backend should switch to, renewed first if it is due, or null when this
+     *         scan has nothing refreshable; the backend then keeps what it has
+     */
+    public TCloudConfiguration refreshScanCredentials(ConnectContext context) {
+        return null;
+    }
+
+    /**
+     * Random, made the first time refreshable credentials of this scan are serialized and sent with them: a
+     * refresh request must return it, so only a holder of the credentials can ask for their renewal. Query and
+     * fragment instance ids cannot serve, they are derivable and printed in logs and profiles.
+     */
+    protected final String credentialRefreshToken() {
+        if (credentialRefreshToken.get() == null) {
+            byte[] bytes = new byte[16];
+            TOKEN_RANDOM.nextBytes(bytes);
+            credentialRefreshToken.compareAndSet(null, HexFormat.of().formatHex(bytes));
+        }
+        return credentialRefreshToken.get();
+    }
+
+    /** Constant-time; false until this scan has sent refreshable credentials. */
+    public final boolean acceptsCredentialRefreshToken(String token) {
+        String own = credentialRefreshToken.get();
+        return own != null && token != null
+                && MessageDigest.isEqual(own.getBytes(StandardCharsets.UTF_8), token.getBytes(StandardCharsets.UTF_8));
+    }
+
+>>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
     protected void setConnectorCatalogType(TPlanNode msg) {
         Table table = desc.getTable();
         if (table != null) {

@@ -166,6 +166,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
+import com.starrocks.qe.ScanCredentialsRefresher;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
@@ -367,6 +368,13 @@ import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TRefreshRoleMappingRequest;
+import com.starrocks.thrift.TRefreshRoleMappingResponse;
+import com.starrocks.thrift.TRefreshScanCredentialsRequest;
+import com.starrocks.thrift.TRefreshScanCredentialsResponse;
+>>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -2065,6 +2073,29 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public TRefreshScanCredentialsResponse refreshScanCredentials(TRefreshScanCredentialsRequest request)
+            throws TException {
+        return ScanCredentialsRefresher.refresh(request);
+    }
+
+    @Override
+    public TSemanticMetadataInvalidationResponse invalidateSemanticMetadata(
+            TSemanticMetadataInvalidationRequest request) throws TException {
+        try {
+            TStatus status = AgentBase.semanticHooks().invalidateSemanticMetadata(request);
+            return new TSemanticMetadataInvalidationResponse().setStatus(status);
+        } catch (Exception e) {
+            LOG.warn("Failed to invalidate local Semantic metadata cache", e);
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.addToError_msgs(e.getMessage());
+            return new TSemanticMetadataInvalidationResponse().setStatus(status);
+        }
+    }
+
+    @Override
+>>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
     public TRefreshConnectionsResponse refreshConnections(TRefreshConnectionsRequest request) throws TException {
         try {
             boolean force = request.isForce();

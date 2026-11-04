@@ -573,6 +573,31 @@ public class DefaultCoordinator extends Coordinator {
         return coordinatorPreprocessor;
     }
 
+<<<<<<< HEAD
+=======
+    private static boolean carriesQueryScopedCredentials(JobSpec jobSpec) {
+        return ScanNode.anyCarriesQueryScopedCredentials(jobSpec.getScanNodes());
+    }
+
+    /**
+     * Admits per-query credentials against the job's fixed timeout, renewing them if needed. A scan is refused
+     * only when no usable window is left. The shortened window is not enforced on the backends yet; until then
+     * an over-running query is stopped by storage rejecting the expired credential, except for reads served
+     * entirely from the backend cache. Renewable credentials are also renewed while the scan runs, through
+     * ScanNode.refreshScanCredentials.
+     */
+    private void admitQueryScopedCredentials() {
+        if (!carriesQueryScopedCredentials(jobSpec)) {
+            return;
+        }
+        Instant requestedDeadline =
+                Instant.now().plusSeconds(jobSpec.getQueryOptions().getQuery_timeout());
+        for (ScanNode scanNode : jobSpec.getScanNodes()) {
+            scanNode.admitScanCredentials(requestedDeadline);
+        }
+    }
+
+>>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
     // Build a single BE-local TExecPlanFragmentParams for the classic synchronous stream load
     // (Config.enable_pipeline_stream_load). Assign the fragment instance to a worker WITHOUT any
     // RPC deploy, then materialize its pipeline-correct params (carrying

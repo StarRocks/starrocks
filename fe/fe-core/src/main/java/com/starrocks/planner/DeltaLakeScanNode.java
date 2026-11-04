@@ -31,6 +31,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -89,6 +90,34 @@ public class DeltaLakeScanNode extends ScanNode {
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }
 
+<<<<<<< HEAD
+=======
+    // The coordinator keeps such plans out of phased scheduling, logging and query history.
+    @Override
+    public boolean carriesQueryScopedCredentials() {
+        return queryScopedCredentials != null;
+    }
+
+    @Override
+    public TCloudConfiguration refreshScanCredentials(ConnectContext context) {
+        return HdfsScanNode.refreshQueryScopedCredentials(this, queryScopedCredentials, context);
+    }
+
+    @Override
+    public void admitScanCredentials(Instant requestedDeadline) {
+        if (queryScopedCredentials != null) {
+            queryScopedCredentials.admitForExecution(requestedDeadline);
+        }
+    }
+
+    private DeltaScanContext deltaScanContext() {
+        if (queryScopedCredentials instanceof DeltaScanContextSource source) {
+            return source.deltaScanContext(deltaLakeTable, ConnectContext.get());
+        }
+        return DeltaScanContext.of(deltaLakeTable);
+    }
+
+>>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
@@ -229,7 +258,18 @@ public class DeltaLakeScanNode extends ScanNode {
         }
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
+<<<<<<< HEAD
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+=======
+        // Per serialization: validates against the running query, and admission may have renewed them.
+        if (queryScopedCredentials != null) {
+            tHdfsScanNode.setCloud_configuration(
+                    HdfsScanNode.queryScopedCloudConfigurationToThrift(this, queryScopedCredentials,
+                            ConnectContext.get()));
+        } else {
+            HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
+        }
+>>>>>>> e95f8a8e362... [Enhancement][RB-581] Refresh vended and Lake Formation credentials of scans that outlive them (#68356)
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
