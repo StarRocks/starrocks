@@ -98,6 +98,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -680,7 +681,7 @@ public class PipeManagerTest {
         mockRepoExecutor();
         final String pipeName = "p_drop_failed";
         Pipe pipe = preparePipe(pipeName);
-        mockTaskSubmission(PipeManagerTest::submittedWithFailedRun);
+        mockTaskExecution(Constants.TaskRunState.FAILED);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
 
         List<String> attemptTaskNames = new ArrayList<>();
