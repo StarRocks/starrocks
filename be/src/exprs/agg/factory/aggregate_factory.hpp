@@ -103,8 +103,6 @@ public:
     static AggregateFunctionPtr MakeCountAggregateFunction();
 
     template <LogicalType LT>
-    static auto MakeCountDistinctAggregateFunction();
-    template <LogicalType LT>
     static auto MakeCountDistinctAggregateFunctionV2();
 
     template <LogicalType LT>
@@ -178,8 +176,6 @@ public:
     template <LogicalType LT>
     static auto MakeCorelationAggregateFunction();
 
-    template <LogicalType LT>
-    static auto MakeSumDistinctAggregateFunction();
     template <LogicalType LT>
     static auto MakeSumDistinctAggregateFunctionV2();
     template <LogicalType LT>
@@ -308,11 +304,6 @@ AggregateFunctionPtr AggregateFactory::MakeWindowfunnelAggregateFunction() {
 }
 
 template <LogicalType LT>
-auto AggregateFactory::MakeCountDistinctAggregateFunction() {
-    return new DistinctAggregateFunction<LT, AggDistinctType::COUNT>();
-}
-
-template <LogicalType LT>
 auto AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return new DistinctAggregateFunctionV2<LT, AggDistinctType::COUNT>();
 }
@@ -410,11 +401,6 @@ auto AggregateFactory::MakeCovarianceAggregateFunction() {
 template <LogicalType LT>
 auto AggregateFactory::MakeCorelationAggregateFunction() {
     return new CorelationAggregateFunction<LT>();
-}
-
-template <LogicalType LT>
-auto AggregateFactory::MakeSumDistinctAggregateFunction() {
-    return new DistinctAggregateFunction<LT, AggDistinctType::SUM>();
 }
 
 template <LogicalType LT>
