@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class LocationRestrictedWorkerProviderTest {
+class LocationRestrictedWorkerProviderTest {
 
     private static ImmutableMap<Long, ComputeNode> nodes(int n) {
         Map<Long, ComputeNode> map = new HashMap<>();
@@ -46,7 +46,7 @@ public class LocationRestrictedWorkerProviderTest {
     }
 
     @Test
-    public void testMaybeWrap() {
+    void testMaybeWrap() {
         ImmutableMap<Long, ComputeNode> map = nodes(2);
         DefaultWorkerProvider base = baseProvider(map);
         Assertions.assertSame(base, LocationRestrictedWorkerProvider.maybeWrap(base, null));
@@ -62,11 +62,11 @@ public class LocationRestrictedWorkerProviderTest {
     }
 
     @Test
-    public void testSelectAndFilterApis() throws Exception {
+    void testSelectAndFilterApis() throws Exception {
         ImmutableMap<Long, ComputeNode> map = nodes(3);
         DefaultWorkerProvider base = baseProvider(map);
-        LocationRestrictedWorkerProvider restricted =
-                new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L), Set.of(0L));
+        LocationRestrictedWorkerProvider restricted = new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L),
+                Set.of(0L));
 
         Assertions.assertFalse(restricted.isPreferComputeNode());
         Assertions.assertEquals(WarehouseManager.DEFAULT_RESOURCE, restricted.getComputeResource());
@@ -90,12 +90,12 @@ public class LocationRestrictedWorkerProviderTest {
     }
 
     @Test
-    public void testPreferredSoftFallbackWhenPreferredInvisible() {
+    void testPreferredSoftFallbackWhenPreferredInvisible() {
         ImmutableMap<Long, ComputeNode> map = nodes(2);
         DefaultWorkerProvider base = baseProvider(map);
         // Preferred id 9 is not visible; soft-fallback returns allowedWorkers.
-        LocationRestrictedWorkerProvider restricted =
-                new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L), Set.of(9L));
+        LocationRestrictedWorkerProvider restricted = new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L),
+                Set.of(9L));
         Collection<ComputeNode> preferred = restricted.getPreferredConnectorWorkers();
         Assertions.assertEquals(2, preferred.size());
         Assertions.assertEquals(Set.of(0L, 1L),
@@ -103,42 +103,43 @@ public class LocationRestrictedWorkerProviderTest {
     }
 
     @Test
-    public void testBackupWorkerClippedToAllowed() {
+    void testBackupWorkerClippedToAllowed() {
         ImmutableMap<Long, ComputeNode> map = nodes(3);
         DefaultWorkerProvider base = baseProvider(map);
-        LocationRestrictedWorkerProvider restricted =
-                new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L), Set.of(0L));
+        LocationRestrictedWorkerProvider restricted = new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L),
+                Set.of(0L));
 
         Assertions.assertEquals(base.allowUsingBackupNode(), restricted.allowUsingBackupNode());
-        // Shared-nothing DefaultWorkerProvider returns -1 for backup; still clipped by allowed set.
+        // Shared-nothing DefaultWorkerProvider returns -1 for backup; still clipped by
+        // allowed set.
         Assertions.assertEquals(-1, restricted.selectBackupWorker(0L));
         Assertions.assertEquals(-1, restricted.selectBackupWorker(0L, 42L));
     }
 
     @Test
-    public void testReportDelegates() {
+    void testReportDelegates() {
         ImmutableMap<Long, ComputeNode> map = nodes(1);
         DefaultWorkerProvider base = baseProvider(map);
-        LocationRestrictedWorkerProvider restricted =
-                new LocationRestrictedWorkerProvider(base, Set.of(0L), Set.of(0L));
+        LocationRestrictedWorkerProvider restricted = new LocationRestrictedWorkerProvider(base, Set.of(0L),
+                Set.of(0L));
         Assertions.assertThrows(NonRecoverableException.class, restricted::reportDataNodeNotFoundException);
         Assertions.assertThrows(NonRecoverableException.class,
                 () -> restricted.reportWorkerNotFoundException("prefix:"));
     }
 
     @Test
-    public void testSelectNextWorkerEmptyAllowed() {
+    void testSelectNextWorkerEmptyAllowed() {
         ImmutableMap<Long, ComputeNode> map = nodes(1);
         DefaultWorkerProvider base = baseProvider(map);
         // Allowed id missing from delegate → empty allowedWorkers.
-        LocationRestrictedWorkerProvider restricted =
-                new LocationRestrictedWorkerProvider(base, Set.of(99L), Set.of(99L));
+        LocationRestrictedWorkerProvider restricted = new LocationRestrictedWorkerProvider(base, Set.of(99L),
+                Set.of(99L));
         Assertions.assertTrue(restricted.getAllWorkers().isEmpty());
         Assertions.assertThrows(NonRecoverableException.class, restricted::selectNextWorker);
     }
 
     @Test
-    public void testSupplementAllowedFromGetAllWorkers() throws Exception {
+    void testSupplementAllowedFromGetAllWorkers() {
         ComputeNode onlyInAllWorkers = new ComputeNode(7L, "192.168.1.7", 9030);
         onlyInAllWorkers.setAlive(true);
         WorkerProvider delegate = new WorkerProvider() {
@@ -149,6 +150,7 @@ public class LocationRestrictedWorkerProviderTest {
 
             @Override
             public void selectWorker(long workerId) throws NonRecoverableException {
+                // Intentionally empty: explicit select is not exercised by this stub.
             }
 
             @Override
@@ -174,10 +176,12 @@ public class LocationRestrictedWorkerProviderTest {
 
             @Override
             public void reportDataNodeNotFoundException() throws NonRecoverableException {
+                // Intentionally empty: reporting is not exercised by this stub.
             }
 
             @Override
             public void reportWorkerNotFoundException(String errorMessagePrefix) throws NonRecoverableException {
+                // Intentionally empty: reporting is not exercised by this stub.
             }
 
             @Override
@@ -197,6 +201,8 @@ public class LocationRestrictedWorkerProviderTest {
 
             @Override
             public void selectWorkerUnchecked(long workerId) {
+                // Intentionally empty: this stub only exercises getWorkerById/getAllWorkers
+                // wiring; selection tracking is not under test here.
             }
 
             @Override
@@ -220,8 +226,8 @@ public class LocationRestrictedWorkerProviderTest {
             }
         };
 
-        LocationRestrictedWorkerProvider restricted =
-                new LocationRestrictedWorkerProvider(delegate, Set.of(7L), Set.of(7L));
+        LocationRestrictedWorkerProvider restricted = new LocationRestrictedWorkerProvider(delegate, Set.of(7L),
+                Set.of(7L));
         Assertions.assertEquals(1, restricted.getAllWorkers().size());
         Assertions.assertEquals(7L, restricted.getAllWorkers().iterator().next().getId());
         Assertions.assertEquals(List.of(7L), restricted.selectAllComputeNodes());

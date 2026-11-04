@@ -188,15 +188,20 @@ public class CoordinatorPreprocessor {
     }
 
     public TNetworkAddress getBrpcAddress(long workerId) {
-        return getWorkerProvider().getWorkerById(workerId).getBrpcAddress();
+        ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
+        Preconditions.checkNotNull(worker, "Worker %s not found", workerId);
+        return worker.getBrpcAddress();
     }
 
     public TNetworkAddress getBrpcIpAddress(long workerId) {
-        return getWorkerProvider().getWorkerById(workerId).getBrpcIpAddress();
+        ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
+        Preconditions.checkNotNull(worker, "Worker %s not found", workerId);
+        return worker.getBrpcIpAddress();
     }
 
     public TNetworkAddress getAddress(long workerId) {
         ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
+        Preconditions.checkNotNull(worker, "Worker %s not found", workerId);
         return worker.getAddress();
     }
 

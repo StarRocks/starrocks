@@ -24,7 +24,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
 
 /**
  * Restricts a delegate {@link WorkerProvider} to an allowed worker id set (L ∪ N) and exposes
@@ -37,7 +36,6 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
 
     private final WorkerProvider delegate;
     private final Set<Long> allowedWorkerIds;
-    private final Set<Long> preferredConnectorWorkerIds;
     private final List<ComputeNode> allowedWorkers;
     private final List<ComputeNode> preferredConnectorWorkers;
 
@@ -46,7 +44,7 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
                                             Set<Long> preferredConnectorWorkerIds) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.allowedWorkerIds = Objects.requireNonNull(allowedWorkerIds, "allowedWorkerIds");
-        this.preferredConnectorWorkerIds = Objects.requireNonNull(preferredConnectorWorkerIds,
+        Set<Long> preferredIds = Objects.requireNonNull(preferredConnectorWorkerIds,
                 "preferredConnectorWorkerIds");
 
         // Resolve allowed workers from the delegate so we keep the same alive/blacklist view.
@@ -67,13 +65,13 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
         }
         this.allowedWorkers = ImmutableList.copyOf(allowed);
 
-        List<ComputeNode> preferred = allowedWorkers.stream()
-                .filter(w -> preferredConnectorWorkerIds.contains(w.getId()))
-                .collect(Collectors.toList());
+        List<ComputeNode> preferred = new ArrayList<>(allowedWorkers.stream()
+                .filter(w -> preferredIds.contains(w.getId()))
+                .toList());
         // Prefer labelled backends even when prefer_compute_node made getAllWorkers return CNs:
         // look them up individually from the delegate.
         if (preferred.isEmpty()) {
-            for (Long id : preferredConnectorWorkerIds) {
+            for (Long id : preferredIds) {
                 ComputeNode worker = delegate.getWorkerById(id);
                 if (worker != null) {
                     preferred.add(worker);
@@ -116,7 +114,7 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
     public List<Long> selectAllComputeNodes() {
         return delegate.selectAllComputeNodes().stream()
                 .filter(allowedWorkerIds::contains)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -173,7 +171,7 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
     public List<Long> getAllAvailableNodes() {
         return delegate.getAllAvailableNodes().stream()
                 .filter(allowedWorkerIds::contains)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override

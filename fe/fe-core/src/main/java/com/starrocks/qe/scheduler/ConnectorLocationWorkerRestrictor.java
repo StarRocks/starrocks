@@ -170,20 +170,17 @@ public final class ConnectorLocationWorkerRestrictor {
     static Set<Long> computeFixedLocationRequiredBackendIds(List<ScanNode> scanNodes) {
         Set<Long> backendIds = Sets.newHashSet();
         for (ScanNode scanNode : scanNodes) {
-            if (scanNode.isConnectorScanNode()) {
-                continue;
-            }
-            List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
-            if (locations == null) {
-                continue;
-            }
-            for (TScanRangeLocations rangeLocations : locations) {
-                if (rangeLocations.getLocations() == null) {
-                    continue;
-                }
-                for (TScanRangeLocation location : rangeLocations.getLocations()) {
-                    if (location.isSetBackend_id()) {
-                        backendIds.add(location.getBackend_id());
+            if (!scanNode.isConnectorScanNode()) {
+                List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);
+                if (locations != null) {
+                    for (TScanRangeLocations rangeLocations : locations) {
+                        if (rangeLocations.getLocations() != null) {
+                            for (TScanRangeLocation location : rangeLocations.getLocations()) {
+                                if (location.isSetBackend_id()) {
+                                    backendIds.add(location.getBackend_id());
+                                }
+                            }
+                        }
                     }
                 }
             }

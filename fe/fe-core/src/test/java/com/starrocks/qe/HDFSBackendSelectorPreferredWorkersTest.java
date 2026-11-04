@@ -40,9 +40,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Standalone preferred-worker assignment checks that do not require GlobalStateMgr warehouse init.
+ * Standalone preferred-worker assignment checks that do not require
+ * GlobalStateMgr warehouse init.
  */
-public class HDFSBackendSelectorPreferredWorkersTest {
+class HDFSBackendSelectorPreferredWorkersTest {
     @Mocked
     private HdfsScanNode hdfsScanNode;
     @Mocked
@@ -101,9 +102,10 @@ public class HDFSBackendSelectorPreferredWorkersTest {
     }
 
     @Test
-    public void testPreferredConnectorWorkersOnly() throws Exception {
+    void testPreferredConnectorWorkersOnly() throws Exception {
         SessionVariable sessionVariable = new SessionVariable();
-        // Avoid CandidateWorkerProvider path which needs a fully initialized GlobalStateMgr.
+        // Avoid CandidateWorkerProvider path which needs a fully initialized
+        // GlobalStateMgr.
         sessionVariable.setEnableDataCacheSharing(false);
         new Expectations() {
             {
@@ -131,9 +133,8 @@ public class HDFSBackendSelectorPreferredWorkersTest {
         WorkerProvider workerProvider = new LocationRestrictedWorkerProvider(
                 base, Set.of(0L, 1L, 2L), Set.of(0L, 1L));
 
-        HDFSBackendSelector selector =
-                new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
-                        false, false, false, context);
+        HDFSBackendSelector selector = new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
+                false, false, false, context);
         selector.computeScanRangeAssignment();
 
         Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);

@@ -47,10 +47,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class ConnectorLocationWorkerRestrictorTest {
+class ConnectorLocationWorkerRestrictorTest {
 
     @Test
-    public void testFixedLocationRequiredBackendIdsFromOlapAndMetaScan(
+    void testFixedLocationRequiredBackendIdsFromOlapAndMetaScan(
             @Mocked OlapScanNode olapScanNode,
             @Mocked MetaScanNode metaScanNode) {
         TScanRangeLocations olapRange = new TScanRangeLocations();
@@ -86,7 +86,7 @@ public class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
-    public void testFixedLocationRequiredBackendIdsIncludesSchemaAndKudu(
+    void testFixedLocationRequiredBackendIdsIncludesSchemaAndKudu(
             @Mocked SchemaScanNode schemaScanNode,
             @Mocked KuduScanNode kuduScanNode,
             @Mocked IcebergScanNode icebergScanNode) {
@@ -125,7 +125,7 @@ public class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
-    public void testResolveUnrestrictedWhenNoConnectorLocation(
+    void testResolveUnrestrictedWhenNoConnectorLocation(
             @Mocked OlapScanNode olapScanNode,
             @Mocked SystemInfoService clusterInfo) {
         new Expectations() {
@@ -135,13 +135,13 @@ public class ConnectorLocationWorkerRestrictorTest {
                 minTimes = 0;
             }
         };
-        ConnectorLocationWorkerRestrictor.Restriction restriction =
-                ConnectorLocationWorkerRestrictor.resolve(Lists.newArrayList(olapScanNode), clusterInfo, null);
+        ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor
+                .resolve(Lists.newArrayList(olapScanNode), clusterInfo, null);
         Assertions.assertFalse(restriction.isRestricted());
     }
 
     @Test
-    public void testResolveUnrestrictedForNullOrEmptyScanNodes(@Mocked SystemInfoService clusterInfo) {
+    void testResolveUnrestrictedForNullOrEmptyScanNodes(@Mocked SystemInfoService clusterInfo) {
         Assertions.assertFalse(
                 ConnectorLocationWorkerRestrictor.resolve(null, clusterInfo, null).isRestricted());
         Assertions.assertFalse(
@@ -149,7 +149,7 @@ public class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
-    public void testCollectIgnoresBlankInvalidAndMissingCatalog(
+    void testCollectIgnoresBlankInvalidAndMissingCatalog(
             @Mocked IcebergScanNode blankLocScan,
             @Mocked IcebergScanNode invalidLocScan,
             @Mocked IcebergScanNode missingCatalogScan,
@@ -228,7 +228,7 @@ public class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
-    public void testFixedLocationSkipsNullRanges(@Mocked OlapScanNode olapScanNode) {
+    void testFixedLocationSkipsNullRanges(@Mocked OlapScanNode olapScanNode) {
         new Expectations() {
             {
                 olapScanNode.isConnectorScanNode();
@@ -243,15 +243,14 @@ public class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
-    public void testResolveDisabledByConfig(
+    void testResolveDisabledByConfig(
             @Mocked IcebergScanNode icebergScanNode,
             @Mocked SystemInfoService clusterInfo) {
         boolean saved = Config.enable_connector_location_worker_restriction;
         Config.enable_connector_location_worker_restriction = false;
         try {
-            ConnectorLocationWorkerRestrictor.Restriction restriction =
-                    ConnectorLocationWorkerRestrictor.resolve(
-                            Lists.newArrayList(icebergScanNode), clusterInfo, null);
+            ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
+                    Lists.newArrayList(icebergScanNode), clusterInfo, null);
             Assertions.assertFalse(restriction.isRestricted());
         } finally {
             Config.enable_connector_location_worker_restriction = saved;
@@ -259,7 +258,7 @@ public class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
-    public void testResolveFallbackWhenNoAliveMatch(
+    void testResolveFallbackWhenNoAliveMatch(
             @Mocked IcebergScanNode icebergScanNode,
             @Mocked TupleDescriptor tupleDescriptor,
             @Mocked IcebergTable icebergTable,
@@ -290,14 +289,13 @@ public class ConnectorLocationWorkerRestrictorTest {
             }
         };
 
-        ConnectorLocationWorkerRestrictor.Restriction restriction =
-                ConnectorLocationWorkerRestrictor.resolve(
-                        Lists.newArrayList(icebergScanNode), clusterInfo, catalogMgr);
+        ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
+                Lists.newArrayList(icebergScanNode), clusterInfo, catalogMgr);
         Assertions.assertFalse(restriction.isRestricted());
     }
 
     @Test
-    public void testResolveRestrictedWithNativeUnion(
+    void testResolveRestrictedWithNativeUnion(
             @Mocked IcebergScanNode icebergScanNode,
             @Mocked TupleDescriptor tupleDescriptor,
             @Mocked IcebergTable icebergTable,
@@ -345,16 +343,15 @@ public class ConnectorLocationWorkerRestrictorTest {
             }
         };
 
-        ConnectorLocationWorkerRestrictor.Restriction restriction =
-                ConnectorLocationWorkerRestrictor.resolve(
-                        Lists.newArrayList(icebergScanNode, olapScanNode), clusterInfo, catalogMgr);
+        ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
+                Lists.newArrayList(icebergScanNode, olapScanNode), clusterInfo, catalogMgr);
         Assertions.assertTrue(restriction.isRestricted());
         Assertions.assertEquals(Set.of(1L), restriction.getPreferredConnectorWorkerIds());
         Assertions.assertEquals(Set.of(1L, 99L), restriction.getAllowedWorkerIds());
     }
 
     @Test
-    public void testLocationRestrictedWorkerProviderPreferredSubset() throws Exception {
+    void testLocationRestrictedWorkerProviderPreferredSubset() {
         Map<Long, ComputeNode> nodes = new HashMap<>();
         for (long i = 0; i < 3; i++) {
             ComputeNode node = new ComputeNode(i, "192.168.1." + i, 9030);
@@ -377,7 +374,7 @@ public class ConnectorLocationWorkerRestrictorTest {
     }
 
     @Test
-    public void testLocationRestrictedWorkerProviderRotatesAcrossInstances() throws Exception {
+    void testLocationRestrictedWorkerProviderRotatesAcrossInstances() throws Exception {
         Map<Long, ComputeNode> nodes = new HashMap<>();
         for (long i = 0; i < 3; i++) {
             ComputeNode node = new ComputeNode(i, "192.168.1." + i, 9030);
@@ -395,7 +392,8 @@ public class ConnectorLocationWorkerRestrictorTest {
             WorkerProvider restricted = new LocationRestrictedWorkerProvider(base, allowed, preferred);
             firstPicks.add(restricted.selectNextWorker());
         }
-        // Process-wide cursor must advance across fresh wrappers; not always allowedWorkers[0].
+        // Process-wide cursor must advance across fresh wrappers; not always
+        // allowedWorkers[0].
         Assertions.assertEquals(3, Set.copyOf(firstPicks).size());
     }
 }
