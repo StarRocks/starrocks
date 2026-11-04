@@ -319,7 +319,7 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
     @Test
     public void testDataFileCacheWithoutColumnStats() throws Exception {
         measureContentFiles("data_files no_column_stats",
-                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "0"), 40, true, false,
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_WITH_COLUMN_STATISTICS, "false"), 40, true, false,
                 false);
     }
 
