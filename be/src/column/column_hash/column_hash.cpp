@@ -75,12 +75,20 @@ struct XXHash3 {
             return static_cast<uint32_t>(h);
         }
         if (bytes >= 9 && bytes <= 16) {
-            return static_cast<uint32_t>(XXH3_len_9to16_64b(static_cast<const xxh_u8*>(data),
-                                                            static_cast<size_t>(bytes), XXH3_kSecret, seed));
+            uint64_t h = XXH3_len_9to16_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes), XXH3_kSecret,
+                                            seed);
+#if !defined(__AVX512DQ__)
+            XXH_COMPILER_GUARD(h);
+#endif
+            return static_cast<uint32_t>(h);
         }
         if (bytes >= 1 && bytes <= 3) {
-            return static_cast<uint32_t>(XXH3_len_1to3_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes),
-                                                           XXH3_kSecret, seed));
+            uint64_t h =
+                    XXH3_len_1to3_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes), XXH3_kSecret, seed);
+#if !defined(__AVX512DQ__)
+            XXH_COMPILER_GUARD(h);
+#endif
+            return static_cast<uint32_t>(h);
         }
         return static_cast<uint32_t>(HashUtil::xx_hash3_64(data, UNLIKELY(bytes <= 0) ? 0 : bytes, seed));
     }
@@ -117,11 +125,6 @@ struct SelectorRange {
 
     template <class Fn>
     void for_each(Fn&& fn) {
-#if defined(__clang__) && !defined(__AVX512DQ__)
-#pragma clang loop vectorize(disable)
-#elif defined(__GNUC__) && !defined(__clang__) && (__GNUC__ >= 14) && !defined(__AVX512DQ__)
-#pragma GCC novector
-#endif
         for (uint32_t i = from; i < to; i++) {
             fn(i);
         }
