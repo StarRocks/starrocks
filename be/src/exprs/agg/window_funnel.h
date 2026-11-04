@@ -94,13 +94,11 @@ struct WindowFunnelState {
     };
     using TimestampVector = std::vector<TimestampTypePair>;
 
-    // `window_size` is guaranteed to be non-negative by the analyzer in FE,
-    // so use -1 to indicate `window_size` hasn't been initialized.
-    static constexpr int64_t ABSENT_WINDOW_SIZE = -1;
-
-    int64_t window_size = ABSENT_WINDOW_SIZE;
-    mutable int32_t mode = 0;
-    uint8_t events_size;
+    // -1 is a valid window: the UTC calendar day of the first event.
+    int64_t window_size = 0;
+    int32_t mode = 0;
+    bool initialized = false;
+    uint8_t events_size = 0;
     bool sorted = true;
     char buffer[reserve_list_size * sizeof(TimestampEvent)];
     stack_memory_resource mr;
@@ -109,7 +107,7 @@ struct WindowFunnelState {
     WindowFunnelState() : mr(buffer, sizeof(buffer)), events_list(&mr) { events_list.reserve(reserve_list_size); }
 
     void init_once(FunctionContext* ctx) {
-        if (window_size != ABSENT_WINDOW_SIZE) {
+        if (initialized) {
             return;
         }
 
@@ -121,6 +119,7 @@ struct WindowFunnelState {
         window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(window_size_col_index));
 
         mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
+        initialized = true;
     }
 
     void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
@@ -211,38 +210,46 @@ struct WindowFunnelState {
         }
 
         bool increase = (mode & INCREASE);
-        mode &= DEDUPLICATION_FIXED;
+        int32_t filter_mode = mode & DEDUPLICATION_FIXED;
         auto const& ordered_events_list = events_list;
-        if (!mode) {
+        if (!filter_mode) {
             TimestampVector events_timestamp(events_size);
             auto begin = ordered_events_list.begin();
             while (begin != ordered_events_list.end()) {
-                TimestampType timestamp = (*begin).first;
-                uint8_t event_idx = (*begin).second;
-
-                if (event_idx == 0) {
-                    ++begin;
-                    continue;
+                auto end = begin + 1;
+                while (end != ordered_events_list.end() && end->first == begin->first) {
+                    ++end;
                 }
-
-                event_idx -= 1;
-                if (event_idx == 0) {
-                    events_timestamp[0].start_timestamp = timestamp;
-                    events_timestamp[0].last_timestamp = timestamp;
-                } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
-                    bool matched = timestamp <= events_timestamp[event_idx - 1].start_timestamp + window_size;
-                    if (increase) {
-                        matched = matched && events_timestamp[event_idx - 1].last_timestamp < timestamp;
+                // In strict timestamp mode, consume the previous timestamp's lower-stage state
+                // before overwriting it. One timestamp must not advance multiple repeated steps.
+                for (auto it = increase ? end : begin; increase ? it != begin : it != end;) {
+                    const auto& event = increase ? *--it : *it++;
+                    TimestampType timestamp = event.first;
+                    uint8_t event_idx = event.second;
+                    if (event_idx == 0) {
+                        continue;
                     }
-                    if (matched) {
-                        events_timestamp[event_idx].start_timestamp = events_timestamp[event_idx - 1].start_timestamp;
-                        events_timestamp[event_idx].last_timestamp = timestamp;
-                        if (event_idx + 1 == events_size) {
-                            return events_size;
+
+                    event_idx -= 1;
+                    if (event_idx == 0) {
+                        events_timestamp[0].start_timestamp = timestamp;
+                        events_timestamp[0].last_timestamp = timestamp;
+                    } else if (events_timestamp[event_idx - 1].start_timestamp >= 0) {
+                        bool matched = within_window(events_timestamp[event_idx - 1].start_timestamp, timestamp);
+                        if (increase) {
+                            matched = matched && events_timestamp[event_idx - 1].last_timestamp < timestamp;
+                        }
+                        if (matched) {
+                            events_timestamp[event_idx].start_timestamp =
+                                    events_timestamp[event_idx - 1].start_timestamp;
+                            events_timestamp[event_idx].last_timestamp = timestamp;
+                            if (event_idx + 1 == events_size) {
+                                return events_size;
+                            }
                         }
                     }
                 }
-                ++begin;
+                begin = end;
             }
 
             for (size_t event = events_timestamp.size(); event > 0; --event) {
@@ -264,7 +271,7 @@ struct WindowFunnelState {
          */
         TimestampVector events_timestamp(events_size);
         auto begin = ordered_events_list.begin();
-        switch (mode) {
+        switch (filter_mode) {
         // mode: deduplication
         case DEDUPLICATION: {
             while (begin != ordered_events_list.end()) {
@@ -400,10 +407,27 @@ struct WindowFunnelState {
         }
     }
 
+    bool within_window(TimestampType start, TimestampType timestamp) const {
+        if (window_size != -1) {
+            return timestamp <= start + window_size;
+        }
+        if constexpr (LT == TYPE_DATE) {
+            return timestamp == start;
+        } else {
+            // DATETIME is stored as Unix seconds here. Integer inputs use Unix milliseconds
+            // in same-day mode; nonnegative windows retain their existing input units.
+            constexpr int64_t units_per_day = LT == TYPE_DATETIME ? 86400 : 86400000;
+            auto day = [](TimestampType value) {
+                return value / units_per_day - (value % units_per_day < 0);
+            };
+            return day(timestamp) == day(start);
+        }
+    }
+
     bool promote_to_next_level(TimestampVector* events_timestamp, const TimestampType& timestamp,
                                const int8_t event_idx, int8_t* curr_event_level, bool increase) const {
         auto first_timestamp = (*events_timestamp)[event_idx - 1].start_timestamp;
-        bool time_matched = (timestamp <= (first_timestamp + window_size));
+        bool time_matched = within_window(first_timestamp, timestamp);
         if (increase) {
             time_matched = time_matched && (*events_timestamp)[event_idx - 1].last_timestamp < timestamp;
         }
@@ -555,6 +579,7 @@ public:
 
         const auto timestamp_column = down_cast<const TimeTypeColumn*>(src[1].get());
         const auto* bool_array_column = down_cast<const ArrayColumn*>(src[3].get());
+        std::vector<int64_t> buffer;
         for (int i = 0; i < chunk_size; i++) {
             TimestampType tv;
             if constexpr (LT == TYPE_DATETIME) {
@@ -567,22 +592,21 @@ public:
 
             // get 4th value: event cond array
             auto ele_vector = bool_array_column->get(i).get_array();
-            uint8_t event_level = 0;
-            for (uint8_t j = 0; j < ele_vector.size(); j++) {
+            buffer.clear();
+            buffer.reserve(2 + 2 * ele_vector.size());
+            buffer.push_back(ele_vector.size());
+            buffer.push_back(false);
+            for (size_t j = 0; j < ele_vector.size(); j++) {
                 if (!ele_vector[j].is_null() && ele_vector[j].get_uint8() > 0) {
-                    event_level = j + 1;
-                    break;
+                    buffer.push_back(tv);
+                    buffer.push_back(j + 1);
                 }
             }
-
-            size_t events_size = ele_vector.size();
-            bool sorted = false;
-            int64_t buffer[4];
-            buffer[0] = (int64_t)events_size;
-            buffer[1] = (int64_t)sorted;
-            buffer[2] = (int64_t)tv;
-            buffer[3] = (int64_t)event_level;
-            WindowFunnelState<LT>::serialize(buffer, 4, dst_column);
+            if (buffer.size() == 2) {
+                buffer.push_back(tv);
+                buffer.push_back(0);
+            }
+            WindowFunnelState<LT>::serialize(buffer.data(), buffer.size(), dst_column);
         }
     }
 
