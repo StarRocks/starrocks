@@ -53,6 +53,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable.PaimonReaderMode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.NodeMgr;
@@ -112,16 +113,20 @@ import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.deletionvectors.Bitmap64DeletionVector;
 import org.apache.paimon.disk.IOManager;
 import org.apache.paimon.disk.IOManagerImpl;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.globalindex.sorted.SortedGlobalIndexBuilder;
 import org.apache.paimon.index.IndexFileMeta;
+import org.apache.paimon.io.CompactIncrement;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.io.DataIncrement;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.partition.Partition;
+import org.apache.paimon.predicate.LeafPredicate;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
@@ -137,6 +142,7 @@ import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
 import org.apache.paimon.table.sink.CommitMessage;
+import org.apache.paimon.table.sink.CommitMessageImpl;
 import org.apache.paimon.table.sink.StreamTableCommit;
 import org.apache.paimon.table.sink.StreamTableWrite;
 import org.apache.paimon.table.sink.StreamWriteBuilder;
@@ -1074,6 +1080,170 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testSnapshotBindingPreservesSchemaEvolutionForReaderSelection() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_snapshot_reader_schema_");
+        Identifier identifier = Identifier.create("test_db", "reader_schema");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase(identifier.getDatabaseName(), true);
+            catalog.createTable(identifier, Schema.newBuilder()
+                    .column("id", DataTypes.INT().notNull())
+                    .column("v", DataTypes.INT())
+                    .primaryKey("id")
+                    .option(CoreOptions.BUCKET.key(), "1")
+                    .option("deletion-vectors.enabled", "true")
+                    .option("deletion-vectors.bitmap64", "true")
+                    .build(), false);
+            FileStoreTable written = (FileStoreTable) catalog.getTable(identifier);
+            BatchWriteBuilder builder = written.newBatchWriteBuilder();
+            try (IOManager ioManager = new IOManagerImpl(tmpDir.toString());
+                    BatchTableWrite writer = builder.newWrite().withIOManager(ioManager);
+                    BatchTableCommit commit = builder.newCommit()) {
+                for (GenericRow row : List.of(GenericRow.of(1, 10), GenericRow.of(2, 200),
+                        GenericRow.of(3, 30), GenericRow.of(4, 99))) {
+                    writer.write(row);
+                }
+                commit.commit(writer.prepareCommit());
+            }
+            List<Split> writtenSplits = written.newReadBuilder().newScan().plan().splits();
+            assertEquals(1, writtenSplits.size());
+            DataSplit writtenSplit = (DataSplit) writtenSplits.get(0);
+            assertEquals(1, writtenSplit.dataFiles().size());
+            assertEquals(4, writtenSplit.dataFiles().get(0).rowCount());
+            assertTrue(writtenSplit.deletionFiles().orElseThrow().stream().allMatch(java.util.Objects::isNull));
+            List<List<Integer>> physicalRows = new ArrayList<>();
+            try (RecordReaderIterator<InternalRow> rows = new RecordReaderIterator<>(written.newReadBuilder()
+                    .newRead().createReader(writtenSplit))) {
+                while (rows.hasNext()) {
+                    InternalRow row = rows.next();
+                    physicalRows.add(List.of(row.getInt(0), row.getInt(1)));
+                }
+            }
+            assertEquals(List.of(List.of(1, 10), List.of(2, 200), List.of(3, 30), List.of(4, 99)), physicalRows);
+            // Commit a real bitmap64 DV directly so a tiny fixture cannot compact it away.
+            // The single sorted PK file above places id=4 at zero-based physical row 3.
+            Bitmap64DeletionVector deletionVector = new Bitmap64DeletionVector();
+            deletionVector.delete(physicalRows.indexOf(List.of(4, 99)));
+            IndexFileMeta deletionIndex = written.store().newIndexFileHandler().dvIndex(BinaryRow.EMPTY_ROW, 0)
+                    .writeSingleFile(Map.of(writtenSplit.dataFiles().get(0).fileName(), deletionVector));
+            try (BatchTableCommit commit = written.newBatchWriteBuilder().newCommit()) {
+                commit.commit(List.of(new CommitMessageImpl(BinaryRow.EMPTY_ROW, 0, 1,
+                        DataIncrement.indexIncrement(List.of(deletionIndex)), CompactIncrement.emptyIncrement())));
+            }
+            long snapshotId = catalog.getTable(identifier).latestSnapshot().orElseThrow().id();
+            long snapshotTime = catalog.getTable(identifier).latestSnapshot().orElseThrow().timeMillis();
+            // Schema-only changes leave the last data snapshot bound to the old INT schema.
+            catalog.alterTable(identifier, SchemaChange.updateColumnType("v", DataTypes.STRING()), false);
+            FileStoreTable current = (FileStoreTable) catalog.getTable(identifier);
+            assertTrue(current.schema().id() > current.latestSnapshot().orElseThrow().schemaId());
+
+            PaimonMetadata metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "reader_schema");
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(List.of("id", "v"))
+                    .setLimit(-1)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
+                    .build();
+            PaimonSplitsInfo planned = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            FileStoreTable bound = (FileStoreTable) planned.getNativeTable();
+            assertTrue(planned.getPaimonSplits().stream().filter(DataSplit.class::isInstance)
+                    .map(DataSplit.class::cast).anyMatch(split -> split.convertToRawFiles().isPresent()
+                            && split.deletionFiles().isPresent()
+                            && split.deletionFiles().get().stream().anyMatch(java.util.Objects::nonNull)));
+            assertEquals(current.schema().id(), bound.schema().id());
+            assertEquals(current.rowType(), bound.rowType());
+            assertEquals(String.valueOf(snapshotId), bound.options().get(CoreOptions.SCAN_SNAPSHOT_ID.key()));
+            assertFalse(planned.getPaimonSplits().isEmpty());
+            PaimonReaderSelector selector = new PaimonReaderSelector(bound, List.of("id", "v"));
+            for (Split split : planned.getPaimonSplits()) {
+                assertEquals(new PaimonReaderSelector.Decision(PaimonReaderSelector.Reader.JNI,
+                                PaimonReaderSelector.Reason.DELETION_VECTOR),
+                        selector.select(split, PaimonReaderMode.AUTO));
+                StarRocksConnectorException nativeError = assertThrows(StarRocksConnectorException.class,
+                        () -> selector.select(split, PaimonReaderMode.NATIVE));
+                assertTrue(nativeError.getMessage().contains("DELETION_VECTOR"));
+            }
+            assertEquals(List.of("1:10", "2:200", "3:30"), readStringPairs(planned));
+
+            // Compare as STRING after evolution: '30' > '100', unlike the old physical INT ordering.
+            GetRemoteFilesParams filteredParams = params.copy();
+            filteredParams.setPredicate(new BinaryPredicateOperator(BinaryType.GT,
+                    new ColumnRefOperator(2, VARCHAR, "v", true), ConstantOperator.createVarchar("100")));
+            PaimonSplitsInfo filtered = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, filteredParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertEquals(1, filtered.getPredicate().size());
+            LeafPredicate leaf = (LeafPredicate) filtered.getPredicate().get(0);
+            assertEquals(DataTypes.STRING(), leaf.type());
+            assertEquals(1, leaf.index());
+            assertEquals(List.of(BinaryString.fromString("100")), leaf.literals());
+            assertEquals(List.of("2:200", "3:30"), readStringPairs(filtered));
+
+            BatchWriteBuilder laterBuilder = current.newBatchWriteBuilder();
+            try (IOManager ioManager = new IOManagerImpl(tmpDir.toString());
+                    BatchTableWrite writer = laterBuilder.newWrite().withIOManager(ioManager);
+                    BatchTableCommit commit = laterBuilder.newCommit()) {
+                writer.write(GenericRow.of(5, BinaryString.fromString("50")));
+                commit.commit(writer.prepareCommit());
+            }
+            long laterSnapshot = catalog.getTable(identifier).latestSnapshot().orElseThrow().id();
+            assertTrue(laterSnapshot > snapshotId);
+            PaimonMetadata refreshed = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable refreshedTable = (PaimonTable) refreshed.getTable(context, "test_db", "reader_schema");
+            PaimonSplitsInfo pinned = ((PaimonRemoteFileDesc) refreshed.getRemoteFiles(refreshedTable, params)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertEquals(List.of("1:10", "2:200", "3:30"), readStringPairs(pinned));
+            GetRemoteFilesParams laterParams = params.copy();
+            laterParams.setTableVersionRange(TvrTableSnapshot.of(laterSnapshot));
+            PaimonSplitsInfo latest = ((PaimonRemoteFileDesc) refreshed.getRemoteFiles(refreshedTable, laterParams)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertEquals(List.of("1:10", "2:200", "3:30", "5:50"), readStringPairs(latest));
+
+            // A catalog may already supply an SDK handle resolved to a historical schema.
+            // Attaching scan options must retain that schema too, without upgrading it to latest.
+            for (Map<String, String> historicalOptions : List.of(
+                    Map.of(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId)),
+                    Map.of(CoreOptions.SCAN_TIMESTAMP_MILLIS.key(), String.valueOf(snapshotTime)))) {
+                FileStoreTable historical = current.copy(historicalOptions);
+                assertEquals(0, historical.schema().id());
+                new Expectations() {{
+                        paimonNativeCatalog.getTable(identifier);
+                        result = historical;
+                    }};
+                PaimonMetadata historicalMetadata = new PaimonMetadata("paimon", new HdfsEnvironment(),
+                        paimonNativeCatalog, new ConnectorProperties(ConnectorType.PAIMON));
+                PaimonTable historicalTable = (PaimonTable) historicalMetadata.getTable(
+                        context, "test_db", "reader_schema");
+                GetRemoteFilesParams historicalParams = params.copy();
+                if (historicalOptions.containsKey(CoreOptions.SCAN_TIMESTAMP_MILLIS.key())) {
+                    // The SDK forbids simultaneous timestamp and snapshot selectors.
+                    historicalParams.setTableVersionRange(TvrTableSnapshot.of(-1L));
+                }
+                PaimonSplitsInfo historicalSplits = ((PaimonRemoteFileDesc) historicalMetadata
+                        .getRemoteFiles(historicalTable, historicalParams).get(0).getFiles().get(0)).getPaimonSplitsInfo();
+                FileStoreTable historicalBound = (FileStoreTable) historicalSplits.getNativeTable();
+                assertEquals(historical.schema().id(), historicalBound.schema().id());
+                assertEquals(historical.rowType(), historicalBound.rowType());
+                historicalOptions.forEach((key, value) -> assertEquals(value, historicalBound.options().get(key)));
+                List<Integer> ids = new ArrayList<>();
+                try (RecordReaderIterator<InternalRow> rows = new RecordReaderIterator<>(historicalBound
+                        .newReadBuilder().newRead().createReader(historicalSplits.getPaimonSplits()))) {
+                    while (rows.hasNext()) {
+                        ids.add(rows.next().getInt(0));
+                    }
+                }
+                assertEquals(List.of(1, 2, 3), ids);
+            }
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    @Test
     public void testScalarGlobalIndexUsesFullMode() throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_scalar_index_");
         Identifier identifier = Identifier.create("test_db", "indexed_table");
@@ -1697,6 +1867,19 @@ public class PaimonMetadataTest {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
         }
+    }
+
+    private static List<String> readStringPairs(PaimonSplitsInfo splits) throws Exception {
+        List<String> values = new ArrayList<>();
+        try (RecordReaderIterator<InternalRow> rows = new RecordReaderIterator<>(splits.getNativeTable().newReadBuilder()
+                .withFilter(splits.getPredicate()).newRead().executeFilter().createReader(splits.getPaimonSplits()))) {
+            while (rows.hasNext()) {
+                InternalRow row = rows.next();
+                values.add(row.getInt(0) + ":" + row.getString(1));
+            }
+        }
+        values.sort(String::compareTo);
+        return values;
     }
 
     private static void writeRows(FileStoreTable table, GenericRow... rows) throws Exception {
