@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -303,9 +304,10 @@ public class MVPartitionCellBuilder {
 
     // ========== Internal: helpers ==========
 
-    private static PartitionKey nextPartitionKey(PartitionKey currentPartitionKey,
-                                                 PartitionUtil.DateTimeInterval dateTimeInterval,
-                                                 PrimitiveType partitionColumnPrimitiveType)
+    @VisibleForTesting
+    static PartitionKey nextPartitionKey(PartitionKey currentPartitionKey,
+                                         PartitionUtil.DateTimeInterval dateTimeInterval,
+                                         PrimitiveType partitionColumnPrimitiveType)
             throws AnalysisException {
         LiteralExpr lowerBound = currentPartitionKey.getKeys().get(0);
         LiteralExpr literalExpr;
