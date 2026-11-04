@@ -452,10 +452,18 @@ TEST(HashUtilTest, CrcHashUnalignedAllSizes) {
 TEST(HashUtilTest, CrcHashNegativeBytesDoesNotOverread) {
     std::vector<uint8_t> exact(4, 0x5a);
     const uint32_t seed = 0x811C9DC5u;
-    if (hardware_crc_available()) {
-        EXPECT_EQ(HashUtil::crc_hash(exact.data(), -3, seed), ref_half_swap(seed));
-    } else {
-        EXPECT_EQ(HashUtil::crc_hash(exact.data(), -3, seed), seed);
+    const uint64_t seed64 = 0x1234567890abcdefULL;
+    for (int32_t neg_len : {-1, -3, -4, -5, -17}) {
+        if (hardware_crc_available()) {
+            EXPECT_EQ(HashUtil::crc_hash(exact.data(), neg_len, seed), ref_half_swap(seed));
+        } else {
+            EXPECT_EQ(HashUtil::crc_hash(exact.data(), neg_len, seed), seed);
+        }
+        EXPECT_EQ(HashUtil::crc_hash64(exact.data(), neg_len, seed64), HashUtil::crc_hash64(exact.data(), 0, seed64));
+        EXPECT_EQ(HashUtil::hash64(exact.data(), neg_len, seed64), HashUtil::hash64(exact.data(), 0, seed64));
+        EXPECT_EQ(HashUtil::xx_hash3_64(exact.data(), neg_len, seed64), HashUtil::xx_hash3_64(exact.data(), 0, seed64));
+        EXPECT_EQ(HashUtil::xx_hash32(exact.data(), neg_len, seed), HashUtil::xx_hash32(exact.data(), 0, seed));
+        EXPECT_EQ(HashUtil::xx_hash64(exact.data(), neg_len, seed64), HashUtil::xx_hash64(exact.data(), 0, seed64));
     }
 }
 
