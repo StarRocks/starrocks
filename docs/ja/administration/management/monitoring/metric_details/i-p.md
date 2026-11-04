@@ -406,7 +406,7 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 
 - 単位: 件数
 - タイプ: Gauge
-- 説明: この BE/CN の起動以降、このノードの Data Cache に保持した tablet の publish 結果の累積件数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。tablet の publish がリクエスト到着から publish RPC タイムアウト + 3 秒を超えて完了した場合、または再試行された publish がトランザクションを再適用した場合に結果を保持します。同じノードでの後続の再試行は、再適用せずにこの結果を読み出します（`lake_publish_skipped_by_partial_meta` を参照）。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+- 説明: この BE/CN の起動以降、tablet の publish 結果をこのノードの Data Cache に書き込んだ累積回数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。tablet の publish がリクエスト到着から publish RPC タイムアウト + 3 秒を超えて完了した場合、または publish が再試行の場合に結果を書き込みます。保持済みの結果を使った再試行でも、もう一度書き込みます。同じノードでの後続の再試行は、再適用せずにこの結果を読み出します（`lake_publish_skipped_by_partial_meta` を参照）。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
 
 ## `lake_publish_skipped_by_partial_meta`
 

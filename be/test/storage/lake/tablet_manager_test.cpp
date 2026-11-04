@@ -224,7 +224,7 @@ TEST_F(LakeTabletManagerTest, partial_meta_in_local_disk_cache) {
     EXPECT_EQ(5, read->rowsets(0).id());
     EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 78).status().is_not_found());
     EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 4, 77).status().is_not_found());
-    // Written again for the same version, as a later retry that had to apply again does.
+    // Written again for the same version, as every later retry does.
     ASSERT_OK(_tablet_manager->put_partial_tablet_metadata(metadata));
     ASSERT_OK(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status());
 }

@@ -406,7 +406,7 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Type: Gauge
-- Description: Cumulative number of tablet publish results this BE/CN has kept in its local data cache since it started. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. A result is kept when the tablet's publish finished more than the publish RPC timeout plus 3 seconds after the request arrived, or when a retried publish had to apply the transactions again. A later retry on the same node reads it back instead of applying again, see `lake_publish_skipped_by_partial_meta`. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
+- Description: Cumulative number of times since this BE/CN started that it wrote a tablet's publish result to its local data cache. Counted only when the BE configuration item `lake_enable_publish_partial_meta` is `true`, and only for tables with file bundling. A result is written when the tablet's publish finished more than the publish RPC timeout plus 3 seconds after the request arrived, or when the publish is a retry; a retry answered from the kept result writes it again. A later retry on the same node reads it back instead of applying again, see `lake_publish_skipped_by_partial_meta`. Shared-data clusters only. Exported through `/metrics` when `dump_metrics_with_bvar` is enabled.
 
 ## `lake_publish_skipped_by_partial_meta`
 

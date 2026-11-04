@@ -60,13 +60,10 @@ class PublishTabletInfo;
 // |is_retry_publish| carries PublishVersionRequest::is_retry_publish: on a metacache miss, read
 // |new_version| from storage (the tablet's partial_meta first under file bundling) before applying anything
 // and return it if it is already written.
-// |applied|, when not null, is set to whether this call applied the txns rather than returning a result that
-// already existed.
 StatusOr<TabletMetadataPtr> publish_version(
         TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info, int64_t base_version, int64_t new_version,
         std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata, int64_t fe_built_version = 0,
-        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst, bool is_retry_publish = false,
-        bool* applied = nullptr);
+        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst, bool is_retry_publish = false);
 
 // Publish a batch new versions of transaction logs.
 //

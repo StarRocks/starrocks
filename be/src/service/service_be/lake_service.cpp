@@ -20,7 +20,6 @@
 #include <butil/time.h> // NOLINT
 
 #include <set>
-#include <thread>
 
 #include "agent/agent_server.h"
 #include "base/brpc/brpc.h"
@@ -212,12 +211,13 @@ bool is_async_vector_index_table(const TabletMetadataPB& metadata) {
 
 // Under file bundling a tablet's publish result reaches storage only inside the version's bundle, which the
 // aggregator writes once every tablet of the partition succeeded. Keeps a copy in this node's local disk cache when
-// it may never get there: the aggregator has stopped waiting for it, or this retry had to apply again because an
-// earlier result was lost. A retry on this node reads it back.
+// it may never get there: the aggregator has stopped waiting for it, or the partition is being retried and the copy
+// in the metacache may be evicted before the next attempt. A retry on this node reads it back. A retry writes the
+// entry again even when it was answered from it, which also keeps it recently used in the cache.
 void maybe_keep_partial_meta(lake::TabletManager* tablet_mgr, const PublishVersionRequest& request,
-                             bool skip_write_tablet_metadata, bool applied, int64_t start_monotonic_us,
-                             int64_t timeout_ms, const TabletMetadataPtr& metadata) {
-    if (!skip_write_tablet_metadata || !applied || !config::lake_enable_publish_partial_meta ||
+                             bool skip_write_tablet_metadata, int64_t start_monotonic_us, int64_t timeout_ms,
+                             const TabletMetadataPtr& metadata) {
+    if (!skip_write_tablet_metadata || !config::lake_enable_publish_partial_meta ||
         request.resharding_tablet_infos_size() > 0) {
         return;
     }
@@ -278,10 +278,6 @@ LakeServiceImpl::~LakeServiceImpl() = default;
 // in the txn-log apply path (OSS read of txn_log, broken segment, ...),
 // which no_op_publish=true bypasses entirely (transactions.cpp:320).
 DEFINE_FAIL_POINT(lake_publish_version_rpc_fail);
-// Makes each tablet publish of this node that actually applied last until its request's timeout plus a few seconds
-// has passed, so a test can make a slow tablet finish after the aggregator stopped waiting for it while a retry that
-// finds the result already there stays fast (see lake_enable_publish_partial_meta).
-DEFINE_FAIL_POINT(lake_publish_tablet_delay_past_timeout);
 // Forces the query-side parent alias back to the pre-fix behaviour (merge the primary-index
 // sstables too), so the cost of that merge can be measured against the same data.
 
@@ -472,25 +468,18 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     }
 
                     StatusOr<TabletMetadataPtr> res;
-                    bool applied = false;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
                                                     skip_write_tablet_metadata, fe_built_version, base_version_order,
-                                                    request->is_retry_publish(), &applied);
-                        FAIL_POINT_TRIGGER_EXECUTE(lake_publish_tablet_delay_past_timeout, {
-                            if (applied) {
-                                std::this_thread::sleep_for(
-                                        std::chrono::milliseconds(timeout_ms + kPartialMetaTimeoutMarginMs + 2000));
-                            }
-                        });
+                                                    request->is_retry_publish());
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
                     }
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
-                        maybe_keep_partial_meta(_tablet_mgr, *request, skip_write_tablet_metadata, applied,
-                                                start_monotonic_us, timeout_ms, metadata);
+                        maybe_keep_partial_meta(_tablet_mgr, *request, skip_write_tablet_metadata, start_monotonic_us,
+                                                timeout_ms, metadata);
                         auto score = compaction_score(_tablet_mgr, metadata);
                         // Per-tablet stats returned to FE: for range-distribution tablets (every
                         // publish) to drive real-time split/merge, and on first import (base_version==1)

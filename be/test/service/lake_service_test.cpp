@@ -832,8 +832,7 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
 // flip publish, including the W == 1 skip-load (empty partition) path.
 #ifdef WITH_STARCACHE
 // A bundled publish request keeps a tablet's result as its partial_meta only when the result may never reach the
-// bundle: here, a retry that had to apply again. A later retry that finds neither the metacache entry nor the txn
-// log answers from it.
+// bundle: here, a retry. A later retry that finds neither the metacache entry nor the txn log answers from it.
 TEST_F(LakeServiceTest, test_publish_version_keeps_partial_meta_for_retry) {
     const bool old_enable = config::lake_enable_publish_partial_meta;
     config::lake_enable_publish_partial_meta = true;

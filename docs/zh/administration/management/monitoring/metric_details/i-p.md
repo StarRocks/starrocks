@@ -406,7 +406,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 
 - 单位：次数
 - 类型：Gauge
-- 描述：本 BE/CN 启动以来，在本节点 Data Cache 中保留的 Tablet 发布结果的累积个数。仅在 BE 配置项 `lake_enable_publish_partial_meta` 为 `true` 时统计，且只涉及开启 File Bundling 的表。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者重试时不得不重新 apply 事务，就会保留其结果。之后同一节点上的重试会直接读取这份结果，不再重新 apply，参见 `lake_publish_skipped_by_partial_meta`。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+- 描述：本 BE/CN 启动以来，把 Tablet 发布结果写入本节点 Data Cache 的累积次数。仅在 BE 配置项 `lake_enable_publish_partial_meta` 为 `true` 时统计，且只涉及开启 File Bundling 的表。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会写入其结果；重试即使直接用了已保留的结果，也会再写一次。之后同一节点上的重试会直接读取这份结果，不再重新 apply，参见 `lake_publish_skipped_by_partial_meta`。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
 
 ## `lake_publish_skipped_by_partial_meta`
 

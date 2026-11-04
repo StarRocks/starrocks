@@ -2912,10 +2912,10 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_partial_meta) {
         txns.emplace_back(TEST_txn_info(id, commit_time));
     }
     auto new_version = base_version + 2;
-    auto publish = [&](bool is_retry_publish, bool* applied) {
+    auto publish = [&](bool is_retry_publish) {
         return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), base_version, new_version, txns,
                                /*skip_write_tablet_metadata=*/true, /*fe_built_version=*/0,
-                               InitialMetadataOrder::kPerTabletFirst, is_retry_publish, applied);
+                               InitialMetadataOrder::kPerTabletFirst, is_retry_publish);
     };
     auto evict_caches = [&]() {
         _tablet_mgr->prune_metacache();
@@ -2923,30 +2923,28 @@ TEST_P(LakePrimaryKeyPublishTest, test_retry_publish_reads_partial_meta) {
         ASSERT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
     };
 
-    bool applied = false;
-    ASSIGN_OR_ABORT(auto metadata, publish(/*is_retry_publish=*/false, &applied));
-    EXPECT_TRUE(applied);
+    ASSIGN_OR_ABORT(auto metadata, publish(/*is_retry_publish=*/false));
     ASSERT_OK(_tablet_mgr->put_partial_tablet_metadata(metadata));
 
     auto old_enable = config::lake_enable_publish_partial_meta;
     DeferOp restore([&]() { config::lake_enable_publish_partial_meta = old_enable; });
     config::lake_enable_publish_partial_meta = true;
     evict_caches();
-    ASSIGN_OR_ABORT(auto from_partial, publish(/*is_retry_publish=*/true, &applied));
-    EXPECT_FALSE(applied);
+    // Answered from the partial_meta: the index stays unloaded.
+    ASSIGN_OR_ABORT(auto from_partial, publish(/*is_retry_publish=*/true));
     EXPECT_EQ(new_version, from_partial->version());
     EXPECT_EQ(metadata->rowsets_size(), from_partial->rowsets_size());
     EXPECT_EQ(0, _primary_key_mgr->get_primary_index_data_version(tablet_id));
 
-    // A first attempt never reads it.
+    // A first attempt never reads it: it applies again and loads the index on the way.
     evict_caches();
-    ASSERT_OK(publish(/*is_retry_publish=*/false, &applied).status());
-    EXPECT_TRUE(applied);
+    ASSERT_OK(publish(/*is_retry_publish=*/false).status());
+    EXPECT_GT(_primary_key_mgr->get_primary_index_data_version(tablet_id), 0);
 
     config::lake_enable_publish_partial_meta = false;
     evict_caches();
-    ASSERT_OK(publish(/*is_retry_publish=*/true, &applied).status());
-    EXPECT_TRUE(applied);
+    ASSERT_OK(publish(/*is_retry_publish=*/true).status());
+    EXPECT_GT(_primary_key_mgr->get_primary_index_data_version(tablet_id), 0);
 }
 #endif
 

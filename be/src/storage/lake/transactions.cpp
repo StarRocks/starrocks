@@ -16,8 +16,11 @@
 
 #include <bvar/bvar.h>
 
+#include <thread>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -59,6 +62,11 @@ bvar::Adder<int64_t> g_publish_skipped_durable_new_version("lake_publish_version
 bvar::Adder<int64_t> g_publish_skipped_by_partial_meta("lake_publish_skipped_by_partial_meta");
 
 } // namespace
+
+// Makes each tablet publish that applies its txns last 15 s longer, past a 10 s lake_publish_version_timeout_ms plus
+// the 3 s after which the result is kept as its partial_meta, while a retry that reads the kept result stays fast.
+// Lets a test make a node's tablets finish after the aggregator stopped waiting for them.
+DEFINE_FAIL_POINT(lake_publish_tablet_delay_past_timeout);
 
 namespace starrocks::lake {
 
@@ -384,7 +392,7 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
                                                       int64_t base_version, int64_t new_version,
                                                       std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
                                                       int64_t fe_built_version, InitialMetadataOrder base_version_order,
-                                                      bool is_retry_publish, bool* applied) {
+                                                      bool is_retry_publish) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -772,22 +780,17 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
 
     delete_files_async(std::move(files_to_delete));
 
-    if (applied != nullptr) {
-        *applied = true;
-    }
+    FAIL_POINT_TRIGGER_EXECUTE(lake_publish_tablet_delay_past_timeout,
+                               { std::this_thread::sleep_for(std::chrono::seconds(15)); });
     return new_metadata;
 }
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
                                             bool skip_write_tablet_metadata, int64_t fe_built_version,
-                                            InitialMetadataOrder base_version_order, bool is_retry_publish,
-                                            bool* applied) {
-    if (applied != nullptr) {
-        *applied = false;
-    }
+                                            InitialMetadataOrder base_version_order, bool is_retry_publish) {
     auto res = do_publish_version(tablet_mgr, tablet_info, base_version, new_version, txns, skip_write_tablet_metadata,
-                                  fe_built_version, base_version_order, is_retry_publish, applied);
+                                  fe_built_version, base_version_order, is_retry_publish);
     // A primary key publish fails with MemoryLimitExceeded when it runs past the update memory limit. Its failed
     // applier has already dropped this tablet's index from the cache; shrink the indexes other tablets keep so
     // that the retry has memory to load into. Any other publish only checks the urgent level: the background
