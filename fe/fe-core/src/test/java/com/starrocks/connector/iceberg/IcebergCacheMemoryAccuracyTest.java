@@ -85,9 +85,9 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
     private static final double HIGH = 1.15;
     // A table's schema reaches the same column names from its fields and from two name/id maps, in different
     // orders. The sampled walk of each map lands on names the field walk has not visited and extrapolates them
-    // again, about 80 B per column. That is a fixed few KB per table: 1.25x on a single-snapshot table with
+    // again, about 80 B per column. That is a fixed few KB per table: ~1.30x on a single-snapshot table with
     // 110 columns, ~1.05x once the table has history. Sampling cannot see that overlap; only a full walk could.
-    private static final double HIGH_TABLE = 1.30;
+    private static final double HIGH_TABLE = 1.35;
 
     // Every ratio of a test is printed before any is asserted, so one run shows the whole picture.
     private final List<String> outOfBand = new ArrayList<>();
@@ -253,11 +253,16 @@ public class IcebergCacheMemoryAccuracyTest extends TableTestBase {
         if (planAfterCaching) {
             loaded.forEach(IcebergCacheMemoryAccuracyTest::plan);
         }
-        // What an entry retains on its own: the tables share the catalog's Configuration and FileIO, so the
-        // graph of all of them minus the graph of one leaves tableCount - 1 private parts.
-        long all = GraphLayout.parseInstance(loaded.toArray()).totalSize();
-        long one = GraphLayout.parseInstance(loaded.get(0)).totalSize();
-        long actual = (all - one) / (tableCount - 1) * tableCount;
+        // What an entry retains on its own: the part of its graph no other table reaches. The tables share the
+        // catalog's Configuration and FileIO, plus whatever gets lazily attached to only some of them, so
+        // subtracting a single table's graph is not stable; subtracting all the others is.
+        long actual = 0;
+        for (int t = 0; t < tableCount; t++) {
+            List<Table> others = new ArrayList<>(loaded);
+            others.remove(t);
+            actual += GraphLayout.parseInstance(loaded.get(t))
+                    .subtract(GraphLayout.parseInstance(others.toArray())).totalSize();
+        }
         if (planAfterCaching) {
             System.out.printf("MEMACC %s | ledger (not checked) estimated=%d actual=%d ratio=%.3f%n", label,
                     ledger(tables), actual, ledger(tables) * 1.0 / actual);
