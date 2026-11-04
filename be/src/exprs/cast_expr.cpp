@@ -326,7 +326,7 @@ Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool*
             pool->add(cast_input.release());
         }
 
-        return new CastVariantToStruct(node, std::move(field_casts));
+        return new CastVariantToStruct(node, std::move(field_casts), allow_throw_exception);
     }
     default:
         LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
