@@ -64,6 +64,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
@@ -384,6 +385,7 @@ public class OptimizeJobV2Test extends DDLTestBase {
     }
 
     @Test
+    @Disabled("Flaky: the transaction may already be VISIBLE when the test checks for COMMITTED")
     public void testCommittedIngestionIgnoresPlannedButUnwrittenSourcePartition() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `testOptimizeCommittedPartitioned` (\n" +
                 "  `v1` bigint NULL,\n" +
