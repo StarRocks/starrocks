@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Tuple;
 import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
@@ -37,16 +38,19 @@ import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintTuple;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.varcharColumn;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
  * Eligibility coverage for {@link MaterializedViewRowIdBoundaries}: every shape it declines must be
- * attributable to {@link SkipReason#MATERIALIZED_VIEW_TARGET} rather than skipped silently, and the one
- * shape it serves must produce a source that reads the auto-increment counter at plan time.
+ * attributable to {@link SkipReason#MATERIALIZED_VIEW_TARGET} rather than skipped silently, and each of the
+ * two shapes it serves must produce the matching source: the auto-increment one reads the counter at plan
+ * time, the fingerprint one never reads it.
  */
 public class MaterializedViewRowIdBoundariesTest {
 
@@ -57,16 +61,19 @@ public class MaterializedViewRowIdBoundariesTest {
     private static final Estimates BIG_ENOUGH = new Estimates(1L << 30, 1_000_000L);
 
     private int savedIdCacheSize;
+    private long savedMinSplitSize;
 
     @BeforeEach
     public void setUp() {
         savedIdCacheSize = Config.auto_increment_cache_size;
         Config.auto_increment_cache_size = 25;
+        savedMinSplitSize = Config.tablet_reshard_min_split_size;
     }
 
     @AfterEach
     public void tearDown() {
         Config.auto_increment_cache_size = savedIdCacheSize;
+        Config.tablet_reshard_min_split_size = savedMinSplitSize;
     }
 
     @Test
@@ -84,11 +91,69 @@ public class MaterializedViewRowIdBoundariesTest {
     }
 
     @Test
-    public void testQueryComputedRowIdIsDeclined() {
-        // QUERY_COMPUTED row ids encode the view's group-by keys; that domain is not derivable and no
-        // boundary source serves it, so it must not fall through to the auto-increment planner.
+    public void testQueryComputedRowIdWithUnsetVersionIsDeclined() {
+        // An unset encode version reads as 0, the sort-key encoding: ids follow the data and are not
+        // derivable, so it must not fall through to the auto-increment planner.
         assertNotDerivable(mockMaterializedView(RowIdStrategy.QUERY_COMPUTED, /*visibleIndexCount=*/ 1),
                 List.of(rowIdColumn()));
+    }
+
+    @Test
+    public void testSortKeyEncodedRowIdIsDeclined() {
+        assertNotDerivable(mockMaterializedView(RowIdStrategy.QUERY_COMPUTED, /*visibleIndexCount=*/ 1,
+                IvmOpUtils.ENCODE_ROW_ID_VERSION_SORT_KEY), List.of(varcharRowIdColumn()));
+    }
+
+    @Test
+    public void testFingerprintRowIdIsDerivable() {
+        for (int version : new int[] {IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT,
+                IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT_V2}) {
+            MaterializedView materializedView =
+                    mockMaterializedView(RowIdStrategy.QUERY_COMPUTED, /*visibleIndexCount=*/ 1, version);
+            try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class)) {
+                stubSortKey(metaUtils, materializedView, List.of(varcharRowIdColumn()));
+                Assertions.assertTrue(MaterializedViewRowIdBoundaries.isDerivable(materializedView),
+                        "version " + version);
+            }
+        }
+    }
+
+    @Test
+    public void testFingerprintRowIdWithASecondIndexIsDeclined() {
+        assertNotDerivable(mockMaterializedView(RowIdStrategy.QUERY_COMPUTED, /*visibleIndexCount=*/ 2,
+                IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT_V2), List.of(varcharRowIdColumn()));
+    }
+
+    @Test
+    public void testFingerprintSourceCutsTheBase64Space() {
+        // Afford 4 tablets: the planner clamps the count by bytes / tablet_reshard_min_split_size.
+        Config.tablet_reshard_min_split_size = 1L << 28;
+        MaterializedView materializedView = mockMaterializedView(RowIdStrategy.QUERY_COMPUTED,
+                /*visibleIndexCount=*/ 1, IvmOpUtils.ENCODE_ROW_ID_VERSION_FINGERPRINT_V2);
+        LocalMetastore localMetastore = mock(LocalMetastore.class);
+        IndexPreSplitTarget target = new IndexPreSplitTarget(BASE_INDEX_META_ID, /*oldTabletId=*/ 100L,
+                List.of(varcharRowIdColumn()));
+
+        try (MockedStatic<MetaUtils> metaUtils = Mockito.mockStatic(MetaUtils.class);
+                MockedStatic<GlobalStateMgr> globalStateMgr = Mockito.mockStatic(GlobalStateMgr.class)) {
+            stubSortKey(metaUtils, materializedView, List.of(varcharRowIdColumn()));
+            GlobalStateMgr globalState = mock(GlobalStateMgr.class);
+            when(globalState.getLocalMetastore()).thenReturn(localMetastore);
+            globalStateMgr.when(GlobalStateMgr::getCurrentState).thenReturn(globalState);
+
+            DerivedBoundarySource.Result result = MaterializedViewRowIdBoundaries
+                    .sourceFor(materializedView, new Estimates(BIG_ENOUGH.totalBytes(), 0L), /*nodes=*/ 1)
+                    .plan(target, /*requestedTabletCount=*/ 4);
+
+            Assertions.assertNull(result.skipReason());
+            List<String> cuts = new ArrayList<>();
+            for (Tuple cut : result.boundaries().getBoundaries()) {
+                cuts.add(cut.getValues().get(0).getStringValue());
+            }
+            Assertions.assertEquals(List.of("E+", "U+", "k+"), cuts);
+            // Fingerprints are uniform whatever the counter says, so the counter must not be consulted.
+            verifyNoInteractions(localMetastore);
+        }
     }
 
     @Test
@@ -198,8 +263,17 @@ public class MaterializedViewRowIdBoundariesTest {
     }
 
     private static MaterializedView mockMaterializedView(RowIdStrategy rowIdStrategy, int visibleIndexCount) {
+        return mockMaterializedView(rowIdStrategy, visibleIndexCount, null);
+    }
+
+    private static MaterializedView mockMaterializedView(RowIdStrategy rowIdStrategy, int visibleIndexCount,
+                                                         Integer encodeRowIdVersion) {
         MaterializedView materializedView = mock(MaterializedView.class);
         when(materializedView.getRowIdStrategy()).thenReturn(rowIdStrategy);
+        // Left unstubbed when null, so the view reports the default version like one whose version was never set.
+        if (encodeRowIdVersion != null) {
+            when(materializedView.getEncodeRowIdVersion()).thenReturn(encodeRowIdVersion);
+        }
         List<MaterializedIndexMeta> visibleIndexMetas = new ArrayList<>(visibleIndexCount);
         long[] metaIds = {BASE_INDEX_META_ID, ROLLUP_INDEX_META_ID};
         for (int i = 0; i < visibleIndexCount; i++) {
@@ -213,6 +287,10 @@ public class MaterializedViewRowIdBoundariesTest {
 
     private static Column rowIdColumn() {
         return bigintColumn(IvmOpUtils.COLUMN_ROW_ID);
+    }
+
+    private static Column varcharRowIdColumn() {
+        return varcharColumn(IvmOpUtils.COLUMN_ROW_ID);
     }
 
     private static IndexPreSplitTarget rowIdIndexTarget() {
