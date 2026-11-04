@@ -613,4 +613,110 @@ PARALLEL_TEST(SimdFilterTest, exact_capacity_asan) {
     check_exact_capacity_asan_for_type<uint8_t>();
 }
 
+#if defined(__x86_64__)
+PARALLEL_TEST(SimdFilterTest, x86_64_explicit_avx2_w4) {
+    const std::vector<size_t> sizes = {0, 1, 7, 16, 31, 32, 33, 64, 129};
+    const std::vector<size_t> from_offsets = {0, 1, 7, 15, 16, 31, 32};
+    const uint8_t non_canonical_palette[] = {0x80, 0x00, 0x7F, 0x00, 0xFF, 0x01, 0x00, 0x02};
+
+    for (size_t from : from_offsets) {
+        for (size_t len : sizes) {
+            size_t to = from + len;
+            if (to == from) {
+                std::vector<uint32_t> dst(to + 8, 0xDeadBeef);
+                std::vector<uint32_t> src(to + 8, 0x12345678);
+                std::vector<uint8_t> selector(to + 8, 1);
+                size_t out_sz =
+                        SIMD::Filter::detail::compress_avx2_w4(dst.data(), src.data(), selector.data(), from, to);
+                EXPECT_EQ(from, out_sz);
+                continue;
+            }
+
+            for (int mode = 0; mode < 7; ++mode) {
+                std::vector<uint32_t> src(to + 16);
+                std::vector<uint8_t> selector(to + 16, 0);
+                std::vector<uint32_t> expected;
+
+                for (size_t i = 0; i < to + 16; ++i) {
+                    src[i] = static_cast<uint32_t>(i * 101 + 37);
+                }
+
+                for (size_t i = 0; i < to; ++i) {
+                    bool keep = false;
+                    uint8_t sel_byte = 1;
+                    switch (mode) {
+                    case 0: // 0%
+                        keep = false;
+                        sel_byte = 0;
+                        break;
+                    case 1: // 100%
+                        keep = true;
+                        sel_byte = 1;
+                        break;
+                    case 2: // alternating
+                        keep = (i % 2 == 0);
+                        sel_byte = keep ? 1 : 0;
+                        break;
+                    case 3: // single survivor
+                        keep = (i == from);
+                        sel_byte = keep ? 1 : 0;
+                        break;
+                    case 4: // all except one
+                        keep = (i != from);
+                        sel_byte = keep ? 1 : 0;
+                        break;
+                    case 5: // pseudo-random / periodic (e.g. 3 of 8)
+                        keep = ((i * 7 + 3) % 8 < 3);
+                        sel_byte = keep ? 1 : 0;
+                        break;
+                    case 6: // non-canonical selector bytes
+                        sel_byte = non_canonical_palette[i % std::size(non_canonical_palette)];
+                        keep = (sel_byte != 0);
+                        break;
+                    }
+                    selector[i] = sel_byte;
+                    if (i >= from && keep) {
+                        expected.push_back(src[i]);
+                    }
+                }
+
+                // 1. Separate destination buffer
+                {
+                    std::vector<uint32_t> dst(to + 16, 0xBAADF00D);
+                    size_t out_sz =
+                            SIMD::Filter::detail::compress_avx2_w4(dst.data(), src.data(), selector.data(), from, to);
+                    ASSERT_EQ(from + expected.size(), out_sz)
+                            << "Separate dst: from=" << from << " to=" << to << " mode=" << mode;
+                    for (size_t i = 0; i < from; ++i) {
+                        ASSERT_EQ(0xBAADF00Du, dst[i])
+                                << "Untouched prefix clobbered at i=" << i << " from=" << from << " to=" << to;
+                    }
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        ASSERT_EQ(expected[i], dst[from + i])
+                                << "Mismatch at i=" << i << " from=" << from << " to=" << to << " mode=" << mode;
+                    }
+                }
+
+                // 2. In-place stream compaction (dst == src)
+                {
+                    std::vector<uint32_t> in_place = src;
+                    size_t ip_sz = SIMD::Filter::detail::compress_avx2_w4(in_place.data(), in_place.data(),
+                                                                          selector.data(), from, to);
+                    ASSERT_EQ(from + expected.size(), ip_sz)
+                            << "In-place: from=" << from << " to=" << to << " mode=" << mode;
+                    for (size_t i = 0; i < from; ++i) {
+                        ASSERT_EQ(src[i], in_place[i])
+                                << "Untouched prefix in-place clobbered at i=" << i << " from=" << from << " to=" << to;
+                    }
+                    for (size_t i = 0; i < expected.size(); ++i) {
+                        ASSERT_EQ(expected[i], in_place[from + i]) << "In-place mismatch at i=" << i << " from=" << from
+                                                                   << " to=" << to << " mode=" << mode;
+                    }
+                }
+            }
+        }
+    }
+}
+#endif // __x86_64__
+
 } // namespace starrocks
