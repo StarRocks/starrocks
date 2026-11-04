@@ -41,13 +41,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-<<<<<<< HEAD
 import com.starrocks.catalog.Table;
-=======
-import com.starrocks.catalog.PartitionNames;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
->>>>>>> 1035b99 ([BugFix][RB-784] Route routine load partition fetches through a CN group with alive CNs (#81874))
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
@@ -67,32 +63,22 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.RowDelimiter;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.ComputeNode;
->>>>>>> 1035b99 ([BugFix][RB-784] Route routine load partition fetches through a CN group with alive CNs (#81874))
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
-<<<<<<< HEAD
 import com.starrocks.warehouse.DefaultWarehouse;
-=======
 import com.starrocks.warehouse.cngroup.CRAcquireContext;
->>>>>>> 1035b99 ([BugFix][RB-784] Route routine load partition fetches through a CN group with alive CNs (#81874))
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -100,8 +86,6 @@ import java.util.Map;
 import java.util.Objects;
 
 public class RoutineLoadJobTest {
-<<<<<<< HEAD
-=======
 
     private static final long AZ_CN_GROUP_ID = 10001L;
 
@@ -116,7 +100,6 @@ public class RoutineLoadJobTest {
         UtFrameUtils.tearDownForPersisTest();
     }
 
->>>>>>> 1035b99 ([BugFix][RB-784] Route routine load partition fetches through a CN group with alive CNs (#81874))
     @Test
     public void testAfterAbortedReasonOffsetOutOfRange(@Mocked GlobalStateMgr globalStateMgr,
                                                        @Injectable TransactionState transactionState,
