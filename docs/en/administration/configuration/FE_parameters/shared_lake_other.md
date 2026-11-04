@@ -593,7 +593,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Milliseconds
 - Is mutable: Yes
-- Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. For a table with file bundling, the FE waits twice this value for the aggregator, which still gives each compute node this value, so that the aggregator has finished before the FE retries. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
+- Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
 - Introduced in: v4.2.0
 
 ### `slow_publish_partition_log_threshold_ms`

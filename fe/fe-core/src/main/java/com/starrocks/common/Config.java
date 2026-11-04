@@ -4162,10 +4162,8 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Timeout (ms) of the publish version RPC of a shared-data transaction. " +
             "It bounds both how long FE waits for the compute node to answer and the deadline the compute node " +
-            "applies to the publish task itself. For a table with file bundling, FE waits twice this value for " +
-            "the aggregator, which still gives each compute node this value, so that the aggregator has finished " +
-            "before FE retries. Raise it when publishing a large batch of tablets legitimately takes longer than " +
-            "the default.")
+            "applies to the publish task itself. Raise it when publishing a large batch of tablets legitimately " +
+            "takes longer than the default.")
     public static int lake_publish_version_timeout_ms = 60000;
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")

@@ -210,6 +210,31 @@ bool is_async_vector_index_table(const TabletMetadataPB& metadata) {
     return false;
 }
 
+// Under file bundling a tablet's publish result reaches storage only inside the version's bundle, which the
+// aggregator writes once every tablet of the partition succeeded. Keeps a copy in this node's local disk cache when
+// it may never get there: the aggregator has stopped waiting for it, or this retry had to apply again because an
+// earlier result was lost. A retry on this node reads it back.
+void maybe_keep_partial_meta(lake::TabletManager* tablet_mgr, const PublishVersionRequest& request,
+                             bool skip_write_tablet_metadata, bool applied, int64_t start_monotonic_us,
+                             int64_t timeout_ms, const TabletMetadataPtr& metadata) {
+    if (!skip_write_tablet_metadata || !applied || !config::lake_enable_publish_partial_meta ||
+        request.resharding_tablet_infos_size() > 0) {
+        return;
+    }
+    if (!request.is_retry_publish() &&
+        MonotonicMicros() - start_monotonic_us <= (timeout_ms + kPartialMetaTimeoutMarginMs) * 1000) {
+        return;
+    }
+    auto st = tablet_mgr->put_partial_tablet_metadata(metadata);
+    if (st.ok()) {
+        g_publish_partial_meta_written << 1;
+    } else if (!st.is_not_supported()) {
+        // Best effort: the publish itself succeeded, a retry just re-applies.
+        LOG(WARNING) << "Fail to write partial_meta of tablet " << metadata->id() << " version " << metadata->version()
+                     << ": " << st;
+    }
+}
+
 } // namespace
 
 // Get txn_ids string from request (compatible with both new and old FE versions)
@@ -464,25 +489,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     }
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
-                        // Under file bundling this result reaches storage only inside the version's bundle,
-                        // which the aggregator writes once every tablet of the partition succeeded. Keep a copy in
-                        // this node's local disk cache when it may never get there: the aggregator has stopped
-                        // waiting for it, or this retry had to apply again because an earlier result was lost. A
-                        // retry on this node reads it back.
-                        if (skip_write_tablet_metadata && applied && config::lake_enable_publish_partial_meta &&
-                            request->resharding_tablet_infos_size() == 0 &&
-                            (request->is_retry_publish() ||
-                             MonotonicMicros() - start_monotonic_us >
-                                     (timeout_ms + kPartialMetaTimeoutMarginMs) * 1000)) {
-                            auto st = _tablet_mgr->put_partial_tablet_metadata(metadata);
-                            if (st.ok()) {
-                                g_publish_partial_meta_written << 1;
-                            } else if (!st.is_not_supported()) {
-                                // Best effort: the publish itself succeeded, a retry just re-applies.
-                                LOG(WARNING) << "Fail to write partial_meta of tablet " << metadata->id() << " version "
-                                             << metadata->version() << ": " << st;
-                            }
-                        }
+                        maybe_keep_partial_meta(_tablet_mgr, *request, skip_write_tablet_metadata, applied,
+                                                start_monotonic_us, timeout_ms, metadata);
                         auto score = compaction_score(_tablet_mgr, metadata);
                         // Per-tablet stats returned to FE: for range-distribution tablets (every
                         // publish) to drive real-time split/merge, and on first import (base_version==1)
