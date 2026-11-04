@@ -249,6 +249,47 @@ public class PaimonCreateTableAnalyzerTest {
     }
 
     @Test
+    public void testCreateAfterExternalDropBypassesStaleCache(@TempDir Path warehouse) throws Exception {
+        Options options = Options.fromMap(Map.of("warehouse", warehouse.toUri().toString(), "cache-enabled", "true"));
+        Options externalOptions = Options.fromMap(Map.of("warehouse", warehouse.toUri().toString(),
+                "cache-enabled", "false"));
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options));
+                Catalog external = CatalogFactory.createCatalog(CatalogContext.create(externalOptions))) {
+            PaimonMetadata ddl = new PaimonMetadata("paimon_ddl", new HdfsEnvironment(), catalog,
+                    new ConnectorProperties(ConnectorType.PAIMON));
+            MetadataMgr metadata = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            new Expectations(metadata) {
+                {
+                    metadata.getOptionalMetadata("paimon_ddl");
+                    result = Optional.of(ddl);
+                    minTimes = 0;
+                }
+            };
+            executeDdl("create database paimon_ddl.ddl_cache");
+            Identifier id = Identifier.create("ddl_cache", "t");
+            for (String clause : List.of("", "if not exists ")) {
+                executeDdl("create table paimon_ddl.ddl_cache.t (old_column int)");
+                Assertions.assertTrue(ddl.tableExists(context, "ddl_cache", "t"));
+                Table cached = catalog.getTable(id);
+                external.dropTable(id, false);
+                Assertions.assertTrue(ddl.tableExists(context, "ddl_cache", "t"));
+                Assertions.assertSame(cached, catalog.getTable(id));
+                Assertions.assertThrows(Catalog.TableNotExistException.class, () -> external.getTable(id));
+
+                executeDdl("create table " + clause + "paimon_ddl.ddl_cache.t (new_column bigint)");
+                Assertions.assertEquals(List.of("new_column"), external.getTable(id).rowType().getFieldNames());
+                Assertions.assertEquals(List.of("new_column"), catalog.getTable(id).rowType().getFieldNames());
+                executeDdl("create table if not exists paimon_ddl.ddl_cache.t (ignored_column int)");
+                Assertions.assertEquals(List.of("new_column"), external.getTable(id).rowType().getFieldNames());
+                Assertions.assertThrows(DdlException.class,
+                        () -> executeDdl("create table paimon_ddl.ddl_cache.t (id int)"));
+                executeDdl("drop table paimon_ddl.ddl_cache.t");
+            }
+            executeDdl("drop database paimon_ddl.ddl_cache");
+        }
+    }
+
+    @Test
     public void testPaimonCtasIsRejectedBeforeCreatingATable() {
         for (String engine : List.of("", "engine=paimon")) {
             CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) SqlParser.parse(

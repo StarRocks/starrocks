@@ -744,7 +744,7 @@ CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
 
 #### 参数
 
-- **表名与引擎**：指定已有 Paimon catalog 中的数据库和新表名称。目标为 Paimon catalog 时，可以省略 `ENGINE = paimon`。`IF NOT EXISTS` 表示表已存在时不报错。
+- **表名与引擎**：指定已有 Paimon catalog 中的数据库和新表名称。目标为 Paimon catalog 时，可以省略 `ENGINE = paimon`。`IF NOT EXISTS` 会忽略表已存在的错误，但仍会校验表定义和属性。
 - **列定义**：支持 BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度不超过 38 的 DECIMAL，以及 ARRAY、MAP、STRUCT 和 VARIANT。DATETIME 映射为 Paimon TIMESTAMP(6)。VARIANT 仍受现有读取限制约束。仅支持 `DEFAULT NULL`，主键列不能设置默认值。可以通过 `COMMENT` 设置列注释和表注释。
 - **主键**：使用 `PRIMARY KEY (column, ...)` 或 `primary-key` 表属性定义。主键列不必位于表的开头，未显式指定可空性时会在 Paimon schema 中设为非空，不能显式声明为 `NULL`。同时指定两种形式时，解析后的列名及顺序必须一致。
 - **分区**：使用 `PARTITION BY (column, ...)` 指定普通分区列，不支持分区表达式和显式分区定义。
@@ -792,12 +792,6 @@ PROPERTIES (
 - 不支持 `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、聚合列和 `AUTO_INCREMENT`。
 - 不支持非 NULL 的列默认值。
 - 不支持 `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`，也不支持通过 `INSERT`、`UPDATE`、`DELETE` 写入数据。
-
-#### 元数据缓存限制
-
-如果其他引擎删除了 StarRocks 已缓存元数据的表，`CREATE TABLE` 仍可能报表已存在，`CREATE TABLE IF NOT EXISTS` 则可能成功返回但没有重新创建表。请等待缓存元数据过期后，再重试建表。
-
-外部删表后，`REFRESH EXTERNAL TABLE` 不能保证恢复：如果表的 schema 文件已被删除，刷新语句可能在解析旧表元数据时失败，尚未执行到缓存失效操作。
 
 ### DROP TABLE
 

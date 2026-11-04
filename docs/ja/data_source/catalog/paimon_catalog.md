@@ -744,7 +744,7 @@ CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
 
 #### パラメータ
 
-- **テーブル名とエンジン**: 既存の Paimon catalog 内のデータベースと新しいテーブル名を指定します。作成先が Paimon catalog の場合、`ENGINE = paimon` は省略できます。`IF NOT EXISTS` を指定すると、テーブルが既に存在する場合にエラーを返しません。
+- **テーブル名とエンジン**: 既存の Paimon catalog 内のデータベースと新しいテーブル名を指定します。作成先が Paimon catalog の場合、`ENGINE = paimon` は省略できます。`IF NOT EXISTS` はテーブルが既に存在する場合のエラーを抑制しますが、テーブル定義とプロパティの検証は行われます。
 - **列定義**: 対応する型は BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、FLOAT、DOUBLE、DATE、DATETIME、CHAR、VARCHAR、VARBINARY、精度 38 以下の DECIMAL、ARRAY、MAP、STRUCT、VARIANT です。DATETIME は Paimon TIMESTAMP(6) に変換されます。VARIANT の既存の読み取り制限は引き続き適用されます。デフォルト値は `DEFAULT NULL` のみ対応し、主キー列にはデフォルト値を指定できません。列とテーブルのコメントは `COMMENT` で指定します。
 - **主キー**: `PRIMARY KEY (column, ...)` または `primary-key` テーブルプロパティで定義します。主キー列を先頭に配置する必要はありません。NULL 許容性を省略すると Paimon schema では非 NULL になります。明示的な `NULL` 宣言は使用できません。両方の形式を指定する場合、解決後の列名と順序を一致させてください。
 - **パーティション**: 通常のパーティション列は `PARTITION BY (column, ...)` で指定します。パーティション式と明示的なパーティション定義はサポートされていません。
@@ -792,12 +792,6 @@ PROPERTIES (
 - `DISTRIBUTED BY`、`ORDER BY`、`ROLLUP`、生成列、集約列、`AUTO_INCREMENT` はサポートされていません。
 - NULL 以外の列デフォルト値はサポートされていません。
 - `CREATE TABLE LIKE`、`CREATE TABLE AS SELECT`、および `INSERT`、`UPDATE`、`DELETE` によるデータの書き込みはサポートされていません。
-
-#### メタデータキャッシュの制限
-
-StarRocks にメタデータがキャッシュされているテーブルを別のエンジンで削除すると、`CREATE TABLE` は引き続きテーブルが存在すると報告する場合があります。`CREATE TABLE IF NOT EXISTS` は、削除されたテーブルを再作成せずに成功を返す場合があります。キャッシュされたメタデータの有効期限が切れてから、作成を再試行してください。
-
-外部でテーブルを削除した後の `REFRESH EXTERNAL TABLE` は、確実な回避策ではありません。テーブルの schema ファイルが削除されていると、キャッシュを無効化する前に、古いテーブルメタデータの解決中に失敗する場合があります。
 
 ### DROP TABLE
 

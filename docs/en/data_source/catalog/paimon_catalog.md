@@ -744,7 +744,7 @@ CREATE TABLE [IF NOT EXISTS] <catalog_name>.<database_name>.<table_name> (
 
 #### Parameters
 
-- **Table name and engine**: Specify the database and new table name in an existing Paimon catalog. You can omit `ENGINE = paimon` when the target is a Paimon catalog. `IF NOT EXISTS` suppresses the error if the table already exists.
+- **Table name and engine**: Specify the database and new table name in an existing Paimon catalog. You can omit `ENGINE = paimon` when the target is a Paimon catalog. `IF NOT EXISTS` suppresses the duplicate-table error, but the table definition and properties are still validated.
 - **Column definitions**: Supported types are BOOLEAN, TINYINT, SMALLINT, INT, BIGINT, FLOAT, DOUBLE, DATE, DATETIME, CHAR, VARCHAR, VARBINARY, DECIMAL with precision up to 38, ARRAY, MAP, STRUCT, and VARIANT. DATETIME maps to Paimon TIMESTAMP(6). The existing read restrictions for VARIANT still apply. Only `DEFAULT NULL` is supported, and primary key columns cannot have defaults. Use `COMMENT` for column and table comments.
 - **Primary keys**: Define keys with `PRIMARY KEY (column, ...)` or the `primary-key` table property. Key columns need not be the first columns. If nullability is unspecified, they become non-nullable in the Paimon schema; explicitly declaring them as `NULL` is not allowed. If both key forms are specified, the resolved column names and their order must match.
 - **Partitions**: Use `PARTITION BY (column, ...)` for ordinary partition columns. Partition expressions and explicit partition definitions are not supported.
@@ -792,12 +792,6 @@ Alternatively, omit the `PRIMARY KEY (id, dt)` clause and add `"primary-key" = "
 - `DISTRIBUTED BY`, `ORDER BY`, `ROLLUP`, generated columns, aggregate columns, and `AUTO_INCREMENT` are not supported.
 - Non-NULL column defaults are not supported.
 - `CREATE TABLE LIKE`, `CREATE TABLE AS SELECT`, and writing data with `INSERT`, `UPDATE`, or `DELETE` are not supported.
-
-#### Metadata cache limitation
-
-If another engine drops a table whose metadata is cached in StarRocks, `CREATE TABLE` may still report that the table exists. `CREATE TABLE IF NOT EXISTS` may return successfully without recreating the missing table. Wait for the cached metadata to expire before retrying creation.
-
-`REFRESH EXTERNAL TABLE` is not a reliable workaround after an external drop: if the table's schema files have been removed, the refresh statement can fail while resolving the old table metadata, before invalidating the cache.
 
 ### DROP TABLE
 
