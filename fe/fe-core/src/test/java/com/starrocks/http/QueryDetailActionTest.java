@@ -41,9 +41,15 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -143,9 +149,52 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
                 .build();
     }
 
+    // Reads one HTTP/1.1 response with a chunked body off the stream and returns the body.
+    private static String readChunkedBody(InputStream in) throws IOException {
+        String statusLine = readLine(in);
+        Assertions.assertTrue(statusLine.startsWith("HTTP/1.1 200"), statusLine);
+        boolean chunked = false;
+        for (String header = readLine(in); !header.isEmpty(); header = readLine(in)) {
+            chunked |= header.equalsIgnoreCase("transfer-encoding: chunked");
+        }
+        Assertions.assertTrue(chunked, "not a chunked response");
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        for (int size = Integer.parseInt(readLine(in), 16); size > 0; size = Integer.parseInt(readLine(in), 16)) {
+            byte[] chunk = in.readNBytes(size);
+            Assertions.assertEquals(size, chunk.length);
+            body.write(chunk);
+            Assertions.assertEquals("", readLine(in));
+        }
+        Assertions.assertEquals("", readLine(in));
+        return body.toString(StandardCharsets.UTF_8);
+    }
+
+    private static String readLine(InputStream in) throws IOException {
+        StringBuilder line = new StringBuilder();
+        for (int c = in.read(); c != '\n'; c = in.read()) {
+            if (c < 0) {
+                throw new EOFException("connection closed in the middle of a response");
+            }
+            if (c != '\r') {
+                line.append((char) c);
+            }
+        }
+        return line.toString();
+    }
+
+    private String getRequest() {
+        return "GET /api/query_detail?event_time=0 HTTP/1.1\r\nHost: localhost\r\nAuthorization: " + rootAuth
+                + "\r\n\r\n";
+    }
+
     // Several chunks' worth of records with multi-byte statement text, about 480 KB in all.
     private static void addLargeWindow() {
-        for (int i = 0; i < 40; i++) {
+        addWindow(40);
+    }
+
+    // About 12 KB of statement text per record.
+    private static void addWindow(int records) {
+        for (int i = 0; i < records; i++) {
             QueryDetail detail = detail("large-" + i, "root", ROOT_PROFILE);
             detail.setSql("select '" + Strings.repeat("文", 4096) + "'");
             QueryDetailQueue.addQueryDetail(detail);
@@ -247,6 +296,54 @@ public class QueryDetailActionTest extends StarRocksHttpTestCase {
         Assertions.assertEquals(3, connections.size());
         Assertions.assertSame(connections.get(0), connections.get(1));
         Assertions.assertSame(connections.get(0), connections.get(2));
+    }
+
+    @Test
+    public void testPipelinedRequestsEachGetAWholeResponse() throws IOException {
+        stubOperate(true);
+        addLargeWindow();
+        String expected = new Gson().toJson(QueryDetailQueue.getQueryDetailsAfterTime(0));
+
+        try (Socket socket = new Socket("localhost", HTTP_PORT)) {
+            socket.setSoTimeout(20_000);
+            OutputStream out = socket.getOutputStream();
+            // Both requests are sent before either response is read: the connection handles one at a time, so the
+            // chunks of one response are not mixed with the other's.
+            out.write((getRequest() + getRequest()).getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+            InputStream in = new BufferedInputStream(socket.getInputStream());
+            Assertions.assertEquals(expected, readChunkedBody(in));
+            Assertions.assertEquals(expected, readChunkedBody(in));
+        }
+    }
+
+    @Test
+    public void testClientThatStopsReadingIsCutOff() throws Exception {
+        stubOperate(true);
+        // About 12 MB: more than the socket buffers on both ends hold, so the server's writes stall.
+        addWindow(1000);
+        long timeoutMs = BaseAction.chunkWriteTimeoutMs;
+        BaseAction.chunkWriteTimeoutMs = 1000;
+        try (Socket socket = new Socket()) {
+            socket.setReceiveBufferSize(4096);
+            socket.connect(new InetSocketAddress("localhost", HTTP_PORT));
+            socket.getOutputStream().write(getRequest().getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+            // Read nothing for a while, then drain what the connection still holds: it ends, short of the body.
+            Thread.sleep(5_000);
+            socket.setSoTimeout(20_000);
+            ByteArrayOutputStream received = new ByteArrayOutputStream();
+            try {
+                socket.getInputStream().transferTo(received);
+            } catch (SocketException e) {
+                // A reset is also the server giving up on the connection; a read timeout is not, and fails the test.
+            }
+            String raw = received.toString(StandardCharsets.UTF_8);
+            Assertions.assertTrue(raw.startsWith("HTTP/1.1 200"), raw.substring(0, Math.min(200, raw.length())));
+            Assertions.assertFalse(raw.endsWith("\r\n0\r\n\r\n"), "the whole body was sent");
+        } finally {
+            BaseAction.chunkWriteTimeoutMs = timeoutMs;
+        }
     }
 
     @Test
