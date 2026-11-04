@@ -592,6 +592,10 @@ static LocalDiskCacheEngine* partial_tablet_metadata_cache() {
     return cache != nullptr && cache->is_initialized() ? cache : nullptr;
 }
 
+bool TabletManager::can_keep_partial_tablet_metadata() const {
+    return partial_tablet_metadata_cache() != nullptr;
+}
+
 Status TabletManager::put_partial_tablet_metadata(const TabletMetadataPtr& metadata) {
     TRACE_COUNTER_SCOPE_LATENCY_US("put_partial_meta_us");
     auto* cache = partial_tablet_metadata_cache();

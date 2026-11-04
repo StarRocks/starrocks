@@ -211,10 +211,12 @@ TEST_F(LakeTabletManagerTest, partial_meta_in_local_disk_cache) {
     metadata->set_gtid(77);
     metadata->add_rowsets()->set_id(5);
 
+    EXPECT_FALSE(_tablet_manager->can_keep_partial_tablet_metadata());
     EXPECT_TRUE(_tablet_manager->put_partial_tablet_metadata(metadata).is_not_supported());
     EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_not_found());
 
     lake::ScopedLocalDiskCache local_disk_cache(_test_dir + "/partial_meta_cache");
+    EXPECT_TRUE(_tablet_manager->can_keep_partial_tablet_metadata());
     EXPECT_TRUE(_tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77).status().is_not_found());
     ASSERT_OK(_tablet_manager->put_partial_tablet_metadata(metadata));
     ASSIGN_OR_ABORT(auto read, _tablet_manager->get_partial_tablet_metadata(tablet_id, 3, 77));

@@ -1016,9 +1016,11 @@ void LakeServiceImpl::aggregate_publish_version(::google::protobuf::RpcControlle
                                            get_txn_ids_string(&req), JoinInts(req.tablet_ids(), ",")));
     }
 
-    // With partial_meta on, every node is still asked to publish after one sub-request failed: what the others
-    // finish now is kept for the retry instead of being redone (see lake_enable_publish_partial_meta).
-    const bool keep_dispatching_on_failure = config::lake_enable_publish_partial_meta;
+    // With partial_meta on and a local disk cache to keep it in, every node is still asked to publish after one
+    // sub-request failed: what the others finish now is kept for the retry instead of being redone (see
+    // lake_enable_publish_partial_meta). Without the cache there is nothing to keep, so stop as before.
+    const bool keep_dispatching_on_failure =
+            config::lake_enable_publish_partial_meta && _tablet_mgr->can_keep_partial_tablet_metadata();
     for (int i = 0; i < request->publish_reqs_size(); ++i) {
         if (ctx.has_failure && !keep_dispatching_on_failure) {
             ctx.count_down();
