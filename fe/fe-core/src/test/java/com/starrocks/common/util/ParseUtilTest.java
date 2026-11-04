@@ -14,6 +14,7 @@
 
 package com.starrocks.common.util;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -47,5 +48,43 @@ public class ParseUtilTest {
         Assertions.assertEquals("`a``b`", ParseUtil.backquote("a`b"));
         Assertions.assertEquals("```ab```", ParseUtil.backquote("`ab`"));
         Assertions.assertEquals("`ab`", ParseUtil.backquote("ab"));
+    }
+
+    @Test
+    public void testAnalyzeDataVolumeNormal() throws Exception {
+        Assertions.assertEquals(1L, ParseUtil.analyzeDataVolume("1B"));
+        Assertions.assertEquals(1024L, ParseUtil.analyzeDataVolume("1K"));
+        Assertions.assertEquals(1024L * 1024, ParseUtil.analyzeDataVolume("1MB"));
+        Assertions.assertEquals(10L * 1024 * 1024 * 1024, ParseUtil.analyzeDataVolume("10G"));
+        Assertions.assertEquals(8L * 1024 * 1024 * 1024 * 1024, ParseUtil.analyzeDataVolume("8t"));
+        Assertions.assertEquals(2L * 1024 * 1024 * 1024 * 1024 * 1024, ParseUtil.analyzeDataVolume("2P"));
+    }
+
+    @Test
+    public void testAnalyzeDataVolumeOverflow() {
+        // Each of these parses fine but its product with the byte-unit multiplier
+        // overflows a long (into negative, 0, or an unrelated positive value).
+        // They must all be rejected at analysis time.
+        for (String s : new String[] {"8589934592G", "17179869184G", "17179869185G", "9223372036854775807G"}) {
+            try {
+                ParseUtil.analyzeDataVolume(s);
+                Assertions.fail("expected AnalysisException for overflow input: " + s);
+            } catch (AnalysisException e) {
+                Assertions.assertTrue(e.getMessage().contains("overflow"),
+                        "unexpected message for " + s + ": " + e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    public void testAnalyzeDataVolumeInvalidInput() {
+        for (String s : new String[] {"0G", "-1G", "abc", "", "1XB"}) {
+            try {
+                ParseUtil.analyzeDataVolume(s);
+                Assertions.fail("expected AnalysisException for invalid input: '" + s + "'");
+            } catch (AnalysisException e) {
+                // expected
+            }
+        }
     }
 }
