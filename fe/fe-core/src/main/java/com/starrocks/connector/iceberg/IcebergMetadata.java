@@ -2610,7 +2610,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void invalidateCachedTable(String dbName, String tableName) {
         tables.remove(TableIdentifier.of(dbName, tableName));
-        icebergCatalog.invalidateTableCache(dbName, tableName);
+        icebergCatalog.invalidateTableCacheAfterPeerCommit(dbName, tableName);
     }
 
     private void refreshTableWithResource(Table table) {
@@ -2763,6 +2763,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 throw new RuntimeException(e);
             }
         }
+        // Outside the commit task, so waiting on a slow FE does not hold up the next commit queued for this table
+        invalidateOthersFeMetadataCache(dbName, tableName);
     }
 
     private void commitWithCleanup(Runnable commitAction, Runnable cleanupAction,
@@ -3087,7 +3089,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     System.currentTimeMillis() - startMs, deleteType);
         }
 
-        invalidateThenRefreshOthersFeMetadataCache(dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
     // The head of the branch a row delta commits to: validation must start from an ancestor of it
@@ -3252,7 +3254,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
         }
 
-        invalidateThenRefreshOthersFeMetadataCache(dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
     private void commitDataOperation(Transaction transaction, org.apache.iceberg.Table nativeTbl,
@@ -3340,15 +3342,23 @@ public class IcebergMetadata implements ConnectorMetadata {
                     System.currentTimeMillis() - startMs, writeType);
         }
 
-        invalidateThenRefreshOthersFeMetadataCache(dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
     }
 
     private void invalidateThenRefreshOthersFeMetadataCache(String dbName, String tableName) {
-        TableName table = new TableName(catalogName, dbName, tableName);
-        LOG.info("Invalidate and async refresh others fe iceberg metadata cache on {}.{}.{}",
-                catalogName, dbName, tableName);
-        GlobalStateMgr.getCurrentState().invalidateOthersFeTable(table);
-        GlobalStateMgr.getCurrentState().refreshOthersFeTableAsync(table, new ArrayList<>());
+        invalidateOthersFeMetadataCache(dbName, tableName);
+        asyncRefreshOthersFeMetadataCache(dbName, tableName);
+    }
+
+    private void invalidateOthersFeMetadataCache(String dbName, String tableName) {
+        LOG.info("Invalidate others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().invalidateOthersFeTable(new TableName(catalogName, dbName, tableName));
+    }
+
+    private void asyncRefreshOthersFeMetadataCache(String dbName, String tableName) {
+        LOG.info("Submit async refresh others fe iceberg metadata cache on {}.{}.{}", catalogName, dbName, tableName);
+        GlobalStateMgr.getCurrentState().refreshOthersFeTableAsync(
+                new TableName(catalogName, dbName, tableName), new ArrayList<>());
     }
 
     public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite, boolean isRewrite) {

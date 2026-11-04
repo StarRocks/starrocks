@@ -213,6 +213,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -716,6 +717,56 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testFinishSinkInvalidatesTheOtherFesOutsideTheCommitQueue() throws Exception {
+        IcebergCommitQueueManager manager = new IcebergCommitQueueManager(
+                new IcebergCommitQueueManager.Config(true, 30, 100));
+        try {
+            IcebergHiveCatalog icebergHiveCatalog =
+                    new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+            IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                    Executors.newSingleThreadExecutor(), null,
+                    new ConnectorProperties(ConnectorType.ICEBERG), new IcebergProcedureRegistry(), manager);
+            IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                    "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+            new Expectations(metadata) {
+                {
+                    metadata.getTable((ConnectContext) any, anyString, anyString);
+                    result = icebergTable;
+                    minTimes = 0;
+                }
+            };
+            List<String> otherFeCalls = new CopyOnWriteArrayList<>();
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public void invalidateOthersFeTable(TableName table) {
+                    otherFeCalls.add("invalidate on " + Thread.currentThread().getName());
+                }
+
+                @Mock
+                public Future<?> refreshOthersFeTableAsync(TableName table, List<String> partitionNames) {
+                    otherFeCalls.add("refresh");
+                    return CompletableFuture.completedFuture(null);
+                }
+            };
+
+            TIcebergDataFile dataFile = new TIcebergDataFile();
+            dataFile.setPath(FILE_A.path().toString());
+            dataFile.setFormat("parquet");
+            dataFile.setRecord_count(10);
+            dataFile.setFile_size_in_bytes(1024);
+            dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+            TSinkCommitInfo commitInfo = new TSinkCommitInfo();
+            commitInfo.setIceberg_data_file(dataFile);
+            metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(commitInfo), null);
+
+            Assertions.assertEquals(List.of("refresh", "invalidate on " + Thread.currentThread().getName()),
+                    otherFeCalls);
+        } finally {
+            manager.shutdownAll();
+        }
+    }
+
+    @Test
     public void testInvalidateCachedTableDropsTheTableWithoutLoadingIt() throws Exception {
         String dbName = "iceberg_db";
         String tableName = "iceberg_table";
@@ -739,7 +790,7 @@ public class IcebergMetadataTest extends TableTestBase {
 
         Assertions.assertAll(
                 () -> Assertions.assertEquals(0, loadsByTheInvalidation),
-                () -> Mockito.verify(icebergCatalog).invalidateTableCache(dbName, tableName),
+                () -> Mockito.verify(icebergCatalog).invalidateTableCacheAfterPeerCommit(dbName, tableName),
                 () -> Mockito.verify(icebergCatalog, Mockito.never()).invalidatePartitionCache(dbName, tableName),
                 () -> Assertions.assertEquals(2, catalogGetTableCalls.get(),
                         "the next read must load the table again once its cached copy is dropped"));

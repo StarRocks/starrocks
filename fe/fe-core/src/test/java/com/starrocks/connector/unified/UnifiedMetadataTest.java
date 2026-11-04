@@ -256,6 +256,18 @@ public class UnifiedMetadataTest {
     }
 
     @Test
+    public void testInvalidateCachedTableReachesTheIcebergConnector() {
+        new Expectations() {
+            {
+                icebergMetadata.invalidateCachedTable("test_db", "test_tbl");
+                times = 1;
+            }
+        };
+
+        unifiedMetadata.invalidateCachedTable("test_db", "test_tbl");
+    }
+
+    @Test
     public void testRouteToIcebergConnector(@Mocked HiveTable hiveTable) throws DdlException {
         Table icebergTable = new IcebergTable();
 

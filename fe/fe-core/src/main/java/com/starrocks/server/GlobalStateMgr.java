@@ -3599,7 +3599,7 @@ public class GlobalStateMgr {
     }
 
     private void awaitOtherFeInvalidated(String host, Future<TStatus> future, TableName tableName, long deadline,
-                                         int timeoutMs) throws InterruptedException {
+                                         int timeoutMs) throws InterruptedException, ExecutionException {
         try {
             TStatus status = future.get(Math.max(0, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
             if (status.getStatus_code() != TStatusCode.OK) {
@@ -3607,8 +3607,6 @@ public class GlobalStateMgr {
             }
         } catch (TimeoutException e) {
             LOG.warn("Fe {} did not invalidate {} within {} ms", host, tableName, timeoutMs);
-        } catch (ExecutionException e) {
-            LOG.warn("Fe {} did not invalidate {}", host, tableName, e);
         }
     }
 

@@ -412,6 +412,26 @@ public class MetadataMgrTest {
     }
 
     @Test
+    public void testInvalidateCachedTableReachesTheCatalogMetadata(@Mocked ConnectorMetadata connectorMetadata) {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<ConnectorMetadata> getOptionalMetadata(Optional<String> queryId, String catalogName) {
+                return "iceberg_catalog".equals(catalogName) ? Optional.of(connectorMetadata) : Optional.empty();
+            }
+        };
+        new Expectations() {
+            {
+                connectorMetadata.invalidateCachedTable("iceberg_db", "iceberg_table");
+                times = 1;
+            }
+        };
+
+        metadataMgr.invalidateCachedTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+        metadataMgr.invalidateCachedTable("catalog_not_exist", "iceberg_db", "iceberg_table");
+    }
+
+    @Test
     public void testRemoveCache() {
         MetadataMgr mgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 

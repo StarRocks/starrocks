@@ -651,6 +651,72 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testRefreshAfterAPeerCommitWarmsTheCommittedSnapshot(@Mocked IcebergCatalog delegate,
+                                                                    @Mocked PartitionSpec spec) {
+        Table beforeCommit = tableAtSnapshot(11L, 1000L, "metadata-v1", spec);
+        Table afterCommit = tableAtSnapshot(22L, 2000L, "metadata-v2", spec);
+        AtomicInteger loads = new AtomicInteger();
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = new Delegate<Table>() {
+                    Table get(ConnectContext c, String db, String tbl) {
+                        return loads.getAndIncrement() == 0 ? beforeCommit : afterCommit;
+                    }
+                };
+                delegate.getPartitions((IcebergTable) any, 22L, null);
+                result = new HashMap<String, Partition>();
+                times = 1;
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        ConnectContext ctx = new ConnectContext();
+
+        catalog.getTable(ctx, "db1", "t1");
+        catalog.invalidateTableCacheAfterPeerCommit("db1", "t1");
+        // The refresh that follows a commit reads the table first, so it finds the committed snapshot cached
+        Assertions.assertSame(afterCommit, catalog.getTable(ctx, "db1", "t1"));
+        catalog.refreshTable("db1", "t1", ctx, executor);
+    }
+
+    @Test
+    public void testRefreshOfAnUnchangedTableDoesNotWarmItsCaches(@Mocked IcebergCatalog delegate,
+                                                                 @Mocked PartitionSpec spec) {
+        Table current = tableAtSnapshot(22L, 2000L, "metadata-v2", spec);
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = current;
+                delegate.getPartitions((IcebergTable) any, anyLong, null);
+                times = 0;
+            }
+        };
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        ConnectContext ctx = new ConnectContext();
+
+        catalog.getTable(ctx, "db1", "t1");
+        catalog.refreshTable("db1", "t1", ctx, executor);
+    }
+
+    private static Table tableAtSnapshot(long snapshotId, long timestampMillis, String location, PartitionSpec spec) {
+        Snapshot snapshot = Mockito.mock(Snapshot.class);
+        Mockito.when(snapshot.snapshotId()).thenReturn(snapshotId);
+        Mockito.when(snapshot.timestampMillis()).thenReturn(timestampMillis);
+        Mockito.when(snapshot.dataManifests(Mockito.any())).thenReturn(Lists.newArrayList());
+        TableMetadata meta = Mockito.mock(TableMetadata.class);
+        Mockito.when(meta.metadataFileLocation()).thenReturn(location);
+        Mockito.when(meta.spec()).thenReturn(spec);
+        Mockito.when(meta.currentSnapshot()).thenReturn(snapshot);
+        TableOperations ops = Mockito.mock(TableOperations.class);
+        Mockito.when(ops.current()).thenReturn(meta);
+        return new BaseTable(ops, "db1.t1");
+    }
+
+    @Test
     public void testRefreshTableDoesNotResurrectEntryInvalidatedDuringReload(@Mocked IcebergCatalog delegate) {
         assertRefreshLeavesNoEntryAfterConcurrentChange(delegate, false, false);
     }

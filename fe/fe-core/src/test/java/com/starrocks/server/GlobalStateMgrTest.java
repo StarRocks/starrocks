@@ -1054,6 +1054,55 @@ public class GlobalStateMgrTest {
         }
     }
 
+    @Test
+    public void testInvalidateOthersFeTableOnlyLogsAnFeItCannotReach() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2", "127.0.0.3");
+        Set<String> attempted = ConcurrentHashMap.newKeySet();
+        new MockUp<ThriftRPCRequestExecutor>() {
+            @Mock
+            public <RESULT, SERVER_CLIENT extends org.apache.thrift.TServiceClient> RESULT call(
+                    com.starrocks.rpc.ThriftConnectionPool<SERVER_CLIENT> genericPool,
+                    TNetworkAddress address,
+                    int timeoutMs,
+                    int tryTimes,
+                    ThriftRPCRequestExecutor.MethodCallable<SERVER_CLIENT, RESULT> callable) throws TException {
+                attempted.add(address.getHostname());
+                throw new TException("connection refused");
+            }
+        };
+        try {
+            Assertions.assertDoesNotThrow(() -> globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t")));
+            Assertions.assertEquals(Set.of("127.0.0.2", "127.0.0.3"), attempted);
+        } finally {
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
+    @Test
+    public void testInvalidateOthersFeTableKeepsAnInterruptedCommitInterrupted() throws Exception {
+        int originalTimeout = Config.iceberg_commit_invalidate_other_fe_timeout_ms;
+        Config.iceberg_commit_invalidate_other_fe_timeout_ms = 3000;
+        GlobalStateMgr globalStateMgr = createRefreshTestGlobalStateMgr(2, 1);
+        setFrontendsAlive(globalStateMgr, "127.0.0.1", "127.0.0.2");
+        CountDownLatch neverAnswers = new CountDownLatch(1);
+        answerFeRpcs(new ConcurrentHashMap<>(), "127.0.0.2", neverAnswers);
+        try {
+            Thread.currentThread().interrupt();
+            globalStateMgr.invalidateOthersFeTable(new TableName("c", "d", "t"));
+
+            Assertions.assertTrue(Thread.interrupted());
+        } finally {
+            Thread.interrupted();
+            neverAnswers.countDown();
+            Config.iceberg_commit_invalidate_other_fe_timeout_ms = originalTimeout;
+            shutdownRefreshOtherFeExecutors(globalStateMgr);
+        }
+    }
+
     // Records each FE's request and answers OK; heldHost answers only once hold is released
     private void answerFeRpcs(Map<String, TRefreshTableRequest> requests, String heldHost, CountDownLatch hold) {
         new MockUp<ThriftRPCRequestExecutor>() {
