@@ -107,9 +107,13 @@ labels" row and the "If yes" change types; only write the sections and set the b
 - **Change in behavior**: check `- [x] No` (the notes themselves don't change product
   behavior).
 - **Checklist**: this PR *is* the user documentation; leave test-case boxes unchecked.
-- **Bugfix cherry-pick branch check**: this is a docs PR, not a code backport — leave this
-  section as the template has it (its versions, order and indentation) with every box unchecked
-  unless the user says otherwise.
+- **Bugfix cherry-pick branch check**: keep this section's rows as the template has them (its
+  versions, order and indentation). Release notes go to the release's line and every newer one,
+  so the docs agree on each branch: tick the parent "I have checked the version labels" box and
+  every version box **equal to or greater than** the minor line the notes are for, comparing
+  versions numerically. Leave older lines unticked. With the template listing 4.2, 4.1, 4.0 and
+  3.5: notes for 4.0.x tick 4.0, 4.1 and 4.2; notes for 4.1.x tick 4.1 and 4.2; notes for 3.5.x
+  tick all four.
 - Append the **"Needs reviewer confirmation"** list under "What I'm doing" so reviewers
   verify the flagged entries.
 
