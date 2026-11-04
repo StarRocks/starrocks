@@ -811,12 +811,4 @@ TEST(ColumnHashOracleTest, Xxh3AndCrc32ChainedSeedAndBinaryLengthsOracleParity) 
     run_xxh3_and_crc32_chained_seed_and_binary_lengths_oracle_parity();
 }
 
-TEST(ColumnHashTestOracle, Xxh3FixedWidthAndFallbackOracleParity) {
-    run_xxh3_fixed_width_and_fallback_oracle_parity();
-}
-
-TEST(ColumnHashTestOracle, Xxh3AndCrc32ChainedSeedAndBinaryLengthsOracleParity) {
-    run_xxh3_and_crc32_chained_seed_and_binary_lengths_oracle_parity();
-}
-
 } // namespace starrocks

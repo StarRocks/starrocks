@@ -448,7 +448,7 @@ public:
     }
 
 private:
-    [[always_inline]] uint32_t* slot(uint32_t idx) const {
+    ALWAYS_INLINE uint32_t* slot(uint32_t idx) const {
         if constexpr (std::is_same_v<SelectorType, SelectorSingle>) {
             return _hashes;
         } else if constexpr (std::is_same_v<SelectorType, SelectorRangeRebased>) {
