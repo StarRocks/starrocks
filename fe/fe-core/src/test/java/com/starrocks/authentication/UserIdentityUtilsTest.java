@@ -16,11 +16,11 @@ package com.starrocks.authentication;
 
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TTableInfo;
@@ -105,7 +105,7 @@ public class UserIdentityUtilsTest {
     @Test
     public void testEphemeralUserGetsActivatedRoles() throws Exception {
         // An ephemeral user owns no roles; its privileges are the roles its session activated.
-        TUserIdentity userIdent = userIdent(new UserIdentity("uiu_ephemeral", "%", false, true), List.of(openRoleId));
+        TUserIdentity userIdent = userIdent(new UserIdentity(true, "uiu_ephemeral", "%"), List.of(openRoleId));
         ConnectContext caller = withoutSession(() -> callerOf(userIdent));
 
         assertEquals(Set.of(openRoleId), caller.getCurrentRoleIds());
@@ -130,7 +130,7 @@ public class UserIdentityUtilsTest {
         // information_schema.tables: an ephemeral user sees the tables its activated roles may read.
         TAuthInfo authInfo = new TAuthInfo();
         authInfo.setCurrent_user_ident(
-                userIdent(new UserIdentity("uiu_ephemeral", "%", false, true), List.of(openRoleId)));
+                userIdent(new UserIdentity(true, "uiu_ephemeral", "%"), List.of(openRoleId)));
         authInfo.setPattern(DB);
         TGetTablesInfoRequest request = new TGetTablesInfoRequest();
         request.setAuth_info(authInfo);
