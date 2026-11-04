@@ -78,7 +78,7 @@ struct XXHash3 {
             return static_cast<uint32_t>(XXH3_len_1to3_64b(static_cast<const xxh_u8*>(data), static_cast<size_t>(bytes),
                                                            XXH3_kSecret, seed));
         }
-        return static_cast<uint32_t>(HashUtil::xx_hash3_64(data, bytes, seed));
+        return static_cast<uint32_t>(HashUtil::xx_hash3_64(data, UNLIKELY(bytes <= 0) ? 0 : bytes, seed));
     }
 };
 

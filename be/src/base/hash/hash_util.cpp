@@ -108,20 +108,20 @@ static uint64_t crc64_init_stub(const void* data, int32_t bytes, uint64_t hash) 
 }
 
 uint64_t HashUtil::xx_hash3_64(const void* key, int32_t len, uint64_t seed) {
-    return XXH3_64bits_withSeed(key, len, seed);
+    return XXH3_64bits_withSeed(key, UNLIKELY(len < 0) ? 0 : static_cast<size_t>(len), seed);
 }
 
 uint32_t HashUtil::xx_hash32(const void* key, int32_t len, uint32_t seed) {
-    return XXH32(key, len, seed);
+    return XXH32(key, UNLIKELY(len < 0) ? 0 : static_cast<size_t>(len), seed);
 }
 
 uint64_t HashUtil::xx_hash64(const void* key, int32_t len, uint64_t seed) {
-    return XXH64(key, len, seed);
+    return XXH64(key, UNLIKELY(len < 0) ? 0 : static_cast<size_t>(len), seed);
 }
 
 uint64_t HashUtil::hash64_fallback(const void* data, int32_t bytes, uint64_t seed) {
     uint64_t hash = 0;
-    murmur_hash3_x64_64(data, bytes, seed, &hash);
+    murmur_hash3_x64_64(data, UNLIKELY(bytes < 0) ? 0 : bytes, seed, &hash);
     return hash;
 }
 
@@ -153,6 +153,14 @@ static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash) {
 }
 
 static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash) {
+    if (UNLIKELY(bytes <= 0)) {
+        uint32_t h1 = hash >> 32;
+        uint32_t h2 = (hash << 32) >> 32;
+        h1 = (h1 << 16) | (h1 >> 16);
+        h2 = (h2 << 16) | (h2 >> 16);
+        return (static_cast<uint64_t>(h2) << 32) | h1;
+    }
+
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % sizeof(uint32_t);
 
@@ -210,6 +218,14 @@ static uint32_t crc_hash_arm64(const void* data, int32_t bytes, uint32_t hash) {
 }
 
 static uint64_t crc_hash64_arm64(const void* data, int32_t bytes, uint64_t hash) {
+    if (UNLIKELY(bytes <= 0)) {
+        uint32_t h1 = hash >> 32;
+        uint32_t h2 = (hash << 32) >> 32;
+        h1 = (h1 << 16) | (h1 >> 16);
+        h2 = (h2 << 16) | (h2 >> 16);
+        return (static_cast<uint64_t>(h2) << 32) | h1;
+    }
+
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % sizeof(uint32_t);
 
