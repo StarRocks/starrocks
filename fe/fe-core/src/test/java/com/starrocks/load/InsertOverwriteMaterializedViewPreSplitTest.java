@@ -205,16 +205,21 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
     }
 
     @Test
-    public void nonPristineAutoIncrementCounterSubmitsNothing() {
-        // Once an id has been handed out, a compute node may still hold cached ids this planner can
-        // neither see nor bound, so the low end of the span is no longer known to be 1 and the whole
-        // derivation is guesswork. The gate is cheap and easy to "optimise away", hence this case.
+    public void usedAutoIncrementCounterCutsAboveTheCounter() {
+        // Every id a later grant hands out is at or above the counter, so the span starts there: same
+        // 4 tablets and 1000-row stride as the pristine case, shifted to 500 + 1000 * k. The doubled gap
+        // mass (2 * 1 node * cache size 25 = 50) still affords 4000 / (10 * 50) = 8 tablets, so the
+        // requested count of 4 survives without touching auto_increment_cache_size.
         try (Fixture fixture = new Fixture(/*temporaryPartitionCount*/ 1)) {
             fixture.assignAutoIncrementId(500L);
 
             fixture.runner.preSplitStaticOverwriteTempPartitions();
 
-            fixture.assertNothingSubmitted();
+            List<TabletRange> ranges = fixture.submittedRanges().get(FIRST_BASE_TABLET_ID);
+            Assertions.assertEquals(4, ranges.size(), "three cuts carve four tablets");
+            Assertions.assertEquals(rowIdTuple(1500L), ranges.get(0).getRange().getUpperBound());
+            Assertions.assertEquals(rowIdTuple(2500L), ranges.get(1).getRange().getUpperBound());
+            Assertions.assertEquals(rowIdTuple(3500L), ranges.get(2).getRange().getUpperBound());
         }
     }
 
@@ -491,7 +496,7 @@ public class InsertOverwriteMaterializedViewPreSplitTest {
             return ArgumentCaptor.forClass(Map.class);
         }
 
-        /** Hand out an id for the view, making the row-id space no longer pristine. */
+        /** Hand out an id for the view so the next span starts above it. */
         private void assignAutoIncrementId(long currentAutoIncrementId) {
             when(localMetastore.getCurrentAutoIncrementIdByTableId(MV_ID)).thenReturn(currentAutoIncrementId);
         }

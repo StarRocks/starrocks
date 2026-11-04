@@ -67,10 +67,9 @@ final class MaterializedViewRowIdBoundaries {
      */
     static DerivedBoundarySource sourceFor(OlapTable table, Estimates estimates, int activeComputeNodeCount) {
         return (indexTarget, requestedTabletCount) -> AutoIncrementRowIdBoundaries.plan(
-                // Read when the boundaries are planned rather than when this source is resolved: the
-                // derivation holds only while the counter is pristine, so the closer that read sits to
-                // the split being submitted, the smaller the window in which a concurrent load could
-                // have started allocating ids without this planner noticing.
+                // Read when the boundaries are planned rather than when this source is resolved: the span
+                // starts at the counter, so reading it as close as possible to the split being submitted
+                // starts the span at the most recent value.
                 GlobalStateMgr.getCurrentState().getLocalMetastore()
                         .getCurrentAutoIncrementIdByTableId(table.getId()),
                 estimates.totalRows(), requestedTabletCount, activeComputeNodeCount,
