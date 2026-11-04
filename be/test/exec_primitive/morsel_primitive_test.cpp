@@ -89,4 +89,80 @@ TEST(MorselPrimitiveTest, ScanMorselHandlesEmptyScanRangeMarker) {
     ASSERT_TRUE(has_more);
 }
 
+TEST(MorselPrimitiveTest, GroupedEnvelopeSurvivesCopiesAndKeepsSameTabletTasksDistinct) {
+    TInternalScanRange internal;
+    internal.__set_tablet_id(77);
+    internal.__set_version("42");
+    internal.__set_bucket_sequence(0);
+    TGroupedRangeTask task;
+    task.__set_group_id(0);
+    TTuple cut;
+    for (auto literal : {"5", "0", "0"}) {
+        TScalarType scalar;
+        scalar.__set_type(TPrimitiveType::BIGINT);
+        TTypeNode node;
+        node.__set_type(TTypeNodeType::SCALAR);
+        node.__set_scalar_type(scalar);
+        TTypeDesc type;
+        type.__set_types({node});
+        type.__isset.types = true;
+        TVariant value;
+        value.__set_type(type);
+        value.__set_variant_type(TVariantType::NORMAL_VALUE);
+        value.__set_value(literal);
+        cut.values.push_back(value);
+    }
+    TTabletRange clip;
+    clip.__set_upper_bound(cut);
+    clip.__set_upper_bound_included(false);
+    task.__set_key_range(clip);
+    task.__set_sort_key_unique_ids({100, 101, 102});
+    TScanRangeParams first;
+    first.scan_range.__set_internal_scan_range(internal);
+    first.scan_range.__set_grouped_range_task(task);
+    auto second = first;
+    second.scan_range.grouped_range_task.__set_group_id(1);
+    second.scan_range.grouped_range_task.key_range.__isset.upper_bound = false;
+    second.scan_range.grouped_range_task.key_range.__set_lower_bound(cut);
+    second.scan_range.grouped_range_task.key_range.__set_lower_bound_included(true);
+    second.scan_range.internal_scan_range.__set_bucket_sequence(1);
+    Morsels morsels;
+    bool has_more = false;
+    ScanMorsel::build_scan_morsels(9, {first, second}, true, &morsels, &has_more);
+    ASSERT_EQ(2, morsels.size());
+    first.scan_range.grouped_range_task.__set_group_id(99);
+    for (int i = 0; i < 2; ++i) {
+        auto* range = morsels[i]->get_scan_range();
+        EXPECT_TRUE(range->__isset.grouped_range_task);
+        EXPECT_EQ(i, range->grouped_range_task.group_id);
+        EXPECT_EQ(i == 0, range->grouped_range_task.key_range.__isset.upper_bound);
+        EXPECT_EQ(i == 1, range->grouped_range_task.key_range.__isset.lower_bound);
+        const auto& bound = i == 0 ? range->grouped_range_task.key_range.upper_bound
+                                   : range->grouped_range_task.key_range.lower_bound;
+        EXPECT_EQ(cut, bound);
+        EXPECT_EQ((std::vector<int32_t>{100, 101, 102}), range->grouped_range_task.sort_key_unique_ids);
+        EXPECT_EQ(77, range->internal_scan_range.tablet_id);
+        EXPECT_EQ("42", range->internal_scan_range.version);
+        EXPECT_EQ(i, morsels[i]->owner_id());
+    }
+    EXPECT_FALSE(has_more);
+}
+
+TEST(MorselPrimitiveTest, GroupedPaddingHasNoSyntheticTabletAndTerminates) {
+    TScanRangeParams marker;
+    marker.__set_empty(true);
+    Morsels morsels;
+    bool has_more = true;
+    ScanMorsel::build_scan_morsels(9, {marker}, true, &morsels, &has_more);
+    EXPECT_TRUE(morsels.empty());
+    EXPECT_FALSE(has_more);
+    auto queue = make_fixed_morsel_queue_builder(std::move(morsels))->build();
+    ASSERT_TRUE(queue.ok());
+    EXPECT_TRUE(queue.value()->empty());
+    EXPECT_FALSE(queue.value()->has_more());
+    auto next = queue.value()->try_get();
+    ASSERT_TRUE(next.ok());
+    EXPECT_EQ(nullptr, next.value());
+}
+
 } // namespace starrocks::pipeline
