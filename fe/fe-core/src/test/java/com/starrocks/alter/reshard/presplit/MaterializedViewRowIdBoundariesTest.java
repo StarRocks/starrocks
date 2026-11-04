@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintTuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -131,9 +132,9 @@ public class MaterializedViewRowIdBoundariesTest {
 
     @Test
     public void testCounterIsReadWhenBoundariesArePlanned() {
-        // The pristine check has to run against the counter as it stands when the split is planned, not
-        // as it stood when the source was resolved: a load that starts allocating ids in between
-        // invalidates the derivation, and a resolve-time read would carve the span anyway.
+        // The span starts at the counter, so it has to be read as it stands when the split is planned, not
+        // as it stood when the source was resolved: a load that allocates ids in between moves the span
+        // start, and a resolve-time read would leave the cuts below the ids the refresh actually gets.
         MaterializedView materializedView =
                 mockMaterializedView(RowIdStrategy.AUTO_INCREMENT, /*visibleIndexCount=*/ 1);
         LocalMetastore localMetastore = mock(LocalMetastore.class);
@@ -151,12 +152,17 @@ public class MaterializedViewRowIdBoundariesTest {
 
             DerivedBoundarySource.Result pristine = source.plan(rowIdIndexTarget(), /*requestedTabletCount=*/ 4);
             Assertions.assertNull(pristine.skipReason());
-            Assertions.assertEquals(3, pristine.boundaries().getBoundaries().size());
+            // cache 25, 1 node, 1,000,000 rows, 4 tablets: stride 250,000 from span start 1
+            Assertions.assertEquals(List.of(bigintTuple(250_001), bigintTuple(500_001), bigintTuple(750_001)),
+                    pristine.boundaries().getBoundaries());
 
             when(localMetastore.getCurrentAutoIncrementIdByTableId(any())).thenReturn(500L);
-            Assertions.assertEquals(SkipReason.ROW_ID_SPACE_NOT_PRISTINE,
-                    source.plan(rowIdIndexTarget(), /*requestedTabletCount=*/ 4).skipReason(),
-                    "an id already handed out between resolve and plan must stop the derivation");
+            // The doubled gap mass (50) still affords 4 tablets; the same stride starts at the counter,
+            // so every cut moves by exactly 499.
+            DerivedBoundarySource.Result used = source.plan(rowIdIndexTarget(), /*requestedTabletCount=*/ 4);
+            Assertions.assertNull(used.skipReason());
+            Assertions.assertEquals(List.of(bigintTuple(250_500), bigintTuple(500_500), bigintTuple(750_500)),
+                    used.boundaries().getBoundaries());
         }
     }
 

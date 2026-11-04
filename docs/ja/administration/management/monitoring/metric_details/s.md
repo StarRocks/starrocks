@@ -699,7 +699,6 @@ description: "Alphabetical s"
 | --- | --- |
 | `materialized_view_target` | 導出ティアがこのマテリアライズドビューに対応していない（増分マテリアライズドビューでない、ソートキーが隠し row-id 列でないなど）。 |
 | `row_id_span_too_small` | 推定出力が小さすぎて、row-id の範囲を均等に分割できない。 |
-| `row_id_space_not_pristine` | 自動インクリメントカウンタが既に id を払い出しているため、分割点を安全に導出できない。 |
 | `estimate_unavailable` | 利用できる出力サイズの見積もりがなく、タブレット数を決められない。テーブル統計のない External Catalog のテーブルからの INSERT でも記録される。 |
 | `multiple_temporary_partitions` | リフレッシュが複数の置き換えパーティションに書き込むため、分割するとほとんどのタブレットが空になる。機能を有効にしてもこれは変わらない。 |
 | `derivation_failed` | 分割点の導出に失敗した、または導出した分割点が検証に通らなかった。 |
