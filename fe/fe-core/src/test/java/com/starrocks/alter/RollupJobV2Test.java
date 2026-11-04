@@ -67,6 +67,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -504,8 +505,13 @@ public class RollupJobV2Test extends DDLTestBase {
             handler.processCreateMaterializedView(stmt, leader.getDb(dbName), table);
             AlterJobV2 job = handler.getAlterJobsV2().values().iterator().next();
             Expr predicate = Deencapsulation.getField(job, "whereClause");
+            String predicateSql = predicate == null ? null : ExprToSql.toSql(predicate);
             runToFinished(job);
             table.setState(OlapTable.OlapTableState.NORMAL);
+            if (predicate != null) {
+                assertEquals(predicateSql, ExprToSql.toSql(table.getIndexMetaByMetaId(
+                        table.getIndexMetaIdByName("mv_" + name)).getWhereClause()));
+            }
             GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(job), AlterJobV2.class);
             assertSyncMvInsertPlans(ctx, tableName);
             table.getIndexMetaIdToMeta().values().forEach(table::analyzeRollupIndexMeta);

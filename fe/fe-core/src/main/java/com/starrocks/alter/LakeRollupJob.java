@@ -629,9 +629,16 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase implements GsonP
 
             if (jobState == JobState.PENDING) {
                 addTabletToInvertedIndex(table);
+                // A replayed PENDING job may be resumed by the leader before WAITING_TXN is replayed.
+                MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(rollupIndexMetaId, rollupSchema,
+                        rollupSchemaVersion, rollupSchemaHash, rollupShortKeyColumnCount,
+                        TStorageType.COLUMN, rollupKeysType, origStmt);
+                indexMeta.setWhereClause(whereClause);
+                table.analyzeRollupIndexMetaBestEffort(indexMeta);
                 table.setState(OlapTable.OlapTableState.ROLLUP);
             } else if (jobState == JobState.WAITING_TXN) {
                 addRollupIndexToCatalog(table);
+                table.analyzeRollupIndexMetaBestEffort(table.getIndexMetaByMetaId(rollupIndexMetaId));
             } else if (jobState == JobState.RUNNING) {
                     // do nothing
             } else if (jobState == JobState.FINISHED_REWRITING) {
@@ -719,7 +726,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase implements GsonP
         indexMeta.setViewDefineSql(viewDefineSql);
         indexMeta.setColocateMVIndex(isColocateMVIndex);
         indexMeta.setWhereClause(whereClause);
-        tbl.analyzeRollupIndexMetaBestEffort(indexMeta);
         tbl.rebuildFullSchema();
     }
 

@@ -485,7 +485,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         indexMeta.setViewDefineSql(viewDefineSql);
         indexMeta.setColocateMVIndex(isColocateMVIndex);
         indexMeta.setWhereClause(whereClause);
-        tbl.analyzeRollupIndexMetaBestEffort(indexMeta);
         tbl.rebuildFullSchema();
     }
 
@@ -921,6 +920,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()),
                 LockType.WRITE)) {
             addTabletToInvertedIndex(tbl);
+            // A replayed PENDING job may be resumed by the leader before WAITING_TXN is replayed.
+            MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(rollupIndexMetaId, rollupSchema,
+                    rollupSchemaVersion, rollupSchemaHash, rollupShortKeyColumnCount,
+                    TStorageType.COLUMN, rollupKeysType, origStmt);
+            indexMeta.setWhereClause(whereClause);
+            tbl.analyzeRollupIndexMetaBestEffort(indexMeta);
         }
 
         // to make sure that this job will run runPendingJob() again to create the rollup replicas
@@ -969,6 +974,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         try (AutoCloseableLock ignore =
                 new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.WRITE)) {
             addRollupIndexToCatalog(tbl);
+            tbl.analyzeRollupIndexMetaBestEffort(tbl.getIndexMetaByMetaId(rollupIndexMetaId));
         }
 
         // should still be in WAITING_TXN state, so that the alter tasks will be resend again
