@@ -53,10 +53,15 @@ import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(DeltaLakeMetastore.class);
-    private static final int CHECKPOINT_ESTIMATOR_SAMPLE_SIZE = 3;
-    private static final int CHECKPOINT_ESTIMATOR_MAX_DEPTH = 8;
-    private static final int JSON_ESTIMATOR_SAMPLE_SIZE = 5;
-    private static final int JSON_ESTIMATOR_MAX_DEPTH = 10;
+    // The cached values are heterogeneous at small fan-out: a checkpoint StructVector's member vectors
+    // range from a long column to the path column, and a log line's ObjectNode has ~6 fields of which
+    // `stats` dominates. A sample smaller than that fan-out extrapolates from whichever fields it hits
+    // (measured 1.43x on checkpoints, 0.31x on json at 3/8 and 5/10), so sample them in full. Same values
+    // as estimateSize(), so the ledger and the reported number agree.
+    private static final int CHECKPOINT_ESTIMATOR_SAMPLE_SIZE = 20;
+    private static final int CHECKPOINT_ESTIMATOR_MAX_DEPTH = 20;
+    private static final int JSON_ESTIMATOR_SAMPLE_SIZE = 20;
+    private static final int JSON_ESTIMATOR_MAX_DEPTH = 20;
     protected final String catalogName;
     protected final IMetastore delegate;
     protected final Configuration hdfsConfiguration;
