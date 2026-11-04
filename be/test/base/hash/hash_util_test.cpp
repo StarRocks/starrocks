@@ -449,6 +449,51 @@ TEST(HashUtilTest, CrcHashUnalignedAllSizes) {
     }
 }
 
+TEST(HashUtilTest, CrcHashNegativeBytesDoesNotOverread) {
+    std::vector<uint8_t> exact(4, 0x5a);
+    const uint32_t seed = 0x811C9DC5u;
+    if (hardware_crc_available()) {
+        EXPECT_EQ(HashUtil::crc_hash(exact.data(), -3, seed), ref_half_swap(seed));
+    } else {
+        EXPECT_EQ(HashUtil::crc_hash(exact.data(), -3, seed), seed);
+    }
+}
+
+TEST(HashUtilTest, CrcHashArm64EightByteStepParity) {
+    if (!hardware_crc_available()) {
+        GTEST_SKIP() << "Hardware CRC-32C not available in this build/CPU";
+    }
+    const auto buf = make_pattern(4096 + 16);
+    std::vector<int32_t> lens;
+    for (int32_t len = 0; len <= 130; ++len) {
+        lens.push_back(len);
+    }
+    for (int32_t len : {255, 1024, 4096}) {
+        lens.push_back(len);
+    }
+    for (uint32_t seed : {0u, 1u, 0x811C9DC5u, 0xdeadbeefu, 0xffffffffu}) {
+        for (int32_t offset = 0; offset <= 7; ++offset) {
+            const uint8_t* p = buf.data() + offset;
+            for (int32_t len : lens) {
+                std::vector<uint8_t> exact(p, p + len);
+                const uint8_t* ptr = len > 0 ? exact.data() : p;
+                EXPECT_EQ(HashUtil::crc_hash(ptr, len, seed), ref_crc_hash(ptr, len, seed))
+                        << "len=" << len << " offset=" << offset << " seed=" << seed;
+            }
+        }
+    }
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+    for (int32_t offset = 0; offset <= 7; ++offset) {
+        const uint8_t* p = buf.data() + offset;
+        const uint64_t u64 = HashUtil::unaligned_load<uint64_t>(p);
+        const uint32_t lo32 = HashUtil::unaligned_load<uint32_t>(p);
+        const uint32_t hi32 = HashUtil::unaligned_load<uint32_t>(p + 4);
+        const uint32_t seed = 0x811C9DC5u;
+        EXPECT_EQ(__crc32cd(seed, u64), __crc32cw(__crc32cw(seed, lo32), hi32));
+    }
+#endif
+}
+
 #if (defined(__x86_64__) && defined(__SSE4_2__)) || (defined(__aarch64__) && defined(__ARM_FEATURE_CRC32))
 TEST(HashUtilTest, CrcHash64UnmixedDoesNotDoubleHashTail) {
     const uint64_t seed = 0x12345678abcdef90ULL;

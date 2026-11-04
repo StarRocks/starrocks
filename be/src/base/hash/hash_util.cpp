@@ -127,6 +127,10 @@ uint64_t HashUtil::hash64_fallback(const void* data, int32_t bytes, uint64_t see
 
 #ifdef __SSE4_2__
 static uint32_t crc_hash_sse42(const void* data, int32_t bytes, uint32_t hash) {
+    if (UNLIKELY(bytes <= 0)) {
+        return (hash << 16) | (hash >> 16);
+    }
+
     uint32_t words = bytes / sizeof(uint32_t);
     bytes = bytes % sizeof(uint32_t);
 
@@ -176,17 +180,25 @@ static uint64_t crc_hash64_sse42(const void* data, int32_t bytes, uint64_t hash)
 
 #if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
 static uint32_t crc_hash_arm64(const void* data, int32_t bytes, uint32_t hash) {
-    uint32_t words = bytes / sizeof(uint32_t);
-    bytes = bytes % sizeof(uint32_t);
+    if (UNLIKELY(bytes <= 0)) {
+        return (hash << 16) | (hash >> 16);
+    }
 
     const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
 
-    while (words--) {
+    while (bytes >= static_cast<int32_t>(sizeof(uint64_t))) {
+        hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
+        p += sizeof(uint64_t);
+        bytes -= sizeof(uint64_t);
+    }
+
+    if (bytes & 4) {
         hash = __crc32cw(hash, unaligned_load<uint32_t>(p));
         p += sizeof(uint32_t);
     }
 
-    while (bytes--) {
+    int32_t tail = bytes & 3;
+    while (tail--) {
         hash = __crc32cb(hash, *p);
         ++p;
     }
