@@ -1172,8 +1172,6 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_del_num_rows) {
     EXPECT_EQ(100, total); // 70 + 30
 }
 
-<<<<<<< HEAD
-=======
 // batch path: every op_write of a multi-statement transaction goes into one merged rowset. A row-mode
 // partial update keys its rewritten segments by position in its own op_write, and each rewrite must
 // land on that op_write's segment of the merged rowset -- found by segment POSITION, which an
@@ -1188,7 +1186,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_places_rewrites_on_their_own_segme
 
     MetaFileBuilder builder(*tablet, metadata);
     auto rewrite = [](const std::string& path) {
-        SegmentFileInfo info;
+        FileInfo info;
         info.path = path;
         info.size = 100;
         return info;
@@ -1231,65 +1229,6 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_places_rewrites_on_their_own_segme
     EXPECT_EQ(305u, metadata->next_rowset_id());
 }
 
-// The partial-update replace path refreshes segment_vector_index_uid wholesale from the replace
-// FileInfo (apply_replace_segment): a recorded owner overwrites whatever the replaced segment
-// carried, and an unset owner (-1) clears a stale one. Non-replaced segments are carried verbatim.
-TEST_F(MetaFileTest, test_apply_opwrite_replace_refreshes_vector_index_owner) {
-    const int64_t tablet_id = 31003;
-    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
-    auto metadata = std::make_shared<TabletMetadata>();
-    metadata->set_id(tablet_id);
-    metadata->set_version(10);
-    metadata->set_next_rowset_id(110);
-
-    MetaFileBuilder builder(*tablet, metadata);
-    TxnLogPB_OpWrite op_write;
-    auto* rowset = op_write.mutable_rowset();
-    {
-        // Replaced by a rewrite that recorded an owner: refreshed to the FileInfo's value.
-        auto* replaced = rowset->add_segment_metas();
-        replaced->set_filename("partial0.dat");
-        replaced->add_vector_index_ids(100);
-        // Replaced by a rewrite without vector indexes: the stale pre-set owner must be cleared.
-        auto* stale_owner = rowset->add_segment_metas();
-        stale_owner->set_filename("partial1.dat");
-        stale_owner->add_vector_index_ids(100);
-        stale_owner->set_segment_vector_index_uid(7777);
-        // Not replaced: carried verbatim.
-        auto* untouched = rowset->add_segment_metas();
-        untouched->set_filename("untouched.dat");
-        untouched->add_vector_index_ids(100);
-        untouched->set_segment_vector_index_uid(9999);
-    }
-
-    std::map<int, SegmentFileInfo> replace_segments;
-    SegmentFileInfo rewrite0;
-    rewrite0.path = "rewrite0.dat";
-    rewrite0.size = 1024;
-    rewrite0.vector_index_ids.push_back(100);
-    rewrite0.segment_vector_index_uid = tablet_id;
-    replace_segments[0] = rewrite0;
-    SegmentFileInfo rewrite1; // no ids, no owner
-    rewrite1.path = "rewrite1.dat";
-    rewrite1.size = 2048;
-    replace_segments[1] = rewrite1;
-
-    builder.apply_opwrite(op_write, replace_segments, {});
-
-    ASSERT_EQ(1, metadata->rowsets_size());
-    const auto& written = metadata->rowsets(0);
-    ASSERT_EQ(3, written.segment_metas_size());
-    EXPECT_EQ("rewrite0.dat", written.segment_metas(0).filename());
-    ASSERT_TRUE(written.segment_metas(0).has_segment_vector_index_uid());
-    EXPECT_EQ(tablet_id, written.segment_metas(0).segment_vector_index_uid());
-    EXPECT_EQ("rewrite1.dat", written.segment_metas(1).filename());
-    EXPECT_EQ(0, written.segment_metas(1).vector_index_ids_size());
-    EXPECT_FALSE(written.segment_metas(1).has_segment_vector_index_uid());
-    ASSERT_TRUE(written.segment_metas(2).has_segment_vector_index_uid());
-    EXPECT_EQ(9999, written.segment_metas(2).segment_vector_index_uid());
-}
-
->>>>>>> f2f1e66 ([BugFix] Fix row-mode partial updates and bundle offsets in a lake multi-statement transaction's merged rowset (#79402))
 TEST_F(MetaFileTest, test_apply_opcompaction_delete_delvec_with_segment_id) {
     const int64_t tablet_id = 31002;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
@@ -1564,8 +1503,6 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
 
-<<<<<<< HEAD
-=======
 // A batch can mix physical bundle slices and standalone files. Preserve every physical offset and
 // rssid while assigning the standalone files synthetic offset 0 in the merged rowset.
 TEST_F(MetaFileTest, test_batch_apply_opwrite_merges_bundled_and_standalone_segments) {
@@ -1780,7 +1717,7 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_keeps_other_statements_bun
         segment->set_filename("partial.dat");
         segment->set_bundle_file_offset(0);
     }
-    SegmentFileInfo rewrite;
+    FileInfo rewrite;
     rewrite.path = "rewrite.dat";
     rewrite.size = 300;
     builder.batch_apply_opwrite(partial, {{0, rewrite}}, {});
@@ -1851,61 +1788,6 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_normalizes_mixed_op_write) {
     EXPECT_EQ(402, metadata->next_rowset_id());
 }
 
-// PrimaryKeyManager::_do_delete hands a pre-built tombstone sstable that an index other than the cloud-native one
-// does not ingest to vacuum through the rowset's orphan files, next to the segments a partial update replaced.
-// Both the single and the batch apply path must record it like those: name, size and shared flag kept, and the
-// version being built stamped as its creation version unless the producer set one.
-TEST_F(MetaFileTest, test_apply_opwrite_records_tombstone_sstable_orphan) {
-    const int64_t tablet_id = 30004;
-    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
-    std::vector<FileMetaPB> orphan_files(3);
-    orphan_files[0].set_name("replaced.dat");
-    orphan_files[0].set_size(10);
-    orphan_files[1].set_name("0000000000000007_tombstone.sst");
-    orphan_files[1].set_size(20);
-    orphan_files[1].set_shared(true);
-    orphan_files[2].set_name("0000000000000008_tombstone.sst");
-    orphan_files[2].set_size(30);
-    orphan_files[2].set_version(5);
-
-    auto check_orphans = [&](const TabletMetadata& metadata) {
-        ASSERT_EQ(orphan_files.size(), metadata.orphan_files_size());
-        for (int i = 0; i < metadata.orphan_files_size(); i++) {
-            const auto& orphan = metadata.orphan_files(i);
-            EXPECT_EQ(orphan_files[i].name(), orphan.name());
-            EXPECT_EQ(orphan_files[i].size(), orphan.size());
-            EXPECT_EQ(orphan_files[i].shared(), orphan.shared());
-            EXPECT_EQ(orphan_files[i].has_version() ? orphan_files[i].version() : metadata.version(), orphan.version())
-                    << orphan.name();
-        }
-    };
-
-    {
-        auto metadata = std::make_shared<TabletMetadata>();
-        metadata->set_id(tablet_id);
-        metadata->set_version(10);
-        metadata->set_next_rowset_id(110);
-        MetaFileBuilder builder(*tablet, metadata);
-        TxnLogPB_OpWrite op_write;
-        op_write.mutable_rowset()->add_segment_metas()->set_filename("a.dat");
-        builder.apply_opwrite(op_write, {}, orphan_files);
-        check_orphans(*metadata);
-    }
-    {
-        auto metadata = std::make_shared<TabletMetadata>();
-        metadata->set_id(tablet_id);
-        metadata->set_version(11);
-        metadata->set_next_rowset_id(120);
-        MetaFileBuilder builder(*tablet, metadata);
-        TxnLogPB_OpWrite op_write;
-        op_write.mutable_rowset()->add_segment_metas()->set_filename("b.dat");
-        builder.batch_apply_opwrite(op_write, {}, orphan_files);
-        ASSERT_OK(builder.set_final_rowset());
-        check_orphans(*metadata);
-    }
-}
-
->>>>>>> f2f1e66 ([BugFix] Fix row-mode partial updates and bundle offsets in a lake multi-statement transaction's merged rowset (#79402))
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {
     // Test SSTable delvec integration: test new get_del_vec(DelvecPagePB) function and
     // version reference collection from SSTable delvecs during finalization

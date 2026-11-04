@@ -5775,45 +5775,6 @@ TEST_F(LakePcuSchemaDriftTest, WriteThenDropTargetColumn_ReturnsInternalError) {
             << "expected 'unique id' in message; got: " << st.message();
 }
 
-<<<<<<< HEAD
-=======
-// A publish iterator narrowed to this tablet's slice of a shared post-split segment reports NO
-// ownership mask -- every row it emitted is this tablet's -- so an empty mask cannot be read as "the
-// iterator emitted the whole segment". Reading it that way sends the segment down the copy-and-append
-// rewrite, which copies all of the source's written-column rows while appending only the emitted rows'
-// resolved ones; the halves then disagree ("num rows written 0 is not equal to segment num rows 300")
-// and the publish fails identically on every retry.
-TEST(RowsetUpdateStateNarrowedEmitTest, an_emit_short_of_the_segment_owns_only_what_it_emitted) {
-    Filter mask;
-    // Narrowed: the iterator emitted 120 of the segment's 300 rows.
-    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/120, /*source_rows=*/300, &mask));
-    ASSERT_EQ(120u, mask.size()) << "the mask must span exactly the rows the iterator emitted";
-    EXPECT_EQ(120, std::count(mask.begin(), mask.end(), 1)) << "every emitted row is owned";
-}
-
-// The case that actually stalls production, and the reason this answers with a bool instead of through
-// the mask's emptiness: a shared segment none of whose rows fall in this tablet's range makes the
-// iterator emit NOTHING. "Own nothing" still means filter -- keep none of the source's rows and write
-// an empty segment -- which is a different instruction from "was not narrowed at all".
-TEST(RowsetUpdateStateNarrowedEmitTest, an_empty_narrowed_emit_still_owns_only_its_nothing) {
-    Filter mask;
-    EXPECT_TRUE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/300, &mask));
-    EXPECT_TRUE(mask.empty()) << "owning no row is an empty mask, not the absence of one";
-}
-
-TEST(RowsetUpdateStateNarrowedEmitTest, a_whole_segment_emit_keeps_the_copy_and_append_rewrite) {
-    Filter mask;
-    // Not narrowed: the copy-and-append rewrite is correct as is, and must not be given a mask.
-    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/300, /*source_rows=*/300, &mask));
-    EXPECT_TRUE(mask.empty());
-    // An empty segment has nothing to narrow.
-    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/0, /*source_rows=*/0, &mask));
-    EXPECT_TRUE(mask.empty());
-    // An emit longer than its source is not a narrowing; leave it to the assertions downstream.
-    EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/301, /*source_rows=*/300, &mask));
-    EXPECT_TRUE(mask.empty());
-}
-
 // The statements of ONE multi-statement transaction that write the same tablet -- a SQL BEGIN ...
 // COMMIT, published with a TxnInfoPB that carries each statement's load_id -- are applied together:
 // TxnLogApplier folds every statement's op_write into one merged rowset (MetaFileBuilder::
@@ -5835,13 +5796,13 @@ public:
 
     void SetUp() override {
         LakePartialUpdateTestBase::SetUp();
-        auto* pool = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool();
+        auto* pool = ExecEnv::GetInstance()->lake_partial_update_thread_pool();
         _saved_partial_update_threads = pool->max_threads();
         ASSERT_OK(pool->update_max_threads(GetParam()));
     }
 
     void TearDown() override {
-        EXPECT_TRUE(RuntimeEnv::GetInstance()
+        EXPECT_TRUE(ExecEnv::GetInstance()
                             ->lake_partial_update_thread_pool()
                             ->update_max_threads(_saved_partial_update_threads)
                             .ok());
@@ -5981,7 +5942,12 @@ protected:
     // `load_ids`, with the TxnInfoPB the FE sends for a SQL BEGIN ... COMMIT.
     StatusOr<TabletMetadataPtr> publish_statements(int64_t tablet_id, int64_t new_version, int64_t txn_id,
                                                    const std::vector<PUniqueId>& load_ids) {
-        auto txn_info = TEST_txn_info(txn_id, time(nullptr));
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(time(nullptr));
+        txn_info.set_force_publish(false);
         for (const auto& load_id : load_ids) {
             txn_info.add_load_ids()->CopyFrom(load_id);
         }
@@ -5997,7 +5963,7 @@ protected:
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
         RETURN_IF_ERROR(reader->prepare());
         RETURN_IF_ERROR(reader->open(TabletReaderParams()));
-        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
         while (true) {
             auto st = reader->get_next(chunk.get());
             if (st.is_end_of_file()) {
@@ -6164,5 +6130,4 @@ INSTANTIATE_TEST_SUITE_P(LakeMultiStatementPartialUpdateTest, LakeMultiStatement
                              return info.param == 1 ? std::string("serial_rewrite") : std::string("parallel_rewrite");
                          });
 
->>>>>>> f2f1e66 ([BugFix] Fix row-mode partial updates and bundle offsets in a lake multi-statement transaction's merged rowset (#79402))
 } // namespace starrocks::lake

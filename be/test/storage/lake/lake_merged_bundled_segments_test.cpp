@@ -33,22 +33,21 @@
 #include <optional>
 #include <vector>
 
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
 #include "column/chunk.h"
-#include "column/chunk_factory.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
-#include "common/config_ingest_fwd.h"
+#include "common/config.h"
 #include "fs/bundle_file.h"
 #include "gutil/strings/join.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/primary_key_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/test_util.h"
+#include "storage/lake/update_manager.h"
 #include "storage/tablet_schema.h"
+#include "testutil/assert.h"
+#include "testutil/id_generator.h"
 
 namespace starrocks::lake {
 
@@ -273,7 +272,12 @@ protected:
 
     StatusOr<TabletMetadataPtr> publish_statements(int64_t tablet_id, int64_t new_version, int64_t txn_id,
                                                    const std::vector<PUniqueId>& load_ids) {
-        auto txn_info = TEST_txn_info(txn_id, time(nullptr));
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_combined_txn_log(false);
+        txn_info.set_commit_time(time(nullptr));
+        txn_info.set_force_publish(false);
         for (const auto& load_id : load_ids) {
             txn_info.add_load_ids()->CopyFrom(load_id);
         }
@@ -290,7 +294,7 @@ protected:
         ASSERT_OK(reader->open(TabletReaderParams()));
         Rows actual;
         std::vector<int> duplicates;
-        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        auto chunk = ChunkHelper::new_chunk(*_schema, 128);
         while (true) {
             auto st = reader->get_next(chunk.get());
             if (st.is_end_of_file()) {

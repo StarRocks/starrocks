@@ -1326,20 +1326,10 @@ Status MetaFileBuilder::set_final_rowset() {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
-<<<<<<< HEAD
-=======
         // A rewrite is standalone. Preserve other statements' real bundle offsets and clear only
         // this segment's old offset and synthetic marker before normalizing the merged rowset below.
         segment_meta->clear_bundle_file_offset();
         segment_meta->clear_synthetic_bundle_file_offset();
-        // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
-        // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
-        // "unfiltered".
-        if (replace_seg.second.dropped_unowned_rows) {
-            segment_meta->set_num_rows(replace_seg.second.num_rows);
-            replace_seg.second.sort_key_fields_to_proto(segment_meta);
-        }
->>>>>>> f2f1e66 ([BugFix] Fix row-mode partial updates and bundle offsets in a lake multi-statement transaction's merged rowset (#79402))
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
