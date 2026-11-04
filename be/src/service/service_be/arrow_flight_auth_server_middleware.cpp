@@ -39,6 +39,15 @@ void NoOpBearerAuthServerMiddleware::SendingHeaders(arrow::flight::AddCallHeader
 arrow::Status NoOpBearerAuthServerMiddlewareFactory::StartCall(
         const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
         std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) {
+    std::string bearer_token = FindKeyValPrefixInCallHeaders(context.incoming_headers(), kAuthHeader, kBearerPrefix);
+    _is_valid = (bearer_token == std::string(kBearerDefaultToken));
+    if (!_is_valid) {
+        // Previously this factory admitted every call unconditionally and only recorded the
+        // token comparison in _is_valid, a field nothing ever read (CWE-287: the call was
+        // effectively unauthenticated). Fail closed instead of falling back to an implicitly
+        // authenticated state so a missing/incorrect bearer token actually rejects the call.
+        return arrow::Status::IOError("Unauthenticated: missing or invalid bearer token");
+    }
     *middleware = std::make_shared<NoOpBearerAuthServerMiddleware>(context.incoming_headers(), &_is_valid);
     return arrow::Status::OK();
 }
