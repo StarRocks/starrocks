@@ -16,8 +16,11 @@
 
 #include <bvar/bvar.h>
 
+#include <thread>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -55,8 +58,15 @@ const int64_t EMPTY_TXNLOG_TXNID = -1;
 // Tablet publishes of a retry answered by metadata already in storage instead of a full re-apply. A retry
 // round that converges shows this rising while the publish latency falls.
 bvar::Adder<int64_t> g_publish_skipped_durable_new_version("lake_publish_version_skipped_durable");
+// Tablet publishes of a retry answered by the tablet's partial_meta (see lake_enable_publish_partial_meta).
+bvar::Adder<int64_t> g_publish_skipped_by_partial_meta("lake_publish_skipped_by_partial_meta");
 
 } // namespace
+
+// Makes each tablet publish that applies its txns last 15 s longer, past a 10 s lake_publish_version_timeout_ms plus
+// the 3 s after which the result is kept as its partial_meta, while a retry that reads the kept result stays fast.
+// Lets a test make a node's tablets finish after the aggregator stopped waiting for them.
+DEFINE_FAIL_POINT(lake_publish_tablet_delay_past_timeout);
 
 namespace starrocks::lake {
 
@@ -297,10 +307,12 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
 // retry (FE sets is_retry_publish when an earlier attempt was sent and did not finish) also asks storage -- the
 // datacache or object storage -- at the cost of one read. A first attempt, where new_version cannot exist yet, does
 // not.
-static TabletMetadataPtr lookup_published_new_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
-                                                      int64_t base_version, int64_t new_version,
-                                                      std::span<const TxnInfoPB> txns, int64_t fe_built_version,
-                                                      bool is_retry_publish) {
+static StatusOr<TabletMetadataPtr> lookup_published_new_version(TabletManager* tablet_mgr,
+                                                                const PublishTabletInfo& tablet_info,
+                                                                int64_t base_version, int64_t new_version,
+                                                                std::span<const TxnInfoPB> txns,
+                                                                bool skip_write_tablet_metadata,
+                                                                int64_t fe_built_version, bool is_retry_publish) {
     auto tablet_id = tablet_info.get_tablet_id_in_metadata();
     auto new_metadata_path = tablet_mgr->tablet_metadata_location(tablet_id, new_version);
     // If any txn in this batch is marked as no-op publish (admin escape hatch),
@@ -335,6 +347,23 @@ static TabletMetadataPtr lookup_published_new_version(TabletManager* tablet_mgr,
     if (!is_retry_publish ||
         std::any_of(txns.begin(), txns.end(), [](const TxnInfoPB& t) { return t.rebuild_pindex(); })) {
         return nullptr;
+    }
+    // Under file bundling the version's bundle is written only after every tablet of the partition succeeded,
+    // so a tablet that finished in an earlier attempt on this node finds its result in its partial_meta, kept in
+    // this node's local disk cache. Checked before the stored version below because it is a local read.
+    if (skip_write_tablet_metadata && config::lake_enable_publish_partial_meta) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("check_partial_meta_latency_us");
+        auto partial_metadata = tablet_mgr->get_partial_tablet_metadata(tablet_id, new_version, txns.back().gtid());
+        if (partial_metadata.ok() && (*partial_metadata)->version() == new_version &&
+            (*partial_metadata)->vector_index_built_version() >= fe_built_version) {
+            g_publish_skipped_by_partial_meta << 1;
+            VLOG(1) << "Skipped publish version because the tablet's partial_meta has it. tablet_info=" << tablet_info
+                    << " base_version=" << base_version << " new_version=" << new_version;
+            // Like the result of an apply under file bundling: cached for the aggregator's next attempt.
+            RETURN_IF_ERROR(tablet_mgr->cache_tablet_metadata(*partial_metadata));
+            tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
+            return std::move(partial_metadata).value();
+        }
     }
     StatusOr<TabletMetadataPtr> durable_new_metadata;
     {
@@ -407,9 +436,10 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
     VLOG(2) << "publish version tablet_info: " << tablet_info << ", txns: " << txns
             << ", base_version: " << base_version << ", new_version: " << new_version;
 
-    if (auto published = lookup_published_new_version(tablet_mgr, tablet_info, base_version, new_version, txns,
-                                                      fe_built_version, is_retry_publish);
-        published != nullptr) {
+    ASSIGN_OR_RETURN(auto published,
+                     lookup_published_new_version(tablet_mgr, tablet_info, base_version, new_version, txns,
+                                                  skip_write_tablet_metadata, fe_built_version, is_retry_publish));
+    if (published != nullptr) {
         return published;
     }
 
@@ -750,6 +780,8 @@ static StatusOr<TabletMetadataPtr> do_publish_version(TabletManager* tablet_mgr,
 
     delete_files_async(std::move(files_to_delete));
 
+    FAIL_POINT_TRIGGER_EXECUTE(lake_publish_tablet_delay_past_timeout,
+                               { std::this_thread::sleep_for(std::chrono::seconds(15)); });
     return new_metadata;
 }
 
