@@ -296,6 +296,18 @@ size_t detail::filter_range(void* dst, const void* src, size_t element_size, con
 #endif
 }
 
+#if defined(__x86_64__)
+__attribute__((target("avx2"))) size_t detail::scan_avx2_baseline_w4(uint32_t* dst, const uint32_t* src,
+                                                                     const uint8_t* selector, size_t from, size_t to) {
+    return scan_avx2<uint32_t>(dst, src, selector, from, to);
+}
+
+__attribute__((target("avx2"))) size_t detail::scan_avx2_baseline_w8(uint64_t* dst, const uint64_t* src,
+                                                                     const uint8_t* selector, size_t from, size_t to) {
+    return scan_avx2<uint64_t>(dst, src, selector, from, to);
+}
+#endif
+
 #undef FILTER_WIDTH_DISPATCH
 #undef FILTER_CALL
 
