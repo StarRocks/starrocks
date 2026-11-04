@@ -730,7 +730,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Description: The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. Both the start time and the end time are inclusive at second granularity. For example, if the end time is `17:00:00`, collection is allowed until `17:00:00` ends. If the start time is later than the end time, the period spans midnight.
 - Introduced in: -
 
 ### `statistic_auto_analyze_start_time`
@@ -739,7 +739,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`.
+- Description: The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. Both the start time and the end time are inclusive at second granularity. For example, if the end time is `17:00:00`, collection is allowed until `17:00:00` ends. If the start time is later than the end time, the period spans midnight.
 - Introduced in: -
 
 ### `statistic_auto_collect_ratio`
