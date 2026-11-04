@@ -23,6 +23,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
+import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -70,6 +71,9 @@ public class MvTaskRunContext extends TaskRunContext {
     // Set when auto_refresh_partitions_limit excluded older changed partitions from a complete refresh
     // this batch: the batch then does not cover the whole MV and must not confirm whole-MV freshness.
     private boolean partitionLimitExcludedPartitions = false;
+    // Partitions created by a shape change to replace dropped partitions. They must be materialized
+    // in this task run; otherwise the dropped partition's history would turn into an empty partition.
+    private PCellSortedSet replacementAddPartitions = PCellSortedSet.of();
     // MaterializedView#getVersionMapResetEpoch as this run saw it before reading anything, -1 when not recorded.
     private long versionMapResetEpoch = -1;
 
@@ -159,6 +163,10 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionLimitExcludedPartitions(boolean partitionLimitExcludedPartitions) {
         this.partitionLimitExcludedPartitions = partitionLimitExcludedPartitions;
+    }
+
+    public PCellSortedSet getReplacementAddPartitions() {
+        return replacementAddPartitions;
     }
 
     /**

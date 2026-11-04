@@ -29,10 +29,19 @@ import java.util.Map;
 public class PartitionDiff {
     private final PCellSortedSet adds;
     private final PCellSortedSet deletes;
+    // Partitions created by a shape change to replace dropped partitions. They must be materialized
+    // before the old partitions' data can be considered gone; refresh planning uses this set to make
+    // sure they are not excluded by auto_refresh_partitions_limit.
+    private final PCellSortedSet replacementAdds;
 
     public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes) {
+        this(adds, deletes, PCellSortedSet.of());
+    }
+
+    public PartitionDiff(PCellSortedSet adds, PCellSortedSet deletes, PCellSortedSet replacementAdds) {
         this.adds = adds;
         this.deletes = deletes;
+        this.replacementAdds = replacementAdds == null ? PCellSortedSet.of() : replacementAdds;
     }
 
     public PCellSortedSet getAdds() {
@@ -41,6 +50,10 @@ public class PartitionDiff {
 
     public PCellSortedSet getDeletes() {
         return deletes;
+    }
+
+    public PCellSortedSet getReplacementAdds() {
+        return replacementAdds;
     }
 
     /**

@@ -100,9 +100,15 @@ public class RangePartitionDifferTest extends MVTestBase {
     }
 
     private static RangePartitionDiffer differ(Range<PartitionKey> rangeToInclude) {
+        return differ(rangeToInclude, 0);
+    }
+
+    private static RangePartitionDiffer differ(Range<PartitionKey> rangeToInclude, int autoRefreshPartitionsLimit) {
         MaterializedView mv = Mockito.mock(MaterializedView.class);
         Mockito.when(mv.getPartitionInfo()).thenReturn(Mockito.mock(PartitionInfo.class));
-        Mockito.when(mv.getTableProperty()).thenReturn(Mockito.mock(TableProperty.class));
+        TableProperty tableProperty = Mockito.mock(TableProperty.class);
+        Mockito.when(tableProperty.getAutoRefreshPartitionsLimit()).thenReturn(autoRefreshPartitionsLimit);
+        Mockito.when(mv.getTableProperty()).thenReturn(tableProperty);
         return new RangePartitionDiffer(mv, MVTimelinessArbiter.QueryRewriteParams.ofRefresh(), rangeToInclude);
     }
 
@@ -367,5 +373,142 @@ public class RangePartitionDifferTest extends MVTestBase {
         Assertions.assertEquals(
                 Set.of("p20210501_20210601", "p20210601_20210701"), diff.getAdds().getPartitionNames());
         Assertions.assertEquals(4, diff.getDeletes().size());
+    }
+
+    /**
+     * A complete (unbounded) refresh with auto_refresh_partitions_limit only keeps the newest
+     * partition. A replacement component outside that window must be left untouched: the old day
+     * partitions keep their history instead of being dropped for a coarse partition that this
+     * refresh will never materialize.
+     */
+    @Test
+    public void testRefreshLimitKeepsOutOfWindowHistory() throws Exception {
+        RangePartitionDiffer differ = differ(null, 1);
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
+
+        Assertions.assertEquals(Collections.singleton("p20210601_20210701"),
+                diff.getAdds().getPartitionNames());
+        // in-window June days are migrated
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210601_20210602"));
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210602_20210603"));
+        // out-of-window May days must be preserved
+        Assertions.assertFalse(diff.getDeletes().containsName("p20210501_20210502"));
+        Assertions.assertFalse(diff.getDeletes().containsName("p20210502_20210503"));
+        Assertions.assertEquals(Collections.singleton("p20210601_20210701"),
+                diff.getReplacementAdds().getPartitionNames());
+    }
+
+    /** When the limit covers every replacement component, the complete refresh migrates all. */
+    @Test
+    public void testRefreshLimitCoversAllComponentsMigratesFully() throws Exception {
+        RangePartitionDiffer differ = differ(null, 2);
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
+
+        Assertions.assertEquals(
+                Set.of("p20210501_20210601", "p20210601_20210701"), diff.getAdds().getPartitionNames());
+        Assertions.assertEquals(4, diff.getDeletes().size());
+        Assertions.assertEquals(
+                Set.of("p20210501_20210601", "p20210601_20210701"),
+                diff.getReplacementAdds().getPartitionNames());
+    }
+
+    /**
+     * The reverse migration (coarse month split into days) needs all day replacements inside the
+     * refresh window; otherwise the month must stay coarse instead of losing 30 days of history.
+     */
+    @Test
+    public void testCoarseToFineOutsideRefreshLimitKeepsCoarse() throws Exception {
+        PCellSortedSet src = cells(Map.of(
+                "p20210501_20210502", range("2021-05-01", "2021-05-02"),
+                "p20210515_20210516", range("2021-05-15", "2021-05-16"),
+                "p20210531_20210601", range("2021-05-31", "2021-06-01")));
+        PCellSortedSet dst = cells(Map.of("p20210501_20210601", range("2021-05-01", "2021-06-01")));
+
+        RangePartitionDiffer differ = differ(null, 1);
+        PartitionDiff diff = differ.diff(src, dst, true);
+
+        Assertions.assertTrue(diff.getAdds().getPartitionNames().isEmpty(), "adds: " + diff.getAdds());
+        Assertions.assertTrue(diff.getDeletes().getPartitionNames().isEmpty(), "deletes: " + diff.getDeletes());
+        Assertions.assertTrue(diff.getReplacementAdds().isEmpty(), "replacementAdds: " + diff.getReplacementAdds());
+    }
+
+    /** When the window covers every day of the coarse partition, the reverse migration is applied. */
+    @Test
+    public void testCoarseToFineInsideRefreshLimitMigrates() throws Exception {
+        PCellSortedSet src = cells(Map.of(
+                "p20210501_20210502", range("2021-05-01", "2021-05-02"),
+                "p20210515_20210516", range("2021-05-15", "2021-05-16"),
+                "p20210531_20210601", range("2021-05-31", "2021-06-01")));
+        PCellSortedSet dst = cells(Map.of("p20210501_20210601", range("2021-05-01", "2021-06-01")));
+
+        RangePartitionDiffer differ = differ(null, 3);
+        PartitionDiff diff = differ.diff(src, dst, true);
+
+        Assertions.assertEquals(3, diff.getAdds().size(), "adds: " + diff.getAdds());
+        Assertions.assertEquals(Collections.singleton("p20210501_20210601"),
+                diff.getDeletes().getPartitionNames());
+        Assertions.assertEquals(3, diff.getReplacementAdds().size(), "replacementAdds: " + diff.getReplacementAdds());
+    }
+
+    /** A bounded refresh keeps using rangeToInclude, regardless of the auto refresh limit. */
+    @Test
+    public void testRefreshLimitDoesNotAffectBoundedRefresh() throws Exception {
+        RangePartitionDiffer differ = differ(range("2021-06-01", "2021-07-01"), 1);
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
+
+        Assertions.assertEquals(Collections.singleton("p20210601_20210701"),
+                diff.getAdds().getPartitionNames());
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210601_20210602"));
+        Assertions.assertTrue(diff.getDeletes().containsName("p20210602_20210603"));
+        Assertions.assertFalse(diff.getDeletes().containsName("p20210501_20210502"));
+        Assertions.assertFalse(diff.getDeletes().containsName("p20210502_20210503"));
+    }
+
+    /** A pure addition has no replacement component, so the refresh limit never removes it. */
+    @Test
+    public void testPureAddOutsideRefreshLimitStillCreated() throws Exception {
+        PCellSortedSet src = cells(Map.of("p20210701_20210801", range("2021-07-01", "2021-08-01")));
+        PCellSortedSet dst = PCellSortedSet.of();
+
+        RangePartitionDiffer differ = differ(null, 1);
+        PartitionDiff diff = differ.diff(src, dst, true);
+
+        Assertions.assertEquals(Collections.singleton("p20210701_20210801"),
+                diff.getAdds().getPartitionNames());
+        Assertions.assertTrue(diff.getDeletes().isEmpty());
+        Assertions.assertTrue(diff.getReplacementAdds().isEmpty());
+    }
+
+    /** The limit only applies to shape changes; the default mapping keeps its previous behavior. */
+    @Test
+    public void testDefaultMappingUnaffectedByRefreshLimit() throws Exception {
+        RangePartitionDiffer differ = differ(null, 1);
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), false);
+
+        Assertions.assertEquals(
+                Set.of("p20210501_20210601", "p20210601_20210701"), diff.getAdds().getPartitionNames());
+        Assertions.assertEquals(4, diff.getDeletes().size());
+        Assertions.assertTrue(diff.getReplacementAdds().isEmpty());
+    }
+
+    /** A complete shape change without a limit records all replacement additions for materialization. */
+    @Test
+    public void testFullRefreshRecordsReplacementAdds() throws Exception {
+        RangePartitionDiffer differ = differ(null);
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
+
+        Assertions.assertEquals(
+                Set.of("p20210501_20210601", "p20210601_20210701"),
+                diff.getReplacementAdds().getPartitionNames());
+    }
+
+    /** A bounded shape change records only the replacement additions that are actually applied. */
+    @Test
+    public void testBoundedRefreshRecordsReplacementAdds() throws Exception {
+        RangePartitionDiffer differ = differ(range("2021-06-01", "2021-07-01"));
+        PartitionDiff diff = differ.diff(fineToCoarseSrc(), fineToCoarseDst(), true);
+
+        Assertions.assertEquals(Collections.singleton("p20210601_20210701"),
+                diff.getReplacementAdds().getPartitionNames());
     }
 }

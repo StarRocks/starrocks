@@ -412,4 +412,220 @@ public class MVMirrorBasePartitionTest extends MVTestBase {
             Config.enable_mv_mirror_base_partition = original;
         }
     }
+
+    /**
+     * With auto_refresh_partitions_limit=1, a complete refresh only keeps the newest partition.
+     * Enabling mirror on a populated daily MV must migrate the in-window month but leave the
+     * out-of-window month's day partitions (and their history) untouched.
+     */
+    @Test
+    public void testAutoRefreshLimitKeepsMirrorHistory() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_limit1", MAY_RANGE, JUNE_RANGE));
+            executeInsertSql(connectContext,
+                    "insert into mirror_limit1 partition(p202105) values('2021-05-06', 1, 1);");
+            executeInsertSql(connectContext,
+                    "insert into mirror_limit1 partition(p202106) values('2021-06-06', 1, 2);");
+            starRocksAssert.withMaterializedView(
+                    "create materialized view test.mv_mirror_limit\n" +
+                            "partition by date_trunc('day', k1)\n" +
+                            "distributed by hash(k2) buckets 3\n" +
+                            "properties('replication_num'='1', 'partition_refresh_number'='-1')\n" +
+                            "refresh deferred manual\n" +
+                            "as select k1, k2, sum(v1) as v1 from test.mirror_limit1 group by k1, k2",
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        refreshMV(DB_NAME, mv);
+                        Set<String> before = mv.getRangePartitionMap().getPartitionNames();
+                        Assertions.assertTrue(before.contains("p20210501_20210502"), "before: " + before);
+                        Assertions.assertFalse(before.contains("p20210501_20210601"), "before: " + before);
+
+                        Config.enable_mv_mirror_base_partition = true;
+                        mv.getTableProperty().setAutoRefreshPartitionsLimit(1);
+                        // make the June base partition newer so this run has a change to process
+                        executeInsertSql(connectContext,
+                                "insert into mirror_limit1 partition(p202106) values('2021-06-15', 2, 3);");
+
+                        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+                        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                        Constants.TaskRunState state = taskRun.executeTaskRun();
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state,
+                                "complete refresh did not succeed");
+
+                        Set<String> after = mv.getRangePartitionMap().getPartitionNames();
+                        // May is outside the newest-1 window: its day partitions must survive
+                        Assertions.assertTrue(after.contains("p20210501_20210502"), "after: " + after);
+                        Assertions.assertTrue(after.contains("p20210531_20210601"), "after: " + after);
+                        Assertions.assertFalse(after.contains("p20210501_20210601"), "after: " + after);
+                        // June is inside the window: it is migrated to the mirror month partition
+                        Assertions.assertTrue(after.contains("p20210601_20210701"), "after: " + after);
+
+                        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                        MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
+                        Assertions.assertTrue(
+                                extraMessage.getMvPartitionsToRefresh().contains("p20210601_20210701"),
+                                "refreshed: " + extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertFalse(
+                                extraMessage.getMvPartitionsToRefresh().contains("p20210501_20210502"),
+                                "refreshed: " + extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * Only toggling the mirror flag (no base data change) still creates a replacement partition.
+     * That partition must be materialized instead of being left empty because change detection
+     * cannot see it.
+     */
+    @Test
+    public void testMirrorToggleWithoutBaseChangeMaterializesReplacement() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = false;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_toggle1", MAY_RANGE));
+            executeInsertSql(connectContext,
+                    "insert into mirror_toggle1 partition(p202105) values('2021-05-06', 1, 1);");
+            starRocksAssert.withMaterializedView(
+                    "create materialized view test.mv_mirror_toggle\n" +
+                            "partition by date_trunc('day', k1)\n" +
+                            "distributed by hash(k2) buckets 3\n" +
+                            "properties('replication_num'='1', 'partition_refresh_number'='-1')\n" +
+                            "refresh deferred manual\n" +
+                            "as select k1, k2, sum(v1) as v1 from test.mirror_toggle1 group by k1, k2",
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        refreshMV(DB_NAME, mv);
+                        Assertions.assertTrue(mv.getRangePartitionMap().getPartitionNames()
+                                .contains("p20210501_20210502"));
+
+                        Config.enable_mv_mirror_base_partition = true;
+                        // No base table change at all: only the partition mapping changes.
+                        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+                        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                        Constants.TaskRunState state = taskRun.executeTaskRun();
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state,
+                                "refresh skipped even though the shape change needed materialization");
+
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                mv.getRangePartitionMap().getPartitionNames());
+                        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                        MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
+                        Assertions.assertTrue(
+                                extraMessage.getMvPartitionsToRefresh().contains("p20210501_20210601"),
+                                "refreshed: " + extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * Reverse migration with a small limit: the month needs 31 day replacements, which cannot fit
+     * in the newest-1 window, so the coarse month must be kept instead of being partially split.
+     */
+    @Test
+    public void testAutoRefreshLimitKeepsCoarseHistoryAfterDisablingMirror() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = true;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_reverse_limit1", MAY_RANGE));
+            executeInsertSql(connectContext,
+                    "insert into mirror_reverse_limit1 partition(p202105) values('2021-05-06', 1, 1);");
+            starRocksAssert.withMaterializedView(
+                    "create materialized view test.mv_mirror_reverse_limit\n" +
+                            "partition by date_trunc('day', k1)\n" +
+                            "distributed by hash(k2) buckets 3\n" +
+                            "properties('replication_num'='1', 'partition_refresh_number'='-1')\n" +
+                            "refresh deferred manual\n" +
+                            "as select k1, k2, sum(v1) as v1 from test.mirror_reverse_limit1 group by k1, k2",
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        refreshMV(DB_NAME, mv);
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                mv.getRangePartitionMap().getPartitionNames());
+
+                        Config.enable_mv_mirror_base_partition = false;
+                        mv.getTableProperty().setAutoRefreshPartitionsLimit(1);
+                        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+                        taskRun.getProperties().put(TaskRun.FORCE, "true");
+                        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                        Constants.TaskRunState state = taskRun.executeTaskRun();
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state,
+                                "complete refresh did not succeed");
+
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                mv.getRangePartitionMap().getPartitionNames(),
+                                "coarse month must be kept when the day replacements exceed the limit");
+                        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                        MVTaskRunExtraMessage extraMessage = processor.getMVTaskRunExtraMessage();
+                        Assertions.assertTrue(
+                                extraMessage.getMvPartitionsToRefresh().contains("p20210501_20210601"),
+                                "refreshed: " + extraMessage.getMvPartitionsToRefresh());
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
+
+    /**
+     * When the auto refresh limit allows the whole coarse-to-fine component, the day replacements
+     * must still be refreshed together even though partition_refresh_number defaults to 1. Deferring
+     * 30 of them would leave empty partitions after their month was already dropped.
+     */
+    @Test
+    public void testAutoRefreshLimitKeepsCoarseHistoryWithPartitionRefreshNumberOne() throws Exception {
+        boolean original = Config.enable_mv_mirror_base_partition;
+        Config.enable_mv_mirror_base_partition = true;
+        try {
+            starRocksAssert.withTable(createTableSql("mirror_reverse_batch1", MAY_RANGE));
+            starRocksAssert.withMaterializedView(
+                    "create materialized view test.mv_mirror_reverse_batch\n" +
+                            "partition by date_trunc('day', k1)\n" +
+                            "distributed by hash(k2) buckets 3\n" +
+                            "properties('replication_num'='1', 'partition_refresh_number'='1')\n" +
+                            "refresh deferred manual\n" +
+                            "as select k1, k2, sum(v1) as v1 from test.mirror_reverse_batch1 group by k1, k2",
+                    (mvName) -> {
+                        MaterializedView mv = getMv(DB_NAME, (String) mvName);
+                        refreshMV(DB_NAME, mv);
+                        Assertions.assertEquals(Sets.newHashSet("p20210501_20210601"),
+                                mv.getRangePartitionMap().getPartitionNames());
+
+                        Config.enable_mv_mirror_base_partition = false;
+                        mv.getTableProperty().setAutoRefreshPartitionsLimit(31);
+                        TaskRun taskRun = buildMVTaskRun(mv, DB_NAME);
+                        taskRun.getProperties().put(TaskRun.FORCE, "true");
+                        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                        Constants.TaskRunState state = taskRun.executeTaskRun();
+                        Assertions.assertEquals(Constants.TaskRunState.SUCCESS, state,
+                                "complete refresh did not succeed");
+
+                        Set<String> after = mv.getRangePartitionMap().getPartitionNames();
+                        Assertions.assertEquals(31, after.size(), "after: " + after);
+                        Assertions.assertFalse(after.contains("p20210501_20210601"), "after: " + after);
+
+                        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+                        // The task-run extra message is truncated for display
+                        // (Config.max_mv_task_run_meta_message_values_length), so assert on the
+                        // internal refresh scope instead.
+                        Assertions.assertEquals(31, processor.getMvContext().getRefreshScope()
+                                        .getMvPartitionsToRefresh().size(),
+                                "all replacement day partitions must be refreshed together");
+                        Assertions.assertNull(processor.getMvContext().getNextPartitionStart(),
+                                "replacement partitions must not be deferred to a next batch");
+                        Assertions.assertNull(processor.getMvContext().getNextPartitionEnd(),
+                                "replacement partitions must not be deferred to a next batch");
+                        Assertions.assertTrue(mv.isActive(), "mv inactive: " + mv.getInactiveReason());
+                    });
+        } finally {
+            Config.enable_mv_mirror_base_partition = original;
+        }
+    }
 }
