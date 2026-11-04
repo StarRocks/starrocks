@@ -239,7 +239,7 @@ public class StarRocksIcebergTableScan
     }
 
     private DeleteFileIndex planDeletesLocally(List<ManifestFile> deleteManifests, Set<DeleteFile> cachedDeleteFiles) {
-        DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(io(), deleteManifests);
+        DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(fileIO().get(), deleteManifests);
         if (cachedDeleteFiles != null && !cachedDeleteFiles.isEmpty()) {
             builder.cachedDeleteFiles(cachedDeleteFiles);
         }
@@ -259,7 +259,7 @@ public class StarRocksIcebergTableScan
     }
 
     private List<ManifestFile> findMatchingDataManifests(Snapshot snapshot) {
-        List<ManifestFile> dataManifests = snapshot.dataManifests(io());
+        List<ManifestFile> dataManifests = snapshot.dataManifests(fileIO().get());
         scanMetrics().totalDataManifests().increment(dataManifests.size());
 
         List<ManifestFile> matchingDataManifests =
@@ -271,7 +271,7 @@ public class StarRocksIcebergTableScan
     }
 
     private List<ManifestFile> findMatchingDeleteManifests(Snapshot snapshot) {
-        List<ManifestFile> deleteManifests = snapshot.deleteManifests(io());
+        List<ManifestFile> deleteManifests = snapshot.deleteManifests(fileIO().get());
         List<ManifestFile> matchingDeleteManifests =
                 IcebergApiConverter.filterManifests(deleteManifests, scanSpecsById, filter());
 
@@ -365,7 +365,7 @@ public class StarRocksIcebergTableScan
                 deleteFiles.add(files);
             }
 
-            index = DeleteFileIndex.builderFor(io(), Collections.emptyList())
+            index = DeleteFileIndex.builderFor(fileIO().get(), Collections.emptyList())
                     .cachedDeleteFiles(Iterables.concat(deleteFiles))
                     .specsById(scanSpecsById)
                     .schemasById(table().schemas())
@@ -444,7 +444,7 @@ public class StarRocksIcebergTableScan
         LOG.info("Planning file tasks locally for table {}", table().name());
 
         ManifestGroup manifestGroup =
-                new ManifestGroup(io(), dataManifests, deleteManifests)
+                new ManifestGroup(fileIO().get(), dataManifests, deleteManifests)
                         .caseSensitive(isCaseSensitive())
                         .select(shouldReturnColumnStats() ? SCAN_WITH_STATS_COLUMNS : SCAN_COLUMNS)
                         .filterData(filter())
@@ -637,7 +637,7 @@ public class StarRocksIcebergTableScan
 
         Set<DeleteFile> fetchedDeleteFiles = new HashSet<>();
         if (!deleteManifestWithoutCache.isEmpty()) {
-            DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(io(), deleteManifestWithoutCache);
+            DeleteFileIndex.Builder builder = DeleteFileIndex.builderFor(fileIO().get(), deleteManifestWithoutCache);
             if (shouldPlanWithExecutor() && deleteManifests.size() > 1) {
                 builder.planWith(planExecutor());
             }
