@@ -23,8 +23,12 @@
 #include "base/container/raw_container.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
+#include "base/hash/crc32c.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "cache/datacache.h"
+#include "cache/disk_cache/io_buffer.h"
+#include "cache/disk_cache/local_disk_cache_engine.h"
 #include "common/compiler_util.h"
 #include "common/config_lake_fwd.h"
 #include "common/system/master_info.h"
@@ -571,6 +575,77 @@ Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, con
 
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata) {
     return put_tablet_metadata(metadata, tablet_metadata_location(metadata->id(), metadata->version()));
+}
+
+// A partial_meta entry in the local disk cache: the payload size as a uint64_t and the payload's crc32c as a
+// uint32_t, then the serialized TabletMetadataPB. The size comes first so that a read asks the cache for exactly the
+// bytes that exist. Header and payload are two reads, and a later retry can overwrite the entry in between; the
+// checksum rejects a payload that does not belong to the header read before it.
+static constexpr size_t kPartialMetaHeaderSize = sizeof(uint64_t) + sizeof(uint32_t);
+
+static std::string partial_tablet_metadata_cache_key(int64_t tablet_id, int64_t version) {
+    // Short on purpose: the key is kept in the cache's index for every entry.
+    return fmt::format("lpm/{}/{}", tablet_id, version);
+}
+
+static LocalDiskCacheEngine* partial_tablet_metadata_cache() {
+    auto* cache = DataCache::GetInstance()->local_disk_cache();
+    return cache != nullptr && cache->is_initialized() ? cache : nullptr;
+}
+
+Status TabletManager::put_partial_tablet_metadata(const TabletMetadataPtr& metadata) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("put_partial_meta_us");
+    auto* cache = partial_tablet_metadata_cache();
+    if (cache == nullptr) {
+        return Status::NotSupported("local disk cache is not enabled");
+    }
+    std::string payload;
+    if (!metadata->SerializeToString(&payload)) {
+        return Status::InternalError(fmt::format("fail to serialize metadata of tablet {}", metadata->id()));
+    }
+    const uint64_t payload_size = payload.size();
+    const uint32_t payload_crc = crc32c::Value(payload.data(), payload.size());
+    IOBuffer buffer;
+    buffer.raw_buf().append(&payload_size, sizeof(payload_size));
+    buffer.raw_buf().append(&payload_crc, sizeof(payload_crc));
+    buffer.raw_buf().append(payload);
+    DiskCacheWriteOptions options;
+    options.overwrite = true;
+    return cache->write(partial_tablet_metadata_cache_key(metadata->id(), metadata->version()), buffer, &options);
+}
+
+StatusOr<TabletMetadataPtr> TabletManager::get_partial_tablet_metadata(int64_t tablet_id, int64_t version,
+                                                                       int64_t expected_gtid) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_partial_meta_us");
+    auto* cache = partial_tablet_metadata_cache();
+    if (cache == nullptr) {
+        return Status::NotFound("local disk cache is not enabled");
+    }
+    const auto key = partial_tablet_metadata_cache_key(tablet_id, version);
+    IOBuffer header;
+    RETURN_IF_ERROR(cache->read(key, 0, kPartialMetaHeaderSize, &header, nullptr));
+    char header_bytes[kPartialMetaHeaderSize];
+    if (header.copy_to(header_bytes, kPartialMetaHeaderSize) != kPartialMetaHeaderSize) {
+        return Status::Corruption(fmt::format("truncated partial_meta of tablet {} version {}", tablet_id, version));
+    }
+    uint64_t payload_size = 0;
+    uint32_t payload_crc = 0;
+    memcpy(&payload_size, header_bytes, sizeof(payload_size));
+    memcpy(&payload_crc, header_bytes + sizeof(payload_size), sizeof(payload_crc));
+    IOBuffer body;
+    RETURN_IF_ERROR(cache->read(key, kPartialMetaHeaderSize, payload_size, &body, nullptr));
+    std::string payload(body.size(), '\0');
+    body.copy_to(payload.data(), payload.size());
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    if (payload.size() != payload_size || crc32c::Value(payload.data(), payload.size()) != payload_crc ||
+        !metadata->ParseFromString(payload) || metadata->id() != tablet_id || metadata->version() != version) {
+        return Status::Corruption(fmt::format("bad partial_meta of tablet {} version {}", tablet_id, version));
+    }
+    normalize_tablet_metadata_after_load(metadata.get());
+    if (expected_gtid > 0 && metadata->gtid() > 0 && expected_gtid != metadata->gtid()) {
+        return Status::NotFound("Not found expected tablet metadata");
+    }
+    return metadata;
 }
 
 Status TabletManager::cache_tablet_metadata(const TabletMetadataPtr& metadata) {

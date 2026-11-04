@@ -148,6 +148,11 @@ bvar::LatencyRecorder g_aggregate_publish_version_wait_resp_latency("lake_aggreg
 bvar::LatencyRecorder g_aggregate_publish_version_write_meta_latency("lake_aggregate_publish_version_write_meta");
 bvar::Adder<int64_t> g_aggregate_compaction_failed_tasks("lake_aggregate_compaction_failed_tasks");
 bvar::Adder<int64_t> g_aggregate_compaction_total_tasks("lake_aggregate_compaction_total_tasks");
+// partial_meta entries written to this node's local disk cache, see lake_enable_publish_partial_meta.
+bvar::Adder<int64_t> g_publish_partial_meta_written("lake_publish_partial_meta_written");
+// A tablet that finishes this long after its request arrived cannot have been waited for by the aggregator,
+// whose deadline started before it sent the request. The margin absorbs timing error between the two.
+constexpr int64_t kPartialMetaTimeoutMarginMs = 3000;
 bvar::LatencyRecorder g_aggregate_compaction_wait_resp_latency("lake_aggregate_compaction_wait_resp");
 bvar::LatencyRecorder g_aggregate_compaction_write_meta_latency("lake_aggregate_compaction_write_meta");
 
@@ -202,6 +207,32 @@ bool is_async_vector_index_table(const TabletMetadataPB& metadata) {
         }
     }
     return false;
+}
+
+// Under file bundling a tablet's publish result reaches storage only inside the version's bundle, which the
+// aggregator writes once every tablet of the partition succeeded. Keeps a copy in this node's local disk cache when
+// it may never get there: the aggregator has stopped waiting for it, or the partition is being retried and the copy
+// in the metacache may be evicted before the next attempt. A retry on this node reads it back. A retry writes the
+// entry again even when it was answered from it, which also keeps it recently used in the cache.
+void maybe_keep_partial_meta(lake::TabletManager* tablet_mgr, const PublishVersionRequest& request,
+                             bool skip_write_tablet_metadata, int64_t start_monotonic_us, int64_t timeout_ms,
+                             const TabletMetadataPtr& metadata) {
+    if (!skip_write_tablet_metadata || !config::lake_enable_publish_partial_meta ||
+        request.resharding_tablet_infos_size() > 0) {
+        return;
+    }
+    if (!request.is_retry_publish() &&
+        MonotonicMicros() - start_monotonic_us <= (timeout_ms + kPartialMetaTimeoutMarginMs) * 1000) {
+        return;
+    }
+    auto st = tablet_mgr->put_partial_tablet_metadata(metadata);
+    if (st.ok()) {
+        g_publish_partial_meta_written << 1;
+    } else if (!st.is_not_supported()) {
+        // Best effort: the publish itself succeeded, a retry just re-applies.
+        LOG(WARNING) << "Fail to write partial_meta of tablet " << metadata->id() << " version " << metadata->version()
+                     << ": " << st;
+    }
 }
 
 } // namespace
@@ -355,6 +386,7 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto timeout_ms = request->has_timeout_ms() ? request->timeout_ms() : kDefaultTimeoutForPublishVersion;
     auto timeout_deadline = std::chrono::system_clock::now() + std::chrono::milliseconds(timeout_ms);
     auto start_ts = butil::gettimeofday_us();
+    const int64_t start_monotonic_us = MonotonicMicros();
     auto thread_pool = publish_version_thread_pool(_env);
     CHECK(thread_pool != nullptr);
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
@@ -446,6 +478,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     }
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
+                        maybe_keep_partial_meta(_tablet_mgr, *request, skip_write_tablet_metadata, start_monotonic_us,
+                                                timeout_ms, metadata);
                         auto score = compaction_score(_tablet_mgr, metadata);
                         // Per-tablet stats returned to FE: for range-distribution tablets (every
                         // publish) to drive real-time split/merge, and on first import (base_version==1)
