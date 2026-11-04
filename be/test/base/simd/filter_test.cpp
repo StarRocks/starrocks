@@ -17,10 +17,12 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
+#include <iterator>
 #include <random>
 #include <vector>
 
 #include "base/testutil/parallel_test.h"
+#include "gutil/dynamic_annotations.h"
 
 namespace starrocks {
 
@@ -433,6 +435,182 @@ PARALLEL_TEST(SimdFilterTest, floating_point_special_values) {
             ASSERT_EQ(expected_bits[i], ip_bits) << "In-place double bit mismatch at " << i;
         }
     }
+}
+
+PARALLEL_TEST(SimdFilterTest, non_normalized_selectors) {
+    const std::vector<uint8_t> non_zero_bytes = {0x80, 0x7F, 0xFF, 0x01, 0xAA, 0x02, 0xFE};
+    const std::vector<size_t> test_sizes = {1, 15, 31, 32, 33, 64, 100};
+
+    auto run_for_type = [&](auto dummy) {
+        using T = decltype(dummy);
+        for (uint8_t nz_byte : non_zero_bytes) {
+            for (size_t n : test_sizes) {
+                std::vector<T> src(n);
+                for (size_t i = 0; i < n; ++i) {
+                    src[i] = static_cast<T>(i * 31 + 1);
+                }
+
+                // 1. All rows have nz_byte: 100% kept
+                {
+                    std::vector<uint8_t> selector(n, nz_byte);
+                    std::vector<T> dst(n);
+                    size_t out_sz = filter_range(dst.data(), src.data(), selector, 0, n);
+                    ASSERT_EQ(n, out_sz) << "Byte 0x" << std::hex << static_cast<int>(nz_byte) << " n=" << n;
+                    for (size_t i = 0; i < n; ++i) {
+                        ASSERT_EQ(src[i], dst[i]);
+                    }
+
+                    std::vector<T> in_place = src;
+                    size_t ip_sz = filter_range(in_place.data(), in_place.data(), selector, 0, n);
+                    ASSERT_EQ(n, ip_sz);
+                    for (size_t i = 0; i < n; ++i) {
+                        ASSERT_EQ(src[i], in_place[i]);
+                    }
+                }
+
+                // 2. Alternating nz_byte and 0x00: exactly even rows kept
+                {
+                    std::vector<uint8_t> selector(n);
+                    std::vector<T> expected;
+                    for (size_t i = 0; i < n; ++i) {
+                        selector[i] = (i % 2 == 0) ? nz_byte : 0x00;
+                        if (selector[i]) {
+                            expected.push_back(src[i]);
+                        }
+                    }
+
+                    std::vector<T> dst(n);
+                    size_t out_sz = filter_range(dst.data(), src.data(), selector, 0, n);
+                    ASSERT_EQ(expected.size(), out_sz);
+                    for (size_t i = 0; i < out_sz; ++i) {
+                        ASSERT_EQ(expected[i], dst[i]);
+                    }
+
+                    std::vector<T> in_place = src;
+                    size_t ip_sz = filter_range(in_place.data(), in_place.data(), selector, 0, n);
+                    ASSERT_EQ(expected.size(), ip_sz);
+                    for (size_t i = 0; i < ip_sz; ++i) {
+                        ASSERT_EQ(expected[i], in_place[i]);
+                    }
+                }
+            }
+        }
+
+        // 3. Mixed selector with assorted non-canonical bytes (0x80, 0x7F, 0xFF, 0x01) and 0x00
+        for (size_t n : test_sizes) {
+            std::vector<T> src(n);
+            std::vector<uint8_t> selector(n);
+            std::vector<T> expected;
+            const uint8_t palette[] = {0x80, 0x00, 0x7F, 0x00, 0xFF, 0x01, 0x00, 0x02};
+            for (size_t i = 0; i < n; ++i) {
+                src[i] = static_cast<T>(i * 17 + 5);
+                selector[i] = palette[i % std::size(palette)];
+                if (selector[i] != 0) {
+                    expected.push_back(src[i]);
+                }
+            }
+
+            std::vector<T> dst(n);
+            size_t out_sz = filter_range(dst.data(), src.data(), selector, 0, n);
+            ASSERT_EQ(expected.size(), out_sz);
+            for (size_t i = 0; i < out_sz; ++i) {
+                ASSERT_EQ(expected[i], dst[i]);
+            }
+
+            std::vector<T> in_place = src;
+            size_t ip_sz = filter_range(in_place.data(), in_place.data(), selector, 0, n);
+            ASSERT_EQ(expected.size(), ip_sz);
+            for (size_t i = 0; i < ip_sz; ++i) {
+                ASSERT_EQ(expected[i], in_place[i]);
+            }
+        }
+    };
+
+    run_for_type(uint32_t{0});
+    run_for_type(uint64_t{0});
+}
+
+template <typename T>
+static void check_exact_capacity_asan_for_type() {
+    constexpr size_t kRedzone = 64; // guard elements past `to`
+    const std::vector<size_t> from_offsets = {0, 1, 7, 15, 16, 31, 32};
+    const std::vector<size_t> lengths = {0, 1, 2, 7, 8, 15, 16, 31, 32, 33, 63, 64, 65, 100, 128};
+
+    for (size_t from : from_offsets) {
+        for (size_t len : lengths) {
+            size_t to = from + len;
+
+            for (int selectivity_case : {0, 1, 2, 3, 4, 5}) {
+                std::vector<T> src(to);
+                std::vector<uint8_t> selector(to);
+
+                for (size_t i = 0; i < to; ++i) {
+                    src[i] = static_cast<T>(i * 101 + 7);
+                    bool keep = false;
+                    switch (selectivity_case) {
+                    case 0:
+                        keep = false; // 0%
+                        break;
+                    case 1:
+                        keep = true; // 100%
+                        break;
+                    case 2:
+                        keep = (i == from); // 1 item kept
+                        break;
+                    case 3:
+                        keep = (i != from); // all except 1 kept
+                        break;
+                    case 4:
+                        keep = (i % 2 == 0); // 50%
+                        break;
+                    case 5:
+                        keep = ((i * 7 + 3) % 8 < 3); // ~37.5%
+                        break;
+                    }
+                    selector[i] = keep ? 1 : 0;
+                }
+
+                std::vector<T> expected;
+                for (size_t i = from; i < to; ++i) {
+                    if (selector[i]) {
+                        expected.push_back(src[i]);
+                    }
+                }
+
+                // Allocate dst with capacity strictly `to`, plus `kRedzone` poison elements
+                std::vector<T> dst_buf(to + kRedzone);
+                constexpr uint8_t kCanaryByte = 0x5A;
+                std::memset(dst_buf.data() + to, kCanaryByte, kRedzone * sizeof(T));
+
+                // Poison memory region strictly past `to`
+                ASAN_POISON_MEMORY_REGION(dst_buf.data() + to, kRedzone * sizeof(T));
+
+                size_t out_sz = filter_range(dst_buf.data(), src.data(), selector, from, to);
+                ASSERT_EQ(from + expected.size(), out_sz)
+                        << "from=" << from << " to=" << to << " case=" << selectivity_case;
+
+                for (size_t i = 0; i < expected.size(); ++i) {
+                    ASSERT_EQ(expected[i], dst_buf[from + i]);
+                }
+
+                // Unpoison so we can verify canary bytes and deallocate safely
+                ASAN_UNPOISON_MEMORY_REGION(dst_buf.data() + to, kRedzone * sizeof(T));
+
+                const auto* redzone_bytes = reinterpret_cast<const uint8_t*>(dst_buf.data() + to);
+                for (size_t b = 0; b < kRedzone * sizeof(T); ++b) {
+                    ASSERT_EQ(kCanaryByte, redzone_bytes[b])
+                            << "Redzone canary clobbered at byte offset " << b << " past to=" << to
+                            << " for from=" << from << " case=" << selectivity_case;
+                }
+            }
+        }
+    }
+}
+
+PARALLEL_TEST(SimdFilterTest, exact_capacity_asan) {
+    check_exact_capacity_asan_for_type<uint32_t>();
+    check_exact_capacity_asan_for_type<uint64_t>();
+    check_exact_capacity_asan_for_type<uint8_t>();
 }
 
 } // namespace starrocks
