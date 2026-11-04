@@ -25,6 +25,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.KeysType;
@@ -151,5 +152,26 @@ public class AnalyzerUtilsTempPartitionOnMergedTest {
         PartitionKeyDesc keyDesc = onlyKeyDesc(clause);
         Assertions.assertEquals("2026-01-05", keyDesc.getLowerValues().get(0).getStringValue());
         Assertions.assertEquals("2026-01-06", keyDesc.getUpperValues().get(0).getStringValue());
+    }
+
+    /**
+     * The range index still lists a covering range whose partition the table no longer has. That happens only
+     * without the table lock (tablet pre-split), when the partition is dropped between the lookup and resolving
+     * it. The expression's daily bounds are known to be wrong for the value, so it is rejected instead.
+     */
+    @Test
+    public void valueWhoseCoveringPartitionIsGoneIsRejected() throws Exception {
+        OlapTable table = mergedTable();
+        ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) table.getPartitionInfo();
+        partitionInfo.setRange(MERGED_PARTITION_ID + 1, false, dateRange("2026-02-01", "2026-03-01"));
+        Assertions.assertThrows(AnalysisException.class, () -> AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                table, values("2026-02-10"), true, "txn1"));
+    }
+
+    private static Range<PartitionKey> dateRange(String lower, String upper) throws Exception {
+        List<Column> columns = Lists.newArrayList(new Column("dt", DateType.DATE));
+        return Range.closedOpen(
+                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(lower)), columns),
+                PartitionKey.createPartitionKey(Collections.singletonList(new PartitionValue(upper)), columns));
     }
 }
