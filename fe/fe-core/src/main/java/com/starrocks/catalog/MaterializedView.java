@@ -1496,10 +1496,20 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     @Override
     public void dropPartition(long dbId, String partitionName, boolean isForceDrop) {
+        dropPartition(dbId, partitionName, isForceDrop, 0L);
+    }
+
+    /**
+     * A force drop of an mv partition always keeps its tablets for a while: for `retentionPeriod` seconds
+     * when the caller gives one (e.g. partition TTL), otherwise for partition_recycle_retention_period_secs.
+     */
+    @Override
+    public void dropPartition(long dbId, String partitionName, boolean isForceDrop, long retentionPeriod) {
         if (isForceDrop) {
-            super.dropPartitionWithRetention(dbId, partitionName, Config.partition_recycle_retention_period_secs);
+            long period = retentionPeriod > 0 ? retentionPeriod : Config.partition_recycle_retention_period_secs;
+            super.dropPartitionWithRetention(dbId, partitionName, period);
         } else {
-            super.dropPartition(dbId, partitionName, isForceDrop);
+            super.dropPartition(dbId, partitionName, false);
         }
 
         // if mv's partition is dropped, we need to update mv's timeliness.
@@ -2377,7 +2387,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // ALTER ... ACTIVE re-analyzes this DDL, and the analyzer requires one listed column per
         // query output field, then re-appends storage-filled ones (AUTO_INCREMENT __ROW_ID__ on
         // non-aggregate IVM) itself — listing those here breaks the round trip.
+        // The simple form, shown to users, leaves an incremental mv's hidden columns for the analyzer to regenerate.
+        boolean omitHiddenColumns = simple && getCurrentRefreshMode().isIncrementalOrAuto();
         for (Column column : queryProducedColumns()) {
+            if (omitHiddenColumns && column.isHidden()) {
+                continue;
+            }
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");

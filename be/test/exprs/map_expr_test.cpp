@@ -81,8 +81,7 @@ TEST_F(MapExprTest, test_evaluate) {
     {
         auto expr = create_map_expr(type_map_int_str);
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({1, 3, 6}), LogicalType::TYPE_INT));
-        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-        type_varchar.len = 10;
+        TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(10);
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"a", "ab", ""}), type_varchar));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_EQ(3, result->size());
@@ -93,8 +92,7 @@ TEST_F(MapExprTest, test_evaluate) {
     {
         auto expr = create_map_expr(type_map_int_str);
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int32_t>({1, 3, 6}), LogicalType::TYPE_INT));
-        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-        type_varchar.len = 10;
+        TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(10);
         expr->add_child(new_mock_expr(ColumnTestHelper::build_column<Slice>({"a", "ab", ""}), type_varchar));
 
         expr->add_child(new_mock_expr(ColumnTestHelper::build_nullable_column<int32_t>({4, 0, 6}, {0, 1, 0}),
@@ -133,8 +131,7 @@ TEST_F(MapExprTest, test_const_evaluate) {
         auto expr = create_map_expr(type_map_int_str);
         expr->add_child(
                 new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(1, 1), LogicalType::TYPE_INT));
-        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-        type_varchar.len = 10;
+        TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(10);
         expr->add_child(
                 new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>("a", 1), type_varchar));
 
@@ -149,8 +146,7 @@ TEST_F(MapExprTest, test_const_evaluate) {
         auto expr = create_map_expr(type_map_int_str);
         expr->add_child(
                 new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_INT>(1, 1), LogicalType::TYPE_INT));
-        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-        type_varchar.len = 10;
+        TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(10);
         expr->add_child(
                 new_mock_expr(ColumnHelper::create_const_column<LogicalType::TYPE_VARCHAR>("a", 1), type_varchar));
 

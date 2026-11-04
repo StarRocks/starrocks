@@ -703,20 +703,24 @@ Status DeltaWriter::_reset_mem_table() {
         _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
     }
+    // Install the memtable only once prepare() accepts it: write() writes into a set _mem_table as is, so a memtable
+    // left behind by a failed prepare() -- e.g. slots that do not match the write schema -- would take the next write.
+    std::unique_ptr<MemTable> mem_table;
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
-        _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
-                                                _mem_table_sink.get(), _opt.merge_condition, _mem_tracker);
+        mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                               _mem_table_sink.get(), _opt.merge_condition, _mem_tracker);
     } else {
-        _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
-                                                _mem_table_sink.get(), "", _mem_tracker);
+        mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,
+                                               _mem_table_sink.get(), "", _mem_tracker);
     }
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
     }
-    RETURN_IF_ERROR(_mem_table->prepare(pk_encoding_type));
-    _mem_table->set_write_buffer_row(_memtable_buffer_row);
-    _write_buffer_size = _mem_table->write_buffer_size();
+    RETURN_IF_ERROR(mem_table->prepare(pk_encoding_type));
+    mem_table->set_write_buffer_row(_memtable_buffer_row);
+    _write_buffer_size = mem_table->write_buffer_size();
+    _mem_table = std::move(mem_table);
     return Status::OK();
 }
 

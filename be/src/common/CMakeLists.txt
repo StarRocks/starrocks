@@ -52,6 +52,7 @@ set(COMMON_FILES
   util/stack_trace_mutex.cpp
   util/table_metrics.cpp
   util/thrift_client_cache.cpp
+  util/thrift_key_redaction.cpp
   util/thrift_client.cpp
   util/thrift_server.cpp
   util/thrift_util.cpp

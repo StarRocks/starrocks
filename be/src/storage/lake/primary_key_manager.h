@@ -68,8 +68,19 @@ private:
 class RssidFileInfoContainer {
 public:
     void add_rssid_to_file(const TabletMetadata& metadata);
-    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_idx,
-                           const std::map<int, SegmentFileInfo>& replace_segments);
+    // Register the segment at position `segment_pos` of `meta`, a rowset whose id is `rowset_id`,
+    // taking its file from `replace_segments` (keyed by segment position) when it was rewritten.
+    // `segment_idx_base` is where the rowset's segment indexes start inside the rowset `rowset_id`
+    // names: non-zero for an op_write batch-applied after other op_writes of the same transaction,
+    // whose segments MetaFileBuilder appends at assigned_segment_idx() of the merged rowset.
+    void add_rssid_to_file(const RowsetMetadataPB& meta, uint32_t rowset_id, uint32_t segment_pos,
+                           const std::map<int, SegmentFileInfo>& replace_segments, uint32_t segment_idx_base = 0);
+    // Register the segments of the op_writes `builder` has batch-applied so far (the earlier statements
+    // of a multi-statement transaction), which reach the tablet metadata only in set_final_rowset(),
+    // under the rssids the primary index already gives their rows: `rowset_id`, the tablet's
+    // next_rowset_id(), plus their segment index in the pending rowset. A segment a row-mode partial
+    // update rewrote is registered with the rewritten file.
+    void add_pending_rowset(const MetaFileBuilder& builder, uint32_t rowset_id);
 
     const std::unordered_map<uint32_t, FileInfo>& rssid_to_file() const { return _rssid_to_file_info; }
     const std::unordered_map<uint32_t, uint32_t>& rssid_to_rowid() const { return _rssid_to_rowid; }
@@ -266,7 +277,9 @@ public:
 
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
-    Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
+    // With unshare, rewrite the index files the tablet cannot keep as they are instead of picking by size, unless the
+    // tablet's sort key is not its primary key, in which case no index file is compacted.
+    Status execute_index_major_compaction(const TabletMetadataPtr& metadata, TxnLogPB* txn_log, bool unshare = false);
 
     PersistentIndexBlockCache* block_cache() { return _block_cache.get(); }
 
@@ -281,9 +294,10 @@ private:
     // print memory tracker state
     void _print_memory_stats();
     Status _do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKIteratorPtr& upsert,
-                      LakePersistentIndex& index, DeletesMap* new_deletes, bool read_only, bool is_cloud_native_index);
+                      LakePersistentIndex& index, DeletesMap* new_deletes, bool read_only);
     Status _do_delete(uint32_t del_id, uint32_t del_rssid, const RowsetUpdateStateParams& params,
-                      RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes);
+                      RowsetUpdateState& state, LakePersistentIndex& index, DeletesMap* new_deletes,
+                      std::vector<FileMetaPB>* orphan_files);
 
     // Performs condition-based merge update using parallel chunk-level execution for segments
     // WITHOUT pre-materialized SST files. Unlike the SST-backed sibling, new-row condition values

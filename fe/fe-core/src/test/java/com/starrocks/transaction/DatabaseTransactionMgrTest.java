@@ -1438,6 +1438,89 @@ public class DatabaseTransactionMgrTest {
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
     }
 
+    // The committed txns 6, 7 and 8 of the fixture, alone in a fresh graph, so that the next publish batch
+    // from txn 6 is [6, 7, 8].
+    private DatabaseTransactionMgr dbTransMgrWithThreeBatchableTxns() throws AnalysisException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        TransactionGraph graph = new TransactionGraph();
+        for (String label : List.of(GlobalStateMgrTestUtil.testTxnLable6, GlobalStateMgrTestUtil.testTxnLable7,
+                GlobalStateMgrTestUtil.testTxnLable8)) {
+            graph.add(lableToTxnId.get(label), Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+        }
+        Deencapsulation.setField(masterDbTransMgr, "transactionGraph", graph);
+        return masterDbTransMgr;
+    }
+
+    // As the publish daemon does when it sends a publish attempt for these txns.
+    private static void markSent(DatabaseTransactionMgr mgr, long... txnIds) {
+        for (long txnId : txnIds) {
+            mgr.getTransactionState(txnId).setHasSendTask(true);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testRetryBatchTakesOnlyTheTxnsOfTheLastAttempt(boolean multiTable) throws AnalysisException {
+        boolean oldMultiTable = Config.lake_enable_batch_publish_multi_table;
+        Config.lake_enable_batch_publish_multi_table = multiTable;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+
+            // An attempt [6, 7] did not finish and txn 8 committed after it: the retry must leave txn 8 out.
+            markSent(masterDbTransMgr, txnId6, txnId7);
+            for (int round = 0; round < 2; round++) {
+                batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+                assertEquals(1, batches.size());
+                assertEquals(List.of(txnId6, txnId7), batches.get(0).getTxnIds());
+            }
+        } finally {
+            Config.lake_enable_batch_publish_multi_table = oldMultiTable;
+        }
+    }
+
+    @Test
+    public void testRetryOfAOneTxnBatchStaysAlone() throws AnalysisException {
+        int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
+        Config.lake_batch_publish_min_version_num = 3;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            // Txn 6 was sent alone: its retry stays alone even though 7 and 8 are ready to join it, and even
+            // though a fresh batch would need three txns.
+            markSent(masterDbTransMgr, txnId6);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_batch_publish_min_version_num = oldMinVersionNum;
+        }
+    }
+
+    @Test
+    public void testRetryTakesInNewTxnsWhenRetryFreezeIsOff() throws AnalysisException {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = false;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            markSent(masterDbTransMgr, txnId6, txnId7);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
+    }
+
     private static TransactionState makeVisibleBatchTxn(long txnId, List<Long> tableIds) {
         return new TransactionState(GlobalStateMgrTestUtil.testDbId1, tableIds, txnId,
                 "replay_mt_" + txnId, UUIDUtil.genTUniqueId(),

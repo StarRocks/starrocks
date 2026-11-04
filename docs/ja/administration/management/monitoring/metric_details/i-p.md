@@ -15,7 +15,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [非同期マテリアライズドビューのメトリクスに関するメトリクス](../metrics-materialized_view.md)
 - [共有データダッシュボードのメトリクス、およびスターレットダッシュボードのメトリクスに関するメトリクス](../metrics-shared-data.md)
 
-StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../monitoring.md)。
+StarRocksクラスターの監視サービスを構築する方法の詳細については、以下を参照してください。[監視とアラート](../prometheus_grafana.md)。
 
 :::
 
@@ -395,6 +395,30 @@ StarRocksクラスターの監視サービスを構築する方法の詳細に�
 - 単位: 件数
 - タイプ: 累積
 - 説明: 共有データモード専用。主キーテーブルの Publish 時に、tablet の主キーインデックスが主キーインデックスキャッシュになく、インデックス全体をロードする必要があった回数。インデックスがキャッシュにないのは、BE の起動後にまだロードされていないか、削除（evict）されたためです。ロードでは、その tablet のすべての主キーインデックス SST ファイルを開き、それらのファイルがまだカバーしていない rowset を再生します。失敗したロードも数えられます。ロード先の tablet が変わらないのにこの値が増え続ける場合、インデックスの削除と再ロードが繰り返されています。
+
+## `lake_publish_batch_retry_total`
+
+- 単位: 件数
+- タイプ: 累積
+- 説明: 共有データクラスタで、完了しなかった試行を再試行したバッチ発行の回数。つまり、バッチの最初のトランザクションが以前の試行ですでに送信されていたものです。`lake_enable_batch_publish_retry_freeze` が `true` の場合、このような再試行には以前の試行のトランザクションだけが含まれます。このカウンタを増加させるのは Leader FE のみです。
+
+## `lake_publish_partial_meta_written`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、tablet の publish 結果をこのノードの Data Cache に書き込んだ累積回数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。tablet の publish がリクエスト到着から publish RPC タイムアウト + 3 秒を超えて完了した場合、または publish が再試行の場合に結果を書き込みます。保持済みの結果を使った再試行でも、もう一度書き込みます。同じノードでの後続の再試行は、再適用せずにこの結果を読み出します（`lake_publish_skipped_by_partial_meta` を参照）。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_publish_skipped_by_partial_meta`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、再試行された publish が、このノードの Data Cache に保持された tablet の publish 結果（`lake_publish_partial_meta_written` を参照）を使い、トランザクションを再適用しなかった tablet の累積回数。BE 設定項目 `lake_enable_publish_partial_meta` が `true` の場合のみ、File Bundling が有効なテーブルについてカウントされます。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
+
+## `lake_publish_version_skipped_durable`
+
+- 単位: 件数
+- タイプ: Gauge
+- 説明: この BE/CN の起動以降、再試行された publish が、ストレージにすでに書き込まれている新しいバージョンの tablet メタデータを使い、トランザクションを再適用しなかった tablet の累積回数。再試行（そのパーティションの以前の publish リクエストが送信され、完了しなかった場合）で、新しいバージョンがメタデータキャッシュにない場合のみカウントされます。メタデータキャッシュでヒットした tablet と初回の publish はカウントされません。共有データクラスタのみ。`dump_metrics_with_bvar` が有効な場合に `/metrics` で公開されます。
 
 ## `lake_segment_cache_hit_minute`
 

@@ -58,6 +58,7 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/schema_change.h"
+#include "storage/lake/scoped_local_disk_cache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -829,6 +830,54 @@ TEST_F(LakeServiceTest, test_publish_version_for_write) {
 // whose shadow_rewrite_alter_version carries the watershed W. This exercises the TXN_SHADOW_REWRITE
 // branch in publish_version that anchors the historical rewrite as an op_schema_change@W during the
 // flip publish, including the W == 1 skip-load (empty partition) path.
+#ifdef WITH_STARCACHE
+// A bundled publish request keeps a tablet's result as its partial_meta only when the result may never reach the
+// bundle: here, a retry. A later retry that finds neither the metacache entry nor the txn log answers from it.
+TEST_F(LakeServiceTest, test_publish_version_keeps_partial_meta_for_retry) {
+    const bool old_enable = config::lake_enable_publish_partial_meta;
+    config::lake_enable_publish_partial_meta = true;
+    DeferOp restore([&]() { config::lake_enable_publish_partial_meta = old_enable; });
+    lake::ScopedLocalDiskCache local_disk_cache(std::string(kRootLocation) + "_partial_meta_cache");
+
+    auto txn_log = generate_write_txn_log(2, 101, 4096);
+    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
+    PublishVersionRequest request;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_tablet_ids(_tablet_id);
+    request.add_txn_ids(txn_log.txn_id());
+    request.set_enable_aggregate_publish(true);
+
+    // A first attempt that finishes in time keeps nothing.
+    {
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        EXPECT_TRUE(_tablet_mgr->get_partial_tablet_metadata(_tablet_id, 2, 0).status().is_not_found());
+    }
+    request.set_is_retry_publish(true);
+    // A retry after the metacache lost the version applies again and keeps the result.
+    {
+        _tablet_mgr->prune_metacache();
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        ASSIGN_OR_ABORT(auto partial, _tablet_mgr->get_partial_tablet_metadata(_tablet_id, 2, 0));
+        EXPECT_EQ(2, partial->version());
+    }
+    // The next retry answers from it, without the txn log.
+    {
+        ASSERT_OK(fs::delete_file(_tablet_mgr->txn_log_location(_tablet_id, txn_log.txn_id())));
+        _tablet_mgr->prune_metacache();
+        PublishVersionResponse response;
+        _lake_service.publish_version(nullptr, &request, &response, nullptr);
+        ASSERT_EQ(0, response.failed_tablets_size()) << response.status().DebugString();
+        ASSERT_EQ(1, response.tablet_metas().count(_tablet_id));
+        EXPECT_EQ(2, response.tablet_metas().at(_tablet_id).version());
+    }
+}
+#endif
+
 TEST_F(LakeServiceTest, test_publish_version_shadow_rewrite) {
     // Each shadow tablet is freshly created at version 1; W (alter_version) is the base partition's
     // watershed, independent of the shadow tablet's base_version and always < new_version.
@@ -4220,8 +4269,10 @@ TEST_F(LakeServiceTest, test_get_tablet_stats) {
     // the precious LRU metacache with stat-collection workloads.
     auto cache_key_v1 = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
     auto cache_key_v3 = _tablet_mgr->tablet_metadata_location(_tablet_id, 3);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v1) == nullptr);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key_v3) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key_v1)) == nullptr);
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key_v3)) == nullptr);
 
     // test timeout
     response.clear_tablet_stats();
@@ -4503,7 +4554,8 @@ TEST_F(LakeServiceTest, test_get_tablet_stats_does_not_pollute_metacache) {
 
     // Metadata must NOT be in the metacache after a stat request
     auto cache_key = _tablet_mgr->tablet_metadata_location(_tablet_id, 1);
-    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(cache_key) == nullptr)
+    ASSERT_TRUE(_tablet_mgr->metacache()->lookup_tablet_metadata(
+                        starrocks::lake::MetacacheKey::tablet_metadata(cache_key)) == nullptr)
             << "get_tablet_stats should not fill the metacache (fill_cache=false)";
 }
 
@@ -5076,7 +5128,8 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         auto combined_log = CombinedTxnLogPB();
         combined_log.add_txn_logs()->CopyFrom(*txn_log);
 
-        _tablet_mgr->metacache()->cache_txn_log(_tablet_mgr->txn_log_location(_tablet_id, txn_id), txn_log);
+        _tablet_mgr->metacache()->cache_txn_log(
+                starrocks::lake::MetacacheKey::txn_log(_tablet_mgr->txn_log_location(_tablet_id, txn_id)), txn_log);
 
         ASSERT_OK(_tablet_mgr->put_combined_txn_log(combined_log));
 
@@ -5087,13 +5140,16 @@ TEST_F(LakeServiceTest, test_publish_version_with_combined_log) {
         auto path = _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id);
         ASSERT_OK(FileSystem::Default()->path_exists(path));
 
-        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
+        _tablet_mgr->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
         // publish again without txn log cache
         do_test(txn_id, TStatusCode::OK);
 
         // publish again without txn log cache and combined txn log cache
-        _tablet_mgr->metacache()->erase(_tablet_mgr->txn_log_location(_tablet_id, txn_id));
-        _tablet_mgr->metacache()->erase(_tablet_mgr->combined_txn_log_location(_tablet_id, txn_id));
+        _tablet_mgr->metacache()->erase(
+                starrocks::lake::MetacacheKey::TEST_from_string(_tablet_mgr->txn_log_location(_tablet_id, txn_id)));
+        _tablet_mgr->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(
+                _tablet_mgr->combined_txn_log_location(_tablet_id, txn_id)));
         do_test(txn_id, TStatusCode::OK);
     }
 }
@@ -6970,7 +7026,7 @@ TEST_F(LakeServiceTest, test_publish_version_prefer_shared_initial_metadata) {
     const auto shared_location = _tablet_mgr->tablet_initial_metadata_location(tablet_a);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(shared, shared_location));
     // put_tablet_metadata() caches what it wrote; a cold CN has nothing.
-    _tablet_mgr->metacache()->erase(shared_location);
+    _tablet_mgr->metacache()->erase(starrocks::lake::MetacacheKey::TEST_from_string(shared_location));
 
     for (auto tablet_id : {tablet_a, tablet_b}) {
         TxnLog log;

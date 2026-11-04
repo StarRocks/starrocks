@@ -1033,6 +1033,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：导入或 Compaction 生成的数据大于该阈值时，系统会即时构建主键索引文件。默认为 100MB。
 - 引入版本：-
 
+### pk_index_del_sst_min_rows
+
+- 默认值：1000000
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：适用于存算分离集群的主键表。导入生成的删除文件行数达到该值时，系统会在导入阶段同时构建该文件的主键索引文件，发布导入时直接挂载该文件，而不是把每个被删除的主键逐一写入内存中的主键索引。该条件与 `pk_index_eager_build_threshold_bytes` 共同生效：删除文件满足其中任一条件即会构建索引文件。设为 `0` 或负数时关闭该条件。
+- 引入版本：-
+
 ### primary_key_limit_size
 
 - 默认值：128

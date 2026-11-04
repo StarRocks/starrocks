@@ -1039,10 +1039,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      * Whether a partition may be added to {@code olapTable} while it is in a non-NORMAL state.
      * Only the metadata-only, provably-safe alter situations are tolerated (gated by
      * {@link Config#enable_concurrent_add_partition_during_alter}): the transient UPDATING_META
-     * window of fast schema evolution, and the shared-data ADD/DROP INDEX fast-path jobs that
-     * declare {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}. The
-     * consistency guarantee for the newly built tablets is provided by checkIfMetaChange under
-     * the table WRITE lock, not by this coarse table-state check.
+     * window of fast schema evolution, and the alter jobs that declare
+     * {@link com.starrocks.alter.AlterJobV2#allowConcurrentPartitionCreation()}: the shared-data
+     * ADD/DROP INDEX fast-path jobs, and the optimize jobs while they wait for the table to become
+     * stable (WAITING_STABLE). The consistency guarantee for the newly built tablets is provided by
+     * checkIfMetaChange under the table WRITE lock, not by this coarse table-state check.
      */
     private boolean allowAddPartitionDuringAlter(OlapTable olapTable) {
         if (!Config.enable_concurrent_add_partition_during_alter) {
@@ -1050,7 +1051,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         OlapTable.OlapTableState state = olapTable.getState();
         return state == OlapTable.OlapTableState.UPDATING_META
-                || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
+                || ((state == OlapTable.OlapTableState.SCHEMA_CHANGE || state == OlapTable.OlapTableState.WAITING_STABLE)
                     && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId()));
     }
 
@@ -1209,6 +1210,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         if (olapTable.getDefaultDistributionInfo().getType() !=
                 copiedTable.getDefaultDistributionInfo().getType()) {
+            metaChanged = true;
+        }
+
+        // An optimize may give the table other distribution columns while the partition is built: no load could write
+        // the partition together with the ones that have the new columns.
+        if (olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo distribution
+                && copiedTable.getDefaultDistributionInfo() instanceof HashDistributionInfo copiedDistribution
+                && !distribution.getDistributionColumns().equals(copiedDistribution.getDistributionColumns())) {
             metaChanged = true;
         }
 
@@ -1608,6 +1617,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
     @Override
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
+        dropPartition(db, table, clause, 0L);
+    }
+
+    /**
+     * Same as {@link #dropPartition(Database, Table, DropPartitionClause)}, but a force drop keeps the
+     * dropped partitions' tablets in the recycle bin, non-recoverable, for `retentionPeriod` seconds, so
+     * that statements already running against them can finish.
+     */
+    public void dropPartition(Database db, Table table, DropPartitionClause clause, long retentionPeriod)
+            throws DdlException {
         CatalogUtils.checkTableExist(db, table.getName());
         Locker locker = new Locker();
         OlapTable olapTable = (OlapTable) table;
@@ -1676,26 +1695,29 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
         }
 
-        DropPartitionsInfo info =
-                new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(), existPartitions);
+        DropPartitionsInfo info = new DropPartitionsInfo(dbId, tableId, isTempPartition, clause.isForceDrop(),
+                existPartitions, false, retentionPeriod);
         editLog.logDropPartitions(info, wal -> {
-            dropPartitionInternal(olapTable, db, existPartitions, isTempPartition, clause.isForceDrop());
+            dropPartitionInternal(olapTable, db, existPartitions, isTempPartition, clause.isForceDrop(), retentionPeriod);
         });
 
         if (!isTempPartition) {
             LoadJobMVListener.INSTANCE.onTableDataChange(db, olapTable);
         }
-        LOG.info("succeed in dropping partitions[{}], db: {}, table: {}, is temp : {}, is force : {}", existPartitions,
+        LOG.info("succeed in dropping partitions[{}], db: {}, table: {}, is temp : {}, is force : {}, " +
+                        "retention period : {}s", existPartitions,
                 db.getFullName(), olapTable.getName(),
                 isTempPartition,
-                clause.isForceDrop());
+                clause.isForceDrop(),
+                retentionPeriod);
     }
 
     protected void dropPartitionInternal(OlapTable olapTable,
                                        Database db,
                                        List<String> partitionNames,
                                        boolean isTempPartition,
-                                       boolean isForceDrop) {
+                                       boolean isForceDrop,
+                                       long retentionPeriod) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         for (String partitionName : partitionNames) {
             // drop
@@ -1710,7 +1732,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         partitionRange = ((RangePartitionInfo) partitionInfo).getRange(partition.getId());
                     }
                 }
-                olapTable.dropPartition(db.getId(), partitionName, isForceDrop);
+                olapTable.dropPartition(db.getId(), partitionName, isForceDrop, retentionPeriod);
                 if (olapTable instanceof MaterializedView mv) {
                     try {
                         SyncPartitionUtils.dropBaseVersionMeta(mv, partitionName, partitionRange);
@@ -1743,13 +1765,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     + " partitionNames = " + info.getPartitionNames()
                     + " isTempPartition = " + info.isTempPartition()
                     + " isForceDrop = " + info.isForceDrop()
-                    + " isDropAll = " + info.isDropAll());
+                    + " isDropAll = " + info.isDropAll()
+                    + " retentionPeriod = " + info.getRetentionPeriod());
             List<String> partitionNames = info.getPartitionNames();
             OlapTable olapTable = (OlapTable) getTable(db.getId(), info.getTableId());
             boolean isTempPartition = info.isTempPartition();
             long dbId = info.getDbId();
             boolean isForceDrop = info.isForceDrop();
             boolean isDropAll = info.isDropAll();
+            long retentionPeriod = info.getRetentionPeriod();
             if (isDropAll && isTempPartition) {
                 olapTable.dropAllTempPartitions();
                 return;
@@ -1758,7 +1782,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 if (isTempPartition) {
                     olapTable.dropTempPartition(partitionName, true);
                 } else {
-                    olapTable.dropPartition(dbId, partitionName, isForceDrop);
+                    olapTable.dropPartition(dbId, partitionName, isForceDrop, retentionPeriod);
                 }
             });
         }
@@ -2249,6 +2273,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 TabletTaskExecutor.buildPartitionsSequentially(
                         db.getId(), table, partitions, numReplicas, numAliveNodes, computeResource, option);
             }
+        } catch (RuntimeException e) {
+            // A create replica task that cannot be sent, as to a backend that is down, fails with a RuntimeException
+            // in shared-nothing mode. The callers drop the tablets they registered for the partitions on a
+            // DdlException only, and a tablet left in the inverted index keeps a decommission of its backend from
+            // ever ending.
+            LOG.warn("failed to build {} partitions for table {}.{}", partitions.size(), db.getFullName(),
+                    table.getName(), e);
+            throw new DdlException(e.getMessage(), e);
         } finally {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
         }
@@ -4085,7 +4117,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             db.dropTable(oldTableName);
             db.registerTableUnlocked(olapTable);
         });
-        AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapTable,
+        AlterMVJobExecutor.inactiveRelatedMaterializedViewsForRename(olapTable,
                 MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
     }

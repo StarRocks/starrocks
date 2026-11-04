@@ -15,7 +15,7 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../monitoring.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../prometheus_grafana.md)。
 
 :::
 
@@ -395,6 +395,30 @@ import MetricsIP from '../../../../_assets/commonMarkdown/metrics_i_p.mdx'
 - 单位：计数
 - 类型：累积
 - 描述：仅存算分离模式。主键表 Publish 时，tablet 的主键索引不在主键索引缓存中、必须整体加载的次数。索引不在缓存中，要么是 BE 启动后尚未加载过，要么是已被淘汰。加载时会打开该 tablet 的全部主键索引 SST 文件，并重放这些文件尚未覆盖的 rowset。加载失败也会计入。如果写入的 tablet 集合不变而该值持续上升，说明主键索引在被反复淘汰和重新加载。
+
+## `lake_publish_batch_retry_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：存算分离集群中重试批量发布的次数，即批次的首个事务在之前的尝试中已经发出、但那次尝试没有完成。`lake_enable_batch_publish_retry_freeze` 为 `true` 时，这类重试只包含上一次尝试中的事务。仅 Leader FE 递增该计数器。
+
+## `lake_publish_partial_meta_written`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，把 Tablet 发布结果写入本节点 Data Cache 的累积次数。仅在 BE 配置项 `lake_enable_publish_partial_meta` 为 `true` 时统计，且只涉及开启 File Bundling 的表。某个 Tablet 的 Publish 在请求到达后超过 Publish RPC 超时时间加 3 秒才完成，或者本次 Publish 是重试，就会写入其结果；重试即使直接用了已保留的结果，也会再写一次。之后同一节点上的重试会直接读取这份结果，不再重新 apply，参见 `lake_publish_skipped_by_partial_meta`。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_publish_skipped_by_partial_meta`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，重试的 Publish 直接使用本节点 Data Cache 中保留的 Tablet 发布结果（参见 `lake_publish_partial_meta_written`）、不再重新 apply 事务的 Tablet 累积次数。仅在 BE 配置项 `lake_enable_publish_partial_meta` 为 `true` 时统计，且只涉及开启 File Bundling 的表。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
+
+## `lake_publish_version_skipped_durable`
+
+- 单位：次数
+- 类型：Gauge
+- 描述：本 BE/CN 启动以来，重试的 publish 直接使用存储中已写好的新版本 tablet 元数据、不再重新 apply 事务的 tablet 累积次数。只统计重试（该分区之前的 publish 请求已经发出、但没有完成）且新版本不在元数据缓存中的情况；命中元数据缓存的 tablet 和首次 publish 都不计入。仅适用于存算分离集群。启用 `dump_metrics_with_bvar` 后，通过 `/metrics` 导出。
 
 ## `lake_segment_cache_hit_minute`
 

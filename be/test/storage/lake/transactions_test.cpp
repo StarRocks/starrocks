@@ -68,7 +68,7 @@ static Status put_combined_txn_log_with_dir(TabletManager* tablet_mgr, const Com
 
 TEST(TransactionsLoadIdsTest, AllLoadIdsPresent_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1001;
     const int64_t txn_id = 2002;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{1, 11}, {2, 22}, {3, 33}};
@@ -95,7 +95,7 @@ TEST(TransactionsLoadIdsTest, AllLoadIdsPresent_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, SomeLoadIdsMissingAreSkipped_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1002; // Use different tablet_id to avoid conflicts
     const int64_t txn_id = 2003;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{10, 100}, {20, 200}, {30, 300}};
@@ -124,7 +124,7 @@ TEST(TransactionsLoadIdsTest, SomeLoadIdsMissingAreSkipped_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, AnyOtherErrorShouldFail_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1003; // Use different tablet_id
     const int64_t txn_id = 2004;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{100, 1000}}; // Only test one load_id
@@ -146,7 +146,7 @@ TEST(TransactionsLoadIdsTest, AnyOtherErrorShouldFail_RealApiWithMockMgr) {
 // under any load id is reported like a missing single txn log rather than as nothing to apply.
 TEST(TransactionsLoadIdsTest, AllMissingReturnsNotFound_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1004; // Use different tablet_id
     const int64_t txn_id = 2005;
     std::vector<std::pair<int64_t, int64_t>> load_ids = {{7, 70}, {8, 80}};
@@ -159,7 +159,7 @@ TEST(TransactionsLoadIdsTest, AllMissingReturnsNotFound_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, TabletWithoutAnyLogReturnsNotFound_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id_1 = 1012;
     const int64_t tablet_id_2 = 1013;
     const int64_t txn_id = 2010;
@@ -184,7 +184,7 @@ TEST(TransactionsLoadIdsTest, TabletWithoutAnyLogReturnsNotFound_RealApiWithMock
 
 TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id = 1005; // Use different tablet_id
     const int64_t txn_id = 2006;
 
@@ -206,7 +206,7 @@ TEST(TransactionsLoadIdsTest, SingleTxnLogWithoutLoadIds_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, MultiTabletLoadIdsPresent_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t tablet_id_1 = 1006;
     const int64_t tablet_id_2 = 1007;
     const int64_t txn_id = 2007;
@@ -239,7 +239,7 @@ TEST(TransactionsLoadIdsTest, MultiTabletLoadIdsPresent_RealApiWithMockMgr) {
 
 TEST(TransactionsLoadIdsTest, CombinedTxnLogForMultipleTablets_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t partition_id = 3001;
     const int64_t tablet_id_1 = 1008;
     const int64_t tablet_id_2 = 1009;
@@ -276,7 +276,7 @@ TEST(TransactionsLoadIdsTest, CombinedTxnLogForMultipleTablets_RealApiWithMockMg
 
 TEST(TransactionsLoadIdsTest, PreserveInputTabletIdsOrder_RealApiWithMockMgr) {
     auto location_provider = std::make_shared<FixedLocationProvider>("/tmp/test_lake");
-    TabletManager mgr(location_provider, 1);
+    TabletManager mgr(location_provider, 1, 1);
     const int64_t partition_id = 3002;
     const int64_t tablet_id_1 = 1010;
     const int64_t tablet_id_2 = 1011;
@@ -385,7 +385,7 @@ TEST_F(NoOpPublishTest, no_op_publish_bypasses_stale_metacache) {
     stale_metadata->set_version(2);
     stale_metadata->set_commit_time(kStaleSentinelCommitTime);
     auto stale_path = _tablet_mgr->tablet_metadata_location(tablet_id, 2);
-    _tablet_mgr->metacache()->cache_tablet_metadata(stale_path, stale_metadata);
+    _tablet_mgr->metacache()->cache_tablet_metadata(MetacacheKey::tablet_metadata(stale_path), stale_metadata);
 
     TxnInfoPB txn_info;
     txn_info.set_txn_id(txn_id);
@@ -673,7 +673,8 @@ TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted) {
 
     auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
     meta_v2->set_version(2);
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2), meta_v2);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2)), meta_v2);
     set_primary_index_data_version(tablet_id, 2);
 
     auto txns = make_txns();
@@ -691,7 +692,8 @@ TEST_F(CalNewBaseVersionTest, cache_only_version_not_adopted_on_bundled_metadata
 
     auto meta_v2 = std::make_shared<TabletMetadataPB>(*_tablet_metadata);
     meta_v2->set_version(2);
-    _tablet_mgr->metacache()->cache_tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2), meta_v2);
+    _tablet_mgr->metacache()->cache_tablet_metadata(
+            MetacacheKey::tablet_metadata(_tablet_mgr->tablet_metadata_location(tablet_id, 2)), meta_v2);
     _tablet_mgr->cache_bundled_metadata_partition_marker(tablet_id);
     set_primary_index_data_version(tablet_id, 2);
 

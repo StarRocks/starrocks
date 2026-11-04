@@ -188,7 +188,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
+- 描述: 设置为 `true` 时，分区创建（手动 `ALTER TABLE ... ADD PARTITION`、导入过程中的自动创建以及动态分区调度器）允许与可证明安全的纯元数据 ALTER 操作并发执行——目前包括存算分离模式下的 ADD/DROP INDEX 快速路径任务，以及 fast schema evolution 的瞬态 `UPDATING_META` 状态——而不再拒绝该 DDL 或取消 ALTER 任务。此外，优化作业在开始执行前会等待表的所有副本都恢复健康，这可能持续整个副本修复过程，在此期间同样允许创建分区。设置为 `false` 可恢复旧版的互斥行为。该配置仅放宽分区创建，其他所有 ALTER 任务以及所有非 `ADD PARTITION` 的 DDL 仍保持旧版的状态检查。
 - 引入版本: -
 
 ### `capacity_used_percent_high_water`
@@ -330,7 +330,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 StarRocks 在创建优化作业时是否使用非阻塞在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（无分区/键/排序规范，分布不是 `RandomDistributionDesc`，存储类型不是 `COLUMN_WITH_ROW`，已启用复制存储，且该表不是云原生表或物化视图）时，规划器会创建一个 `OnlineOptimizeJobV2` 以在不阻塞写入的情况下执行优化。如果为 false 或任何兼容性条件失败，StarRocks 将回退到 `OptimizeJobV2`，这可能会在优化期间阻塞写入操作。
+- 描述: 控制 StarRocks 在创建优化作业时是否使用非阻塞在线优化路径。当 `enable_online_optimize_table` 为 true 且目标表满足兼容性检查（无分区/键/排序规范，分布不是 `RandomDistributionDesc`，未修改分桶方式和分桶键，存储类型不是 `COLUMN_WITH_ROW`，已启用复制存储，且该表不是云原生表或物化视图）时，规划器会创建一个 `OnlineOptimizeJobV2` 以在不阻塞写入的情况下执行优化。如果为 false 或任何兼容性条件失败，StarRocks 将回退到 `OptimizeJobV2`，这可能会在优化期间阻塞写入操作。在线优化路径不支持 `enable_new_publish_mechanism`：如果 `enable_new_publish_mechanism` 也为 true，创建满足兼容性检查的优化作业会失败并返回错误。此时需要将 `enable_new_publish_mechanism` 或 `enable_online_optimize_table` 设置为 false。
 - 引入版本: v3.3.3, v3.4.0, v3.5.0
 
 ### `enable_strict_storage_medium_check`
@@ -393,7 +393,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Long
 - 单位: 秒
 - 是否可变: Yes
-- 描述: INSERT OVERWRITE 或物化视图刷新操作删除的分区的元数据保留时间。请注意，此类元数据无法通过执行 RECOVER 恢复。
+- 描述: 被 INSERT OVERWRITE、物化视图刷新操作或分区 TTL（`partition_live_number`、`partition_ttl`、`partition_retention_condition`）删除的分区，其元数据的保留时间。请注意，此类元数据无法通过执行 RECOVER 恢复。
 - 引入版本: v3.5.9
 
 ### `recover_with_empty_tablet`
@@ -760,7 +760,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。源表可以是内部 OLAP 表，也可以是 External Catalog 中的表，如 Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch 表，但不支持视图。如果无法根据表统计信息估算外部源表的大小，该导入跳过预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。对于 `INSERT INTO`，也支持手动 Range 分区的目标表：只对已有的空分区做分裂，不会新建任何分区。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。源表可以是内部 OLAP 表，也可以是 External Catalog 中的表，如 Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch 表，但不支持视图。如果无法根据表统计信息估算外部源表的大小，该导入跳过预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。对于 `INSERT INTO` 和 static `INSERT OVERWRITE`，也支持手动 Range 分区的目标表：`INSERT INTO` 分裂已有的空分区，覆盖写入则分裂用于替换的临时分区，均不会新建任何分区。如果源表是内表，且用 `PARTITION (...)` 限定了分区，则只从这些分区采样。非增量异步物化视图如果定义查询只读取一张内表、不含聚合、连接和集合运算，刷新时也按同样方式采样。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -880,7 +880,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Broker Load 触发载入不对称。** 多分区预分裂钩子在 `BrokerLoadJob.createLoadingTask` 中触发，**晚于** `task.prepare()` 构建该次导入的 sink plan（plan 基于当时的 catalog 状态）。因此 Broker Load 路径下，预建分区和分裂后的 tablet 布局只对**后续**针对同一张表的导入可见 —— 触发本次预分裂的 Broker Load 自身仍按原布局运行，命中的分区走 BE 运行时自动建分区。INSERT-from-FILES 钩子在 `StatementPlanner.plan()` 之前触发，因此触发本次预分裂的 INSERT 本身就能受益。
 - **后续 INSERT 失败时的空分区残留。** 当预建成功，但触发本次预建的 INSERT 因不相关原因失败（FILES schema 不匹配、BE 崩溃、导入超时等），空的预建分区会留在 catalog 中。这与 `ALTER TABLE ADD PARTITION` 在后续失败时的语义一致 —— ALTER 同样不会回滚已建分区。介意残留的运维可以用 `ALTER TABLE ... DROP PARTITION` 手动删除；实际上空分区代价很低，下次重试导入时会复用。
-- **手动 Range 分区的目标表。** 对于用户自行声明 RANGE 分区的表，预分裂不会新建分区。每条采样行按分区范围归入包含它的已有分区，不落在任何已声明范围内的值直接从计划中剔除。只有仍为空且只有一个 tablet 的分区才会被分裂，典型场景是刚通过 `ALTER TABLE ... ADD PARTITION` 新增的分区；如果本次导入的目标分区都已有数据，则不采样源数据，直接跳过预分裂。手动分区表的 `INSERT OVERWRITE`、LIST 分区和表达式分区暂不支持。
+- **手动 Range 分区的目标表。** 对于用户自行声明 RANGE 分区的表，预分裂不会新建分区。每条采样行按分区范围归入包含它的已有分区，不落在任何已声明范围内的值直接从计划中剔除。只有仍为空且只有一个 tablet 的分区才会被分裂，典型场景是刚通过 `ALTER TABLE ... ADD PARTITION` 新增的分区；如果本次导入的目标分区都已有数据，则不采样源数据，直接跳过预分裂。static `INSERT OVERWRITE` 会分裂替换指定分区的新临时分区。手动分区表的 dynamic `INSERT OVERWRITE`、LIST 分区和表达式分区暂不支持。
 
 #### 生产部署建议
 

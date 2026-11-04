@@ -239,7 +239,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
 
 TEST_F(ScrollParserTest, JsonTestOK) {
     {
-        SlotDesc slot_descs[] = {{"contactData", TypeDescriptor::from_logical_type(LogicalType::TYPE_JSON)}, {""}};
+        SlotDesc slot_descs[] = {{"contactData", TYPE_JSON_DESC}, {""}};
         std::unique_ptr<ScrollParser> scroll_parser = std::make_unique<ScrollParser>(false);
         scroll_parser->set_params(_create_tuple_desc(slot_descs), nullptr, _runtime_state->timezone());
         Status st = scroll_parser->parse(
@@ -256,7 +256,7 @@ TEST_F(ScrollParserTest, JsonTestOK) {
                 R"([[{"contactType": "email", "emailAddress": "jane.doe@example.com", "firstName": "Jane", "lastName": "Doe", "phoneNumber": "+1987654321"}]])");
     }
     {
-        SlotDesc slot_descs[] = {{"contactData", TypeDescriptor::from_logical_type(LogicalType::TYPE_JSON)}, {""}};
+        SlotDesc slot_descs[] = {{"contactData", TYPE_JSON_DESC}, {""}};
         std::unique_ptr<ScrollParser> scroll_parser = std::make_unique<ScrollParser>(false);
         scroll_parser->set_params(_create_tuple_desc(slot_descs), nullptr, _runtime_state->timezone());
         Status st = scroll_parser->parse(

@@ -1,0 +1,39 @@
+name: RELEASE FREEZE
+
+# A patch branch is frozen from the cut: regression starts when branch-X.Y.Z is created. Same
+# shape as SKIP CASE: the `release-freeze` job is a required check of the patch-branch
+# protection rules and fails for every PR into branch-X.Y.Z; its error says the branch is
+# frozen for its release and which QA members can let the PR in. A `release-unfreeze` label
+# lets it pass, only when one of them added it (ci-tool lib/qa_label.py QA_USERS, the SKIP CASE
+# list); adding or removing the label re-runs this job. Other release branches (customer
+# branches such as branch-4.0.17-sn-1025, -rcNN) always pass.
+# Thin caller: the logic is ci-tool lib/release_freeze.py.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+    branches: ['branch-[0-9]*.[0-9]*.*', 'branch-[0-9]*.[0-9]*-*']
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read  # who added release-unfreeze (issue events)
+
+concurrency:
+  group: release-freeze-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  release-freeze:
+    name: release-freeze
+    if: github.repository == 'StarRocks/starrocks'
+    runs-on: [self-hosted, quick]
+    env:
+      # Reads the PR and its label events; no PR code is checked out.
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - name: release-freeze
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && (cd ci-tool && git pull -q || true)
+          python3 ci-tool/lib/release_freeze.py --repo "${{ github.repository }}" --pr "${PR_NUMBER}"

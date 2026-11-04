@@ -493,6 +493,7 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
     - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用 FE 配置项 `tablet_reshard_target_size`。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
     - 自动合并与未指定 Tablet ID 的手动 MERGE 按相同方式选取要合并的 Tablet。手动 MERGE 使用 `PROPERTIES` 中指定的值，未指定时同样使用该 FE 配置项。只有小于 `ceil(0.8 × tablet_reshard_target_size)` 的 Tablet 才会参与合并：相邻的此类 Tablet 按 Range 顺序分组，每组大小总和不超过 `tablet_reshard_target_size`，中间遇到更大的 Tablet 时分组随之断开。合并不会使物化索引的 Tablet 数量低于其并行度下限，即所属仓库的计算节点数（受 `tablet_reshard_max_split_count` 上限约束，且不小于 2）。如果没有可合并的 Tablet，手动执行的语句会报错 `No tablets need to merge in table ...`。
     - 指定 Tablet ID 的手动 MERGE 直接按指定的分组合并，不检查 Tablet 大小，也不受并行度下限约束。每组须由同一分区、同一物化索引内至少两个连续的 Tablet 组成。
+    - 自动合并和手动 MERGE 都只会合并不再与其他 Tablet 共享数据文件的 Tablet。SPLIT 生成的 Tablet 会一直共享原 Tablet 的数据文件，直到 Compaction 重写这些文件为止，因此如需重新合并这些 Tablet，请先对所在分区执行 `ALTER TABLE ... COMPACT`。
     - 无论哪种方式，当前正在执行 SPLIT 或 MERGE 的 Tablet 数量都须小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
 :::note
@@ -772,6 +773,7 @@ PROPERTIES：支持设置超时时间，默认超时时间为一天。
 
 - 表必须为明细表（Duplicate Key）、聚合表（Aggregate）或更新表（Unique Key），不支持主键表（Primary Key）。
 - 表不能为 Colocate 表。
+- 不能删除 Rollup 排序键中的列，也不能修改这些列的类型。唯一的例外是：可以单独增加 VARCHAR 列的长度（通过 Fast Schema Evolution 完成），但不能同时调整该列的位置或修改其他属性。此类 Rollup 不支持 `ORDER BY ... FROM <rollup>`。
 - 支持添加多个此类 Rollup。每条 `ALTER TABLE` 语句添加一个 Rollup（添加多个 Rollup 需分多条语句执行）。该 Rollup 始终基于基表索引构建，不支持 `FROM <其他 Rollup>`。表不能包含同步物化视图。
 
 示例：
