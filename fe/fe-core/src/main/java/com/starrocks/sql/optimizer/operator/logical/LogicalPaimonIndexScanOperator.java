@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.index.IndexTable;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
@@ -26,27 +26,27 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
-/** Logical scan over a virtual connector index table. */
-public class LogicalIndexScanOperator extends LogicalScanOperator {
+/** Logical scan over a virtual Paimon index table. */
+public class LogicalPaimonIndexScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
-    public LogicalIndexScanOperator(Table table,
-                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                    Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-                                    long limit,
-                                    ScalarOperator predicate) {
-        super(OperatorType.LOGICAL_INDEX_SCAN, table, colRefToColumnMetaMap,
+    public LogicalPaimonIndexScanOperator(Table table,
+                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                         Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+                                         long limit,
+                                         ScalarOperator predicate) {
+        super(OperatorType.LOGICAL_PAIMON_INDEX_SCAN, table, colRefToColumnMetaMap,
                 columnMetaToColRefMap, limit, predicate, null);
-        Preconditions.checkState(table instanceof IndexTable);
+        Preconditions.checkState(table instanceof PaimonIndexTable);
     }
 
-    private LogicalIndexScanOperator() {
-        super(OperatorType.LOGICAL_INDEX_SCAN);
+    private LogicalPaimonIndexScanOperator() {
+        super(OperatorType.LOGICAL_PAIMON_INDEX_SCAN);
     }
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
-        return visitor.visitLogicalIndexScan(this, context);
+        return visitor.visitLogicalPaimonIndexScan(this, context);
     }
 
     @Override
@@ -60,14 +60,14 @@ public class LogicalIndexScanOperator extends LogicalScanOperator {
     }
 
     public static class Builder
-            extends LogicalScanOperator.Builder<LogicalIndexScanOperator, LogicalIndexScanOperator.Builder> {
+            extends LogicalScanOperator.Builder<LogicalPaimonIndexScanOperator, LogicalPaimonIndexScanOperator.Builder> {
         @Override
-        protected LogicalIndexScanOperator newInstance() {
-            return new LogicalIndexScanOperator();
+        protected LogicalPaimonIndexScanOperator newInstance() {
+            return new LogicalPaimonIndexScanOperator();
         }
 
         @Override
-        public Builder withOperator(LogicalIndexScanOperator scanOperator) {
+        public Builder withOperator(LogicalPaimonIndexScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates.clone();
             return this;

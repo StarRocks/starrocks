@@ -40,11 +40,9 @@ import org.apache.paimon.types.DataTypeRoot;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
@@ -94,32 +92,15 @@ final class PaimonIndexMetadataReader {
                 continue;
             }
 
-            Map<String, String> options = indexOptions(snapshotSchema.options(), field.name(), provider);
-            descriptors.add(newIndexDescriptor(indexType, provider, field, options));
+            descriptors.add(newIndexDescriptor(indexType, field));
         }
         return ConnectorIndexMetadata.of(snapshot.id(), tableType, new ArrayList<>(descriptors));
     }
 
     private static ConnectorIndexDescriptor newIndexDescriptor(
-            IndexType indexType, String provider, DataField field, Map<String, String> options) {
-        return new ConnectorIndexDescriptor(indexType, provider, field.id(), field.name(),
-                options, supportedOperations(indexType, field.type()), Coverage.UNKNOWN);
-    }
-
-    private static Map<String, String> indexOptions(Map<String, String> tableOptions,
-                                                     String columnName, String provider) {
-        Map<String, String> result = new HashMap<>();
-        String fieldPrefix = "fields." + columnName + ".";
-        String normalizedProvider = provider.toLowerCase(Locale.ROOT);
-        String providerPrefix = normalizedProvider + ".";
-        tableOptions.forEach((key, value) -> {
-            String normalizedKey = key.toLowerCase(Locale.ROOT);
-            if (normalizedKey.startsWith(fieldPrefix.toLowerCase(Locale.ROOT))
-                    || normalizedKey.startsWith(providerPrefix)) {
-                result.put(key, value);
-            }
-        });
-        return result;
+            IndexType indexType, DataField field) {
+        return new ConnectorIndexDescriptor(indexType, field.id(), field.name(),
+                supportedOperations(indexType, field.type()), Coverage.UNKNOWN);
     }
 
     static TableType toConnectorIndexTableType(TableSchema schema) {

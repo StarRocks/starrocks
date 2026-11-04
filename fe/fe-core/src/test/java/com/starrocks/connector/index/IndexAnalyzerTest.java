@@ -181,7 +181,7 @@ public class IndexAnalyzerTest {
     @Test
     public void testScanBindingUsesCurrentFieldIdInsteadOfColumnRefName() {
         ConnectorIndexDescriptor historicalDescriptor = new ConnectorIndexDescriptor(
-                IndexType.RANGE, "btree", 7, "old_id", Map.of(), Set.of(Operation.EQUAL), Coverage.FULL);
+                IndexType.RANGE, 7, "old_id", Set.of(Operation.EQUAL), Coverage.FULL);
         ConnectorIndexMetadata renamedMetadata = ConnectorIndexMetadata.of(
                 42, TableType.DATA_EVOLUTION, List.of(historicalDescriptor),
                 Map.of("renamed_id", 7, "old_id", 8), Set.of());
@@ -286,7 +286,7 @@ public class IndexAnalyzerTest {
 
     private ConnectorIndexDescriptor descriptor(IndexType type, ColumnRefOperator column,
                                                 Set<Operation> operations) {
-        return new ConnectorIndexDescriptor(type, "test", column.getId(), column.getName(), Map.of(), operations,
+        return new ConnectorIndexDescriptor(type, column.getId(), column.getName(), operations,
                 Coverage.FULL);
     }
 }

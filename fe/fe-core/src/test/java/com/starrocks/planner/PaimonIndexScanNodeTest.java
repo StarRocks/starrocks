@@ -20,8 +20,8 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.index.ConnectorIndexDescriptor.IndexType;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
-import com.starrocks.connector.index.IndexTable;
 import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -84,7 +84,7 @@ public class PaimonIndexScanNodeTest {
     @Test
     public void testExtractRequestAcceptsOnlyStringEquality() {
         ColumnRefOperator args = new ColumnRefOperator(
-                1, VarcharType.VARCHAR, IndexTable.ARGS_COLUMN_NAME, true);
+                1, VarcharType.VARCHAR, PaimonIndexTable.ARGS_COLUMN_NAME, true);
 
         Assertions.assertEquals("request", PaimonIndexScanNode.extractRequest(
                 new BinaryPredicateOperator(BinaryType.EQ, args, ConstantOperator.createVarchar("request"))));
@@ -99,9 +99,9 @@ public class PaimonIndexScanNodeTest {
 
     @Test
     public void testExtractRequestRejectsAmbiguousOrResidualArgsPredicates() {
-        ColumnRefOperator args = new ColumnRefOperator(1, VarcharType.VARCHAR, IndexTable.ARGS_COLUMN_NAME, true);
+        ColumnRefOperator args = new ColumnRefOperator(1, VarcharType.VARCHAR, PaimonIndexTable.ARGS_COLUMN_NAME, true);
         ColumnRefOperator result = new ColumnRefOperator(
-                2, VarbinaryType.VARBINARY, IndexTable.INDEX_RESULT_COLUMN_NAME, true);
+                2, VarbinaryType.VARBINARY, PaimonIndexTable.INDEX_RESULT_COLUMN_NAME, true);
         ScalarOperator request = new BinaryPredicateOperator(
                 BinaryType.EQ, args, ConstantOperator.createVarchar("request"));
         ScalarOperator residual = new IsNullPredicateOperator(result);
@@ -176,7 +176,7 @@ public class PaimonIndexScanNodeTest {
             }
         };
 
-        IndexTable indexTable = new IndexTable(table);
+        PaimonIndexTable indexTable = new PaimonIndexTable(table);
         TupleDescriptor descriptor = new TupleDescriptor(new TupleId(3));
         descriptor.setTable(indexTable);
         PaimonIndexScanNode scanNode = new PaimonIndexScanNode(new PlanNodeId(5), descriptor, indexTable);
@@ -189,7 +189,7 @@ public class PaimonIndexScanNodeTest {
                 new Path("file:///tmp/paimon/orders").toString(), "main", snapshotId,
                 3L, 1000L, condition).toTransportString();
         ColumnRefOperator argsColumn = new ColumnRefOperator(
-                2, VarcharType.VARCHAR, IndexTable.ARGS_COLUMN_NAME, true);
+                2, VarcharType.VARCHAR, PaimonIndexTable.ARGS_COLUMN_NAME, true);
         ScalarOperator requestPredicate = new BinaryPredicateOperator(
                 BinaryType.EQ, argsColumn, ConstantOperator.createVarchar(transport));
         Assertions.assertTrue(scanNode.setupScanRangeLocations(requestPredicate).isEmpty());
@@ -223,7 +223,7 @@ public class PaimonIndexScanNodeTest {
 
         PaimonIndexScanNode residualScan = new PaimonIndexScanNode(new PlanNodeId(6), descriptor, indexTable);
         ScalarOperator residual = new IsNullPredicateOperator(new ColumnRefOperator(
-                3, VarbinaryType.VARBINARY, IndexTable.INDEX_RESULT_COLUMN_NAME, true));
+                3, VarbinaryType.VARBINARY, PaimonIndexTable.INDEX_RESULT_COLUMN_NAME, true));
         Assertions.assertEquals(List.of(residual),
                 residualScan.setupScanRangeLocations(Utils.compoundAnd(requestPredicate, residual)));
         Assertions.assertEquals(locations, residualScan.getScanRangeLocations(0L));

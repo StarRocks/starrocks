@@ -445,6 +445,11 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
+        String baseName = PaimonIndexTable.baseTableName(tblName);
+        if (!baseName.equals(tblName)) {
+            Table baseTable = getTable(context, dbName, baseName);
+            return baseTable instanceof PaimonTable ? new PaimonIndexTable((PaimonTable) baseTable) : null;
+        }
         Identifier identifier = new Identifier(dbName, tblName);
         if (tables.containsKey(identifier)) {
             return tables.get(identifier);
@@ -509,7 +514,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                 Optional<ConnectorTableVersion> startVersion,
                                                 Optional<ConnectorTableVersion> endVersion) {
-        PaimonTable paimonTable = (PaimonTable) table;
+        PaimonTable paimonTable = (PaimonTable) PaimonIndexTable.metadataTable(table);
         String branch = endVersion.map(PaimonMetadata::requestedBranch).orElse(DEFAULT_MAIN_BRANCH);
         String startBranch = startVersion.map(PaimonMetadata::requestedBranch).orElse(branch);
         if (!branch.equals(startBranch)) {
@@ -643,6 +648,10 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tableName) {
+        String baseName = PaimonIndexTable.baseTableName(tableName);
+        if (!baseName.equals(tableName)) {
+            return getTable(context, dbName, tableName) != null;
+        }
         try {
             paimonNativeCatalog.getTable(Identifier.create(dbName, tableName));
             return true;
@@ -813,15 +822,21 @@ public class PaimonMetadata implements ConnectorMetadata {
                 readBuilder = readBuilder.withLimit((int) params.getLimit());
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
+            boolean distributedIndexApplied = false;
             if (!params.isDisableGlobalIndex()) {
-                resolvePaimonGlobalIndexResult(params.getConnectorIndexResult(),
-                        paimonNativeTable, currentBranch, tvrVersionRange).ifPresent(scan::withGlobalIndexResult);
+                Optional<GlobalIndexResult> result = resolvePaimonGlobalIndexResult(params.getConnectorIndexResult(),
+                        paimonNativeTable, currentBranch, tvrVersionRange);
+                if (result.isPresent()) {
+                    scan.withGlobalIndexResult(result.get());
+                    distributedIndexApplied = true;
+                }
             }
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
             List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
-            PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits, paimonNativeTable);
+            PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(
+                    predicates, splits, paimonNativeTable, distributedIndexApplied);
             if (cacheSplits) {
                 paimonSplits.put(filter, paimonSplitsInfo);
             }
@@ -1089,7 +1104,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             ConnectorIndexMetadata metadata = indexMetadataCache.get(cacheKey,
                     () -> PaimonIndexMetadataReader.load(fileStoreTable, resolvedSnapshot));
             Set<Integer> stableBtreeFields = metadata.getDescriptors().stream()
-                    .anyMatch(descriptor -> "btree".equals(descriptor.getProvider()))
+                    .anyMatch(descriptor -> descriptor.getType() == IndexType.RANGE)
                     ? indexMetadataCache.getStableScalarFields(catalogName, paimonTable.getCatalogDBName(),
                             paimonTable.getCatalogTableName(), fileStoreTable) : Set.of();
             return bindCurrentSchema(metadata, fileStoreTable, stableBtreeFields);
@@ -1160,7 +1175,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 .collect(Collectors.toSet());
         List<ConnectorIndexDescriptor> currentDescriptors = metadata.getDescriptors().stream()
                 .filter(descriptor -> currentFieldIds.contains(descriptor.getFieldId()))
-                .filter(descriptor -> !"btree".equals(descriptor.getProvider())
+                .filter(descriptor -> descriptor.getType() != IndexType.RANGE
                         || stableBtreeFields.contains(descriptor.getFieldId()))
                 .map(descriptor -> descriptor.withColumnName(currentFieldNames.get(descriptor.getFieldId())))
                 .collect(Collectors.toList());

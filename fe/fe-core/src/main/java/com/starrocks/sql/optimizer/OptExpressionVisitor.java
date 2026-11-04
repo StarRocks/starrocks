@@ -166,7 +166,7 @@ public abstract class OptExpressionVisitor<R, C> {
         return visitPhysicalScan(optExpression, context);
     }
 
-    public R visitPhysicalIndexScan(OptExpression optExpression, C context) {
+    public R visitPhysicalPaimonIndexScan(OptExpression optExpression, C context) {
         return visitPhysicalScan(optExpression, context);
     }
 

@@ -191,6 +191,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1109,7 +1110,7 @@ public class PaimonMetadataTest {
             ConnectorIndexMetadata discovered = fullMetadata.getIndexMetadata(
                     starRocksTable, TvrTableSnapshot.of(snapshotId));
             ConnectorIndexDescriptor btree = discovered.findDescriptor(0, IndexType.RANGE).orElseThrow();
-            assertEquals("btree", btree.getProvider());
+            assertEquals(IndexType.RANGE, btree.getType());
             assertTrue(btree.supports(Operation.EQUAL));
 
             PaimonSplitsInfo fullSplits = planSplits(fullMetadata, context, predicate, snapshotId);
@@ -1170,6 +1171,13 @@ public class PaimonMetadataTest {
             PaimonMetadata metadata = new PaimonMetadata(
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
             PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", "indexed_table");
+            PaimonIndexTable virtual = (PaimonIndexTable) metadata.getTable(
+                    context, "test_db", "indexed_table$global_index");
+            assertSame(table, virtual.getInnerTable());
+            assertTrue(metadata.tableExists(context, "test_db", "indexed_table$global_index"));
+            assertFalse(metadata.tableExists(context, "test_db", "missing$global_index"));
+            assertEquals(snapshotId, metadata.getTableVersionRange("test_db", virtual,
+                    Optional.empty(), Optional.empty()).end().orElseThrow());
             ColumnRefOperator id = new ColumnRefOperator(1, IntegerType.INT, "id", true);
             ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, id, ConstantOperator.createInt(1));
             OptimizerContext optimizer = OptimizerFactory.mockContext(context, new ColumnRefFactory());
@@ -1279,6 +1287,10 @@ public class PaimonMetadataTest {
                     context, "test_db", "main_table");
             TvrVersionRange devVersion = branchMetadata.getTableVersionRange("test_db", branchedTable,
                     Optional.empty(), Optional.of(branchVersion));
+            PaimonIndexTable virtual = (PaimonIndexTable) branchMetadata.getTable(
+                    context, "test_db", "branched_table$global_index");
+            assertEquals(devVersion, branchMetadata.getTableVersionRange("test_db", virtual,
+                    Optional.empty(), Optional.of(branchVersion)));
             // The same catalog table object is used by two aliases. Numeric main and branch
             // snapshots deliberately have identical IDs, but different data and cache entries.
             TvrVersionRange mainVersion = branchMetadata.getTableVersionRange("test_db", branchedTable,
@@ -1472,6 +1484,8 @@ public class PaimonMetadataTest {
             PaimonSplitsInfo selectedSplits = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
                     .get(0).getFiles().get(0)).getPaimonSplitsInfo();
             assertNotSame(regular, selectedSplits);
+            assertFalse(regular.isDistributedIndexApplied());
+            assertTrue(selectedSplits.isDistributedIndexApplied());
             assertTrue(selectedSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1), readIds(nativeTable, selectedSplits));
             assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(
@@ -1480,6 +1494,10 @@ public class PaimonMetadataTest {
                     com.starrocks.common.tvr.TvrTableDelta.of(indexedSnapshot - 1, indexedSnapshot)).isEmpty());
             PaimonGlobalIndexResult wrongTable = new PaimonGlobalIndexResult(
                     nativeTable.location() + "/other", "main", indexedSnapshot, selected.getResult());
+            params.setConnectorIndexResult(wrongTable);
+            PaimonSplitsInfo rejected = ((PaimonRemoteFileDesc) metadata.getRemoteFiles(table, params)
+                    .get(0).getFiles().get(0)).getPaimonSplitsInfo();
+            assertFalse(rejected.isDistributedIndexApplied());
             assertTrue(PaimonMetadata.resolvePaimonGlobalIndexResult(
                     wrongTable, nativeTable, "main", TvrTableSnapshot.of(indexedSnapshot)).isEmpty());
             createEmptyPrimaryKeyTable(catalog, "primary_key_table");
@@ -1672,7 +1690,7 @@ public class PaimonMetadataTest {
             };
             ConnectorIndexMetadata discovered = metadata.getIndexMetadata(table, TvrTableSnapshot.of(mixed));
             assertEquals(1, discovered.getDescriptors().size());
-            assertEquals("btree", discovered.getDescriptors().get(0).getProvider());
+            assertEquals(IndexType.RANGE, discovered.getDescriptors().get(0).getType());
             assertTrue(metadata.getIndexShards(table, mixed, Map.of(0, IndexType.RANGE)).isEmpty());
             assertFalse(metadata.getIndexShards(table, btreeOnly, Map.of(0, IndexType.RANGE)).isEmpty());
         } finally {

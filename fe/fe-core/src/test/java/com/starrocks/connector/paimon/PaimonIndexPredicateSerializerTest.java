@@ -12,11 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.sql.optimizer.operator.scalar;
+package com.starrocks.connector.paimon;
 
 import com.google.gson.Gson;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -26,14 +35,14 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
-public class ScalarOperatorSerializerTest {
+public class PaimonIndexPredicateSerializerTest {
     private static final Gson GSON = new Gson();
 
     @Test
     public void testRejectsUnfoldedLossyCast() {
         ScalarOperator lossy = new CastOperator(FloatType.FLOAT,
                 new CastOperator(IntegerType.INT, ConstantOperator.createFloat(1.9)));
-        Assertions.assertThrows(IllegalArgumentException.class, () -> ScalarOperatorSerializer.toJson(lossy));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> PaimonIndexPredicateSerializer.toJson(lossy));
     }
 
     @Test
@@ -45,7 +54,7 @@ public class ScalarOperatorSerializerTest {
         Assertions.assertEquals(
                 "{\"o\":\"b\",\"b\":\"GT\",\"c\":[{\"o\":\"cr\",\"t\":\"int\",\"n\":\"k\"},"
                         + "{\"o\":\"co\",\"t\":\"int\",\"v\":10}]}",
-                GSON.toJson(ScalarOperatorSerializer.toJson(predicate)));
+                GSON.toJson(PaimonIndexPredicateSerializer.toJson(predicate)));
     }
 
     @Test
@@ -59,10 +68,10 @@ public class ScalarOperatorSerializerTest {
         reversedTypes.forEach((type, expected) -> {
             ConstantOperator literal = ConstantOperator.createInt(10);
             BinaryPredicateOperator predicate = new BinaryPredicateOperator(type, literal, column);
-            Map<String, Object> serialized = ScalarOperatorSerializer.toJson(predicate);
+            Map<String, Object> serialized = PaimonIndexPredicateSerializer.toJson(predicate);
             Assertions.assertEquals(expected.name(), serialized.get("b"), type.name());
-            Assertions.assertEquals(List.of(ScalarOperatorSerializer.toJson(column),
-                    ScalarOperatorSerializer.toJson(literal)), serialized.get("c"));
+            Assertions.assertEquals(List.of(PaimonIndexPredicateSerializer.toJson(column),
+                    PaimonIndexPredicateSerializer.toJson(literal)), serialized.get("c"));
             Assertions.assertEquals(type, predicate.getBinaryType());
             Assertions.assertSame(literal, predicate.getChild(0));
             Assertions.assertSame(column, predicate.getChild(1));
@@ -79,7 +88,7 @@ public class ScalarOperatorSerializerTest {
                 List.of(new ColumnRefOperator(2, com.starrocks.type.VarcharType.VARCHAR, "s", true),
                         ConstantOperator.createVarchar("x")));
 
-        String json = GSON.toJson(ScalarOperatorSerializer.toJson(
+        String json = GSON.toJson(PaimonIndexPredicateSerializer.toJson(
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, in,
                         new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                                 isNull, startsWith))));

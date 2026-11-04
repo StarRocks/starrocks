@@ -483,6 +483,8 @@ public class PaimonScanNodeTest {
             Assertions.assertEquals(1, captured.size());
             Assertions.assertTrue(captured.get(0).isDisableGlobalIndex());
             Assertions.assertNull(captured.get(0).getConnectorIndexResult());
+            Assertions.assertFalse(scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL)
+                    .contains("RECOGNIZED INDEX CONDITION:"));
         } finally {
             ConnectContext.remove();
         }
@@ -511,7 +513,9 @@ public class PaimonScanNodeTest {
             };
 
             List<GetRemoteFilesParams> captured = new ArrayList<>();
-            List<RemoteFileInfo> remoteFiles = createRemoteFiles(createDataSplit());
+            PaimonSplitsInfo appliedSplits = new PaimonSplitsInfo(List.of(), List.of(createDataSplit()), null, true);
+            List<RemoteFileInfo> remoteFiles = List.of(RemoteFileInfo.builder()
+                    .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(appliedSplits))).build());
             new Expectations() {
                 {
                     table.getCatalogName();
@@ -542,6 +546,9 @@ public class PaimonScanNodeTest {
             Assertions.assertFalse(captured.get(0).isDisableGlobalIndex());
             Assertions.assertSame(indexResult, captured.get(0).getConnectorIndexResult());
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("RECOGNIZED INDEX CONDITION: true"), explain);
+            Assertions.assertTrue(explain.contains("DISTRIBUTED INDEX: applied"), explain);
         } finally {
             ConnectContext.remove();
         }
@@ -597,6 +604,9 @@ public class PaimonScanNodeTest {
             Assertions.assertFalse(captured.get(0).isDisableGlobalIndex());
             Assertions.assertNull(captured.get(0).getConnectorIndexResult());
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("RECOGNIZED INDEX CONDITION: true"), explain);
+            Assertions.assertTrue(explain.contains("DISTRIBUTED INDEX: SDK fallback"), explain);
         } finally {
             ConnectContext.remove();
         }
@@ -707,6 +717,9 @@ public class PaimonScanNodeTest {
             Assertions.assertSame(indexResult, captured.get(0).getConnectorIndexResult());
             Assertions.assertNull(captured.get(1).getConnectorIndexResult());
             Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            String explain = scanNode.getNodeExplainString("", com.starrocks.thrift.TExplainLevel.NORMAL);
+            Assertions.assertTrue(explain.contains("DISTRIBUTED INDEX: SDK fallback"), explain);
+            Assertions.assertFalse(explain.contains("DISTRIBUTED INDEX: applied"), explain);
         } finally {
             ConnectContext.remove();
         }

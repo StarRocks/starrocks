@@ -45,6 +45,7 @@ import com.starrocks.connector.index.ConnectorIndexResult;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.metadata.MetadataTableType;
+import com.starrocks.connector.paimon.PaimonIndexTable;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -129,10 +130,15 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     }
 
     private ConnectorMetadata metadataOfTable(String dbName, String tblName) {
+        String baseName = PaimonIndexTable.baseTableName(tblName);
+        if (!baseName.equals(tblName) && getTableType(dbName, baseName) == PAIMON) {
+            return metadataOfType(PAIMON);
+        }
         return metadataOfType(getTableType(dbName, tblName));
     }
 
     private ConnectorMetadata metadataOfTable(Table table) {
+        table = PaimonIndexTable.metadataTable(table);
         Table.TableType type = getTableType(table);
         if (table.isHiveView()) {
             type = HIVE;
@@ -224,6 +230,10 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
+        String baseName = PaimonIndexTable.baseTableName(tblName);
+        if (!baseName.equals(tblName) && getTableType(dbName, baseName) == PAIMON) {
+            return metadataOfType(PAIMON).tableExists(context, dbName, tblName);
+        }
         return hiveMetadata.tableExists(context, dbName, tblName);
     }
 
