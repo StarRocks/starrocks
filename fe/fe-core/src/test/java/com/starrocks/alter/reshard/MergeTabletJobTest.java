@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -39,13 +40,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.metric.LongCounterMetric;
-import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -62,17 +57,15 @@ import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -278,7 +271,6 @@ public class MergeTabletJobTest {
         mergeJob.run();
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, mergeJob.getJobState());
     }
-
 
     @Test
     public void testRunMergeBumpsOptimisticVersion() throws Exception {

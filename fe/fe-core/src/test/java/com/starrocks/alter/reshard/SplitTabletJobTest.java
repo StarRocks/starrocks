@@ -16,6 +16,7 @@ package com.starrocks.alter.reshard;
 
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.alter.ConcurrentLoad;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -51,17 +52,15 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -158,78 +157,6 @@ public class SplitTabletJobTest {
         }
     }
 
-<<<<<<< HEAD
-=======
-    /**
-     * A load that commits while the job creates the new shards takes a version below the one the job commits,
-     * so the gtid that labels the job's version must be drawn after the load's, when the job reserves the
-     * version.
-     */
-    @Test
-    public void testCommitVersionGtid() throws Exception {
-        starRocksAssert.withTable("create table gtid_split_table (key1 int, key2 varchar(10)) order by(key1) "
-                + "properties('replication_num' = '1')");
-        OlapTable gtidTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), "gtid_split_table");
-        PhysicalPartition physicalPartition = gtidTable.getAllPhysicalPartitions().iterator().next();
-        ConcurrentLoad.holdPublishDaemon();
-        List<TxnInfoPB> publishedTxns = new CopyOnWriteArrayList<>();
-        List<Long> publishedVersions = new CopyOnWriteArrayList<>();
-        new MockUp<MockLakeService>() {
-            @Mock
-            public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
-                return CompletableFuture.completedFuture(
-                        recordPublish(List.of(request), publishedTxns, publishedVersions));
-            }
-
-            @Mock
-            public Future<PublishVersionResponse> aggregatePublishVersion(AggregatePublishVersionRequest request) {
-                return CompletableFuture.completedFuture(
-                        recordPublish(request.publishReqs, publishedTxns, publishedVersions));
-            }
-        };
-        AtomicReference<TransactionState> load = new AtomicReference<>();
-        new MockUp<StarOSAgent>() {
-            @Mock
-            public void createShardsForSplit(Invocation invocation, Map<Long, Long> newToOldShardId,
-                                             Map<Long, List<Long>> newShardIdToGroupIds, FilePathInfo pathInfo,
-                                             FileCacheInfo cacheInfo, Map<String, String> properties,
-                                             ComputeResource computeResource, boolean unpinPlacement)
-                    throws Exception {
-                load.set(ConcurrentLoad.commit(db, gtidTable));
-                invocation.proceed();
-            }
-        };
-        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
-        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
-                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
-        clause.setTabletReshardTargetSize(-2);
-        TabletReshardJob job = new SplitTabletJobFactory(db, gtidTable, clause).createTabletReshardJob();
-
-        job.init();
-        job.run();
-        // The job waits for the load, which holds the version below the one the job reserved.
-        Assertions.assertEquals(TabletReshardJob.JobState.PREPARING, job.getJobState());
-        ConcurrentLoad.makeVisible(db, load.get());
-        long deadlineMs = System.currentTimeMillis() + 60_000L;
-        while (job.getJobState() != TabletReshardJob.JobState.FINISHED) {
-            Assertions.assertTrue(System.currentTimeMillis() < deadlineMs, "job is still " + job.getJobState());
-            job.run();
-            Thread.sleep(10);
-        }
-
-        long loadVersion = ConcurrentLoad.versionIn(load.get(), gtidTable, physicalPartition.getId());
-        Assertions.assertFalse(publishedTxns.isEmpty());
-        Assertions.assertEquals(Set.of(loadVersion + 1), Set.copyOf(publishedVersions));
-        Set<Long> publishedGtids = publishedTxns.stream().map(txn -> txn.gtid).collect(Collectors.toSet());
-        Assertions.assertEquals(1, publishedGtids.size(), publishedGtids.toString());
-        long commitGtid = publishedGtids.iterator().next();
-        Assertions.assertTrue(load.get().getGlobalTransactionId() > 0);
-        Assertions.assertTrue(commitGtid > load.get().getGlobalTransactionId(),
-                "commit version gtid " + commitGtid + " is not after the gtid " + load.get().getGlobalTransactionId()
-                        + " of the load committed below it");
-    }
-
     /**
      * A load that committed after the job reserved its version but before the job journaled the reservation would
      * reach the journal first, so a leader change in between would leave the reserved version to no one and the
@@ -290,59 +217,6 @@ public class SplitTabletJobTest {
         Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
     }
 
-
-    /**
-     * Records the transactions and the version of each reshard publish, and answers it the way a BE splits the
-     * tablets by their data.
-     */
-    private PublishVersionResponse recordPublish(List<PublishVersionRequest> requests, List<TxnInfoPB> txns,
-                                                 List<Long> versions) {
-        PublishVersionResponse response = new PublishVersionResponse();
-        response.status = new StatusPB();
-        response.status.statusCode = TStatusCode.OK.getValue();
-        response.tabletRanges = new HashMap<>();
-        for (PublishVersionRequest request : requests) {
-            if (request.reshardingTabletInfos == null) {
-                continue;
-            }
-            txns.addAll(request.txnInfos);
-            versions.add(request.newVersion);
-            for (ReshardingTabletInfoPB info : request.reshardingTabletInfos) {
-                addDataDrivenRanges(info, response.tabletRanges);
-            }
-        }
-        return response;
-    }
-
-    @Test
-    public void testPkOrderByFactoryLeavesBoundarySelectionToBePkIndex() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE pk_order_by_split "
-                + "(pk1 int not null, pk2 int not null, sort_col int not null) "
-                + "PRIMARY KEY(pk1, pk2) ORDER BY(sort_col) "
-                + "PROPERTIES('replication_num' = '1', 'file_bundling' = 'true')");
-        OlapTable pkOrderByTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), "pk_order_by_split");
-        PhysicalPartition physicalPartition = pkOrderByTable.getAllPhysicalPartitions().iterator().next();
-        long tabletId = physicalPartition.getLatestBaseIndex().getTablets().get(0).getId();
-
-        SplitTabletClause clause = new SplitTabletClause(null, new TabletList(List.of(tabletId)),
-                Map.of(PropertyAnalyzer.PROPERTIES_TABLET_RESHARD_TARGET_SIZE, "-2"));
-        clause.setTabletReshardTargetSize(-2);
-        SplitTabletJob job = (SplitTabletJob) new SplitTabletJobFactory(db, pkOrderByTable, clause)
-                .createTabletReshardJob();
-
-        SplittingTablet splittingTablet = job.getReshardingPhysicalPartitions().values().stream()
-                .flatMap(partition -> partition.getReshardingIndexes().values().stream())
-                .flatMap(index -> index.getReshardingTablets().stream())
-                .map(ReshardingTablet::getSplittingTablet)
-                .filter(java.util.Objects::nonNull)
-                .findFirst().orElseThrow();
-        Assertions.assertTrue(splittingTablet.getNewTabletRanges().isEmpty(),
-                "ordinary split must let BE derive PK boundaries from the cloud-native PK index");
-        Assertions.assertTrue(splittingTablet.getNewTabletIds().size() > 1);
-    }
-
->>>>>>> c65d4db ([BugFix][RB-723] Journal a reshard job's version reservation before releasing its lock (#81922))
     @Test
     public void testRunBumpsOptimisticVersion() throws Exception {
         installLakeServiceMock(this::addDataDrivenRanges);
