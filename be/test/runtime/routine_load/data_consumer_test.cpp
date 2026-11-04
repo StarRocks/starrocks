@@ -21,22 +21,13 @@
 #include <thread>
 #include <vector>
 
-<<<<<<< HEAD:be/test/runtime/routine_load/data_consumer_test.cpp
-=======
-#include "gtest/gtest.h"
-
-// Routine load dependencies.
-#include "base/concurrency/stopwatch.hpp"
-#include "base/testutil/assert.h"
-#include "data_workflows/load/routine_load/data_consumer_group.h"
-#include "exec/exec_env.h"
->>>>>>> 481a97b ([BugFix][RB-743] Fix pooled Kafka consumers skipping data on an out-of-range offset and failing on new partitions (#81909)):be/test/data_workflows/load/routine_load/data_consumer_test.cpp
 #include "librdkafka/rdkafka.h"
 #include "librdkafka/rdkafka_mock.h"
 #include "runtime/exec_env.h"
 #include "runtime/routine_load/data_consumer_group.h"
 #include "testutil/assert.h"
 #include "util/byte_buffer.h"
+#include "util/stopwatch.hpp"
 
 #ifndef __APPLE__
 #include "pulsar/MessageBuilder.h"
