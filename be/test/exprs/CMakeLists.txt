@@ -75,6 +75,7 @@ set(EXPR_TEST_FILES
     decimal_cast_expr_decimalv2_test.cpp
     decimal_cast_expr_integer_test.cpp
     decimal_cast_expr_time_test.cpp
+    decimal_null_row_report_error_test.cpp
     encryption_functions_test.cpp
     function_call_expr_test.cpp
     generate_series_core_test.cpp
