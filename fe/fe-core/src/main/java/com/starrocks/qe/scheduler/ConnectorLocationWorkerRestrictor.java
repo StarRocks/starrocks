@@ -95,13 +95,6 @@ public final class ConnectorLocationWorkerRestrictor {
     }
 
     /**
-     * @param catalogMgr optional; when null, resolved lazily from {@link GlobalStateMgr} only if needed
-     */
-    static Restriction resolve(List<ScanNode> scanNodes, SystemInfoService clusterInfo, CatalogMgr catalogMgr) {
-        return resolve(scanNodes, clusterInfo, catalogMgr, null);
-    }
-
-    /**
      * @param catalogMgr     optional; when null, resolved lazily from {@link GlobalStateMgr} only if needed
      * @param workerProvider optional captured provider; when non-null, L is intersected with workers
      *                       visible on it (excludes blacklisted / otherwise unschedulable nodes)

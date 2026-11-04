@@ -159,6 +159,11 @@ class LocationRestrictedWorkerProviderTest {
             }
 
             @Override
+            public boolean isPreferComputeNode() {
+                return true;
+            }
+
+            @Override
             public Collection<ComputeNode> getAllWorkers() {
                 return List.of(onlyInAllWorkers);
             }
@@ -235,5 +240,27 @@ class LocationRestrictedWorkerProviderTest {
         Assertions.assertEquals(-1, restricted.selectBackupWorker(8L));
         Assertions.assertEquals(7L, restricted.selectBackupWorker(7L, 1L));
         Assertions.assertEquals(-1, restricted.selectBackupWorker(8L, 1L));
+    }
+
+    @Test
+    void testSelectAllComputeNodesDoesNotSelectExcluded() {
+        ImmutableMap<Long, ComputeNode> map = nodes(3);
+        // prefer_compute_node=true + ALL_NODES-style pool: every node is in the compute map.
+        // Calling selectAllComputeNodes on the delegate would mark 2L selected before filtering.
+        DefaultWorkerProvider base = new DefaultWorkerProvider(
+                map, map, map, map, true, WarehouseManager.DEFAULT_RESOURCE);
+        LocationRestrictedWorkerProvider restricted =
+                new LocationRestrictedWorkerProvider(base, Set.of(0L, 1L), Set.of(0L));
+
+        List<Long> selected = restricted.selectAllComputeNodes();
+        Assertions.assertEquals(Set.of(0L, 1L), Set.copyOf(selected));
+        Assertions.assertTrue(restricted.isWorkerSelected(0L));
+        Assertions.assertTrue(restricted.isWorkerSelected(1L));
+        Assertions.assertFalse(restricted.isWorkerSelected(2L),
+                "excluded workers outside L∪N must not be recorded as selected");
+        // Wrapper still reports prefer=false; RemoteFragment ignores the list but selection
+        // state must already be clean for CoordinatorMonitor.
+        Assertions.assertFalse(restricted.isPreferComputeNode());
+        Assertions.assertTrue(base.isPreferComputeNode());
     }
 }

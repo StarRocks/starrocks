@@ -112,9 +112,21 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
 
     @Override
     public List<Long> selectAllComputeNodes() {
-        return delegate.selectAllComputeNodes().stream()
-                .filter(allowedWorkerIds::contains)
-                .toList();
+        // Do not call delegate.selectAllComputeNodes(): it records every compute-pool node as
+        // selected before filtering. RemoteFragmentAssignmentStrategy invokes this even when
+        // isPreferComputeNode() is false; a later death of an unused node outside L∪N would
+        // cancel the query via CoordinatorMonitor. Filter first, then record.
+        if (!delegate.isPreferComputeNode()) {
+            return List.of();
+        }
+        List<Long> selected = new ArrayList<>();
+        for (Long id : delegate.getAllAvailableNodes()) {
+            if (allowedWorkerIds.contains(id)) {
+                selectWorkerUnchecked(id);
+                selected.add(id);
+            }
+        }
+        return selected;
     }
 
     @Override

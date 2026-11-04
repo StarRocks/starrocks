@@ -136,16 +136,16 @@ class ConnectorLocationWorkerRestrictorTest {
             }
         };
         ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor
-                .resolve(Lists.newArrayList(olapScanNode), clusterInfo, null);
+                .resolve(Lists.newArrayList(olapScanNode), clusterInfo);
         Assertions.assertFalse(restriction.isRestricted());
     }
 
     @Test
     void testResolveUnrestrictedForNullOrEmptyScanNodes(@Mocked SystemInfoService clusterInfo) {
         Assertions.assertFalse(
-                ConnectorLocationWorkerRestrictor.resolve(null, clusterInfo, null).isRestricted());
+                ConnectorLocationWorkerRestrictor.resolve(null, clusterInfo).isRestricted());
         Assertions.assertFalse(
-                ConnectorLocationWorkerRestrictor.resolve(Collections.emptyList(), clusterInfo, null).isRestricted());
+                ConnectorLocationWorkerRestrictor.resolve(Collections.emptyList(), clusterInfo).isRestricted());
     }
 
     @Test
@@ -250,7 +250,7 @@ class ConnectorLocationWorkerRestrictorTest {
         Config.enable_connector_location_worker_restriction = false;
         try {
             ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
-                    Lists.newArrayList(icebergScanNode), clusterInfo, null);
+                    Lists.newArrayList(icebergScanNode), clusterInfo);
             Assertions.assertFalse(restriction.isRestricted());
         } finally {
             Config.enable_connector_location_worker_restriction = saved;
@@ -290,7 +290,7 @@ class ConnectorLocationWorkerRestrictorTest {
         };
 
         ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
-                Lists.newArrayList(icebergScanNode), clusterInfo, catalogMgr);
+                Lists.newArrayList(icebergScanNode), clusterInfo, catalogMgr, null);
         Assertions.assertFalse(restriction.isRestricted());
     }
 
@@ -428,7 +428,7 @@ class ConnectorLocationWorkerRestrictorTest {
         };
 
         ConnectorLocationWorkerRestrictor.Restriction restriction = ConnectorLocationWorkerRestrictor.resolve(
-                Lists.newArrayList(icebergScanNode, olapScanNode), clusterInfo, catalogMgr);
+                Lists.newArrayList(icebergScanNode, olapScanNode), clusterInfo, catalogMgr, null);
         Assertions.assertTrue(restriction.isRestricted());
         Assertions.assertEquals(Set.of(1L), restriction.getPreferredConnectorWorkerIds());
         Assertions.assertEquals(Set.of(1L, 99L), restriction.getAllowedWorkerIds());
