@@ -3321,9 +3321,9 @@ public class Config extends ConfigBase {
 
     /**
      * When true (default), queries that scan an external catalog with {@code labels.location}
-     * are scheduled only on label-matched backends (L) union native OlapScan replica backends (N)
-     * in shared-nothing mode. Connector scans prefer L. Set false to disable and restore
-     * unrestricted worker scheduling for external catalog reads.
+     * are scheduled only on label-matched backends (L) union fixed-location scan backends (N)
+     * (OlapScan/MetaScan/SchemaScan/Kudu, etc.) in shared-nothing mode. Connector scans prefer L.
+     * Set false to disable and restore unrestricted worker scheduling for external catalog reads.
      */
     @ConfField(mutable = true)
     public static boolean enable_connector_location_worker_restriction = true;

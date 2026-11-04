@@ -21,7 +21,6 @@ import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -41,7 +40,8 @@ import java.util.Set;
  * Best-effort worker restriction for queries that touch external catalogs with {@code labels.location}.
  * <ul>
  *   <li>L = alive backends matching the connector catalog location labels</li>
- *   <li>N = backends holding native OlapScan replicas (table-level labels already reflected in placement)</li>
+ *   <li>N = backends required by fixed-location non-connector scans (OlapScan replicas,
+ *       MetaScan, BE-local SchemaScan, Kudu, etc.)</li>
  *   <li>If no connector location is set, or L is empty, scheduling stays unrestricted</li>
  *   <li>Otherwise allowed workers = L ∪ N; connector scans prefer L only</li>
  * </ul>
@@ -119,9 +119,9 @@ public final class ConnectorLocationWorkerRestrictor {
             return Restriction.unrestricted();
         }
 
-        Set<Long> nativeRequired = computeNativeRequiredBackendIds(scanNodes);
+        Set<Long> fixedRequired = computeFixedLocationRequiredBackendIds(scanNodes);
         Set<Long> allowed = Sets.newHashSet(preferred);
-        allowed.addAll(nativeRequired);
+        allowed.addAll(fixedRequired);
         return Restriction.of(Collections.unmodifiableSet(preferred), Collections.unmodifiableSet(allowed));
     }
 
@@ -162,10 +162,15 @@ public final class ConnectorLocationWorkerRestrictor {
         return location;
     }
 
-    static Set<Long> computeNativeRequiredBackendIds(List<ScanNode> scanNodes) {
+    /**
+     * Collect worker IDs that fixed-location scans must keep available under L∪N.
+     * Skips connector scans (assigned via preferred L). Includes OlapScan, MetaScan,
+     * SchemaScan, Kudu, and any other non-connector scan that pins {@code backend_id}.
+     */
+    static Set<Long> computeFixedLocationRequiredBackendIds(List<ScanNode> scanNodes) {
         Set<Long> backendIds = Sets.newHashSet();
         for (ScanNode scanNode : scanNodes) {
-            if (!(scanNode instanceof OlapScanNode)) {
+            if (scanNode.isConnectorScanNode()) {
                 continue;
             }
             List<TScanRangeLocations> locations = scanNode.getScanRangeLocations(0);

@@ -22,6 +22,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -41,12 +42,22 @@ public final class LanceWorkerSelector {
     }
 
     public static ComputeNode selectWorker(WorkerProvider provider) throws StarRocksException {
-        List<ComputeNode> workers = new ArrayList<>(provider.getAllWorkers());
+        Collection<ComputeNode> preferred = provider.getPreferredConnectorWorkers();
+        Collection<ComputeNode> pool = (preferred != null && !preferred.isEmpty())
+                ? preferred : provider.getAllWorkers();
+        return selectWorker(pool, provider.getComputeResource());
+    }
+
+    /**
+     * Rotate across the given worker pool (must match the pool used to initialize assignment stats).
+     */
+    public static ComputeNode selectWorker(Collection<ComputeNode> workerPool, ComputeResource resource)
+            throws StarRocksException {
+        List<ComputeNode> workers = new ArrayList<>(workerPool);
         if (workers.isEmpty()) {
             throw new StarRocksException("Failed to find backend to execute");
         }
         workers.sort(Comparator.comparingLong(ComputeNode::getId));
-        ComputeResource resource = provider.getComputeResource();
         WorkerPool pool = new WorkerPool(resource.getWarehouseId(), resource.getWorkerGroupId(),
                 workers.stream().map(ComputeNode::getId).toList());
         int index = Math.floorMod(NEXT_WORKER_INDEX.getUnchecked(pool).getAndIncrement(), workers.size());

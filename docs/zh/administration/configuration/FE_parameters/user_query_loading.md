@@ -350,7 +350,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 在存算一体模式下，是否对扫描配置了 Catalog 属性 `labels.location` 的外部 Catalog 的查询启用 Worker 调度限制。开启后，可用 BE 为标签匹配的 BE（L）与原生 OlapScan 副本所在 BE（N）的并集，外部表扫描优先使用 L。关闭后，即使 Catalog 设置了 `labels.location`，外部 Catalog 读请求也恢复为不受限的 Worker 调度。存算分离模式不受影响。
+- 描述: 在存算一体模式下，是否对扫描配置了 Catalog 属性 `labels.location` 的外部 Catalog 的查询启用 Worker 调度限制。开启后，可用 BE 为标签匹配的 BE（L）与固定位置非连接器扫描所需 BE（N，如 OlapScan、MetaScan、SchemaScan、Kudu）的并集，外部表扫描优先使用 L。关闭后，即使 Catalog 设置了 `labels.location`，外部 Catalog 读请求也恢复为不受限的 Worker 调度。存算分离模式不受影响。
 - 引入版本: -
 
 ### `enable_decimal_v3`

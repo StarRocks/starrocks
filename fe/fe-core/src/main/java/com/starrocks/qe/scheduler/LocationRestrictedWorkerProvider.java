@@ -31,10 +31,13 @@ import java.util.stream.Collectors;
  * preferred connector workers (L) for connector scan assignment.
  */
 public class LocationRestrictedWorkerProvider implements WorkerProvider {
+    // Process-wide cursor so query-local wrappers keep DefaultWorkerProvider-style round-robin
+    // instead of always starting at allowedWorkers[0] for gather/result fragments.
+    private static final AtomicInteger NEXT_WORKER_INDEX = new AtomicInteger(0);
+
     private final WorkerProvider delegate;
     private final Set<Long> allowedWorkerIds;
     private final Set<Long> preferredConnectorWorkerIds;
-    private final AtomicInteger nextIndex = new AtomicInteger(0);
     private final List<ComputeNode> allowedWorkers;
     private final List<ComputeNode> preferredConnectorWorkers;
 
@@ -95,7 +98,7 @@ public class LocationRestrictedWorkerProvider implements WorkerProvider {
         if (allowedWorkers.isEmpty()) {
             reportWorkerNotFoundException();
         }
-        int index = Math.floorMod(nextIndex.getAndIncrement(), allowedWorkers.size());
+        int index = Math.floorMod(NEXT_WORKER_INDEX.getAndIncrement(), allowedWorkers.size());
         ComputeNode worker = allowedWorkers.get(index);
         selectWorkerUnchecked(worker.getId());
         return worker.getId();

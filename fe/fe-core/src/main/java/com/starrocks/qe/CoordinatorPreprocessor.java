@@ -233,7 +233,7 @@ public class CoordinatorPreprocessor {
 
     /**
      * Capture available workers and optionally restrict to connector-catalog label backends
-     * (L) union native replica backends (N). Shared-data mode is left unrestricted.
+     * (L) union fixed-location scan backends (N). Shared-data mode is left unrestricted.
      */
     private WorkerProvider captureWorkerProvider() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();

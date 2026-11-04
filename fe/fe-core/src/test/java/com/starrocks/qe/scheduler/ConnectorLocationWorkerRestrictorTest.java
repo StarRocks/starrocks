@@ -22,7 +22,10 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.KuduScanNode;
+import com.starrocks.planner.MetaScanNode;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.WarehouseManager;
@@ -36,8 +39,10 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,24 +50,78 @@ import java.util.stream.Collectors;
 public class ConnectorLocationWorkerRestrictorTest {
 
     @Test
-    public void testNativeRequiredBackendIdsFromOlapScan(@Mocked OlapScanNode olapScanNode) {
-        TScanRangeLocations range = new TScanRangeLocations();
+    public void testFixedLocationRequiredBackendIdsFromOlapAndMetaScan(
+            @Mocked OlapScanNode olapScanNode,
+            @Mocked MetaScanNode metaScanNode) {
+        TScanRangeLocations olapRange = new TScanRangeLocations();
         TScanRangeLocation loc1 = new TScanRangeLocation();
         loc1.setBackend_id(11L);
         TScanRangeLocation loc2 = new TScanRangeLocation();
         loc2.setBackend_id(22L);
-        range.setLocations(Lists.newArrayList(loc1, loc2));
+        olapRange.setLocations(Lists.newArrayList(loc1, loc2));
+
+        TScanRangeLocations metaRange = new TScanRangeLocations();
+        TScanRangeLocation metaLoc = new TScanRangeLocation();
+        metaLoc.setBackend_id(33L);
+        metaRange.setLocations(Lists.newArrayList(metaLoc));
 
         new Expectations() {
             {
+                olapScanNode.isConnectorScanNode();
+                result = false;
+                minTimes = 0;
                 olapScanNode.getScanRangeLocations(0);
-                result = Lists.newArrayList(range);
+                result = Lists.newArrayList(olapRange);
+                metaScanNode.isConnectorScanNode();
+                result = false;
+                minTimes = 0;
+                metaScanNode.getScanRangeLocations(0);
+                result = Lists.newArrayList(metaRange);
             }
         };
 
-        Set<Long> ids = ConnectorLocationWorkerRestrictor.computeNativeRequiredBackendIds(
-                Lists.newArrayList(olapScanNode));
-        Assertions.assertEquals(Set.of(11L, 22L), ids);
+        Set<Long> ids = ConnectorLocationWorkerRestrictor.computeFixedLocationRequiredBackendIds(
+                Lists.newArrayList(olapScanNode, metaScanNode));
+        Assertions.assertEquals(Set.of(11L, 22L, 33L), ids);
+    }
+
+    @Test
+    public void testFixedLocationRequiredBackendIdsIncludesSchemaAndKudu(
+            @Mocked SchemaScanNode schemaScanNode,
+            @Mocked KuduScanNode kuduScanNode,
+            @Mocked IcebergScanNode icebergScanNode) {
+        TScanRangeLocations schemaRange = new TScanRangeLocations();
+        TScanRangeLocation schemaLoc = new TScanRangeLocation();
+        schemaLoc.setBackend_id(44L);
+        schemaRange.setLocations(Lists.newArrayList(schemaLoc));
+
+        TScanRangeLocations kuduRange = new TScanRangeLocations();
+        TScanRangeLocation kuduLoc = new TScanRangeLocation();
+        kuduLoc.setBackend_id(55L);
+        kuduRange.setLocations(Lists.newArrayList(kuduLoc));
+
+        new Expectations() {
+            {
+                schemaScanNode.isConnectorScanNode();
+                result = false;
+                minTimes = 0;
+                schemaScanNode.getScanRangeLocations(0);
+                result = Lists.newArrayList(schemaRange);
+                kuduScanNode.isConnectorScanNode();
+                result = false;
+                minTimes = 0;
+                kuduScanNode.getScanRangeLocations(0);
+                result = Lists.newArrayList(kuduRange);
+                // Connector scans must not contribute to N.
+                icebergScanNode.isConnectorScanNode();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        Set<Long> ids = ConnectorLocationWorkerRestrictor.computeFixedLocationRequiredBackendIds(
+                Lists.newArrayList(schemaScanNode, kuduScanNode, icebergScanNode));
+        Assertions.assertEquals(Set.of(44L, 55L), ids);
     }
 
     @Test
@@ -79,6 +138,108 @@ public class ConnectorLocationWorkerRestrictorTest {
         ConnectorLocationWorkerRestrictor.Restriction restriction =
                 ConnectorLocationWorkerRestrictor.resolve(Lists.newArrayList(olapScanNode), clusterInfo, null);
         Assertions.assertFalse(restriction.isRestricted());
+    }
+
+    @Test
+    public void testResolveUnrestrictedForNullOrEmptyScanNodes(@Mocked SystemInfoService clusterInfo) {
+        Assertions.assertFalse(
+                ConnectorLocationWorkerRestrictor.resolve(null, clusterInfo, null).isRestricted());
+        Assertions.assertFalse(
+                ConnectorLocationWorkerRestrictor.resolve(Collections.emptyList(), clusterInfo, null).isRestricted());
+    }
+
+    @Test
+    public void testCollectIgnoresBlankInvalidAndMissingCatalog(
+            @Mocked IcebergScanNode blankLocScan,
+            @Mocked IcebergScanNode invalidLocScan,
+            @Mocked IcebergScanNode missingCatalogScan,
+            @Mocked IcebergScanNode nullTableScan,
+            @Mocked TupleDescriptor blankDesc,
+            @Mocked TupleDescriptor invalidDesc,
+            @Mocked TupleDescriptor missingDesc,
+            @Mocked TupleDescriptor nullTableDesc,
+            @Mocked IcebergTable blankTable,
+            @Mocked IcebergTable invalidTable,
+            @Mocked IcebergTable missingTable,
+            @Mocked CatalogMgr catalogMgr) {
+        Map<String, String> blankCfg = new HashMap<>();
+        blankCfg.put("type", "iceberg");
+        blankCfg.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, "  ");
+        Catalog blankCatalog = new Catalog(1, "blank_cat", blankCfg, "");
+
+        Map<String, String> invalidCfg = new HashMap<>();
+        invalidCfg.put("type", "iceberg");
+        invalidCfg.put(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION, "not-a-valid-location");
+        Catalog invalidCatalog = new Catalog(2, "bad_cat", invalidCfg, "");
+
+        new Expectations() {
+            {
+                nullTableScan.isConnectorScanNode();
+                result = true;
+                nullTableScan.getDesc();
+                result = nullTableDesc;
+                nullTableDesc.getTable();
+                result = null;
+
+                blankLocScan.isConnectorScanNode();
+                result = true;
+                blankLocScan.getDesc();
+                result = blankDesc;
+                blankDesc.getTable();
+                result = blankTable;
+                blankTable.getCatalogName();
+                result = "blank_cat";
+                CatalogMgr.isExternalCatalog("blank_cat");
+                result = true;
+                catalogMgr.getCatalogByName("blank_cat");
+                result = blankCatalog;
+
+                invalidLocScan.isConnectorScanNode();
+                result = true;
+                invalidLocScan.getDesc();
+                result = invalidDesc;
+                invalidDesc.getTable();
+                result = invalidTable;
+                invalidTable.getCatalogName();
+                result = "bad_cat";
+                CatalogMgr.isExternalCatalog("bad_cat");
+                result = true;
+                catalogMgr.getCatalogByName("bad_cat");
+                result = invalidCatalog;
+
+                missingCatalogScan.isConnectorScanNode();
+                result = true;
+                missingCatalogScan.getDesc();
+                result = missingDesc;
+                missingDesc.getTable();
+                result = missingTable;
+                missingTable.getCatalogName();
+                result = "missing_cat";
+                CatalogMgr.isExternalCatalog("missing_cat");
+                result = true;
+                catalogMgr.getCatalogByName("missing_cat");
+                result = null;
+            }
+        };
+
+        Multimap<String, String> locs = ConnectorLocationWorkerRestrictor.collectConnectorCatalogLocations(
+                Lists.newArrayList(nullTableScan, blankLocScan, invalidLocScan, missingCatalogScan), catalogMgr);
+        Assertions.assertTrue(locs.isEmpty());
+    }
+
+    @Test
+    public void testFixedLocationSkipsNullRanges(@Mocked OlapScanNode olapScanNode) {
+        new Expectations() {
+            {
+                olapScanNode.isConnectorScanNode();
+                result = false;
+                minTimes = 0;
+                olapScanNode.getScanRangeLocations(0);
+                result = null;
+            }
+        };
+        Assertions.assertTrue(ConnectorLocationWorkerRestrictor.computeFixedLocationRequiredBackendIds(
+                Lists.newArrayList(olapScanNode)).isEmpty());
     }
 
     @Test
@@ -213,5 +374,28 @@ public class ConnectorLocationWorkerRestrictorTest {
         Assertions.assertEquals(Set.of(0L, 1L), preferredIds);
         Assertions.assertNull(restricted.getWorkerById(5L));
         Assertions.assertNotNull(restricted.getWorkerById(2L));
+    }
+
+    @Test
+    public void testLocationRestrictedWorkerProviderRotatesAcrossInstances() throws Exception {
+        Map<Long, ComputeNode> nodes = new HashMap<>();
+        for (long i = 0; i < 3; i++) {
+            ComputeNode node = new ComputeNode(i, "192.168.1." + i, 9030);
+            node.setAlive(true);
+            nodes.put(i, node);
+        }
+        ImmutableMap<Long, ComputeNode> map = ImmutableMap.copyOf(nodes);
+        Set<Long> allowed = Set.of(0L, 1L, 2L);
+        Set<Long> preferred = Set.of(0L, 1L);
+
+        List<Long> firstPicks = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            DefaultWorkerProvider base = new DefaultWorkerProvider(
+                    map, ImmutableMap.of(), map, ImmutableMap.of(), false, WarehouseManager.DEFAULT_RESOURCE);
+            WorkerProvider restricted = new LocationRestrictedWorkerProvider(base, allowed, preferred);
+            firstPicks.add(restricted.selectNextWorker());
+        }
+        // Process-wide cursor must advance across fresh wrappers; not always allowedWorkers[0].
+        Assertions.assertEquals(3, Set.copyOf(firstPicks).size());
     }
 }

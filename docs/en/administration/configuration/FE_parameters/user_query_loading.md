@@ -350,7 +350,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to restrict worker scheduling for queries that scan an external catalog with the catalog property `labels.location` in shared-nothing mode. When enabled, allowed backends are the label-matched backends (L) union native OlapScan replica backends (N), and connector scans prefer L. When disabled, external catalog reads use unrestricted worker scheduling even if `labels.location` is set on the catalog. Shared-data mode is unaffected.
+- Description: Whether to restrict worker scheduling for queries that scan an external catalog with the catalog property `labels.location` in shared-nothing mode. When enabled, allowed backends are the label-matched backends (L) union backends required by fixed-location non-connector scans (N) such as OlapScan, MetaScan, SchemaScan, and Kudu, and connector scans prefer L. When disabled, external catalog reads use unrestricted worker scheduling even if `labels.location` is set on the catalog. Shared-data mode is unaffected.
 - Introduced in: -
 
 ### `enable_decimal_v3`

@@ -373,9 +373,10 @@ public class HDFSBackendSelector implements BackendSelector {
 
         if (scanNode instanceof LanceScanNode) {
             // Whole-dataset Lance scans have no replica locality or native file-cache affinity.
-            // Rotate across the provider's connector workers, including its compute-node preference.
+            // Rotate across the same connector worker pool used to initialize assignment maps
+            // (preferred L when restricted), so we never select an N-only worker missing from those maps.
             for (TScanRangeLocations scanRangeLocations : locations) {
-                ComputeNode worker = LanceWorkerSelector.selectWorker(workerProvider);
+                ComputeNode worker = LanceWorkerSelector.selectWorker(workers, workerProvider.getComputeResource());
                 recordScanRangeAssignment(worker, null, List.of(worker), scanRangeLocations);
             }
             recordScanRangeStatistic();

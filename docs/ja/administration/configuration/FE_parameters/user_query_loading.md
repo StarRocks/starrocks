@@ -341,7 +341,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：共有なしモードで、Catalog プロパティ `labels.location` が設定された外部 Catalog をスキャンするクエリに対して Worker スケジューリング制限を有効にするかどうか。有効な場合、許可されるバックエンドはラベル一致のバックエンド（L）とネイティブ OlapScan レプリカのバックエンド（N）の和集合となり、コネクタスキャンは L を優先します。無効にすると、Catalog に `labels.location` が設定されていても外部 Catalog の読み取りは制限なしの Worker スケジューリングに戻ります。共有データモードには影響しません。
+- 説明：共有なしモードで、Catalog プロパティ `labels.location` が設定された外部 Catalog をスキャンするクエリに対して Worker スケジューリング制限を有効にするかどうか。有効な場合、許可されるバックエンドはラベル一致のバックエンド（L）と固定配置の非コネクタスキャンが必要とするバックエンド（N、例: OlapScan、MetaScan、SchemaScan、Kudu）の和集合となり、コネクタスキャンは L を優先します。無効にすると、Catalog に `labels.location` が設定されていても外部 Catalog の読み取りは制限なしの Worker スケジューリングに戻ります。共有データモードには影響しません。
 - 導入時期：-
 
 ### `enable_decimal_v3`
