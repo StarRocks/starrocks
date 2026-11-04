@@ -157,16 +157,21 @@ public class MergeTabletJob extends TabletReshardJob {
         // 3. Commit transaction (update next version)
         // NOTE: After updateNextVersions(), the table's next version is advanced.
         // From this point the job must not abort or throw, because the run() wrapper would attempt to abort.
-        updateNextVersions();
+        // Steps 4-6 stay under the same lock, so the reservation is journaled (step 6) before a load can commit
+        // above it. A load journaled first would leave a new leader with the load but not the reservation, and
+        // the reserved version would never be published.
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            updateNextVersions(lockedTable.get());
 
-        // 4. Add new tablets to inverted index
-        addTabletsToInvertedIndex();
+            // 4. Add new tablets to inverted index
+            addTabletsToInvertedIndex();
 
-        // 5. Register resharding tablets
-        registerReshardingTablets();
+            // 5. Register resharding tablets
+            registerReshardingTablets();
 
-        // 6. Set job state to PREPARING
-        setJobState(JobState.PREPARING);
+            // 6. Set job state to PREPARING
+            setJobState(JobState.PREPARING);
+        }
     }
 
     /*
@@ -434,7 +439,9 @@ public class MergeTabletJob extends TabletReshardJob {
     // Correspond to runPendingJob()
     @Override
     protected void replayPreparingJob() {
-        updateNextVersions();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
+            updateNextVersions(lockedTable.get());
+        }
         addTabletsToInvertedIndex();
         registerReshardingTablets();
         LOG.info("Merge tablet job replayed preparing job. {}", this);
@@ -568,32 +575,29 @@ public class MergeTabletJob extends TabletReshardJob {
         }
     }
 
-    private void updateNextVersions() {
-        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            OlapTable olapTable = lockedTable.get();
-            for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
-                PhysicalPartition physicalPartition = olapTable
-                        .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
-                if (physicalPartition == null) {
-                    continue;
-                }
+    // The caller holds the table WRITE lock.
+    private void updateNextVersions(OlapTable olapTable) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition = olapTable
+                    .getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                continue;
+            }
 
-                long commitVersion = reshardingPhysicalPartition.getCommitVersion();
-                if (commitVersion <= 0) {
-                    commitVersion = physicalPartition.getNextVersion();
-                    reshardingPhysicalPartition.setCommitVersion(commitVersion);
-                }
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            if (commitVersion <= 0) {
+                commitVersion = physicalPartition.getNextVersion();
+                reshardingPhysicalPartition.setCommitVersion(commitVersion);
+            }
 
-                // Never move nextVersion backwards. The commit version is reserved here, in
-                // runPendingJob, but the job does not journal anything until it reaches PREPARING a
-                // few steps later -- so a load transaction that commits in between journals its own
-                // entry first, and a replaying FE applies that entry before this one. By then the
-                // transaction has already carried nextVersion past the version reserved here, and
-                // assigning commitVersion + 1 unconditionally would drag it back, handing the same
-                // version out twice.
-                if (physicalPartition.getNextVersion() < commitVersion + 1) {
-                    physicalPartition.setNextVersion(commitVersion + 1);
-                }
+            // Never move nextVersion backwards. runPendingJob journals the reservation before it
+            // releases the table lock, but a journal written by an FE without that ordering can
+            // still carry a load that committed between the reservation and its PREPARING entry.
+            // A replaying FE applies that load first, so the load has already carried nextVersion
+            // past the version reserved here, and assigning commitVersion + 1 unconditionally
+            // would drag it back, handing the same version out twice.
+            if (physicalPartition.getNextVersion() < commitVersion + 1) {
+                physicalPartition.setNextVersion(commitVersion + 1);
             }
         }
     }
