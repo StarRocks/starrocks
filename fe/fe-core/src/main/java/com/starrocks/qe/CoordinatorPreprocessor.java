@@ -72,6 +72,7 @@ import java.util.stream.Collectors;
 public class CoordinatorPreprocessor {
     private static final Logger LOG = LogManager.getLogger(CoordinatorPreprocessor.class);
     private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
+    private static final String WORKER_NOT_FOUND_MSG = "Worker %s not found";
     public static final int BUCKET_ABSENT = 2147483647;
 
     static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -189,19 +190,19 @@ public class CoordinatorPreprocessor {
 
     public TNetworkAddress getBrpcAddress(long workerId) {
         ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
-        Preconditions.checkNotNull(worker, "Worker %s not found", workerId);
+        Preconditions.checkNotNull(worker, WORKER_NOT_FOUND_MSG, workerId);
         return worker.getBrpcAddress();
     }
 
     public TNetworkAddress getBrpcIpAddress(long workerId) {
         ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
-        Preconditions.checkNotNull(worker, "Worker %s not found", workerId);
+        Preconditions.checkNotNull(worker, WORKER_NOT_FOUND_MSG, workerId);
         return worker.getBrpcIpAddress();
     }
 
     public TNetworkAddress getAddress(long workerId) {
         ComputeNode worker = getWorkerProvider().getWorkerById(workerId);
-        Preconditions.checkNotNull(worker, "Worker %s not found", workerId);
+        Preconditions.checkNotNull(worker, WORKER_NOT_FOUND_MSG, workerId);
         return worker.getAddress();
     }
 

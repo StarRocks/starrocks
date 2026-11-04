@@ -28,7 +28,7 @@ import java.util.Set;
 public class LanceWorkerSelectorPreferredPoolTest {
 
     @Test
-    public void testSelectWorkerUsesPreferredPool() throws Exception {
+    void testSelectWorkerUsesPreferredPool() throws Exception {
         Map<Long, ComputeNode> map = new HashMap<>();
         for (long i = 0; i < 3; i++) {
             ComputeNode node = new ComputeNode(i, "192.168.1." + i, 9030);
@@ -51,7 +51,7 @@ public class LanceWorkerSelectorPreferredPoolTest {
     }
 
     @Test
-    public void testSelectWorkerExplicitPool() throws Exception {
+    void testSelectWorkerExplicitPool() throws Exception {
         ComputeNode a = new ComputeNode(10L, "192.168.1.10", 9030);
         ComputeNode b = new ComputeNode(11L, "192.168.1.11", 9030);
         a.setAlive(true);

@@ -33,7 +33,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -143,36 +142,44 @@ public final class ConnectorLocationWorkerRestrictor {
         Multimap<String, String> location = HashMultimap.create();
         CatalogMgr resolvedCatalogMgr = catalogMgr;
         for (ScanNode scanNode : scanNodes) {
-            if (!scanNode.isConnectorScanNode()) {
-                continue;
-            }
-            Table table = scanNode.getDesc() != null ? scanNode.getDesc().getTable() : null;
-            if (table == null) {
-                continue;
-            }
-            String catalogName = table.getCatalogName();
-            if (!CatalogMgr.isExternalCatalog(catalogName)) {
-                continue;
-            }
-            if (resolvedCatalogMgr == null) {
-                resolvedCatalogMgr = GlobalStateMgr.getCurrentState().getCatalogMgr();
-            }
-            Catalog catalog = resolvedCatalogMgr.getCatalogByName(catalogName);
-            if (catalog == null || catalog.getConfig() == null) {
-                continue;
-            }
-            Map<String, String> config = catalog.getConfig();
-            String loc = config.get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
-            if (StringUtils.isBlank(loc)) {
-                continue;
-            }
+            resolvedCatalogMgr = appendConnectorCatalogLocation(scanNode, location, resolvedCatalogMgr);
+        }
+        return location;
+    }
+
+    /**
+     * @return {@code catalogMgr}, lazily resolving it from {@link GlobalStateMgr} when first needed
+     */
+    private static CatalogMgr appendConnectorCatalogLocation(ScanNode scanNode,
+                                                             Multimap<String, String> location,
+                                                             CatalogMgr catalogMgr) {
+        if (!scanNode.isConnectorScanNode()) {
+            return catalogMgr;
+        }
+        Table table = scanNode.getDesc() != null ? scanNode.getDesc().getTable() : null;
+        if (table == null) {
+            return catalogMgr;
+        }
+        String catalogName = table.getCatalogName();
+        if (!CatalogMgr.isExternalCatalog(catalogName)) {
+            return catalogMgr;
+        }
+        CatalogMgr resolved = catalogMgr != null
+                ? catalogMgr
+                : GlobalStateMgr.getCurrentState().getCatalogMgr();
+        Catalog catalog = resolved.getCatalogByName(catalogName);
+        if (catalog == null || catalog.getConfig() == null) {
+            return resolved;
+        }
+        String loc = catalog.getConfig().get(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION);
+        if (StringUtils.isNotBlank(loc)) {
             try {
                 location.putAll(PropertyAnalyzer.analyzeLocationStringToMap(loc));
             } catch (Exception e) {
                 LOG.warn("Ignore invalid labels.location '{}' on catalog {}: {}", loc, catalogName, e.getMessage());
             }
         }
-        return location;
+        return resolved;
     }
 
     /**
