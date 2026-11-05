@@ -499,6 +499,7 @@ jobs:
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
       BASE_REF: ${{ needs.INFO.outputs.BASE_REF }}
       bucket_prefix: ${{ needs.INFO.outputs.BUCKET_PREFIX }}
+      SKIP_COV: ${{ needs.INFO.outputs.SKIP_COV }}
       # Scratch dir, deliberately not the tracked `java-extensions/`. See FE_UT_UNPACK_DIR.
       JAVA_EXT_UT_UNPACK_DIR: java-extensions-ut-report
     steps:
@@ -519,7 +520,10 @@ jobs:
             rm -rf ${JAVA_EXT_UT_UNPACK_DIR} && mkdir ${JAVA_EXT_UT_UNPACK_DIR} && cd ${JAVA_EXT_UT_UNPACK_DIR}
             ossutil64 --config-file ~/.ossutilconfig cp ${oss_path}/java_extension_ut_report.tar.gz . --recursive
             tar zxf java_extension_ut_report.tar.gz
-          elif [[ "${BASE_REF}" == "main" ]]; then
+          fi
+          # Same as the FE report: no report, or SKIP_COV, publishes the empty result.
+          if [[ "${BASE_REF}" == "main" ]] && [[ "$size" == 0 || "${SKIP_COV}" == "true" ]]; then
+            cd ${GITHUB_WORKSPACE}
             rm -rf ./coverchecker && ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
@@ -545,7 +549,7 @@ jobs:
 
       # Incremental Total Coverage
       - name: Publish Incremental Coverage Report - Total
-        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main'
+        if: steps.publish_report.outcome == 'success' && env.BASE_REF == 'main' && env.SKIP_COV != 'true'
         env:
           code_path: ${{ github.workspace }}/${{ env.JAVA_EXT_UT_UNPACK_DIR }}
         run: |
