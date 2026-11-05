@@ -149,6 +149,8 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 }
 
 Status JsonDocumentStreamParser::advance() noexcept {
+    static_assert(simdjson::SIMDJSON_VERSION_MAJOR == 5,
+                  "Re-validate JsonDocumentStreamParser::advance() mid-document error latching on simdjson upgrade");
     _curr_ready = false;
     ++_doc_stream_itr;
     if (_first_object_parsed && _doc_stream_itr != _doc_stream.end() && _doc_stream_itr.error() != simdjson::SUCCESS &&
