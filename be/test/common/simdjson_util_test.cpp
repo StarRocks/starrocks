@@ -22,6 +22,7 @@
 
 #include <cstdlib>
 #include <limits>
+#include <thread>
 
 #include "base/utility/defer_op.h"
 
@@ -350,30 +351,35 @@ TEST_F(SimdJsonUtilTest, CrossImplementationEquivalence) {
         if (impl->name() == "fallback") {
             tested_fallback = true;
         }
-        simdjson::get_active_implementation() = impl;
-        simdjson::ondemand::parser local_parser;
-        auto doc = local_parser.iterate(json);
-        simdjson::ondemand::object obj = doc.get_object();
-        auto it = obj.begin();
-        auto first_field = *it;
-        auto key_res = field_unescaped_key_safe(first_field, &buffer);
-        ASSERT_EQ(simdjson::SUCCESS, key_res.error()) << "impl=" << impl->name();
-        EXPECT_EQ(key_res.value(), "key_汉字") << "impl=" << impl->name();
-        simdjson::ondemand::value str_val = first_field.value();
-        auto val_res = value_get_string_safe(&str_val, &buffer);
-        ASSERT_EQ(simdjson::SUCCESS, val_res.error()) << "impl=" << impl->name();
-        EXPECT_EQ(val_res.value(),
-                  "汉字中文\xF0\x9F\x98\x80_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-                << "impl=" << impl->name();
-        EXPECT_EQ(uint64_t(doc["u64_max"].get_uint64()), 18446744073709551615ULL) << "impl=" << impl->name();
-        EXPECT_EQ(doc["big"].get_number_type().value(), simdjson::ondemand::number_type::big_integer)
-                << "impl=" << impl->name();
-        EXPECT_EQ(int64_t(doc["i64_min"].get_int64()), std::numeric_limits<int64_t>::min()) << "impl=" << impl->name();
+        std::thread t([&]() {
+            simdjson::get_active_implementation() = impl;
+            faststring local_buffer;
+            simdjson::ondemand::parser local_parser;
+            auto doc = local_parser.iterate(json);
+            simdjson::ondemand::object obj = doc.get_object();
+            auto it = obj.begin();
+            auto first_field = *it;
+            auto key_res = field_unescaped_key_safe(first_field, &local_buffer);
+            ASSERT_EQ(simdjson::SUCCESS, key_res.error()) << "impl=" << impl->name();
+            EXPECT_EQ(key_res.value(), "key_汉字") << "impl=" << impl->name();
+            simdjson::ondemand::value str_val = first_field.value();
+            auto val_res = value_get_string_safe(&str_val, &local_buffer);
+            ASSERT_EQ(simdjson::SUCCESS, val_res.error()) << "impl=" << impl->name();
+            EXPECT_EQ(val_res.value(),
+                      "汉字中文\xF0\x9F\x98\x80_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                    << "impl=" << impl->name();
+            EXPECT_EQ(uint64_t(doc["u64_max"].get_uint64()), 18446744073709551615ULL) << "impl=" << impl->name();
+            EXPECT_EQ(doc["big"].get_number_type().value(), simdjson::ondemand::number_type::big_integer)
+                    << "impl=" << impl->name();
+            EXPECT_EQ(int64_t(doc["i64_min"].get_int64()), std::numeric_limits<int64_t>::min())
+                    << "impl=" << impl->name();
 
-        auto bad_doc = local_parser.iterate(bad_surrogate_json);
-        simdjson::ondemand::value bad_val = bad_doc.find_field("value");
-        auto bad_res = value_get_string_safe(&bad_val, &buffer);
-        EXPECT_EQ(simdjson::STRING_ERROR, bad_res.error()) << "impl=" << impl->name();
+            auto bad_doc = local_parser.iterate(bad_surrogate_json);
+            simdjson::ondemand::value bad_val = bad_doc.find_field("value");
+            auto bad_res = value_get_string_safe(&bad_val, &local_buffer);
+            EXPECT_EQ(simdjson::STRING_ERROR, bad_res.error()) << "impl=" << impl->name();
+        });
+        t.join();
     }
     const simdjson::implementation* fallback_impl = simdjson::get_available_implementations()["fallback"];
     if (fallback_impl != nullptr && fallback_impl->supported_by_runtime_system()) {

@@ -23,24 +23,32 @@ namespace starrocks {
 
 namespace {
 
-// A singleton wrapper of the simdjson::ondemand::parser for `unescape()` interface only.
+// A thread-local wrapper of the simdjson::ondemand::parser for `unescape()` interface only.
 class SimdjsonParser {
 public:
     static simdjson::simdjson_result<std::string_view> unescape(simdjson::ondemand::raw_json_string in, uint8_t*& dst,
                                                                 bool allow_replacement = false) noexcept {
         static thread_local SimdjsonParser s_wrapper;
+        if (UNLIKELY(s_wrapper._active_impl != simdjson::get_active_implementation())) {
+            s_wrapper.reset();
+        }
         return s_wrapper._parser.unescape(in, dst, allow_replacement);
     }
 
 private:
-    SimdjsonParser() {
+    SimdjsonParser() { reset(); }
+    ~SimdjsonParser() = default;
+
+    void reset() noexcept {
+        _active_impl = simdjson::get_active_implementation();
+        _parser = simdjson::ondemand::parser();
         // The `_parser` is only used for `unescape`ing, which touches nothing of the parser's internal structure,
         // so the capacity doesn't matter.
         [[maybe_unused]] auto err = _parser.allocate(0);
     }
-    ~SimdjsonParser() = default;
 
 private:
+    const simdjson::implementation* _active_impl{nullptr};
     simdjson::ondemand::parser _parser;
 };
 } // namespace
