@@ -29,11 +29,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.iceberg.BlobMetadata;
 import org.apache.iceberg.DataFile;
-<<<<<<< HEAD
-=======
 import org.apache.iceberg.DataOperations;
-import org.apache.iceberg.DeleteFile;
->>>>>>> c392cc86264... [Enhancement][RB-225] Serve the Iceberg column-statistics path from the manifest cache and use only fresh Puffin NDVs (#68486)
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionField;
@@ -46,11 +42,6 @@ import org.apache.iceberg.puffin.StandardBlobTypes;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
-<<<<<<< HEAD
-import org.apache.iceberg.util.SnapshotUtil;
-=======
-import org.apache.iceberg.util.ContentFileUtil;
->>>>>>> c392cc86264... [Enhancement][RB-225] Serve the Iceberg column-statistics path from the manifest cache and use only fresh Puffin NDVs (#68486)
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
