@@ -835,14 +835,15 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
             }
 
             if (static_cast<int>(txn_logs.size()) < expected_count) {
-                // load_txn_log silently skips per-load_id files that are NotFound, so any
-                // shortfall here means either (a) an idempotent retry where the target
-                // .vlog has already been written and (some of) the source .log files have
-                // been vacuumed, or (b) shared-storage corruption / silent data loss.
-                // Distinguish by checking the .vlog: if it already exists, accept this as
-                // the idempotent path and clean up any leftover .log files; otherwise
-                // surface NotFound so FE retries / fails the publish instead of advancing
-                // visibility with incomplete statement data.
+                // load_ids lists every statement of the transaction, while a statement writes txn logs only
+                // for the tablets it loads: when one statement loads another table or another partition, this
+                // tablet has no log under that statement's load id. publish_version applies whatever logs it
+                // finds for the same reason, and so does this path.
+                //
+                // A shortfall is also what a retry sees after a previous attempt wrote the .vlog and deleted
+                // some or all source logs. Check the .vlog first: rewriting it from the logs that are left would
+                // drop the statements whose logs are gone. If its existence cannot be determined, fail instead of
+                // risking that.
                 auto txn_vlog_path = tablet_mgr->txn_vlog_location(tablet_id, log_version);
                 ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(txn_vlog_path));
                 auto check_st = fs->path_exists(txn_vlog_path);
@@ -854,11 +855,16 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
                     }
                     continue;
                 }
-                LOG_IF(WARNING, !check_st.is_not_found())
-                        << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
-                return Status::NotFound(
-                        fmt::format("incomplete per-load_id txn logs for tablet {} txn {}: loaded {} of {} expected",
-                                    tablet_id, txn_id, txn_logs.size(), expected_count));
+                if (!check_st.is_not_found()) {
+                    LOG(WARNING) << "Fail to check the existance of " << txn_vlog_path << ": " << check_st;
+                    return check_st;
+                }
+                // FE publishes a partition only after all of its tablets finished loading, so every tablet has
+                // the log of at least one statement.
+                if (txn_logs.empty()) {
+                    return Status::NotFound(fmt::format("no txn log of tablet {} for any of the {} load ids of txn {}",
+                                                        tablet_id, expected_count, txn_id));
+                }
             }
 
             auto merged = std::make_shared<TxnLogPB>(*txn_logs[0]);
