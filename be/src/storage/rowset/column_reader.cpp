@@ -944,9 +944,9 @@ Status ColumnReader::_load_inverted_index(const std::shared_ptr<TabletIndex>& in
                                                      std::memory_order_relaxed);
                            _meta_mem_usage.fetch_add(builtin_inverted_index->mem_usage(), std::memory_order_relaxed);
                            {
-                               SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(
-                                       _segment->uses_process_memory() ? process_memory_tracker()
-                                                                       : CurrentThread::mem_tracker());
+                               SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_segment->uses_process_memory()
+                                                                              ? process_memory_tracker()
+                                                                              : CurrentThread::mem_tracker());
                                _builtin_inverted_index_meta.reset();
                            }
                            _segment->update_cache_size();
