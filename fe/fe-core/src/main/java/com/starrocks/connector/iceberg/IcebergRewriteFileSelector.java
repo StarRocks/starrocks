@@ -18,6 +18,8 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.Types;
 
 import java.nio.ByteBuffer;
 import java.util.Map;
@@ -76,13 +78,32 @@ public record IcebergRewriteFileSelector(boolean rewriteAll,
             if (isPartitionScoped(del)) {
                 return true;
             }
-            if (IcebergConnectorScanRangeSource.referencesOnlyDataFile(del, file)) {
+            if (referencesOnlyDataFile(del, file)) {
                 deletedRows += del.recordCount();
             }
         }
         // Divide rather than multiply the threshold: 0.3 * 10 is 3.0000000000000004, so 3 of 10 rows would miss 0.3.
         return deletedRows > 0 && file.recordCount() > 0
                 && (double) deletedRows / file.recordCount() >= deleteRatioThreshold;
+    }
+
+    // True when the position delete names dataFile as its only target: either explicitly
+    // (referenced_data_file), or the lower and upper bounds of its file_path column are both
+    // dataFile's path. A truncated bound never equals the full path.
+    private static boolean referencesOnlyDataFile(DeleteFile deleteFile, DataFile dataFile) {
+        String dataFilePath = dataFile.path().toString();
+        if (deleteFile.referencedDataFile() != null) {
+            return deleteFile.referencedDataFile().equals(dataFilePath);
+        }
+        if (deleteFile.lowerBounds() == null || deleteFile.upperBounds() == null) {
+            return false;
+        }
+        ByteBuffer lower = deleteFile.lowerBounds().get(FILE_PATH_FIELD_ID);
+        ByteBuffer upper = deleteFile.upperBounds().get(FILE_PATH_FIELD_ID);
+        if (lower == null || !lower.equals(upper)) {
+            return false;
+        }
+        return dataFilePath.equals(Conversions.fromByteBuffer(Types.StringType.get(), lower.duplicate()).toString());
     }
 
     // A position delete without a referenced data file whose file_path bounds differ spans several data files.
