@@ -268,6 +268,14 @@ Status DeltaWriter::_init() {
 
     // maybe partial update, change to partial tablet schema
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < real_num_columns) {
+        // Applying a column-mode partial update never evaluates merge_condition, so accepting the load would let
+        // rows with an older condition value overwrite newer ones. Refuse it before any data is written.
+        if (!_opt.merge_condition.empty() && (_opt.partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
+                                              _opt.partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE)) {
+            Status st = Status::NotSupported("partial update with column mode and condition update at the same time");
+            _set_state(kAborted, st);
+            return st;
+        }
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
