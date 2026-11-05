@@ -59,6 +59,10 @@ struct SIMDGather {
     // T was int32_t or uint32_t
     // Constrained via SFINAE so unsupported types are rejected at overload resolution instead of
     // being accepted by a decltype-only check.
+    // This is SFINAE rather than an in-body static_assert on purpose: a violating call (e.g. an
+    // int16_t dest with raw size_t trailing arguments) must be rejected at overload resolution
+    // instead of silently binding to a different overload.
+    // Contract: b, a and c must not overlap (see the other overloads).
     template <class TB, class TC,
               std::enable_if_t<sizeof(TB) == 4 && std::is_integral_v<TB> && sizeof(TC) == 4 && std::is_integral_v<TC>,
                                int> = 0>
@@ -229,6 +233,8 @@ struct SIMDGather {
     }
 
     /// dest[i] = src[indexes[i]]
+    /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
+    /// pointers, so overlapping ranges are undefined behaviour.
     template <typename DataType, typename IndexType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows) {
         static_assert(std::is_integral_v<IndexType>);
@@ -238,6 +244,8 @@ struct SIMDGather {
     }
 
     /// dest[i] = is_filtered[i] == 0 ? src[indexes[i]] : 0
+    /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
+    /// pointers, so overlapping ranges are undefined behaviour.
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
                               const CondType* is_filtered, size_t num_rows) {
@@ -248,6 +256,12 @@ struct SIMDGather {
     }
 
     /// Caller-informed gather with DRAM prefetch heuristic.
+    /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
+    /// pointers, so overlapping ranges are undefined behaviour.
+    /// `pool_size` is a PERFORMANCE hint only and never affects correctness. Prefetch is issued only
+    /// for rows whose indexes the subsequent loads will read (filtered rows are skipped). Prefetch is
+    /// x86-64 only (measured regression on AArch64); elsewhere this overload degenerates to the plain
+    /// unrolled loop.
     /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes, size_t num_rows,
@@ -287,6 +301,12 @@ struct SIMDGather {
     }
 
     /// Caller-informed filtered gather with DRAM prefetch heuristic.
+    /// Contract: `dest`, `src` and `indexes` must not overlap: the helpers take `__restrict__`
+    /// pointers, so overlapping ranges are undefined behaviour.
+    /// `pool_size` is a PERFORMANCE hint only and never affects correctness. Prefetch is issued only
+    /// for rows whose indexes the subsequent loads will read (filtered rows are skipped). Prefetch is
+    /// x86-64 only (measured regression on AArch64); elsewhere this overload degenerates to the plain
+    /// unrolled loop.
     /// @param pool_size Element count of the source array (`src`), wrapped in SourcePoolSize.
     template <typename DataType, typename IndexType, typename CondType>
     static inline void gather(DataType* dest, const DataType* src, const IndexType* indexes,
