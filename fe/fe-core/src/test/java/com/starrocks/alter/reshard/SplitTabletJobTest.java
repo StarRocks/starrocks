@@ -31,6 +31,8 @@ import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
@@ -57,6 +59,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -73,6 +76,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
@@ -973,7 +977,11 @@ public class SplitTabletJobTest {
     }
 
     private TabletReshardJob createTabletReshardJob() throws Exception {
-        PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
+        return createTabletReshardJob(table, table.getAllPhysicalPartitions().iterator().next());
+    }
+
+    private TabletReshardJob createTabletReshardJob(OlapTable targetTable, PhysicalPartition physicalPartition)
+            throws Exception {
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
 
         long tabletId = materializedIndex.getTablets().get(0).getId();
@@ -983,7 +991,7 @@ public class SplitTabletJobTest {
         SplitTabletClause clause = new SplitTabletClause(null, tabletList, properties);
         clause.setTabletReshardTargetSize(-2);
 
-        TabletReshardJobFactory factory = new SplitTabletJobFactory(db, table, clause);
+        TabletReshardJobFactory factory = new SplitTabletJobFactory(db, targetTable, clause);
         TabletReshardJob tabletReshardJob = factory.createTabletReshardJob();
 
         Assertions.assertTrue(tabletReshardJob.getParallelTablets() > 0);
@@ -1362,5 +1370,98 @@ public class SplitTabletJobTest {
             splitJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
         }
+    }
+
+    // A RUNNING split job on partition p1 of a new range-partitioned table, which holds the table in TABLET_RESHARD.
+    private TabletReshardJob startSplitJob(String tableName) throws Exception {
+        installLakeServiceMock(this::addDataDrivenRanges);
+        starRocksAssert.withTable("create table " + tableName + " (p int, k int, v int) partition by range(p) "
+                + "(partition p1 values [('0'), ('10')), partition p2 values [('10'), ('20'))) "
+                + "order by(k) properties('replication_num' = '1')");
+        OlapTable target = (OlapTable) db.getTable(tableName);
+        TabletReshardJob job = createTabletReshardJob(target, target.getPartition("p1").getDefaultPhysicalPartition());
+        job.init();
+        job.run();
+        Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, job.getJobState());
+        return job;
+    }
+
+    private static void runUntilDone(TabletReshardJob job) {
+        for (int i = 0; i < 10 && !job.isDone(); i++) {
+            job.run();
+        }
+    }
+
+    // Metadata-only ALTER TABLE clauses run while the split job holds the table in TABLET_RESHARD: adding a
+    // partition the job does not own, renaming the sort-key column and renaming the table. The job still
+    // installs its new index and restores NORMAL.
+    @Test
+    public void testMetadataAlterWhileSplitJobRuns() throws Exception {
+        TabletReshardJob job = startSplitJob("split_alter_lifecycle");
+        OlapTable target = (OlapTable) db.getTable(job.getTableId());
+        PhysicalPartition physicalPartition = target.getPartition("p1").getDefaultPhysicalPartition();
+        MaterializedIndex oldIndex = physicalPartition.getLatestBaseIndex();
+
+        starRocksAssert.alterTable("alter table split_alter_lifecycle add partition p3 values [('20'), ('30'))");
+        starRocksAssert.alterTable("alter table split_alter_lifecycle rename column k to k2");
+        starRocksAssert.alterTable("alter table split_alter_lifecycle rename split_alter_lifecycle_renamed");
+        Assertions.assertEquals(OlapTable.OlapTableState.TABLET_RESHARD, target.getState());
+
+        runUntilDone(job);
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, target.getState());
+        MaterializedIndex newIndex = physicalPartition.getLatestBaseIndex();
+        Assertions.assertNotSame(oldIndex, newIndex);
+        Assertions.assertTrue(newIndex.getTablets().size() > oldIndex.getTablets().size());
+        Assertions.assertNotNull(target.getPartition("p3"));
+        Assertions.assertNotNull(target.getColumn("k2"));
+        Assertions.assertSame(target, db.getTable("split_alter_lifecycle_renamed"));
+    }
+
+    // The partition a split job is resharding can be dropped while the job runs (with FORCE: a recoverable drop is
+    // refused, see AlterTableDuringTabletReshardTest); the job skips the partition and still finishes, restoring
+    // NORMAL.
+    @Test
+    public void testDropReshardedPartitionWhileSplitJobRuns() throws Exception {
+        TabletReshardJob job = startSplitJob("split_drop_lifecycle");
+        OlapTable target = (OlapTable) db.getTable(job.getTableId());
+
+        starRocksAssert.alterTable("alter table split_drop_lifecycle drop partition p1 force");
+        Assertions.assertNull(target.getPartition("p1"));
+
+        runUntilDone(job);
+        Assertions.assertEquals(TabletReshardJob.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, target.getState());
+    }
+
+    // The partitions' cache settings are read under the table READ lock: PartitionInfo keeps them in a plain
+    // HashMap that a concurrent ADD PARTITION may be rehashing. The StarOS RPC itself runs without the lock.
+    @Test
+    public void testCreateShardsReadsPartitionCacheInfoUnderTheLockAndCallsStarOSWithoutIt() throws Exception {
+        SplitTabletJob splitJob = (SplitTabletJob) createTabletReshardJob();
+        AtomicBoolean cacheInfoReadUnderLock = new AtomicBoolean(false);
+        AtomicBoolean starOSCalledWithoutLock = new AtomicBoolean(false);
+        new MockUp<LakeTable>() {
+            @Mock
+            public FileCacheInfo getPartitionFileCacheInfo(Invocation invocation, long partitionId) {
+                cacheInfoReadUnderLock.set(LockHoldDepth.current() > 0);
+                return invocation.proceed(partitionId);
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createShardsForSplit(Map<Long, Long> newToOldShardId,
+                                             Map<Long, List<Long>> newShardIdToGroupIds,
+                                             FilePathInfo pathInfo,
+                                             FileCacheInfo cacheInfo,
+                                             Map<String, String> properties,
+                                             ComputeResource computeResource,
+                                             boolean spreadNewShards) {
+                starOSCalledWithoutLock.set(LockHoldDepth.current() == 0);
+            }
+        };
+        splitJob.createShardsOnStarOS();
+        Assertions.assertTrue(cacheInfoReadUnderLock.get());
+        Assertions.assertTrue(starOSCalledWithoutLock.get());
     }
 }

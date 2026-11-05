@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.FileCacheInfo;
 import com.staros.proto.PlacementPolicy;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishResult;
 import com.starrocks.alter.reshard.ReshardingPhysicalPartition.PublishState;
@@ -243,11 +244,12 @@ public class SplitTabletJob extends TabletReshardJob {
         gtid = globalStateMgr.getGtidGenerator().nextGtid();
 
         // 2. Create new shards on StarOS — the last "abortable" step before the no-abort
-        //    boundary below. No table lock needed: init() already moved the
-        //    table to TABLET_RESHARD, which blocks concurrent DDL. If this throws, run()
-        //    catches, abort() fires (state still PENDING), runAbortingJob unwinds the
-        //    FE-side mutations, and any orphan staros shards from a partial RPC are reaped
-        //    by StarMgrMetaSyncer's diff-and-purge cycle.
+        //    boundary below. TABLET_RESHARD does not block every DDL: partitions can be added,
+        //    dropped or replaced and the table renamed or swapped meanwhile, so the table and the
+        //    job's partitions are resolved under the table READ lock; the StarOS RPCs then run
+        //    without it. If this throws, run() catches, abort() fires (state still PENDING),
+        //    runAbortingJob unwinds the FE-side mutations, and any orphan staros shards from a
+        //    partial RPC are reaped by StarMgrMetaSyncer's diff-and-purge cycle.
         createShardsOnStarOS();
 
         // 3. Commit transaction (update next version)
@@ -1153,8 +1155,8 @@ public class SplitTabletJob extends TabletReshardJob {
         }
     }
 
-    private LockedObject<OlapTable> getLockedTable(LockType lockType) {
-        return new LockedObject<>(dbId, List.of(tableId), lockType, getOlapTable());
+    LockedObject<OlapTable> getLockedTable(LockType lockType) {
+        return new LockedObject<>(dbId, List.of(tableId), lockType, this::getOlapTable);
     }
 
     private OlapTable getOlapTable() {
@@ -1222,7 +1224,19 @@ public class SplitTabletJob extends TabletReshardJob {
      * diff-and-purge cycle.
      */
     void createShardsOnStarOS() {
-        OlapTable table = getOlapTable();
+        OlapTable table;
+        Map<Long, PhysicalPartition> physicalPartitions = new HashMap<>();
+        Map<Long, FileCacheInfo> cacheInfos = new HashMap<>();
+        try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.READ)) {
+            table = lockedTable.get();
+            for (long physicalPartitionId : reshardingPhysicalPartitions.keySet()) {
+                PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
+                if (physicalPartition != null) {
+                    physicalPartitions.put(physicalPartitionId, physicalPartition);
+                    cacheInfos.put(physicalPartitionId, table.getPartitionFileCacheInfo(physicalPartitionId));
+                }
+            }
+        }
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ColocateTableIndex.GroupId rangeColocateGroupId =
                 colocateTableIndex.getRangeColocateGroupId(table.getId());
@@ -1236,13 +1250,14 @@ public class SplitTabletJob extends TabletReshardJob {
         try {
             for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
                 PhysicalPartition physicalPartition =
-                        table.getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+                        physicalPartitions.get(reshardingPhysicalPartition.getPhysicalPartitionId());
                 if (physicalPartition == null) {
                     continue;
                 }
                 for (ReshardingMaterializedIndex reshardingIndex :
                         reshardingPhysicalPartition.getReshardingIndexes().values()) {
-                    createShardsForOneIndex(table, physicalPartition, reshardingIndex,
+                    createShardsForOneIndex(table, physicalPartition, cacheInfos.get(physicalPartition.getId()),
+                            reshardingIndex,
                             colocateRanges, colocateColumnCount);
                 }
             }
@@ -1254,6 +1269,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
     private void createShardsForOneIndex(OlapTable table,
                                          PhysicalPartition physicalPartition,
+                                         FileCacheInfo cacheInfo,
                                          ReshardingMaterializedIndex reshardingIndex,
                                          List<ColocateRange> colocateRanges,
                                          int colocateColumnCount) throws StarRocksException {
@@ -1314,7 +1330,7 @@ public class SplitTabletJob extends TabletReshardJob {
                 newToOldShardId,
                 newShardIdToGroupIds,
                 table.getPartitionFilePathInfo(physicalPartitionId),
-                table.getPartitionFileCacheInfo(physicalPartitionId),
+                cacheInfo,
                 shardProperties, computeResource,
                 unpinPlacement);
     }

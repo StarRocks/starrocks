@@ -1681,6 +1681,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                             "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
                                             " please use \"DROP PARTITION <partition> FORCE\".");
                         }
+                        // A tablet split or merge reserves its publish version without registering a transaction,
+                        // so the check above cannot see it, and a recovered partition would sit below that version.
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            if (stateMgr.getTabletReshardJobMgr()
+                                    .isPhysicalPartitionReshardingLocked(olapTable, physicalPartition.getId())) {
+                                throw new DdlException("A tablet split or merge is in progress on the partition [" +
+                                        partitionName + "]. Wait until it completes, or use " +
+                                        "\"DROP PARTITION <partition> FORCE\" to drop it forcibly (cannot be recovered).");
+                            }
+                        }
                     }
                 }
             }
