@@ -393,12 +393,16 @@ public class SerializableTable implements Table, Serializable, HasTableOperation
         return (StaticTableOperations) ((BaseTable) lazyTable()).operations();
     }
 
-    private static class SerializableConfSupplier implements SerializableSupplier<Configuration> {
+    // Public for IcebergCachingFileIO, whose in-memory configuration supplier is replaced by this one when
+    // serialized: the class must be one the BE can load. serialVersionUID pins the value the JVM computed
+    // before the class was made public, so FE and BE of different versions still read each other's splits.
+    public static class SerializableConfSupplier implements SerializableSupplier<Configuration> {
+        private static final long serialVersionUID = -6427790099069926131L;
 
         private final Map<String, String> confAsMap;
         private transient volatile Configuration conf = null;
 
-        SerializableConfSupplier(Configuration conf) {
+        public SerializableConfSupplier(Configuration conf) {
             this.confAsMap = new HashMap<>(conf.size());
             conf.forEach(entry -> confAsMap.put(entry.getKey(), entry.getValue()));
         }
