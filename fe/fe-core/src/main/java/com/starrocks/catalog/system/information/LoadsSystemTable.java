@@ -47,6 +47,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
@@ -189,7 +190,16 @@ public class LoadsSystemTable {
                                                LoadRequestFilter filter, long startJobIdOffset) {
         StreamLoadMgr streamLoadMgr = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         if (request.isSetJob_id()) {
-            addStreamLoadTask(candidates, streamLoadMgr.getTaskById(request.getJob_id()), filter, startJobIdOffset);
+            long jobId = request.getJob_id();
+            if (LoadJobVisibility.isEnabled()) {
+                // A statement of a multi-statement transaction is authorized with the transaction, then picked out.
+                AbstractStreamLoadTask task = streamLoadMgr.getRegisteredTaskById(jobId);
+                addStreamLoadTask(candidates, task, filter, startJobIdOffset,
+                        statement -> task.getId() == jobId || statement.getId() == jobId);
+            } else {
+                addStreamLoadTask(candidates, streamLoadMgr.getTaskById(jobId), filter, startJobIdOffset,
+                        statement -> true);
+            }
             return;
         }
         List<AbstractStreamLoadTask> streamLoadTaskList = streamLoadMgr.getTaskByName(request.getLabel());
@@ -197,12 +207,13 @@ public class LoadsSystemTable {
             return;
         }
         for (AbstractStreamLoadTask streamLoadTask : streamLoadTaskList) {
-            addStreamLoadTask(candidates, streamLoadTask, filter, startJobIdOffset);
+            addStreamLoadTask(candidates, streamLoadTask, filter, startJobIdOffset, statement -> true);
         }
     }
 
     private static void addStreamLoadTask(List<Candidate> candidates, AbstractStreamLoadTask task,
-                                          LoadRequestFilter filter, long startJobIdOffset) {
+                                          LoadRequestFilter filter, long startJobIdOffset,
+                                          Predicate<AbstractStreamLoadTask> statements) {
         if (task == null || task.getId() < startJobIdOffset) {
             return;
         }
@@ -212,10 +223,22 @@ public class LoadsSystemTable {
         Collection<? extends AbstractStreamLoadTask> tasks =
                 task instanceof StreamLoadMultiStmtTask multiTask ? multiTask.getTasks() : List.of(task);
         List<VisibleTask> matched = Lists.newArrayList();
-        for (AbstractStreamLoadTask oneTask : tasks) {
-            if (matchFilter(oneTask, filter)) {
-                matched.addAll(LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(filter.caller, oneTask)
-                        : LoadJobVisibility.allTasksInFull(oneTask));
+        if (LoadJobVisibility.isEnabled()) {
+            // Authorizing locks the target tables, so skip a task none of whose statements the request asks for.
+            if (tasks.stream().noneMatch(oneTask -> statements.test(oneTask) && matchFilter(oneTask, filter))) {
+                return;
+            }
+            // The statements of a multi-statement transaction are authorized together.
+            for (VisibleTask visibleTask : LoadJobVisibility.visibleTasks(filter.caller, task)) {
+                if (statements.test(visibleTask.task()) && matchFilter(visibleTask.task(), filter)) {
+                    matched.add(visibleTask);
+                }
+            }
+        } else {
+            for (AbstractStreamLoadTask oneTask : tasks) {
+                if (matchFilter(oneTask, filter)) {
+                    matched.addAll(LoadJobVisibility.allTasksInFull(oneTask));
+                }
             }
         }
         if (matched.isEmpty()) {

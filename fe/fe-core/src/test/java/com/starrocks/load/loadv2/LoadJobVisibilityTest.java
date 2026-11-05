@@ -19,6 +19,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
@@ -42,6 +43,7 @@ import com.starrocks.load.batchwrite.MergeCommitTask;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.AbstractStreamLoadTask;
+import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadMultiStmtTask;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.persist.gson.GsonUtils;
@@ -275,10 +277,11 @@ public class LoadJobVisibilityTest {
         assertTrue(visibleTasks(reader, secretTask).isEmpty());
         assertEquals(List.of(new VisibleTask(secretTask, METADATA)), visibleTasks(writer, secretTask));
 
-        // Each statement of a multi-statement transaction loads one table into its own error log, and only the
-        // statements the caller may see are kept, each as far as the caller may see it.
-        assertEquals(List.of(new VisibleTask(openTask, FULL)), visibleTasks(reader, multiStmtTask));
-        assertEquals(List.of(new VisibleTask(openTask, FULL), new VisibleTask(secretTask, METADATA)),
+        // Only the statements of a multi-statement transaction the caller may see are kept, and they are shown in
+        // full only if every statement is: a failed transaction gives each statement the error of the one that
+        // failed, with its error-log URL.
+        assertEquals(List.of(new VisibleTask(openTask, METADATA)), visibleTasks(reader, multiStmtTask));
+        assertEquals(List.of(new VisibleTask(openTask, METADATA), new VisibleTask(secretTask, METADATA)),
                 visibleTasks(mixed, multiStmtTask));
         assertEquals(List.of(new VisibleTask(openTask, FULL), new VisibleTask(secretTask, FULL)),
                 visibleTasks(both, multiStmtTask));
@@ -291,6 +294,85 @@ public class LoadJobVisibilityTest {
                 visibleTasks(UserIdentity.ROOT, notStartedMergeCommitTask));
         assertEquals(List.of(new VisibleTask(notStartedMergeCommitTask, METADATA)),
                 visibleTasks(operator, notStartedMergeCommitTask));
+    }
+
+    @Test
+    public void testFailedTransactionErrorNeedsEveryStatement() throws Exception {
+        // A multi-statement transaction on t_open and t_secret whose t_secret statement failed: the rollback gives
+        // every statement the transaction's error (cancelCoordinatorOnly), which names the t_secret error log.
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb(DB);
+        StreamLoadMultiStmtTask txn = new StreamLoadMultiStmtTask(GlobalStateMgr.getCurrentState().getNextId(), db,
+                "multi_stmt_failed", "", "", 100000L, System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+        String reason = "commit failed: abnormal data more than max filter rate, tracking_url: " + TRACKING_URL;
+        Map<String, StreamLoadTask> statements = Deencapsulation.getField(txn, "taskMaps");
+        for (String name : List.of("t_open", "t_secret")) {
+            StreamLoadTask statement = new StreamLoadTask(GlobalStateMgr.getCurrentState().getNextId(), db,
+                    (OlapTable) metastore.getTable(DB, name), txn.getLabel(), "", "", 100000L, 1, 0,
+                    System.currentTimeMillis(), WarehouseManager.DEFAULT_RESOURCE);
+            // What the rollback of the transaction (tryRollbackNow) does to each statement.
+            statement.cancelCoordinatorOnly(reason);
+            statements.put(name, statement);
+        }
+        StreamLoadTask open = statements.get("t_open");
+        StreamLoadTask secret = statements.get("t_secret");
+        StreamLoadMgr streamLoadMgr = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        streamLoadMgr.addLoadTask(txn, false);
+        try {
+            // reader may read t_open alone: its statement without the error, in every view, looked up either way.
+            assertEquals(List.of(new VisibleTask(open, METADATA)), visibleTasks(reader, txn));
+            TGetLoadsParams byId = request(reader);
+            byId.setJob_id(open.getId());
+            for (List<TStreamLoadInfo> rows : List.of(streamLoads(reader, txn.getLabel()),
+                    new FrontendServiceImpl(null).getStreamLoads(byId).getLoads())) {
+                assertEquals(List.of(open.getId()), rows.stream().map(TStreamLoadInfo::getId)
+                        .collect(Collectors.toList()));
+                assertFalse(rows.get(0).isSetError_msg());
+            }
+            for (List<TLoadInfo> rows : List.of(List.of(loadsRow(reader, txn.getLabel())),
+                    LoadsSystemTable.query(byId).getLoads())) {
+                assertEquals(List.of(open.getId()), rows.stream().map(TLoadInfo::getJob_id)
+                        .collect(Collectors.toList()));
+                assertFalse(rows.get(0).isSetError_msg());
+            }
+            int errorMsg = ShowStreamLoadStmt.getTitleNames().indexOf("ErrorMsg");
+            assertNull(row(showRows(reader, "SHOW ALL STREAM LOAD FROM " + DB), 0, txn.getLabel()).get(errorMsg));
+            byId.setJob_id(secret.getId());
+            assertTrue(new FrontendServiceImpl(null).getStreamLoads(byId).getLoads().isEmpty());
+
+            // both may read both tables: every statement in full.
+            assertEquals(Sets.newHashSet(new VisibleTask(open, FULL), new VisibleTask(secret, FULL)),
+                    Sets.newHashSet(visibleTasks(both, txn)));
+            List<TStreamLoadInfo> rows = streamLoads(both, txn.getLabel());
+            assertEquals(2, rows.size());
+            assertTrue(rows.stream().allMatch(info -> reason.equals(info.getError_msg())), rows.toString());
+
+            // With the rule off, a statement looked up by its job id is shown in full to anyone, as before the rule.
+            Config.setMutableConfig("enable_new_load_job_privilege_check", "false", false, "");
+            try {
+                for (StreamLoadTask statement : List.of(open, secret)) {
+                    TGetLoadsParams request = request(none);
+                    request.setJob_id(statement.getId());
+                    List<TStreamLoadInfo> streamRows = new FrontendServiceImpl(null).getStreamLoads(request)
+                            .getLoads();
+                    assertEquals(List.of(statement.getId()), streamRows.stream().map(TStreamLoadInfo::getId)
+                            .collect(Collectors.toList()));
+                    assertEquals(reason, streamRows.get(0).getError_msg());
+                    List<TLoadInfo> loadsRows = LoadsSystemTable.query(request).getLoads();
+                    assertEquals(List.of(statement.getId()), loadsRows.stream().map(TLoadInfo::getJob_id)
+                            .collect(Collectors.toList()));
+                    assertEquals(reason, loadsRows.get(0).getError_msg());
+                }
+            } finally {
+                Config.setMutableConfig("enable_new_load_job_privilege_check", "true", false, "");
+            }
+        } finally {
+            Map<String, AbstractStreamLoadTask> byLabel = Deencapsulation.getField(streamLoadMgr, "idToStreamLoadTask");
+            byLabel.remove(txn.getLabel());
+            Map<Long, Map<String, AbstractStreamLoadTask>> byDb =
+                    Deencapsulation.getField(streamLoadMgr, "dbToLabelToStreamLoadTask");
+            byDb.get(dbId).remove(txn.getLabel());
+        }
     }
 
     @Test

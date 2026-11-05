@@ -3577,9 +3577,22 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TStreamLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                AbstractStreamLoadTask task = loadManager.getTaskById(request.getJob_id());
-                if (task != null) {
-                    addStreamLoadInfos(loads, caller, task);
+                long jobId = request.getJob_id();
+                if (LoadJobVisibility.isEnabled()) {
+                    // A statement of a multi-statement transaction is authorized with the transaction.
+                    AbstractStreamLoadTask task = loadManager.getRegisteredTaskById(jobId);
+                    if (task != null) {
+                        for (VisibleTask visibleTask : LoadJobVisibility.visibleTasks(caller, task)) {
+                            if (task.getId() == jobId || visibleTask.task().getId() == jobId) {
+                                addStreamLoadInfos(loads, visibleTask);
+                            }
+                        }
+                    }
+                } else {
+                    AbstractStreamLoadTask task = loadManager.getTaskById(jobId);
+                    if (task != null) {
+                        addStreamLoadInfos(loads, caller, task);
+                    }
                 }
             } else {
                 List<AbstractStreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
@@ -3612,10 +3625,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<VisibleTask> visibleTasks = LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(caller, task)
                 : LoadJobVisibility.allTasksInFull(task);
         for (VisibleTask visibleTask : visibleTasks) {
-            for (TStreamLoadInfo info : visibleTask.task().toStreamLoadThrift()) {
-                boolean full = visibleTask.access() == LoadJobVisibility.Access.FULL;
-                loads.add(full ? info : LoadJobRedaction.redact(info));
-            }
+            addStreamLoadInfos(loads, visibleTask);
+        }
+    }
+
+    private static void addStreamLoadInfos(List<TStreamLoadInfo> loads, VisibleTask visibleTask) {
+        for (TStreamLoadInfo info : visibleTask.task().toStreamLoadThrift()) {
+            boolean full = visibleTask.access() == LoadJobVisibility.Access.FULL;
+            loads.add(full ? info : LoadJobRedaction.redact(info));
         }
     }
 

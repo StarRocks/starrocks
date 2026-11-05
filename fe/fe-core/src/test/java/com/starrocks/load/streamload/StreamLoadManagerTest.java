@@ -259,7 +259,7 @@ public class StreamLoadManagerTest {
             @Mock
             public List<LoadJobVisibility.VisibleTask> visibleTasks(ConnectContext context,
                                                                      AbstractStreamLoadTask task) {
-                return List.of(new LoadJobVisibility.VisibleTask(task, LoadJobVisibility.Access.FULL));
+                return LoadJobVisibility.allTasksInFull(task);
             }
         };
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
