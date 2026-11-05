@@ -5,7 +5,7 @@
 set scan_or_to_union_limit = 1;
 -- result:
 -- !result
-CREATE TABLE t_or_bitmap_erase (
+CREATE TABLE t_or_bitmap_erase_${uuid0} (
   id BIGINT NOT NULL,
   a  INT    NOT NULL,
   b  INT    NOT NULL,
@@ -21,7 +21,7 @@ DISTRIBUTED BY HASH(id) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
-INSERT INTO t_or_bitmap_erase
+INSERT INTO t_or_bitmap_erase_${uuid0}
 SELECT generate_series, generate_series + 1000, generate_series + 1000, 10 + generate_series % 2, generate_series + 1000
 FROM TABLE(generate_series(1, 5000))
 UNION ALL SELECT 100001, 1, 2, 10, 1
@@ -29,11 +29,11 @@ UNION ALL SELECT 100002, 5, 5, 7, 1
 UNION ALL SELECT 100003, 1, 3, 10, 1;
 -- result:
 -- !result
-select id from t_or_bitmap_erase where d = 1 and ((a = 1 and b = 2) or c = 7) order by id;
+select id from t_or_bitmap_erase_${uuid0} where d = 1 and ((a = 1 and b = 2) or c = 7) order by id;
 -- result:
 100001
 100002
 -- !result
-drop table t_or_bitmap_erase;
+drop table t_or_bitmap_erase_${uuid0};
 -- result:
 -- !result
