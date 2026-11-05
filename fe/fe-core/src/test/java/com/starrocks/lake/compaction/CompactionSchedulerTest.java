@@ -726,6 +726,12 @@ public class CompactionSchedulerTest {
                 return WarehouseManager.DEFAULT_RESOURCE;
             }
         };
+        // Admission must filter selected candidates before starting jobs.
+        compactionScheduler.updateCompactionAllowlist("ALLOWLIST", "");
+        compactionScheduler.runOneCycle();
+        Assertions.assertEquals(0, compactionScheduler.getRunningCompactions().size());
+        // Both physical partitions of an admitted table are scheduled again.
+        compactionScheduler.updateCompactionAllowlist("ALLOWLIST", "2");
         compactionScheduler.runOneCycle();
         Assertions.assertEquals(2, compactionScheduler.getRunningCompactions().size());
 
