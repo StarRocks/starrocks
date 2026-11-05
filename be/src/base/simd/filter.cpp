@@ -314,19 +314,17 @@ size_t scan_neon(Elem* dst, const Elem* src, const uint8_t* selector, size_t fro
 // One IFUNC family. Each clone maps the width to a compile-time-width code path,
 // so the hot per-element copies never use a runtime-sized memcpy.
 MFV_DEFAULT(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
-                               size_t to) { return scan_scalar_any(dst, src, element_size, selector, from, to); });
-
+                               size_t to) { return scan_scalar_any(dst, src, element_size, selector, from, to); })
 MFV_AVX2(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                             size_t to) {
     return detail::filter_range_avx2(dst, src, element_size, selector, from, to);
-});
-
+})
 MFV_AVX512VLBW(size_t filter_impl(void* dst, const void* src, size_t element_size, const uint8_t* selector, size_t from,
                                   size_t to) {
     if (element_size == 4) return FILTER_CALL(compress_w4, uint32_t);
     if (element_size == 8) return FILTER_CALL(compress_w8, uint64_t);
     return scan_avx2_any(dst, src, element_size, selector, from, to);
-});
+})
 
 #endif // __x86_64__
 
