@@ -194,6 +194,18 @@ description: "Alphabetical s"
 - タイプ: 累積値
 - 説明: スキャン時に flat JSON サブカラム値の型変換に費やした累積時間。
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: 入力セグメントの一部がフラット JSON、残りが完全な JSON である JSON 列を、コンパクションがフラット JSON セグメントのレイアウト（すべてのサブカラムを JSON 型）で読み取った回数。`enable_compaction_flat_json_mixed_inputs` を参照してください。
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超えたが、書き出しに使える単一のフラットレイアウトがなかったため、出力を完全な JSON として書き出したフラット JSON コンパクションの回数。
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - 単位: カウント
@@ -204,7 +216,7 @@ description: "Alphabetical s"
 
 - 単位: カウント
 - タイプ: 累積値
-- 説明: `starrocks_be_flat_json_compaction_total` に計上されるフラット JSON コンパクションのうち、出力セグメント全体をバッファせず入力を受け取り次第書き出した回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1 を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
+- 説明: `starrocks_be_flat_json_compaction_total` に計上されるフラット JSON コンパクションのうち、出力セグメント全体をバッファせず入力を受け取り次第書き出した回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1（同時に書き込まれる JSON 列で等分）を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
 
 ## `starrocks_be_flat_json_compaction_total`
 
@@ -685,9 +697,8 @@ description: "Alphabetical s"
 
 | `reason` | 記録される条件 |
 | --- | --- |
-| `materialized_view_target` | 導出ティアがこのマテリアライズドビューに対応していない（増分マテリアライズドビューでない、ソートキーが隠し row-id 列でないなど）。 |
-| `row_id_span_too_small` | 推定出力が小さすぎて、row-id の範囲を均等に分割できない。 |
-| `row_id_space_not_pristine` | 自動インクリメントカウンタが既に id を払い出しているため、分割点を安全に導出できない。 |
+| `materialized_view_target` | ビューが増分マテリアライズドビューで、導出ティアがそのキーを決められない（可視インデックスが複数ある、ソートキーが隠し row-id 列だけではない、row id がフィンガープリントではなくキー値を順に符号化したものである）。マテリアライズドビューへの取り込みが、そのビュー自身のリフレッシュでない場合にも記録される。 |
+| `row_id_span_too_small` | 推定出力が小さすぎて、row-id の範囲を均等に分割できない。または、`tablet_reshard_min_split_size` のサイズのタブレット 2 つ分に満たない。 |
 | `estimate_unavailable` | 利用できる出力サイズの見積もりがなく、タブレット数を決められない。テーブル統計のない External Catalog のテーブルからの INSERT でも記録される。 |
 | `multiple_temporary_partitions` | リフレッシュが複数の置き換えパーティションに書き込むため、分割するとほとんどのタブレットが空になる。機能を有効にしてもこれは変わらない。 |
 | `derivation_failed` | 分割点の導出に失敗した、または導出した分割点が検証に通らなかった。 |

@@ -301,6 +301,56 @@ public class IcebergUtilTest {
         }
     }
 
+    // At the 2024-11-03 fall-back in New York, 05:30 UTC is 01:30 EDT and 06:10 UTC is 01:10 EST: converting the two
+    // ends gives a minimum above a value of the file, while the widened bounds cover it.
+    @Test
+    public void testWidenedTimestampTzBoundsCoverOffsetChanges() {
+        Schema schema = new Schema(required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true));
+        slots.get(0).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+        long low = java.time.Instant.parse("2024-11-03T05:30:00Z").getEpochSecond() * 1_000_000L;
+        long high = java.time.Instant.parse("2024-11-03T06:10:00Z").getEpochSecond() * 1_000_000L;
+        Map<Integer, ByteBuffer> lowerBounds = Map.of(5, Conversions.toByteBuffer(Types.TimestampType.withZone(), low));
+        Map<Integer, ByteBuffer> upperBounds =
+                Map.of(5, Conversions.toByteBuffer(Types.TimestampType.withZone(), high));
+        Map<Integer, Long> nullValueCounts = Map.of(5, 0L);
+        Map<Integer, Long> valueCounts = Map.of(5, 2L);
+        long localOfHigh = java.time.LocalDateTime.parse("2024-11-03T01:10:00")
+                .toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L;
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        try {
+            ctx.getSessionVariable().setTimeZone("America/New_York");
+            IcebergUtil.MinMaxValue endpoints = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, false).get(5);
+            Assertions.assertTrue((Long) endpoints.minValue > localOfHigh);
+
+            IcebergUtil.MinMaxValue widened = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, true).get(5);
+            long eighteenHours = 18 * 3600 * 1_000_000L;
+            assertEquals(low - eighteenHours, widened.minValue);
+            assertEquals(high + eighteenHours, widened.maxValue);
+            Map<Integer, TExprMinMaxValue> thrift = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, true);
+            assertEquals(low - eighteenHours, thrift.get(5).min_int_value);
+            assertEquals(high + eighteenHours, thrift.get(5).max_int_value);
+
+            // a fixed offset converts exactly
+            ctx.getSessionVariable().setTimeZone("+08:00");
+            IcebergUtil.MinMaxValue fixed = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots, true).get(5);
+            assertEquals(low + 8 * 3600 * 1_000_000L, fixed.minValue);
+            assertEquals(high + 8 * 3600 * 1_000_000L, fixed.maxValue);
+
+            ctx.getSessionVariable().setTimeZone("America/New_York");
+            assertEquals(Long.MIN_VALUE, IcebergUtil.widenedSessionTzLowerBound(Long.MIN_VALUE + 1));
+            assertEquals(Long.MAX_VALUE, IcebergUtil.widenedSessionTzUpperBound(Long.MAX_VALUE - 1));
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
     private static org.apache.iceberg.Table tableWithProperty(String key, String value) {
         org.apache.iceberg.Table table = org.mockito.Mockito.mock(org.apache.iceberg.Table.class);
         Map<String, String> props = new HashMap<>();

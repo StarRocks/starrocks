@@ -410,7 +410,11 @@ public class IcebergTable extends Table {
             if (!bucketPropertySupported(column.getType())) {
                 continue;
             }
-            bucketProperties.add(new BucketProperty(TBucketFunction.MURMUR3_X86_32, bucket.second, column));
+            // Iceberg buckets a uuid by its 16 bytes, but StarRocks reads it as a 36-char string, so the BE
+            // must parse the string back to bytes before hashing when it shuffles the other side.
+            TBucketFunction func = schema.findField(bucket.first).type() instanceof Types.UUIDType
+                    ? TBucketFunction.MURMUR3_X86_32_UUID : TBucketFunction.MURMUR3_X86_32;
+            bucketProperties.add(new BucketProperty(func, bucket.second, column));
         }
 
         return bucketProperties;

@@ -485,6 +485,11 @@ public class PlanFragmentBuilder {
         private final List<Integer> collectExecStatsIds = Lists.newArrayList();
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
+        // Columns that a runtime filter of an enclosing hash join or top-n may probe in the subtree being visited.
+        // Runtime filters are assigned after the scans are set up, so an Iceberg scan uses this to request the file
+        // bounds of these columns, which let the BE skip a file once the filter arrives.
+        private Set<ColumnRefOperator> runtimeFilterProbeColumns = Set.of();
+
         public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
         }
@@ -1099,13 +1104,14 @@ public class PlanFragmentBuilder {
 
             OlapScanNode scanNode = new OlapScanNode(context.getNextNodeId(), tupleDescriptor, "OlapScanNode",
                     node.getSelectedIndexMetaId(), context.getConnectContext().getCurrentComputeResource());
+            scanNode.setParallelRangeScan(node.isParallelRangeScan());
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
-            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
-            scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
+            scanNode.setIsSortedByKeyPerTablet(!node.isParallelRangeScan() && node.needSortedByKeyPerTablet());
+            scanNode.setIsOutputChunkByBucket(!node.isParallelRangeScan() && node.needOutputChunkByBucket());
             scanNode.setEnableGlobalLateMaterialization(node.isEnableGlobalLateMaterialization());
-            scanNode.setWithoutColocateRequirement(node.isWithoutColocateRequirement());
+            scanNode.setWithoutColocateRequirement(!node.isParallelRangeScan() && node.isWithoutColocateRequirement());
             scanNode.setGtid(node.getGtid());
             scanNode.setVectorSearchOptions(node.getVectorSearchOptions());
             scanNode.setSample(node.getSample());
@@ -1124,7 +1130,7 @@ public class PlanFragmentBuilder {
                 scanNode.setUsePreparedPhysicalSplitScan(true);
             }
 
-            currentExecGroup.add(scanNode);
+            currentExecGroup.add(scanNode, node.isParallelRangeScan());
 
             // set slot
             List<ColumnRefOperator> partitionRefs = Lists.newArrayList();
@@ -1186,7 +1192,8 @@ public class PlanFragmentBuilder {
                             .getBackendIdByHost(FrontendOptions.getLocalHostAddress());
                 }
 
-                RangeColocateScanDispatch dispatch = RangeColocateScanDispatch.forTable(referenceTable);
+                RangeColocateScanDispatch dispatch = node.isParallelRangeScan() ? null
+                        : RangeColocateScanDispatch.forTable(referenceTable);
 
                 // Filter out logical partitions that have no non-empty physical sub-partition. The result
                 // keeps deduplicated LOGICAL (parent) partition ids -- matching the convention used by every
@@ -1225,9 +1232,10 @@ public class PlanFragmentBuilder {
                         Preconditions.checkState(selectTabletIds != null && !selectTabletIds.isEmpty());
                         final MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                         totalTabletsNum += selectedIndex.getTablets().size();
-                        List<Long> allTabletIds = selectedIndex.getTabletIdsInOrder();
-                        OlapScanNode.fillTabletId2BucketSeq(
-                                dispatch, selectedIndex, allTabletIds, tabletId2BucketSeq);
+                        if (!node.isParallelRangeScan()) {
+                            OlapScanNode.fillTabletId2BucketSeq(
+                                    dispatch, selectedIndex, selectedIndex.getTabletIdsInOrder(), tabletId2BucketSeq);
+                        }
                         List<Tablet> tablets =
                                 selectTabletIds.stream().map(selectedIndex::getTablet).collect(Collectors.toList());
                         scanNode.addScanRangeLocations(partition, physicalPartition, selectedIndex, tablets, partitionRange,
@@ -2147,6 +2155,12 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            if (!isEqDeleteScan && !runtimeFilterProbeColumns.isEmpty()) {
+                icebergScanNode.setRuntimeFilterProbeColumnNames(node.getColRefToColumnMetaMap().entrySet().stream()
+                        .filter(entry -> runtimeFilterProbeColumns.contains(entry.getKey()))
+                        .map(entry -> entry.getValue().getName())
+                        .collect(Collectors.toSet()));
+            }
             icebergScanNode.setColumnAccessPaths(node.getColumnAccessPaths());
             icebergScanNode.computeStatistics(expression.getStatistics());
             currentExecGroup.add(icebergScanNode, true);
@@ -3109,6 +3123,20 @@ public class PlanFragmentBuilder {
 
         // Check whether colocate Table exists in the same Fragment
         public boolean hasColocateScanChildInFragment(PlanNode node) {
+            return !containsParallelRangeScan(node) && hasColocateScanChild(node);
+        }
+
+        private boolean containsParallelRangeScan(PlanNode node) {
+            if (node instanceof OlapScanNode scan && scan.isParallelRangeScan()) {
+                return true;
+            }
+            if (node instanceof ExchangeNode) {
+                return false;
+            }
+            return node.getChildren().stream().anyMatch(this::containsParallelRangeScan);
+        }
+
+        private boolean hasColocateScanChild(PlanNode node) {
             if (node instanceof OlapScanNode scanNode) {
                 ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
                 if (colocateIndex.isColocateTable(scanNode.getOlapTable().getId())) {
@@ -3125,7 +3153,7 @@ public class PlanFragmentBuilder {
             }
             boolean hasColocateChild = false;
             for (PlanNode child : node.getChildren()) {
-                hasColocateChild |= hasColocateScanChildInFragment(child);
+                hasColocateChild |= hasColocateScanChild(child);
             }
             return hasColocateChild;
         }
@@ -3249,12 +3277,25 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalTopN(OptExpression optExpr, ExecPlan context) {
+            PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             ExecGroup lastExecGroup = currentExecGroup;
             currentExecGroup = execGroups.newExecGroup();
-            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
+            Set<ColumnRefOperator> outerProbeColumns = runtimeFilterProbeColumns;
+            // the top-n runtime filter probes the first ORDER BY column (see SortNode#buildRuntimeFilters)
+            List<Ordering> orderings = topN.getOrderSpec().getOrderDescs();
+            if (topN.getLimit() >= 0 && !orderings.isEmpty() && ConnectContext.get() != null &&
+                    ConnectContext.get().getSessionVariable().getEnableTopNRuntimeFilter()) {
+                runtimeFilterProbeColumns = new HashSet<>(outerProbeColumns);
+                runtimeFilterProbeColumns.add(orderings.get(0).getColumnRef());
+            }
+            PlanFragment inputFragment;
+            try {
+                inputFragment = visit(optExpr.inputAt(0), context);
+            } finally {
+                runtimeFilterProbeColumns = outerProbeColumns;
+            }
             currentExecGroup = lastExecGroup;
 
-            PhysicalTopNOperator topN = (PhysicalTopNOperator) optExpr.getOp();
             Preconditions.checkState(topN.getOffset() >= 0);
             if (!topN.isSplit()) {
                 return buildPartialTopNFragment(optExpr, context, topN.getPartitionByColumns(),
@@ -3446,13 +3487,43 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalHashJoin(OptExpression optExpr, ExecPlan context) {
-            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            Set<ColumnRefOperator> outerProbeColumns = runtimeFilterProbeColumns;
+            runtimeFilterProbeColumns = withHashJoinProbeColumns(optExpr, outerProbeColumns);
+            PlanFragment leftFragment;
+            try {
+                leftFragment = visit(optExpr.inputAt(0), context);
+            } finally {
+                runtimeFilterProbeColumns = outerProbeColumns;
+            }
             leftFragment.getPlanRoot().forceCollectExecStats();
             ExecGroup leftExecGroup = this.currentExecGroup;
             this.currentExecGroup = execGroups.newExecGroup();
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
             rightFragment.getPlanRoot().forceCollectExecStats();
             return visitPhysicalJoin(leftFragment, rightFragment, leftExecGroup, currentExecGroup, optExpr, context);
+        }
+
+        // `probeColumns` plus the probe-side columns of the join's equi-conditions, which its runtime filters probe
+        // (see JoinNode#buildRuntimeFilters for the join types that build them).
+        private Set<ColumnRefOperator> withHashJoinProbeColumns(OptExpression optExpr,
+                                                               Set<ColumnRefOperator> probeColumns) {
+            PhysicalHashJoinOperator join = (PhysicalHashJoinOperator) optExpr.getOp();
+            JoinOperator joinType = join.getJoinType();
+            if (!joinType.isAnyInnerJoin() && !joinType.isLeftSemiJoin() && !joinType.isRightJoin()) {
+                return probeColumns;
+            }
+            ColumnRefSet leftColumns = optExpr.inputAt(0).getOutputColumns();
+            ColumnRefSet rightColumns = optExpr.inputAt(1).getOutputColumns();
+            Set<ColumnRefOperator> result = new HashSet<>(probeColumns);
+            for (BinaryPredicateOperator eq : JoinHelper.getEqualsPredicate(leftColumns, rightColumns,
+                    Utils.extractConjuncts(join.getOnPredicate()))) {
+                for (ScalarOperator child : eq.getChildren()) {
+                    if (child instanceof ColumnRefOperator columnRef && leftColumns.contains(columnRef)) {
+                        result.add(columnRef);
+                    }
+                }
+            }
+            return result;
         }
 
         private List<Expr> extractConjuncts(ScalarOperator predicate, ExecPlan context) {

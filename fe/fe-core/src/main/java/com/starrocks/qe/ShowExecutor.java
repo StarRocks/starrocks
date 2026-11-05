@@ -124,6 +124,9 @@ import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
@@ -306,7 +309,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1450,6 +1453,9 @@ public class ShowExecutor {
                     if (matcher != null && !matcher.match(col.getName())) {
                         continue;
                     }
+                    if (col.isHidden() && table.isNativeTableOrMaterializedView()) {
+                        continue;
+                    }
                     final String columnName = col.getName();
                     final String columnType = col.getType().canonicalName().toLowerCase();
                     final String isAllowNull = col.isAllowNull() ? SchemaConstants.YES : SchemaConstants.NO;
@@ -1511,7 +1517,8 @@ public class ShowExecutor {
             List<List<Comparable>> loadInfos =
                     globalStateMgr.getLoadMgr().getLoadJobInfosByDb(dbId, statement.getLabelValue(),
                             statement.isAccurateMatch(),
-                            statesValue);
+                            statesValue,
+                            context);
 
             // order the result of List<LoadInfo> by orderByPairs in show statement
             List<OrderByPair> orderByPairs = statement.getOrderByPairs();
@@ -1565,32 +1572,23 @@ public class ShowExecutor {
                 LOG.warn(e.getMessage(), e);
                 throw new SemanticException(e.getMessage());
             }
-            // In new privilege framework(RBAC), user needs any action on the table to show routine load job on it.
             if (routineLoadJobList != null) {
-                Iterator<RoutineLoadJob> iterator = routineLoadJobList.iterator();
-                while (iterator.hasNext()) {
-                    RoutineLoadJob routineLoadJob = iterator.next();
-                    try {
-                        try {
-                            Authorizer.checkAnyActionOnTable(context, new TableName(routineLoadJob.getDbFullName(),
-                                    routineLoadJob.getTableName()));
-                        } catch (AccessDeniedException e) {
-                            iterator.remove();
-                        }
-                    } catch (MetaNotFoundException e) {
-                        // ignore
-                    }
+                // Decided here rather than in the parallel stream below, which runs off the session thread.
+                Map<RoutineLoadJob, LoadJobVisibility.Access> accesses = new IdentityHashMap<>();
+                for (RoutineLoadJob routineLoadJob : routineLoadJobList) {
+                    accesses.put(routineLoadJob, LoadJobVisibility.isEnabled()
+                            ? LoadJobVisibility.accessOf(context, routineLoadJob)
+                            : legacyRoutineLoadAccess(context, routineLoadJob));
                 }
-            }
-
-            if (routineLoadJobList != null) {
+                routineLoadJobList.removeIf(job -> accesses.get(job) == LoadJobVisibility.Access.NONE);
                 RoutineLoadFunctionalExprProvider fProvider = statement.getFunctionalExprProvider(context);
                 rows = routineLoadJobList.parallelStream()
                         .filter(fProvider.getPredicateChain())
                         .sorted(fProvider.getOrderComparator())
                         .skip(fProvider.getSkipCount())
                         .limit(fProvider.getLimitCount())
-                        .map(RoutineLoadJob::getShowInfo)
+                        .map(job -> accesses.get(job) == LoadJobVisibility.Access.FULL ? job.getShowInfo()
+                                : LoadJobRedaction.redactShowRoutineLoad(job.getShowInfo()))
                         .collect(Collectors.toList());
             }
 
@@ -1603,6 +1601,20 @@ public class ShowExecutor {
                         ", you can try `show all routine load job for job_name` if you want to list stopped and cancelled jobs");
             }
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        // The check of SHOW ROUTINE LOAD with the load job privilege check off, as it was before: any privilege on the
+        // table the job's table name leads to, and the job is kept if its table is gone. The INSERT check of the row
+        // filter applies on top.
+        private static LoadJobVisibility.Access legacyRoutineLoadAccess(ConnectContext context, RoutineLoadJob job) {
+            try {
+                Authorizer.checkAnyActionOnTable(context, new TableName(job.getDbFullName(), job.getTableName()));
+            } catch (AccessDeniedException e) {
+                return LoadJobVisibility.Access.NONE;
+            } catch (MetaNotFoundException e) {
+                // ignore
+            }
+            return LoadJobVisibility.Access.FULL;
         }
 
         @Override
@@ -1748,6 +1760,14 @@ public class ShowExecutor {
             }
 
             if (streamLoadTaskList != null) {
+                // Decided here rather than in the parallel stream below, which runs off the session thread.
+                Map<AbstractStreamLoadTask, List<VisibleTask>> visibleTasks = new IdentityHashMap<>();
+                for (AbstractStreamLoadTask task : streamLoadTaskList) {
+                    // With the rule off, every task, which the INSERT check of the row filter then narrows, as before.
+                    visibleTasks.put(task, LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(context, task)
+                            : LoadJobVisibility.allTasksInFull(task));
+                }
+                streamLoadTaskList.removeIf(task -> visibleTasks.get(task).isEmpty());
                 StreamLoadFunctionalExprProvider fProvider =
                         statement.getFunctionalExprProvider(context);
                 List<AbstractStreamLoadTask> tasks = streamLoadTaskList.parallelStream()
@@ -1757,7 +1777,12 @@ public class ShowExecutor {
                         .limit(fProvider.getLimitCount())
                         .collect(Collectors.toList());
                 for (AbstractStreamLoadTask task : tasks) {
-                    rows.addAll(task.getShowInfo());
+                    for (VisibleTask visibleTask : visibleTasks.get(task)) {
+                        for (List<String> row : visibleTask.task().getShowInfo()) {
+                            rows.add(visibleTask.access() == LoadJobVisibility.Access.FULL ? row
+                                    : LoadJobRedaction.redactShowStreamLoad(row));
+                        }
+                    }
                 }
             }
 

@@ -131,13 +131,15 @@ polygon:
 coordinate_list_list:
     coordinate_list_list ',' '(' coordinate_list ')'
     {
-        $1->add($4);
+        std::unique_ptr<starrocks::GeoCoordinateList> list($4);
+        $1->add(std::move(*list));
         $$ = $1;
     }
     | '(' coordinate_list ')'
     {
+        std::unique_ptr<starrocks::GeoCoordinateList> list($2);
         $$ = new starrocks::GeoCoordinateListList();
-        $$->add($2);
+        $$->add(std::move(*list));
     }
     ;
 

@@ -222,10 +222,11 @@ final class PreSplitFlow {
             if (target != null) {
                 runSinglePartitionFlow(target, prepared, loadKind, shouldAbort);
             }
-        } else if (Boolean.TRUE.equals(table.supportedAutomaticPartition())) {
-            // Manually list/range-partitioned targets are still skipped: the multi-partition flow
-            // pre-creates partitions from sampled values, which it may not do outside a user-defined
-            // partition set.
+        } else if (Boolean.TRUE.equals(table.supportedAutomaticPartition())
+                || PartitionSampleGrouper.isManualRangePartitioned(table)) {
+            // With a temporary scope the multi-partition flow only resolves sampled rows against the
+            // existing temporary partitions' ranges and never creates a partition, so it is safe for a
+            // manual range target too. List-partitioned targets are still skipped.
             runMultiPartitionFlow(database, table, prepared, loadKind, shouldAbort, context,
                     -1L, partitionScope);
         }
@@ -376,6 +377,12 @@ final class PreSplitFlow {
         PreSplitProfile.recordOutcome(outcome);
         if (outcome instanceof PreSplitOutcome.SubmittedCombined submittedCombined) {
             PreSplitProfile.recordReshardJobId(submittedCombined.combinedJob().getJobId());
+            if (overwriteTransactionId > 0) {
+                TabletPreSplitCoordinator.awaitCombinedJobLayoutReadyAllowingFallback(
+                        loadKind, table, submittedCombined.combinedJob(), shouldAbort,
+                        submittedCombined.combinedJob().getAdmissionLease());
+                return;
+            }
             try {
                 TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
                         loadKind, table, submittedCombined.combinedJob(), shouldAbort);

@@ -787,6 +787,32 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
+    def create_paimon_ddl_catalog(self, catalog_name, warehouse_id):
+        """Create an isolated filesystem catalog; catalogs in one case share the warehouse."""
+        # CLEANUP runs outside the normal statement UUID substitution.
+        self.paimon_ddl_warehouse_id = warehouse_id
+        properties = {"type": "paimon", "paimon.catalog.type": "filesystem"}
+        local_root = getattr(self, "paimon_ddl_local_warehouse_root", "")
+        if local_root:
+            warehouse = os.path.join(local_root, warehouse_id)
+            os.makedirs(warehouse, exist_ok=True)
+            properties["paimon.catalog.warehouse"] = "file://" + warehouse
+        else:
+            if not all(getattr(self, key, "") for key in ("oss_bucket", "oss_ak", "oss_sk", "oss_endpoint")):
+                raise SkipTest("Paimon DDL requires OSS settings or paimon_ddl_local_warehouse_root")
+            warehouse_root = getattr(self, "paimon_ddl_warehouse_root", "") or (
+                "oss://%s/tmp/paimon_catalog_ddl" % self.oss_bucket)
+            properties.update({
+                "paimon.catalog.warehouse": "%s/%s" % (warehouse_root.rstrip("/"), warehouse_id),
+                "aws.s3.access_key": self.oss_ak,
+                "aws.s3.secret_key": self.oss_sk,
+                "aws.s3.endpoint": self.oss_endpoint,
+            })
+        sql = "create external catalog `%s` properties (%s)" % (
+            catalog_name, ", ".join('"%s" = "%s"' % (key, value) for key, value in properties.items()))
+        result = self.execute_sql(sql)
+        tools.assert_true(result["status"], "create Paimon DDL catalog failed: %s" % result.get("msg"))
+
     def assert_paimon_reader(self, query, table, expected):
         """Assert one reader and reject empty scans or mixed routes."""
         self.assert_paimon_readers(query, table, expected)

@@ -33,7 +33,6 @@ namespace {
 
 Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
     const auto& type = descriptor.type;
-    const auto& storage = descriptor.storage;
     const bool geography = type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY &&
                            type.coordinate_system == GEO_COORDINATE_SYSTEM_SPHERICAL &&
                            GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) &&
@@ -42,9 +41,7 @@ Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
     const bool geometry = type.logical_type == GEO_LOGICAL_TYPE_GEOMETRY &&
                           type.coordinate_system == GEO_COORDINATE_SYSTEM_CARTESIAN &&
                           type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR;
-    if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536 ||
-        storage.encoding != GEO_ENCODING_WKB || !GeoDimensionPB_IsValid(storage.dimension) ||
-        !GeoValidationStatePB_IsValid(storage.validation_state)) {
+    if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536) {
         return Status::NotSupported("Unsupported GEO transport descriptor");
     }
     return Status::OK();
@@ -52,20 +49,14 @@ Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
 
 } // namespace
 
-GeoColumn::GeoColumn(size_t size)
-        : GeoColumn(GeoColumnDescriptor{{},
-                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+GeoColumn::GeoColumn(size_t size) : GeoColumn(GeoColumnDescriptor{}) {
     resize(size);
 }
 
-GeoColumn::GeoColumn(GeoColumnDescriptor descriptor) : _descriptor(std::move(descriptor)) {
-    if (_descriptor.storage.encoding != GEO_ENCODING_WKB)
-        throw std::invalid_argument("GeoColumn requires WKB encoding");
-}
+GeoColumn::GeoColumn(GeoColumnDescriptor descriptor) : _descriptor(std::move(descriptor)) {}
 
 GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
-        : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{}),
-                                        {GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED}}) {
+        : GeoColumn(GeoColumnDescriptor{type.geo_type.value_or(GeoTypeDescriptor{})}) {
     if (type.geo_type && type.geo_type->logical_type != GEO_LOGICAL_TYPE_UNKNOWN &&
         ((type.type == TYPE_GEOGRAPHY) != (type.geo_type->logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY))) {
         throw std::invalid_argument("GeoColumn primitive/descriptor mismatch");
@@ -73,27 +64,10 @@ GeoColumn::GeoColumn(const TypeDescriptor& type, size_t size)
     resize(size);
 }
 
-bool GeoColumn::_is_storage_placeholder() const {
-    return _descriptor.storage ==
-                   GeoStorageDescriptor{GEO_ENCODING_WKB, GEO_DIMENSION_UNKNOWN, GEO_VALIDATION_STATE_UNVALIDATED} &&
-           _data->get_immutable_bytes().empty();
-}
-
-const GeoColumn& GeoColumn::_source(const Column& src) {
+const GeoColumn& GeoColumn::_source(const Column& src) const {
     const auto& geo = down_cast<const GeoColumn&>(src);
-    if (_descriptor != geo._descriptor) {
-        if (_descriptor.type != geo._descriptor.type) throw std::invalid_argument("GeoColumn descriptor mismatch");
-        // TypeDescriptor factories have semantic identity but no physical metadata yet.
-        // Empty WKB bytes are only NULL/default placeholders, so binding storage here does
-        // not relabel any existing geometry. Populated UNKNOWN/MIXED data is never upgraded.
-        if (_is_storage_placeholder()) {
-            _descriptor.storage = geo._descriptor.storage;
-        } else if (!geo._is_storage_placeholder()) {
-            throw std::invalid_argument("GeoColumn descriptor mismatch");
-        }
-        // Copying a source containing only default placeholders preserves the destination's
-        // physical descriptor (for example a materialized NULL after a non-NULL UNION row).
-    }
+    // Only the semantic type must match; kernels check each row's own WKB.
+    if (_descriptor.type != geo._descriptor.type) throw std::invalid_argument("GeoColumn descriptor mismatch");
     return geo;
 }
 
@@ -136,7 +110,10 @@ void GeoColumn::remove_first_n_values(size_t count) {
 }
 
 void GeoColumn::append(const Column& src, size_t offset, size_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append(*copy, offset, count);
@@ -147,7 +124,10 @@ void GeoColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_selective(*copy, indexes, from, count);
@@ -158,7 +138,10 @@ void GeoColumn::append_selective(const Column& src, const uint32_t* indexes, uin
 }
 
 void GeoColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t count) {
-    if (count == 0) return;
+    if (count == 0) {
+        _source(src);
+        return;
+    }
     if (&src == this) {
         auto copy = clone();
         append_value_multiple_times(*copy, index, count);
@@ -260,9 +243,8 @@ int64_t GeoColumn::xor_checksum(uint32_t, uint32_t) const {
     unsupported("checksum");
 }
 void GeoColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t row, bool) const {
-    if (_descriptor.type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY ||
-        _descriptor.storage.encoding != GEO_ENCODING_WKB) {
-        unsupported("MySQL output for non-GEOGRAPHY or non-WKB columns");
+    if (_descriptor.type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY) {
+        unsupported("MySQL output for non-GEOGRAPHY columns");
     }
     const auto wkb = get_wkb(row);
     buf->push_binary(wkb.data, wkb.size);
@@ -339,13 +321,13 @@ StatusOr<const uint8_t*> GeoColumn::deserialize_column(const uint8_t* src, const
         return Status::Corruption("Invalid GEO transport lengths");
     }
     GeoColumnDescPB pb;
-    if (!pb.ParseFromArray(src, descriptor_size) || !pb.has_type() || !pb.has_storage() ||
-        !pb.unknown_fields().empty() || !pb.type().unknown_fields().empty() || !pb.storage().unknown_fields().empty()) {
+    if (!pb.ParseFromArray(src, descriptor_size) || !pb.has_type() || !pb.unknown_fields().empty() ||
+        !pb.type().unknown_fields().empty()) {
         return Status::Corruption("Invalid or unsupported GEO transport metadata");
     }
     auto descriptor = GeoColumnDescriptor::from_protobuf(pb);
     RETURN_IF_ERROR(check_transport_descriptor(descriptor));
-    // The receiving plan owns semantic identity; only storage metadata comes from the wire.
+    // The receiving plan owns semantic identity; the wire descriptor must match it exactly.
     if (_descriptor.type != descriptor.type) {
         return Status::Corruption("GEO transport descriptor does not match the receiving type");
     }

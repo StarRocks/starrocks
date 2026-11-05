@@ -34,6 +34,7 @@ import com.starrocks.qe.ColocatedBackendSelector;
 import com.starrocks.qe.FragmentScanRangeAssignment;
 import com.starrocks.qe.HostBlacklist;
 import com.starrocks.qe.NormalBackendSelector;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy;
 import com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy;
 import com.starrocks.qe.SimpleScheduler;
@@ -726,6 +727,28 @@ public class DefaultSharedDataWorkerProviderTest {
     }
 
     /**
+     * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH} is the default: of the
+     * policy, of the blacklist_backup_routing session variable, and of a provider built without a policy.
+     */
+    @Test
+    public void testTabletHashIsDefaultPolicy() {
+        Assertions.assertEquals(BlacklistBackupRoutingPolicy.TABLET_HASH, BlacklistBackupRoutingPolicy.getDefault());
+        Assertions.assertEquals(BlacklistBackupRoutingPolicy.TABLET_HASH,
+                new SessionVariable().getBlacklistBackupRoutingPolicy());
+
+        ImmutableMap<Long, ComputeNode> allNodes = genTabletHashNodes(8);
+        long downNodeId = TABLET_HASH_FIRST_NODE_ID + 2;
+        int numTablets = 100;
+        WorkerProvider defaultProvider = new DefaultSharedDataWorkerProvider(allNodes,
+                ImmutableMap.copyOf(Maps.filterKeys(allNodes, id -> id != downNodeId)),
+                WarehouseManager.DEFAULT_RESOURCE);
+        WorkerProvider tabletHashProvider =
+                newProviderWithDownNode(allNodes, downNodeId, BlacklistBackupRoutingPolicy.TABLET_HASH);
+        Assertions.assertEquals(selectBackupPerTablet(tabletHashProvider, downNodeId, numTablets),
+                selectBackupPerTablet(defaultProvider, downNodeId, numTablets));
+    }
+
+    /**
      * {@link com.starrocks.qe.SessionVariableConstants.BlacklistBackupRoutingPolicy#TABLET_HASH} through
      * {@link NormalBackendSelector}: each tablet of the unavailable node is assigned to its hashed backup, the same one
      * on every query.
@@ -927,8 +950,9 @@ public class DefaultSharedDataWorkerProviderTest {
         );
 
         // Create a mock WorkerProvider that supports backup node selection
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider backupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
-                WarehouseManager.DEFAULT_RESOURCE) {
+                WarehouseManager.DEFAULT_RESOURCE, BlacklistBackupRoutingPolicy.CIRCULAR) {
             @Override
             public long selectBackupWorker(long workerId) {
                 // Map unavailable nodes to available backup nodes
@@ -1022,8 +1046,9 @@ public class DefaultSharedDataWorkerProviderTest {
         ImmutableMap<Long, ComputeNode> availableNodes = ImmutableMap.of();
 
         // Create a mock WorkerProvider that supports backup node selection but returns no backup
+        // CIRCULAR resolves the backup through the overridden selectBackupWorker(long)
         WorkerProvider noBackupWorkerProvider = new DefaultSharedDataWorkerProvider(allNodes, availableNodes,
-                WarehouseManager.DEFAULT_RESOURCE) {
+                WarehouseManager.DEFAULT_RESOURCE, BlacklistBackupRoutingPolicy.CIRCULAR) {
             @Override
             public long selectBackupWorker(long workerId) {
                 // No backup available

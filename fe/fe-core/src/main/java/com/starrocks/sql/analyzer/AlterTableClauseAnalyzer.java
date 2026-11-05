@@ -53,7 +53,7 @@ import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.procedure.IcebergTableProcedure;
 import com.starrocks.connector.iceberg.procedure.NamedArgument;
-import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -319,10 +319,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 " must be bool type(false/true)");
             }
 
-            if (!table.isCloudNativeTable()) {
+            if (!table.isCloudNativeTableOrMaterializedView()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
-                                " only support cloud native table");
+                                " only support cloud native table or materialized view");
             }
 
             boolean fileBundling = properties.get(
@@ -341,7 +341,7 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                 "(both split and aggregate). Please wait until old metadata versions are vacuumed");
             }
 
-            if (!((LakeTable) olapTable).checkLakeRollupAllowFileBundling()) {
+            if (!LakeTableHelper.checkLakeRollupAllowFileBundling(olapTable)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Property " + PropertyAnalyzer.PROPERTIES_FILE_BUNDLING +
                                 " cannot be updated now because this table contains LakeRollup created in old version." +

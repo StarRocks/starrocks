@@ -276,8 +276,7 @@ public:
 
         auto dictionary_get_expr = std::make_unique<DictionaryGetExpr>(node);
 
-        TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
-        type_varchar.len = 100;
+        TypeDescriptor type_varchar = TypeDescriptor::create_varchar_type(100);
         std::string dictionary_name("dictionary_name");
         Slice slice(dictionary_name);
         dictionary_get_expr->add_child(

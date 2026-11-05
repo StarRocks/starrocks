@@ -200,6 +200,18 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total time spent casting flat JSON sub-column values during scan.
 
+## `starrocks_be_flat_json_compaction_mixed_inputs_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of times a compaction read a JSON column whose input segments are partly Flat JSON and partly whole JSON with the Flat JSON layout of the flat segments, every sub-column typed JSON. See `enable_compaction_flat_json_mixed_inputs`.
+
+## `starrocks_be_flat_json_compaction_plain_fallback_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compaction outputs written as whole JSON because the buffered input exceeded one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, without one flat layout to write it with.
+
 ## `starrocks_be_flat_json_compaction_schema_change_total`
 
 - Unit: Count
@@ -210,7 +222,7 @@ description: "Alphabetical s"
 
 - Unit: Count
 - Type: Cumulative
-- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker` and all of it shares one flat layout.
+- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker`, divided among the JSON columns written together, and all of it shares one flat layout.
 
 ## `starrocks_be_flat_json_compaction_total`
 
@@ -689,9 +701,8 @@ Values recorded by the derived tier, which refreshes a range-distributed increme
 
 | `reason` | Recorded when |
 | --- | --- |
-| `materialized_view_target` | The derived tier does not support this materialized view, for example because it is not incremental or its sort key is not the hidden row-id column. |
-| `row_id_span_too_small` | The estimated output is too small to split the row-id range evenly. |
-| `row_id_space_not_pristine` | The auto-increment counter has already handed out ids, so the split points cannot be derived safely. |
+| `materialized_view_target` | The view is incremental and the derived tier cannot key it: it has more than one visible index, its sort key is not the hidden row-id column alone, or its row id is encoded from the key values in order rather than as a fingerprint. Also recorded when a load into a materialized view is not that view's own refresh. |
+| `row_id_span_too_small` | The estimated output is too small to split the row-id range evenly, or too small to fill two tablets of `tablet_reshard_min_split_size`. |
 | `estimate_unavailable` | No output-size estimate is available, so the tablet count cannot be chosen. An INSERT from an external-catalog table without table statistics also records it. |
 | `multiple_temporary_partitions` | The refresh writes more than one replacement partition, so most tablets would stay empty. Enabling the feature does not change this. |
 | `derivation_failed` | Deriving the split points failed, or the derived split points are invalid. |

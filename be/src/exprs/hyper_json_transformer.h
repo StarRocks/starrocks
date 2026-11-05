@@ -81,6 +81,8 @@ private:
         bool need_cast = false;
         // Convert a scalar sub-column of src_type to JSON value by value (see _to_json).
         bool to_json = false;
+        // Extract the destination type from a JSON sub-column value by value (see _from_json).
+        bool from_json = false;
         LogicalType src_type = TYPE_UNKNOWN;
 
         int dst_index = -1;
@@ -98,10 +100,12 @@ private:
     };
 
     // Sets up the conversion of a source sub-column of src_type to the destination type at dst_index.
-    void _init_conversion(MergeTask* task, int dst_index, LogicalType src_type);
+    // `compaction`: the destination is written to a segment, see _from_json.
+    void _init_conversion(MergeTask* task, int dst_index, LogicalType src_type, bool compaction);
     Status _equals(const MergeTask& task, const Columns& columns);
     Status _cast(const MergeTask& task, const ColumnPtr& columns);
     Status _to_json(const MergeTask& task, const ColumnPtr& col);
+    Status _from_json(const MergeTask& task, const ColumnPtr& col);
     Status _merge(const MergeTask& task, const Columns& columns);
     void _flat(const FlatTask& task, const Columns& columns);
 

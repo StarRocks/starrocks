@@ -28,23 +28,23 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
     public static final String JWT_REQUIRED_AUDIENCE = "required_audience";
 
     private final String jwksUrl;
-    private final String principalFiled;
+    private final String principalField;
     private final String[] requiredIssuer;
     private final String[] requiredAudience;
     private final GroupSource groupSource;
     private final String groupClaim;
     private final String integrationName;
 
-    public JWTAuthenticationProvider(String jwksUrl, String principalFiled,
+    public JWTAuthenticationProvider(String jwksUrl, String principalField,
                                      String[] requiredIssuer, String[] requiredAudience) {
-        this(jwksUrl, principalFiled, requiredIssuer, requiredAudience, GroupSource.GROUP_PROVIDER, null, null);
+        this(jwksUrl, principalField, requiredIssuer, requiredAudience, GroupSource.GROUP_PROVIDER, null, null);
     }
 
-    public JWTAuthenticationProvider(String jwksUrl, String principalFiled,
+    public JWTAuthenticationProvider(String jwksUrl, String principalField,
                                      String[] requiredIssuer, String[] requiredAudience,
                                      GroupSource groupSource, String groupClaim, String integrationName) {
         this.jwksUrl = jwksUrl;
-        this.principalFiled = principalFiled;
+        this.principalField = principalField;
         this.requiredIssuer = requiredIssuer;
         this.requiredAudience = requiredAudience;
         this.groupSource = groupSource == null ? GroupSource.GROUP_PROVIDER : groupSource;
@@ -69,11 +69,11 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
         // claim is then checked against it); Bearer has no declared user, so the principal claim
         // itself becomes the user name.
         String userName = (userIdentity != null) ? userIdentity.getUser()
-                : OpenIdConnectVerifier.extractPrincipal(idToken, principalFiled);
+                : OpenIdConnectVerifier.extractPrincipal(idToken, principalField);
 
         try {
             JWKSource<SecurityContext> jwkSource = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSource(jwksUrl);
-            JWTClaimsSet claims = OpenIdConnectVerifier.verify(idToken, userName, jwkSource, principalFiled,
+            JWTClaimsSet claims = OpenIdConnectVerifier.verify(idToken, userName, jwkSource, principalField,
                     requiredIssuer, requiredAudience);
             // Only after the signature holds. Reading a claim out of an unverified token would mean
             // the token's holder gets to pick their own groups.

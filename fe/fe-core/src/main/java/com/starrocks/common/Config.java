@@ -594,6 +594,16 @@ public class Config extends ConfigBase {
     public static int label_keep_max_second = 3 * 24 * 3600; // 3 days
 
     /**
+     * Whether the load job views (information_schema loads, load_tracking_logs, routine_load_jobs, stream_loads,
+     * SHOW LOAD / STREAM LOAD / ROUTINE LOAD, their SHOW PROC nodes and /api/{db}/_load_info) show a job only to
+     * callers with a privilege on its target tables or OPERATE, and its rejected rows and the fields leading to them
+     * only to callers with SELECT on them. Setting it to false returns every view to its earlier checks, and exposes
+     * the rejected rows and error-log URLs to the users those checks let through.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_new_load_job_privilege_check = true;
+
+    /**
      * for load job managed by LoadManager, such as Insert, Broker load and Spark load.
      */
     @ConfField(mutable = true)
@@ -661,6 +671,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Minimum schedule interval of a task")
     public static int task_min_schedule_interval_s = 10;
+
+    @ConfField(mutable = true, comment = "Interval of TaskManager TaskRun dispatch scheduler in milliseconds")
+    public static int task_runs_dispatch_interval_ms = 1000;
 
     @ConfField(mutable = true, comment = "Interval of TableKeeper daemon")
     public static int table_keeper_interval_second = 30;
@@ -1409,13 +1422,31 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
 
+    /**
+     * @deprecated No effect. Every transaction that no longer waits for an earlier one starts a publish batch in
+     * each round, and the batch is published whatever its size, up to {@code lake_batch_publish_max_version_num}. A
+     * minimum above 1 was unsafe: a batch that could never grow to the minimum, for example the last loads of a
+     * table that becomes idle or a chain blocked at a multi-table transaction, was dropped in every round with no
+     * fallback, so its committed transactions never became visible and later loads on the same tables queued
+     * behind them. Kept, and still mutable, only so that an existing fe.conf entry or ADMIN SET FRONTEND CONFIG
+     * on it keeps working.
+     */
     @ConfField(mutable = true)
+    @Deprecated
     public static int lake_batch_publish_min_version_num = 1;
 
     @ConfField(mutable = true, comment = "Allow batching consecutive multi-table transactions into one publish. " +
-            "Effective only when lake_enable_batch_publish_version is true. Enable this only after all FE nodes " +
-            "are upgraded to a version that supports it.")
-    public static boolean lake_enable_batch_publish_multi_table = false;
+            "Effective only when lake_enable_batch_publish_version is true. An FE older than 4.1.5 replays such " +
+            "a batch incorrectly (it applies the visible log of the first table only). When upgrading from such " +
+            "a version, keep this false on the upgraded FEs until all FEs are upgraded. When downgrading to such " +
+            "a version, set it to false and wait until the transactions committed before the change are " +
+            "visible before creating the metadata image.")
+    public static boolean lake_enable_batch_publish_multi_table = true;
+
+    @ConfField(mutable = true, comment = "Retry a lake publish batch that did not finish with only the transactions " +
+            "of that attempt, so that every partition keeps the new version of the attempt. When false, a retry " +
+            "batch is rebuilt as usual and may take in transactions committed since.")
+    public static boolean lake_enable_batch_publish_retry_freeze = true;
 
     /**
      * Minimum interval, in milliseconds, before PublishVersionDaemon retries a partition whose last publish
@@ -1677,6 +1708,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_running_txn_num_per_db = 1000;
 
+    /**
+     * How far ahead, in milliseconds, the gtid generator reserves a batch when the next gtid would
+     * pass the current batch end. Must be {@code >= 1}; values below 1 are treated as 1. Must also
+     * fit in the remaining 42-bit snowflake timestamp ({@code GtidGenerator.MAX_TIMESTAMP}); a
+     * larger value fails {@code nextGtid} rather than wrapping the batch end. A larger valid window
+     * writes journal less often. The side effect is that unused reservation is discarded on
+     * leader failover, so the timestamp field can jump forward by up to this window.
+     */
+    @ConfField(mutable = true)
+    public static long gtid_batch_window_ms = 5000;
+
     @ConfField(mutable = true, comment = "A comma-separated list of transaction latency metric groups to report. " +
             "Load job source types (see TransactionState.LoadJobSourceType) are categorized into logical groups " +
             "for monitoring. When a group is enabled, its name is added as a 'type' label to transaction metrics. " +
@@ -1764,7 +1806,7 @@ public class Config extends ConfigBase {
     public static long catalog_trash_expire_second = 86400L; // 1day
 
     /**
-     * The retention time for partition dropped by insert overwrite/mv rewrite etc.
+     * The retention time for partition dropped by insert overwrite/mv rewrite/partition ttl etc.
      */
     @ConfField(mutable = true)
     public static long partition_recycle_retention_period_secs = 30 * 60L; // 30mins
@@ -3539,31 +3581,31 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache dir
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
 
     /**
      * iceberg metadata memory cache total size, default 0MB (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_capacity = 0L;
 
     /**
      * iceberg metadata memory cache expiration time, default 86500s
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
 
     /**
      * enable iceberg metadata disk cache, default false
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_iceberg_metadata_disk_cache = false;
 
     /**
      * iceberg metadata disk cache total size, default 2GB
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
 
     /**
@@ -3575,7 +3617,7 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache max entry size, default 0L (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
@@ -4460,6 +4502,18 @@ public class Config extends ConfigBase {
     public static String ssl_keystore_location = "";
 
     /**
+     * the keystore type. Empty means auto detection.
+     */
+    @ConfField
+    public static String ssl_keystore_type = "";
+
+    /**
+     * the keystore security provider
+     */
+    @ConfField
+    public static String ssl_keystore_provider = "";
+
+    /**
      * the password of keystore file
      */
     @ConfField(sensitive = true)
@@ -4478,10 +4532,40 @@ public class Config extends ConfigBase {
     public static String ssl_truststore_location = "";
 
     /**
+     * the truststore type. Empty means auto detection.
+     */
+    @ConfField
+    public static String ssl_truststore_type = "";
+
+    /**
+     * the truststore security provider
+     */
+    @ConfField
+    public static String ssl_truststore_provider = "";
+
+    /**
      * the password of truststore file
      */
     @ConfField(sensitive = true)
     public static String ssl_truststore_password = "";
+
+    /**
+     * the security provider class for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_class = "";
+
+    /**
+     * the security provider name for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_name = "";
+
+    /**
+     * the security provider jar path for SSL keystore and truststore
+     */
+    @ConfField
+    public static String ssl_security_provider_path = "";
 
     /**
      * Allow only secure transport from clients
@@ -4649,8 +4733,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
-    @ConfField(mutable = true, comment = "Whether to enable the automatic related materialized views since of base table's " +
-            "schema changes")
+    @ConfField(mutable = true, comment = "Whether to inactivate the materialized views on a base table or view when its " +
+            "schema or definition changes or it is dropped. Renaming or swapping a base table, or renaming a base " +
+            "materialized view, always inactivates them")
     public static boolean enable_mv_automatic_inactive_by_base_table_changes = true;
 
     @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
@@ -4665,6 +4750,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "The default try lock timeout for mv refresh to try base table/mv dbs' lock")
     public static int mv_refresh_try_lock_timeout_ms = 30 * 1000;
+
+    @ConfField(mutable = true, comment = "How long an incremental refresh waits for the materialized view's " +
+            "committed transactions to become visible before it reads the view. The refresh fails when they " +
+            "are still not visible by then, and the next refresh tries again")
+    public static long mv_incremental_refresh_wait_visible_timeout_ms = 300 * 1000L;
 
     @ConfField(mutable = true, comment = "materialized view can refresh at most 64 partition at a time")
     public static int mv_max_partitions_num_per_refresh = 64;

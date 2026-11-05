@@ -326,24 +326,30 @@ public abstract class BaseAction implements IAction {
             return null;
         }
         String[] parts = header.split(" ", 2);
-        if (parts.length != 2) {
-            return null;
-        }
         String host = request.getHostString();
+        if (parts.length != 2) {
+            return parts[0].equalsIgnoreCase("Basic") ? malformedBasic(host) : null;
+        }
         if (parts[0].equalsIgnoreCase("Basic")) {
             ByteBuf buf = null;
             ByteBuf decodeBuf = null;
             try {
                 buf = Unpooled.copiedBuffer(ByteBuffer.wrap(parts[1].getBytes()));
-                decodeBuf = Base64.decode(buf);
+                try {
+                    decodeBuf = Base64.decode(buf);
+                } catch (IllegalArgumentException e) {
+                    // Not Base64 at all: as unusable as a missing header, so the caller answers
+                    // 401 rather than letting the decoder's exception surface as a 500.
+                    return malformedBasic(host);
+                }
                 String authString = decodeBuf.toString(CharsetUtil.UTF_8);
                 if (authString.isEmpty()) {
-                    return null;
+                    return malformedBasic(host);
                 }
                 // Note that the password may contain a colon, so split on the first one only.
                 int index = authString.indexOf(':');
                 if (index == -1) {
-                    return null;
+                    return malformedBasic(host);
                 }
                 String fullUserName = authString.substring(0, index);
                 String[] elements = fullUserName.split("@");
@@ -362,6 +368,15 @@ public abstract class BaseAction implements IAction {
         } else if (parts[0].equalsIgnoreCase("Bearer")) {
             return AuthCredentials.ofBearer(parts[1].trim(), AuthChannel.HTTP, host);
         }
+        return null;
+    }
+
+    // A Basic header that yields no user and password is refused like a missing one (401). Unlike
+    // a missing one it is a failed login attempt, and it never reaches
+    // AuthenticationHandler.authenticate, where failures are counted, so count it here.
+    private static AuthCredentials malformedBasic(String host) {
+        AuthenticationHandler.recordMalformedCredential(
+                AuthCredentials.ofPassword("", "", AuthChannel.HTTP, host));
         return null;
     }
 

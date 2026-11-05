@@ -232,9 +232,8 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A colocate range table rollup stays rejected (parallel to the sort-key-reorder colocate
-     * rejection): the rollup would build a fresh K-tablet layout independent of the colocate range
-     * manager's expected ranges.
+     * A colocate range table rollup stays rejected: the rollup would build a fresh K-tablet layout
+     * independent of the colocate range manager's expected ranges.
      */
     @Test
     public void testRangeRollupOnColocateRejected() throws Exception {
@@ -248,19 +247,125 @@ public class RangeDistributionGuardTest {
                 "alter table t_guard_rollup_colocate add rollup r1(k1, k2, v1) order by (k2, k1)");
     }
 
+    private static final String CREATE_ROLLUP_ON_COLOCATE_ERROR =
+            "ROLLUP is not supported in CREATE TABLE for a range distribution table with 'colocate_with'";
+
+    private static String colocateRangeTableWithRollupDdl(String name, String rollup, String group) {
+        return "create table " + name + " (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "rollup (" + rollup + ")\n"
+                + "properties('replication_num' = '1', 'colocate_with' = '" + group + ":k1');";
+    }
+
+    private static boolean tableExists(String name) {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTable(name) != null;
+    }
+
+    private static boolean colocateGroupExists(String group) {
+        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getId();
+        return GlobalStateMgr.getCurrentState().getColocateTableIndex()
+                .getGroupSchema(ColocateTableIndex.getFullGroupName(dbId, group)) != null;
+    }
+
     /**
-     * A range table carrying an AUTO_INCREMENT column stays rejected (out of scope for the rollup
-     * re-route, mirroring the sort-key-reorder auto-increment rejection).
+     * CREATE TABLE ... ROLLUP on a range table with colocate_with is rejected, and the rejected CREATE
+     * leaves no colocate group behind.
      */
     @Test
-    public void testRangeRollupWithAutoIncrementRejected() throws Exception {
-        starRocksAssert.withTable("create table t_guard_rollup_autoinc "
-                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
-                + "duplicate key(k1, k2)\n"
+    public void testCreateTableRollupOnRangeColocateRejected() throws Exception {
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_colocate", "r1 (k2, k1)", "g_ctr")));
+        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertFalse(tableExists("t_ctr_colocate"));
+        assertFalse(colocateGroupExists("g_ctr"));
+    }
+
+    /** A rollup that leads on the colocate column is rejected as well: no colocate rollup is supported yet. */
+    @Test
+    public void testCreateTableRollupLeadingOnColocateColumnRejected() throws Exception {
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_colocate_lead", "r1 (k1, v1)", "g_ctr_lead")));
+        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertFalse(tableExists("t_ctr_colocate_lead"));
+        assertFalse(colocateGroupExists("g_ctr_lead"));
+    }
+
+    /** A range table without colocate_with keeps accepting ROLLUP in CREATE TABLE. */
+    @Test
+    public void testCreateTableRollupOnRangeNonColocateAllowed() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_plain (k1 int, k2 int, v1 int)\n"
                 + "order by(k1, k2)\n"
+                + "rollup (r1 (k2, k1))\n"
                 + "properties('replication_num' = '1');");
-        assertAlterRejectedWithRangeDistribution(
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_plain");
+        assertNotNull(table.getIndexMetaIdByName("r1"));
+    }
+
+    /**
+     * Joining an existing group: the rejected CREATE must not add a member or change the group's
+     * ColocateRanges.
+     */
+    @Test
+    public void testCreateTableRollupIntoExistingRangeColocateGroupRejected() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_ok (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'g_ctr_exist:k1');");
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        OlapTable okTable = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_ok");
+        ColocateTableIndex.GroupId groupId = colocateIndex.getGroup(okTable.getId());
+        assertNotNull(groupId);
+        List<Long> membersBefore = colocateIndex.getAllTableIds(groupId);
+        assertEquals(List.of(okTable.getId()), membersBefore);
+        List<?> rangeListBefore = colocateIndex.getColocateRanges(groupId.grpId);
+
+        DdlException e = assertThrowsDdlException(() -> starRocksAssert.withTable(
+                colocateRangeTableWithRollupDdl("t_ctr_candidate", "r3 (k2, k1, v1)", "g_ctr_exist")));
+        assertTrue(e.getMessage().contains(CREATE_ROLLUP_ON_COLOCATE_ERROR), e.getMessage());
+        assertFalse(tableExists("t_ctr_candidate"));
+        assertEquals(membersBefore, colocateIndex.getAllTableIds(groupId));
+        assertEquals(rangeListBefore, colocateIndex.getColocateRanges(groupId.grpId));
+    }
+
+    /** Hash colocate tables are aligned by bucket and keep accepting ROLLUP in CREATE TABLE. */
+    @Test
+    public void testCreateTableRollupOnHashColocateAllowed() throws Exception {
+        starRocksAssert.withTable("create table t_ctr_hash (k1 int, k2 int, v1 int)\n"
+                + "duplicate key(k1, k2)\n"
+                + "distributed by hash(k1) buckets 2\n"
+                + "rollup (r1 (k2, k1))\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 'g_ctr_hash');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_ctr_hash");
+        assertNotNull(table.getIndexMetaIdByName("r1"));
+    }
+
+    /**
+     * A range table carrying an AUTO_INCREMENT column is routed to {@link LakeRangeRollupJob}, both for
+     * a rollup that omits the column and for one that stores it. Two tables are used so the second
+     * ALTER does not depend on resetting the first table's state.
+     */
+    @Test
+    public void testRangeRollupWithAutoIncrementRouted() throws Exception {
+        for (String name : List.of("t_guard_rollup_autoinc", "t_guard_rollup_autoinc2")) {
+            starRocksAssert.withTable("create table " + name + " "
+                    + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                    + "duplicate key(k1, k2)\n"
+                    + "order by(k1, k2)\n"
+                    + "properties('replication_num' = '1');");
+        }
+        starRocksAssert.alterTable(
                 "alter table t_guard_rollup_autoinc add rollup r1(k1, k2) order by (k2, k1)");
+        AlterJobV2 job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r1", ((LakeRangeRollupJob) job).getRollupIndexName());
+
+        starRocksAssert.alterTable(
+                "alter table t_guard_rollup_autoinc2 add rollup r2(k2, id) order by (k2)");
+        job = fetchAndClearRollupJob();
+        assertTrue(job instanceof LakeRangeRollupJob, "Expected a LakeRangeRollupJob, got: " + job);
+        assertEquals("r2", ((LakeRangeRollupJob) job).getRollupIndexName());
     }
 
     /**
@@ -367,19 +472,66 @@ public class RangeDistributionGuardTest {
     }
 
     @Test
-    public void testSyncRangeColocateAndAutoIncrementRemainRejected() throws Exception {
+    public void testSyncRangeColocateRemainsRejected() throws Exception {
         String colocate = "t_sync_colocate";
         starRocksAssert.withTable(rangeTableDdl(colocate));
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable("test", colocate);
         table.setColocateGroup("sync_colocate_group");
         DdlException error = assertThrowsDdlException(() -> createSync(colocate, "select k2 from " + colocate));
         assertTrue(error.getMessage().contains("range distribution"));
-        String auto = "t_sync_auto";
-        starRocksAssert.withTable("create table " + auto + " (k1 int not null, k2 int, "
+    }
+
+    private static String autoIncrementSyncTableDdl(String name) {
+        return "create table " + name + " (k1 int not null, k2 int, "
                 + "id bigint not null auto_increment) duplicate key(k1) order by(k1,k2) "
-                + "properties('replication_num'='1')");
-        error = assertThrowsDdlException(() -> createSync(auto, "select k2 from " + auto));
-        assertTrue(error.getMessage().contains("range distribution"));
+                + "properties('replication_num'='1')";
+    }
+
+    /**
+     * Selecting the AUTO_INCREMENT column itself, or filtering on it in WHERE, is allowed on a range
+     * synchronous MV: the view column shares the slot the sink fills, and the WHERE clause is evaluated
+     * after the fill.
+     */
+    @Test
+    public void testSyncRangeAutoIncrementPlainAndWhereAllowed() throws Exception {
+        starRocksAssert.withTable(autoIncrementSyncTableDdl("t_sync_auto"));
+        createSync("t_sync_auto", "select k2, id from t_sync_auto");
+        LakeRangeRollupJob job = org.junit.jupiter.api.Assertions.assertInstanceOf(
+                LakeRangeRollupJob.class, fetchAndClearRollupJob());
+        assertTrue(job.isSyncMaterializedView());
+
+        starRocksAssert.withTable(autoIncrementSyncTableDdl("t_sync_auto_where"));
+        createSync("t_sync_auto_where", "select k1, k2 from t_sync_auto_where where id > 0");
+        job = org.junit.jupiter.api.Assertions.assertInstanceOf(LakeRangeRollupJob.class, fetchAndClearRollupJob());
+        assertTrue(job.isSyncMaterializedView());
+    }
+
+    /**
+     * A range synchronous MV column computed from the AUTO_INCREMENT column is rejected before any job
+     * is registered: the load plan computes it before the sink assigns the AUTO_INCREMENT value.
+     */
+    @Test
+    public void testSyncRangeComputedFromAutoIncrementRejected() throws Exception {
+        String[][] cases = {
+                {"t_sync_auto_sum", "select k2, sum(id) from t_sync_auto_sum group by k2",
+                        "Column[mv_sum_id] of range synchronous materialized view[mv_t_sync_auto_sum] "
+                                + "cannot be computed from AUTO_INCREMENT column[id]"},
+                {"t_sync_auto_expr", "select k2, id + 1 as id_plus from t_sync_auto_expr",
+                        "Column[mv_id_plus] of range synchronous materialized view[mv_t_sync_auto_expr] "
+                                + "cannot be computed from AUTO_INCREMENT column[id]"}};
+        MaterializedViewHandler handler = GlobalStateMgr.getCurrentState().getRollupHandler();
+        try {
+            for (String[] c : cases) {
+                String name = c[0];
+                starRocksAssert.withTable(autoIncrementSyncTableDdl(name));
+                DdlException error = assertThrows(DdlException.class, () -> createSync(name, c[1]));
+                assertEquals(c[2], error.getMessage());
+                assertTrue(handler.getAlterJobsV2().isEmpty());
+                assertEquals(OlapTable.OlapTableState.NORMAL, getTable(name).getState());
+            }
+        } finally {
+            handler.clearJobs();
+        }
     }
 
     @Test
@@ -403,7 +555,7 @@ public class RangeDistributionGuardTest {
                 + "order by(k1,k2) properties('replication_num'='1')");
         DdlException error = assertThrows(DdlException.class, () -> createSync(name, "select k2 from " + name));
         assertEquals("Synchronous materialized view with range distribution requires a shared-data, "
-                + "non-colocate, non-auto-increment, non-primary-key table. "
+                + "non-colocate, non-primary-key table. "
                 + "Use an asynchronous materialized view instead: declare it with an explicit "
                 + "REFRESH clause (REFRESH ASYNC or REFRESH MANUAL) or a DISTRIBUTED BY clause, "
                 + "e.g. CREATE MATERIALIZED VIEW ... DISTRIBUTED BY HASH(...) REFRESH ASYNC AS SELECT ...",
@@ -654,34 +806,65 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * A range-COLOCATE table stays rejected: the rewrite would resample a fresh K-tablet layout
-     * independently of the colocate range manager's expected ranges, desyncing colocate routing after
-     * the flip. The routing predicate must therefore exclude colocate tables, keeping the existing
-     * range-distribution rejection. (Colocate membership is simulated; create-time colocate+range
-     * wiring is orthogonal to the routing decision under test.)
+     * A sort-key reorder on a table in a range colocate group must keep the group's colocate columns
+     * leading the sort key: an ORDER BY that moves the colocate column k1 out of the first position is
+     * rejected with the colocate prefix rule.
      */
     @Test
     public void testColocateRangeTableRejectsSortKeyReorder() throws Exception {
-        starRocksAssert.withTable(rangeTableDdl("t_guard_colocate"));
-        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
-                .getLocalMetastore().getTable("test", "t_guard_colocate");
-        // Simulate colocate membership via the table's group property: the routing predicate now reads
-        // OlapTable.hasColocateGroup(), equivalent to ColocateTableIndex.isColocateTable for a live table.
-        table.setColocateGroup("t_guard_colocate_group");
-        assertAlterRejectedWithRangeDistribution("alter table t_guard_colocate order by (k2, k1)");
+        starRocksAssert.withTable("create table t_guard_colocate (k1 int, k2 int, v1 int)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 't_guard_colocate_group:k1');");
+        Throwable e = assertThrows(Throwable.class,
+                () -> starRocksAssert.alterTable("alter table t_guard_colocate order by (k2, k1)"));
+        assertTrue(String.valueOf(e.getMessage()).contains(
+                        "The sort key of a table in a range colocate group must start with its colocate columns"),
+                "Unexpected error: " + e);
     }
 
     /**
-     * A range table carrying an AUTO_INCREMENT column stays rejected (out of scope for the re-route).
+     * A range table whose colocate_with is set but that is in no range colocate group, as a crash between
+     * the creation of the table and its colocate group membership can leave it, keeps the range-distribution
+     * rejection of a sort-key reorder: there is no group to keep its new layout aligned with.
      */
     @Test
-    public void testAutoIncrementRangeTableRejectsSortKeyReorder() throws Exception {
+    public void testColocatePropertyWithoutRangeColocateGroupRejectsSortKeyReorder() throws Exception {
+        starRocksAssert.withTable(rangeTableDdl("t_guard_colocate_orphan"));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState()
+                .getLocalMetastore().getTable("test", "t_guard_colocate_orphan");
+        table.setColocateGroup("t_guard_colocate_orphan_group");
+        assertAlterRejectedWithRangeDistribution("alter table t_guard_colocate_orphan order by (k2, k1)");
+    }
+
+    /**
+     * A range table carrying an AUTO_INCREMENT column routes a sort-key reorder to the range rewrite job:
+     * the rewrite copies existing AUTO_INCREMENT values verbatim.
+     */
+    @Test
+    public void testAutoIncrementRangeTableRoutesSortKeyReorder() throws Exception {
         starRocksAssert.withTable("create table t_guard_autoinc "
                 + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
                 + "duplicate key(k1, k2)\n"
                 + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1');");
-        assertAlterRejectedWithRangeDistribution("alter table t_guard_autoinc order by (k2, k1)");
+        AlterJobV2 job = buildAlterJob("t_guard_autoinc", "alter table t_guard_autoinc order by (k2, k1)");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+    }
+
+    /**
+     * ALTER TABLE ... ORDER BY may put the AUTO_INCREMENT column itself into the sort key.
+     */
+    @Test
+    public void testAutoIncrementColumnIntoSortKeyRoutes() throws Exception {
+        starRocksAssert.withTable("create table t_guard_autoinc_sk "
+                + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
+                + "duplicate key(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1');");
+        AlterJobV2 job = buildAlterJob("t_guard_autoinc_sk", "alter table t_guard_autoinc_sk order by (id, k1)");
+        assertTrue(job instanceof LakeRangeRewriteSchemaChangeJob);
+        assertEquals(baseColumn("t_guard_autoinc_sk", "id").getUniqueId(),
+                ((LakeRangeRewriteSchemaChangeJob) job).getShadowSortKeyUniqueIds().get(0));
     }
 
     /**
@@ -889,6 +1072,52 @@ public class RangeDistributionGuardTest {
         // widen, so the relaxation must not apply and it must stay rejected.
         assertAlterRejectedWithRangeDistribution(
                 "alter table t_guard_flip modify column k1 varchar(40)");
+    }
+
+    private static String varcharColocateRangeTableDdl(String name, String colocateWith) {
+        return "create table " + name + " (k1 varchar(10) NOT NULL, k2 varchar(10) NOT NULL, v1 int)\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "order by(k1, k2)\n" +
+                "properties('replication_num' = '1', 'colocate_with' = '" + colocateWith + "');";
+    }
+
+    private static void assertColocateWidenRejected(String table, String column, String alterSql) {
+        int jobsBefore = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size();
+        Throwable e = assertThrows(Throwable.class, () -> starRocksAssert.alterTable(alterSql));
+        assertTrue(e.getMessage().contains("Can not modify colocate column[" + column + "] for colocate table"),
+                "Unexpected message: " + e.getMessage());
+        assertEquals(10, baseColumn(table, column).getStrLen());
+        assertEquals(jobsBefore,
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().size());
+    }
+
+    @Test
+    public void testWidenColocateColumnRejectedOnRangeColocateTable() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_widen", "g_widen:k1"));
+        assertColocateWidenRejected("t_guard_colo_widen", "k1",
+                "alter table t_guard_colo_widen modify column k1 varchar(20) KEY NOT NULL");
+    }
+
+    @Test
+    public void testWidenSortKeyColumnOutsideColocatePrefixAllowedOnRangeColocateTable() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_tail", "g_tail:k1"));
+        starRocksAssert.alterTable("alter table t_guard_colo_tail modify column k2 varchar(20) KEY NOT NULL");
+        assertEquals(20, baseColumn("t_guard_colo_tail", "k2").getStrLen());
+    }
+
+    @Test
+    public void testWidenColocateColumnRejectedWhenAllSortKeyColumnsColocate() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_all", "g_all"));
+        assertColocateWidenRejected("t_guard_colo_all", "k2",
+                "alter table t_guard_colo_all modify column k2 varchar(20) KEY NOT NULL");
+    }
+
+    @Test
+    public void testWidenRenamedColocateColumnStillRejected() throws Exception {
+        starRocksAssert.withTable(varcharColocateRangeTableDdl("t_guard_colo_rename", "g_rename:k1"));
+        starRocksAssert.alterTable("alter table t_guard_colo_rename rename column k1 to k1_renamed");
+        assertColocateWidenRejected("t_guard_colo_rename", "k1_renamed",
+                "alter table t_guard_colo_rename modify column k1_renamed varchar(20) KEY NOT NULL");
     }
 
     /**
@@ -1331,22 +1560,23 @@ public class RangeDistributionGuardTest {
         assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
     }
 
+    /**
+     * A table in a range colocate group is eligible: appending the same NULL sentinel to every tablet bound
+     * keeps each tablet inside its colocate range.
+     */
     @Test
-    public void testColocateTableNotMetadataOnly() throws Exception {
-        starRocksAssert.withTable(dupRangeTableWithValueDdl("t_meta_colocate"));
+    public void testColocateTableMetadataOnly() throws Exception {
+        starRocksAssert.withTable("create table t_meta_colocate (k1 int, k2 int, v1 int)\n"
+                + "DUPLICATE KEY(k1, k2)\n"
+                + "order by(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 't_meta_colocate_group:k1');");
         OlapTable table = getTable("t_meta_colocate");
         SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
-        new MockUp<ColocateTableIndex>() {
-            @Mock
-            public boolean isColocateTable(long tableId) {
-                return true;
-            }
-        };
-        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
     }
 
     @Test
-    public void testAutoIncrementTableNotMetadataOnly() throws Exception {
+    public void testAutoIncrementTableMetadataOnly() throws Exception {
         starRocksAssert.withTable("create table t_meta_autoinc "
                 + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
                 + "DUPLICATE KEY(k1, k2)\n"
@@ -1354,7 +1584,7 @@ public class RangeDistributionGuardTest {
                 + "properties('replication_num' = '1');");
         OlapTable table = getTable("t_meta_autoinc");
         SchemaChangeData resolved = buildTrailingKeyAddCandidate(table, constKeyColumn(table, "c_new"));
-        assertFalse(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
+        assertTrue(SchemaChangeHandler.isMetadataOnlyTrailingKeyAdd(resolved));
     }
 
     /**
@@ -1763,44 +1993,45 @@ public class RangeDistributionGuardTest {
     }
 
     /**
-     * Colocate range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY is not
-     * diverted and the existing range-distribution rejection applies (unaffected by the diversion).
+     * A trailing ADD COLUMN KEY on a table in a range colocate group takes the metadata-only route like any
+     * other range table: the tablets keep their colocate ranges.
      */
     @Test
-    public void testColocateRangeAddKeyColUnaffected() throws Exception {
-        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_colo"));
-        // needsRangeRewriteSchemaChange reads the table's colocate-group property while
-        // isMetadataOnlyTrailingKeyAdd reads ColocateTableIndex; set both so the table is colocate to
-        // each guard and the ADD COLUMN KEY stays on the existing range-distribution rejection.
-        getTable("t_add_meta_colo").setColocateGroup("t_add_meta_colo_group");
-        new MockUp<ColocateTableIndex>() {
-            @Mock
-            public boolean isColocateTable(long tableId) {
-                return true;
-            }
-        };
-        DdlException e = assertThrowsDdlException(() ->
+    public void testColocateRangeAddKeyColMetadataOnly() throws Exception {
+        starRocksAssert.withTable("create table t_add_meta_colo (k1 int, k2 int, v1 int)\n"
+                + "DUPLICATE KEY(k1, k2)\n"
+                + "properties('replication_num' = '1', 'colocate_with' = 't_add_meta_colo_group:k1');");
+        assertMetadataOnlyJob(
                 buildAlterJob("t_add_meta_colo", "alter table t_add_meta_colo add column c int key default '0'"));
+    }
+
+    /**
+     * A range table whose colocate_with is set but that is in no range colocate group keeps the
+     * range-distribution rejection of an ADD COLUMN KEY: it is not routed to the metadata-only job.
+     */
+    @Test
+    public void testColocatePropertyWithoutRangeColocateGroupRejectsAddKeyCol() throws Exception {
+        starRocksAssert.withTable(dupRangeKeyDerivedDdl("t_add_meta_colo_orphan"));
+        getTable("t_add_meta_colo_orphan").setColocateGroup("t_add_meta_colo_orphan_group");
+        DdlException e = assertThrowsDdlException(() -> buildAlterJob("t_add_meta_colo_orphan",
+                "alter table t_add_meta_colo_orphan add column c int key default '0'"));
         assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
                 "Expected 'range distribution' in: " + e.getMessage());
     }
 
     /**
-     * AUTO_INCREMENT range tables are excluded from range-rewrite routing, so an ADD COLUMN KEY stays
-     * on the existing range-distribution rejection (unaffected by the diversion).
+     * An AUTO_INCREMENT range table still takes the metadata-only trailing key add: the new key column
+     * is a constant, and the existing AUTO_INCREMENT values are not touched. The sort key is derived
+     * from the key columns, so the new key column joins it.
      */
     @Test
-    public void testAutoIncrementRangeAddKeyColUnaffected() throws Exception {
+    public void testAutoIncrementRangeAddKeyColMetadataOnly() throws Exception {
         starRocksAssert.withTable("create table t_add_meta_autoinc "
                 + "(k1 int not null, k2 int not null, id bigint not null auto_increment)\n"
                 + "duplicate key(k1, k2)\n"
-                + "order by(k1, k2)\n"
                 + "properties('replication_num' = '1');");
-        DdlException e = assertThrowsDdlException(() ->
-                buildAlterJob("t_add_meta_autoinc",
-                        "alter table t_add_meta_autoinc add column c int key default '0'"));
-        assertTrue(e.getMessage().toLowerCase(Locale.ROOT).contains("range distribution"),
-                "Expected 'range distribution' in: " + e.getMessage());
+        assertMetadataOnlyJob(buildAlterJob("t_add_meta_autoinc",
+                "alter table t_add_meta_autoinc add column c int key default '0'"));
     }
 
     /**

@@ -391,13 +391,16 @@ private:
     StatusOr<SparseRange<>> _get_prepared_pruned_row_ranges();
 
     Status _apply_tablet_range();
+    Status _apply_task_range();
     Status _apply_precomputed_scan_range();
-    StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
+    StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range,
+                                                                const SparseRange<>* candidates = nullptr);
 
     uint32_t segment_id() const { return _segment->id(); }
     uint32_t num_rows() const { return _segment->num_rows(); }
 
-    Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
+    Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid,
+                           const Range<>* window = nullptr);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
                            rowid_t* rowid);
     Status _seek_columns(const Schema& schema, rowid_t pos);
@@ -972,6 +975,9 @@ Status SegmentIterator::_init() {
 }
 
 Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
+    if (_opts.task_range.has_value() || options.task_range.has_value()) {
+        return Status::NotSupported("grouped range task does not support segment iterator reuse");
+    }
     _opts.pred_tree = options.pred_tree;
     _opts.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
     _opts.runtime_filter_preds = options.runtime_filter_preds;
@@ -1003,6 +1009,11 @@ Status SegmentIterator::reset_for_reuse(const SegmentReadOptions& options) {
 }
 
 Status SegmentIterator::_init_internal() {
+    if (_opts.task_range.has_value() &&
+        (_opts.read_state_cache.scan_range != nullptr || _opts.read_state_cache.seek_range_rowid_ranges != nullptr ||
+         _opts.read_state_cache.tablet_rowid_range != nullptr || !_opts.short_key_ranges.empty())) {
+        return Status::NotSupported("grouped range task does not support prepared or logical split segment readers");
+    }
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");
@@ -1060,6 +1071,7 @@ Status SegmentIterator::_init_scan_range_and_context() {
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_keys());
         RETURN_IF_ERROR(_apply_tablet_range());
+        RETURN_IF_ERROR(_apply_task_range());
         bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
         if (!apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
@@ -1100,14 +1112,20 @@ Status SegmentIterator::_init_scan_range_and_context() {
     _init_column_predicates();
     RETURN_IF_ERROR(_init_context());
 
-    // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
-    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
-        _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
-    }
-    _range_iter = _scan_range.new_iterator();
+    // Finalize: turn the filtered range into the form the read loop consumes. Not a function of its
+    // own, so the scope is explicit -- it covers the split/reverse, the range iterator construction and
+    // the sparse-to-io-range conversion, and nothing else runs after it in this function.
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->segment_init_finalize_ns);
+        // When desc_hint_split_range is not greater than 0, we don't split and reverse the scan_range.
+        if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
+            _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
+        }
+        _range_iter = _scan_range.new_iterator();
 
-    for (auto column_index : _io_coalesce_column_index) {
-        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        for (auto column_index : _io_coalesce_column_index) {
+            RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+        }
     }
     return Status::OK();
 }
@@ -1149,6 +1167,9 @@ Status SegmentIterator::_init_reused_scan() {
 }
 
 StatusOr<SparseRange<>> SegmentIterator::_get_prepared_pruned_row_ranges() {
+    if (_opts.task_range.has_value()) {
+        return Status::NotSupported("grouped range task does not support prepared scan ranges");
+    }
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");
     }
@@ -1886,6 +1907,10 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
 }
 
 void SegmentIterator::_init_column_access_paths() {
+    // Shares segment_init_prepare_ns with _check_low_cardinality_optimization: both are cheap
+    // schema-shaped setup that runs once before any filtering, and splitting them would add a second
+    // near-zero row to the profile for no diagnostic gain.
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_prepare_ns);
     if (_opts.column_access_paths == nullptr || _opts.column_access_paths->empty()) {
         return;
     }
@@ -2338,6 +2363,10 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
 }
 
 Status SegmentIterator::_apply_tablet_range() {
+    // Overlaps ColumnIteratorInit on the uncached path: _seek_range_to_rowid_range below initializes
+    // column iterators, which carry their own SCOPED_RAW_TIMER. Same pre-existing nesting that
+    // ShortKeyFilter has; untangling both belongs to the de-overlap change, not here.
+    SCOPED_RAW_TIMER(&_opts.stats->tablet_range_filter_ns);
     if (!_opts.tablet_range.has_value() || _opts.tablet_range.value().all_range()) {
         return Status::OK();
     }
@@ -2370,7 +2399,9 @@ Status SegmentIterator::_apply_tablet_range() {
     } else {
         // _lookup_ordinal() relies on short key index.
         RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
-        ASSIGN_OR_RETURN(rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+        const auto* candidates =
+                _opts.task_range.has_value() && _opts.rowid_range_option != nullptr ? &_scan_range : nullptr;
+        ASSIGN_OR_RETURN(rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value(), candidates));
     }
     if (rowid_range_opt.has_value()) {
         _scan_range &= SparseRange<>(rowid_range_opt.value());
@@ -2381,7 +2412,29 @@ Status SegmentIterator::_apply_tablet_range() {
     return Status::OK();
 }
 
+Status SegmentIterator::_apply_task_range() {
+    if (!_opts.task_range.has_value() || _opts.task_range->all_range() || _scan_range.empty()) {
+        return Status::OK();
+    }
+    // Attribute exact ownership seeking to the existing range-filter timer and page/IO counters.
+    // This is an independent AND, after the query-range union and physical tablet ownership.
+    SCOPED_RAW_TIMER(&_opts.stats->tablet_range_filter_ns);
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
+    const auto* candidates = _opts.rowid_range_option != nullptr ? &_scan_range : nullptr;
+    ASSIGN_OR_RETURN(auto rowid_range, _seek_range_to_rowid_range(*_opts.task_range, candidates));
+    if (rowid_range.has_value()) {
+        _scan_range &= SparseRange<>(*rowid_range);
+    } else {
+        _scan_range.clear();
+    }
+    return Status::OK();
+}
+
 Status SegmentIterator::_apply_precomputed_scan_range() {
+    // Kept separate from rowid_range_filter_ns rather than folded into it: this runs only on the lake
+    // prepared-split path while the rowid range runs on every scan, so summing them would hide which
+    // path a segment took.
+    SCOPED_RAW_TIMER(&_opts.stats->precomputed_range_filter_ns);
     if (_opts.read_state_cache.scan_range == nullptr) {
         return Status::OK();
     }
@@ -2414,7 +2467,9 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
 
     RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts, _opts.stats));
     for (const SeekRange& range : _opts.ranges) {
-        ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range));
+        const auto* candidates =
+                _opts.task_range.has_value() && _opts.rowid_range_option != nullptr ? &_scan_range : nullptr;
+        ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(range, candidates));
         if (rowid_range_opt.has_value()) {
             res.add(rowid_range_opt.value());
         }
@@ -2422,17 +2477,34 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
     return res;
 }
 
-StatusOr<std::optional<Range<>>> SegmentIterator::_seek_range_to_rowid_range(const SeekRange& range) {
+StatusOr<std::optional<Range<>>> SegmentIterator::_seek_range_to_rowid_range(const SeekRange& range,
+                                                                             const SparseRange<>* candidates) {
     rowid_t lower_rowid = 0;
     rowid_t upper_rowid = num_rows();
+    std::optional<Range<>> window;
+    if (candidates != nullptr) {
+        if (candidates->empty()) return std::nullopt;
+        // Keep sparse gaps in the final AND. Range intersections can retain non-sorted entries,
+        // so their first/last endpoints are not necessarily a conservative envelope.
+        lower_rowid = num_rows();
+        upper_rowid = 0;
+        for (size_t i = 0; i < candidates->size(); ++i) {
+            lower_rowid = std::min(lower_rowid, (*candidates)[i].begin());
+            upper_rowid = std::max(upper_rowid, (*candidates)[i].end());
+        }
+        if (lower_rowid >= upper_rowid) return std::nullopt;
+        window.emplace(lower_rowid, upper_rowid);
+    }
 
     if (!range.upper().empty()) {
         RETURN_IF_ERROR(_init_column_iterators<false>(range.upper().schema()));
-        RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), num_rows(), &upper_rowid));
+        RETURN_IF_ERROR(_lookup_ordinal(range.upper(), !range.inclusive_upper(), upper_rowid, &upper_rowid,
+                                        window ? &*window : nullptr));
     }
-    if (!range.lower().empty() && upper_rowid > 0) {
+    if (!range.lower().empty() && upper_rowid > lower_rowid) {
         RETURN_IF_ERROR(_init_column_iterators<false>(range.lower().schema()));
-        RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid));
+        RETURN_IF_ERROR(_lookup_ordinal(range.lower(), range.inclusive_lower(), upper_rowid, &lower_rowid,
+                                        window ? &*window : nullptr));
     }
 
     if (lower_rowid <= upper_rowid) {
@@ -2608,7 +2680,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
 // if |lower| is false, return the first row in the range [0, end) that is greater than |key|,
 // or end if no such row is found.
 // |rowid| will be assigned to the id of found row or |end| if no such row is found.
-Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid) {
+Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid,
+                                        const Range<>* window) {
+    const rowid_t requested_end = end;
     std::string index_key;
     index_key = lower ? key.short_key_encode(_segment->num_short_keys(), KEY_MINIMAL_MARKER)
                       : key.short_key_encode(_segment->num_short_keys(), KEY_MAXIMAL_MARKER);
@@ -2633,6 +2707,17 @@ Status SegmentIterator::_lookup_ordinal(const SeekTuple& key, bool lower, rowid_
     auto end_iter = _segment->upper_bound(index_key);
     if (end_iter.valid()) {
         end = end_iter.ordinal() * _segment->num_rows_per_block();
+    }
+    if (window != nullptr) {
+        // A physical child need not seek boundary pages elsewhere in the shared segment.
+        // Legacy and pre-initialization range resolvers do not supply a window.
+        const rowid_t limit = std::min(requested_end, window->end());
+        if (window->begin() >= limit) {
+            *rowid = limit;
+            return Status::OK();
+        }
+        start = std::clamp(start, window->begin(), limit);
+        end = std::clamp(end, start, limit);
     }
 
     // binary search to find the exact key
@@ -4254,6 +4339,8 @@ Status SegmentIterator::_decode_dict_codes(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_check_low_cardinality_optimization() {
+    // Shared with _init_column_access_paths; see the note there.
+    SCOPED_RAW_TIMER(&_opts.stats->segment_init_prepare_ns);
     _predicate_need_rewrite.resize(1 + ChunkSchemaHelper::max_column_id(_schema), false);
     const size_t n = _opts.pred_tree.num_columns();
     for (size_t i = 0; i < n; i++) {
@@ -4533,6 +4620,7 @@ Status SegmentIterator::_apply_bitmap_index() {
 }
 
 Status SegmentIterator::_apply_del_vector() {
+    SCOPED_RAW_TIMER(&_opts.stats->del_vector_apply_ns);
     RETURN_IF(_scan_range.empty(), Status::OK());
     if (_opts.is_primary_keys && _opts.version > 0 && _del_vec && !_del_vec->empty()) {
         Roaring row_bitmap = range2roaring(_scan_range);
@@ -4812,6 +4900,7 @@ Status SegmentIterator::_get_row_ranges_by_bloom_filter() {
 }
 
 Status SegmentIterator::_get_row_ranges_by_rowid_range() {
+    SCOPED_RAW_TIMER(&_opts.stats->rowid_range_filter_ns);
     DCHECK_EQ(0, _scan_range.span_size());
 
     _scan_range.add(Range<>(0, num_rows()));
@@ -4982,6 +5071,9 @@ StatusOr<ChunkIteratorPtr> new_reusable_segment_iterator(const std::shared_ptr<S
                                                          const Schema& iterator_schema, const Schema& output_schema,
                                                          const SegmentReadOptions& options,
                                                          ChunkIteratorPtr* reusable_slot) {
+    if (options.task_range.has_value()) {
+        return Status::NotSupported("grouped range task does not support segment iterator reuse");
+    }
     if (reusable_slot == nullptr) {
         return Status::InvalidArgument("reusable segment iterator slot is null");
     }
@@ -5107,11 +5199,15 @@ static bool init_seek_range_iterator_schema(const SeekRange& range, Schema* iter
 template <typename ResolveFn>
 static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& segment, const Schema& iterator_schema,
                                              const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats,
+                                             bool use_page_cache, const std::atomic<bool>* is_cancelled,
                                              ResolveFn&& resolve_fn)
         -> decltype(std::declval<ResolveFn>()(std::declval<SegmentIterator&>())) {
     OlapReaderStatistics local_stats;
     if (stats == nullptr) {
         stats = &local_stats;
+    }
+    if (is_cancelled != nullptr && is_cancelled->load(std::memory_order_acquire)) {
+        return Status::Cancelled("cancelled while resolving segment rowid ranges");
     }
     RETURN_IF_ERROR(segment->load_index(lake_io_opts, stats));
 
@@ -5120,6 +5216,8 @@ static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& seg
     read_options.lake_io_opts = lake_io_opts;
     read_options.stats = stats;
     read_options.fs = std::move(file_system);
+    read_options.use_page_cache = use_page_cache;
+    read_options.is_cancelled = is_cancelled;
     SegmentIterator iterator(segment, iterator_schema, read_options);
     auto result = resolve_fn(iterator);
     // Closing adds what the key column reads fetched through the column files to the stats.
@@ -5129,7 +5227,8 @@ static auto with_segment_seek_range_iterator(const std::shared_ptr<Segment>& seg
 
 StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowid_ranges(
         const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges,
-        const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats) {
+        const LakeIOOptions& lake_io_opts, OlapReaderStatistics* stats, bool use_page_cache,
+        const std::atomic<bool>* is_cancelled) {
     std::vector<std::optional<Range<rowid_t>>> rowid_ranges;
     rowid_ranges.reserve(ranges.size());
     if (ranges.empty()) {
@@ -5154,9 +5253,12 @@ StatusOr<std::vector<std::optional<Range<rowid_t>>>> segment_seek_ranges_to_rowi
         return rowid_ranges;
     }
     return with_segment_seek_range_iterator(
-            segment, iterator_schema, lake_io_opts, stats,
+            segment, iterator_schema, lake_io_opts, stats, use_page_cache, is_cancelled,
             [&](SegmentIterator& iterator) -> StatusOr<std::vector<std::optional<Range<rowid_t>>>> {
                 for (const auto& range : ranges) {
+                    if (is_cancelled != nullptr && is_cancelled->load(std::memory_order_acquire)) {
+                        return Status::Cancelled("cancelled while resolving segment rowid ranges");
+                    }
                     ASSIGN_OR_RETURN(auto rowid_range, iterator.resolve_range_to_rowid_range(range));
                     rowid_ranges.emplace_back(rowid_range);
                 }
@@ -5175,7 +5277,7 @@ StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const 
     if (!init_seek_range_iterator_schema(range, &iterator_schema)) {
         return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
     }
-    return with_segment_seek_range_iterator(segment, iterator_schema, lake_io_opts, nullptr,
+    return with_segment_seek_range_iterator(segment, iterator_schema, lake_io_opts, nullptr, false, nullptr,
                                             [&](SegmentIterator& iterator) -> StatusOr<std::optional<Range<rowid_t>>> {
                                                 return iterator.resolve_range_to_rowid_range(range);
                                             });

@@ -1821,6 +1821,10 @@ public class QueryAnalyzer {
             ArrayList<Field> fields = new ArrayList<>();
             for (int fieldIdx = 0; fieldIdx < outputSize; ++fieldIdx) {
                 Field oldField = leftChildScope.getRelationFields().getFieldByIndex(fieldIdx);
+                if (outputTypes[fieldIdx].isGeoType() &&
+                        !(node instanceof UnionRelation && node.getQualifier().equals(SetQualifier.ALL))) {
+                    throw new SemanticException("%s not support set operation", outputTypes[fieldIdx]);
+                }
                 fields.add(new Field(oldField.getName(), outputTypes[fieldIdx], oldField.getRelationAlias(),
                         oldField.getOriginExpression(), true, nullables.get(fieldIdx)));
             }

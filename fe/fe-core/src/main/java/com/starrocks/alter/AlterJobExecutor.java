@@ -190,11 +190,18 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                     && (state == OlapTable.OlapTableState.UPDATING_META
                         || (state == OlapTable.OlapTableState.SCHEMA_CHANGE
                             && AlterJobMgr.unfinishedAlterJobsAllowConcurrentPartitionCreation(olapTable.getId())));
-            if (!tolerable) {
+            boolean reshardTolerable = state == OlapTable.OlapTableState.TABLET_RESHARD
+                    && olapTable.isCloudNativeTableOrMaterializedView()
+                    && olapTable.isRangeDistribution()
+                    && !statement.getAlterClauseList().isEmpty()
+                    && statement.getAlterClauseList().stream().allMatch(AlterJobExecutor::isTabletReshardTolerated);
+            if (!tolerable && !reshardTolerable) {
                 throw new AlterJobException("", InvalidOlapTableStateException.of(state, olapTable.getName()));
             }
-            LOG.info("allow ADD PARTITION on table {} concurrent with alter, state={}",
-                    olapTable.getName(), state);
+            if (tolerable) {
+                LOG.info("allow ADD PARTITION on table {} concurrent with alter, state={}",
+                        olapTable.getName(), state);
+            }
         }
 
         this.db = db;
@@ -256,6 +263,26 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
             }
         }
         return null;
+    }
+
+    // A tablet split or merge job only changes which tablets hold a partition's data, and it tracks the table,
+    // its partitions and indexes by id. These clauses change names, comments, partition properties or the
+    // set of partitions; their handlers either accept TABLET_RESHARD or do not check the table state, and the
+    // job skips a partition that is dropped or replaced under it.
+    private static boolean isTabletReshardTolerated(AlterClause clause) {
+        return clause instanceof SplitTabletClause
+                || clause instanceof MergeTabletClause
+                || clause instanceof AddPartitionClause
+                || clause instanceof DropPartitionClause
+                || clause instanceof ReplacePartitionClause
+                || clause instanceof TruncatePartitionClause
+                || clause instanceof ModifyPartitionClause
+                || clause instanceof PartitionRenameClause
+                || clause instanceof TableRenameClause
+                || clause instanceof RollupRenameClause
+                || clause instanceof ColumnRenameClause
+                || clause instanceof AlterTableCommentClause
+                || clause instanceof SwapTableClause;
     }
 
     @Override
@@ -566,9 +593,9 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
                 }
 
                 // inactive the related MVs
-                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(origTable,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsForRename(origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
-                AlterMVJobExecutor.inactiveRelatedMaterializedViewsRecursive(olapNewTbl,
+                AlterMVJobExecutor.inactiveRelatedMaterializedViewsForRename(olapNewTbl,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());

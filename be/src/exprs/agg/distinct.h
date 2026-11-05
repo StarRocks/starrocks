@@ -47,60 +47,6 @@ static const size_t MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA = 24;
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
 struct DistinctAggregateState {};
 
-template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
-    using T = RunTimeCppType<LT>;
-    using SumType = RunTimeCppType<SumLT>;
-    using MyHashSet = HashSetWithAggStateAllocator<T>;
-
-    void update([[maybe_unused]] MemPool* mem_pool, T key) { set.insert(key); }
-
-    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
-
-    void prefetch(T key) { set.prefetch(key); }
-
-    int64_t distinct_count() const { return set.size(); }
-
-    size_t serialize_size() const {
-        size_t size = set.dump_bound();
-        DCHECK(size >= MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA);
-        return size;
-    }
-
-    void serialize(uint8_t* dst) const {
-        phmap::InMemoryOutput output(reinterpret_cast<char*>(dst));
-        [[maybe_unused]] auto err = set.dump(output);
-        DCHECK(output.length() == set.dump_bound());
-    }
-
-    void deserialize_and_merge(const uint8_t* src, size_t len) {
-        phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
-        auto old_size = set.size();
-        if (old_size == 0) {
-            [[maybe_unused]] auto err = set.load(input);
-        } else {
-            MyHashSet set_src;
-            [[maybe_unused]] auto err = set_src.load(input);
-            set.merge(set_src);
-        }
-    }
-
-    SumType sum_distinct() const {
-        SumType sum{};
-        // Sum distinct doesn't support timestamp and date type
-        if constexpr (IsDateTime<SumType>) {
-            return sum;
-        }
-
-        for (auto& key : set) {
-            sum += key;
-        }
-        return sum;
-    }
-
-    MyHashSet set;
-};
-
 struct AdaptiveSliceHashSet {
     using KeyType = typename SliceHashSet::key_type;
 
@@ -566,10 +512,6 @@ public:
         }
     }
 };
-
-template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-using DistinctAggregateFunction =
-        TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T>;
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
 using DistinctAggregateFunctionV2 =

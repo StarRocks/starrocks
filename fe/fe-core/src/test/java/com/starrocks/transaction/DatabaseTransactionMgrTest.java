@@ -72,6 +72,10 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
+import com.starrocks.load.routineload.KafkaProgress;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
+import com.starrocks.load.routineload.KafkaTaskInfo;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
@@ -84,8 +88,13 @@ import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TPulsarRLTaskProgress;
+import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import mockit.Invocation;
@@ -103,6 +112,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -112,6 +122,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -798,6 +809,152 @@ public class DatabaseTransactionMgrTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(longs = {0, 10})
+    public void testEmptyKafkaRoutineLoadTxnCommitsAndBecomesVisible(long unselectedRows) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr =
+                    masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+            long jobId = 20000;
+            KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(jobId, "empty_kafka_job",
+                    GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1, "broker:9092", "topic");
+            masterTransMgr.getCallbackFactory().addCallback(job);
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_kafka_label", null,
+                    transactionSource, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, jobId,
+                    Config.stream_load_default_timeout_second);
+            UUID taskId = UUID.randomUUID();
+            KafkaTaskInfo task = new KafkaTaskInfo(taskId, job, 10000, 0, Map.of(0, 100L), 60000);
+            Deencapsulation.setField(task, "txnId", txnId);
+            Deencapsulation.setField(job, "routineLoadTaskInfoList", Lists.newArrayList(task));
+            RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(
+                    emptyKafkaRoutineLoadAttachment(jobId, taskId, unselectedRows));
+
+            // Both WHERE-only filtering and a control-record-only batch must commit their consumed positions.
+            masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                    Lists.newArrayList(), Lists.newArrayList(), attachment);
+            assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(txnId).getStatus());
+            assertEquals(110L, ((KafkaProgress) job.getProgress()).getOffsetByPartition(0));
+            masterDbTransMgr.finishTransaction(txnId, Sets.newHashSet(), 0);
+            assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    private static TRLTaskTxnCommitAttachment emptyKafkaRoutineLoadAttachment(long jobId, UUID taskId,
+                                                                              long unselectedRows) {
+        TKafkaRLTaskProgress progress = new TKafkaRLTaskProgress();
+        progress.setPartitionCmtOffset(Map.of(0, 109L));
+        progress.setPartitionCmtOffsetTimestamp(Map.of(0, 1000L));
+        TRLTaskTxnCommitAttachment attachment = new TRLTaskTxnCommitAttachment();
+        attachment.setJobId(jobId);
+        attachment.setId(new TUniqueId(taskId.getMostSignificantBits(), taskId.getLeastSignificantBits()));
+        attachment.setLoadSourceType(TLoadSourceType.KAFKA);
+        attachment.setKafkaRLTaskProgress(progress);
+        attachment.setUnselectedRows(unselectedRows);
+        return attachment;
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"BACKEND_STREAMING", "BATCH_LOAD_JOB", "FRONTEND"})
+    public void testEmptyNonRoutineLoadTxnStillRejected(String sourceName) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_non_routine_label", transactionSource,
+                    TransactionState.LoadJobSourceType.valueOf(sourceName), Config.stream_load_default_timeout_second);
+            RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(
+                    emptyKafkaRoutineLoadAttachment(20000, UUID.randomUUID(), 0));
+            TransactionCommitFailedException exception = assertThrows(TransactionCommitFailedException.class, () ->
+                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                            Lists.newArrayList(), Lists.newArrayList(), attachment));
+            assertThat(exception.getMessage(), containsString("No rows were imported from upstream"));
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing_attachment", "manual_attachment", "missing_progress", "pulsar",
+            "non_retryable", "loaded_rows"})
+    public void testEmptyRoutineLoadTxnRequiresSuccessfulKafkaProgress(String condition) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_routine_invalid_label", transactionSource,
+                    TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, Config.stream_load_default_timeout_second);
+            TRLTaskTxnCommitAttachment thriftAttachment = emptyKafkaRoutineLoadAttachment(20000, UUID.randomUUID(), 0);
+            TxnCommitAttachment attachment;
+            switch (condition) {
+                case "missing_attachment":
+                    attachment = null;
+                    break;
+                case "manual_attachment":
+                    attachment = new ManualLoadTxnCommitAttachment();
+                    break;
+                case "missing_progress":
+                    attachment = new RLTaskTxnCommitAttachment();
+                    break;
+                case "pulsar":
+                    thriftAttachment.setLoadSourceType(TLoadSourceType.PULSAR);
+                    thriftAttachment.setPulsarRLTaskProgress(new TPulsarRLTaskProgress());
+                    attachment = new RLTaskTxnCommitAttachment(thriftAttachment);
+                    break;
+                case "non_retryable":
+                    thriftAttachment.setNonRetryable(true);
+                    attachment = new RLTaskTxnCommitAttachment(thriftAttachment);
+                    break;
+                case "loaded_rows":
+                    thriftAttachment.setLoadedRows(1);
+                    attachment = new RLTaskTxnCommitAttachment(thriftAttachment);
+                    break;
+                default:
+                    throw new AssertionError(condition);
+            }
+            TransactionCommitFailedException exception = assertThrows(TransactionCommitFailedException.class, () ->
+                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                            Lists.newArrayList(), Lists.newArrayList(), attachment));
+            assertThat(exception.getMessage(), containsString("No rows were imported from upstream"));
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testEmptyKafkaRoutineLoadTxnStillRequiresActiveTask(boolean registerJob) throws StarRocksException {
+        boolean savedEmptyLoadAsError = Config.empty_load_as_error;
+        Config.empty_load_as_error = true;
+        try {
+            long jobId = 20000;
+            KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(jobId, "empty_kafka_inactive_job",
+                    GlobalStateMgrTestUtil.testDbId1, GlobalStateMgrTestUtil.testTableId1, "broker:9092", "topic");
+            if (registerJob) {
+                masterTransMgr.getCallbackFactory().addCallback(job);
+            }
+            long txnId = masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1,
+                    Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1), "empty_kafka_inactive_label", null,
+                    transactionSource, TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, jobId,
+                    Config.stream_load_default_timeout_second);
+            RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment(
+                    emptyKafkaRoutineLoadAttachment(jobId, UUID.randomUUID(), 0));
+            assertThrows(TransactionException.class, () ->
+                    masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, txnId,
+                            Lists.newArrayList(), Lists.newArrayList(), attachment));
+            assertEquals(TransactionStatus.PREPARED,
+                    masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1)
+                            .getTxnState(txnId).getStatus());
+            assertFalse(((KafkaProgress) job.getProgress()).hasPartition());
+        } finally {
+            Config.empty_load_as_error = savedEmptyLoadAsError;
+        }
+    }
+
     @Test
     public void testAbortTransactionWithAttachment() throws StarRocksException {
         DatabaseTransactionMgr masterDbTransMgr =
@@ -1279,6 +1436,89 @@ public class DatabaseTransactionMgrTest {
                 fakeEditLog.getTransaction(txnId8)));
         slaveTransMgr.replayUpsertTransactionStateBatch(replayStateBatch);
         assertEquals(4, masterDbTransMgr.getFinishedTxnNums());
+    }
+
+    // The committed txns 6, 7 and 8 of the fixture, alone in a fresh graph, so that the next publish batch
+    // from txn 6 is [6, 7, 8].
+    private DatabaseTransactionMgr dbTransMgrWithThreeBatchableTxns() throws AnalysisException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        TransactionGraph graph = new TransactionGraph();
+        for (String label : List.of(GlobalStateMgrTestUtil.testTxnLable6, GlobalStateMgrTestUtil.testTxnLable7,
+                GlobalStateMgrTestUtil.testTxnLable8)) {
+            graph.add(lableToTxnId.get(label), Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1));
+        }
+        Deencapsulation.setField(masterDbTransMgr, "transactionGraph", graph);
+        return masterDbTransMgr;
+    }
+
+    // As the publish daemon does when it sends a publish attempt for these txns.
+    private static void markSent(DatabaseTransactionMgr mgr, long... txnIds) {
+        for (long txnId : txnIds) {
+            mgr.getTransactionState(txnId).setHasSendTask(true);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void testRetryBatchTakesOnlyTheTxnsOfTheLastAttempt(boolean multiTable) throws AnalysisException {
+        boolean oldMultiTable = Config.lake_enable_batch_publish_multi_table;
+        Config.lake_enable_batch_publish_multi_table = multiTable;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+
+            // An attempt [6, 7] did not finish and txn 8 committed after it: the retry must leave txn 8 out.
+            markSent(masterDbTransMgr, txnId6, txnId7);
+            for (int round = 0; round < 2; round++) {
+                batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+                assertEquals(1, batches.size());
+                assertEquals(List.of(txnId6, txnId7), batches.get(0).getTxnIds());
+            }
+        } finally {
+            Config.lake_enable_batch_publish_multi_table = oldMultiTable;
+        }
+    }
+
+    @Test
+    public void testRetryOfAOneTxnBatchStaysAlone() throws AnalysisException {
+        int oldMinVersionNum = Config.lake_batch_publish_min_version_num;
+        Config.lake_batch_publish_min_version_num = 3;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            // Txn 6 was sent alone: its retry stays alone even though 7 and 8 are ready to join it, and even
+            // though a fresh batch would need three txns.
+            markSent(masterDbTransMgr, txnId6);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_batch_publish_min_version_num = oldMinVersionNum;
+        }
+    }
+
+    @Test
+    public void testRetryTakesInNewTxnsWhenRetryFreezeIsOff() throws AnalysisException {
+        boolean oldRetryFreeze = Config.lake_enable_batch_publish_retry_freeze;
+        Config.lake_enable_batch_publish_retry_freeze = false;
+        try {
+            DatabaseTransactionMgr masterDbTransMgr = dbTransMgrWithThreeBatchableTxns();
+            long txnId6 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable6);
+            long txnId7 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable7);
+            long txnId8 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable8);
+            markSent(masterDbTransMgr, txnId6, txnId7);
+            List<TransactionStateBatch> batches = masterDbTransMgr.getReadyToPublishTxnListBatch();
+            assertEquals(1, batches.size());
+            assertEquals(List.of(txnId6, txnId7, txnId8), batches.get(0).getTxnIds());
+        } finally {
+            Config.lake_enable_batch_publish_retry_freeze = oldRetryFreeze;
+        }
     }
 
     private static TransactionState makeVisibleBatchTxn(long txnId, List<Long> tableIds) {

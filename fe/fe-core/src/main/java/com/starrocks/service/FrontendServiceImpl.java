@@ -133,6 +133,9 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.EtlJobType;
+import com.starrocks.load.LoadJobRedaction;
+import com.starrocks.load.LoadJobVisibility;
+import com.starrocks.load.LoadJobVisibility.VisibleTask;
 import com.starrocks.load.batchwrite.RequestLoadResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.loadv2.LoadJob;
@@ -166,6 +169,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsInfo;
+import com.starrocks.qe.ScanCredentialsRefresher;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.qe.scheduler.warehouse.WarehouseQueryQueueMetrics;
@@ -367,6 +371,8 @@ import com.starrocks.thrift.TPrivilegeRequirement;
 import com.starrocks.thrift.TQueryStatisticsInfo;
 import com.starrocks.thrift.TRefreshConnectionsRequest;
 import com.starrocks.thrift.TRefreshConnectionsResponse;
+import com.starrocks.thrift.TRefreshScanCredentialsRequest;
+import com.starrocks.thrift.TRefreshScanCredentialsResponse;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -1438,8 +1444,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private long loadTxnBeginImpl(TLoadTxnBeginRequest request, String clientIp) throws Exception {
-        checkAuthAndLoadPriv(request.getUser(), request.getPasswd(), request.getAuth_type(), request.getDb(),
-                request.getTbl(), request.getUser_ip());
+        UserIdentity authenticatedUser = checkAuthAndLoadPriv(request.getUser(),
+                request.getPasswd(), request.getAuth_type(), request.getDb(), request.getTbl(),
+                request.getUser_ip());
+        // A Bearer request declares no user (the BE sends an empty one; the principal lives in the
+        // token), so record the load under the user the token authenticated as.
+        String loadUser = AuthCredentialKind.isBearer(request.getAuth_type())
+                ? authenticatedUser.getUser() : request.getUser();
 
         // check txn
         long limit = Config.stream_load_max_txn_num_per_be;
@@ -1487,7 +1498,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TransactionResult resp = new TransactionResult();
         StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
         streamLoadManager.beginLoadTaskFromBackend(dbName, table.getName(), request.getLabel(), request.getRequest_id(),
-                request.getUser(), clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
+                loadUser, clientIp, timeoutSecond * 1000, resp, false, computeResource, backendId);
         if (!resp.stateOK()) {
             LOG.warn(resp.msg);
             throw resp.getException();
@@ -1897,8 +1908,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     throw new StarRocksException("can not find stream load task by txnId " + request.getTxnId());
                 }
                 // Resource-group resolution on the pipeline path reads ctx.getQualifiedUser();
-                // set it here (pipeline path only, so the legacy path is unchanged).
-                context.setQualifiedUser(request.getUser());
+                // set it here (pipeline path only, so the legacy path is unchanged). A Bearer
+                // request declares no user, and authenticating its token already set the real one.
+                if (!AuthCredentialKind.isBearer(request.getAuth_type())) {
+                    context.setQualifiedUser(request.getUser());
+                }
                 // The LoadPlanner/JobSpec path derives query_globals.time_zone from the context
                 // session variable, not from streamLoadInfo; set it so the load honors its timezone.
                 context.getSessionVariable().setTimeZone(streamLoadInfo.getTimezone());
@@ -2054,6 +2068,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TRefreshTableResponse(status);
         }
+    }
+
+    @Override
+    public TRefreshScanCredentialsResponse refreshScanCredentials(TRefreshScanCredentialsRequest request)
+            throws TException {
+        return ScanCredentialsRefresher.refresh(request);
     }
 
     @Override
@@ -3513,12 +3533,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("Receive getRoutineLoadJobs: {}", request);
         TGetRoutineLoadJobsResult result = new TGetRoutineLoadJobsResult();
         RoutineLoadMgr routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        ConnectContext caller = LoadJobVisibility.callerOf(request);
         List<TRoutineLoadJobInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
                 RoutineLoadJob job = routineLoadManager.getJob(request.getJob_id());
                 if (job != null) {
-                    loads.add(job.toThrift());
+                    addRoutineLoadJobInfo(loads, caller, job);
                 }
             } else {
                 List<RoutineLoadJob> loadJobList;
@@ -3535,7 +3556,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         loadJobList = routineLoadManager.getJob(null, null, true);
                     }
                 }
-                loads.addAll(loadJobList.stream().map(RoutineLoadJob::toThrift).collect(Collectors.toList()));
+                for (RoutineLoadJob job : loadJobList) {
+                    addRoutineLoadJobInfo(loads, caller, job);
+                }
             }
             result.setLoads(loads);
         } catch (MetaNotFoundException e) {
@@ -3550,18 +3573,32 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("Receive getStreamLoads: {}", request);
         TGetStreamLoadsResult result = new TGetStreamLoadsResult();
         StreamLoadMgr loadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
+        ConnectContext caller = LoadJobVisibility.callerOf(request);
         List<TStreamLoadInfo> loads = Lists.newArrayList();
         try {
             if (request.isSetJob_id()) {
-                AbstractStreamLoadTask task = loadManager.getTaskById(request.getJob_id());
-                if (task != null) {
-                    loads.addAll(task.toStreamLoadThrift());
+                long jobId = request.getJob_id();
+                if (LoadJobVisibility.isEnabled()) {
+                    // A statement of a multi-statement transaction is authorized with the transaction.
+                    AbstractStreamLoadTask task = loadManager.getRegisteredTaskById(jobId);
+                    if (task != null) {
+                        for (VisibleTask visibleTask : LoadJobVisibility.visibleTasks(caller, task)) {
+                            if (task.getId() == jobId || visibleTask.task().getId() == jobId) {
+                                addStreamLoadInfos(loads, visibleTask);
+                            }
+                        }
+                    }
+                } else {
+                    AbstractStreamLoadTask task = loadManager.getTaskById(jobId);
+                    if (task != null) {
+                        addStreamLoadInfos(loads, caller, task);
+                    }
                 }
             } else {
                 List<AbstractStreamLoadTask> streamLoadTaskList = loadManager.getTaskByName(request.getLabel());
                 if (streamLoadTaskList != null) {
                     for (AbstractStreamLoadTask task : streamLoadTaskList) {
-                        loads.addAll(task.toStreamLoadThrift());
+                        addStreamLoadInfos(loads, caller, task);
                     }
                 }
             }
@@ -3570,6 +3607,33 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             LOG.warn("Failed to getStreamLoads", e);
         }
         return result;
+    }
+
+    private static void addRoutineLoadJobInfo(List<TRoutineLoadJobInfo> loads, ConnectContext caller,
+                                              RoutineLoadJob job) {
+        // With the rule off the views check nothing, as before it.
+        LoadJobVisibility.Access access = LoadJobVisibility.isEnabled() ? LoadJobVisibility.accessOf(caller, job)
+                : LoadJobVisibility.Access.FULL;
+        if (access != LoadJobVisibility.Access.NONE) {
+            TRoutineLoadJobInfo info = job.toThrift();
+            loads.add(access == LoadJobVisibility.Access.FULL ? info : LoadJobRedaction.redact(info));
+        }
+    }
+
+    private static void addStreamLoadInfos(List<TStreamLoadInfo> loads, ConnectContext caller,
+                                           AbstractStreamLoadTask task) {
+        List<VisibleTask> visibleTasks = LoadJobVisibility.isEnabled() ? LoadJobVisibility.visibleTasks(caller, task)
+                : LoadJobVisibility.allTasksInFull(task);
+        for (VisibleTask visibleTask : visibleTasks) {
+            addStreamLoadInfos(loads, visibleTask);
+        }
+    }
+
+    private static void addStreamLoadInfos(List<TStreamLoadInfo> loads, VisibleTask visibleTask) {
+        for (TStreamLoadInfo info : visibleTask.task().toStreamLoadThrift()) {
+            boolean full = visibleTask.access() == LoadJobVisibility.Access.FULL;
+            loads.add(full ? info : LoadJobRedaction.redact(info));
+        }
     }
 
     @Override

@@ -115,24 +115,20 @@ public enum SkipReason {
      */
     PARTITION_NOT_ELIGIBLE_POST_CREATE,
     /**
-     * Target is a materialized view that the derived tier cannot key: not an incremental MV, more than
-     * one visible index, a sort key that is not the single hidden row-id column, or a row-id kind no
-     * boundary source serves yet. Replaces an older unconditional materialized-view skip that recorded
-     * nothing at all.
+     * Target is a materialized view written by anything other than its own refresh, or an incremental
+     * MV the derived tier cannot key: more than one visible index, a sort key that is not the single
+     * hidden row-id column, or a row id that is an order-preserving encoding of the group-by keys,
+     * whose values follow the data. A view without a row id (a PCT view) refreshed by the system is
+     * sampled instead. Replaces an older unconditional materialized-view skip that recorded nothing at all.
      */
     MATERIALIZED_VIEW_TARGET,
     /**
-     * Derived tier: the estimated output is too small for the row-id key space to be carved usefully —
-     * a tablet's share of rows would not stay clear of the gaps that per-node id caching leaves behind,
-     * so the split would be unbalanced rather than helpful.
+     * Derived tier: the estimated output is too small for the row-id key space to be carved usefully.
+     * For auto-increment ids, a tablet's share of rows would not stay clear of the gaps that per-node
+     * id caching leaves behind, so the split would be unbalanced rather than helpful. For fingerprint
+     * ids, the estimate cannot fill two tablets of {@code tablet_reshard_min_split_size}.
      */
     ROW_ID_SPAN_TOO_SMALL,
-    /**
-     * Derived tier: the target's auto-increment counter has already handed out ids, so compute nodes may
-     * hold cached id intervals this planner cannot account for. Only a pristine id space lets the
-     * boundaries be derived; anything else falls back to no pre-split.
-     */
-    ROW_ID_SPACE_NOT_PRISTINE,
     /** Derived tier: no usable output-size estimate, so the tablet count cannot be chosen. */
     ESTIMATE_UNAVAILABLE,
     /**
