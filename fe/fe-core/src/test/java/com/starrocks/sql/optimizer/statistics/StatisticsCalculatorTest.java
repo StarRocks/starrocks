@@ -985,10 +985,10 @@ public class StatisticsCalculatorTest {
     }
 
     // An outer join keeps the unmatched rows of its preserved side, so the NDV of the preserved side's columns must
-    // not be capped at the (tiny) inner-join row count, whereas the non-preserved side's columns stay capped.
+    // not be capped at the inner-join row count, while the non-preserved side's columns stay capped
     @ParameterizedTest
     @EnumSource(value = JoinOperator.class, names = {"LEFT_OUTER_JOIN", "RIGHT_OUTER_JOIN", "FULL_OUTER_JOIN"})
-    public void testOuterJoinKeepsPreservedSideDistinctValues(JoinOperator joinType) {
+    public void testOuterJoinKeepsPreservedSideStats(JoinOperator joinType) {
         ConnectContext.get().getSessionVariable().setUseCorrelatedJoinEstimate(true);
         // big side: 200000 rows, key v1 and non-key v2
         ColumnRefOperator v1 = columnRefFactory.create("v1", IntegerType.INT, true);
@@ -1030,11 +1030,16 @@ public class StatisticsCalculatorTest {
         Assertions.assertEquals(200000, joinStats.getOutputRowCount(), 0.0001);
         // preserved side: key and non-key NDVs survive, the key range is not narrowed to the small side's
         Assertions.assertEquals(200000, joinStats.getColumnStatistic(v1).getDistinctValuesCount(), 0.0001);
+        Assertions.assertEquals(1, joinStats.getColumnStatistic(v1).getMinValue(), 0.0001);
         Assertions.assertEquals(200000, joinStats.getColumnStatistic(v1).getMaxValue(), 0.0001);
+        Assertions.assertEquals(1, joinStats.getColumnStatistic(v2).getMinValue(), 0.0001);
+        Assertions.assertEquals(200000, joinStats.getColumnStatistic(v2).getMaxValue(), 0.0001);
         Assertions.assertEquals(100000, joinStats.getColumnStatistic(v2).getDistinctValuesCount(), 0.0001);
         // non-preserved side: only the matched values remain
         Assertions.assertEquals(100, joinStats.getColumnStatistic(v3).getDistinctValuesCount(), 0.0001);
         Assertions.assertEquals(100, joinStats.getColumnStatistic(v4).getDistinctValuesCount(), 0.0001);
+        Assertions.assertEquals(1, joinStats.getColumnStatistic(v3).getMinValue(), 0.0001);
+        Assertions.assertEquals(100, joinStats.getColumnStatistic(v3).getMaxValue(), 0.0001);
     }
 
 

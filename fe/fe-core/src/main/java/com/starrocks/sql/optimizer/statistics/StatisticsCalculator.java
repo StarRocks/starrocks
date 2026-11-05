@@ -1547,8 +1547,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                         ErrorType.INTERNAL_ERROR);
         }
         Statistics joinStats = joinStatsBuilder.build();
+        ColumnRefSet preservedColumns = new ColumnRefSet();
         if (joinType.isOuterJoin()) {
-            ColumnRefSet preservedColumns = new ColumnRefSet();
             if (!joinType.isRightOuterJoin()) {
                 preservedColumns.union(leftStatistics.getUsedColumns());
             }
@@ -1556,7 +1556,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 preservedColumns.union(rightStatistics.getUsedColumns());
             }
             joinStats = restoreUnknownPreservedKeys(joinStats, rawCrossJoinStats, eqOnPredicates, preservedColumns);
-            joinStats = restorePreservedColumnDistinctValues(joinStats, rawCrossJoinStats, preservedColumns);
         }
 
         allJoinPredicate.removeAll(eqOnPredicates);
@@ -1575,6 +1574,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     Math.max(Math.min(estimateStatistics.getOutputRowCount(), leftRowCount), 1));
         } else if (joinType.isAsofLeftOuterJoin()) {
             estimateStatistics = estimateStatistics.withOutputRowCount(Math.max(1, leftRowCount));
+        }
+        // Restore stats for outer joins after the residual ON predicates are evaluated
+        if (joinType.isOuterJoin()) {
+            estimateStatistics = restorePreservedColumnsStats(estimateStatistics, rawCrossJoinStats,
+                    preservedColumns);
         }
 
         context.setStatistics(estimateStatistics);
@@ -2008,39 +2012,33 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return builder == null ? joinStats : builder.build();
     }
 
-    // The inner-join estimate intersects the key ranges and caps every column's NDV at the inner-join row count.
-    // That is right for the matched rows, but an outer join also keeps the unmatched rows of its preserved side,
-    // so every distinct value of a preserved-side column survives.
-    // Restore the original NDV, range and histogram of the preserved columns, capped by the outer-join
-    // output row count.
-    private static Statistics restorePreservedColumnDistinctValues(Statistics joinStats, Statistics rawCrossJoinStats,
-                                                                   ColumnRefSet preservedColumns) {
+    // The inner-join estimate caps every column's NDV at the inner-join row count and narrows the join keys' range
+    // to the matched values. An outer join also keeps the unmatched rows of its preserved side, so every distinct
+    // value and the range of a preserve side columns survive.
+    // Restore the original NDV (capped by the output row count) and range of the preserved columns.
+    private static Statistics restorePreservedColumnsStats(Statistics joinStats, Statistics rawCrossJoinStats,
+                                                           ColumnRefSet preservedColumns) {
         double outputRowCount = Math.max(1, joinStats.getOutputRowCount());
-        Statistics.Builder builder = null;
-        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : joinStats.getColumnStatistics().entrySet()) {
-            ColumnRefOperator column = entry.getKey();
-            ColumnStatistic current = entry.getValue();
+        Map<ColumnRefOperator, ColumnStatistic> restored = new HashMap<>();
+        joinStats.getColumnStatistics().forEach((column, current) -> {
             if (!preservedColumns.contains(column) || current.isUnknown()) {
-                continue;
+                return;
             }
             ColumnStatistic raw = rawCrossJoinStats.getColumnStatistics().get(column);
             if (raw == null || raw.isUnknown()) {
-                continue;
+                return;
             }
-            double restoredNdv = Math.min(raw.getDistinctValuesCount(), outputRowCount);
-            if (restoredNdv <= current.getDistinctValuesCount() && raw.getMinValue() == current.getMinValue()
-                    && raw.getMaxValue() == current.getMaxValue()) {
-                continue;
-            }
-            if (builder == null) {
-                builder = Statistics.buildFrom(joinStats);
-            }
-            builder.addColumnStatistic(column, ColumnStatistic.buildFrom(raw)
-                    .setNullsFraction(current.getNullsFraction())
-                    .setDistinctValuesCount(restoredNdv)
+            double ndv = Math.min(raw.getDistinctValuesCount(), outputRowCount);
+            restored.put(column, ColumnStatistic.buildFrom(current)
+                    .setMinValue(raw.getMinValue())
+                    .setMaxValue(raw.getMaxValue())
+                    .setDistinctValuesCount(ndv)
                     .build());
+        });
+        if (restored.isEmpty()) {
+            return joinStats;
         }
-        return builder == null ? joinStats : builder.build();
+        return Statistics.buildFrom(joinStats).addColumnStatistics(restored).build();
     }
 
     // For an equi-join key whose statistics are unknown on one side only, assume its values are contained in the
