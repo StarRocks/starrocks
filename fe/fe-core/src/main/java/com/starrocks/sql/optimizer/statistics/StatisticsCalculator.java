@@ -2033,6 +2033,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                     .setMinValue(raw.getMinValue())
                     .setMaxValue(raw.getMaxValue())
                     .setDistinctValuesCount(ndv)
+                    .setHistogram(null)
                     .build());
         });
         if (restored.isEmpty()) {
