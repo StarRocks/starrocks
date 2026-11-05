@@ -239,15 +239,11 @@ bool CompactionTask::should_enable_pk_index_eager_build(int64_t input_bytes) {
     }
     // Eager PK index build only works when all conditions are met:
     // 1. whether use cloud native index
-    // 2. whether use light compaction publish
-    // 3. whether input_bytes is large enough
+    // 2. whether input_bytes is large enough
     auto metadata = _tablet.metadata();
     bool use_cloud_native_index = metadata->enable_persistent_index() &&
                                   metadata->persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
-    bool use_light_compaction_publish = config::enable_light_pk_compaction_publish &&
-                                        StorageEngine::instance()->get_persistent_index_store(_tablet.id()) != nullptr;
-    return use_cloud_native_index && use_light_compaction_publish &&
-           input_bytes >= config::pk_index_eager_build_threshold_bytes;
+    return use_cloud_native_index && input_bytes >= config::pk_index_eager_build_threshold_bytes;
 }
 
 } // namespace starrocks::lake

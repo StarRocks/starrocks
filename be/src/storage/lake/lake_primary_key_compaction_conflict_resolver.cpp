@@ -31,9 +31,9 @@ namespace starrocks::lake {
 StatusOr<FileInfo> LakePrimaryKeyCompactionConflictResolver::filename() const {
     FileInfo info;
     // The rows mapper (.lcrm) is always stored on remote storage (S3/HDFS) and tracked in the
-    // txn log, so any compute node can read it during publish without file replication. The
-    // caller only reaches this resolver via light publish, which is gated on has_lcrm_file(),
-    // so _lcrm_file.name() is guaranteed non-empty here.
+    // txn log, so any compute node can read it during publish without file replication.
+    // publish_primary_compaction only builds this resolver for a compaction whose txn log
+    // records the mapper, so _lcrm_file.name() is guaranteed non-empty here.
     // PERFORMANCE: Use the size from metadata (_lcrm_file.size) to avoid a ~10-50ms get_size()
     // HEAD request to S3/HDFS per mapper file.
     ASSIGN_OR_RETURN(info.path, lake_rows_mapper_filename(_tablet_mgr, _rowset->tablet_id(), _lcrm_file.name()));

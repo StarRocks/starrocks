@@ -1246,9 +1246,9 @@ void TabletParallelCompactionManager::cleanup_tablet(int64_t tablet_id, int64_t 
     }
 
     // NOTE: Do NOT delete rows mapper files here!
-    // These files are needed by light_publish_primary_compaction which happens in a
-    // separate publish RPC after compaction completes. Each subtask's rows mapper file
-    // is cleaned up by RowsMapperIterator in its destructor during _light_publish_subtask().
+    // These files are needed by publish_primary_compaction which happens in a
+    // separate publish RPC after compaction completes. That publish records each
+    // rows mapper file as an orphan file, and vacuum deletes it.
 
     VLOG(1) << "Cleaned up parallel compaction state for tablet " << tablet_id << ", txn_id=" << txn_id;
 }
@@ -1729,8 +1729,7 @@ StatusOr<TxnLogPB> TabletParallelCompactionManager::get_merged_txn_log(int64_t t
     // Lock released here
 
     // Merge subtask LCRM files into a single LCRM for each large rowset split group.
-    // This enables the light publish path (SST ingestion) instead of the full publish
-    // path (try_replace), which is more robust and performant.
+    // Publish resolves a compaction through its LCRM, so the merged output needs one too.
     for (auto& task : lcrm_merge_tasks) {
         auto st = _merge_subtask_lcrm_files(tablet_id, txn_id, task.lcrm_files, task.num_rows_per_subtask,
                                             op_parallel->mutable_subtask_compactions(task.merged_compaction_idx));

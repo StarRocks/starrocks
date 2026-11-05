@@ -148,11 +148,9 @@ TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_preload_memory_limit_percent) 
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "50"));
     ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
-    ASSERT_EQ(primary_key_mem_limit * 50 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("lake_pk_preload_memory_limit_percent", "10"));
     ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->update_state_mem_tracker()->limit());
-    ASSERT_EQ(primary_key_mem_limit * 10 / 100, primary_key_mgr->compaction_state_mem_tracker()->limit());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_lake_pk_index_block_cache_limit_percent) {
@@ -221,14 +219,14 @@ TEST_F(ConfigUpdateHooksTest, test_update_memory_limit_percent) {
     ASSERT_EQ(process_mem_limit * 30 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 30 / 100, primary_key_mgr->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 30 / 100 * preload_mem_percent / 100,
-              primary_key_mgr->compaction_state_mem_tracker()->limit());
+              primary_key_mgr->update_state_mem_tracker()->limit());
 
     ASSERT_OK(ConfigUpdateRegistry::instance()->update_config("update_memory_limit_percent", "50"));
     ASSERT_EQ(process_mem_limit * 50 / 100, _runtime_env->update_mem_tracker()->limit());
     ASSERT_EQ(process_mem_limit * 50 / 100, StorageEngine::instance()->update_manager()->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 50 / 100, primary_key_mgr->index_cache().capacity());
     ASSERT_EQ(process_mem_limit * 50 / 100 * preload_mem_percent / 100,
-              primary_key_mgr->compaction_state_mem_tracker()->limit());
+              primary_key_mgr->update_state_mem_tracker()->limit());
 }
 
 TEST_F(ConfigUpdateHooksTest, test_update_load_sink_close_thread_pool_num_max) {
