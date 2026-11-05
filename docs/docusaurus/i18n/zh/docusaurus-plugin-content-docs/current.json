@@ -531,9 +531,9 @@
     "message": "AI 函数",
     "description": "The label for category AI functions in sidebar docs"
   },
-  "sidebar.docs.category.File functions": {
+  "sidebar.docs.category.FILE functions": {
     "message": "FILE 函数",
-    "description": "The label for category File functions in sidebar docs"
+    "description": "The label for category FILE functions in sidebar docs"
   },
   "sidebar.docs.category.Scalar": {
     "message": "标量函数",

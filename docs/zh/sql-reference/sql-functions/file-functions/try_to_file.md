@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据 STRUCT 表达式构造 FILE 值，字段值非法的行返回 NULL。"
+sidebar_position: 20
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

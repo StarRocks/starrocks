@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "FILE 値の size フィールドを取得します。"
+sidebar_position: 50
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

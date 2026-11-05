@@ -295,9 +295,9 @@
     "message": "AI 関数",
     "description": "The label for category AI functions in sidebar docs"
   },
-  "sidebar.docs.category.File functions": {
+  "sidebar.docs.category.FILE functions": {
     "message": "FILE 関数",
-    "description": "The label for category File functions in sidebar docs"
+    "description": "The label for category FILE functions in sidebar docs"
   },
   "sidebar.docs.category.Scalar": {
     "message": "スカラー",

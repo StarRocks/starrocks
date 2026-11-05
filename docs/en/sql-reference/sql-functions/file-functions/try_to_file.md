@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Constructs a FILE value from a STRUCT expression and returns NULL for rows with invalid field values."
+sidebar_position: 20
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

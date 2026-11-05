@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "提取 FILE 值的 size 字段。"
+sidebar_position: 50
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

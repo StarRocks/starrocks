@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "提取 FILE 值的 checksum 字段。"
+sidebar_position: 70
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'

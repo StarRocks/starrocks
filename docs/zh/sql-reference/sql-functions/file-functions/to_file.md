@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "根据 STRUCT 表达式构造 FILE 值。"
+sidebar_position: 10
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
@@ -35,7 +36,7 @@ FILE to_file(STRUCT struct_expr)
 
 - 字段名称大小写不敏感，顺序不限。未知或重复字段名在分析阶段报错。
 - 缺失字段和显式 NULL 均填为 NULL，不补默认值，包括 `offset` 和 `size`。
-- NULL STRUCT 返回 NULL，并跳过字段值校验。对于每个非 NULL STRUCT，`uri` 和 `inline` 必须恰好一个非 NULL；字段缺失等同于 NULL。
+- 对于每个非 NULL STRUCT，`uri` 和 `inline` 必须恰好一个非 NULL；字段缺失等同于 NULL。
 - 整数输入扩宽为 BIGINT。每个字段都接受未定型 NULL。其他输入类型需要显式 CAST。
 - `offset`、`size` 可以为 NULL；非 NULL 值必须大于等于 0。任意一行违反此规则或 `uri`/`inline` 二选一规则，查询都会失败。如需对这类行返回 NULL，请使用 [try_to_file](try_to_file.md)。
 - 不校验 URI 格式、MIME 类型、校验和，以及 size 与实际字节长度是否一致。

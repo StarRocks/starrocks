@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Constructs a FILE value from a STRUCT expression."
+sidebar_position: 10
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
@@ -35,7 +36,7 @@ Returns a FILE value. If `struct_expr` is NULL, returns NULL.
 
 - Field names are case-insensitive and can appear in any order. Unknown or duplicate names cause an analysis error.
 - Missing fields and explicit NULL values become NULL. No defaults are filled in, including for `offset` and `size`.
-- A NULL STRUCT returns NULL and skips field-value validation. For each non-NULL STRUCT, exactly one of `uri` and `inline` must be non-NULL. Missing fields count as NULL.
+- For each non-NULL STRUCT, exactly one of `uri` and `inline` must be non-NULL. Missing fields count as NULL.
 - Integer inputs are widened to BIGINT. Untyped NULL is accepted for every field. Other input types require an explicit CAST.
 - `offset` and `size` can be NULL; non-NULL values must be greater than or equal to zero. A row that violates these rules or the `uri`/`inline` rule causes the query to fail. To return NULL for such rows instead, use [try_to_file](try_to_file.md).
 - URI syntax, MIME types, checksums, and consistency between size and payload length are not validated.

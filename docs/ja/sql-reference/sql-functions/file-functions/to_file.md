@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "STRUCT 式から FILE 値を構築します。"
+sidebar_position: 10
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
@@ -35,7 +36,7 @@ FILE 値を返します。`struct_expr` が NULL の場合は NULL を返しま�
 
 - フィールド名は大文字と小文字を区別せず、順序は任意です。不明な名前や重複した名前は解析エラーになります。
 - 省略したフィールドと明示的な NULL は NULL になります。`offset` と `size` を含め、デフォルト値は補完しません。
-- NULL STRUCT は NULL を返し、フィールド値の検証を省略します。非 NULL の各 STRUCT では、`uri` と `inline` のどちらか一方だけが非 NULL である必要があります。省略したフィールドは NULL とみなします。
+- 非 NULL の各 STRUCT では、`uri` と `inline` のどちらか一方だけが非 NULL である必要があります。省略したフィールドは NULL とみなします。
 - 整数入力は BIGINT に拡張されます。すべてのフィールドで型未指定の NULL を使用できます。その他の入力型には明示的な CAST が必要です。
 - `offset` と `size` は NULL にできますが、非 NULL の値は 0 以上である必要があります。いずれかの行がこのルール、または `uri` と `inline` のルールに違反すると、クエリは失敗します。このような行で NULL を返すには、[try_to_file](try_to_file.md) を使用してください。
 - URI の構文、MIME タイプ、チェックサム、size と実際のバイト長の整合性は検証しません。

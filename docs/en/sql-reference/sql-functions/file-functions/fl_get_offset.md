@@ -1,6 +1,7 @@
 ---
 displayed_sidebar: docs
 description: "Extracts the offset field of a FILE value."
+sidebar_position: 40
 ---
 
 import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
