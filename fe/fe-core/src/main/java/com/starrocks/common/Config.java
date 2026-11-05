@@ -2844,31 +2844,36 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache dir
      */
+<<<<<<< HEAD
     @ConfField(mutable = true)
     public static String iceberg_metadata_cache_disk_path = StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg";
+=======
+    @ConfField
+    public static String iceberg_metadata_cache_disk_path = Config.STARROCKS_HOME_DIR + "/caches/iceberg";
+>>>>>>> 1799d44 ([BugFix][RB-225] Share the Hadoop configuration and AWS credentials providers across Iceberg FileIOs (#82448))
 
     /**
      * iceberg metadata memory cache total size, default 0MB (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_capacity = 0L;
 
     /**
      * iceberg metadata memory cache expiration time, default 86500s
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_memory_cache_expiration_seconds = 86500;
 
     /**
      * enable iceberg metadata disk cache, default false
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static boolean enable_iceberg_metadata_disk_cache = false;
 
     /**
      * iceberg metadata disk cache total size, default 2GB
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
 
     /**
@@ -2880,7 +2885,7 @@ public class Config extends ConfigBase {
     /**
      * iceberg metadata cache max entry size, default 0L (turn off)
      */
-    @ConfField(mutable = true)
+    @ConfField
     public static long iceberg_metadata_cache_max_entry_size = 0L;
 
     /**
