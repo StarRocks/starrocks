@@ -107,6 +107,11 @@ public:
     ColumnReader(const private_type&, Segment* segment);
     ~ColumnReader();
 
+    // CLucene readers retain independently shared FileReader/TabletIndex
+    // objects. Release this excluded ownership chain in the caller's context,
+    // before deleting process-owned Segment metadata.
+    void release_inverted_index();
+
     ColumnReader(const ColumnReader&) = delete;
     void operator=(const ColumnReader&) = delete;
     ColumnReader(ColumnReader&&) = delete;

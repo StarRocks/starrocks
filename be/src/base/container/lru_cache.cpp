@@ -113,7 +113,9 @@ bool HandleTable::_resize() {
         new_length *= 2;
     }
 
-    auto** new_list = new (std::nothrow) LRUHandle*[new_length];
+    auto** new_list = _allocator != nullptr
+                              ? static_cast<LRUHandle**>(_allocator->allocate(sizeof(LRUHandle*) * new_length))
+                              : new (std::nothrow) LRUHandle*[new_length];
 
     if (nullptr == new_list) {
         LOG(FATAL) << "failed to malloc new hash list. new_length=" << new_length;
@@ -138,18 +140,18 @@ bool HandleTable::_resize() {
     }
 
     if (_elems != count) {
-        delete[] new_list;
+        _free_buckets(new_list);
         LOG(FATAL) << "_elems not match new count. elems=" << _elems << ", count=" << count;
         return false;
     }
 
-    delete[] _list;
+    _free_buckets(_list);
     _list = new_list;
     _length = new_length;
     return true;
 }
 
-LRUCache::LRUCache() {
+LRUCache::LRUCache(const CacheStorageAllocator* allocator) : _allocator(allocator), _table(allocator) {
     // Make empty circular linked list
     _lru.next = &_lru;
     _lru.prev = &_lru;
@@ -323,7 +325,9 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
 LRUHandle* LRUCache::_alloc_handle(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                    void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
     size_t key_mem_size = sizeof(LRUHandle) - 1 + key.size();
-    auto* e = reinterpret_cast<LRUHandle*>(malloc(key_mem_size));
+    auto* e = reinterpret_cast<LRUHandle*>(_allocator != nullptr ? _allocator->allocate(key_mem_size)
+                                                                 : malloc(key_mem_size));
+    e->storage_allocator = _allocator;
     e->value = value;
     e->deleter = deleter;
     e->charge = value_size + key_mem_size;
@@ -404,7 +408,7 @@ Cache::Handle* LRUCache::insert_no_evict(const CacheKey& key, uint32_t hash, voi
 
     if (!fits) {
         // Only the handle is ours to release; `value` still belongs to the caller.
-        ::free(e);
+        e->free_storage();
         return nullptr;
     }
     for (auto entry : last_ref_list) {
@@ -441,7 +445,7 @@ Cache::Handle* LRUCache::insert_if_absent(const CacheKey& key, uint32_t hash, vo
     *inserted = (ret == e);
     if (!*inserted) {
         // Only the handle is ours to release; `value` still belongs to the caller.
-        ::free(e);
+        e->free_storage();
     }
     for (auto entry : last_ref_list) {
         entry->free();
@@ -483,7 +487,7 @@ bool LRUCache::replace_if(const CacheKey& key, uint32_t hash, void* value, size_
         release(reinterpret_cast<Cache::Handle*>(replacement));
     } else {
         // The cache never adopted value; only its unused handle belongs to us.
-        ::free(replacement);
+        replacement->free_storage();
     }
     return replaced;
 }
@@ -578,12 +582,8 @@ uint32_t ShardedLRUCache::_shard(uint32_t hash) {
     return hash >> (32 - kNumShardBits);
 }
 
-ShardedLRUCache::ShardedLRUCache(size_t capacity) : _capacity(capacity) {
-    const size_t per_shard = (_capacity + (kNumShards - 1)) / kNumShards;
-    for (auto& _shard : _shards) {
-        _shard.set_capacity(per_shard);
-    }
-}
+ShardedLRUCache::ShardedLRUCache(size_t capacity, const CacheStorageAllocator* allocator)
+        : ShardedLRUCache(capacity, allocator, std::make_index_sequence<kNumShards>()) {}
 
 void ShardedLRUCache::_set_capacity(size_t capacity) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
@@ -764,8 +764,8 @@ void ShardedLRUCache::get_cache_status(rapidjson::Document* document) {
     }
 }
 
-Cache* new_lru_cache(size_t capacity) {
-    return new ShardedLRUCache(capacity);
+Cache* new_lru_cache(size_t capacity, const CacheStorageAllocator* allocator) {
+    return new ShardedLRUCache(capacity, allocator);
 }
 
 } // namespace starrocks

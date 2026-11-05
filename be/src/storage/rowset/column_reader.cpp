@@ -55,6 +55,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "platform/key_cache.h"
 #include "runtime/current_thread.h"
+#include "runtime/memory/process_memory.h"
 #include "runtime/runtime_env.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/lake/index_delta_group.h"
@@ -142,6 +143,17 @@ ColumnReader::~ColumnReader() {
         _zstd_compression_ddict.reset();
     }
     MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_metadata_mem_tracker(), sizeof(ColumnReader));
+}
+
+void ColumnReader::release_inverted_index() {
+    _inverted_index.reset();
+    if (_sub_readers != nullptr) {
+        for (auto& reader : *_sub_readers) {
+            if (reader != nullptr) {
+                reader->release_inverted_index();
+            }
+        }
+    }
 }
 
 Status ColumnReader::_init(ColumnMetaPB* meta, const TabletColumn* column) {
@@ -562,13 +574,13 @@ Status ColumnReader::_ensure_zstd_compression_ddict(const ColumnIteratorOptions&
                        // on the parentless metadata tree, which is what sizes the
                        // metacache and does not participate in process accounting.
                        // ~ColumnReader releases under the same scope.
-                       StatusOr<std::unique_ptr<compression::ZstdDDict>> ddict_or;
-                       {
-                           SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(RuntimeEnv::GetInstance()->process_mem_tracker());
-                           ddict_or = compression::ZstdDDict::create(body);
-                       }
-                       RETURN_IF_ERROR(ddict_or.status());
-                       _zstd_compression_ddict = std::move(ddict_or.value()); // unique_ptr -> shared_ptr
+                       RETURN_IF_ERROR(with_memory_tracker(process_memory_tracker(), [&]() -> Status {
+                           ASSIGN_OR_RETURN(auto ddict, compression::ZstdDDict::create(body));
+                           // Both the dictionary and its shared_ptr control block
+                           // must be released under the same process owner.
+                           _zstd_compression_ddict = std::move(ddict);
+                           return Status::OK();
+                       }));
                        // The DDict holds its own copy of the dictionary and lives as long
                        // as this reader does, which for a cached segment means as long as
                        // the segment stays in the metacache. Report it the way every other
@@ -776,66 +788,122 @@ Status ColumnReader::ngram_bloom_filter(const std::vector<const ::starrocks::Col
 
 Status ColumnReader::load_ordinal_index(const IndexReadOptions& opts) {
     if (_ordinal_index == nullptr || _ordinal_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    auto meta = _ordinal_index_meta.get();
-    ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(opts, *meta, num_rows()));
-    if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
-                                 _ordinal_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_ordinal_index->mem_usage(), std::memory_order_relaxed);
-        _ordinal_index_meta.reset();
+    auto metadata_opts = opts;
+    const bool process_owned = _segment != nullptr && _segment->uses_process_memory();
+    if (process_owned) {
+        // The stream belongs to the iterator. Its lazy IO buffers must remain
+        // charged to that caller, not to the shared index metadata owner.
+        metadata_opts.read_file_mem_tracker = CurrentThread::mem_tracker();
+    }
+    bool loaded = false;
+    auto status = with_process_memory(process_owned, [&]() -> Status {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+        auto meta = _ordinal_index_meta.get();
+        ASSIGN_OR_RETURN(auto first_load, _ordinal_index->load(metadata_opts, *meta, num_rows()));
+        if (UNLIKELY(first_load)) {
+            MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->ordinal_index_mem_tracker(),
+                                     _ordinal_index_meta->SpaceUsedLong());
+            _meta_mem_usage.fetch_sub(_ordinal_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+            _meta_mem_usage.fetch_add(_ordinal_index->mem_usage(), std::memory_order_relaxed);
+            _ordinal_index_meta.reset();
+            loaded = true;
+        }
+        return Status::OK();
+    });
+    if (loaded) {
         _segment->update_cache_size();
     }
-    return Status::OK();
+    return status;
 }
 
 Status ColumnReader::_load_zonemap_index(const IndexReadOptions& opts) {
     if (_zonemap_index == nullptr || _zonemap_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    auto meta = _zonemap_index_meta.get();
-    ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(opts, *meta));
-    if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
-                                 _zonemap_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_zonemap_index->mem_usage());
-        _zonemap_index_meta.reset();
+    auto metadata_opts = opts;
+    const bool process_owned = _segment != nullptr && _segment->uses_process_memory();
+    if (process_owned) {
+        // The stream belongs to the iterator. Its lazy IO buffers must remain
+        // charged to that caller, not to the shared index metadata owner.
+        metadata_opts.read_file_mem_tracker = CurrentThread::mem_tracker();
+    }
+    bool loaded = false;
+    auto status = with_process_memory(process_owned, [&]() -> Status {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+        auto meta = _zonemap_index_meta.get();
+        ASSIGN_OR_RETURN(auto first_load, _zonemap_index->load(metadata_opts, *meta));
+        if (UNLIKELY(first_load)) {
+            MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->column_zonemap_index_mem_tracker(),
+                                     _zonemap_index_meta->SpaceUsedLong());
+            _meta_mem_usage.fetch_sub(_zonemap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+            _meta_mem_usage.fetch_add(_zonemap_index->mem_usage());
+            _zonemap_index_meta.reset();
+            loaded = true;
+        }
+        return Status::OK();
+    });
+    if (loaded) {
         _segment->update_cache_size();
     }
-    return Status::OK();
+    return status;
 }
 
 Status ColumnReader::_load_bitmap_index(const IndexReadOptions& opts) {
     if (_bitmap_index == nullptr || _bitmap_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    auto meta = _bitmap_index_meta.get();
-    ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(opts, *meta));
-    if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
-                                 _bitmap_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_bitmap_index->mem_usage(), std::memory_order_relaxed);
-        _bitmap_index_meta.reset();
+    auto metadata_opts = opts;
+    const bool process_owned = _segment != nullptr && _segment->uses_process_memory();
+    if (process_owned) {
+        // The stream belongs to the iterator. Its lazy IO buffers must remain
+        // charged to that caller, not to the shared index metadata owner.
+        metadata_opts.read_file_mem_tracker = CurrentThread::mem_tracker();
+    }
+    bool loaded = false;
+    auto status = with_process_memory(process_owned, [&]() -> Status {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+        auto meta = _bitmap_index_meta.get();
+        ASSIGN_OR_RETURN(auto first_load, _bitmap_index->load(metadata_opts, *meta));
+        if (UNLIKELY(first_load)) {
+            MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bitmap_index_mem_tracker(),
+                                     _bitmap_index_meta->SpaceUsedLong());
+            _meta_mem_usage.fetch_sub(_bitmap_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+            _meta_mem_usage.fetch_add(_bitmap_index->mem_usage(), std::memory_order_relaxed);
+            _bitmap_index_meta.reset();
+            loaded = true;
+        }
+        return Status::OK();
+    });
+    if (loaded) {
         _segment->update_cache_size();
     }
-    return Status::OK();
+    return status;
 }
 
 Status ColumnReader::_load_bloom_filter_index(const IndexReadOptions& opts) {
     if (_bloom_filter_index == nullptr || _bloom_filter_index->loaded()) return Status::OK();
-    SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
-    auto meta = _bloom_filter_index_meta.get();
-    ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(opts, *meta));
-    if (UNLIKELY(first_load)) {
-        MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
-                                 _bloom_filter_index_meta->SpaceUsedLong());
-        _meta_mem_usage.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
-        _meta_mem_usage.fetch_add(_bloom_filter_index->mem_usage(), std::memory_order_relaxed);
-        _bloom_filter_index_meta.reset();
+    auto metadata_opts = opts;
+    const bool process_owned = _segment != nullptr && _segment->uses_process_memory();
+    if (process_owned) {
+        // The stream belongs to the iterator. Its lazy IO buffers must remain
+        // charged to that caller, not to the shared index metadata owner.
+        metadata_opts.read_file_mem_tracker = CurrentThread::mem_tracker();
+    }
+    bool loaded = false;
+    auto status = with_process_memory(process_owned, [&]() -> Status {
+        SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
+        auto meta = _bloom_filter_index_meta.get();
+        ASSIGN_OR_RETURN(auto first_load, _bloom_filter_index->load(metadata_opts, *meta));
+        if (UNLIKELY(first_load)) {
+            MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                                     _bloom_filter_index_meta->SpaceUsedLong());
+            _meta_mem_usage.fetch_sub(_bloom_filter_index_meta->SpaceUsedLong(), std::memory_order_relaxed);
+            _meta_mem_usage.fetch_add(_bloom_filter_index->mem_usage(), std::memory_order_relaxed);
+            _bloom_filter_index_meta.reset();
+            loaded = true;
+        }
+        return Status::OK();
+    });
+    if (loaded) {
         _segment->update_cache_size();
     }
-    return Status::OK();
+    return status;
 }
 
 Status ColumnReader::new_inverted_index_iterator(const std::shared_ptr<TabletIndex>& index_meta,

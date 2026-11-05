@@ -115,6 +115,7 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
 
     PageReadOptions page_opts;
     page_opts.read_file = opts.read_file;
+    page_opts.read_file_mem_tracker = opts.read_file_mem_tracker;
     page_opts.page_pointer = PagePointer(meta.root_page().root_page());
     page_opts.codec = nullptr; // ordinal index page uses NO_COMPRESSION right now
     page_opts.stats = opts.stats;
