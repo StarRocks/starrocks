@@ -14,15 +14,31 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.PlanMode;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.type.AnyStructType;
+import com.starrocks.type.Type;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.DataFile;
@@ -49,6 +65,8 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +79,7 @@ import static com.starrocks.connector.iceberg.IcebergMetadataTest.DEFAULT_CATALO
 import static com.starrocks.connector.iceberg.IcebergMetadataTest.DEFAULT_CONFIG;
 import static com.starrocks.connector.iceberg.IcebergMetadataTest.HDFS_ENVIRONMENT;
 import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.VarcharType.VARCHAR;
 
 // The manifest cache keeps file-level min/max of columns outside the partition/sort keep-set, so a warm cache prunes
 // the same files as a cold one.
@@ -437,5 +456,322 @@ public class IcebergManifestCacheStatsTest extends TableTestBase {
                 rounds.get(0).get("/path/to/data-id-7.parquet").subList(0, 2));
         Assertions.assertEquals(rounds.get(0), rounds.get(1));
         Assertions.assertEquals(rounds.get(0), rounds.get(2));
+    }
+
+    // ---- the column-statistics path (enable_iceberg_column_statistics=true) ----
+
+    private static ByteBuffer str(String value) {
+        return Conversions.toByteBuffer(Types.StringType.get(), value);
+    }
+
+    // a, b, c INT and s STRING; file i: a in [i, i + 5], b in [100 + i, 200] with 2 nulls, c = 20 + i, s in
+    // ["s<i>", "s<i>z"]. The last file lacks b's bounds without being all null (corrupted). A column d is added after
+    // the files, which have no statistics for it.
+    private Table columnStatsTable(String name) {
+        Schema schema = new Schema(List.of(
+                Types.NestedField.optional(1, "a", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "b", Types.IntegerType.get()),
+                Types.NestedField.optional(3, "c", Types.IntegerType.get()),
+                Types.NestedField.optional(4, "s", Types.StringType.get())));
+        Table table = create(schema, PartitionSpec.unpartitioned(), name, 2);
+        AppendFiles append = table.newAppend();
+        for (int i = 0; i < FILES; i++) {
+            Map<Integer, ByteBuffer> lower = new HashMap<>(Map.of(1, id(i), 2, id(100 + i), 3, id(20 + i),
+                    4, str("s" + i)));
+            Map<Integer, ByteBuffer> upper = new HashMap<>(Map.of(1, id(i + 5), 2, id(200), 3, id(20 + i),
+                    4, str("s" + i + "z")));
+            if (i == FILES - 1) {
+                lower.remove(2);
+                upper.remove(2);
+            }
+            append.appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                    .withPath("/path/to/" + name + "-" + i + ".parquet")
+                    .withFileSizeInBytes(100)
+                    .withRecordCount(10)
+                    .withMetrics(new Metrics(10L, Map.of(1, 40L, 2, 30L + i, 3, 20L, 4, 60L),
+                            Map.of(1, 10L, 2, 10L, 3, 10L, 4, 10L), Map.of(1, 0L, 2, 2L, 3, 0L, 4, 0L), null,
+                            lower, upper))
+                    .build());
+        }
+        append.commit();
+        table.updateSchema().addColumn("d", Types.IntegerType.get()).commit();
+        return table;
+    }
+
+    private static IcebergTable srTable(Table table, String name, List<Column> columns) {
+        return new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", DB_NAME, name, "", columns, table,
+                Maps.newHashMap());
+    }
+
+    private static IcebergMetadata statsMetadata(IcebergCatalog catalog) {
+        return new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, catalog, Executors.newSingleThreadExecutor(),
+                DEFAULT_CATALOG_PROPERTIES, new ConnectorProperties(ConnectorType.ICEBERG,
+                Map.of(ConnectorProperties.ENABLE_GET_STATS_FROM_EXTERNAL_METADATA, "true")), null);
+    }
+
+    // The statistics the optimizer sees, in comparable form: the row count and, per column, every estimate.
+    private static List<Object> columnStatistics(IcebergMetadata metadata, IcebergTable table,
+                                                 Map<ColumnRefOperator, Column> columns, ScalarOperator predicate,
+                                                 boolean enableColumnStats) {
+        ConnectContext context = new ConnectContext();
+        context.getSessionVariable().setEnableIcebergColumnStatistics(enableColumnStats);
+        context.setThreadLocalInfo();
+        try {
+            OptimizerContext optimizerContext = OptimizerFactory.mockContext(context, new ColumnRefFactory());
+            Statistics statistics = metadata.getTableStatistics(optimizerContext, table, columns, null, predicate, -1,
+                    TvrTableSnapshot.of(Optional.of(table.getNativeTable().currentSnapshot().snapshotId())));
+            List<Object> result = new ArrayList<>();
+            result.add(statistics.getOutputRowCount());
+            columns.keySet().stream().sorted(Comparator.comparing(ColumnRefOperator::getName)).forEach(ref -> {
+                ColumnStatistic stat = statistics.getColumnStatistic(ref);
+                result.add(List.of(ref.getName(), stat.getMinValue(), stat.getMaxValue(),
+                        String.valueOf(stat.getMinString()), String.valueOf(stat.getMaxString()),
+                        stat.getNullsFraction(), stat.getAverageRowSize(), stat.getDistinctValuesCount(),
+                        stat.getType()));
+            });
+            return result;
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    private static Map<ColumnRefOperator, Column> columnRefs(String... names) {
+        Map<ColumnRefOperator, Column> columns = new HashMap<>();
+        int id = 1;
+        for (String name : names) {
+            Type type = name.equals("s") || name.equals("data") ? VARCHAR : INT;
+            columns.put(new ColumnRefOperator(id++, type, name, true), new Column(name, type));
+        }
+        return columns;
+    }
+
+    private static ScalarOperator greaterEqual(Map<ColumnRefOperator, Column> columns, String name, int value) {
+        ColumnRefOperator ref = columns.keySet().stream().filter(c -> c.getName().equals(name)).findFirst()
+                .orElseThrow();
+        return new BinaryPredicateOperator(BinaryType.GE, ref, ConstantOperator.createInt(value));
+    }
+
+    // The column-statistics path asks for the estimated columns only and is served from the manifest cache, with the
+    // same statistics as the path that reads every manifest; repeated queries hit the warm cache.
+    @Test
+    public void testColumnStatisticsFromCacheMatchNonCachePath() {
+        String name = "t_colstats";
+        Table table = columnStatsTable(name);
+        Map<ColumnRefOperator, Column> columns = columnRefs("a", "b", "s", "d", "not_in_table");
+        IcebergTable icebergTable = srTable(table, name, new ArrayList<>(columns.values()));
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        IcebergHiveCatalog nonCaching = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        TvrTableSnapshot version = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
+        Assertions.assertEquals(Set.of("a", "b", "s", "d"), statsMetadata(catalog).statsColumnNamesServedFromCache(
+                icebergTable, columns.values(), null, version, null));
+        Assertions.assertNull(statsMetadata(nonCaching).statsColumnNamesServedFromCache(
+                icebergTable, columns.values(), null, version, null));
+
+        List<ScalarOperator> predicates = Arrays.asList(null, greaterEqual(columns, "a", 10));
+        List<List<Object>> expected = new ArrayList<>();
+        for (ScalarOperator predicate : predicates) {
+            expected.add(columnStatistics(statsMetadata(nonCaching), icebergTable, columns, predicate, true));
+        }
+        // a >= 10 keeps files 5..7 only
+        Assertions.assertEquals(30.0, expected.get(1).get(0));
+        for (int i = 0; i < predicates.size(); i++) {
+            Assertions.assertEquals(expected.get(i),
+                    columnStatistics(statsMetadata(catalog), icebergTable, columns, predicates.get(i), true));
+        }
+        // With the manifests gone, only the cache can serve the statistics.
+        for (ManifestFile manifest : table.currentSnapshot().allManifests(table.io())) {
+            table.io().deleteFile(manifest.path());
+        }
+        for (int round = 0; round < 2; round++) {
+            for (int i = 0; i < predicates.size(); i++) {
+                Assertions.assertEquals(expected.get(i),
+                        columnStatistics(statsMetadata(catalog), icebergTable, columns, predicates.get(i), true),
+                        "predicate " + predicates.get(i) + " round " + round);
+            }
+        }
+        List<Object> all = expected.get(0);
+        Assertions.assertEquals(80.0, all.get(0));
+        // a: [0, 12]; b: no min once a file lacks its bounds (the provider keeps the max seen before it); s: string
+        // bounds; d: no statistics in any file
+        Assertions.assertEquals(List.of("a", 0.0, 12.0), ((List<?>) all.get(1)).subList(0, 3));
+        Assertions.assertEquals(List.of("b", Double.NEGATIVE_INFINITY, 200.0, 0.2),
+                List.of(((List<?>) all.get(2)).get(0), ((List<?>) all.get(2)).get(1), ((List<?>) all.get(2)).get(2),
+                        ((List<?>) all.get(2)).get(5)));
+        Assertions.assertEquals(List.of("s0", "s7z"), ((List<?>) all.get(5)).subList(3, 5));
+    }
+
+    // A column the cache does not keep in every manifest sends the path past the cache, requesting all columns as
+    // before; the statistics do not change.
+    @Test
+    public void testColumnStatisticsNotKeptByCacheUseNonCachePath() {
+        String name = "t_colstats_limit";
+        Table table = columnStatsTable(name);
+        Map<ColumnRefOperator, Column> columns = columnRefs("a", "c");
+        IcebergTable icebergTable = srTable(table, name, new ArrayList<>(columns.values()));
+        CachingIcebergCatalog catalog = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "2"));
+        IcebergHiveCatalog nonCaching = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        TvrTableSnapshot version = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
+
+        Assertions.assertEquals(Set.of("a"), statsMetadata(catalog).statsColumnNamesServedFromCache(
+                icebergTable, columnRefs("a").values(), null, version, null));
+        Assertions.assertNull(statsMetadata(catalog).statsColumnNamesServedFromCache(
+                icebergTable, columns.values(), null, version, null));
+        Assertions.assertEquals(columnStatistics(statsMetadata(nonCaching), icebergTable, columns, null, true),
+                columnStatistics(statsMetadata(catalog), icebergTable, columns, null, true));
+
+        // it reads the manifests even with a warm cache, so it fails without them, while a covered column set is
+        // still served from the cache
+        List<Object> onlyA = columnStatistics(statsMetadata(catalog), icebergTable, columnRefs("a"), null, true);
+        for (ManifestFile manifest : table.currentSnapshot().allManifests(table.io())) {
+            table.io().deleteFile(manifest.path());
+        }
+        Assertions.assertThrows(Exception.class,
+                () -> columnStatistics(statsMetadata(catalog), icebergTable, columns, null, true));
+        Assertions.assertEquals(onlyA,
+                columnStatistics(statsMetadata(catalog), icebergTable, columnRefs("a"), null, true));
+    }
+
+    // A partitioned table: the bucket source is in the cache keep-set, id ranks within the limit.
+    @Test
+    public void testPartitionedColumnStatisticsFromCacheMatchNonCachePath() {
+        appendFiles(mockedNativeTableA);
+        Map<ColumnRefOperator, Column> columns = columnRefs("id", "data");
+        IcebergTable icebergTable = srTable(mockedNativeTableA, TABLE_NAME, new ArrayList<>(columns.values()));
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        IcebergHiveCatalog nonCaching = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        Assertions.assertEquals(Set.of("id", "data"), statsMetadata(catalog).statsColumnNamesServedFromCache(
+                icebergTable, columns.values(), null,
+                TvrTableSnapshot.of(Optional.of(mockedNativeTableA.currentSnapshot().snapshotId())), null));
+        List<Object> expected = columnStatistics(statsMetadata(nonCaching), icebergTable, columns, null, true);
+        for (int round = 0; round < 2; round++) {
+            Assertions.assertEquals(expected, columnStatistics(statsMetadata(catalog), icebergTable, columns, null, true));
+        }
+        Assertions.assertEquals(List.of("id", 0.0, 79.0), ((List<?>) expected.get(2)).subList(0, 3));
+    }
+
+    // With the switch off (the default) the columns stay UNKNOWN and nothing is planned for statistics.
+    @Test
+    public void testColumnStatisticsOffKeepsColumnsUnknown() {
+        String name = "t_colstats_off";
+        Table table = columnStatsTable(name);
+        Map<ColumnRefOperator, Column> columns = columnRefs("a");
+        IcebergTable icebergTable = srTable(table, name, new ArrayList<>(columns.values()));
+        List<Object> stats = columnStatistics(statsMetadata(newCatalog(Map.of())), icebergTable, columns, null, false);
+        Assertions.assertEquals(80.0, stats.get(0));
+        Assertions.assertEquals(ColumnStatistic.StatisticType.UNKNOWN, ((List<?>) stats.get(1)).get(8));
+    }
+
+    // The fields a pushed-down predicate prunes files on count toward the cache coverage: a struct subfield that the
+    // cache does not keep sends the path past the cache, so it prunes the same files as before.
+    @Test
+    public void testPredicateFieldsCountTowardCacheCoverage() {
+        String name = "t_nested";
+        Schema schema = new Schema(List.of(
+                Types.NestedField.optional(1, "a", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "st", Types.StructType.of(
+                        Types.NestedField.optional(3, "x", Types.IntegerType.get())))));
+        Table table = create(schema, PartitionSpec.unpartitioned(), name, 2);
+        AppendFiles append = table.newAppend();
+        for (int i = 0; i < FILES; i++) {
+            append.appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                    .withPath("/path/to/" + name + "-" + i + ".parquet")
+                    .withFileSizeInBytes(10)
+                    .withRecordCount(10)
+                    .withMetrics(new Metrics(10L, null, Map.of(1, 10L, 3, 10L), Map.of(1, 0L, 3, 0L), null,
+                            Map.of(1, id(i), 3, id(10 * i)), Map.of(1, id(i), 3, id(10 * i + 9))))
+                    .build());
+        }
+        append.commit();
+        Map<ColumnRefOperator, Column> columns = columnRefs("a");
+        IcebergTable icebergTable = srTable(table, name, new ArrayList<>(columns.values()));
+        // the cache keeps the statistics of one column: a
+        CachingIcebergCatalog catalog = newCatalog(
+                Map.of(IcebergCatalogProperties.ICEBERG_MANIFEST_CACHE_STATISTICS_MAX_COLUMNS, "1"));
+        IcebergHiveCatalog nonCaching = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        TvrTableSnapshot version = TvrTableSnapshot.of(Optional.of(table.currentSnapshot().snapshotId()));
+        ColumnRefOperator st = new ColumnRefOperator(10, AnyStructType.ANY_STRUCT, "st", true);
+        ScalarOperator onSubfield = new BinaryPredicateOperator(BinaryType.EQ,
+                new SubfieldOperator(st, INT, ImmutableList.of("x")), ConstantOperator.createInt(25));
+
+        Assertions.assertEquals(Set.of("a"), statsMetadata(catalog).statsColumnNamesServedFromCache(
+                icebergTable, columns.values(), greaterEqual(columns, "a", 2), version, null));
+        Assertions.assertNull(statsMetadata(catalog).statsColumnNamesServedFromCache(
+                icebergTable, columns.values(), onSubfield, version, null));
+        List<Object> expected = columnStatistics(statsMetadata(nonCaching), icebergTable, columns, onSubfield, true);
+        // st.x = 25 keeps file 2 only
+        Assertions.assertEquals(10.0, expected.get(0));
+        for (int round = 0; round < 2; round++) {
+            Assertions.assertEquals(expected,
+                    columnStatistics(statsMetadata(catalog), icebergTable, columns, onSubfield, true));
+        }
+    }
+
+    // The cache truncates STRING bounds to 16 characters, as Iceberg's default metrics mode does. Longer bounds (a
+    // `full` metrics mode) are served truncated: still a valid lower / upper bound, a looser estimate; the rest of
+    // the statistics are the same.
+    @Test
+    public void testLongStringBoundsServedTruncated() {
+        String name = "t_long_string";
+        Schema schema = new Schema(List.of(Types.NestedField.optional(1, "s", Types.StringType.get())));
+        Table table = create(schema, PartitionSpec.unpartitioned(), name, 2);
+        String longMin = "aaaaaaaaaaaaaaaaaaaa-min";
+        String longMax = "zzzzzzzzzzzzzzzzyyyy-max";
+        table.newAppend().appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                .withPath("/path/to/" + name + ".parquet")
+                .withFileSizeInBytes(10)
+                .withRecordCount(10)
+                .withMetrics(new Metrics(10L, Map.of(1, 50L), Map.of(1, 10L), Map.of(1, 0L), null,
+                        Map.of(1, str(longMin)), Map.of(1, str(longMax))))
+                .build()).commit();
+        Map<ColumnRefOperator, Column> columns = columnRefs("s");
+        IcebergTable icebergTable = srTable(table, name, new ArrayList<>(columns.values()));
+        CachingIcebergCatalog catalog = newCatalog(Map.of());
+        IcebergHiveCatalog nonCaching = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        List<?> exact = (List<?>) columnStatistics(statsMetadata(nonCaching), icebergTable, columns, null, true).get(1);
+        Assertions.assertEquals(List.of(longMin, longMax), exact.subList(3, 5));
+        // the first query fills the cache, the second one is served from it
+        columnStatistics(statsMetadata(catalog), icebergTable, columns, null, true);
+        List<Object> cached = columnStatistics(statsMetadata(catalog), icebergTable, columns, null, true);
+        List<?> truncated = (List<?>) cached.get(1);
+        Assertions.assertEquals(longMin.substring(0, 16), truncated.get(3));
+        Assertions.assertTrue(((String) truncated.get(4)).compareTo(longMax) >= 0, truncated.get(4).toString());
+        Assertions.assertEquals(10.0, cached.get(0));
+        Assertions.assertEquals(exact.subList(5, 9), truncated.subList(5, 9));
+    }
+
+    // The CBO statistics request and the min/max scan of `SELECT max(id)` share a planning key; when the statistics
+    // request plans first, the min/max scan reuses its tasks, which must keep the file statistics it needs.
+    @Test
+    public void testMinMaxScanReusingStatisticsTasksKeepsFileStats() {
+        appendFiles(mockedNativeTableA);
+        Map<ColumnRefOperator, Column> columns = columnRefs("id");
+        IcebergTable icebergTable = srTable(mockedNativeTableA, TABLE_NAME, new ArrayList<>(columns.values()));
+        IcebergMetadata metadata = statsMetadata(newCatalog(Map.of()));
+        columnStatistics(metadata, icebergTable, columns, ConstantOperator.TRUE, true);
+
+        IcebergGetRemoteFilesParams params = (IcebergGetRemoteFilesParams) IcebergGetRemoteFilesParams.newBuilder()
+                .setAllParams(IcebergTableMORParams.EMPTY)
+                .setParams(IcebergMORParams.EMPTY)
+                .setTableVersionRange(TvrTableSnapshot.of(
+                        Optional.of(mockedNativeTableA.currentSnapshot().snapshotId())))
+                .setPredicate(ConstantOperator.TRUE)
+                .setEnableColumnStats(true)
+                .setFieldNames(List.of("id"))
+                .setStatsColumnNames(Set.of("id"))
+                .build();
+        RemoteFileInfoSource source = metadata.getRemoteFilesAsync(icebergTable, params);
+        List<FileScanTask> tasks = new ArrayList<>();
+        while (source.hasMoreOutput()) {
+            tasks.add(((IcebergRemoteFileInfo) source.getOutput()).getFileScanTask());
+        }
+        Assertions.assertEquals(FILES, tasks.size());
+        // reused from the statistics request
+        tasks.forEach(task -> Assertions.assertInstanceOf(IcebergSplitScanTask.class, task));
+        Assertions.assertEquals(List.of(Map.of(1, id(70)), Map.of(1, id(79))),
+                statsByFile(tasks).get("/path/to/data-id-7.parquet").subList(0, 2));
     }
 }
