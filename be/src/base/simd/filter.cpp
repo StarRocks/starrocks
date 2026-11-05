@@ -39,6 +39,10 @@ namespace {
 // and it always takes the vectorised path.)
 #if defined(__x86_64__)
 constexpr int kCompressMinBits = 6;
+// AVX2 8-byte compaction splits each 32-row batch into 8 groups of 4 lanes
+// (vs. 4 groups of 8 lanes in AVX-512), so the per-batch group loop overhead
+// is higher and a plain scalar ctz copy wins below 8 surviving lanes.
+constexpr int kAvx2CompressMinBitsW8 = 8;
 
 constexpr auto make_permute_table_8x32() {
     std::array<std::array<int32_t, 8>, 256> table{};
@@ -367,18 +371,12 @@ __attribute__((target("avx2"))) size_t detail::compress_avx2_w4(uint32_t* dst, c
                 if (sub_mask == 0) {
                     continue;
                 }
-                if (sub_mask == 0xffu) {
-                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result),
-                                        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 8)));
-                    result += 8;
-                } else {
-                    __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 8));
-                    __m256i v_perm =
-                            _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable8x32[sub_mask].data()));
-                    __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
-                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
-                    result += _mm_popcnt_u32(sub_mask);
-                }
+                __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 8));
+                __m256i v_perm =
+                        _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable8x32[sub_mask].data()));
+                __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
+                result += _mm_popcnt_u32(sub_mask);
             }
         }
         start += kBatchNums;
@@ -406,9 +404,11 @@ __attribute__((target("avx2"))) size_t detail::compress_avx2_w8(uint64_t* dst, c
                 std::memmove(dst + result, src + start, kBatchNums * sizeof(uint64_t));
             }
             result += kBatchNums;
-        } else if (_mm_popcnt_u32(mask) < 4) {
+        } else if (uint32_t pop = _mm_popcnt_u32(mask); __builtin_expect(pop < kAvx2CompressMinBitsW8, 1)) {
+            uint64_t* out = dst + result;
+            result += pop;
             for (uint32_t m = mask; m != 0; m &= m - 1) {
-                dst[result++] = src[start + __builtin_ctz(m)];
+                *out++ = src[start + __builtin_ctz(m)];
             }
         } else {
             for (int g = 0; g < 8; ++g) {
@@ -416,18 +416,12 @@ __attribute__((target("avx2"))) size_t detail::compress_avx2_w8(uint64_t* dst, c
                 if (sub_mask == 0) {
                     continue;
                 }
-                if (sub_mask == 0x0fu) {
-                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result),
-                                        _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 4)));
-                    result += 4;
-                } else {
-                    __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 4));
-                    __m256i v_perm =
-                            _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable4x64[sub_mask].data()));
-                    __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
-                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
-                    result += _mm_popcnt_u32(sub_mask);
-                }
+                __m256i v_src = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + start + g * 4));
+                __m256i v_perm =
+                        _mm256_load_si256(reinterpret_cast<const __m256i*>(kPermuteTable4x64[sub_mask].data()));
+                __m256i v_compact = _mm256_permutevar8x32_epi32(v_src, v_perm);
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst + result), v_compact);
+                result += _mm_popcnt_u32(sub_mask);
             }
         }
         start += kBatchNums;
