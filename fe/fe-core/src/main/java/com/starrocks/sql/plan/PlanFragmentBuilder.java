@@ -485,20 +485,12 @@ public class PlanFragmentBuilder {
         private final List<Integer> collectExecStatsIds = Lists.newArrayList();
         private ExecGroup currentExecGroup = execGroups.newExecGroup();
 
-<<<<<<< HEAD
-        public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
-=======
-        // see findResultTopN; null when the plan has none or its root fragment does not end in a result sink
-        private final OptExpression resultTopN;
-        private boolean resultTopNMergeSkipped = false;
-
         // Columns that a runtime filter of an enclosing hash join or top-n may probe in the subtree being visited.
         // Runtime filters are assigned after the scans are set up, so an Iceberg scan uses this to request the file
         // bounds of these columns, which let the BE skip a file once the filter arrives.
         private Set<ColumnRefOperator> runtimeFilterProbeColumns = Set.of();
 
-        public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory, OptExpression resultTopN) {
->>>>>>> 35fc336d7b0... [Enhancement][RB-225] Skip Iceberg data files ruled out by runtime filters before opening them (#68495)
+        public PhysicalPlanTranslator(ColumnRefFactory columnRefFactory) {
             this.columnRefFactory = columnRefFactory;
         }
 

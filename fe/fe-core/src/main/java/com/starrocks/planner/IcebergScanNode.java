@@ -66,11 +66,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Deque;
-<<<<<<< HEAD
-=======
 import java.util.HashSet;
-import java.util.LinkedHashMap;
->>>>>>> 35fc336d7b0... [Enhancement][RB-225] Skip Iceberg data files ruled out by runtime filters before opening them (#68495)
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -104,8 +100,6 @@ public class IcebergScanNode extends ScanNode {
     private IcebergMetricsReporter icebergScanMetricsReporter;
     private boolean usedForDelete = false;
     private Set<String> runtimeFilterPruningColumns = Set.of();
-<<<<<<< HEAD
-=======
     // Columns probed by a join or top-n runtime filter. Their file bounds let the BE skip a whole file once the
     // filter arrives, so the scan asks for their statistics when the manifest cache keeps them.
     private Set<String> runtimeFilterProbeColumnNames = Set.of();
@@ -114,11 +108,6 @@ public class IcebergScanNode extends ScanNode {
     private static final Set<PrimitiveType> FILE_STATS_PRUNING_TYPES = Set.of(PrimitiveType.TINYINT,
             PrimitiveType.SMALLINT, PrimitiveType.INT, PrimitiveType.BIGINT, PrimitiveType.DATE,
             PrimitiveType.DATETIME);
-    // Materialized-planning outputs for the V3 deletion-vector delete sink; null unless this is
-    // the DELETE target's DATA scan node on a format-version >= 3 table.
-    private Map<String, List<DeleteFile>> previousDeletesByRef = null;
-    private Map<String, DataFile> plannedDataFiles = null;
->>>>>>> 35fc336d7b0... [Enhancement][RB-225] Skip Iceberg data files ruled out by runtime filters before opening them (#68495)
     private boolean enableGlobalLateMaterialization = false;
     private boolean enableIncrementalScanRanges = false;
 
@@ -313,8 +302,6 @@ public class IcebergScanNode extends ScanNode {
         scanRangeSource.setRuntimeFilterPruningColumns(runtimeFilterPruningColumns);
     }
 
-<<<<<<< HEAD
-=======
     // A DATETIME slot only from an Iceberg timestamp (with or without time zone; the bounds of the former are
     // widened to the session time zone conservatively), not a nanosecond one, which has no file bounds here.
     private boolean fileStatsPruningType(SlotDescriptor slot) {
@@ -370,15 +357,6 @@ public class IcebergScanNode extends ScanNode {
         }
     }
 
-    public Map<String, List<DeleteFile>> getPreviousDeletesByRef() {
-        return previousDeletesByRef == null ? Map.of() : previousDeletesByRef;
-    }
-
-    public Map<String, DataFile> getPlannedDataFiles() {
-        return plannedDataFiles == null ? Map.of() : plannedDataFiles;
-    }
-
->>>>>>> 35fc336d7b0... [Enhancement][RB-225] Skip Iceberg data files ruled out by runtime filters before opening them (#68495)
     private void setupCloudCredential() {
         String catalogName = icebergTable.getCatalogName();
         if (catalogName == null) {

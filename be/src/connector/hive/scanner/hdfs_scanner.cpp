@@ -214,29 +214,6 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
-<<<<<<< HEAD
-=======
-std::optional<int64_t> HdfsScanner::live_record_count_from_metadata(const THdfsScanRange& scan_range) {
-    if (!scan_range.__isset.record_count) {
-        return std::nullopt;
-    }
-    const auto& deletes = scan_range.delete_files;
-    if (deletes.empty()) {
-        return scan_range.record_count;
-    }
-    // A v3 data file has at most one DV and no other positional deletes; equality deletes are
-    // planned as a separate anti join and never reach delete_files.
-    if (deletes.size() != 1 || !deletes[0].__isset.deletion_vector ||
-        !deletes[0].deletion_vector.__isset.record_count) {
-        return std::nullopt;
-    }
-    int64_t deleted = deletes[0].deletion_vector.record_count;
-    if (deleted < 0 || deleted >= scan_range.record_count) {
-        return std::nullopt;
-    }
-    return scan_range.record_count - deleted;
-}
-
 namespace {
 
 using FileZoneMaps = std::unordered_map<ColumnId, ZoneMapDetail>;
@@ -367,7 +344,6 @@ bool HdfsScanner::_pruned_by_file_stats() const {
     return !zms.empty() && !file_may_satisfy(tree, tree.root(), zms);
 }
 
->>>>>>> 35fc336d7b0... [Enhancement][RB-225] Skip Iceberg data files ruled out by runtime filters before opening them (#68495)
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
