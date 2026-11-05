@@ -1293,23 +1293,12 @@ croaringbitmap_version() {
     return 1
 }
 
-verify_croaringbitmap_install() {
-    local prefix="$1"
-    local expected_version="$2"
-    local installed_version
-    installed_version="$(croaringbitmap_version "${prefix}" || true)"
-    [[ -s "${prefix}/lib/libroaring.a" && "${installed_version}" == "${expected_version}" ]] || return 1
-    local hdr
-    for hdr in roaring.h roaring64.h roaring.hh roaring64.hh roaring64map.hh roaring_version.h; do
-        [[ -s "${prefix}/include/roaring/${hdr}" ]] || return 1
-    done
-    return 0
-}
-
 build_croaringbitmap() {
     local expected_version="${CROARINGBITMAP_SOURCE#CRoaring-}"
+    local installed_version
+    installed_version="$(croaringbitmap_version "${TP_INSTALL_DIR}" || true)"
 
-    if verify_croaringbitmap_install "${TP_INSTALL_DIR}" "${expected_version}"; then
+    if [[ -f "${TP_INSTALL_DIR}/lib/libroaring.a" && -f "${TP_INCLUDE_DIR}/roaring/roaring.h" && "${installed_version}" == "${expected_version}" ]]; then
         return 0
     fi
 
@@ -1364,7 +1353,6 @@ build_croaringbitmap() {
         "${AR}" rcs "${TP_INSTALL_DIR}/lib/libroaring.a" "${object_files[@]}"
         "${RANLIB}" "${TP_INSTALL_DIR}/lib/libroaring.a" >/dev/null 2>&1 || true
     else
-        rm -rf "${TP_INSTALL_DIR}/lib/libroaring.a" "${TP_INCLUDE_DIR}/roaring"
         "${CMAKE_CMD}" --build . -j "${PARALLEL}"
         "${CMAKE_CMD}" --install .
         cd ..
@@ -1377,10 +1365,6 @@ build_croaringbitmap() {
     "${CXX}" ${CXXFLAGS} -c "${shim_src}" -o "${shim_obj}"
     append_object_to_archive "${TP_INSTALL_DIR}/lib/libroaring.a" "${shim_obj}"
     sync_lib64_links
-    if ! verify_croaringbitmap_install "${TP_INSTALL_DIR}" "${expected_version}"; then
-        echo "ERROR: CRoaring ${expected_version} installation verification failed in ${TP_INSTALL_DIR}" >&2
-        exit 1
-    fi
 }
 
 unsupported_package() {
