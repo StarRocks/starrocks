@@ -2508,4 +2508,75 @@ TEST_F(JsonScannerTruncatedDocTest, rejected_record) {
     EXPECT_EQ((std::vector<std::string>{R"({"k1":"b")", kTruncatedDocument}), raw_records);
 }
 
+TEST_F(JsonScannerTruncatedDocTest, mid_document_syntax_error_positions) {
+    // 1. First-only malformed document (with and without trailing newline)
+    for (const std::string& doc : {kMissingValueDocument, kMissingValueDocument + "\n"}) {
+        auto result = scan(TBrokerRangeDesc(), kK13Names, {doc});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(0, result.rows);
+        EXPECT_EQ(1, result.filtered);
+    }
+
+    // 2. Middle position (valid, invalid, valid across stream buffers, with and without trailing newline)
+    for (const std::string& suffix : {std::string(""), std::string("\n")}) {
+        auto result = scan(
+                {R"({"k1":"a","k2":1})" + suffix, R"({"k1":"b","k2":})" + suffix, R"({"k1":"c","k2":3})" + suffix});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(2, result.rows);
+        EXPECT_EQ(1, result.filtered);
+    }
+
+    // 3. Last position in same NDJSON buffer (valid, invalid, with and without trailing newline)
+    for (const std::string& suffix : {std::string(""), std::string("\n")}) {
+        auto result = scan({"{\"k1\":\"a\",\"k2\":1}\n{\"k1\":\"b\",\"k2\":}" + suffix});
+        EXPECT_TRUE(result.status.is_end_of_file()) << result.status;
+        EXPECT_EQ(1, result.rows);
+        EXPECT_EQ(1, result.filtered);
+    }
+}
+
+TEST_F(JsonScannerTest, test_simdjson_v511_big_integer_and_unicode_escapes) {
+    std::string filename = "./be/test/exec/test_data/json_scanner/v511_big_integer_unicode.json";
+    std::string json_data =
+            "{\"f_largeint\": 18446744073709551616, \"f_bigint\": 18446744073709551616, \"f_str\": "
+            "\"\\u6C49\\u5B57\\u4E2D\\u6587\\uD83D\\uDE00\"}\n"
+            "{\"f_largeint\": 99999999999999999999, \"f_bigint\": 99999999999999999999, \"f_str\": "
+            "\"\\u6C49\\u5B57\\u4E2D\\u6587\\uD83D\\uDE00\"}\n";
+    write_json_to_file(filename, json_data);
+    DeferOp defer([&] { std::remove(filename.c_str()); });
+
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_LARGEINT);
+    types.emplace_back(TYPE_BIGINT);
+    types.emplace_back(TYPE_VARCHAR_DESC);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.file_type = TFileType::FILE_LOCAL;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path(filename);
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"f_largeint", "f_bigint", "f_str"});
+    ASSERT_OK(scanner->open());
+    DeferOp close_scanner([&]() { scanner->close(); });
+
+    ASSIGN_OR_ASSERT_FAIL(ChunkPtr chunk, scanner->get_next());
+    ASSERT_EQ(3, chunk->num_columns());
+    ASSERT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("[18446744073709551616, NULL, '汉字中文\xF0\x9F\x98\x80']", chunk->debug_row(0));
+    EXPECT_EQ("[99999999999999999999, NULL, '汉字中文\xF0\x9F\x98\x80']", chunk->debug_row(1));
+
+    const ScannerCounter* counter = scanner->TEST_scanner_counter();
+    ASSERT_NE(nullptr, counter);
+    EXPECT_GT(counter->total_ns, 0);
+    EXPECT_GT(counter->file_read_count, 0);
+    EXPECT_EQ(0, counter->num_rows_filtered);
+}
+
 } // namespace starrocks
